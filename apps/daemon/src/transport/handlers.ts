@@ -470,6 +470,14 @@ export const defaultHandlers = (options: {
         })
       ),
     "usage.watch": () => Stream.fail(new Unsupported({ capability: "usage" })),
+    "data.sources.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
+    "data.queryLog.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
+    "data.describe": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.query": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.source.save": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.source.remove": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.source.label": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.approval.decide": () => Effect.fail(new Unsupported({ capability: "data" })),
     "host.stats.watch": () => Stream.fail(new Unsupported({ capability: "host.stats" })),
     "commit.suggestMessage": () =>
       Stream.fail(

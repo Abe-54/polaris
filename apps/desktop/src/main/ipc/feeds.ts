@@ -1,3 +1,4 @@
+import { watchDataSources, watchDataQueryLog } from "@polaris/client";
 /**
  * The live feeds behind `window.polaris.subscribe`. Host and session feeds are
  * `@polaris/client`'s resumable feeds, so every window shares one upstream
@@ -61,6 +62,10 @@ const openers: Openers = {
     Stream.fail({ code: "Unavailable", message: "Tab completion unavailable" }),
   "prediction.managed.watch": () =>
     Stream.fail({ code: "Unavailable", message: "Tab completion unavailable" }),
+  "data.sources.watch": ({ hostKey, ...input }) =>
+    onLive(hostKey, (session) => watchDataSources(session, input)),
+  "data.queryLog.watch": ({ hostKey, ...input }) =>
+    onLive(hostKey, (session) => watchDataQueryLog(session, input)),
   ...githubOpeners,
   ...gitOpeners,
   ...browserOpeners(undefined),

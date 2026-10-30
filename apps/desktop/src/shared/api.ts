@@ -1,3 +1,4 @@
+import type { DataRequestOutputs, DataSubscriptionItems } from "./dataContract.ts";
 import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
 import type {
   PredictionOutcomeOutputs,
@@ -431,6 +432,7 @@ export interface RequestOutputs
     LinkedDevicesRequestOutputs,
     VoiceRequestOutputs,
     SecretRequestOutputs,
+    DataRequestOutputs,
     PredictionPlacementOutputs,
     PredictionOutcomeOutputs {
   "constellation.stats": ConstellationStatsView;
@@ -562,7 +564,11 @@ export type TerminalItem =
   | { readonly _tag: "Exit"; readonly code: number | null };
 
 export interface SubscriptionItems
-  extends GitHubSubscriptionItems, GitSubscriptionItems, BrowserSubscriptionItems {
+  extends
+    GitHubSubscriptionItems,
+    GitSubscriptionItems,
+    BrowserSubscriptionItems,
+    DataSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
   "prediction.edit": EditPredictionFeedItem;
   "prediction.managed.watch": import("@polaris/protocol").ManagedServerStatus;
