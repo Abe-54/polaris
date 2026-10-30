@@ -24,10 +24,16 @@ export interface ResultSet {
 
 export type SqlRun =
   | { readonly status: "idle" }
-  | { readonly status: "running"; readonly sql: string }
-  | { readonly status: "done"; readonly sql: string; readonly result: ResultSet }
+  | { readonly status: "running"; readonly id: number; readonly sql: string }
+  | {
+      readonly status: "done";
+      readonly id: number;
+      readonly sql: string;
+      readonly result: ResultSet;
+    }
   | {
       readonly status: "failed";
+      readonly id: number;
       readonly sql: string;
       readonly error: DataIpcError;
       readonly span: ErrorSpan | null;
@@ -66,6 +72,15 @@ export const setSqlText = (at: DataSessionKey, tab: SqlTab, text: string) =>
 export const setSqlSource = (at: DataSessionKey, tab: SqlTab, source: string) =>
   patch(at, tab, { source, run: IDLE });
 
+let runs = 0;
+
+/** Tabs to run once they mount: a Query Log re-run opens a tab with its query running. */
+const queued = new Set<string>();
+
+export const queueRun = (at: DataSessionKey, tabId: string) => queued.add(keyOf(at, tabId));
+
+export const takeQueuedRun = (at: DataSessionKey, tabId: string) => queued.delete(keyOf(at, tabId));
+
 /** Results are capped at 200 rows; the grid says when there were more. */
 export const RESULT_LIMIT = 200;
 
@@ -76,7 +91,8 @@ export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) =
   const sql = text;
 
   if (sql.trim() === "" || source === "") return;
-  const running: SqlRun = { status: "running", sql };
+  const id = ++runs;
+  const running: SqlRun = { status: "running", id, sql };
 
   patch(at, tab, { run: running });
   const result = await api.query(at, { source, sql, limit: RESULT_LIMIT });
@@ -85,7 +101,7 @@ export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) =
 
   if (!result.ok) {
     patch(at, tab, {
-      run: { status: "failed", sql, error: result.error, span: errorSpan(sql, result.error) },
+      run: { status: "failed", id, sql, error: result.error, span: errorSpan(sql, result.error) },
     });
 
     return;
@@ -96,6 +112,7 @@ export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) =
   patch(at, tab, {
     run: {
       status: "done",
+      id,
       sql,
       result: { columns, rows, returned, total, truncated, elapsedMs },
     },
