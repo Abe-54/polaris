@@ -32,6 +32,11 @@ never sees a URL or a password, and the database itself enforces read-only.**
   `START TRANSACTION READ ONLY` (MySQL), with a 30 s statement timeout and results capped at
   200 rows / 16k characters. We do not classify SQL by parsing it: functions, CTEs and vendor
   syntax make a parser an incomplete guard, while the server's read-only transaction is not.
+- **MySQL's DDL escape.** MySQL commits implicitly before DDL, so `CREATE TABLE` succeeds inside
+  `START TRANSACTION READ ONLY` (seen on 8.4.13, ENG-644 spike). On MySQL only, `query` also
+  takes a single statement whose first keyword is SELECT, WITH, TABLE, VALUES, SHOW, DESCRIBE or
+  EXPLAIN, and refuses `INTO OUTFILE`/`DUMPFILE`. This allowlist is a second guard, not the
+  first; a SELECT-only database user per Data Source is the recommended hardening (later).
 - **Local and Remote.** A Local Data Source (loopback, a Unix socket, a compose service on the
   Host) is readable by agents without asking. A Remote one needs a Data Source Approval: per
   Host, for its exact server, database and user (or the whole server); a target that changes needs
