@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  chipsOf,
   COPY_EXISTS,
   copyArgv,
   copyOutcome,
@@ -56,5 +57,30 @@ describe("attachments", () => {
     expect(copyOutcome(0, "a.txt", "~/repo").ok).toBe(true);
     expect(copyOutcome(COPY_EXISTS, "a.txt", "~/repo").message).toBe("~/repo already has one");
     expect(copyOutcome(null, "a.txt", "~/repo").title).toBe("Couldn't copy a.txt");
+  });
+});
+
+describe("composer chips", () => {
+  const file = (id: string, mimeType: string) => ({ id, mimeType });
+
+  const picked = (id: string, mimeType: string, key: string) => ({
+    id,
+    mimeType,
+    pick: { key, selector: "#add", url: "http://localhost:3000/", html: "" },
+  });
+
+  test("a pick's screenshot and note are one chip, shown by the screenshot", () => {
+    const chips = chipsOf([
+      file("a", "text/plain"),
+      picked("note", "text/markdown", "p1"),
+      picked("shot", "image/png", "p1"),
+      file("b", "image/png"),
+    ]);
+
+    expect(chips.map((c) => [c.key, c.files.map((f) => f.id), c.image?.id ?? null])).toEqual([
+      ["a", ["a"], null],
+      ["p1", ["note", "shot"], "shot"],
+      ["b", ["b"], null],
+    ]);
   });
 });

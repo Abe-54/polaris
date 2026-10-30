@@ -77,8 +77,16 @@ export const Command = Schema.TaggedUnion({
    * (capability `sessions.idle-compaction`). The Daemon's idle compaction sends it.
    */
   CompactSession: { sessionId: SessionId },
-  /** Add guidance to the Turn in flight without interrupting it, where the Harness supports it. */
-  Steer: { sessionId: SessionId, text: Schema.String },
+  /**
+   * Add guidance to the Turn in flight without interrupting it, where the Harness supports it.
+   * `attachments` need capability `session.steer-attachments` and a Harness whose
+   * `HarnessModels.steersAttachments` is true; otherwise a Client queues the draft as a follow-up.
+   */
+  Steer: {
+    sessionId: SessionId,
+    text: Schema.String,
+    attachments: Schema.optionalKey(Schema.Array(AttachmentId)),
+  },
   Interrupt: { sessionId: SessionId },
   /**
    * Stop background work that outlived its Turn (`AgentSession.backgroundTasks`): the

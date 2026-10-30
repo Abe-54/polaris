@@ -1,8 +1,8 @@
 /**
- * "Link a device" (Paper D1, D1b): a one-time link as a QR code and "Copy link",
- * waiting for the phone until it links or the link expires. The link is never logged.
+ * "Link a device" (Paper D1, D1b; SR-08): a one-time link as a QR code and "Copy link", in
+ * a well of Linked devices, waiting for the phone until it links or expires. Never logged.
  */
-import { Button, PlusIcon } from "@polaris/ui";
+import { SettingsButton, SettingsWell } from "@polaris/ui";
 import { Match } from "effect";
 import { useEffect, useRef, useState } from "react";
 import type { IpcError } from "../../../shared/api.ts";
@@ -12,7 +12,7 @@ import { polaris } from "../bridge.ts";
 import { QrCode } from "../extensions/ui/QrCode.tsx";
 import { names, timeLeft } from "./model.ts";
 
-type Panel =
+export type LinkPanelState =
   | { readonly kind: "closed" }
   | { readonly kind: "starting" }
   | { readonly kind: "waiting"; readonly offer: LinkOfferView }
@@ -23,8 +23,7 @@ const CopyLink = ({ link }: { readonly link: string }) => {
   const [copied, setCopied] = useState(false);
 
   return (
-    <Button
-      size="xs"
+    <SettingsButton
       onClick={() =>
         void polaris()
           .request("clipboard.writeSecret", { text: link })
@@ -32,7 +31,7 @@ const CopyLink = ({ link }: { readonly link: string }) => {
       }
     >
       {copied ? "Copied" : "Copy link"}
-    </Button>
+    </SettingsButton>
   );
 };
 
@@ -49,10 +48,7 @@ const Waiting = ({
   const reach = names([offer.hostKey, ...offer.shareTo].map(labelOf));
 
   return (
-    <div
-      className="rounded-card border-hairline bg-surface-raised p-panel flex gap-5 border"
-      data-testid="link-panel"
-    >
+    <SettingsWell rows={false} className="p-panel flex-row gap-5" data-testid="link-panel">
       <QrCode
         text={offer.linkString}
         size={172}
@@ -61,7 +57,7 @@ const Waiting = ({
       />
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h3 className="text-label text-text-strong font-medium">
+          <h3 className="text-body text-text-default font-medium">
             Scan with Polaris on your phone
           </h3>
           <p className="text-body text-text-subtle">
@@ -84,27 +80,21 @@ const Waiting = ({
           <span className="text-caption text-text-subtle flex-1">
             Waiting for your phone · {timeLeft(offer.expiresAt, now)}
           </span>
-          <Button variant="ghost" onClick={onCancel}>
+          <SettingsButton variant="ghost" onClick={onCancel}>
             Cancel
-          </Button>
+          </SettingsButton>
         </div>
       </div>
-    </div>
+    </SettingsWell>
   );
 };
 
 const endedLine = (error: IpcError) =>
   error.code === "NoRelayHost" ? error.message : `The link ended: ${error.message}`;
 
-export const LinkPanel = ({
-  labelOf,
-  onLinked,
-}: {
-  readonly labelOf: (key: string) => string;
-  /** The device linked; the page reloads to show it and any Host it missed. */
-  readonly onLinked: () => void;
-}) => {
-  const [panel, setPanel] = useState<Panel>({ kind: "closed" });
+/** The link's state, and starting and closing it; a late answer after Cancel is dropped. */
+export const useLink = (onLinked: () => void) => {
+  const [panel, setPanel] = useState<LinkPanelState>({ kind: "closed" });
   // Each start gets a number; a cancelled one's late answer is dropped.
   const attempt = useRef(0);
   // The link still open on its Host: Cancel and leaving the page end it there too.
@@ -161,30 +151,34 @@ export const LinkPanel = ({
     setPanel({ kind: "closed" });
   };
 
-  const button = (
-    <div>
-      <Button onClick={() => void start()} data-testid="link-device">
-        <PlusIcon size={12} />
-        Link a device
-      </Button>
-    </div>
-  );
+  return { panel, start: () => void start(), close };
+};
 
-  return Match.value(panel).pipe(
+/** The link's well while it opens, waits, or after it ended; nothing while closed. */
+export const LinkPanel = ({
+  panel,
+  labelOf,
+  onCancel,
+}: {
+  readonly panel: LinkPanelState;
+  readonly labelOf: (key: string) => string;
+  readonly onCancel: () => void;
+}) =>
+  Match.value(panel).pipe(
     Match.discriminatorsExhaustive("kind")({
-      closed: () => button,
+      closed: () => null,
       starting: () => (
-        <p className="text-body text-text-subtle" role="status">
-          Opening a link…
-        </p>
+        <SettingsWell rows={false} className="px-panel py-3">
+          <p className="text-caption text-text-subtle" role="status">
+            Opening a link…
+          </p>
+        </SettingsWell>
       ),
-      waiting: ({ offer }) => <Waiting offer={offer} labelOf={labelOf} onCancel={close} />,
+      waiting: ({ offer }) => <Waiting offer={offer} labelOf={labelOf} onCancel={onCancel} />,
       ended: ({ line }) => (
-        <div className="flex flex-col gap-2">
+        <SettingsWell rows={false} className="px-panel py-3">
           <p className="text-caption text-text-subtle">{line}</p>
-          {button}
-        </div>
+        </SettingsWell>
       ),
     })
   );
-};

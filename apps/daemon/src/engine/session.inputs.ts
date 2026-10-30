@@ -38,7 +38,13 @@ export const eventSchemas = {
   "turn.send": standard(Schema.Struct({ turn: Turn })),
   "turn.continue": Nothing,
   "turn.retry": standard(Schema.Struct({ turn: Turn })),
-  "turn.steer": standard(Schema.Struct({ canSteer: Schema.Boolean })),
+  "turn.steer": standard(
+    Schema.Struct({
+      canSteer: Schema.Boolean,
+      /** False when the steer carries attachments its Harness can't take mid-Turn. */
+      takesAttachments: Schema.Boolean,
+    })
+  ),
   "turn.interrupt": Nothing,
   "background.stop": standard(
     Schema.Struct({

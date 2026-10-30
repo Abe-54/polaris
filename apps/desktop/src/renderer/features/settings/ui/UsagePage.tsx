@@ -1,15 +1,14 @@
 /**
- * Settings → Usage (DESIGN.md, Settings; Chrome redesign, Paper X-J): two instrument cards. Plan
- * limits, then tokens over 7 / 30 / 90 days (`UsageTokens.tsx`), then usage by Constellation.
+ * Settings → Usage (DESIGN.md, SR-05): Plan limits and Tokens over 7 / 30 / 90 days as in 0.5.0
+ * (`UsageTokens.tsx`), then By constellation (`UsageByConstellation.tsx`).
  */
-import { cn, Dither, hueVar, InstrumentCard, Tile } from "@polaris/ui";
+import { cn, Dither, hueVar, InstrumentCard, SettingsPage, Tile } from "@polaris/ui";
 import { useState } from "react";
 import { useNow } from "../../../shell/useNow.ts";
 import { useRunningHarnesses } from "../../harness/index.ts";
 import { type LimitRow, type LimitWindow, limitRows, METER_CELLS } from "../model/planLimits.ts";
 import { sectionInfo } from "../model/sections.ts";
 import { pricedEstimate, type RangeDays, usageSummary } from "../model/usage.ts";
-import { Column, PageHeader } from "./parts.tsx";
 import { UsageByConstellation } from "./UsageByConstellation.tsx";
 import { CARD_CAPTION, TokensCard } from "./UsageTokens.tsx";
 import { useUsage } from "./useUsage.ts";
@@ -165,6 +164,13 @@ const PlanLimits = ({
   );
 };
 
+const ScreenGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+    <rect x="1.5" y="2" width="9" height="6.5" rx="1" fill="none" stroke="currentColor" />
+    <path d="M4 10.5h4" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
+
 export const UsagePage = () => {
   const [days, setDays] = useState<RangeDays>(30);
   const data = useUsage(days);
@@ -174,8 +180,12 @@ export const UsagePage = () => {
   const summary = usageSummary({ buckets: data.buckets, days, now, estimate: pricedEstimate });
 
   return (
-    <Column>
-      <PageHeader title={info.title} blurb={info.blurb} />
+    <SettingsPage
+      title={info.title}
+      blurb="Tokens from every harness on every host, read from their own logs."
+      scope="All hosts"
+      scopeIcon={<ScreenGlyph />}
+    >
       {data.hostCount === 0 ? (
         <p className="text-caption text-text-subtle">No connected host reports usage yet.</p>
       ) : (
@@ -190,10 +200,16 @@ export const UsagePage = () => {
             onDays={setDays}
           />
           {summary.tokens === 0 ? null : (
-            <UsageByConstellation buckets={data.buckets} now={now} estimate={pricedEstimate} />
+            <UsageByConstellation
+              buckets={data.buckets}
+              now={now}
+              estimate={pricedEstimate}
+              days={days}
+              total={summary.cost}
+            />
           )}
         </>
       )}
-    </Column>
+    </SettingsPage>
   );
 };

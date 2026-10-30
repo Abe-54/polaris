@@ -55,6 +55,7 @@ import { VoiceRpcs } from "./voice.ts";
 import { SecretRpcs } from "./secrets.ts";
 import { TerminalRpcs } from "./terminal.ts";
 import { RestartRpcs } from "./restart.ts";
+import { BrowserStackRpcs } from "./browser.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { Hello } from "./hello.ts";
 import {
@@ -86,7 +87,7 @@ import { HarnessCommands } from "./slashCommands.ts";
 import { UsageReport, UsageStreamItem } from "./usage.ts";
 import { NotFound, Unsupported } from "./errors.ts";
 import { SessionTurnRpcs, TurnDetail } from "./turns.ts";
-import { GitError, GitTracking, GitWatchRpcs, GitWriteRpcs } from "./git.ts";
+import { GitError, GitLogRpcs, GitTracking, GitWatchRpcs, GitWriteRpcs } from "./git.ts";
 
 export { NotFound, Unsupported } from "./errors.ts";
 
@@ -234,6 +235,11 @@ export class HarnessModels extends Schema.Class<HarnessModels>("HarnessModels")(
   switchesModel: Schema.Boolean,
   /** The Harness can move a running command into the background (`BackgroundCommand`). */
   backgroundsCommands: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  /** The Harness takes attachments in a steer (`Steer.attachments`); false from older Daemons. */
+  steersAttachments: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false))
+  ),
   /** The Harness takes the user's shell commands (`RunShellCommand`); false from older Daemons. */
   runsShellCommands: Schema.Boolean.pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(false)),
@@ -760,9 +766,10 @@ export class DaemonRpcs extends RpcGroup.make(
   .merge(LanguageRpcs, PredictionRpcs, SessionTurnRpcs)
   .merge(AutoArchiveRpcs, IdleCompactionRpcs, ContinuityRpcs, PresenceRpcs, HostStatsRpcs)
   .merge(VisualsRpcs)
-  .merge(GitWriteRpcs, GitWatchRpcs, CommitMessageRpcs)
+  .merge(GitWriteRpcs, GitWatchRpcs, GitLogRpcs, CommitMessageRpcs)
   .merge(ExtensionRpcs, RemoteAccessRpcs, LinkedDeviceRpcs, VoiceRpcs, RestartRpcs)
-  .merge(SecretRpcs, TerminalRpcs) {}
+  .merge(SecretRpcs, TerminalRpcs)
+  .merge(BrowserStackRpcs) {}
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with

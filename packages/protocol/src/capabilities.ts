@@ -24,6 +24,8 @@ export const Capability = Schema.Literals([
   "remote-access",
   /** `relayRoute.*` and `devices.*`: the Relay route and Linked Devices (ADR 0080, 0082). */
   "linked-devices",
+  /** `devices.watch`, and `connectedSince` on each Linked Device: which have a session now (ENG-629). */
+  "linked-devices.presence",
   /** A Client announces it when it decodes the `LinkedDevice` Actor; others read it as `Client`. */
   "actor.linked-device",
   /** `voice.transcribe`, `voice.settings` and `voice.setKey` (ADR 0077). */
@@ -45,6 +47,8 @@ export const Capability = Schema.Literals([
   "harness.spinner-verbs",
   "workspace.setup",
   "session.steer",
+  /** `Steer.attachments`, and the steer's `UserMessage.attachments` (ENG-662). */
+  "session.steer-attachments",
   "session.fork",
   /** The `SetModel` command. */
   "session.set-model",
@@ -136,6 +140,8 @@ export const Capability = Schema.Literals([
   "git.watch",
   /** `git.sync` (fetch, pull, push, publish) and `git.status`'s `tracking`. */
   "git.sync",
+  /** `git.log`: recent commits' subjects and bodies (the Commit messages preview in Settings). */
+  "git.log",
   "attachments.stage",
   /** `attachments.read`: a staged attachment's bytes by id, for a message's images on a phone. */
   "attachments.read",
@@ -158,6 +164,13 @@ export const Capability = Schema.Literals([
   /** `terminal.attachBinary`: terminal output as raw bytes on the blob channel, not base64 JSON. */
   "terminal.binary",
   "blobs",
+  /** `hostAddress.open` and `byteStream.credit`: Host-address streams to the Host's loopback (ADR 0093). */
+  "host-address",
+  /**
+   * `browser.*` and `byteStream.credit`: Browser hosting and Browser streams (ADR 0092). A Client
+   * announces it when it can host Browsers; the Daemon refuses `browser.host` from one that didn't.
+   */
+  "browser.host",
   /** `usage.query` and `usage.watch`: Usage and Plan Limits on this Host. */
   "usage",
   /**

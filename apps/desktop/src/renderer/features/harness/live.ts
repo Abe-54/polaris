@@ -229,6 +229,8 @@ export interface ModelsState {
   readonly backgroundsCommands: boolean;
   /** The Harness takes the user's shell commands (`RunShellCommand`); false from older Daemons. */
   readonly runsShellCommands: boolean;
+  /** The Harness takes attachments in a steer (`Steer.attachments`); false from older Daemons. */
+  readonly steersAttachments: boolean;
   readonly error: string | null;
   readonly loading: boolean;
 }
@@ -238,6 +240,7 @@ const NO_MODELS: ModelsState = {
   switchesModel: false,
   backgroundsCommands: false,
   runsShellCommands: false,
+  steersAttachments: false,
   error: null,
   loading: true,
 };

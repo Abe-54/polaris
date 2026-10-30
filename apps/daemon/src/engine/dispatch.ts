@@ -80,14 +80,16 @@ const make = Effect.gen(function* () {
       if (
         !Predicate.isTagged(command, "StartSession") &&
         !Predicate.isTagged(command, "SendTurn") &&
-        !Predicate.isTagged(command, "SendFeedback")
+        !Predicate.isTagged(command, "SendFeedback") &&
+        !Predicate.isTagged(command, "Steer")
       )
         return [];
+      const ids = command.attachments ?? [];
 
-      if (command.attachments.length === 0) return [];
+      if (ids.length === 0) return [];
 
       const found = yield* rt.attachmentStore
-        .get(command.attachments)
+        .get(ids)
         .pipe(
           Effect.mapError(
             (error) => new CommandRejected({ commandId, reason: `attachments: ${error.message}` })
@@ -95,7 +97,7 @@ const make = Effect.gen(function* () {
         );
 
       const byId = new Map(found.map((attachment) => [attachment.id, attachment]));
-      const missing = command.attachments.filter((id) => !byId.has(id));
+      const missing = ids.filter((id) => !byId.has(id));
 
       if (missing.length > 0) {
         return yield* new CommandRejected({
@@ -104,7 +106,7 @@ const make = Effect.gen(function* () {
         });
       }
 
-      return command.attachments.flatMap((id) => byId.get(id) ?? []);
+      return ids.flatMap((id) => byId.get(id) ?? []);
     });
 
   /** What the session's Harness driver declares, for the commands that depend on it. */
@@ -119,6 +121,7 @@ const make = Effect.gen(function* () {
       | "CompactSession",
     can:
       | "steer"
+      | "steerAttachments"
       | "switchModel"
       | "stopBackground"
       | "backgroundCommand"
@@ -188,6 +191,7 @@ const make = Effect.gen(function* () {
       attachments: yield* resolveAttachments(commandId, command),
       pathProbe: Predicate.isTagged(command, "RegisterWorkspace") ? probePath(command.path) : null,
       canSteer: yield* driverCan(command, "Steer", "steer"),
+      canSteerAttachments: yield* driverCan(command, "Steer", "steerAttachments"),
       canSwitchModel: yield* driverCan(command, "SetModel", "switchModel"),
       canStopBackground: yield* driverCan(command, "StopBackgroundTasks", "stopBackground"),
       canBackgroundCommand: yield* driverCan(command, "BackgroundCommand", "backgroundCommand"),

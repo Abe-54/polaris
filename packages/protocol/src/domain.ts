@@ -467,9 +467,15 @@ export const TurnItem = Schema.TaggedUnion({
   AssistantMessage: { id: Schema.String, text: Schema.String, startedAt },
   /**
    * Guidance the user sent into the Turn in flight (a steer), once the model took it in;
-   * `startedAt` is when it did, so it follows whatever held it back.
+   * `startedAt` is when it did, so it follows whatever held it back. `attachments` are
+   * the files the steer carried (capability `session.steer-attachments`).
    */
-  UserMessage: { id: Schema.String, text: Schema.String, startedAt },
+  UserMessage: {
+    id: Schema.String,
+    text: Schema.String,
+    startedAt,
+    attachments: Schema.optionalKey(Schema.Array(Attachment)),
+  },
   Reasoning: {
     id: Schema.String,
     text: Schema.String,

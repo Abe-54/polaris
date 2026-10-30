@@ -42,9 +42,15 @@ export function App() {
     document.documentElement.dataset["theme"] = theme;
   }, [theme]);
 
+  // reducedMotion() and the CSS read it from the root, as the app sets it.
+  useEffect(() => {
+    if (reduceMotion) document.documentElement.dataset["reduceMotion"] = "true";
+    else delete document.documentElement.dataset["reduceMotion"];
+  }, [reduceMotion]);
+
   return (
     <TooltipProvider>
-      <div data-reduce-motion={reduceMotion ? "true" : undefined} className="min-h-screen">
+      <div className="min-h-screen">
         {chrome ? (
           <header className="border-hairline bg-surface-sunken sticky top-0 z-40 flex h-12 items-center gap-4 border-b px-4">
             <Wordmark />

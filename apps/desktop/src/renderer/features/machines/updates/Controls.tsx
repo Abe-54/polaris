@@ -7,11 +7,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  SettingsSelect,
   Switch,
 } from "@polaris/ui";
 import { useId } from "react";
@@ -53,25 +49,14 @@ export const OverrideMenuItems = ({ daemon, onChange }: OverrideProps) => (
   </>
 );
 
-/** The same choice as a select, in the opened row's settings. */
+/** The same choice as the kit's select, in the host page's Daemon card. */
 export const OverrideSelect = ({ daemon, onChange }: OverrideProps) => (
-  <Select
+  <SettingsSelect<OverrideChoice>
+    label="Daemon upgrades"
     value={overrideChoice(daemon)}
-    onValueChange={(value) => {
-      if (isChoice(value)) onChange(overrideValue(value));
-    }}
-  >
-    <SelectTrigger aria-label="Daemon upgrades" className="text-label h-7 w-[260px]">
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      {CHOICES(daemon).map((choice) => (
-        <SelectItem key={choice.value} value={choice.value}>
-          {choice.label}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
+    options={CHOICES(daemon)}
+    onChange={(value) => onChange(overrideValue(value))}
+  />
 );
 
 export interface KeepUpToDateProps {

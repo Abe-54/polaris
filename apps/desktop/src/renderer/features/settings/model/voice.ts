@@ -17,6 +17,9 @@ export type VoiceKeyState =
 
 /** Why a Host shows one line instead of its key row, or null when the row can show. */
 export const unavailableLine = (host: HostView): string | null => {
+  if (host.status.state === "needs-attention")
+    return `${host.label} needs attention in Hosts; its key shows once it's connected`;
+
   if (host.status.state !== "connected")
     return `${host.label} is ${host.status.state.replace("-", " ")}; its key shows once it's connected`;
 

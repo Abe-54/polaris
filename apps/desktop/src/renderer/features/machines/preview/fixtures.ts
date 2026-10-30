@@ -96,14 +96,22 @@ const machine = (
   daemon: update,
 });
 
-export type Scene = "all" | "current" | "failures" | "live" | "wsl" | "task";
+export type Scene = "all" | "current" | "failures" | "live" | "wsl" | "task" | "states";
 
-export const SCENES: ReadonlyArray<Scene> = ["all", "current", "failures", "live", "wsl", "task"];
+export const SCENES: ReadonlyArray<Scene> = [
+  "all",
+  "current",
+  "failures",
+  "live",
+  "wsl",
+  "task",
+  "states",
+];
 
 const thisMac = (update: DaemonUpdateView) =>
   machine(
     "local",
-    "This Mac",
+    "MacBook Pro",
     null,
     connected("darwin-arm64", update.installedVersion ?? "0.5.0", null),
     update
@@ -422,8 +430,50 @@ export const SSH_ALIASES: ReadonlyArray<SshAliasView> = [
   { alias: "work-vm", hostName: "10.0.0.12", user: "lucas" },
 ];
 
+const reconnecting = (now: number): ConnectionStatusView => ({
+  ...offline(now),
+  state: "reconnecting",
+  since: now - 12_000,
+  lastSeenAt: now - 12_000,
+});
+
+const coloured = (view: MachineView, colour: string): MachineView => ({ ...view, colour });
+
+/** HS-D2: every Connection State in the redesigned list, each host in its own colour. */
+const states = (now: number): ReadonlyArray<MachineView> => {
+  const current = daemon({ installedVersion: "0.5.0", updateAvailable: false });
+
+  const later = (patch: Partial<ConnectionStatusView>) => ({
+    ...offline(now),
+    lastSeenAt: now - 2 * 60 * MINUTE,
+    ...patch,
+  });
+
+  return [
+    coloured(thisMac(current), "#E3E4E8"),
+    coloured(
+      machine(
+        "studio",
+        "Mac Studio",
+        "lucas-mac-studio",
+        connected("darwin-arm64", "0.5.0", 47),
+        current
+      ),
+      "#8FB0E8"
+    ),
+    coloured(
+      machine("pi", "Raspberry Pi 4", "lucas-rpi", connected("linux-arm64", "0.5.0", 118), current),
+      "#7FCF9A"
+    ),
+    coloured(machine("vm", "Linux VM", "devbox", reconnecting(now), current), "#A797D9"),
+    coloured(machine("build", "Build box", "buildbox", later({}), current), "#C4A27A"),
+  ];
+};
+
 export const machinesFor = (scene: Scene, now: number): ReadonlyArray<MachineView> => {
   switch (scene) {
+    case "states":
+      return states(now);
     case "wsl":
       return wsl();
     case "task":

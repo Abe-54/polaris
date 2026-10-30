@@ -8,6 +8,9 @@ import { timeAgo } from "../settings/model/github.ts";
 
 export const CAPABILITY = "linked-devices";
 
+/** `devices.watch` and each device's `connectedSince` (ENG-629). */
+export const PRESENCE_CAPABILITY = "linked-devices.presence";
+
 /** One Host as the page sees it, in the Host list's order. */
 export type HostRelay = {
   readonly key: string;
@@ -34,8 +37,14 @@ export interface DeviceSummary {
   readonly linkedAt: string;
   /** The latest session it opened with any Host; null when it hasn't yet. */
   readonly lastSeenAt: string | null;
-  /** Each Host it is linked on, with that Host's id for it. */
-  readonly on: ReadonlyArray<{ readonly hostKey: string; readonly id: LinkedDeviceView["id"] }>;
+  /** Each Host it is linked on, with that Host's id for it, its last session and its presence. */
+  readonly on: ReadonlyArray<{
+    readonly hostKey: string;
+    readonly id: LinkedDeviceView["id"];
+    readonly lastUsedAt: string | null;
+    /** When its open session there began, null without one; absent from older Daemons. */
+    readonly connectedSince?: string | null | undefined;
+  }>;
   /** Hosts with the relay on that don't have it: "Retry" shares it there. */
   readonly notShared: ReadonlyArray<{ readonly key: string; readonly label: string }>;
 }
@@ -65,7 +74,15 @@ export const devicesOf = (hosts: ReadonlyArray<HostRelay>): ReadonlyArray<Device
         linkedAt:
           seen === undefined || device.createdAt < seen.linkedAt ? device.createdAt : seen.linkedAt,
         lastSeenAt: later(seen?.lastSeenAt ?? null, device.lastUsedAt),
-        on: [...(seen?.on ?? []), { hostKey: host.key, id: device.id }],
+        on: [
+          ...(seen?.on ?? []),
+          {
+            hostKey: host.key,
+            id: device.id,
+            lastUsedAt: device.lastUsedAt,
+            connectedSince: device.connectedSince,
+          },
+        ],
         notShared: [],
       });
     }
@@ -110,6 +127,32 @@ export const lastSeenLine = (device: DeviceSummary, now: number): string =>
   device.lastSeenAt === null
     ? "not seen yet"
     : `last seen ${timeAgo(now - Date.parse(device.lastSeenAt))}`;
+
+/** A row's caption: "Linked Oct 20 · last seen 4 minutes ago", or where it isn't shared yet. */
+export const deviceCaption = (device: DeviceSummary, now: number): string =>
+  device.notShared.length > 0
+    ? sharedLine(device)
+    : `Linked ${day(device.linkedAt)} · ${lastSeenLine(device, now)}`;
+
+/** For Daemons without presence: how recently a device must have opened a session to count. */
+export const LIVE_WINDOW_MS = 5 * 60_000;
+
+const recentlyUsed = (lastUsedAt: string | null, now: number) =>
+  lastUsedAt !== null && now - Date.parse(lastUsedAt) <= LIVE_WINDOW_MS;
+
+/**
+ * Whether the device is connected to `host` now: its relay is connected and the device has a
+ * session open there (ENG-629); an older Daemon's device, one opened within LIVE_WINDOW_MS.
+ */
+export const liveOn = (
+  host: HostRelay,
+  on: DeviceSummary["on"][number] | undefined,
+  now: number
+): boolean =>
+  takesDevices(host) &&
+  host.route.connected &&
+  on !== undefined &&
+  (on.connectedSince === undefined ? recentlyUsed(on.lastUsedAt, now) : on.connectedSince !== null);
 
 /** The relay lane of "Hosts your devices reach". `action` is "Turn on" when the user can. */
 export const relayLine = (

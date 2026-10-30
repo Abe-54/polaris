@@ -106,3 +106,31 @@ test("a present lease that isn't renewed lapses", () =>
       })
     )
   ));
+
+test("the connection that reported present most recently is remembered, through away, until it closes", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { presence, connect } = yield* daemon(60_000);
+        const mac = yield* connect;
+        const laptop = yield* connect;
+        const ids = Array.from({ length: 2 }, (_, i) => i);
+
+        expect(ids.map((id) => presence.lastPresentAt(id))).toEqual([null, null]);
+        yield* mac.client["presence.report"]({ presence: "present" });
+        yield* Effect.sleep("5 millis");
+        yield* laptop.client["presence.report"]({ presence: "present" });
+        const macAt = presence.lastPresentAt(0) ?? Number.NaN;
+        const laptopAt = presence.lastPresentAt(1) ?? Number.NaN;
+
+        expect(laptopAt).toBeGreaterThan(macAt);
+
+        // Away ends the lease but keeps when the user was last there; closing forgets it.
+        yield* laptop.client["presence.report"]({ presence: "away" });
+        expect(presence.lastPresentAt(1)).toBe(laptopAt);
+        yield* laptop.close;
+        expect(yield* eventually(() => presence.lastPresentAt(1) === null)).toBe(true);
+        expect(presence.lastPresentAt(0)).toBe(macAt);
+      })
+    )
+  ));

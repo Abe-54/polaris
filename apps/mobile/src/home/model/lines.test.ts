@@ -10,7 +10,7 @@ import {
 import { Effect } from "effect";
 import { commandApproval, question, session } from "../fixtures.testing.ts";
 import type { SessionRow } from "./home.ts";
-import { approvalDetail, quickQuestion, rowDestination, statusLine } from "./lines.ts";
+import { approvalDetail, quickQuestion, statusLine } from "./lines.ts";
 import { type Reply, respond } from "./respond.ts";
 
 const row = (
@@ -52,25 +52,6 @@ test.each([
   ],
 ] as const)("%p says %p", (input, preview, withHost, text) => {
   expect(statusLine(row(input, preview), withHost).text).toBe(text);
-});
-
-test.each([
-  ["starting", "thread"],
-  ["working", "thread"],
-  ["needs-you", "thread"],
-  ["idle", "review"],
-  ["in-terminal", "thread"],
-  ["dormant", "thread"],
-  ["failed", "thread"],
-  ["limited", "thread"],
-] as const)("%s, with an unaccepted turn, opens the %s", (state, destination) => {
-  expect(rowDestination(session({ id: "s", state, turnCount: 1 }))).toBe(destination);
-});
-
-test("an idle session with every turn accepted opens its thread", () => {
-  expect(
-    rowDestination(session({ id: "s", state: "idle", turnCount: 2, acceptedThroughIndex: 1 }))
-  ).toBe("thread");
 });
 
 test("a failed agent session's line is in the failed colour", () => {

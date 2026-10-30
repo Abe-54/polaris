@@ -10,7 +10,7 @@ import {
   encodeLinkString,
   type HostInfo,
   LinkOffer,
-  type LinkedDevice,
+  LinkedDevice,
   type LinkedDeviceId,
   NotFound,
   PushRegistrationError,
@@ -30,7 +30,7 @@ import {
   type WakeOutcome,
 } from "@polaris/protocol/relay";
 import { linkIdentity, linkProof, sameProof } from "@polaris/protocol/relay/party";
-import { Context, Deferred, Effect, Layer, Option, Semaphore } from "effect";
+import { Context, Deferred, Effect, Layer, Option, Queue, Semaphore, Stream } from "effect";
 import { HostSecrets } from "../secrets/index.ts";
 import { type HostRelayKeys, loadHostRelayKeys } from "./keys.ts";
 import { type Admission, RelayLink } from "./link.ts";
@@ -94,7 +94,10 @@ export class RelayRoute extends Context.Service<
       readonly relayAddress: RelayAddress;
       readonly noiseKey: string;
     }) => Effect.Effect<LinkedDevice>;
+    /** Each device with `connectedSince`: when its open relay session began, or null. */
     readonly list: Effect.Effect<ReadonlyArray<LinkedDevice>>;
+    /** `list` now, then again on every link, unlink, and session opened or closed. */
+    readonly watch: Stream.Stream<ReadonlyArray<LinkedDevice>>;
     readonly unlink: (id: LinkedDeviceId) => Effect.Effect<LinkedDevice, NotFound>;
     /** Unlinks the device whose own session asks; that session ends once its answer is out. */
     readonly unlinkSelf: (id: LinkedDeviceId) => Effect.Effect<LinkedDevice, NotFound>;
@@ -160,6 +163,27 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
   const pushChanged = () => pushListeners.forEach((listener) => listener());
   const liveListeners = new Set<() => void>();
   const liveChanged = () => liveListeners.forEach((listener) => listener());
+  // Each device's open session and when it began; the relay ends sessions, so no timer.
+  const connected = new Map<string, { readonly session: DeviceSession; readonly since: string }>();
+  const deviceListeners = new Set<() => void>();
+  const devicesChanged = () => deviceListeners.forEach((listener) => listener());
+
+  const withPresence = (devices: ReadonlyArray<LinkedDevice>) =>
+    devices.map(
+      ({ id, name, relayAddress, noiseKey, createdAt, lastUsedAt, unlinkedAt }) =>
+        new LinkedDevice({
+          id,
+          name,
+          relayAddress,
+          noiseKey,
+          createdAt,
+          lastUsedAt,
+          unlinkedAt,
+          connectedSince: connected.get(id)?.since ?? null,
+        })
+    );
+
+  const list = Effect.map(Effect.orDie(store.list), withPresence);
 
   const sendLive = ({ device, registration }: LiveTarget, slice: LiveSlice) =>
     link?.live({
@@ -230,7 +254,10 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
       links.get(open.id) === open
         ? store
             .add({ name: request.name, relayAddress: request.address, noiseKey: toBase64Url(key) })
-            .pipe(Effect.flatMap((device) => Deferred.succeed(open.done, device)))
+            .pipe(
+              Effect.flatMap((device) => Deferred.succeed(open.done, device)),
+              Effect.tap(() => Effect.sync(devicesChanged))
+            )
         : Effect.sync(() => void log("a link ended before its device could be stored"))
     ).pipe(
       (effect) => linkLock.withPermit(effect),
@@ -283,9 +310,21 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
       return;
     }
 
+    connected.set(device.id, { session, since: new Date().toISOString() });
     runFork(
-      Effect.andThen(Effect.ignore(store.touch(device.id)), connections.serve(session, device))
+      Effect.ignore(store.touch(device.id)).pipe(
+        Effect.tap(() => Effect.sync(devicesChanged)),
+        Effect.andThen(connections.serve(session, device))
+      )
     );
+  };
+
+  const ended = (session: DeviceSession) => {
+    for (const [id, open] of connected)
+      if (open.session === session) {
+        connected.delete(id);
+        devicesChanged();
+      }
   };
 
   const start = Effect.gen(function* () {
@@ -302,6 +341,7 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
       peers,
       admit,
       serve,
+      ended,
       onConnectedChange: (connected) => {
         log(connected ? "connected" : "disconnected");
 
@@ -412,10 +452,31 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
     cancelLink: closeLink,
     add: (device) =>
       store.add(device).pipe(
-        Effect.tap(() => Effect.sync(() => link?.peersChanged())),
+        Effect.tap(() =>
+          Effect.sync(() => {
+            link?.peersChanged();
+            devicesChanged();
+          })
+        ),
         Effect.orDie
       ),
-    list: Effect.orDie(store.list),
+    list,
+    // Sliding by one: a burst of changes reads the list once more, never once per change.
+    watch: Stream.callback<void>(
+      (queue) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const listener = () => Queue.offerUnsafe(queue, undefined);
+
+            deviceListeners.add(listener);
+            listener();
+
+            return listener;
+          }),
+          (listener) => Effect.sync(() => deviceListeners.delete(listener))
+        ),
+      { bufferSize: 1, strategy: "sliding" }
+    ).pipe(Stream.mapEffect(() => list)),
     unlink: Effect.fn("RelayRoute.unlink")(function* (id: LinkedDeviceId) {
       const device = yield* Effect.orDie(store.unlink(id));
 
@@ -424,6 +485,7 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
       link?.drop(device.relayAddress);
       pushChanged();
       liveChanged();
+      devicesChanged();
 
       return device;
     }, Effect.uninterruptible),
@@ -433,6 +495,7 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
       if (device === null) return yield* new NotFound({ what: "linked device", id });
       pushChanged();
       liveChanged();
+      devicesChanged();
       // The key is refused from now; the open session closes after its answer is sent.
       runFork(
         Effect.delay(

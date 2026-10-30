@@ -10,6 +10,8 @@ export * from "./nucleo/ui-more";
 
 export * from "./nucleo/ui-sync";
 
+export * from "./nucleo/ui-browser";
+
 export { ICON_MASKS } from "./nucleo/masks";
 
 export type IconProps = SVGProps<SVGSVGElement> & { readonly size?: number };

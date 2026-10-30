@@ -62,9 +62,11 @@ const ICONS: Readonly<Record<SettingsSection, ReactNode>> = {
   about: <PixelPolarisIcon />,
 };
 
-/** An open popover, menu, select or dialog takes esc first. */
+/** An open popover, menu, select, dialog or in-place confirm takes esc first. */
 const layerOpen = () =>
-  document.querySelector("[data-radix-popper-content-wrapper], [role='dialog']") !== null;
+  document.querySelector(
+    "[data-radix-popper-content-wrapper], [role='dialog'], [data-slot='settings-confirm-row'][data-asking]"
+  ) !== null;
 
 const useEscapeCloses = (close: () => void) => {
   useEffect(() => {
@@ -148,13 +150,19 @@ const SettingsNav = ({ current }: { readonly current: SettingsSection }) => {
         className="px-row-x text-label text-text-default hover:bg-fill-hover rounded-row py-gap flex shrink-0 cursor-default items-center gap-2.5 text-left"
       >
         <PixelPolarisIcon size={16} className="text-starlight" />
+        {/* On the dawn ridge the version darkens to keep its contrast (DESIGN.md, the horizon). */}
         <span className="flex min-w-0 flex-col gap-0.5">
-          About Polaris
-          {/* On the dawn ridge the second line darkens to keep its contrast (DESIGN.md, the horizon). */}
-          <span className="text-caption font-regular text-[light-dark(#4a4c52,var(--color-text-subtle))]">
-            {update?.version ?? version}
-            {update?.phase === "ready" ? " · update ready" : ""}
+          <span className="flex items-baseline gap-2.5">
+            About Polaris
+            <span className="font-regular font-mono text-[11px] leading-[14px] text-[light-dark(#4a4c52,var(--color-text-subtle))]">
+              {update?.version ?? version}
+            </span>
           </span>
+          {update?.phase === "ready" ? (
+            <span className="text-caption font-regular text-[light-dark(#4a4c52,var(--color-text-subtle))]">
+              Update ready
+            </span>
+          ) : null}
         </span>
       </button>
     </nav>

@@ -97,10 +97,15 @@ export const turnInput = (
       ? prompt
       : `${prompt}\n\nAttached files:\n${files.map((f) => `- ${f.hostPath}`).join("\n")}`;
 
-  return [
-    { type: "text", text, text_elements: [] },
-    ...images.map((image): Gen.UserInput => ({ type: "localImage", path: image.hostPath })),
-  ];
+  const pictures = images.map((image): Gen.UserInput => ({
+    type: "localImage",
+    path: image.hostPath,
+  }));
+
+  // An images-only message sends no empty text input.
+  return text === "" && pictures.length > 0
+    ? pictures
+    : [{ type: "text", text, text_elements: [] }, ...pictures];
 };
 
 // ---------------------------------------------------------------------------

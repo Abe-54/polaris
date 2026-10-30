@@ -1,52 +1,31 @@
 /**
- * Settings → Devices (Paper D1, D1b; ENG-461): Linked Devices across every Host,
- * linking a new one, and which Hosts they reach through the Polaris Relay.
+ * Settings → Devices (DESIGN.md, Settings redesign SR-08; ENG-461): the reach map from linked
+ * devices through the Polaris Relay to each host, then the linked devices, Link a device and Unlink.
  */
-import { Button, cn } from "@polaris/ui";
+import {
+  SettingsButton,
+  SettingsCard,
+  SettingsEmpty,
+  SettingsPage,
+  SettingsWell,
+} from "@polaris/ui";
 import type { HostView } from "../../../shared/api.ts";
 import { useApp, useShellActions } from "../../shell/hooks.ts";
 import { useNow } from "../../shell/useNow.ts";
 import { sectionInfo } from "../settings/model/sections.ts";
-import { Column, Group, Heading, PageHeader } from "../settings/ui/parts.tsx";
 import { DeviceRow } from "./DeviceRow.tsx";
-import { LinkPanel } from "./LinkPanel.tsx";
-import { devicesOf, type HostRelay, relayLine, takesDevices } from "./model.ts";
+import { LinkPanel, useLink } from "./LinkPanel.tsx";
+import { devicesOf, takesDevices } from "./model.ts";
+import { ReachMap } from "./ReachMap.tsx";
+import { reachLine } from "./reach.ts";
 import { useDevices } from "./useDevices.ts";
 
-const Note = ({ children }: { readonly children: React.ReactNode }) => (
-  <p className="bg-surface-sunken rounded-card px-panel text-body text-text-subtle py-3">
-    {children}
-  </p>
+const ScreenGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+    <rect x="1.5" y="2.5" width="9" height="6" rx="1" fill="none" stroke="currentColor" />
+    <path d="M4 10.5h4" stroke="currentColor" />
+  </svg>
 );
-
-const HostRow = ({
-  host,
-  onTurnOn,
-}: {
-  readonly host: HostRelay;
-  readonly onTurnOn: () => void;
-}) => {
-  const line = relayLine(host);
-
-  return (
-    <div className="px-panel flex h-11 items-center gap-3" data-testid="relay-host">
-      <span className="text-label text-text-default min-w-0 flex-1 truncate">{host.label}</span>
-      <span
-        className={cn(
-          "text-caption shrink-0 whitespace-nowrap",
-          line.live ? "text-text-default" : "text-text-subtle"
-        )}
-      >
-        {line.text}
-      </span>
-      {line.action ? (
-        <Button variant="ghost" size="xs" onClick={onTurnOn}>
-          Turn on
-        </Button>
-      ) : null}
-    </div>
-  );
-};
 
 /** The page for `hosts`; "Turn on" and "Open hosts" call `onOpenHosts`. */
 export const Devices = ({
@@ -57,27 +36,59 @@ export const Devices = ({
   readonly onOpenHosts: () => void;
 }) => {
   const { relays, reload, unlink, share } = useDevices(hosts);
+  const link = useLink(reload);
   const now = useNow();
   const info = sectionInfo("devices");
   const devices = devicesOf(relays);
   const labelOf = (key: string) => hosts.find((h) => h.key === key)?.label ?? key;
+
+  const colourOf = (key: string) =>
+    hosts.find((h) => h.key === key)?.colour ?? "var(--color-text-subtle)";
+
   const canLink = relays.some((h) => takesDevices(h) && h.route.connected);
+  const linking = link.panel.kind === "starting" || link.panel.kind === "waiting";
 
   return (
-    <Column>
-      <PageHeader title={info.title} blurb={info.blurb} />
-      <section className="flex flex-col gap-3">
-        <Heading
-          aside={
-            <span className="text-caption text-text-subtle">
-              Each one can do anything you can do here
-            </span>
-          }
-        >
-          Linked devices
-        </Heading>
-        {devices.length === 0 ? null : (
-          <Group label="Linked devices">
+    <SettingsPage
+      title={info.title}
+      blurb="Your phone, linked once, reaches every relay host. Unlinking cuts it off at once."
+      scope="All relay hosts"
+      scopeIcon={<ScreenGlyph />}
+    >
+      <SettingsCard
+        title="Reach"
+        aside={reachLine(relays, devices, now)}
+        status="Only hosts with the Polaris Relay on"
+        action={<SettingsButton onClick={toHosts}>Open hosts</SettingsButton>}
+      >
+        <SettingsWell rows={false}>
+          <ReachMap
+            hosts={relays}
+            devices={devices}
+            colourOf={colourOf}
+            now={now}
+            onTurnOn={toHosts}
+          />
+        </SettingsWell>
+      </SettingsCard>
+      <SettingsCard
+        title="Linked devices"
+        aside={
+          canLink && !linking ? (
+            <SettingsButton variant="primary" onClick={link.start}>
+              Link a device
+            </SettingsButton>
+          ) : undefined
+        }
+      >
+        {devices.length === 0 ? (
+          <SettingsEmpty>
+            {canLink
+              ? "No linked devices yet. Link your phone once; it reaches every relay host."
+              : "Turn on the Polaris Relay for a host to link a device."}
+          </SettingsEmpty>
+        ) : (
+          <SettingsWell>
             {devices.map((device) => (
               <DeviceRow
                 key={device.noiseKey}
@@ -87,36 +98,14 @@ export const Devices = ({
                 onRetry={() => share(device)}
               />
             ))}
-          </Group>
+          </SettingsWell>
         )}
-        {canLink ? (
-          <LinkPanel labelOf={labelOf} onLinked={reload} />
-        ) : (
-          <Note>
-            Turn on the Polaris Relay for a host to link a device.{" "}
-            <button type="button" className="text-text-default underline" onClick={toHosts}>
-              Open hosts
-            </button>
-          </Note>
-        )}
-      </section>
-      <section className="flex flex-col gap-3">
-        <Heading
-          aside={
-            <span className="text-caption text-text-subtle">
-              Only hosts with the Polaris Relay on
-            </span>
-          }
-        >
-          Hosts your devices reach
-        </Heading>
-        <Group label="Hosts your devices reach">
-          {relays.map((host) => (
-            <HostRow key={host.key} host={host} onTurnOn={toHosts} />
-          ))}
-        </Group>
-      </section>
-    </Column>
+        <LinkPanel panel={link.panel} labelOf={labelOf} onCancel={link.close} />
+        <p className="pl-gap text-caption text-text-subtle flex min-h-10 items-center">
+          Each one can do anything you can do here.
+        </p>
+      </SettingsCard>
+    </SettingsPage>
   );
 };
 

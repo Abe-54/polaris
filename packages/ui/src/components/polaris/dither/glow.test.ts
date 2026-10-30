@@ -3,13 +3,12 @@ import { describe, expect, test } from "bun:test";
 import {
   BLOOM_MS,
   bloomAt,
-  cornerValue,
+  DOT_PITCH,
+  type FieldColors,
   type FieldFrame,
-  HUE_ALPHA,
   hueAlpha,
   liveAt,
   onLattice,
-  packPixel,
   paintFrame,
   RESTING,
   sparseAlpha,
@@ -17,146 +16,202 @@ import {
   Trail,
 } from "./glow";
 
-const hovered = (x: number, y: number): FieldFrame => ({
-  ...STILL,
-  pointer: { x, y },
-  presence: 1,
-});
+/** Paper "02 · WORKING", the Dot bloom's dots, one character per 2px cell. */
+const PAPER_CORNER = [
+  "#######################.###.###.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#...#",
+  "##.###.###.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#",
+  "#################.###.###.###.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#",
+  ".###.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#",
+  "###############.#######.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#.#.#.#.#...#",
+  ".#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#...#...#",
+  "#.###.###.###.#.#.###.#.#.#.#.#.#.#.#.#.#.#.#.#...#...#.#.#...#",
+  ".#.#.#.#.#.#.#.#.#.#.#.#.#.#...#...#",
+  "#.#.###.###.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#...#",
+  ".#.#.#.#.#.#.#...#.#.#...#...#...#...#",
+  "#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#...#...#",
+  ".......#...#.......#",
+  "#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#.#...#.#.#...#...#",
+  ".....#...#...#...#",
+  "#.#.#.#.#.#.#.#...#...#...#...#...#",
+  "",
+  "#.#.#...#.#.#...#...#...#...#.......#",
+  "",
+  "..#",
+];
 
-describe("the Working strip's dither field", () => {
-  test("at rest, fine dots crowd the top-left and are gone by 150px right or 46px down", () => {
-    expect(hueAlpha(1, 1, STILL)).toBeGreaterThan(0.15);
-    expect(hueAlpha(1, 1, STILL)).toBeLessThanOrEqual(HUE_ALPHA * RESTING.gain);
-    expect(cornerValue(150, 2, 1)).toBe(0);
-    expect(cornerValue(2, 46, 1)).toBe(0);
+const WIDTH = 640;
+
+const HEIGHT = 42;
+
+const COLORS: FieldColors = {
+  hue: [1, 0, 0],
+  trail: [2, 0, 0],
+  sparse: [3, 0, 0],
+  hueAlpha: 0.29,
+};
+
+interface Dot {
+  readonly x: number;
+  readonly y: number;
+  readonly ink: "hue" | "trail" | "sparse";
+}
+
+const INKS = ["hue", "trail", "sparse"] as const;
+
+function dots(frame: FieldFrame): Dot[] {
+  const pixels = new Uint32Array(WIDTH * HEIGHT);
+  const found: Dot[] = [];
+
+  paintFrame({ pixels, width: WIDTH, height: HEIGHT }, COLORS, frame);
+  pixels.forEach((pixel, at) => {
+    const ink = INKS[(pixel & 0xff) - 1];
+
+    if (ink !== undefined) found.push({ x: at % WIDTH, y: Math.floor(at / WIDTH), ink });
   });
 
-  test("the fringe thins by dropping dots, not only by fading them", () => {
-    let lit = 0;
+  return found;
+}
 
-    for (let i = 50; i < 58; i++) for (let j = 0; j < 4; j++) if (hueAlpha(i, j, STILL) > 0) lit++;
+const live = (step: number, seed: number): FieldFrame => ({
+  ...STILL,
+  ...liveAt(step, seed),
+  seed,
+});
 
-    expect(lit).toBeGreaterThan(0);
-    expect(lit).toBeLessThan(32);
+const fingerprint = (frame: FieldFrame) =>
+  dots(frame)
+    .map((d) => `${d.x},${d.y},${d.ink}`)
+    .join(";");
+
+describe("the Working strip's dither field", () => {
+  test("its still corner is Paper's: the same dots within 2% of the cells", () => {
+    let wrong = 0;
+    let cells = 0;
+
+    for (let j = 0; j < HEIGHT / DOT_PITCH; j++) {
+      for (let i = 0; i < 100; i++) {
+        const paper = PAPER_CORNER[j]?.[i] === "#";
+
+        cells++;
+
+        if (paper !== hueAlpha(i, j, STILL) > 0) wrong++;
+      }
+    }
+
+    expect(wrong / cells).toBeLessThan(0.02);
+  });
+
+  test("every dot of the corner weighs the same, as in Paper", () => {
+    const alphas = new Set<number>();
+
+    for (let i = 0; i < 70; i++) for (let j = 0; j < 20; j++) alphas.add(hueAlpha(i, j, STILL));
+
+    expect([...alphas].filter((a) => a > 0)).toEqual([0.29]);
+  });
+
+  test("live, the corner stays within Paper's top-left reach and nothing else is lit", () => {
+    for (const seed of [1, 42, 0xdeadbeef]) {
+      for (let step = 0; step < 600; step += 7) {
+        const frame = dots(live(step, seed));
+        const corner = frame.filter((d) => d.ink === "hue");
+
+        expect(Math.max(...corner.map((d) => d.x))).toBeLessThan(160);
+        expect(Math.max(...corner.map((d) => d.y))).toBeLessThan(44);
+        expect(corner.length).toBe(frame.length);
+      }
+    }
+  });
+
+  test("live, no frame comes back after a second, so the motion doesn't visibly loop", () => {
+    const first = new Map<string, number>();
+    let longest = 0;
+
+    for (let step = 1; step <= 360; step++) {
+      const frame = fingerprint(live(step, 7));
+      const seen = first.get(frame);
+
+      if (seen === undefined) first.set(frame, step);
+      else longest = Math.max(longest, step - seen);
+    }
+
+    expect(longest).toBeLessThan(12);
+  });
+
+  test("the seed decides the motion: two strips never shimmer in step", () => {
+    expect(fingerprint(live(50, 1))).not.toBe(fingerprint(live(50, 2)));
+    expect(fingerprint(live(50, 1))).toBe(fingerprint(live(50, 1)));
+  });
+
+  test("the still frame's corner holds whatever the seed: no drift, no breath", () => {
+    const corner = (seed: number) => fingerprint(live(0, seed));
+
+    expect(corner(1)).toBe(corner(99));
+    expect(corner(1)).not.toBe(fingerprint(live(12, 1)));
   });
 
   test("a bloom floods the corner, reaches further, then settles to rest", () => {
     expect(bloomAt(0).gain).toBe(0);
-    expect(bloomAt(400).gain).toBeCloseTo(1);
+    expect(bloomAt(400).gain).toBeGreaterThan(RESTING.gain);
     expect(bloomAt(400).spread).toBeCloseTo(1.3);
     expect(bloomAt(BLOOM_MS)).toEqual(RESTING);
   });
 
   test("sparse dots sit on a staggered 8×4px lattice", () => {
-    expect([onLattice(0, 0), onLattice(8, 0), onLattice(4, 4), onLattice(12, 4)]).toEqual([
-      true,
-      true,
-      true,
-      true,
-    ]);
-    expect([onLattice(4, 0), onLattice(0, 4), onLattice(2, 2), onLattice(0, 2)]).toEqual([
-      false,
-      false,
-      false,
-      false,
-    ]);
+    const on = [onLattice(0, 0), onLattice(8, 0), onLattice(4, 4), onLattice(12, 4)];
+    const off = [onLattice(4, 0), onLattice(0, 4), onLattice(2, 2), onLattice(0, 2)];
+
+    expect(on).toEqual([true, true, true, true]);
+    expect(off).toEqual([false, false, false, false]);
   });
 
   test("sparse dots show within 22px of the pointer, brightest at its centre", () => {
-    const frame = hovered(200, 16);
+    const frame = { ...STILL, pointer: { x: 200, y: 16 }, presence: 1 };
 
-    expect(sparseAlpha(200, 16, frame)).toBeGreaterThan(0.9);
+    expect(sparseAlpha(200, 16, frame)).toBeCloseTo(0.6);
     expect(sparseAlpha(216, 16, frame)).toBeLessThan(sparseAlpha(200, 16, frame));
     expect(sparseAlpha(232, 16, frame)).toBe(0);
     expect(sparseAlpha(200, 16, { ...frame, presence: 0 })).toBe(0);
   });
 
-  test("the trail lingers behind the pointer and dies away once it rests", () => {
-    const trail = new Trail(150, 17);
+  test("under the pointer the trail is Paper's sparse, flat patch, not a round blob", () => {
+    const trail = new Trail(WIDTH / DOT_PITCH, HEIGHT / DOT_PITCH);
 
-    expect(trail.update(16, 100, 16, 1)).toBe(true);
-    expect(trail.values[8 * 150 + 50]).toBeCloseTo(0.7);
-    trail.update(16, 200, 16, 1);
-    expect(trail.values[8 * 150 + 50] ?? 0).toBeGreaterThan(0.6);
+    for (let k = 0; k < 10; k++) trail.update(16, 280 + k * 4, 21, 1);
+    const lit = dots({ ...STILL, trail }).filter((d) => d.ink === "trail");
+    const xs = lit.map((d) => d.x);
+    const ys = lit.map((d) => d.y);
+    const width = Math.max(...xs) - Math.min(...xs);
+    const height = Math.max(...ys) - Math.min(...ys);
+    const cells = (width / DOT_PITCH + 1) * (height / DOT_PITCH + 1);
 
+    // Paper's pointer patch: ~75×17px of dots, a quarter of the cells or fewer.
+    expect(height).toBeLessThanOrEqual(17);
+    expect(width).toBeLessThanOrEqual(110);
+    expect(lit.length / cells).toBeLessThan(0.3);
+  });
+
+  test("the trail settles while the pointer rests, so the frame loop stops", () => {
+    const trail = new Trail(150, 21);
     let moving = true;
     let frames = 0;
 
     while (moving && frames < 400) {
-      moving = trail.update(16, 200, 16, 1);
+      moving = trail.update(16, 100, 20, 1);
       frames++;
     }
 
     expect(frames).toBeLessThan(400);
-    expect(trail.values[8 * 150 + 50]).toBe(0);
   });
 
-  test("a wash tints the gaps between dots, fainter than the dots", () => {
-    const width = 8;
-    const pixels = new Uint32Array(width * 8);
+  test("the trail dies away once the pointer leaves", () => {
+    const trail = new Trail(150, 21);
 
-    const colors = {
-      hue: [0, 200, 100],
-      sparse: [240, 240, 240],
-      hueAlpha: 0.4,
-      washAlpha: 0.1,
-    } as const;
+    trail.update(16, 100, 20, 1);
+    let frames = 0;
 
-    paintFrame({ pixels, width, height: 8 }, colors, STILL);
+    while (trail.update(16, 0, 0, 0) && frames < 400) frames++;
 
-    expect((pixels[1] ?? 0) >>> 24).toBeGreaterThan(0);
-    expect((pixels[1] ?? 0) >>> 24).toBeLessThan((pixels[0] ?? 0) >>> 24);
-  });
-
-  test("with no wash a frame paints only dot positions, sparse over hue", () => {
-    const width = 40;
-    const pixels = new Uint32Array(width * 20);
-
-    const colors = {
-      hue: [0, 200, 100],
-      sparse: [240, 240, 240],
-      hueAlpha: HUE_ALPHA,
-      washAlpha: 0,
-    } as const;
-
-    paintFrame({ pixels, width, height: 20 }, colors, hovered(8, 8));
-
-    expect(pixels[1]).toBe(0);
-    expect(pixels[width]).toBe(0);
-    expect(pixels[8 * width + 8]).toBe(packPixel(colors.sparse, sparseAlpha(8, 8, hovered(8, 8))));
-    expect((pixels[2] ?? 0) & 0xffffff).toBe(0x64c800);
-  });
-
-  test("live, the fringe's dots drift while its density holds", () => {
-    const lit = (frame: FieldFrame, i0: number, i1: number) => {
-      const dots: string[] = [];
-
-      for (let i = i0; i < i1; i++)
-        for (let j = 0; j < 4; j++) if (hueAlpha(i, j, frame) > 0) dots.push(`${i},${j}`);
-
-      return dots;
-    };
-
-    const later = { ...STILL, ...liveAt(5), breath: 1 };
-
-    expect(lit(later, 50, 58)).not.toEqual(lit(STILL, 50, 58));
-    expect(Math.abs(lit(later, 0, 16).length - lit(STILL, 0, 16).length)).toBeLessThanOrEqual(2);
-  });
-
-  test("live, the edge breathes past the still corner's reach and back", () => {
-    const reach = (step: number) => {
-      const frame = { ...STILL, ...liveAt(step), drift: 0 };
-      let i = 0;
-
-      while (hueAlpha(i, 0, frame) > 0 || hueAlpha(i + 1, 0, frame) > 0) i++;
-
-      return i;
-    };
-
-    const reaches = Array.from({ length: 30 }, (_, step) => reach(step));
-
-    expect(Math.max(...reaches)).toBeGreaterThan(reach(0));
-    expect(Math.min(...reaches)).toBeLessThan(reach(0));
-    expect(liveAt(0)).toEqual({ drift: 0, breath: 1 });
+    expect(frames).toBeLessThan(400);
+    expect(trail.values.every((v) => v === 0)).toBe(true);
   });
 });

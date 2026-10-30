@@ -90,11 +90,9 @@ export const hostWhere = (machine: Pick<MachineView, "kind" | "alias">): string 
 export const wslFooter = (distro: string): string =>
   `Workspaces live inside the distro; Windows sees them at \\\\wsl.localhost\\${distro}. The distro stays up while Polaris is connected to it.`;
 
-/** The page's intro: names this Client's machine, and WSL only when it is in the picture. */
+/** The page's intro, one line in the 680px column (Paper HS-D2); WSL only when it is in the picture. */
 export const hostsIntro = (wsl: boolean, copy: ClientCopy = clientCopy()): string =>
-  wsl
-    ? `Machines Polaris reaches over SSH, or inside WSL on ${copy.machine}. Each runs its own daemon; ${copy.machine} installs and upgrades them.`
-    : `Machines Polaris reaches over SSH, using your ~/.ssh/config. Each runs its own daemon; ${copy.machine} installs and upgrades them.`;
+  `The machines your agents run on. Each runs its own daemon; ${copy.machine} reaches the others over ${wsl ? "SSH or WSL" : "SSH"}.`;
 
 export const addHint = (wsl: boolean): string =>
   wsl

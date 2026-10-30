@@ -84,7 +84,9 @@ const deliverInput = Effect.fn("Constellation.deliverLocalInput")(function* (
 
         const session = decideSession(
           record,
-          working ? { type: "turn.steer", canSteer } : { type: "turn.send", turn }
+          working
+            ? { type: "turn.steer", canSteer, takesAttachments: true }
+            : { type: "turn.send", turn }
         );
 
         if (session.rejection !== null) return [];
@@ -156,7 +158,11 @@ const digest = Effect.fn("Constellation.deliverDigest")(function* (id: Constella
 
         // A working Lead whose Harness can steer hears the digest inside its live Turn.
         if (working !== undefined && canSteer && (yield* leadSteerable(store, graph, record))) {
-          const session = decideSession(record, { type: "turn.steer", canSteer });
+          const session = decideSession(record, {
+            type: "turn.steer",
+            canSteer,
+            takesAttachments: true,
+          });
 
           if (session.rejection !== null) return [];
 

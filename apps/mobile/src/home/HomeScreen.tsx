@@ -23,7 +23,6 @@ import { themedStyles, useReducedMotion, useTheme } from "../theme/index.ts";
 import { useHomeHosts } from "./feed/useHomeHosts.ts";
 import { type HeroPage, heroKicker, nextUpIndex, nextUpMeta, pageIndex } from "./model/hero.ts";
 import { buildHome, type HomeRow, type SessionRow as Row, unreachableOf } from "./model/home.ts";
-import { rowDestination } from "./model/lines.ts";
 import {
   constellationsOnScreen,
   type HomeSection,
@@ -42,8 +41,6 @@ import { CHROME_TEXT_SCALE } from "../theme/textScale.ts";
 
 export interface HomeActions {
   readonly openSession: (hostId: string, sessionId: string) => void;
-  /** Review (M5) of a session's latest ended Turn. */
-  readonly openReview: (hostId: string, sessionId: string) => void;
   readonly openConstellation: (hostId: string, constellationId: string) => void;
   readonly openHosts: () => void;
   readonly link: () => void;
@@ -313,11 +310,7 @@ const ListRow = ({
       now={now}
       withHost={withHost}
       menu={{ menu: sessionMenu(row), onAction: onMenu }}
-      onOpen={() =>
-        rowDestination(row.session) === "review"
-          ? actions.openReview(row.hostId, row.session.id)
-          : actions.openSession(row.hostId, row.session.id)
-      }
+      onOpen={() => actions.openSession(row.hostId, row.session.id)}
     />
   );
 

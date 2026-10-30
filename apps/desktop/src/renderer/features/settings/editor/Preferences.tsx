@@ -1,49 +1,19 @@
-/** The Editor preferences group (Paper L4): language preferences, then the Editor's own keys and saving. */
+/** SR-02's Editing card: Vim, autosave, format on save and inline diagnostics behind one switch each. */
 import { clientCopy } from "../../../../shared/clientCopy.ts";
 import * as P from "@polaris/protocol";
-import { Switch } from "@polaris/ui";
+import { SettingsCard, SettingsToggleRow, SettingsWell } from "@polaris/ui";
 import { currentKeyPlatform, shortcutLabel } from "../../../../shared/chord.ts";
 import { commandShortcut, digitChord } from "../../../../shared/keymap.ts";
 import type { ReactNode } from "react";
-import { Group } from "../ui/parts.tsx";
 import { withKey, type SettingsRecord } from "./records.ts";
 
 const vimCaption = () => {
-  const kept = (
-    ["editor.save", "editor.findFile", "editor.inlineChat", "editor.addToSession"] as const
-  )
-    .map((id) => commandShortcut(id))
-    .join(", ");
-
   const chip = shortcutLabel(digitChord(0, currentKeyPlatform()) ?? "Ctrl+1");
 
-  return `Normal, insert and visual modes, :w, :q, :wq and :e. ${kept} and ${chip}…9 keep working in every mode.`;
+  return `:w, :q, :wq, :e · ${commandShortcut("editor.findFile")} and ${chip}…9 still work`;
 };
 
 type Change = (settings: P.LanguageSettingsPatch) => P.LanguageSettingsPatch;
-
-/** A preference: its name in `body` medium, an optional caption, and its switch. */
-export const PreferenceRow = ({
-  id,
-  title,
-  caption,
-  children,
-}: {
-  readonly id: string;
-  readonly title: string;
-  readonly caption?: string;
-  readonly children: ReactNode;
-}) => (
-  <div className="px-panel flex items-center gap-4 py-[calc(var(--spacing-gap)+4px)]">
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <label htmlFor={id} className="text-body text-text-strong font-medium">
-        {title}
-      </label>
-      {caption && <span className="text-caption text-text-subtle">{caption}</span>}
-    </div>
-    {children}
-  </div>
-);
 
 export interface EditorKeys {
   readonly vim: boolean;
@@ -68,71 +38,46 @@ export const Preferences = ({
   readonly onChange: (change: Change) => void;
   readonly keys: EditorKeys;
 }) => {
-  const settings = record?.settings ?? {};
+  const formatOnSave = record?.settings.formatOnSave ?? true;
+  const on = [keys.vim, keys.autosave, formatOnSave, keys.inlineDiagnostics].filter(Boolean).length;
 
   return (
-    <Group label="Editor preferences">
-      <PreferenceRow
-        id="editor-format-on-save"
-        title="Format on save"
-        caption="Each language's formatter, using the project's own config."
-      >
-        <Switch
-          id="editor-format-on-save"
-          disabled={record === null}
-          checked={settings.formatOnSave ?? true}
-          onCheckedChange={(on) => onChange(withKey("formatOnSave", on))}
+    <SettingsCard
+      title="Editing"
+      aside={`${on} of 4 on`}
+      status={
+        failed
+          ? "Couldn't read or save these preferences · try again"
+          : `Unsaved edits stay on ${clientCopy().machine} either way`
+      }
+    >
+      <SettingsWell>
+        <SettingsToggleRow
+          title="Vim mode"
+          caption={vimCaption()}
+          checked={keys.vim}
+          onCheckedChange={keys.onVim}
         />
-      </PreferenceRow>
-      {keys.commitMessages === undefined ? null : (
-        <PreferenceRow
-          id="editor-commit-messages"
-          title="Commit messages"
-          caption="Drafts from the staged changes in one click. A small model keeps it quick."
-        >
-          <div id="editor-commit-messages" className="shrink-0">
-            {keys.commitMessages}
-          </div>
-        </PreferenceRow>
-      )}
-      <PreferenceRow
-        id="editor-download-tools"
-        title="Download language tools automatically"
-        caption="The first time you open a file, Polaris fetches its pinned language server to that host. Interpreters and toolchains stay yours."
-      >
-        <Switch
-          id="editor-download-tools"
-          disabled={record === null}
-          checked={settings.downloadLanguageToolsAutomatically ?? true}
-          onCheckedChange={(on) => onChange(withKey("downloadLanguageToolsAutomatically", on))}
+        <SettingsToggleRow
+          title="Autosave after a short pause"
+          caption="Never overwrites a newer version on disk"
+          checked={keys.autosave}
+          onCheckedChange={keys.onAutosave}
         />
-      </PreferenceRow>
-      <PreferenceRow id="editor-vim" title="Vim mode" caption={vimCaption()}>
-        <Switch id="editor-vim" checked={keys.vim} onCheckedChange={keys.onVim} />
-      </PreferenceRow>
-      <PreferenceRow
-        id="editor-autosave"
-        title="Autosave after a short pause"
-        caption={`Saves a second after you stop typing. Unsaved edits are kept on ${clientCopy().machine} either way, and a save never overwrites a newer version on disk.`}
-      >
-        <Switch id="editor-autosave" checked={keys.autosave} onCheckedChange={keys.onAutosave} />
-      </PreferenceRow>
-      <PreferenceRow
-        id="editor-inline-diagnostics"
-        title="Inline diagnostics"
-        caption="Each line's most severe error, warning or info at its end. Squiggles and the hover stay either way."
-      >
-        <Switch
-          id="editor-inline-diagnostics"
+        <SettingsToggleRow
+          title="Format on save"
+          caption="Each language's formatter, with the project's config"
+          disabled={record === null}
+          checked={formatOnSave}
+          onCheckedChange={(next) => onChange(withKey("formatOnSave", next))}
+        />
+        <SettingsToggleRow
+          title="Inline diagnostics"
+          caption="Each line's worst problem at its end"
           checked={keys.inlineDiagnostics}
           onCheckedChange={keys.onInlineDiagnostics}
         />
-      </PreferenceRow>
-      {failed && (
-        <p role="status" className="px-panel text-caption text-text-subtle py-2">
-          Couldn't read or save these language preferences. Try again.
-        </p>
-      )}
-    </Group>
+      </SettingsWell>
+    </SettingsCard>
   );
 };

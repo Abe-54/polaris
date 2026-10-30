@@ -2,7 +2,7 @@
  * Turn items as the conversation shows them: one shape for a completed
  * `TurnItem` and for an item still streaming (its `ItemProgress` and deltas).
  */
-import type { ToolKind, TurnItem } from "@polaris/protocol";
+import type { Attachment, ToolKind, TurnItem } from "@polaris/protocol";
 import { Match, Predicate } from "effect";
 import type { LiveItem } from "../../../store/sessionModel.ts";
 import { type NativeCall, nativeCall, nativeSummary } from "./nativeTools/index.ts";
@@ -45,7 +45,12 @@ interface Base {
 export type ItemView =
   | (Base & { readonly kind: "message"; readonly text: string })
   /** A steer the Harness took, where it landed in the Turn. */
-  | (Base & { readonly kind: "user"; readonly text: string })
+  | (Base & {
+      readonly kind: "user";
+      readonly text: string;
+      /** What the steer carried; empty for a text-only one. */
+      readonly attachments: ReadonlyArray<Attachment>;
+    })
   | (Base & {
       readonly kind: "reasoning";
       readonly text: string;
@@ -273,7 +278,13 @@ const fromItem = (item: TurnItem, live: boolean): ItemView =>
   Match.value(item).pipe(
     Match.tagsExhaustive({
       AssistantMessage: (i): ItemView => ({ kind: "message", id: i.id, live, text: i.text }),
-      UserMessage: (i): ItemView => ({ kind: "user", id: i.id, live, text: i.text }),
+      UserMessage: (i): ItemView => ({
+        kind: "user",
+        id: i.id,
+        live,
+        text: i.text,
+        attachments: i.attachments ?? [],
+      }),
       Reasoning: (i): ItemView => ({
         kind: "reasoning",
         id: i.id,

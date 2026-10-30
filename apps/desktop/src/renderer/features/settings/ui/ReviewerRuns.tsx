@@ -1,50 +1,26 @@
 /**
- * Settings → Reviewer's lower half (Paper S7): "When it runs" (pull requests, Agent
- * Sessions, and asking first above a size) and "What it checks against" (the Rules and
- * the review instructions), with the way to Usage.
+ * Settings → Reviewer's lower half (DESIGN.md, Settings redesign SR-10): "When it runs"
+ * (pull requests, agent sessions, the walkthrough, asking first above a size) beside "What
+ * it checks against" (the rules and the review instructions), then the line to Usage.
  */
 import {
-  Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Switch,
+  SettingsButton,
+  type SettingsOption,
+  SettingsRow,
+  SettingsSelectRow,
+  SettingsToggleRow,
+  SettingsCard,
+  SettingsWell,
 } from "@polaris/ui";
 import { useShellActions } from "../../../shell/hooks.ts";
 import { type RunPolicy, THRESHOLDS, thresholdLabel } from "../model/reviewer.ts";
-import { Group, Heading, SettingRow } from "./parts.tsx";
 
 const NEVER = "never";
 
-const ThresholdSelect = ({
-  value,
-  onChange,
-}: {
-  readonly value: number | null;
-  readonly onChange: (lines: number | null) => void;
-}) => (
-  <Select
-    value={value === null ? NEVER : String(value)}
-    onValueChange={(v) => onChange(v === NEVER ? null : Number(v))}
-  >
-    <SelectTrigger
-      id="ask-first"
-      aria-label="Ask first for large changes"
-      className="text-caption bg-surface-sunken h-tree-row px-2.5"
-    >
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      {THRESHOLDS.map((lines) => (
-        <SelectItem key={lines ?? NEVER} value={lines === null ? NEVER : String(lines)}>
-          {thresholdLabel(lines)}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
+const THRESHOLD_OPTIONS: ReadonlyArray<SettingsOption<string>> = THRESHOLDS.map((lines) => ({
+  value: lines === null ? NEVER : String(lines),
+  label: thresholdLabel(lines),
+}));
 
 export const WhenItRuns = ({
   policy,
@@ -57,54 +33,43 @@ export const WhenItRuns = ({
   readonly onWalkthrough: (enabled: boolean) => void;
   readonly onChange: (patch: Partial<RunPolicy>) => void;
 }) => (
-  <section aria-label="When it runs" className="flex flex-col gap-3">
-    <Heading>When it runs</Heading>
-    <Group>
-      <SettingRow
+  <SettingsCard title="When it runs">
+    <SettingsWell>
+      <SettingsToggleRow
+        wrap
         title="When a pull request opens in Review"
         caption="Kept per head commit; new commits are reviewed on their own"
-        htmlFor="run-on-pulls"
-      >
-        <Switch
-          id="run-on-pulls"
-          checked={policy.onPullRequests}
-          onCheckedChange={(on) => onChange({ onPullRequests: on })}
-        />
-      </SettingRow>
-      <SettingRow
+        checked={policy.onPullRequests}
+        onCheckedChange={(on) => onChange({ onPullRequests: on })}
+      />
+      <SettingsToggleRow
+        wrap
         title="When you open an agent session in Review or accept its turns"
         caption="Rules still run after every turn"
-        htmlFor="run-on-sessions"
-      >
-        <Switch
-          id="run-on-sessions"
-          checked={policy.onSessions}
-          onCheckedChange={(on) => onChange({ onSessions: on })}
-        />
-      </SettingRow>
-      <SettingRow
+        checked={policy.onSessions}
+        onCheckedChange={(on) => onChange({ onSessions: on })}
+      />
+      <SettingsToggleRow
+        wrap
         title="Write a walkthrough"
-        caption="Its own read-only session beside the reviewer; lands first on Overview, rewritten when the head moves"
-        htmlFor="write-walkthrough"
-      >
-        <Switch id="write-walkthrough" checked={walkthrough} onCheckedChange={onWalkthrough} />
-      </SettingRow>
-      <SettingRow
+        caption="Lands first on Overview, rewritten when the head moves"
+        checked={walkthrough}
+        onCheckedChange={onWalkthrough}
+      />
+      <SettingsSelectRow
+        wrap
         title="Ask first for large changes"
         caption={
           walkthrough
             ? "Rules run at once; the reviewer and the walkthrough wait for “Run both”"
             : "Rules run at once; the reviewer waits for “Run reviewer”"
         }
-        htmlFor="ask-first"
-      >
-        <ThresholdSelect
-          value={policy.askAboveLines}
-          onChange={(lines) => onChange({ askAboveLines: lines })}
-        />
-      </SettingRow>
-    </Group>
-  </section>
+        value={policy.askAboveLines === null ? NEVER : String(policy.askAboveLines)}
+        options={THRESHOLD_OPTIONS}
+        onChange={(v) => onChange({ askAboveLines: v === NEVER ? null : Number(v) })}
+      />
+    </SettingsWell>
+  </SettingsCard>
 );
 
 const CheckRow = ({
@@ -113,61 +78,52 @@ const CheckRow = ({
   aside,
 }: {
   readonly name: string;
-  readonly what: string;
+  readonly what?: string;
   readonly aside: string;
 }) => (
-  <div className="px-panel min-h-session-row flex items-center gap-[var(--spacing-panel)]">
-    <span className="text-body text-text-default w-[180px] shrink-0">{name}</span>
-    <span className="text-caption text-text-subtle min-w-0 flex-1">{what}</span>
-    <span className="text-caption text-text-subtle shrink-0">{aside}</span>
-  </div>
+  <SettingsRow wrap title={name} caption={what}>
+    <span className="text-caption text-text-subtle whitespace-nowrap">{aside}</span>
+  </SettingsRow>
 );
 
 /** The Daemon's built-in ast-grep pack (apps/daemon/src/rules/README.md). */
 const BUILT_IN_PATTERNS = 28;
 
-export const ChecksAgainst = () => {
+export const ChecksAgainst = () => (
+  <SettingsCard
+    title="What it checks against"
+    status="Rules use no tokens · nothing hides a critical finding"
+  >
+    <SettingsWell>
+      <CheckRow
+        name="Secrets"
+        what="Keys, tokens and credentials · critical, weak matches medium"
+        aside="Always on"
+      />
+      <CheckRow
+        name="Dangerous patterns"
+        what={`${BUILT_IN_PATTERNS} built-in · TypeScript, Python, Go, Rust, shell`}
+        aside="Always on"
+      />
+      <CheckRow
+        name="Review instructions"
+        what=".polaris/review.md, and a private file on each host"
+        aside="Read every run"
+      />
+    </SettingsWell>
+  </SettingsCard>
+);
+
+/** The way to Usage, under the two cards. */
+export const UsageLine = () => {
   const { openSettings } = useShellActions();
 
   return (
-    <section aria-label="What it checks against" className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <Heading>What it checks against</Heading>
-        <p className="text-body text-text-subtle">
-          Rules run on the host without the reviewer and use no tokens. No rule or instruction can
-          hide a critical finding.
-        </p>
-      </div>
-      <Group>
-        <CheckRow
-          name="Secrets"
-          what="Keys, tokens and credentials · critical, weak matches medium"
-          aside="Always on"
-        />
-        <CheckRow
-          name="Dangerous patterns"
-          what={`${BUILT_IN_PATTERNS} built-in · TypeScript, Python, Go, Rust, shell`}
-          aside="Always on"
-        />
-        <CheckRow
-          name="Review instructions"
-          what=".polaris/review.md, and a private file on each host"
-          aside="Read every run"
-        />
-      </Group>
-      <div className="flex items-center gap-2 px-1">
-        <span className="text-caption text-text-subtle flex-1">
-          The reviewer&apos;s tokens count in Usage and plan limits like any session&apos;s.
-        </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="text-text-default"
-          onClick={() => openSettings("usage")}
-        >
-          Open usage
-        </Button>
-      </div>
-    </section>
+    <div className="border-hairline px-panel flex min-h-10 items-center gap-3 rounded-[16px] border py-1.5">
+      <span className="text-caption text-text-subtle min-w-0 flex-1 truncate">
+        The reviewer&apos;s tokens count in Usage and plan limits like any session&apos;s.
+      </span>
+      <SettingsButton onClick={() => openSettings("usage")}>Open usage</SettingsButton>
+    </div>
   );
 };

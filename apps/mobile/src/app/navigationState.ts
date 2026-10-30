@@ -20,6 +20,16 @@ export const initialNavigation: NavigationState = {
 
 export const topOf = (state: NavigationState): Route => state.stack.at(-1) ?? HOME;
 
+/** A screen drawn by the shell, keyed by its place on the stack so it keeps its state as it moves. */
+export interface Layer {
+  readonly route: Route;
+  readonly index: number;
+}
+
+/** The top of the stack and the screen beneath it, bottom first: a swipe back uncovers the second. */
+export const layersOf = (state: NavigationState): ReadonlyArray<Layer> =>
+  state.stack.map((route, index) => ({ route, index })).slice(-2);
+
 export const pushed = (state: NavigationState, route: Route): NavigationState => ({
   ...state,
   stack: [...state.stack, route],

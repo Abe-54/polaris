@@ -1,61 +1,106 @@
 /**
- * Settings → Extensions (Paper X1, X2, X2b; ENG-401): per Host, its Pairings
- * with Grant and last use, Revoke, and pairing a new Extension, whose token
- * shows once as a QR code and a pairing string.
+ * Settings → Extensions (DESIGN.md, Settings redesign SR-07; ENG-401): a card per host with its
+ * pairings, their Grant and last use, Revoke in place, and Pair an extension in that card,
+ * whose token shows once as a QR code and a pairing string.
  */
 import type { Grant, PairingId } from "@polaris/protocol";
-import { Button, PlusIcon } from "@polaris/ui";
+import {
+  cn,
+  SettingsButton,
+  SettingsCard,
+  SettingsEmpty,
+  SettingsPage,
+  SettingsWell,
+} from "@polaris/ui";
 import { Match } from "effect";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { HostView } from "../../../../shared/api.ts";
-import { useApp } from "../../../shell/hooks.ts";
+import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { sectionInfo } from "../../settings/model/sections.ts";
-import { Column, Group, Heading, PageHeader } from "../../settings/ui/parts.tsx";
 import { livePairings } from "../model.ts";
-import { type Paired, type PairingsState, useExtensions } from "../useExtensions.ts";
+import { type Paired, useExtensions } from "../useExtensions.ts";
 import { PairForm } from "./PairForm.tsx";
 import { PairingRow } from "./PairingRow.tsx";
 import { Reveal } from "./Reveal.tsx";
 
 const CAPABILITY = "extensions";
 
+const FALLBACK_COLOUR = "var(--color-text-subtle)";
+
 type Panel =
   | { readonly kind: "closed" }
   | { readonly kind: "form" }
   | { readonly kind: "paired"; readonly paired: Paired };
 
-const Note = ({ line }: { readonly line: string }) => (
-  <p className="bg-surface-sunken rounded-card px-panel text-body text-text-subtle py-3">{line}</p>
+const ScreenGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+    <rect x="1.5" y="2.5" width="9" height="6" rx="1" fill="none" stroke="currentColor" />
+    <path d="M4 10.5h4" stroke="currentColor" />
+  </svg>
+);
+
+const HostName = ({ label, colour }: { readonly label: string; readonly colour: string }) => (
+  <span className="flex items-center gap-2">
+    <span
+      aria-hidden
+      className="size-2.5 shrink-0 rounded-[3px]"
+      style={{ backgroundColor: colour }}
+    />
+    {label}
+  </span>
 );
 
 const PairButton = ({ onClick }: { readonly onClick: () => void }) => (
-  <Button onClick={onClick} data-testid="pair-extension">
-    <PlusIcon size={12} />
-    Pair an extension
-  </Button>
+  <SettingsButton onClick={onClick}>Pair an extension</SettingsButton>
 );
 
-const Empty = ({ label, onPair }: { readonly label: string; readonly onPair: () => void }) => (
-  <div className="bg-surface-sunken rounded-card px-panel flex items-center gap-3 py-3">
-    <span className="text-body text-text-subtle flex-1">No extensions paired with {label}</span>
-    <PairButton onClick={onPair} />
-  </div>
+/** A host whose pairings can't show: one line, and at most one way forward. */
+const LineCard = ({
+  label,
+  colour,
+  line,
+  offline = false,
+  action,
+}: {
+  readonly label: string;
+  readonly colour: string;
+  readonly line: string;
+  readonly offline?: boolean;
+  readonly action?: ReactNode;
+}) => (
+  <SettingsCard
+    title={<HostName label={label} colour={colour} />}
+    aside={offline ? "Not connected" : undefined}
+    action={action}
+    className={cn(offline && "opacity-(--opacity-dimmed)")}
+  >
+    <SettingsEmpty>{line}</SettingsEmpty>
+  </SettingsCard>
 );
 
-/** One connected Host's Pairings, the pair form and the one-time reveal. */
+/** One connected host's card: its pairings, the inline pair form and the one-time reveal. */
 export const HostPairings = ({
   hostKey,
   label,
+  colour = FALLBACK_COLOUR,
 }: {
   readonly hostKey: string;
   readonly label: string;
+  readonly colour?: string;
 }) => {
   const { state, pair, revoke } = useExtensions(hostKey, true);
   const [panel, setPanel] = useState<Panel>({ kind: "closed" });
   const now = useNow();
 
-  if (state.kind !== "ready") return <Note line={loadingLine(state, label)} />;
+  if (state.kind !== "ready")
+    return (
+      <LineCard
+        label={label}
+        colour={colour}
+        line={state.kind === "loading" ? `Asking ${label}…` : state.message}
+      />
+    );
 
   const pairings = livePairings(state.pairings);
   const open = () => setPanel({ kind: "form" });
@@ -75,59 +120,78 @@ export const HostPairings = ({
     }
   };
 
-  if (pairings.length === 0 && panel.kind === "closed") {
-    return <Empty label={label} onPair={open} />;
-  }
+  if (pairings.length === 0 && panel.kind === "closed")
+    return (
+      <SettingsCard
+        title={
+          <span className="flex items-center gap-3">
+            <HostName label={label} colour={colour} />
+            <span className="text-caption text-text-subtle truncate">
+              No extensions paired with {label}
+            </span>
+          </span>
+        }
+        aside={<PairButton onClick={open} />}
+        className="pb-[calc(var(--spacing-gap)+4px)]"
+      >
+        {null}
+      </SettingsCard>
+    );
+
+  const form = panel.kind === "form";
 
   return (
-    <>
+    <SettingsCard
+      title={<HostName label={label} colour={colour} />}
+      aside={form ? "Pairing" : `${pairings.length} paired`}
+      status={form ? undefined : "Grants are fixed at pairing"}
+      action={panel.kind === "closed" ? <PairButton onClick={open} /> : undefined}
+    >
       {pairings.length === 0 ? null : (
-        <Group label={`Extensions paired with ${label}`}>
+        <SettingsWell aria-label={`Extensions paired with ${label}`}>
           {pairings.map((p) => (
             <PairingRow key={p.id} pairing={p} now={now} onRevoke={() => onRevoke(p.id)} />
           ))}
-        </Group>
+        </SettingsWell>
       )}
       {Match.value(panel).pipe(
         Match.discriminatorsExhaustive("kind")({
-          closed: () => (
-            <div>
-              <PairButton onClick={open} />
-            </div>
-          ),
+          closed: () => null,
           form: () => (
             <PairForm hostKey={hostKey} hostLabel={label} onCancel={close} onPair={onPair} />
           ),
           paired: ({ paired }) => <Reveal paired={paired} hostLabel={label} onDone={close} />,
         })
       )}
-    </>
+    </SettingsCard>
   );
 };
 
-const loadingLine = (state: Exclude<PairingsState, { kind: "ready" }>, label: string) =>
-  state.kind === "loading" ? `Asking ${label}…` : state.message;
-
 const HostSection = ({ host }: { readonly host: HostView }) => {
-  const connected = host.status.state === "connected";
-  const supported = host.status.capabilities.includes(CAPABILITY);
+  const { openSettings } = useShellActions();
+  const colour = host.colour ?? FALLBACK_COLOUR;
 
-  return (
-    <section className="flex flex-col gap-3" data-testid="extensions-host" data-host={host.key}>
-      <Heading>{host.label}</Heading>
-      {!connected ? (
-        <Note
-          line={`${host.label} is ${host.status.state.replace("-", " ")}; its extensions show once it's connected`}
-        />
-      ) : !supported ? (
-        <Note
-          line={`The daemon on ${host.label} is too old to pair extensions; upgrade it from Hosts`}
-        />
-      ) : (
-        <HostPairings hostKey={host.key} label={host.label} />
-      )}
-    </section>
-  );
+  if (host.status.state !== "connected")
+    return (
+      <LineCard
+        label={host.label}
+        colour={colour}
+        offline
+        line={`${host.label} isn't connected; its extensions show once it is`}
+      />
+    );
+
+  if (!host.status.capabilities.includes(CAPABILITY))
+    return (
+      <LineCard
+        label={host.label}
+        colour={colour}
+        line={`The daemon on ${host.label} is too old to pair extensions`}
+        action={<SettingsButton onClick={() => openSettings("hosts")}>Open hosts</SettingsButton>}
+      />
+    );
+
+  return <HostPairings hostKey={host.key} label={host.label} colour={colour} />;
 };
 
 export const ExtensionsPage = () => {
@@ -135,11 +199,17 @@ export const ExtensionsPage = () => {
   const info = sectionInfo("extensions");
 
   return (
-    <Column>
-      <PageHeader title={info.title} blurb={info.blurb} />
+    <SettingsPage
+      title={info.title}
+      blurb="Apps and devices that act on a host for you, with only what you grant."
+      scope="Each host"
+      scopeIcon={<ScreenGlyph />}
+    >
       {hosts.map((host) => (
-        <HostSection key={host.key} host={host} />
+        <div key={host.key} data-testid="extensions-host" data-host={host.key} className="contents">
+          <HostSection host={host} />
+        </div>
       ))}
-    </Column>
+    </SettingsPage>
   );
 };

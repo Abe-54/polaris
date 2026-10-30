@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   HOME_TABS,
   initialNavigation,
+  layersOf,
   opened,
   pushed,
   replaced,
@@ -51,5 +52,25 @@ describe("New session", () => {
     expect(started.stack).toEqual([{ screen: "tabs" }, thread]);
     expect(topOf(wentBack(started))).toEqual({ screen: "tabs" });
     expect(wentBack(started).tab).toBe("review");
+  });
+});
+
+describe("the screens drawn", () => {
+  test("a pushed screen sits over the one beneath, which keeps its key through push and back", () => {
+    const thread = { screen: "thread", hostId: "h", sessionId: "s" } as const;
+    const constellation = { screen: "constellation", hostId: "h", constellationId: "c" } as const;
+    const onThread = pushed(initialNavigation, thread);
+    const onConstellation = pushed(onThread, constellation);
+
+    expect(layersOf(initialNavigation)).toEqual([{ route: { screen: "tabs" }, index: 0 }]);
+    expect(layersOf(onThread)).toEqual([
+      { route: { screen: "tabs" }, index: 0 },
+      { route: thread, index: 1 },
+    ]);
+    expect(layersOf(onConstellation)).toEqual([
+      { route: thread, index: 1 },
+      { route: constellation, index: 2 },
+    ]);
+    expect(layersOf(wentBack(onConstellation))).toEqual(layersOf(onThread));
   });
 });

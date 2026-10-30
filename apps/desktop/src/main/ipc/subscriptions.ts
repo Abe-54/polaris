@@ -5,6 +5,7 @@
 import { Cause, Effect, Exit, Fiber, Option, Schema, Stream } from "effect";
 import { EditPredictionInput, PredictionCompletionInput } from "../../shared/predictionContract.ts";
 import type { PredictionBridge } from "../prediction/bridge.ts";
+import type { Registry as Browsers } from "../browser/registry.ts";
 import { CHANNELS, type BatchEntry, type IpcError } from "../../shared/api.ts";
 import type { ClientRuntime } from "../hosts.ts";
 import { newBatcher } from "./batcher.ts";
@@ -24,6 +25,7 @@ export interface WindowSubscriptions {
 
 export interface WindowSubscriptionsInput {
   readonly prediction?: PredictionBridge | undefined;
+  readonly browser?: Browsers | undefined;
   readonly runtime: ClientRuntime;
   readonly target: WindowTarget;
 }
@@ -40,6 +42,7 @@ const endError = (exit: Exit.Exit<void, IpcError>): IpcError | null =>
 
 export const windowSubscriptions = ({
   prediction,
+  browser,
   runtime,
   target,
 }: WindowSubscriptionsInput): WindowSubscriptions => {
@@ -77,7 +80,8 @@ export const windowSubscriptions = ({
     const fiber = runtime.runFork(
       feedOpener(
         kind,
-        prediction
+        prediction,
+        browser
       )(input).pipe(Stream.runForEach((item) => Effect.sync(() => batcher.push(id, item))))
     );
 

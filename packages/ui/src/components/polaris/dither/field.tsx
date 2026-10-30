@@ -1,4 +1,4 @@
-import { type HTMLAttributes, useEffect, useRef } from "react";
+import { type HTMLAttributes, useEffect, useRef, useState } from "react";
 
 import { cn } from "../../../lib/cn";
 import type { CssVars } from "../../../lib/css";
@@ -17,8 +17,8 @@ import {
   RESTING,
   type Rgb,
   Trail,
-  WASH_ALPHA,
 } from "./glow";
+import { randomSeed } from "./noise";
 
 export interface DitherFieldProps extends HTMLAttributes<HTMLCanvasElement> {
   readonly hue: TintHue;
@@ -26,6 +26,8 @@ export interface DitherFieldProps extends HTMLAttributes<HTMLCanvasElement> {
   readonly bloom?: string | undefined;
   /** While a Turn runs the threshold drifts and the edge breathes at 12 fps (LiveClock). */
   readonly active?: boolean | undefined;
+  /** Seeds the drift; unset picks one per mount. */
+  readonly seed?: number | undefined;
 }
 
 /** A resolved CSS colour as sRGB bytes, whatever colour space the token uses. */
@@ -44,7 +46,10 @@ function toRgb(css: string): Rgb {
   return [r, g, b];
 }
 
-/** The hue is the canvas's `color`; the sparse dots take its `outline-color` (text-strong). */
+/**
+ * The hue is the canvas's `color`; the sparse dots take its `outline-color` (text-strong); the
+ * trail is the hue mixed a third of the way to text-strong, lighter on dark, deeper on light.
+ */
 function resolveColors(canvas: HTMLCanvasElement): FieldColors {
   const style = getComputedStyle(canvas);
   const sparse = toRgb(style.outlineColor);
@@ -53,9 +58,9 @@ function resolveColors(canvas: HTMLCanvasElement): FieldColors {
   // Light ground: the hue needs a little more alpha to read at the same weight.
   return {
     hue: toRgb(style.color),
+    trail: toRgb(`color-mix(in oklab, ${style.color} 65%, ${style.outlineColor})`),
     sparse,
     hueAlpha: light ? HUE_ALPHA * 1.25 : HUE_ALPHA,
-    washAlpha: light ? WASH_ALPHA * 0.6 : WASH_ALPHA,
   };
 }
 
@@ -98,27 +103,33 @@ function step(motion: Motion, dt: number): boolean {
   return settling || fading || trailing || motion.bloomAge < BLOOM_MS;
 }
 
+/** A frame's step in ms: never backwards, and at most 50ms after a stall. */
+export const frameDt = (elapsed: number): number => Math.min(Math.max(elapsed, 0), 50);
+
 interface Controller {
   readonly bloom: () => void;
   readonly clock: LiveClock;
 }
 
 /**
- * The live dither field (DESIGN.md, Working strip): fine hue dots at the top-left that drift
- * and breathe while `active`, a trail and sparse bright dots around the pointer while its
- * `[data-dither-hover]` ancestor is hovered, and a bloom on each status. It paints only while
- * something moves; hidden, out of view or under Reduce Motion it is the still corner.
+ * The live dither field (DESIGN.md, Working strip): fine hue dots at the top-left over a CSS
+ * tint; while `active` seeded noise drifts the threshold and breathes the edge at 12 fps. Over a `[data-dither-hover]` ancestor,
+ * sparse bright dots follow the pointer with a flat trail; each status blooms the corner. It
+ * paints only while something moves; hidden, out of view or under Reduce Motion it is still.
  */
 export function DitherField({
   hue,
   bloom,
   active = false,
+  seed: seedProp,
   className,
   style,
   ...props
 }: DitherFieldProps) {
   const ref = useRef<HTMLCanvasElement>(null);
   const controller = useRef<Controller | null>(null);
+  const [ownSeed] = useState(randomSeed);
+  const seed = seedProp ?? ownSeed;
 
   useEffect(() => {
     const canvas = ref.current;
@@ -136,7 +147,7 @@ export function DitherField({
     let origin = { x: 0, y: 0 };
     let frame = 0;
     let last = 0;
-    let live = liveAt(0);
+    let live = liveAt(0, seed);
 
     const motion: Motion = {
       target: { x: 0, y: 0 },
@@ -150,6 +161,7 @@ export function DitherField({
     const current = (): FieldFrame => ({
       bloom: motion.bloomAge >= BLOOM_MS ? RESTING : bloomAt(motion.bloomAge),
       ...live,
+      seed,
       trail: motion.trail,
       pointer: motion.pointer,
       presence: motion.presence,
@@ -168,7 +180,8 @@ export function DitherField({
 
       origin = { x: bounds.left, y: bounds.top };
 
-      if (width !== canvas.width || height !== canvas.height) {
+      // Against the image, not the canvas: a re-run effect finds the canvas already sized.
+      if (width !== image.width || height !== image.height) {
         canvas.width = width;
         canvas.height = height;
         canvas.style.width = `${width}px`;
@@ -181,8 +194,10 @@ export function DitherField({
       paint();
     };
 
-    const tick = (now: number) => {
-      const moving = step(motion, Math.min(now - last, 50));
+    // Timed on performance.now(), as wake() is: a frame's timestamp can precede it.
+    const tick = () => {
+      const now = performance.now();
+      const moving = step(motion, frameDt(now - last));
 
       last = now;
       paint();
@@ -231,7 +246,7 @@ export function DitherField({
 
     // A live step repaints, unless the pointer's frame loop is about to.
     const clock = new LiveClock((step) => {
-      live = liveAt(step);
+      live = liveAt(step, seed);
 
       if (frame === 0) paint();
     });
@@ -271,15 +286,16 @@ export function DitherField({
       host?.removeEventListener("pointermove", onMove);
       host?.removeEventListener("pointerleave", onLeave);
     };
-  }, [hue]);
+  }, [hue, seed]);
 
   useEffect(() => {
     if (bloom !== undefined) controller.current?.bloom();
-  }, [hue, bloom]);
+  }, [hue, seed, bloom]);
 
-  useEffect(() => controller.current?.clock.set({ active }), [hue, active]);
+  useEffect(() => controller.current?.clock.set({ active }), [hue, seed, active]);
 
   const vars: CssVars = {
+    "--dither-hue": hueVar(hue),
     color: hueVar(hue),
     outlineColor: "var(--color-text-strong)",
     ...style,
@@ -290,7 +306,10 @@ export function DitherField({
       ref={ref}
       aria-hidden="true"
       data-slot="dither-field"
-      className={cn("pixelated pointer-events-none absolute top-0 left-0", className)}
+      className={cn(
+        "polaris-dither-field pixelated pointer-events-none absolute top-0 left-0",
+        className
+      )}
       style={vars}
       {...props}
     />

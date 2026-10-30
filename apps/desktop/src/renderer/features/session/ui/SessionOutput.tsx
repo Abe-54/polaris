@@ -45,6 +45,8 @@ import { useFilesTick } from "../output/watch.ts";
 import type { SessionViewProps } from "./SessionIntent.tsx";
 import { OutputTab, SubagentPane, SubagentTab, useShownSubagent } from "./SubagentOutput.tsx";
 import { EditorPlaceProvider, OpenInEditorButton } from "../../editor-links/index.ts";
+import { leaveBrowser } from "../output/browser.ts";
+import { BrowserOutputTab, SessionBrowser, useBrowserShown } from "./BrowserOutput.tsx";
 import { useSettings } from "../../settings/index.ts";
 
 const CARD = "mx-4 border-x border-hairline bg-surface-sunken";
@@ -374,6 +376,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
   const ui = useSessionUi(key);
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const subagent = useShownSubagent(hostKey, sessionId);
+  const browser = useBrowserShown(hostKey, sessionId, subagent !== null);
 
   const groups = groupTurns(model.turns);
   const current = groupOf(groups, ui.diffTurnId) ?? groups.at(-1) ?? null;
@@ -387,11 +390,16 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
     hostKey,
     cwd ?? "",
     sessionId,
-    current === null || subagent !== null ? null : groupSpan(current),
+    current === null || subagent !== null || browser ? null : groupSpan(current),
     current === null ? "" : spanRevision(current.views, files)
   );
 
   const close = () => showSubagent(key, null);
+
+  const changes = () => {
+    close();
+    leaveBrowser(hostKey, sessionId);
+  };
 
   const fold = (path: string) => {
     const next = new Set(folded);
@@ -412,15 +420,21 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
       >
         <div className="border-hairline flex h-11 shrink-0 items-center gap-1 border-b px-3">
           {tabs ?? (
-            <OutputTab id="changes" on={subagent === null} onClick={close}>
+            <OutputTab id="changes" on={subagent === null && !browser} onClick={changes}>
               Changes
             </OutputTab>
           )}
+          <BrowserOutputTab
+            hostKey={hostKey}
+            sessionId={sessionId}
+            on={browser}
+            harness={harness}
+          />
           {subagent === null ? null : (
             <SubagentTab shown={subagent} harness={harness} onClose={close} />
           )}
           <span className="flex-1" />
-          {subagent === null ? (
+          {subagent === null && !browser ? (
             <DiffSummary
               groups={groups}
               current={current}
@@ -438,7 +452,14 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             />
           )}
         </div>
-        {subagent === null ? (
+        {browser && session !== null ? (
+          <SessionBrowser
+            hostKey={hostKey}
+            sessionId={sessionId}
+            workspaceId={session.workspaceId}
+            harness={harness}
+          />
+        ) : subagent === null ? (
           <Changes current={current} state={state} folded={folded} onFold={fold} />
         ) : (
           <SubagentPane

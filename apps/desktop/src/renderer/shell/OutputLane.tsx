@@ -18,6 +18,8 @@ import {
   widthCss,
 } from "../features/session/index.ts";
 import { TerminalDock } from "../features/terminal/index.ts";
+import { useBrowserFeed } from "../features/browser/index.ts";
+import { onAgentTab, useShownSubagent } from "../features/session/index.ts";
 
 export interface OutputLaneProps {
   readonly hostKey: string;
@@ -96,6 +98,11 @@ export const OutputLane = ({ hostKey, workspaceId, sessionId, lane }: OutputLane
   const shown = useOutputShown({ hostKey, workspaceId }, sessionId);
   const width = useOutputWidth();
   const slide = useSlideIn(`${hostKey}\u0000${sessionId}`, shown);
+  const subagentShown = useShownSubagent(hostKey, sessionId) !== null;
+
+  useBrowserFeed(hostKey, sessionId, () =>
+    onAgentTab({ hostKey, workspaceId }, sessionId, subagentShown)
+  );
 
   if (!shown) {
     return (

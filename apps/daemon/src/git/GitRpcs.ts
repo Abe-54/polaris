@@ -1,5 +1,5 @@
 /**
- * Handlers for `git.*`: status, diff, show, and the Changes tab's writes. The
+ * Handlers for `git.*`: status, diff, show, log, and the Changes tab's writes. The
  * transport mounts this layer next to the other partial handler layers.
  */
 import {
@@ -10,6 +10,8 @@ import {
   GitDiscard,
   GitError,
   GitInit,
+  GitLog,
+  GitLogCommit,
   GitShow,
   GitStage,
   GitStatus,
@@ -28,6 +30,7 @@ import { generatedPaths } from "../reviewer/generated.ts";
 import { computeDiff, DiffNotFound, type DiffResult } from "./diff.ts";
 import { indexDiff } from "./diffIndex.ts";
 import { finishingGit, interruptibleGit, interruptibleGitPromise } from "./interrupt.ts";
+import { gitLog } from "./log.ts";
 import { showFile } from "./show.ts";
 import { gitStatus, type Status } from "./status.ts";
 import { publishRemoteAt, runSync, type SyncEvent } from "./sync.ts";
@@ -51,7 +54,8 @@ export class GitRpcs extends RpcGroup.make(
   GitDiscard,
   GitCommit,
   GitWatch,
-  GitSync
+  GitSync,
+  GitLog
 ) {}
 
 const gitError = (cwd: string) => (cause: unknown) =>
@@ -158,6 +162,15 @@ export const handleGitShow = Effect.fn("git.show")(function* ({
   return { size: file.size, mimeType: file.mimeType, content: { _tag: "Blob" as const, blobId } };
 });
 
+export const handleGitLog = Effect.fn("git.log")(function* ({
+  cwd,
+  limit,
+}: typeof GitLog.payloadSchema.Type) {
+  const commits = yield* interruptibleGit({ try: () => gitLog(cwd, limit), catch: gitError(cwd) });
+
+  return { commits: commits.map((c) => new GitLogCommit(c)) };
+});
+
 const pathsWith =
   (name: string, write: (cwd: string, paths: ReadonlyArray<string>) => Promise<void>) =>
   ({ cwd, paths }: typeof GitStage.payloadSchema.Type) =>
@@ -237,4 +250,5 @@ export const GitRpcsLive = GitRpcs.toLayer({
   "git.commit": handleGitCommit,
   "git.watch": ({ cwd }) => watchGit(cwd),
   "git.sync": handleGitSync,
+  "git.log": handleGitLog,
 });

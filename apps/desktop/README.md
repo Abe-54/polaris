@@ -272,6 +272,58 @@ times include downloads only when the managed tools are absent; warm reruns
 reuse verified Host versions. The repository fixture is a tracked `git archive`
 copy of the checked-out commit, with acceptance files and venv added.
 
+### Host addresses in the Browser
+
+`bun apps/desktop/scripts/hostAddressCheck.ts <alias> --remote-command "<line>" [--hmr <url> <file> <from> <to>] <url>…`
+connects to the Host as the app does, sets up a Workspace's Browser partition (ADR 0093) and
+prints each URL's origin, title and text, then edits a Vite page's source on the Host and checks
+that HMR applies it without a reload, and finally removes the Host's routing and loads the first URL
+again, which must fail rather than load from this Mac. A dev Daemon can run beside the installed one: copy
+`apps/daemon/dist/linux-arm64/polaris` to `/tmp/ph`, run `polaris serve --home /tmp/ph/home`,
+and pass `--remote-command "env POLARIS_HOME=/tmp/ph/home /tmp/ph/polaris bridge"`.
+
+Checked on `lucas-rpi` (ENG-614), against a Portless-style HTTPS server with a self-signed
+`*.localhost` certificate and a stock Vite 7 on `[::1]:5173`:
+
+- `https://app.localhost:8443` and `https://other.app.localhost:8443` load with their own origin,
+  the hostname as SNI and Host header, and their cookies on the next load.
+- `http://localhost:5173` reaches Vite on `::1`; its HMR WebSocket applies an edit without a reload.
+- `https://example.com` loads directly; `https://self-signed.badssl.com` still fails
+  `ERR_CERT_AUTHORITY_INVALID`.
+- The partition's proxy (HTTP on 127.0.0.1, its secret answered through `login`) was asked for
+  credentials once; every later connection reused them.
+- After the Host is removed (`forget`), `https://app.localhost:8443` fails `ERR_CONNECTION_RESET`:
+  the retired proxy keeps its port and refuses everything, and Chromium doesn't fall back to a
+  direct load (with the port closed it fails `ERR_PROXY_CONNECTION_FAILED`).
+- Port 443 itself wasn't checked: the Pi has no passwordless sudo to bind it. The stream doesn't
+  care about the port.
+
+The HMR step waits for the reloaded page's own "[vite] connected." (after `did-navigate`): the
+page it replaces can log its late one first, and through a Host the new socket opens slower than
+over `ssh -L`, so the edit used to land before the new page was listening (ENG-612).
+
+### The Browser end to end on a remote Host
+
+`node apps/desktop/scripts/browserRemoteCheck.ts <alias> <out dir> --remote-command "<line>" --app-dir <dir> --app-url <url> --vite-dir <dir> --vite-url <url> [--harness claude] [--person-only]`
+drives the built app (`bun run build`) against a Host that already runs an app behind Portless
+and a Vite dev server, with a fresh user data directory that only knows that Host. A Claude Code
+session drives a tab through agent-browser (open, snapshot, fill, click, screenshot) while the
+Browser shows "… is using this tab"; a person opens both URLs as Host addresses (the badge),
+Vite's HMR applies an edit made on the Host, the app's cookie survives a reload and a restart in
+its Workspace and is absent from another Workspace's Browser; an element picked in the Browser
+goes out with the next message; and the app quits mid-Turn while the agent waits to use the
+Browser, then shows "No Desktop App is connected to show this Browser." in the Turn once it is
+back. `--person-only` skips the two agent parts. `--agent-only` runs only the agent parts (driving,
+the pick, the quit), and with `--local-socket <path>` and the alias `local` the Host is a Daemon on
+this Mac instead: no SSH, no Portless or Vite. Screenshots go to `<out dir>`.
+
+Checked on `lucas-rpi` (ENG-612) with the real Portless 0.15.12 (`portless proxy start -p 1355`,
+its state under a throwaway `HOME`) at `https://app.localhost:1355` and Vite 7 at
+`http://localhost:5173`, against a dev Daemon in `/tmp/pe`: every step passed with Claude Code.
+Codex ran the agent parts against this Mac's Host (`--local-socket`, a branch Daemon in `/tmp/pc`)
+and passed. A fresh Daemon's first session can start without Browser tools while agent-browser
+installs ("later sessions get the Browser"); start the check after it has installed.
+
 ## Known gaps
 
 - Install progress is per step (checking, copying and checking the SHA-256), not per byte; the client reports no byte progress.

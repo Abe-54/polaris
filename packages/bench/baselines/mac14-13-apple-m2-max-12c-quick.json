@@ -2154,6 +2154,264 @@
         "run 3: snapshot peaks: bun 134 MiB, bun 103 MiB, betterleaks 31 MiB"
       ],
       "durationMs": 8167.9466250000005
+    },
+    "byte-streams": {
+      "metrics": {
+        "transfer_mb_per_s": {
+          "value": 170.21833880991943,
+          "unit": "MB/s",
+          "kind": "throughput",
+          "better": "higher",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 0
+          },
+          "runs": [
+            143.42463370190325,
+            187.50782762734673,
+            170.21833880991943
+          ],
+          "min": 143.42463370190325,
+          "max": 187.50782762734673
+        },
+        "rpc_quiet_p99_ms": {
+          "value": 2.57300000000032,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 5
+          },
+          "runs": [
+            2.988332999999784,
+            2.57300000000032,
+            2.0489580000003116
+          ],
+          "min": 2.0489580000003116,
+          "max": 2.988332999999784
+        },
+        "rpc_during_p50_ms": {
+          "value": 0.6905830000005153,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 5
+          },
+          "runs": [
+            2.4149999999999636,
+            0.404957999999624,
+            0.6905830000005153
+          ],
+          "min": 0.404957999999624,
+          "max": 2.4149999999999636
+        },
+        "rpc_during_p99_ms": {
+          "value": 1.7517909999996846,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 20
+          },
+          "runs": [
+            3.2714999999998327,
+            0.9587920000003578,
+            1.7517909999996846
+          ],
+          "min": 0.9587920000003578,
+          "max": 3.2714999999998327
+        },
+        "rpc_during_max_ms": {
+          "value": 1.7517909999996846,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 50
+          },
+          "runs": [
+            3.2714999999998327,
+            0.9587920000003578,
+            1.7517909999996846
+          ],
+          "min": 0.9587920000003578,
+          "max": 3.2714999999998327
+        },
+        "rss_peak_over_base_mib": {
+          "value": 32.03125,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.35,
+            "absolute": 4
+          },
+          "runs": [
+            31.09375,
+            32.03125,
+            34.40625
+          ],
+          "min": 31.09375,
+          "max": 34.40625
+        }
+      },
+      "notes": [
+        "run 1: 16 MiB from a loopback server over bridge; roundTrip pings every 20 ms, 6 of them during the transfer",
+        "run 2: 16 MiB from a loopback server over bridge; roundTrip pings every 20 ms, 4 of them during the transfer",
+        "run 3: 16 MiB from a loopback server over bridge; roundTrip pings every 20 ms, 5 of them during the transfer"
+      ],
+      "durationMs": 5967.008208
+    },
+    "host-address-reload": {
+      "metrics": {
+        "reload_ms": {
+          "value": 236.76383400000122,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 200
+          },
+          "runs": [
+            276.41012500000033,
+            236.76383400000122,
+            225.22091600000022
+          ],
+          "min": 225.22091600000022,
+          "max": 276.41012500000033
+        },
+        "stream_open_p50_ms": {
+          "value": 1.7881040000011126,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 5
+          },
+          "runs": [
+            1.9113749999996799,
+            1.7881040000011126,
+            1.5541039999998247
+          ],
+          "min": 1.5541039999998247,
+          "max": 1.9113749999996799
+        },
+        "stream_open_p99_ms": {
+          "value": 5.586624999999913,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 10
+          },
+          "runs": [
+            6.8992920000000595,
+            5.586624999999913,
+            4.984458000000814
+          ],
+          "min": 4.984458000000814,
+          "max": 6.8992920000000595
+        },
+        "rpc_quiet_p99_ms": {
+          "value": 1.9982080000008864,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 5
+          },
+          "runs": [
+            1.9982080000008864,
+            2.2577500000006694,
+            1.9714170000006561
+          ],
+          "min": 1.9714170000006561,
+          "max": 2.2577500000006694
+        },
+        "rpc_during_p50_ms": {
+          "value": 0.8296249999984866,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 5
+          },
+          "runs": [
+            0.8296249999984866,
+            0.5057919999999285,
+            0.8472910000000411
+          ],
+          "min": 0.5057919999999285,
+          "max": 0.8472910000000411
+        },
+        "rpc_during_p99_ms": {
+          "value": 2.8572910000002594,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 20
+          },
+          "runs": [
+            3.288209000000279,
+            2.8572910000002594,
+            1.1290420000004815
+          ],
+          "min": 1.1290420000004815,
+          "max": 3.288209000000279
+        },
+        "rpc_during_max_ms": {
+          "value": 2.8572910000002594,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.5,
+            "absolute": 50
+          },
+          "runs": [
+            3.288209000000279,
+            2.8572910000002594,
+            1.1290420000004815
+          ],
+          "min": 1.1290420000004815,
+          "max": 3.288209000000279
+        },
+        "rss_peak_over_base_mib": {
+          "value": 37.578125,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.35,
+            "absolute": 16
+          },
+          "runs": [
+            35.84375,
+            37.578125,
+            39.765625
+          ],
+          "min": 35.84375,
+          "max": 39.765625
+        }
+      },
+      "notes": [
+        "run 1: 300 modules (2.7 MB) over bridge, one stream each, 6 at a time; roundTrip pings every 20 ms, 13 of them during the reload",
+        "run 2: 300 modules (2.7 MB) over bridge, one stream each, 6 at a time; roundTrip pings every 20 ms, 12 of them during the reload",
+        "run 3: 300 modules (2.7 MB) over bridge, one stream each, 6 at a time; roundTrip pings every 20 ms, 11 of them during the reload"
+      ],
+      "durationMs": 6231.710666
     }
   }
 }

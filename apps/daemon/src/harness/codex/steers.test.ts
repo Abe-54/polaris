@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TurnItem } from "@polaris/protocol";
+import { Attachment, AttachmentId, TurnItem } from "@polaris/protocol";
 import { CodexSteers } from "./steers.ts";
 
 const steer = (id: string, text: string) => TurnItem.cases.UserMessage.make({ id, text });
@@ -34,6 +34,32 @@ describe("CodexSteers", () => {
 
     expect(steers.take("t1")).toEqual([steer("u2", "again"), steer("steer:t1:2", "again")]);
   });
+
+  test.each(["item first", "response first"])(
+    "a steer with attachments shows as the user sent it (%s)",
+    (order) => {
+      const shot = new Attachment({
+        id: AttachmentId.make("a1"),
+        name: "spec.pdf",
+        mimeType: "application/pdf",
+        size: 4,
+        hostPath: "/stage/spec.pdf",
+        width: null,
+        height: null,
+      });
+
+      const sent = "like this\n\nAttached files:\n- /stage/spec.pdf";
+      const steers = new CodexSteers();
+      steers.fromItem("t1", "u1", "fix it");
+
+      if (order === "item first") steers.fromItem("t1", "u2", sent);
+      steers.fromResponse("t1", sent, { text: "like this", attachments: [shot] });
+
+      if (order === "response first") steers.fromItem("t1", "u2", sent);
+
+      expect(steers.take("t1")).toMatchObject([{ text: "like this", attachments: [shot] }]);
+    }
+  );
 
   test("steers still waiting when the Turn ends land with it", () => {
     const steers = new CodexSteers();

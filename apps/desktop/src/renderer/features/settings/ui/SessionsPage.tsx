@@ -1,26 +1,41 @@
 /**
- * Settings → Sessions (DESIGN.md, Settings): where new sessions work, what a new worktree's
- * branch is called, Output on a Turn's first edit, Needs You and Turn notifications, the Working
- * strip's verbs, idle compaction, Visuals, where accepted work is committed, Archive, and removing hidden
- * workspaces.
+ * Settings → Sessions (DESIGN.md, Settings redesign SR-01): new sessions beside accepting work,
+ * what happens while sessions run, Visuals, idle compaction beside archive, hidden workspaces, then
+ * worker worktree setup beside the Working strip's verbs, on the Settings kit.
  * Each Harness's Model, effort and permissions stay in Settings → Harnesses.
  */
-import { clientCopy } from "../../../../shared/clientCopy.ts";
-import { Button, Input, Switch } from "@polaris/ui";
+import {
+  Input,
+  Kicker,
+  SettingsButton,
+  SettingsCard,
+  SettingsGrid,
+  SettingsPage,
+  SettingsRow,
+  SettingsToggleRow,
+  SettingsWell,
+} from "@polaris/ui";
 import { useState } from "react";
+import { clientCopy } from "../../../../shared/clientCopy.ts";
 import { isBranchPrefix } from "../../../../shared/sessionPrefs.ts";
 import { useShellActions } from "../../../shell/hooks.ts";
 import { sectionInfo } from "../model/sections.ts";
 import { setSessionPrefs, useSettings } from "../store.ts";
-import { Column, Group, PageHeader, SettingRow } from "./parts.tsx";
-import { AcceptBranch } from "./AcceptBranch.tsx";
-import { AutoArchiveSettings } from "./AutoArchive.tsx";
+import { AcceptingWorkCard } from "./AcceptBranch.tsx";
+import { ArchiveCard } from "./AutoArchive.tsx";
 import { HiddenWorkspaces } from "./HiddenWorkspaces.tsx";
-import { IdleCompaction } from "./IdleCompaction.tsx";
-import { WorktreeSetupSettings } from "./WorktreeSetup.tsx";
+import { IdleCompactionCard } from "./IdleCompaction.tsx";
 import { TurnNotifications } from "./TurnNotifications.tsx";
 import { Visuals } from "./Visuals.tsx";
 import { WorkingVerbs } from "./WorkingVerbs.tsx";
+import { WorktreeSetupSettings } from "./WorktreeSetup.tsx";
+
+const ScreenGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+    <rect x="1.5" y="2.5" width="9" height="6" rx="1" fill="none" stroke="currentColor" />
+    <path d="M4 10.5h4" stroke="currentColor" />
+  </svg>
+);
 
 /** Saved on blur or ↵ when git would take it; otherwise the field says why and keeps the old one. */
 const BranchPrefixField = ({ value }: { readonly value: string }) => {
@@ -36,7 +51,7 @@ const BranchPrefixField = ({ value }: { readonly value: string }) => {
   return (
     <Input
       id="branch-prefix"
-      className="text-code-inline w-[160px] font-mono"
+      className="text-code-inline h-[26px] w-[120px] font-mono"
       value={draft}
       placeholder="none"
       aria-invalid={!valid}
@@ -52,118 +67,119 @@ const BranchPrefixField = ({ value }: { readonly value: string }) => {
 
 const example = (prefix: string) => `${prefix}fix-the-login-form-3f9a`;
 
-export const SessionsPage = () => {
+const NewSessionsCard = () => {
   const prefs = useSettings((s) => s.sessions);
+
+  return (
+    <SettingsCard
+      title="New sessions"
+      aside="Each can still choose"
+      status={`Next · ${example(prefs.branchPrefix)}`}
+    >
+      <SettingsWell>
+        <SettingsToggleRow
+          title="Start on a new worktree"
+          caption="Otherwise in the workspace folder"
+          checked={prefs.newWorktree}
+          onCheckedChange={(on) => setSessionPrefs({ newWorktree: on })}
+        />
+        <SettingsRow title="Branch prefix" caption="Named from the prompt" htmlFor="branch-prefix">
+          <BranchPrefixField key={prefs.branchPrefix} value={prefs.branchPrefix} />
+        </SettingsRow>
+      </SettingsWell>
+    </SettingsCard>
+  );
+};
+
+const WhileSessionsRunCard = () => {
+  const prefs = useSettings((s) => s.sessions);
+
+  const notify = [
+    prefs.notifyNeedsYou,
+    prefs.notifyConstellations,
+    prefs.notifyReviewRequests,
+    prefs.notifyTurnEnded,
+    prefs.quietPhoneWhilePresent,
+  ];
+
+  return (
+    <SettingsCard
+      title="While sessions run"
+      aside={`${notify.filter(Boolean).length} of ${notify.length} notifications on`}
+      status={`${clientCopy().os} notifications · your phone has its own switches`}
+    >
+      <SettingsWell>
+        <SettingsToggleRow
+          title="Open output on a turn's first edit"
+          caption="Once per turn; closing it keeps it closed until the next"
+          checked={prefs.openOutputOnEdit}
+          onCheckedChange={(on) => setSessionPrefs({ openOutputOnEdit: on })}
+        />
+      </SettingsWell>
+      <SettingsWell aria-label="Notify me">
+        <Kicker className="px-panel pt-[calc(var(--spacing-gap)+2px)]">
+          Notify me · unless Polaris is showing that session
+        </Kicker>
+        <SettingsToggleRow
+          title="When a session needs you"
+          caption="The star still counts"
+          checked={prefs.notifyNeedsYou}
+          onCheckedChange={(on) => setSessionPrefs({ notifyNeedsYou: on })}
+        />
+        <SettingsToggleRow
+          title="When a constellation needs you"
+          caption="A question to you or a claim the lead hands up, once each"
+          checked={prefs.notifyConstellations}
+          onCheckedChange={(on) => setSessionPrefs({ notifyConstellations: on })}
+        />
+        <SettingsToggleRow
+          title="When your review is requested"
+          caption="One per new request on GitHub"
+          checked={prefs.notifyReviewRequests}
+          onCheckedChange={(on) => setSessionPrefs({ notifyReviewRequests: on })}
+        />
+        <TurnNotifications />
+        <SettingsToggleRow
+          title="Quiet my phone while I'm at this computer"
+          caption="Hosts hold your phone's notifications until you step away or lock the screen"
+          checked={prefs.quietPhoneWhilePresent}
+          onCheckedChange={(on) => setSessionPrefs({ quietPhoneWhilePresent: on })}
+        />
+      </SettingsWell>
+    </SettingsCard>
+  );
+};
+
+export const SessionsPage = () => {
   const { openSettings } = useShellActions();
   const info = sectionInfo("sessions");
 
   return (
-    <Column>
-      <PageHeader title={info.title} blurb={info.blurb} />
+    <SettingsPage
+      title={info.title}
+      blurb="How new agent sessions start, and what happens while they run."
+      scope="This Mac · archive and setup per host"
+      scopeIcon={<ScreenGlyph />}
+    >
+      <SettingsGrid>
+        <NewSessionsCard />
+        <AcceptingWorkCard />
+      </SettingsGrid>
+      <WhileSessionsRunCard />
       <Visuals />
-      <Group label="New sessions">
-        <SettingRow
-          title="Start on a new worktree"
-          caption="Otherwise they work in the workspace directory. Each session can still choose."
-          htmlFor="new-worktree"
-        >
-          <Switch
-            id="new-worktree"
-            checked={prefs.newWorktree}
-            onCheckedChange={(on) => setSessionPrefs({ newWorktree: on })}
-          />
-        </SettingRow>
-        <SettingRow
-          title="Branch prefix"
-          caption={`A new worktree's branch, named from the prompt: ${example(prefs.branchPrefix)}`}
-          htmlFor="branch-prefix"
-        >
-          <BranchPrefixField key={prefs.branchPrefix} value={prefs.branchPrefix} />
-        </SettingRow>
-      </Group>
-      <Group label="While sessions run">
-        <SettingRow
-          title="Open output on a turn's first edit"
-          caption="Once per turn; closing it keeps it closed until the next turn"
-          htmlFor="open-output"
-        >
-          <Switch
-            id="open-output"
-            checked={prefs.openOutputOnEdit}
-            onCheckedChange={(on) => setSessionPrefs({ openOutputOnEdit: on })}
-          />
-        </SettingRow>
-        <SettingRow
-          title="Notify when a session needs you"
-          caption={`A ${clientCopy().os} notification, unless Polaris shows that session. The star still counts.`}
-          htmlFor="notify-needs-you"
-        >
-          <Switch
-            id="notify-needs-you"
-            checked={prefs.notifyNeedsYou}
-            onCheckedChange={(on) => setSessionPrefs({ notifyNeedsYou: on })}
-          />
-        </SettingRow>
-        <SettingRow
-          title="Notify when a constellation needs you"
-          caption="A question to you or a claim the lead hands up, even when no agent calls notify. Once per question; your phone has its own switch."
-          htmlFor="notify-constellations"
-        >
-          <Switch
-            id="notify-constellations"
-            checked={prefs.notifyConstellations}
-            onCheckedChange={(on) => setSessionPrefs({ notifyConstellations: on })}
-          />
-        </SettingRow>
-        <SettingRow
-          title="Quiet my phone while I'm at this computer"
-          caption="Hosts hold your linked phone's notifications while you use this computer, and send what still needs you once you step away or lock the screen."
-          htmlFor="quiet-phone"
-        >
-          <Switch
-            id="quiet-phone"
-            checked={prefs.quietPhoneWhilePresent}
-            onCheckedChange={(on) => setSessionPrefs({ quietPhoneWhilePresent: on })}
-          />
-        </SettingRow>
-        <TurnNotifications />
-        <SettingRow
-          title="Notify when your review is requested"
-          caption={`A ${clientCopy().os} notification per new request on GitHub. Reviews in needs you still lists them.`}
-          htmlFor="notify-review-requests"
-        >
-          <Switch
-            id="notify-review-requests"
-            checked={prefs.notifyReviewRequests}
-            onCheckedChange={(on) => setSessionPrefs({ notifyReviewRequests: on })}
-          />
-        </SettingRow>
-        <IdleCompaction />
-      </Group>
-      <WorktreeSetupSettings />
-      <WorkingVerbs />
-      <AcceptBranch />
-      <Group label="Archive">
-        <AutoArchiveSettings />
-        <SettingRow
-          title="Delete merged branches on archive"
-          caption="Archive removes a session's worktree. Unmerged branches are never deleted."
-          htmlFor="delete-merged"
-        >
-          <Switch
-            id="delete-merged"
-            checked={prefs.deleteMergedBranch}
-            onCheckedChange={(on) => setSessionPrefs({ deleteMergedBranch: on })}
-          />
-        </SettingRow>
-      </Group>
+      <SettingsGrid>
+        <IdleCompactionCard />
+        <ArchiveCard />
+      </SettingsGrid>
       <HiddenWorkspaces />
-      <p className="text-caption text-text-subtle flex items-center gap-1">
+      <SettingsGrid>
+        <WorktreeSetupSettings />
+        <WorkingVerbs />
+      </SettingsGrid>
+      <p className="text-caption text-text-subtle px-gap flex items-center gap-2">
         Model, effort and permissions start per harness.
-        <Button variant="ghost" size="xs" onClick={() => openSettings("harnesses")}>
-          Settings → Harnesses
-        </Button>
+        <SettingsButton onClick={() => openSettings("harnesses")}>Open harnesses</SettingsButton>
       </p>
-    </Column>
+    </SettingsPage>
   );
 };

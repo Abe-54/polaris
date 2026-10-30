@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApprovalDecision,
+  Attachment,
+  AttachmentId,
   type PermissionMode,
   RequestId,
   SessionId,
@@ -237,12 +239,22 @@ describe("OpenCode driver", () => {
     ]);
   });
 
-  test("steer joins the Turn in flight, with the Turn's Model; no second Turn starts", async () => {
+  test("steer joins the Turn in flight, with the Turn's Model and its image; no second Turn starts", async () => {
+    const png = new Attachment({
+      id: AttachmentId.make("a1"),
+      name: "shot.png",
+      mimeType: "image/png",
+      size: 4,
+      hostPath: "/stage/shot.png",
+      width: null,
+      height: null,
+    });
+
     const { events, fake } = await withSession(({ session, emit, waitFor }) =>
       Effect.gen(function* () {
         yield* session.sendTurn(turnInput("turn-1", "long task", "openai/gpt-5.5", "low"));
         emit(ev.user("msg_u1"), ev.userText("msg_u1", "long task"), ev.status("busy"));
-        yield* session.steer("also add docs");
+        yield* session.steer("also add docs", [png]);
         emit(ev.user("msg_u2"), ev.userText("msg_u2", "also add docs"));
         emit(ev.assistant("msg_a1"), ev.text("msg_a1", "prt_t1", "ok"), ev.idle());
         yield* waitFor("TurnEnded");
@@ -253,10 +265,23 @@ describe("OpenCode driver", () => {
 
     const prompts = fake.sent(`POST /session/${FAKE_SESSION_ID}/prompt_async`).map((r) => r.body);
     expect(prompts[1]).toEqual({
-      parts: [{ type: "text", text: "also add docs" }],
+      parts: [
+        { type: "text", text: "also add docs" },
+        {
+          type: "file",
+          mime: "image/png",
+          filename: "shot.png",
+          url: Bun.pathToFileURL(png.hostPath).href,
+        },
+      ],
       model: { providerID: "openai", modelID: "gpt-5.5" },
       variant: "low",
     });
+    expect(
+      ofTag(events, "ItemCompleted").flatMap((e) =>
+        TurnItem.guards.UserMessage(e.item) ? [e.item] : []
+      )
+    ).toMatchObject([{ text: "also add docs", attachments: [png] }]);
     expect(ofTag(events, "TurnStarted")).toEqual([]);
     expect(ofTag(events, "TurnEnded")).toHaveLength(1);
   });

@@ -458,3 +458,36 @@ describe("subagents and tool runs in the conversation", () => {
     }
   );
 });
+
+describe("sources", () => {
+  const fetchCall = (id: string, url: string) =>
+    I.ToolCall.make({
+      id,
+      name: "WebFetch",
+      kind: "fetch",
+      input: { url, prompt: "read" },
+      output: null,
+      status: "completed",
+    });
+
+  const itemRowsOf = (items: ReadonlyArray<TurnItem>) =>
+    turnRows(view(0, items), true, true).flatMap((row) => (row.kind === "item" ? [row] : []));
+
+  test("a Turn's sources sit on its first agent row, across from the avatar, not in the flow", () => {
+    const rows = itemRowsOf([
+      message("m0", "Looking"),
+      fetchCall("f1", "https://bun.sh/docs"),
+      fetchCall("f2", "https://effect.website/docs"),
+      message("m1", "Done."),
+    ]);
+
+    expect(rows.map((row) => row.entry.kind)).toEqual(["item", "item"]);
+    expect(rows.map((row) => row.sources?.length ?? 0)).toEqual([2, 0]);
+  });
+
+  test("a Turn of only sources keeps the pill as its row", () => {
+    const rows = itemRowsOf([fetchCall("f1", "https://bun.sh/docs")]);
+
+    expect(rows.map((row) => [row.entry.kind, row.sources])).toEqual([["sources", undefined]]);
+  });
+});

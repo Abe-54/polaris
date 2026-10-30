@@ -121,6 +121,24 @@ export interface TakeStreamOptions {
    * while, such as a terminal's output.
    */
   readonly idleTimeout?: boolean;
+  /**
+   * A byte stream's blob (ADR 0093): no idle timeout, and no `maxBlobBytes` on what it has
+   * carried in total; its sender's credit window bounds what is unread. Only the connection's
+   * `maxBufferedBlobBytes` still applies.
+   */
+  readonly longLived?: boolean;
+  /**
+   * The receive window (ADR 0093): the sender may never leave more than this many bytes unread.
+   * When set, a sender that ignores its credit and pushes past it aborts the blob before the
+   * extra is buffered, so one stream cannot fill the shared blob buffer. Unset means unbounded.
+   */
+  readonly maxUnread?: number;
+  /**
+   * Called with the byte count each time the consumer consumes a delivered batch (the window
+   * reopens by that much). Credit back to the sender from here, never ahead of this, so a granted
+   * byte is always one the receiver has already freed.
+   */
+  readonly onConsumed?: (bytes: number) => void;
 }
 
 /** Frames buffered per outgoing stream-sourced blob before its source is paused. */
@@ -140,9 +158,20 @@ interface InBlob {
   size: number;
   /** Bytes received so far, for `maxBlobBytes`. */
   received: number;
+  /** Bytes the consumer has consumed (credited back). `received - credited` is the unread window. */
+  credited: number;
+  /** Bytes handed to the consumer's last pull, credited once it pulls again. */
+  inflight: number;
   status: "receiving" | "complete" | "failed";
   claimed: false | "whole" | "stream";
+  /** The consumer stopped reading it (`forget`): only such a tombstone goes at the sender's end. */
+  forgotten: boolean;
+  /** A stream claim whose Stream was actually run; an unrun claim is swept like an unclaimed blob. */
+  started: boolean;
   idleTimeout: boolean;
+  longLived: boolean;
+  /** The consumer's receive window; the unread bytes (`size`) may not exceed it. Null is unbounded. */
+  maxUnread: number | null;
   touched: number;
   failure: BlobError | null;
   /** A streaming consumer waiting for the next chunk. */
@@ -367,8 +396,14 @@ export const makeWire = Effect.fnUntraced(function* (
         size: 0,
         received: 0,
         status: "receiving",
+        credited: 0,
+        inflight: 0,
         claimed: false,
+        forgotten: false,
+        started: false,
         idleTimeout: true,
+        longLived: false,
+        maxUnread: null,
         touched: Date.now(),
         failure: null,
         wake: null,
@@ -388,14 +423,28 @@ export const makeWire = Effect.fnUntraced(function* (
   };
 
   const failBlob = (blobId: string, blob: InBlob, reason: BlobFailure, message: string) => {
-    if (blob.status === "receiving") {
-      release(blob);
-      blob.status = "failed";
-      blob.touched = Date.now();
-      blob.failure = new BlobError({ blobId, reason, message });
-      Deferred.doneUnsafe(blob.deferred, Exit.fail(blob.failure));
-      blob.wake?.();
-    }
+    // Abort a blob still arriving or fully buffered-but-unread; a failure is idempotent. A blob
+    // past its window must be rejected even once complete, so the consumer never reads it.
+    if (blob.status === "failed") return;
+    release(blob);
+    blob.status = "failed";
+    blob.touched = Date.now();
+    blob.failure = new BlobError({ blobId, reason, message });
+    Deferred.doneUnsafe(blob.deferred, Exit.fail(blob.failure));
+    blob.wake?.();
+  };
+
+  /** Which blob or buffer limit `length` more bytes would breach, as a message, or null. */
+  const sizeBreach = (blob: InBlob, length: number): string | null => {
+    if (!blob.longLived && blob.received + length > maxBlobBytes)
+      return `blob exceeds ${maxBlobBytes} bytes`;
+
+    if (bufferedBytes + length > maxBuffered) return "connection blob buffer is full";
+
+    if (blob.maxUnread !== null && blob.received - blob.credited + length > blob.maxUnread)
+      return "the sender exceeded the stream's receive window";
+
+    return null;
   };
 
   const onBlobFrame = (frame: Extract<Frame, { kind: "blob" }>) => {
@@ -404,7 +453,15 @@ export const makeWire = Effect.fnUntraced(function* (
     if (blob === undefined)
       return Effect.fail(new TransportError({ message: "incoming blob count limit exceeded" }));
 
-    if (blob.status !== "receiving") return;
+    if (blob.status !== "receiving") {
+      // A tombstone the consumer left (`forget`) goes at the sender's last frame; any other
+      // failure (too large, aborted) stays for a later take to report, until the sweep.
+      if (frame.final && blob.forgotten && inBlobs.get(frame.blobId) === blob)
+        inBlobs.delete(frame.blobId);
+
+      return;
+    }
+
     blob.touched = Date.now();
 
     if (frame.aborted)
@@ -412,11 +469,9 @@ export const makeWire = Effect.fnUntraced(function* (
     const length = frame.bytes.byteLength;
 
     if (length > 0) {
-      if (blob.received + length > maxBlobBytes)
-        return failBlob(frame.blobId, blob, "too-large", `blob exceeds ${maxBlobBytes} bytes`);
+      const breach = sizeBreach(blob, length);
 
-      if (bufferedBytes + length > maxBuffered)
-        return failBlob(frame.blobId, blob, "too-large", "connection blob buffer is full");
+      if (breach !== null) return failBlob(frame.blobId, blob, "too-large", breach);
       // A view into a much larger read buffer would keep all of it alive; copy those.
       const bytes = frame.bytes.buffer.byteLength > 2 * length ? frame.bytes.slice() : frame.bytes;
       blob.parts.push(bytes);
@@ -480,6 +535,7 @@ export const makeWire = Effect.fnUntraced(function* (
         // and let the sweep forget the entry once the sender has moved on.
         failBlob(blobId, blob, "closed", "the consumer stopped reading");
         blob.claimed = false;
+        blob.forgotten = true;
 
         return;
       }
@@ -493,33 +549,53 @@ export const makeWire = Effect.fnUntraced(function* (
   const takeBlobStream = (
     blobId: string,
     takeOptions: TakeStreamOptions = {}
-  ): Stream.Stream<Uint8Array, BlobError> =>
-    Stream.suspend(() => {
-      const blob = inBlob(blobId);
+  ): Stream.Stream<Uint8Array, BlobError> => {
+    const blob = inBlob(blobId);
 
-      if (blob === undefined) return Stream.fail(unavailableBlob(blobId));
+    if (blob === undefined) return Stream.fail(unavailableBlob(blobId));
 
-      if (blob.claimed)
-        return Stream.fail(
-          new BlobError({ blobId, reason: "closed", message: "blob already taken" })
-        );
+    if (blob.claimed)
+      return Stream.fail(
+        new BlobError({ blobId, reason: "closed", message: "blob already taken" })
+      );
 
-      if (isClosed && blob.status === "receiving")
-        failBlob(blobId, blob, "closed", "connection closed before the blob arrived");
-      blob.claimed = "stream";
-      blob.idleTimeout = takeOptions.idleTimeout ?? true;
-      blob.touched = Date.now();
+    if (isClosed && blob.status === "receiving")
+      failBlob(blobId, blob, "closed", "connection closed before the blob arrived");
+    // Claim now, not at first pull: the window is installed from announcement, so frames
+    // arriving before the consumer reads are enforced at ingestion (`onBlobFrame`).
+    blob.claimed = "stream";
+    blob.longLived = takeOptions.longLived ?? false;
+    blob.idleTimeout = !blob.longLived && (takeOptions.idleTimeout ?? true);
+    blob.maxUnread = takeOptions.maxUnread ?? null;
+    blob.touched = Date.now();
+
+    // Anything already received past the window is rejected, complete or still receiving.
+    if (blob.maxUnread !== null && blob.received - blob.credited > blob.maxUnread)
+      failBlob(blobId, blob, "too-large", "the sender exceeded the stream's receive window");
+
+    return Stream.suspend(() => {
+      blob.started = true;
 
       const pull = Effect.callback<
         readonly [Uint8Array, ...Array<Uint8Array>],
         BlobError | Cause.Done
       >((resume) => {
+        // A fresh pull means the previous batch is consumed: credit it so the window reopens, and
+        // tell the consumer exactly here, so credit back to the sender never outruns the window.
+        if (blob.inflight > 0) {
+          blob.credited += blob.inflight;
+          const consumed = blob.inflight;
+          blob.inflight = 0;
+          takeOptions.onConsumed?.(consumed);
+        }
+
         const settle = (): boolean => {
           const parts = blob.parts;
 
           if (Arr.isArrayNonEmpty(parts)) {
             blob.parts = [];
             bufferedBytes -= blob.size;
+            blob.inflight += blob.size;
             blob.size = 0;
             resume(Effect.succeed(parts));
 
@@ -559,6 +635,7 @@ export const makeWire = Effect.fnUntraced(function* (
 
       return Stream.fromPull(Effect.succeed(pull)).pipe(Stream.ensuring(forget(blobId, blob)));
     });
+  };
 
   // Expiry is swept by a timer that only runs while incoming blobs exist, so an
   // idle connection never wakes the process.
@@ -581,10 +658,11 @@ export const makeWire = Effect.fnUntraced(function* (
       if (blob.status === "receiving" && blob.idleTimeout && now - blob.touched > idleTimeout) {
         failBlob(blobId, blob, "timeout", `no progress for ${idleTimeout}ms`);
       } else if (
-        !blob.claimed &&
+        (!blob.claimed || (blob.claimed === "stream" && !blob.started)) &&
         blob.status !== "receiving" &&
         now - blob.touched > unclaimedTtl
       ) {
+        // Unclaimed, or a stream claim whose Stream was never run: an eager claim must not pin it.
         inBlobs.delete(blobId);
         release(blob);
       }

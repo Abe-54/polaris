@@ -10,8 +10,10 @@ import { useApp, useCommands } from "../../../shell/hooks.ts";
 import type { TurnView } from "../../../store/sessionModel.ts";
 import { sessionKey } from "../../../store/store.ts";
 import {
+  BrowserOutputTab,
   closeSubagent,
   hideOutput,
+  leaveBrowser,
   offerOutput,
   OutputTab,
   type SessionChrome,
@@ -20,6 +22,7 @@ import {
   SessionOutput,
   useShownSubagent,
 } from "../../session/index.ts";
+import { browserKey, useBrowserUi } from "../../browser/index.ts";
 import { useFacts, useLeadConstellation, useWorkerAttempt, type WorkerAttempt } from "../hooks.ts";
 import {
   type ConstellationRecord,
@@ -166,15 +169,20 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
   const ui = useLeadUi(key);
   const commands = useCommands();
   const subagent = useShownSubagent(hostKey, sessionId) !== null;
+  const browser = useBrowserUi(browserKey(hostKey, sessionId)).shown && !subagent;
 
   const workspaceId = useApp(
     (s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.workspaceId
   );
 
+  const harness =
+    useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.harness) ?? null;
+
   if (record === null) return <SessionOutput hostKey={hostKey} sessionId={sessionId} />;
 
   const pick = (tab: "constellation" | "changes") => {
     closeSubagent(hostKey, sessionId);
+    leaveBrowser(hostKey, sessionId);
     patchLeadUi(key, () => ({ tab }));
   };
 
@@ -182,14 +190,14 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
     <>
       <OutputTab
         id="constellation"
-        on={!subagent && ui.tab === "constellation"}
+        on={!subagent && !browser && ui.tab === "constellation"}
         onClick={() => pick("constellation")}
       >
         Constellation
       </OutputTab>
       <OutputTab
         id="changes"
-        on={!subagent && ui.tab === "changes"}
+        on={!subagent && !browser && ui.tab === "changes"}
         onClick={() => pick("changes")}
       >
         Changes
@@ -197,7 +205,7 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
     </>
   );
 
-  if (subagent || ui.tab === "changes")
+  if (subagent || browser || ui.tab === "changes")
     return <SessionOutput hostKey={hostKey} sessionId={sessionId} tabs={tabs} />;
 
   return (
@@ -208,6 +216,7 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
     >
       <div className="border-hairline flex h-11 shrink-0 items-center gap-1 border-b px-3">
         {tabs}
+        <BrowserOutputTab hostKey={hostKey} sessionId={sessionId} on={false} harness={harness} />
         <span className="flex-1" />
         {ui.focus?.kind === "task" ? (
           <Button

@@ -13,6 +13,9 @@ const thumbnails = new Map<string, string>();
 
 export const thumbnailOf = (attachmentId: string) => thumbnails.get(attachmentId) ?? null;
 
+export const keepThumbnail = (attachmentId: string, url: string) =>
+  thumbnails.set(attachmentId, url);
+
 export interface UploadTarget extends StageTarget {
   /** Where ⌥-drop copies to (the session's cwd) and how to name it; null turns copying off. */
   readonly copyTo: { readonly path: string; readonly shown: string } | null;

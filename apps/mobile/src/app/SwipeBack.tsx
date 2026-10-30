@@ -1,21 +1,43 @@
-/** A pushed screen that follows a swipe from the left edge and goes back when it commits. */
-import { type ReactNode, useMemo, useRef } from "react";
-import { Animated, PanResponder, useWindowDimensions, View } from "react-native";
+/**
+ * The top of the stack over the screen beneath it. A pushed screen follows a swipe from the left
+ * edge, uncovering the screen beneath as on iOS, and goes back when the swipe commits.
+ */
+import { type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
+import { Animated, PanResponder, StyleSheet, useWindowDimensions, View } from "react-native";
 import { themedStyles } from "../theme/index.ts";
+import type { Layer, Route } from "./navigation.tsx";
 import { commitsSwipeBack, startsSwipeBack } from "./swipeBack.ts";
 
+/** How far left the screen beneath sits while covered, as a share of the width. */
+const PARALLAX = 0.3;
+
+/** The dim over the screen beneath while covered. */
+const SCRIM = 0.25;
+
 export const SwipeBack = ({
+  layers,
+  render,
   onBack,
-  children,
 }: {
+  readonly layers: ReadonlyArray<Layer>;
+  readonly render: (route: Route) => ReactNode;
   readonly onBack: () => void;
-  readonly children: ReactNode;
 }) => {
   const styles = useStyles();
   const { width } = useWindowDimensions();
-  const x = useRef(new Animated.Value(0)).current;
+  const offsets = useRef(new Map<number, Animated.Value>()).current;
   const latest = useRef({ onBack, width });
   latest.current = { onBack, width };
+  const top = layers.at(-1);
+  const topIndex = top?.index ?? 0;
+  const swipeable = top !== undefined && top.route.screen !== "tabs";
+  // Each screen has its own offset, so one uncovered by going back is already in place.
+  const x = offsets.get(topIndex) ?? new Animated.Value(0);
+  offsets.set(topIndex, x);
+
+  useLayoutEffect(() => {
+    for (const index of offsets.keys()) if (index > topIndex) offsets.delete(index);
+  }, [offsets, topIndex]);
 
   const responder = useMemo(
     () =>
@@ -31,10 +53,7 @@ export const SwipeBack = ({
             return;
           }
 
-          Animated.timing(x, { toValue: w, duration: 180, useNativeDriver: true }).start(() => {
-            back();
-            x.setValue(0);
-          });
+          Animated.timing(x, { toValue: w, duration: 180, useNativeDriver: true }).start(back);
         },
         onPanResponderTerminate: () =>
           Animated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start(),
@@ -42,14 +61,38 @@ export const SwipeBack = ({
     [x]
   );
 
+  const covered = { inputRange: [0, width], extrapolate: "clamp" } as const;
+  const beneathX = x.interpolate({ ...covered, outputRange: [-width * PARALLAX, 0] });
+  const scrim = x.interpolate({ ...covered, outputRange: [SCRIM, 0] });
+
   return (
     <View style={styles.fill}>
-      <Animated.View
-        style={[styles.fill, styles.screen, { transform: [{ translateX: x }] }]}
-        {...responder.panHandlers}
-      >
-        {children}
-      </Animated.View>
+      {layers.map(({ route, index }) => {
+        const isTop = index === topIndex;
+
+        return (
+          <Animated.View
+            key={index}
+            style={[
+              StyleSheet.absoluteFill,
+              styles.screen,
+              { transform: [{ translateX: isTop ? x : beneathX }] },
+            ]}
+            pointerEvents={isTop ? "auto" : "none"}
+            accessibilityElementsHidden={!isTop}
+            importantForAccessibility={isTop ? "auto" : "no-hide-descendants"}
+            {...(isTop && swipeable ? responder.panHandlers : {})}
+          >
+            {render(route)}
+            {isTop ? null : (
+              <Animated.View
+                pointerEvents="none"
+                style={[StyleSheet.absoluteFill, styles.scrim, { opacity: scrim }]}
+              />
+            )}
+          </Animated.View>
+        );
+      })}
     </View>
   );
 };
@@ -57,4 +100,5 @@ export const SwipeBack = ({
 const useStyles = themedStyles((colours) => ({
   fill: { flex: 1 },
   screen: { backgroundColor: colours.ground },
+  scrim: { backgroundColor: "#000" },
 }));

@@ -1,7 +1,7 @@
-/** A Linked Device (Paper D1): where it's shared, when it was last seen, Retry, and a two-step Unlink. */
-import { Button, cn } from "@polaris/ui";
+/** A Linked Device (Paper SR-08): when it was linked and last seen, Retry, and Unlink in place. */
+import { SettingsButton, SettingsConfirmRow } from "@polaris/ui";
 import { useState } from "react";
-import { type DeviceSummary, lastSeenLine, sharedLine } from "./model.ts";
+import { type DeviceSummary, deviceCaption } from "./model.ts";
 
 export const DeviceRow = ({
   device,
@@ -14,67 +14,35 @@ export const DeviceRow = ({
   readonly onUnlink: () => Promise<void>;
   readonly onRetry: () => Promise<void>;
 }) => {
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const run = (action: () => Promise<void>) => {
-    setBusy(true);
-    void action().finally(() => {
-      setBusy(false);
-      setAsking(false);
-    });
+  const run = (reason: string, action: () => Promise<void>) => {
+    setBusy(reason);
+    void action().finally(() => setBusy(null));
   };
 
   return (
-    <div
-      className={cn("px-panel flex h-14 items-center gap-3", asking && "bg-surface-sunken")}
-      data-testid="device-row"
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-label text-text-strong truncate font-medium">{device.name}</span>
-        <span className="text-caption text-text-subtle truncate">
-          {asking
-            ? "Unlinking cuts it off from every host now. To use it again, link it again."
-            : sharedLine(device)}
-          {!asking && device.notShared.length > 0 ? (
-            <>
-              {" · "}
-              <button
-                type="button"
-                className="text-text-default underline-offset-2 hover:underline disabled:opacity-50"
-                disabled={busy}
-                onClick={() => run(onRetry)}
-              >
-                Retry
-              </button>
-            </>
-          ) : null}
-        </span>
-      </div>
-      {asking ? (
-        <>
-          <Button variant="ghost" disabled={busy} onClick={() => setAsking(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            disabled={busy}
-            data-testid="confirm-unlink"
-            onClick={() => run(onUnlink)}
+    <div data-testid="device-row">
+      <SettingsConfirmRow
+        title={device.name}
+        caption={deviceCaption(device, now)}
+        action="Unlink"
+        actionVariant="secondary"
+        consequence="Unlinking cuts it off from every host now. To use it again, link it again."
+        confirm={`Unlink ${device.name}`}
+        onConfirm={() => run("Unlinking…", onUnlink)}
+        {...(busy === null ? {} : { disabledReason: busy })}
+      >
+        {device.notShared.length > 0 ? (
+          <SettingsButton
+            variant="ghost"
+            disabled={busy !== null}
+            onClick={() => run("Sharing…", onRetry)}
           >
-            Unlink {device.name}
-          </Button>
-        </>
-      ) : (
-        <>
-          <span className="text-caption text-text-subtle shrink-0 whitespace-nowrap">
-            {lastSeenLine(device, now)}
-          </span>
-          <Button variant="ghost" className="w-[72px]" onClick={() => setAsking(true)}>
-            Unlink
-          </Button>
-        </>
-      )}
+            Retry
+          </SettingsButton>
+        ) : null}
+      </SettingsConfirmRow>
     </div>
   );
 };

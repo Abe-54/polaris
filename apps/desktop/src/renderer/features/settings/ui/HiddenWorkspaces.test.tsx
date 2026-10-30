@@ -42,6 +42,7 @@ const lead = constellationSummaryOf(
 
 const mount = (options: { readonly connected?: boolean } = {}) => {
   const removed: Array<HiddenWorkspaceRow> = [];
+  const unhidden: Array<HiddenWorkspaceRow> = [];
   let answer = true;
 
   const state: AppState = {
@@ -89,6 +90,11 @@ const mount = (options: { readonly connected?: boolean } = {}) => {
 
           return answer;
         }}
+        unhide={async (row) => {
+          unhidden.push(row);
+
+          return answer;
+        }}
       />
     </AppProvider>
   );
@@ -103,7 +109,7 @@ const mount = (options: { readonly connected?: boolean } = {}) => {
     return within(found);
   };
 
-  return { removed, row, refuse: () => (answer = false) };
+  return { removed, unhidden, row, refuse: () => (answer = false) };
 };
 
 test("lists only hidden workspaces, with what each holds", () => {
@@ -111,7 +117,7 @@ test("lists only hidden workspaces, with what each holds", () => {
 
   const names = screen
     .getAllByTestId("hidden-workspace")
-    .map((el) => el.querySelector("[title]")?.textContent);
+    .map((el) => el.querySelector("span")?.textContent);
 
   expect(names).toEqual(["attic", "warehouse"]);
   expect(screen.queryByText("polaris")).toBeNull();
@@ -121,22 +127,25 @@ test("Remove asks first, names the real counts and that the folder stays, then r
   const { removed, row } = mount();
   const warehouse = row("warehouse");
 
-  expect(warehouse.getByTestId("hidden-workspace-caption").textContent).toBe(
-    "mac · 2 agent sessions · 1 constellation"
-  );
+  expect(warehouse.getByText("mac · 2 agent sessions · 1 constellation")).toBeTruthy();
 
   fireEvent.click(warehouse.getByRole("button", { name: "Remove workspace…" }));
 
   expect(removed).toEqual([]);
-  expect(warehouse.getByTestId("hidden-workspace-caption").textContent).toBe(
-    "Removes 2 agent sessions and 1 constellation. The folder stays on disk."
-  );
+  expect(
+    warehouse.getByText("Removes 2 agent sessions and 1 constellation. The folder stays on disk.")
+  ).toBeTruthy();
 
   await act(async () => {
     fireEvent.click(warehouse.getByRole("button", { name: "Remove warehouse" }));
   });
 
   expect(removed.map((r) => [r.hostKey, r.workspaceId])).toEqual([["mac", "warehouse"]]);
+  // Until the host drops the row, it can't be removed twice.
+  expect(warehouse.getByText("Removing…")).toBeTruthy();
+  expect(
+    warehouse.getByRole("button", { name: "Remove workspace…" }).hasAttribute("disabled")
+  ).toBe(true);
 });
 
 test("Cancel backs out without removing anything", () => {
@@ -170,8 +179,27 @@ test.each([
   const { row } = mount(options);
   const target = row(name);
 
-  expect(target.getByTestId("hidden-workspace-caption").textContent).toBe(why);
+  expect(target.getByText(why)).toBeTruthy();
   expect(target.getByRole("button", { name: "Remove workspace…" }).hasAttribute("disabled")).toBe(
+    true
+  );
+});
+
+test("Unhide shows the workspace again without removing it", async () => {
+  const { removed, unhidden, row } = mount();
+
+  await act(async () => {
+    fireEvent.click(row("attic").getByRole("button", { name: "Unhide" }));
+  });
+
+  expect(unhidden.map((r) => r.workspaceId)).toEqual(["attic"]);
+  expect(removed).toEqual([]);
+});
+
+test("Unhide is off while the host isn't connected", () => {
+  const { row } = mount({ connected: false });
+
+  expect(row("warehouse").getByRole("button", { name: "Unhide" }).hasAttribute("disabled")).toBe(
     true
   );
 });

@@ -23,13 +23,6 @@ afterEach(() => {
   disconnect();
 });
 
-/** happy-dom lacks `oninput`, so React watches the focused field's value on key events. */
-const type = (field: HTMLInputElement, value: string) => {
-  act(() => field.focus());
-  fireEvent.change(field, { target: { value } });
-  fireEvent.keyUp(field, { key: "0" });
-};
-
 const input = (element: HTMLElement) => {
   if (!(element instanceof HTMLInputElement)) throw new Error("not an input");
 
@@ -40,58 +33,52 @@ const page = () => {
   const view = within(render(<TurnNotifications />).container);
 
   return {
-    main: view.getByRole("switch", { name: "Notify when a turn finishes" }),
+    main: view.getByRole("switch", { name: "When a turn finishes" }),
     longOnly: () =>
       input(view.getByRole("checkbox", { name: /^Only turns longer than \d+ minutes$/ })),
-    minutes: () => input(view.getByRole("textbox", { name: "Minutes" })),
+    minutes: () => view.getByRole("group", { name: "Minutes" }),
+    more: () => view.getByRole("button", { name: "Increase Minutes" }),
+    fewer: () => view.getByRole("button", { name: "Decrease Minutes" }),
   };
 };
 
 test("the long-turns option is off until turn notifications are on", () => {
-  const { main, longOnly, minutes } = page();
+  const { main, longOnly, more } = page();
 
-  expect([longOnly().disabled, minutes().disabled]).toEqual([true, true]);
+  expect([longOnly().disabled, more().hasAttribute("disabled")]).toEqual([true, true]);
 
   fireEvent.click(main);
 
-  expect([longOnly().disabled, minutes().disabled]).toEqual([false, false]);
+  expect([longOnly().disabled, more().hasAttribute("disabled")]).toEqual([false, false]);
   expect(longOnly().getAttribute("aria-label")).toBe("Only turns longer than 5 minutes");
-  expect(minutes().value).toBe("5");
 });
 
-test("checking it and changing the minutes saves both", () => {
+test("checking it and stepping the minutes saves both", () => {
   act(() =>
     settingsStore.setState({ sessions: { ...DEFAULT_SESSION_PREFS, notifyTurnEnded: true } })
   );
-  const { longOnly, minutes } = page();
+  const { longOnly, minutes, more } = page();
 
   fireEvent.click(longOnly());
-  type(minutes(), "12");
-  fireEvent.blur(minutes());
+  fireEvent.click(more());
 
   expect(fake.sent("settings.setSessions")).toEqual([
     { patch: { notifyLongTurnsOnly: true } },
-    { patch: { longTurnMinutes: 12 } },
+    { patch: { longTurnMinutes: 10 } },
   ]);
-  expect(settingsStore.getState().sessions).toMatchObject({
-    notifyLongTurnsOnly: true,
-    longTurnMinutes: 12,
-  });
+  expect(minutes().textContent).toContain("10 min");
 });
 
-test("minutes that aren't a whole number from 1 to 999 are marked and not saved", () => {
+test("the minutes stop at one", () => {
   act(() =>
-    settingsStore.setState({ sessions: { ...DEFAULT_SESSION_PREFS, notifyTurnEnded: true } })
+    settingsStore.setState({
+      sessions: { ...DEFAULT_SESSION_PREFS, notifyTurnEnded: true, longTurnMinutes: 5 },
+    })
   );
-  const { minutes } = page();
+  const { fewer } = page();
 
-  for (const value of ["0", "1000", "2.5", "five"]) {
-    type(minutes(), value);
-    fireEvent.keyDown(minutes(), { key: "Enter" });
+  fireEvent.click(fewer());
 
-    expect(minutes().getAttribute("aria-invalid")).toBe("true");
-  }
-
-  expect(fake.sent("settings.setSessions")).toEqual([]);
-  expect(settingsStore.getState().sessions.longTurnMinutes).toBe(5);
+  expect(fake.sent("settings.setSessions")).toEqual([{ patch: { longTurnMinutes: 1 } }]);
+  expect(fewer().hasAttribute("disabled")).toBe(true);
 });

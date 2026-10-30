@@ -35,6 +35,8 @@ import { constellationHandlers, resourceHandlers } from "./constellation.ts";
 import { remoteAccessHandlers } from "./remoteAccess.ts";
 import { linkedDevicesHandlers } from "./linkedDevices.ts";
 import { voiceHandlers } from "./voice.ts";
+import { browserHandlers } from "../browser/ipc.ts";
+import type { Registry as Browsers } from "../browser/registry.ts";
 import { secretHandlers } from "./secrets.ts";
 import { Machines } from "../machines/service.ts";
 import type { NeedsYouSummary } from "../../shared/needsYou.ts";
@@ -87,6 +89,8 @@ export interface RequestContext {
   readonly showAppMenu: () => void;
   /** The renderer's Needs You summary, for the menu bar star, Dock badge and notifications. */
   readonly needsYou: (summary: NeedsYouSummary) => void;
+  /** Agent Sessions' Browsers; absent where there are no windows (tests). */
+  readonly browser?: Browsers;
 }
 
 export type Handler<M extends RequestMethod> = (
@@ -255,6 +259,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...remoteAccessHandlers,
   ...linkedDevicesHandlers,
   ...voiceHandlers,
+  ...browserHandlers(ctx.browser),
   ...secretHandlers,
   "updates.get": () => Effect.sync(ctx.updates.get),
   "updates.check": () => Effect.sync(ctx.updates.check),

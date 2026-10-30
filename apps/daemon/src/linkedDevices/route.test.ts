@@ -2,7 +2,8 @@
  * The Relay route through a real relay process (ADR 0083): a device links with a link
  * string, reaches the Daemon with Client power and is recorded as the actor; unlinked
  * keys, other keys and other addresses are refused; unlinking ends the open connection;
- * and after the relay restarts the Daemon declares its peers again.
+ * a watcher sees each device's session open and close; and after the relay restarts the
+ * Daemon declares its peers again.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -22,7 +23,18 @@ import {
   WorkspaceId,
 } from "@polaris/protocol";
 import { fromBase64Url } from "@polaris/protocol/relay";
-import { Context, Deferred, Effect, Exit, Fiber, Option, Redacted, Scope } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Queue,
+  Redacted,
+  Scope,
+  Stream,
+} from "effect";
 import { DeviceLabel } from "../engine/rpc.ts";
 import { actorOf } from "../extensions/connection.ts";
 import { shortTemp } from "../platform/testing.ts";
@@ -292,6 +304,55 @@ test("a linked device reaches the Daemon with Client power and is recorded as th
         // And the key no longer opens a session.
         expect(yield* openSession(status, phone, phone.noise, 1)).toBeNull();
         open.socket.close();
+      })
+    )
+  );
+}, 30_000);
+
+test("a watcher sees a device's presence flip as its session opens and closes (ENG-629)", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const scope = yield* Effect.scope;
+        const desktop = yield* daemon(scope);
+        yield* desktop["relayRoute.enable"]({ url: relay.url });
+        const status = yield* waitConnected(desktop);
+        const phone = yield* Effect.promise(makeDevice);
+        const device = yield* linkDevice(desktop, phone, "Test iPhone");
+
+        const seen = yield* Queue.unbounded<ReadonlyArray<LinkedDevice>>();
+        yield* desktop["devices.watch"]().pipe(
+          Stream.runForEach((devices) => Queue.offer(seen, devices)),
+          Effect.forkScoped
+        );
+
+        /** The watcher's next list in which the phone's presence is `connected`. */
+        const until = (connected: boolean) =>
+          Effect.gen(function* () {
+            for (;;) {
+              const devices = yield* Queue.take(seen);
+              const since = devices.find((d) => d.id === device.id)?.connectedSince;
+
+              if (since !== undefined && (since !== null) === connected) return since;
+            }
+          }).pipe(Effect.timeout("10 seconds"));
+
+        expect(yield* until(false)).toBeNull();
+
+        const before = new Date().toISOString();
+        const open = yield* openSession(status, phone);
+
+        if (open === null) throw new Error("the linked device was refused");
+        const since = yield* until(true);
+        expect((since ?? "") >= before).toBe(true);
+        const listed = yield* desktop["devices.list"]();
+        expect(listed.find((d) => d.id === device.id)?.connectedSince).toBe(since);
+
+        // The phone goes away: the relay reports it offline and the session ends.
+        open.socket.close();
+        expect(yield* until(false)).toBeNull();
+        const after = yield* desktop["devices.list"]();
+        expect(after.find((d) => d.id === device.id)?.connectedSince).toBeNull();
       })
     )
   );

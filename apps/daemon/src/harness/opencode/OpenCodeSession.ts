@@ -6,7 +6,8 @@
  * and hands every payload to the translator. A TUI attached with
  * `opencode attach` works on the same session, so its Turns show up here too.
  */
-import { type ApprovalDecision, type RequestId, TurnItem } from "@polaris/protocol";
+import { type ApprovalDecision, type Attachment, type RequestId } from "@polaris/protocol";
+import { steerItem } from "../userMessage.ts";
 import { type Cause, Deferred, Effect, Queue, Schema, type Scope, Stream } from "effect";
 import { statSync } from "node:fs";
 import {
@@ -248,12 +249,12 @@ export const openSession = (
         );
       });
 
-    const steer = (text: string) =>
+    const steer = (text: string, attachments: ReadonlyArray<Attachment> = []) =>
       Effect.gen(function* () {
         const active = translator.turn();
 
         if (active === null) return yield* opencodeError("No Turn is in progress to steer");
-        const body: P.PromptAsyncBody = { parts: [{ type: "text", text }] };
+        const body: P.PromptAsyncBody = { parts: promptParts(text, attachments) };
 
         if (active.model !== null) body.model = active.model;
 
@@ -262,7 +263,7 @@ export const openSession = (
         emit(
           HarnessEvent.ItemCompleted({
             turnId: active.id,
-            item: TurnItem.cases.UserMessage.make({ id: `steer:${crypto.randomUUID()}`, text }),
+            item: steerItem(`steer:${crypto.randomUUID()}`, text, attachments),
           })
         );
       });

@@ -30,6 +30,7 @@ export const gitHandlers: GitHandlers = {
     onLive(hostKey, (s) => s.client["git.unstage"](payload)).pipe(done),
   "git.discard": ({ hostKey, ...payload }) =>
     onLive(hostKey, (s) => s.client["git.discard"](payload)).pipe(done),
+  "git.log": ({ hostKey, ...payload }) => onLive(hostKey, (s) => s.client["git.log"](payload)),
 };
 
 type GitOpeners = {

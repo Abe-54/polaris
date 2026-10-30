@@ -1,5 +1,5 @@
 /**
- * Settings → Hosts, an open host's Polaris Relay route (Paper D2, D2b; ENG-461): off until
+ * The host page's Polaris Relay route (Paper HS-D; D2, D2b; ENG-461): off until
  * the user gives a relay URL and turns it on. Linked devices reach the host through it.
  */
 import { Input, Switch } from "@polaris/ui";
@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import type { RelayRouteView } from "../../../shared/linkedDevicesContract.ts";
 import { polaris } from "../bridge.ts";
 import { call } from "./hooks.tsx";
+import { type Flow, FlowLine } from "./page/FlowLine.tsx";
 
 const devices = (n: number) => `${n} device${n === 1 ? "" : "s"}`;
 
@@ -34,6 +35,13 @@ export interface RelayRouteRowProps {
   readonly onChange: (on: boolean) => void;
 }
 
+const flowOf = (route: RelayRouteView | null): Flow => {
+  if (route?.state !== "on") return "off";
+
+  return route.connected ? "live" : "connecting";
+};
+
+/** Paper HS-D's row: the flow line, "Polaris Relay" over its mono state, and the switch. */
 export const RelayRouteRow = ({
   hostLabel,
   route,
@@ -46,13 +54,16 @@ export const RelayRouteRow = ({
   const on = route?.state === "on";
 
   return (
-    <div className="flex flex-col gap-2" data-testid="relay-route">
-      <div className="flex items-center gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-label text-text-default">Polaris Relay · for linked devices</span>
-          <span className="text-caption text-text-subtle">
-            Your phone reaches {hostLabel} from anywhere. The relay passes encrypted traffic it
-            can&apos;t read.
+    <div className="flex flex-col gap-2.5 px-4 py-3.5" data-testid="relay-route">
+      <div className="flex items-center gap-2.5">
+        <FlowLine flow={flowOf(route)} via="relay" />
+        <div
+          className="flex min-w-0 flex-1 flex-col"
+          title={`Your phone reaches ${hostLabel} from anywhere. The relay passes encrypted traffic it can't read.`}
+        >
+          <span className="text-body text-text-default">Polaris Relay</span>
+          <span className="text-text-subtle truncate font-mono text-[10px] leading-[14px] uppercase">
+            {relayStatusLine(route, draft, linked)}
           </span>
         </div>
         <Switch
@@ -62,19 +73,16 @@ export const RelayRouteRow = ({
           onCheckedChange={onChange}
         />
       </div>
-      <div className="flex items-center gap-3">
+      {on || route === null ? null : (
         <Input
           aria-label="Relay URL"
-          className="text-code-inline w-[260px] font-mono"
+          className="text-code-inline font-mono"
           value={draft}
           placeholder="wss://relay.example.com/v1"
-          disabled={on || busy}
+          disabled={busy}
           onChange={(event) => onDraft(event.target.value)}
         />
-        <span className="text-caption text-text-subtle">
-          {relayStatusLine(route, draft, linked)}
-        </span>
-      </div>
+      )}
     </div>
   );
 };
@@ -83,15 +91,7 @@ export const RelayRouteRow = ({
 const connectingPollMs = 2_000;
 
 /** Read when shown; turning it on sends the URL in the field, and a refusal toasts. */
-export const RelayRoute = ({
-  hostKey,
-  hostLabel,
-  pollMs = connectingPollMs,
-}: {
-  readonly hostKey: string;
-  readonly hostLabel: string;
-  readonly pollMs?: number;
-}) => {
+export const useRelayRoute = (hostKey: string, pollMs = connectingPollMs) => {
   const [route, setRoute] = useState<RelayRouteView | null>(null);
   const [linked, setLinked] = useState(0);
   const [draft, setDraft] = useState("");
@@ -156,15 +156,22 @@ export const RelayRoute = ({
     }
   };
 
-  return (
-    <RelayRouteRow
-      hostLabel={hostLabel}
-      route={route}
-      linked={linked}
-      draft={draft}
-      busy={busy}
-      onDraft={setDraft}
-      onChange={(on) => void change(on)}
-    />
-  );
+  return {
+    route,
+    linked,
+    draft,
+    busy,
+    onDraft: setDraft,
+    onChange: (on: boolean) => void change(on),
+  };
 };
+
+export const RelayRoute = ({
+  hostKey,
+  hostLabel,
+  pollMs,
+}: {
+  readonly hostKey: string;
+  readonly hostLabel: string;
+  readonly pollMs?: number;
+}) => <RelayRouteRow hostLabel={hostLabel} {...useRelayRoute(hostKey, pollMs)} />;

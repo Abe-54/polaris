@@ -29,6 +29,11 @@ export class LinkedDevice extends Schema.Class<LinkedDevice>("LinkedDevice")({
   lastUsedAt: Schema.NullOr(Timestamp),
   /** Set once unlinked: its key no longer opens a session. */
   unlinkedAt: Schema.NullOr(Timestamp),
+  /**
+   * When its open relay session with this Host began; null while it has none. Set by
+   * `devices.list` and `devices.watch`; absent from Daemons without `linked-devices.presence`.
+   */
+  connectedSince: Schema.optionalKey(Schema.NullOr(Timestamp)),
 }) {}
 
 export class RelayRouteStatus extends Schema.Class<RelayRouteStatus>("RelayRouteStatus")({
@@ -104,6 +109,15 @@ export const ListLinkedDevices = Rpc.make("devices.list", {
   success: Schema.Array(LinkedDevice),
 });
 
+/**
+ * The linked devices now, then again whenever one links, unlinks, or opens or closes its relay
+ * session (capability `linked-devices.presence`, ENG-629).
+ */
+export const WatchLinkedDevices = Rpc.make("devices.watch", {
+  success: Schema.Array(LinkedDevice),
+  stream: true,
+});
+
 /** Unlinks a device and closes its sessions at once; unlinking twice is fine. */
 export const UnlinkDevice = Rpc.make("devices.unlink", {
   payload: { id: LinkedDeviceId },
@@ -171,7 +185,8 @@ export class LinkedDeviceRpcs extends RpcGroup.make(
   RegisterPush,
   UnregisterPush,
   RegisterLiveActivity,
-  UnregisterLiveActivity
+  UnregisterLiveActivity,
+  WatchLinkedDevices
 ) {}
 
 export const LINK_STRING_PREFIX = "polaris-link:v1:";

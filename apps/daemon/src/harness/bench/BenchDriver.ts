@@ -49,6 +49,7 @@ import { benchReviewReply, isReviewerPrompt } from "./review.ts";
 import { benchBreakdown } from "./context.ts";
 import { runSubagent } from "./subagent.ts";
 import { isPreambleProbe, preambleProbe } from "./preamble.ts";
+import { steerItem } from "../userMessage.ts";
 
 const BenchTurnScriptSchema = Schema.Struct({
   /** Completed TurnItems per Turn; kinds rotate message, reasoning, command, tool call, file change. */
@@ -399,13 +400,13 @@ const openBenchSession = Effect.fn("BenchDriver.open")(function* (options: OpenO
         const fiber = yield* Effect.forkIn(runTurn(input), scope);
         current = { turnId: input.turnId, fiber };
       }),
-    steer: (text) =>
+    steer: (text, attachments) =>
       current === null
         ? Effect.void
         : emit(
             HarnessEvent.ItemCompleted({
               turnId: current.turnId,
-              item: TurnItem.cases.UserMessage.make({ id: `steer:${crypto.randomUUID()}`, text }),
+              item: steerItem(`steer:${crypto.randomUUID()}`, text, attachments),
             })
           ).pipe(Effect.asVoid),
     interrupt: Effect.suspend(() =>
@@ -483,7 +484,7 @@ const BENCH_COMMANDS = [
 
 export const makeBenchDriver = (kind: HarnessKind): HarnessDriver => ({
   kind,
-  capabilities: { steer: true, liveCoAttach: true, switchModel: true },
+  capabilities: { steer: true, steerAttachments: true, liveCoAttach: true, switchModel: true },
   probe: Effect.succeed({ available: true, version: "bench", detail: "scripted bench Harness" }),
   listModels: Effect.succeed(BENCH_MODELS),
   listCommands: () => Effect.succeed(BENCH_COMMANDS),

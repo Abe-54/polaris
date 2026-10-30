@@ -267,9 +267,13 @@ const make = Effect.gen(function* () {
         Effect.suspend(() => {
           const shell = rt.shellJobs.get(command.sessionId);
 
+          const attachments = committed.attachments ?? [];
+
           if (shell === undefined)
-            return live.get(command.sessionId)?.session.steer(command.text) ?? Effect.void;
-          shell.steers.push(command.text);
+            return (
+              live.get(command.sessionId)?.session.steer(command.text, attachments) ?? Effect.void
+            );
+          shell.steers.push({ text: command.text, attachments });
 
           return Effect.void;
         }),

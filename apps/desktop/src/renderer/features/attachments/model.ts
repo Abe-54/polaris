@@ -3,6 +3,7 @@
  * the Host-side copy for ⌥-drop (ENG-180). There is no file write in M1, so
  * the copy runs `cp` on the Host through `terminal.open`.
  */
+import type { PickedElement } from "../session/state.ts";
 
 /** A file on its way to the Host. */
 export interface Upload {
@@ -81,4 +82,57 @@ export const copyOutcome = (code: number | null, name: string, where: string) =>
     title: `Couldn't copy ${name}`,
     message: "The copy on the host failed",
   };
+};
+
+/** One composer chip: a staged file, or every file of one element picked in the Browser. */
+export interface AttachmentChip<A> {
+  readonly key: string;
+  readonly first: A;
+  readonly files: ReadonlyArray<A>;
+  readonly pick: PickedElement | null;
+  /** The pick's screenshot, for its thumbnail. */
+  readonly image: A | null;
+}
+
+interface Chippable {
+  readonly id: string;
+  readonly mimeType: string;
+  readonly pick?: PickedElement;
+}
+
+/** Chips in the order their first file was staged; a pick's files share one. */
+export const chipsOf = <A extends Chippable>(attachments: ReadonlyArray<A>) => {
+  const chips: Array<AttachmentChip<A>> = [];
+  const byPick = new Map<string, number>();
+
+  for (const a of attachments) {
+    const at = a.pick === undefined ? undefined : byPick.get(a.pick.key);
+    const image = a.mimeType.startsWith("image/") ? a : null;
+    const chip = at === undefined ? undefined : chips[at];
+
+    if (at !== undefined && chip !== undefined) {
+      chips[at] = { ...chip, files: [...chip.files, a], image: chip.image ?? image };
+      continue;
+    }
+
+    if (a.pick !== undefined) byPick.set(a.pick.key, chips.length);
+    chips.push({
+      key: a.pick?.key ?? a.id,
+      first: a,
+      files: [a],
+      pick: a.pick ?? null,
+      image: a.pick === undefined ? null : image,
+    });
+  }
+
+  return chips;
+};
+
+const TITLE_HTML = 300;
+
+/** A pick chip's tooltip: the selector, the page and the start of its HTML. */
+export const pickTitle = (pick: PickedElement) => {
+  const html = pick.html.length > TITLE_HTML ? `${pick.html.slice(0, TITLE_HTML)}…` : pick.html;
+
+  return `${pick.selector}\n${pick.url}\n\n${html}`;
 };

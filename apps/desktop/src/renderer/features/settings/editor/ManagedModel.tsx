@@ -1,19 +1,18 @@
 /**
- * Settings → Editor → Tab completion → Model (DESIGN.md, Tab completion setup): the one model
- * Polaris downloads and runs on the chosen machine, the folder it lives in, and what it's doing.
+ * Tab completion's model well (SR-02; DESIGN.md, Tab completion setup): the one model Polaris
+ * runs on the chosen machine with its memory meter, the folder it lives in, and what it's doing.
  */
 import {
-  Button,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Kicker,
+  SettingsButton,
+  SettingsRow,
+  SettingsSelect,
+  SettingsWell,
 } from "@polaris/ui";
 import { ManagedModelId, type ManagedServerStatus } from "@polaris/protocol";
 import { Match, Option, Schema } from "effect";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { PredictionSide } from "@polaris/client/prediction";
 import { polaris } from "../../bridge.ts";
 import { FAILURE_TITLES, gb } from "../../editor/prediction/card/managed.ts";
@@ -25,19 +24,36 @@ import {
   usePrediction,
   watchManaged,
 } from "../../editor/prediction/store.ts";
-import { FooterStrip, Group, SettingRow } from "../ui/parts.tsx";
 import { inSentence } from "./placementRows.ts";
 
 const SWEEP = "sweep-next-edit-1.5b";
 
 /** The closed control says the pick; the open list adds what each costs in memory. */
 const CHOICES: ReadonlyArray<{
-  readonly id: ManagedModelId;
+  readonly value: ManagedModelId;
+  readonly name: string;
+  readonly tag: string;
   readonly label: string;
-  readonly memory: string;
+  readonly short: string;
+  /** The other model's cost, under the meter. */
+  readonly other: string;
 }> = [
-  { id: SWEEP, label: "Sweep Next-Edit 1.5B · recommended", memory: "2.6 GB of memory" },
-  { id: "zeta-2.1", label: "Zeta 2.1 · higher quality", memory: "about 9 GB of memory" },
+  {
+    value: SWEEP,
+    name: "Sweep Next-Edit 1.5B",
+    tag: "recommended",
+    label: "Sweep Next-Edit 1.5B · recommended · 2.6 GB of memory",
+    short: "Sweep",
+    other: "Zeta needs ~9 GB",
+  },
+  {
+    value: "zeta-2.1",
+    name: "Zeta 2.1",
+    tag: "higher quality",
+    label: "Zeta 2.1 · higher quality · about 9 GB of memory",
+    short: "Zeta",
+    other: "Sweep needs ~2.6 GB",
+  },
 ];
 
 export interface ManagedModelProps {
@@ -46,12 +62,35 @@ export interface ManagedModelProps {
   readonly side: PredictionSide;
   readonly machine: string;
   readonly connected: boolean;
+  /** The machine picker in the kicker row. */
+  readonly picker?: ReactNode;
+  /** The machine's memory, for the meter; null when unknown. */
+  readonly ramBytes?: number | null;
+  /** Rows after the folder (Prediction history). */
+  readonly children?: ReactNode;
 }
+
+/** A pixel meter: 3px cells every 5px, filled to `fraction`, the rest a faint track. */
+const Meter = ({ fraction }: { readonly fraction: number }) => (
+  <div
+    role="meter"
+    aria-label="Memory"
+    aria-valuemin={0}
+    aria-valuemax={100}
+    aria-valuenow={Math.round(fraction * 100)}
+    className="h-2 w-full bg-[light-dark(#0000000f,#ffffff12)]"
+  >
+    <div
+      className="h-full bg-[repeating-linear-gradient(90deg,var(--color-text-default)_0_3px,transparent_3px_5px)]"
+      style={{ width: `${Math.min(100, Math.max(1, fraction * 100))}%` }}
+    />
+  </div>
+);
 
 const mb = (bytes: number) => `${Math.round(bytes / 1e6)} MB`;
 
 /** One line for the status row, and which buttons follow it. */
-const describe = (status: ManagedServerStatus, machine: string) =>
+const describe = (status: ManagedServerStatus, machine: string, ramBytes: number | null) =>
   Match.value(status.phase).pipe(
     Match.tag("Unsupported", (phase) => ({
       line:
@@ -93,7 +132,7 @@ const describe = (status: ManagedServerStatus, machine: string) =>
       cancel: false,
     })),
     Match.tag("Serving", () => ({
-      line: `Running${status.memoryBytes === null ? "" : ` · ${gb(status.memoryBytes)} of memory`}`,
+      line: `Running${status.memoryBytes === null ? "" : ` · ${gb(status.memoryBytes)} of ${ramBytes === null ? "" : `${gb(ramBytes)} `}memory`}`,
       primary: null,
       remove: true,
       cancel: false,
@@ -124,7 +163,15 @@ const progressOf = (status: ManagedServerStatus) =>
     Match.orElse(() => null)
   );
 
-export const ManagedModel = ({ hostKey, side, machine, connected }: ManagedModelProps) => {
+export const ManagedModel = ({
+  hostKey,
+  side,
+  machine,
+  connected,
+  picker,
+  ramBytes = null,
+  children,
+}: ManagedModelProps) => {
   const status = usePrediction(
     (state) =>
       state.managed[managedKey(hostKey, side)] ?? state.inspections[hostKey]?.managed[side] ?? null
@@ -195,7 +242,7 @@ export const ManagedModel = ({ hostKey, side, machine, connected }: ManagedModel
     });
   };
 
-  const described = status === null ? null : describe(status, machine);
+  const described = status === null ? null : describe(status, machine, ramBytes);
   const progress = status === null ? null : progressOf(status);
 
   const folderCaption =
@@ -203,42 +250,89 @@ export const ManagedModel = ({ hostKey, side, machine, connected }: ManagedModel
       ? `On ${inSentence(machine)}`
       : `${status.modelsDir}${status.freeBytes === null ? "" : ` · ${gb(status.freeBytes)} free`}`;
 
+  const chosen = CHOICES.find((choice) => choice.value === (preferences.managedModel ?? SWEEP));
+  const memory = status?.memoryBytes ?? null;
+  const line = !connected ? `${machine} is offline` : (described?.line ?? `Checking ${machine}…`);
+
   return (
-    <Group label={`Model on ${inSentence(machine)}`} className="mt-1">
-      <SettingRow
-        htmlFor={`managed-model-${hostKey}`}
-        title="Model"
-        caption="One next-edit model, downloaded from its publisher and run by Polaris on this machine. Zeta needs more memory."
-      >
-        <Select
-          value={preferences.managedModel ?? SWEEP}
-          disabled={busy || !connected}
-          onValueChange={chooseModel}
-        >
-          <SelectTrigger id={`managed-model-${hostKey}`} className="w-[272px]">
-            <SelectValue>
-              {CHOICES.find((choice) => choice.id === (preferences.managedModel ?? SWEEP))?.label}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {CHOICES.map((choice) => (
-              <SelectItem key={choice.id} value={choice.id} textValue={choice.label}>
-                <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="truncate">{choice.label}</span>
-                  <span className="text-text-subtle shrink-0">{choice.memory}</span>
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </SettingRow>
-      <SettingRow htmlFor={`models-dir-${hostKey}`} title="Model folder" caption={folderCaption}>
+    <SettingsWell aria-label={`Model on ${inSentence(machine)}`}>
+      <div className="px-panel flex flex-col gap-2 pt-[calc(var(--spacing-panel)-2px)] pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <Kicker className="text-text-subtle">{`Model · ${machine}`}</Kicker>
+          {picker}
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-text-strong truncate text-[20px] leading-6">{chosen?.name}</span>
+          <span className="text-caption text-text-subtle shrink-0">{chosen?.tag}</span>
+          <span className="flex-1" />
+          <SettingsSelect
+            id={`managed-model-${hostKey}`}
+            label={`Model on ${inSentence(machine)}`}
+            value={chosen?.value}
+            options={CHOICES}
+            disabled={busy || !connected}
+            onChange={chooseModel}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          {progress !== null ? (
+            <div
+              role="progressbar"
+              aria-label="Download"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.floor(progress * 100)}
+            >
+              <Meter fraction={progress} />
+            </div>
+          ) : memory !== null && ramBytes !== null && ramBytes > 0 ? (
+            <Meter fraction={memory / ramBytes} />
+          ) : null}
+          <div className="flex justify-between gap-3">
+            <span
+              className="text-caption text-text-subtle min-w-0 truncate"
+              role="status"
+              data-testid="managed-status"
+              title={described?.line ?? undefined}
+            >
+              {line}
+            </span>
+            <span className="text-caption text-text-subtle shrink-0">{chosen?.other}</span>
+          </div>
+          {described === null ||
+          (!described.cancel && !described.remove && described.primary === null) ? null : (
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              {described.cancel && (
+                <SettingsButton variant="ghost" disabled={busy} onClick={() => void act("cancel")}>
+                  Cancel
+                </SettingsButton>
+              )}
+              {described.remove && (
+                <SettingsButton variant="ghost" disabled={busy} onClick={() => void act("remove")}>
+                  Remove downloaded model
+                </SettingsButton>
+              )}
+              {described.primary !== null && (
+                <SettingsButton disabled={busy || !connected} onClick={() => void act("setup")}>
+                  {described.primary}
+                </SettingsButton>
+              )}
+            </div>
+          )}
+          {error !== null && (
+            <span role="alert" className="text-caption text-text-strong">
+              {error}
+            </span>
+          )}
+        </div>
+      </div>
+      <SettingsRow htmlFor={`models-dir-${hostKey}`} title="Model folder" caption={folderCaption}>
         <Input
           id={`models-dir-${hostKey}`}
           value={folder}
           placeholder="~/.polaris/models"
           spellCheck={false}
-          className="w-64 font-mono"
+          className="h-[26px] w-36 font-mono text-[11px]"
           disabled={busy || !connected}
           onChange={(event) => setFolder(event.target.value)}
           onBlur={(event) => saveFolder(event.target.value)}
@@ -247,68 +341,12 @@ export const ManagedModel = ({ hostKey, side, machine, connected }: ManagedModel
           }}
         />
         {side === "client" && (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={busy || !connected}
-            onClick={() => void choose()}
-          >
+          <SettingsButton disabled={busy || !connected} onClick={() => void choose()}>
             Choose…
-          </Button>
+          </SettingsButton>
         )}
-      </SettingRow>
-      <FooterStrip>
-        <span
-          className="text-caption text-text-subtle min-w-0 flex-1 truncate"
-          role="status"
-          data-testid="managed-status"
-          title={described?.line ?? undefined}
-        >
-          {!connected ? `${machine} is offline` : (described?.line ?? `Checking ${machine}…`)}
-        </span>
-        {progress !== null && (
-          <div
-            role="progressbar"
-            aria-label="Download"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.floor(progress * 100)}
-            className="bg-fill-selected h-[3px] w-40 shrink-0 overflow-hidden rounded-full"
-          >
-            <div
-              className="bg-text-strong h-full rounded-full transition-[width] duration-300"
-              style={{ width: `${Math.max(2, Math.floor(progress * 100))}%` }}
-            />
-          </div>
-        )}
-        {described?.cancel === true && (
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => void act("cancel")}>
-            Cancel
-          </Button>
-        )}
-        {described?.remove === true && (
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => void act("remove")}>
-            Remove downloaded model
-          </Button>
-        )}
-        {described?.primary !== null && described !== undefined && described !== null && (
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={busy || !connected}
-            onClick={() => void act("setup")}
-          >
-            {described.primary}
-          </Button>
-        )}
-      </FooterStrip>
-      {error !== null && (
-        <FooterStrip>
-          <span role="alert" className="text-caption text-text-strong">
-            {error}
-          </span>
-        </FooterStrip>
-      )}
-    </Group>
+      </SettingsRow>
+      {children}
+    </SettingsWell>
   );
 };

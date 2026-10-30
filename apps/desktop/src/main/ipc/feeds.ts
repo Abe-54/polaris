@@ -23,6 +23,8 @@ import { gitOpeners } from "./git.ts";
 import { constellationFeed } from "./constellation.ts";
 import { Machines } from "../machines/service.ts";
 import type { PredictionBridge } from "../prediction/bridge.ts";
+import { browserOpeners } from "../browser/ipc.ts";
+import type { Registry as Browsers } from "../browser/registry.ts";
 
 export type Feed<K extends SubscriptionKind> = Stream.Stream<
   SubscriptionItem<K>,
@@ -61,6 +63,7 @@ const openers: Openers = {
     Stream.fail({ code: "Unavailable", message: "Tab completion unavailable" }),
   ...githubOpeners,
   ...gitOpeners,
+  ...browserOpeners(undefined),
   hosts: () => Stream.unwrap(HostDirectory.useSync((dir) => SubscriptionRef.changes(dir.views))),
   machines: () =>
     Stream.unwrap(Machines.useSync((machines) => SubscriptionRef.changes(machines.views))),
@@ -97,6 +100,7 @@ const openers: Openers = {
     ),
   // Ends at once, empty, on a Daemon without `host.stats`.
   "host.stats": ({ hostKey }) => onLive(hostKey, watchHostStats),
+  "devices.watch": ({ hostKey }) => onLive(hostKey, (session) => session.client["devices.watch"]()),
   "review.watchRiskSummary": ({ hostKey, summaryId }) =>
     onLive(hostKey, (session) => session.client["review.watchRiskSummary"]({ summaryId })),
   "inline.propose": ({ hostKey, ...request }) =>
@@ -107,8 +111,9 @@ const openers: Openers = {
 export const isSubscriptionKind = (kind: string): kind is SubscriptionKind =>
   Object.hasOwn(SubscriptionInputs, kind);
 
-const predictionOpeners = (prediction?: PredictionBridge): Openers => ({
+const predictionOpeners = (prediction?: PredictionBridge, browser?: Browsers): Openers => ({
   ...openers,
+  ...browserOpeners(browser),
   "prediction.edit": (value) => prediction?.edit(value) ?? openers["prediction.edit"](value),
   "prediction.complete": (value) =>
     prediction?.complete(value) ?? openers["prediction.complete"](value),
@@ -117,10 +122,14 @@ const predictionOpeners = (prediction?: PredictionBridge): Openers => ({
 });
 
 /** Decodes a renderer's input for `kind` (untrusted), then opens the feed. */
-export const feedOpener = <K extends SubscriptionKind>(kind: K, prediction?: PredictionBridge) =>
+export const feedOpener = <K extends SubscriptionKind>(
+  kind: K,
+  prediction?: PredictionBridge,
+  browser?: Browsers
+) =>
   flow(
     Schema.decodeUnknownEffect(SubscriptionInputs[kind]),
     Effect.mapError((error): IpcError => ({ code: "InvalidInput", message: error.message })),
-    Effect.map((input): Feed<K> => predictionOpeners(prediction)[kind](input)),
+    Effect.map((input): Feed<K> => predictionOpeners(prediction, browser)[kind](input)),
     Stream.unwrap
   );

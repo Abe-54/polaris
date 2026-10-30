@@ -53,6 +53,13 @@ export const useOutputOpen = (key: string): boolean =>
 
 export const isOutputOpen = (key: string): boolean => (store.getState()[key] ?? CLOSED).open;
 
+/** The user closed Output for this session themselves: nothing but they reopen it. */
+export const isOutputHeldClosed = (key: string): boolean => {
+  const entry = store.getState()[key] ?? CLOSED;
+
+  return entry.toggled && !entry.open;
+};
+
 /** The user opened or closed Output: remembered, and edits no longer open it. */
 export const setOutputOpen = (key: string, open: boolean) =>
   update((memories) => toggled(memories, key, open));

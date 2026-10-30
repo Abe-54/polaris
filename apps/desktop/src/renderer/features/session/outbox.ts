@@ -38,7 +38,8 @@ export interface OutboxInput {
 }
 
 export interface OutboxActions {
-  readonly steer: (text: string) => void;
+  /** Attachments go only where the Daemon and Harness take them in a steer (`steersAttachments`). */
+  readonly steer: (text: string, attachments?: ReadonlyArray<StagedAttachment>) => void;
   /** `shell`: a shell command (`!…`), run as the next Turn. */
   readonly queue: (
     text: string,
@@ -50,13 +51,19 @@ export interface OutboxActions {
   readonly edit: (id: string) => void;
 }
 
+/** A steer's fields; `attachments` only when it carries some, so older Daemons decode it. */
+const steerFields = (sessionId: SessionId, entry: Outbound) =>
+  entry.attachments.length === 0
+    ? { sessionId, text: entry.text }
+    : { sessionId, text: entry.text, attachments: entry.attachments.map((a) => a.id) };
+
 const append = (draft: string, text: string) => (draft.trim() === "" ? text : `${draft}\n${text}`);
 
 /** Dispatch an entry's command; it goes `sent`, or `failed` with the Daemon's reason. */
 const deliver = (hostKey: string, uiKey: string, entry: Outbound, sessionId: SessionId) => {
   const command =
     entry.kind === "steer"
-      ? Commands.Steer({ sessionId, text: entry.text })
+      ? Commands.Steer(steerFields(sessionId, entry))
       : queuedCommand(sessionId, {
           text: entry.text,
           attachments: entry.attachments.map((a) => a.id),
@@ -106,9 +113,9 @@ export const useOutbox = (input: OutboxInput): OutboxActions => {
   const add = (entry: Outbound) =>
     patchSessionUi(uiKey, (ui) => ({ outbox: [...ui.outbox, entry] }));
 
-  const steer = (text: string) => {
+  const steer = (text: string, attachments: ReadonlyArray<StagedAttachment> = []) => {
     if (live === undefined) return;
-    const entry = steerOutgoing<StagedAttachment>(model.turns, live.turn.id, text);
+    const entry = steerOutgoing(model.turns, live.turn.id, text, attachments);
 
     add(entry);
     deliver(hostKey, uiKey, entry, sessionId);
@@ -120,7 +127,7 @@ export const useOutbox = (input: OutboxInput): OutboxActions => {
     if (entry === undefined) return;
 
     if (entry.kind === "steer" && canSteer && live !== undefined) {
-      const again = steerOutgoing<StagedAttachment>(model.turns, live.turn.id, entry.text);
+      const again = steerOutgoing(model.turns, live.turn.id, entry.text, entry.attachments);
 
       patchOutgoing(uiKey, entry.id, () => ({ ...again, id: entry.id }));
       deliver(hostKey, uiKey, { ...again, id: entry.id }, sessionId);

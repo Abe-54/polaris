@@ -52,6 +52,8 @@ import { secureStorageLayer } from "./secure/electron.ts";
 import { SecureStorage } from "./secure/index.ts";
 import { iconPng, nameApp, showIcon } from "./identity.ts";
 import { registerIpc } from "./ipc/index.ts";
+import { type Browsers, createBrowsers } from "./browser/index.ts";
+import { cdpTabsOf, electronCdpVersions, hostBrowsers } from "./browserCdp/index.ts";
 import { registerLanguageIpc } from "./ipc/languages.ts";
 import { optionalLanguageCredential } from "./languages/optionalCredential.ts";
 import { LanguageIdentityEpochs } from "./languages/identityEpochs.ts";
@@ -73,6 +75,8 @@ import {
 } from "./protocol.ts";
 import { internetFetch } from "./net.ts";
 import { distrustInSession } from "./tls/distrust.ts";
+import { createHostAddresses, type HostAddresses } from "./hostAddress/index.ts";
+import { isLocalHost, openThroughHost, whenHostRemoved } from "./hostAddress/open.ts";
 import { openPrices } from "./prices.ts";
 import { openSnapshotCache } from "./snapshotCache.ts";
 import type { SessionPrefsPatch } from "../shared/contract.ts";
@@ -186,7 +190,21 @@ let predictionOutcomes: PredictionOutcomes | null = null;
 
 let needsYou: NeedsYouCenter | null = null;
 
+let browsers: Browsers | null = null;
+
 let presenceWatch: PresenceWatch | null = null;
+
+/** Each Workspace's Browser partition, its Host addresses sent to its Host (ADR 0093). */
+let hostAddresses: HostAddresses | null = null;
+
+// Only a Browser partition's own proxy gets its secret; any other challenge is cancelled.
+app.on("login", (event, webContents, _details, authInfo, callback) => {
+  const credentials = hostAddresses?.proxyLogin(webContents?.session, authInfo) ?? null;
+
+  if (credentials === null) return;
+  event.preventDefault();
+  callback(credentials.username, credentials.password);
+});
 
 let reviews: ReviewNotifier | null = null;
 
@@ -397,6 +415,13 @@ const start = async () => {
       languageEpoch: (hostKey, session) =>
         languageIdentities.bind(hostKey, session)?.connectionEpoch ?? null,
       invalidateLanguage: (hostKey) => languageIdentities.invalidate(hostKey),
+      // Agents drive the session's Browser over CDP through the Daemon's relay (ENG-616).
+      browserHost: (hostKey, sessions) =>
+        hostBrowsers(sessions, {
+          hostKey,
+          tabs: cdpTabsOf(() => browsers),
+          versions: electronCdpVersions(),
+        }),
     },
     machinesLayer({
       settings: { get: () => settings, update: updateSettings },
@@ -409,6 +434,22 @@ const start = async () => {
       localHost: Layer.succeed(LocalHost, local),
     }),
     githubLayer({ userData, env, secureStorage })
+  );
+  const clientRuntime = runtime;
+
+  hostAddresses = createHostAddresses({
+    isLocal: (hostKey) => clientRuntime.runSync(isLocalHost(hostKey)),
+    open: openThroughHost,
+    run: (effect) => clientRuntime.runFork(effect),
+  });
+  const removedHosts = hostAddresses;
+
+  // A removed Host's tabs stop and lose CDP before its proxy stops relaying.
+  clientRuntime.runFork(
+    whenHostRemoved(async (hostKey) => {
+      browsers?.retireHost(hostKey);
+      await removedHosts.forget(hostKey);
+    })
   );
   languageRuntime = createMainLanguageApi({
     runtime,
@@ -448,10 +489,21 @@ const start = async () => {
     commit: (value) => updateSettings(() => value),
   });
 
+  browsers = createBrowsers({
+    runtime,
+    userData,
+    // The one main window, created below.
+    window: () => BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null,
+    configureSession: (hostKey, _workspaceId, partition) =>
+      hostAddresses?.configureBrowserSession(hostKey, partition) ??
+      Promise.reject(new Error("host addresses aren't set up")),
+  });
+
   ipc = registerIpc({
     runtime,
     trusted,
     context: {
+      browser: browsers,
       updates: currentUpdates,
       restartToUpdate,
       showAppInFinder: () =>
@@ -585,6 +637,7 @@ const finishQuit = () => {
   quitting = true;
   exiting = true;
   ipc?.dispose();
+  browsers?.flush();
   languageIpc?.dispose();
   languageRuntime?.dispose();
   languageIdentities.dispose();
@@ -595,7 +648,12 @@ const finishQuit = () => {
   const stopLocal = localHost === null ? undefined : Effect.runPromise(localHost.stop);
 
   presenceWatch?.dispose();
-  void Promise.allSettled([runtime?.dispose(), stopLocal, predictionOutcomes?.close()]).then(() => {
+  void Promise.allSettled([
+    runtime?.dispose(),
+    stopLocal,
+    predictionOutcomes?.close(),
+    hostAddresses?.dispose(),
+  ]).then(() => {
     if (restartForUpdate && updates?.get().phase === "ready") updates.install();
     else app.quit();
   });

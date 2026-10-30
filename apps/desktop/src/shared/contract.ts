@@ -55,6 +55,7 @@ import { ResourceRequestInputs } from "./resourcesContract.ts";
 import { RemoteAccessRequestInputs } from "./remoteAccessContract.ts";
 import { LinkedDevicesRequestInputs } from "./linkedDevicesContract.ts";
 import { VoiceRequestInputs } from "./voiceContract.ts";
+import { BrowserRequestInputs, BrowserSubscriptionInputs } from "./browserContract.ts";
 import { SecretRequestInputs } from "./secretContract.ts";
 import { GitHubRequestInputs, GitHubSubscriptionInputs } from "./githubContract.ts";
 import { GitRequestInputs, GitSubscriptionInputs } from "./gitContract.ts";
@@ -587,6 +588,7 @@ export const RequestInputs = {
   ...RemoteAccessRequestInputs,
   ...LinkedDevicesRequestInputs,
   ...VoiceRequestInputs,
+  ...BrowserRequestInputs,
   ...SecretRequestInputs,
 } as const;
 
@@ -636,12 +638,15 @@ export const SubscriptionInputs = {
   "plan-limits": onHost({}),
   /** The Host's CPU, load, memory and disk: `History`, then a sample per interval (`host.stats`). */
   "host.stats": onHost({}),
+  /** The Linked Devices with their presence, then again on every change (`devices.watch`). */
+  "devices.watch": onHost({}),
   /** A Risk Summary as it fills in (`review.watchRiskSummary`): the whole summary on each change. */
   "review.watchRiskSummary": onHost({ summaryId: RiskSummaryId }),
   /** An inline proposal (`inline.propose`, capability `inline.propose`); closing it cancels. */
   "inline.propose": onHost(InlineRequest.fields),
   ...GitHubSubscriptionInputs,
   ...GitSubscriptionInputs,
+  ...BrowserSubscriptionInputs,
   /** One Constellation's stream (`constellation.subscribe`): Snapshot, Synchronized, then events. */
   constellation: Schema.Struct({
     hostKey: HostKey,

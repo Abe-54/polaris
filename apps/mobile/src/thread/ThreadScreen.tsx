@@ -49,7 +49,13 @@ import { type MobileColours, themedStyles } from "../theme/index.ts";
 import { RiseHorizon, RiseLayer, SLOT_SIZE, useRise } from "./Rise.tsx";
 import { Diamond, Row, type RowSession, type ThreadFocus } from "./Row.tsx";
 import { type HeaderLine, headerLine, outgoingRows, threadRows, type ThreadRow } from "./rows.ts";
-import { chipAction, openCritical, type Suggestion, suggestions } from "./suggestions.ts";
+import {
+  canReview,
+  chipAction,
+  openCritical,
+  type Suggestion,
+  suggestions,
+} from "./suggestions.ts";
 import { threadKey, threads } from "./threads.ts";
 import { useAfter } from "../runtime/useAfter.ts";
 import { InboxBadge } from "../inbox/index.ts";
@@ -153,6 +159,7 @@ const Header = ({
   celestial,
   criticals,
   onBack,
+  onReview,
   rising = false,
   away = false,
   onSlot,
@@ -162,6 +169,8 @@ const Header = ({
   readonly celestial: HeaderBody | null;
   readonly criticals: number;
   readonly onBack: () => void;
+  /** Opens the session's Review; absent until a Turn has ended. */
+  readonly onReview?: (() => void) | undefined;
   /** The celestial is still on its way up (MX-AS): its slot stays empty. */
   readonly rising?: boolean;
   /** The Host is reconnecting (MX-AV): the celestial dims, nothing else changes. */
@@ -211,6 +220,19 @@ const Header = ({
           <Diamond />
           <Text style={styles.pillLabel}>{criticals} critical</Text>
         </View>
+      )}
+      {onReview === undefined ? null : (
+        <Pressable
+          style={styles.pill}
+          onPress={onReview}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Open review"
+        >
+          <Text style={styles.pillLabel} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
+            Review
+          </Text>
+        </Pressable>
       )}
       <InboxBadge />
     </View>
@@ -432,12 +454,16 @@ export const ThreadScreen = ({
     findings,
   });
 
+  const openReview = () =>
+    onOpenReview === undefined
+      ? navigation.push({ screen: "review", hostId, sessionId, turnId: null })
+      : onOpenReview();
+
   const pick = (chip: Suggestion) => {
     const action = chipAction(chip, hostId, sessionId);
 
     if (action.kind === "fill") controller?.type(action.text);
-    else if (onOpenReview === undefined) navigation.push(action.route);
-    else onOpenReview();
+    else openReview();
   };
 
   return (
@@ -454,6 +480,7 @@ export const ThreadScreen = ({
             }}
             criticals={criticals.length}
             onBack={onBack}
+            onReview={canReview(fold.turns.map(({ turn }) => turn.status)) ? openReview : undefined}
             away={away}
             rising={rise.rising}
             onSlot={rise.onSlot}

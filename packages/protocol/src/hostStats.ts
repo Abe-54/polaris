@@ -25,8 +25,8 @@ export class HostDiskUsage extends Schema.Class<HostDiskUsage>("HostDiskUsage")(
 export class HostStatsSample extends Schema.Class<HostStatsSample>("HostStatsSample")({
   at: Timestamp,
   /**
-   * The busy share of all cores since the previous sample, 0 to 100; null on the
-   * first sample after sampling (re)starts, which has no interval to measure.
+   * The busy share of all cores since the previous sample (or the baseline read when
+   * sampling starts), 0 to 100; null when there was none, as older Daemons' first sample.
    */
   cpuPercent: Schema.NullOr(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
   /** The 1, 5 and 15 minute load averages; null where the OS has none (Windows). */

@@ -127,9 +127,26 @@ const itemStarts = (view: TurnView): ReadonlyMap<string, string | null> =>
 const entryStart = (entry: Entry, starts: ReadonlyMap<string, string | null>) =>
   entry.kind === "item" ? (starts.get(entry.item.id) ?? null) : null;
 
+/** The Turn's sources move to its first agent row, across from the avatar, when it has one. */
+const liftSources = (entries: ReadonlyArray<Entry>) => {
+  const pill = entries.find((entry) => entry.kind === "sources");
+  const rest = entries.filter((entry) => entry !== pill);
+  const carrier = rest.findIndex((entry) => !isSteer(entry));
+
+  return pill?.kind === "sources" && carrier !== -1
+    ? { rest, carrier, sources: pill.sources }
+    : { rest: entries, carrier: -1, sources: undefined };
+};
+
 const itemRows = (view: TurnView, part: Part): ReadonlyArray<Row> => {
   const partId = view.turn.id;
-  const entries = turnEntries(view, part.titles ?? noTitles);
+
+  const {
+    rest: entries,
+    carrier,
+    sources,
+  } = liftSources(turnEntries(view, part.titles ?? noTitles));
+
   const starts = itemStarts(view);
 
   // The first agent row carries the avatar, and so does the first one after a steer.
@@ -142,6 +159,7 @@ const itemRows = (view: TurnView, part: Part): ReadonlyArray<Row> => {
     lead: !isSteer(entry) && (n === 0 || isSteer(entries[n - 1])),
     latest: part.latest,
     startedAt: entryStart(entry, starts),
+    sources: n === carrier ? sources : undefined,
   }));
 };
 

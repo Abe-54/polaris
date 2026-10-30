@@ -116,7 +116,13 @@ export const submitCommand = (
   // Mid-Turn a shell command can't steer: the composer queues it for after the Turn.
   if (draft.shell === true) return mode.kind === "send" ? shellCommand(sessionId, draft) : null;
 
-  if (mode.kind === "steer") return text === "" ? null : Commands.Steer({ sessionId, text });
+  if (mode.kind === "steer") {
+    if (text === "" && draft.attachments.length === 0) return null;
+
+    return draft.attachments.length === 0
+      ? Commands.Steer({ sessionId, text })
+      : Commands.Steer({ sessionId, text, attachments: draft.attachments });
+  }
 
   if (mode.kind === "answer") {
     if (text === "") return null;

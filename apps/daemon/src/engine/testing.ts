@@ -47,6 +47,8 @@ export interface FakeHarnessSession {
   readonly turns: Array<TurnInput>;
   readonly responses: Array<{ requestId: RequestId; decision: ApprovalDecision }>;
   readonly steers: Array<string>;
+  /** Each steer's attachments, in the order of `steers`. */
+  readonly steerAttachments: Array<ReadonlyArray<Attachment>>;
   /** Background task ids the engine asked it to stop. */
   readonly stopped: Array<string>;
   /** Running commands the engine moved to the background (null: every one). */
@@ -72,6 +74,8 @@ export const makeFakeDriver = (
   kind: HarnessKind,
   options: {
     readonly steer?: boolean;
+    /** Takes attachments in a steer (default: as `steer`). */
+    readonly steerAttachments?: boolean;
     readonly liveCoAttach?: boolean;
     readonly switchModel?: boolean;
     /** Offer `backgroundCommand` (default true). */
@@ -120,6 +124,7 @@ export const makeFakeDriver = (
     kind,
     capabilities: {
       steer: options.steer ?? false,
+      steerAttachments: options.steerAttachments ?? options.steer ?? false,
       liveCoAttach: options.liveCoAttach ?? false,
       switchModel: options.switchModel ?? true,
       stopBackground: true,
@@ -139,6 +144,7 @@ export const makeFakeDriver = (
           turns: [],
           responses: [],
           steers: [],
+          steerAttachments: [],
           stopped: [],
           backgrounded: [],
           interrupts: 0,
@@ -177,7 +183,11 @@ export const makeFakeDriver = (
 
               return true;
             }),
-          steer: (text) => Effect.sync(() => void session.steers.push(text)),
+          steer: (text, attachments = []) =>
+            Effect.sync(() => {
+              session.steers.push(text);
+              session.steerAttachments.push(attachments);
+            }),
           interrupt: Effect.sync(() => {
             session.interrupts++;
             session.emit(...(options.onInterrupt?.(session) ?? []));

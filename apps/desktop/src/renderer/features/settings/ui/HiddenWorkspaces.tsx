@@ -1,10 +1,20 @@
 /**
- * Settings → Sessions → Hidden workspaces (DESIGN.md, Settings; ENG-566): every hidden workspace
- * with a destructive Remove that confirms in place, naming what goes with it (docs/adr/0086).
+ * Settings → Sessions' "Hidden workspaces" card (DESIGN.md, SR-01; ENG-566): every hidden
+ * workspace with Unhide, and a destructive Remove that confirms in place, naming what goes
+ * with it (docs/adr/0086).
  */
-import { Button } from "@polaris/ui";
+import type { WorkspaceId } from "@polaris/protocol";
+import {
+  SettingsButton,
+  SettingsCard,
+  SettingsConfirmRow,
+  SettingsEmpty,
+  SettingsWell,
+} from "@polaris/ui";
 import { useMemo, useState } from "react";
+import { Commands } from "../../../commands.ts";
 import { useApp } from "../../../shell/hooks.ts";
+import { send } from "../../session/dispatch.ts";
 import {
   type HiddenWorkspaceRow,
   hiddenWorkspaceRows,
@@ -13,75 +23,70 @@ import {
   rowCaption,
 } from "../model/hiddenWorkspaces.ts";
 import { removeWorkspace } from "../removeWorkspace.ts";
-import { Group, Heading } from "./parts.tsx";
+
+type Act = (row: HiddenWorkspaceRow) => Promise<boolean>;
 
 const Row = ({
   row,
   onRemove,
+  onUnhide,
 }: {
   readonly row: HiddenWorkspaceRow;
-  readonly onRemove: (row: HiddenWorkspaceRow) => Promise<boolean>;
+  readonly onRemove: Act;
+  readonly onUnhide: Act;
 }) => {
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const blocked = removalBlocked(row);
+  const [busy, setBusy] = useState<"removing" | "unhiding" | null>(null);
 
-  const caption = asking ? removalConsequence(row) : (blocked ?? rowCaption(row));
+  const run = (what: "removing" | "unhiding", act: Act) => {
+    setBusy(what);
+    // A done act unmounts the row; one refused hands it back.
+    void act(row).then((done) => {
+      if (!done) setBusy(null);
+    });
+  };
+
+  const blocked = busy === "removing" ? "Removing…" : removalBlocked(row);
 
   return (
-    <div
-      className="px-panel flex items-center gap-4 py-[calc(var(--spacing-gap)+4px)]"
-      data-testid="hidden-workspace"
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-label font-regular text-text-default truncate" title={row.path}>
-          {row.name}
-        </span>
-        <span className="text-caption text-text-subtle" data-testid="hidden-workspace-caption">
-          {caption}
-        </span>
-      </div>
-      {asking ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="ghost" autoFocus disabled={busy} onClick={() => setAsking(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            disabled={busy || blocked !== null}
-            data-testid="confirm-remove-workspace"
-            onClick={() => {
-              setBusy(true);
-              void onRemove(row).then((removed) => {
-                if (removed) return;
-                setBusy(false);
-                setAsking(false);
-              });
-            }}
-          >
-            Remove {row.name}
-          </Button>
-        </div>
-      ) : (
-        <Button
-          variant="danger"
-          className="shrink-0"
-          disabled={blocked !== null}
-          data-testid="remove-workspace"
-          onClick={() => setAsking(true)}
+    <div data-testid="hidden-workspace" title={row.path}>
+      <SettingsConfirmRow
+        title={row.name}
+        caption={rowCaption(row)}
+        action="Remove workspace…"
+        consequence={removalConsequence(row)}
+        confirm={`Remove ${row.name}`}
+        onConfirm={() => run("removing", onRemove)}
+        {...(blocked === null ? {} : { disabledReason: blocked })}
+      >
+        <SettingsButton
+          variant="ghost"
+          disabled={!row.connected || busy !== null}
+          onClick={() => run("unhiding", onUnhide)}
         >
-          Remove workspace…
-        </Button>
-      )}
+          Unhide
+        </SettingsButton>
+      </SettingsConfirmRow>
     </div>
   );
 };
 
+const unhideWorkspace: Act = (row) =>
+  send(
+    row.hostKey,
+    // SAFETY: the id came from this Host's own Workspace list.
+    Commands.SetWorkspaceHidden({ workspaceId: row.workspaceId as WorkspaceId, hidden: false }),
+    "Couldn't unhide the workspace"
+  );
+
+const hiddenCount = (n: number) => (n === 0 ? "None hidden" : `${n} hidden`);
+
 export const HiddenWorkspaces = ({
   remove = (row: HiddenWorkspaceRow) => removeWorkspace(row.hostKey, row.workspaceId),
+  unhide = unhideWorkspace,
 }: {
   /** Sends the removal; tests and the preview pass their own. */
-  readonly remove?: (row: HiddenWorkspaceRow) => Promise<boolean>;
+  readonly remove?: Act;
+  readonly unhide?: Act;
 }) => {
   const hosts = useApp((s) => s.hosts);
   const models = useApp((s) => s.hostModels);
@@ -93,15 +98,20 @@ export const HiddenWorkspaces = ({
   );
 
   return (
-    <section aria-label="Hidden workspaces" className="flex flex-col gap-3">
-      <Heading>Hidden workspaces</Heading>
-      <Group>
-        {rows.length === 0 ? (
-          <p className="px-panel text-caption text-text-subtle py-3">No hidden workspaces</p>
-        ) : (
-          rows.map((row) => <Row key={row.key} row={row} onRemove={remove} />)
-        )}
-      </Group>
-    </section>
+    <SettingsCard
+      title="Hidden workspaces"
+      aside={hiddenCount(rows.length)}
+      status="Removing never touches the folder on disk"
+    >
+      {rows.length === 0 ? (
+        <SettingsEmpty>No hidden workspaces</SettingsEmpty>
+      ) : (
+        <SettingsWell>
+          {rows.map((row) => (
+            <Row key={row.key} row={row} onRemove={remove} onUnhide={unhide} />
+          ))}
+        </SettingsWell>
+      )}
+    </SettingsCard>
   );
 };

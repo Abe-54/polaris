@@ -1,7 +1,7 @@
 /**
- * Settings → GitHub accounts (Paper S5, S6): the accounts in routing order (the first is
- * the default), adding one through the device flow, which account each owner uses with
- * each owner's access, and the Workspaces that override their owner.
+ * Settings → GitHub accounts (DESIGN.md, Settings redesign SR-11): the accounts in routing
+ * order (the first is the default), adding one through the device flow, which account each
+ * owner uses, the workspaces that override their owner, then GitHub Enterprise.
  */
 import { clientCopy } from "../../../../shared/clientCopy.ts";
 import {
@@ -14,7 +14,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  PlusIcon,
+  SettingsButton,
+  SettingsCard,
+  SettingsEmpty,
+  SettingsPage,
+  SettingsWell,
 } from "@polaris/ui";
 import { useEffect, useRef } from "react";
 import type { GitHubAccountsView, PullListView } from "../../../../shared/github.ts";
@@ -26,19 +30,19 @@ import { type AccountRow, accountRows } from "../model/github.ts";
 import { sectionInfo } from "../model/sections.ts";
 import { AddGitHubAccount } from "./AddGitHubAccount.tsx";
 import { GitHubEnterprise } from "./GitHubEnterprise.tsx";
-import { OwnerTable } from "./GitHubOwners.tsx";
-import { Column, PageHeader } from "./parts.tsx";
+import { setDefaultAccount, OwnerTable } from "./GitHubOwners.tsx";
 
 const startSignIn = (host?: string) =>
   void polaris().request("github.signIn.start", host === undefined ? {} : { host });
 
 const openExternal = (url: string) => void polaris().request("shell.openExternal", { url });
 
-/** Moves `id` to the front: the default is the first account. */
-const makeDefault = (view: GitHubAccountsView, id: number) =>
-  void polaris().request("github.accounts.reorder", {
-    accountIds: [id, ...view.accounts.map((a) => a.id).filter((a) => a !== id)],
-  });
+const KeyGlyph = () => (
+  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+    <circle cx="4" cy="6" r="2.25" fill="none" stroke="currentColor" />
+    <path d="M6.25 6h4.25M9 6v1.75" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
 
 const AccountMenu = ({
   row,
@@ -55,7 +59,9 @@ const AccountMenu = ({
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
       {row.isDefault ? null : (
-        <DropdownMenuItem onSelect={() => makeDefault(view, row.id)}>Make default</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setDefaultAccount(view, row.id)}>
+          Make default
+        </DropdownMenuItem>
       )}
       <DropdownMenuItem onSelect={() => startSignIn(row.host)}>Sign in again</DropdownMenuItem>
       <DropdownMenuItem
@@ -76,56 +82,6 @@ const AccountMenu = ({
   </DropdownMenu>
 );
 
-const Account = ({
-  row,
-  view,
-}: {
-  readonly row: AccountRow;
-  readonly view: GitHubAccountsView;
-}) => (
-  <div
-    className="px-panel py-gap flex min-h-[calc(var(--spacing-session-row)+8px)] shrink-0 items-center gap-3"
-    data-testid="github-account"
-  >
-    <AccountMark
-      index={row.index}
-      size={null}
-      className={cn("size-harness-tile", row.signedOut && "opacity-(--opacity-dimmed)")}
-    />
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="flex items-center gap-2">
-        <span
-          className={cn(
-            "text-body truncate font-medium",
-            row.signedOut ? "text-text-default" : "text-text-strong"
-          )}
-        >
-          {row.login}
-        </span>
-        {row.isDefault ? <Badge className="h-[18px] text-[11px]">Default</Badge> : null}
-      </span>
-      <span
-        className={cn(
-          "text-caption flex min-w-0 items-center gap-1.5",
-          row.signedOut ? "text-text-default" : "text-text-subtle"
-        )}
-      >
-        {row.signedOut ? <WarnGlyph /> : null}
-        <span className="truncate">{row.caption}</span>
-      </span>
-    </span>
-    {row.since === null ? null : (
-      <span className="text-caption text-text-subtle shrink-0">{row.since}</span>
-    )}
-    {row.signedOut ? (
-      <Button size="xs" onClick={() => startSignIn(row.host)}>
-        Sign in again
-      </Button>
-    ) : null}
-    <AccountMenu row={row} view={view} />
-  </div>
-);
-
 /** Paper S5's small neutral triangle before a signed-out caption (never a signal colour). */
 const WarnGlyph = () => (
   <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden className="shrink-0">
@@ -140,17 +96,101 @@ const WarnGlyph = () => (
   </svg>
 );
 
-const AddRow = ({ view }: { readonly view: GitHubAccountsView }) => (
-  <div className="flex items-center gap-3">
-    <Button variant="primary" disabled={!view.storageAvailable} onClick={() => startSignIn()}>
-      <PlusIcon size={12} />
-      Add account
-    </Button>
-    <span className="text-caption text-text-subtle">
-      {view.storageAvailable
-        ? "Signs in through github.com with a one-time code"
-        : clientCopy().noTokenStore}
+const Account = ({
+  row,
+  view,
+}: {
+  readonly row: AccountRow;
+  readonly view: GitHubAccountsView;
+}) => (
+  <div
+    className="px-panel flex items-center gap-3 py-[calc(var(--spacing-gap)+4px)]"
+    data-testid="github-account"
+  >
+    <AccountMark
+      index={row.index}
+      size={null}
+      className={cn("size-[26px]", row.signedOut && "opacity-(--opacity-dimmed)")}
+    />
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="flex items-center gap-2">
+        <span className="text-body text-text-default truncate">{row.login}</span>
+        {row.isDefault ? <Badge className="h-[18px] text-[11px]">Default</Badge> : null}
+      </span>
+      <span className="text-caption text-text-subtle flex min-w-0 items-center gap-1.5">
+        {row.signedOut ? <WarnGlyph /> : null}
+        <span className="truncate">
+          {row.since === null ? row.caption : `${row.caption} · ${row.since}`}
+        </span>
+      </span>
     </span>
+    {row.signedOut ? (
+      <SettingsButton variant="ghost" onClick={() => startSignIn(row.host)}>
+        Sign in again
+      </SettingsButton>
+    ) : null}
+    <AccountMenu row={row} view={view} />
+  </div>
+);
+
+const summary = (rows: ReadonlyArray<AccountRow>) => {
+  const out = rows.filter((r) => r.signedOut).length;
+  const signedIn = `${rows.length - out} signed in`;
+
+  return out === 0 ? signedIn : `${signedIn} · ${out} signed out`;
+};
+
+const AccountsCard = ({ view }: { readonly view: GitHubAccountsView }) => {
+  const now = useNow();
+  const rows = accountRows(view, now);
+
+  return (
+    <SettingsCard
+      title="Accounts"
+      aside={rows.length === 0 ? undefined : summary(rows)}
+      status={
+        view.storageAvailable
+          ? "Signs in through github.com with a one-time code"
+          : clientCopy().noTokenStore
+      }
+      action={
+        <SettingsButton
+          variant="primary"
+          disabled={!view.storageAvailable || view.signIn !== null}
+          onClick={() => startSignIn()}
+        >
+          Add account
+        </SettingsButton>
+      }
+    >
+      {rows.length === 0 ? (
+        <SettingsEmpty>No GitHub account on {clientCopy().machine} yet</SettingsEmpty>
+      ) : (
+        <SettingsWell aria-label="Accounts">
+          {rows.map((row) => (
+            <Account key={row.id} row={row} view={view} />
+          ))}
+        </SettingsWell>
+      )}
+    </SettingsCard>
+  );
+};
+
+/** What the device flow asks GitHub to grant, and how to add a second account. */
+const ScopeNote = ({ host }: { readonly host: string | undefined }) => (
+  <div className="text-caption text-text-subtle px-gap flex flex-col gap-1.5 leading-[18px] text-pretty">
+    <p>
+      GitHub asks you to grant <code className="font-mono">repo</code>, full read and write access
+      to every repository the account can reach (GitHub has no read-only scope for private
+      repositories), and <code className="font-mono">read:org</code>. Polaris uses it to list pull
+      requests, send your reviews and open pull requests you accept; hosts push code with their own
+      git credentials.
+    </p>
+    <p>
+      Already signed in to {host ?? "github.com"} as another account? Open the link in a private
+      window, or switch accounts on {host ?? "GitHub"} first. Next you choose which owners use the
+      new account.
+    </p>
   </div>
 );
 
@@ -172,44 +212,17 @@ const Body = ({
 }: {
   readonly view: GitHubAccountsView;
   readonly pulls: PullListView | null;
-}) => {
-  const now = useNow();
-  const rows = accountRows(view, now);
-
-  return (
-    <>
-      {rows.length === 0 ? null : (
-        <section
-          aria-label="Accounts"
-          className="rounded-card border-hairline divide-hairline flex flex-col divide-y overflow-clip border bg-[light-dark(var(--color-surface-raised),transparent)]"
-        >
-          {rows.map((row) => (
-            <Account key={row.id} row={row} view={view} />
-          ))}
-        </section>
-      )}
-      {view.signIn === null ? <AddRow view={view} /> : <AddGitHubAccount flow={view.signIn} />}
-      {view.signIn === null || view.signIn.userCode === null ? null : (
-        <div className="text-caption text-text-subtle flex flex-col gap-1.5 px-1 leading-[18px] text-pretty">
-          <p>
-            GitHub asks you to grant <code className="font-mono">repo</code>, full read and write
-            access to every repository the account can reach (GitHub has no read-only scope for
-            private repositories), and <code className="font-mono">read:org</code>. Polaris uses it
-            to list pull requests, send your reviews and open pull requests you accept; hosts push
-            code with their own git credentials.
-          </p>
-          <p>
-            Already signed in to {view.signIn?.host ?? "github.com"} as another account? Open the
-            link in a private window, or switch accounts on {view.signIn?.host ?? "GitHub"} first.
-            Next you choose which owners use the new account.
-          </p>
-        </div>
-      )}
-      {rows.length === 0 ? null : <OwnerTable view={view} pulls={pulls} />}
-      <GitHubEnterprise view={view} />
-    </>
-  );
-};
+}) => (
+  <>
+    <AccountsCard view={view} />
+    {view.signIn === null ? null : <AddGitHubAccount flow={view.signIn} />}
+    {view.signIn === null || view.signIn.userCode === null ? null : (
+      <ScopeNote host={view.signIn.host} />
+    )}
+    {view.accounts.length === 0 ? null : <OwnerTable view={view} pulls={pulls} />}
+    <GitHubEnterprise view={view} />
+  </>
+);
 
 export const GitHubPage = ({ adding }: { readonly adding: boolean }) => {
   const view = usePulls((s) => s.accounts);
@@ -220,13 +233,17 @@ export const GitHubPage = ({ adding }: { readonly adding: boolean }) => {
   useStartWhenAdding(adding, view);
 
   return (
-    <Column>
-      <PageHeader title={info.title} blurb={info.blurb} />
+    <SettingsPage
+      title={info.title}
+      blurb={`Accounts ${clientCopy().machine} uses to list pull requests and send reviews.`}
+      scope={clientCopy().localHost}
+      scopeIcon={<KeyGlyph />}
+    >
       {view === null ? (
-        <p className="text-caption text-text-subtle">Loading accounts…</p>
+        <p className="text-caption text-text-subtle px-gap">Loading accounts…</p>
       ) : (
         <Body view={view} pulls={hosts === 0 ? null : pulls} />
       )}
-    </Column>
+    </SettingsPage>
   );
 };

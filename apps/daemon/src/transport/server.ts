@@ -133,7 +133,8 @@ const blobChannelFor = (wire: Wire): BlobChannel["Service"] =>
   BlobChannel.of({
     offer: (bytes) => wire.offerBlob(bytes),
     take: (blobId) => wire.takeBlob(blobId).pipe(Effect.mapError(blobError)),
-    takeStream: (blobId) => wire.takeBlobStream(blobId).pipe(Stream.mapError(blobError)),
+    takeStream: (blobId, options) =>
+      wire.takeBlobStream(blobId, options).pipe(Stream.mapError(blobError)),
   });
 
 /**

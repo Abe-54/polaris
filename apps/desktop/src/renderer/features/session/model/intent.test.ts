@@ -157,6 +157,19 @@ describe("composer commands", () => {
     ).toBeNull();
   });
 
+  test("a steer carries the draft's attachments, and an attachment alone steers", () => {
+    expect(
+      submitCommand({ kind: "steer" }, sessionId, {
+        text: " like this ",
+        attachments: [attachment],
+      })
+    ).toEqual(Commands.Steer({ sessionId, text: "like this", attachments: [attachment] }));
+    expect(
+      submitCommand({ kind: "steer" }, sessionId, { text: "", attachments: [attachment] })
+    ).toEqual(Commands.Steer({ sessionId, text: "", attachments: [attachment] }));
+    expect(submitCommand({ kind: "steer" }, sessionId, { text: " ", attachments: [] })).toBeNull();
+  });
+
   test("esc interrupts only a Turn in flight", () => {
     expect(interruptCommand(sessionId, "working")).toEqual(Commands.Interrupt({ sessionId }));
     expect(interruptCommand(sessionId, "completed")).toBeNull();

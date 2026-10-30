@@ -54,6 +54,7 @@ import {
   type OpenOptions,
   type TurnInput,
 } from "../HarnessDriver.ts";
+import { steerItem } from "../userMessage.ts";
 import { ItemClock } from "../itemClock.ts";
 import { backgroundControls } from "./backgroundTasks.ts";
 import { breakdownOf } from "./context.ts";
@@ -63,7 +64,7 @@ import { ClaudeHookReceiver } from "./hooks.ts";
 import { contextWindowOf } from "./payloads.ts";
 import { titleHooks } from "./title.ts";
 import { Inbox } from "./inbox.ts";
-import { buildUserMessage } from "./input.ts";
+import { buildUserMessage, landedSteer, type SteerInput, type SteerSent } from "./input.ts";
 import { shellCommandMessage } from "./shellInput.ts";
 import { CLAUDE_CAPABILITIES } from "./capabilities.ts";
 import { listClaudeCommands } from "./commands.ts";
@@ -83,6 +84,8 @@ import { usageLimitWatch } from "./usageLimit.ts";
 import { ClaudeTranslator } from "./translate.ts";
 import { readConfinement } from "../confinement.ts";
 import { readOnlyEnv, readOnlyOptions } from "./readOnly.ts";
+import type { BrowserMcp } from "../browser/index.ts";
+import { claudeBrowserOptions } from "./browser.ts";
 import { withoutShadowedWarning } from "./sdkWarnings.ts";
 import { claudeStartLog } from "./startLog.ts";
 import { logStart } from "../startLog.ts";
@@ -124,6 +127,8 @@ export interface ClaudeDriverOptions {
   readonly sandbox?: () => ClaudeSandbox;
   /** The Host's name in error messages; default the machine's short hostname. */
   readonly hostName?: string;
+  /** The Browser's MCP server for each session that isn't read-only. */
+  readonly browser?: BrowserMcp["Service"];
 }
 
 const HARNESS = "claude";
@@ -247,7 +252,7 @@ const openSession = Effect.fnUntraced(function* (
   /** Steer messages an interrupt cancelled; if Claude starts on one anyway, interrupt again. */
   const cancelled = new Set<string>();
   /** Steers sent that Claude Code hasn't folded into the Turn yet, by uuid. */
-  const steers = new Map<string, { readonly turnId: TurnId; readonly text: string }>();
+  const steers = new Map<string, SteerSent>();
 
   /** Claude Code took the steer in: it shows in its Turn from here. */
   const landSteer = (uuid: string) => {
@@ -255,12 +260,7 @@ const openSession = Effect.fnUntraced(function* (
 
     if (steer === undefined) return;
     steers.delete(uuid);
-    emit(
-      HarnessEvent.ItemCompleted({
-        turnId: steer.turnId,
-        item: TurnItem.cases.UserMessage.make({ id: `steer:${uuid}`, text: steer.text }),
-      })
-    );
+    emit(landedSteer(uuid, steer));
   };
 
   let active: ActiveTurn | null = null;
@@ -396,6 +396,8 @@ const openSession = Effect.fnUntraced(function* (
 
     Object.assign(sdkOptions, claudeConstellationOptions(attachments));
   }
+
+  Object.assign(sdkOptions, yield* claudeBrowserOptions(driver.browser, options, sdkOptions));
 
   if (options.readOnly === true) {
     const confinement = yield* Effect.tryPromise({
@@ -579,7 +581,7 @@ const openSession = Effect.fnUntraced(function* (
 
   const send = Effect.fnUntraced(function* (
     prompt: string,
-    input: TurnInput | null,
+    input: SteerInput | null,
     turn: ActiveTurn | null = null,
     uuid: NonNullable<SDKUserMessage["uuid"]> = crypto.randomUUID()
   ) {
@@ -691,7 +693,7 @@ const openSession = Effect.fnUntraced(function* (
    */
   const steerInput = Effect.fn("ClaudeSession.steer")(function* (
     text: string,
-    input: TurnInput | null
+    input: SteerInput | null
   ) {
     const turn = active;
 
@@ -705,7 +707,7 @@ const openSession = Effect.fnUntraced(function* (
           emit(
             HarnessEvent.ItemCompleted({
               turnId: turn.turnId,
-              item: TurnItem.cases.UserMessage.make({ id: `refused:${id}`, text }),
+              item: steerItem(`refused:${id}`, text, input?.attachments),
             })
           );
           emit(
@@ -722,11 +724,12 @@ const openSession = Effect.fnUntraced(function* (
     );
 
     // It shows in the Turn once Claude Code folds it in (its echo), not while a tool runs.
-    steers.set(uuid, { turnId: turn.turnId, text });
+    steers.set(uuid, { turnId: turn.turnId, text, attachments: input?.attachments ?? [] });
     inbox.push(message);
   });
 
-  const steer = (text: string) => steerInput(text, null);
+  const steer = (text: string, attachments: SteerInput["attachments"] = []) =>
+    steerInput(text, { attachments });
 
   const steerTurn = (input: TurnInput) =>
     Effect.suspend(() =>

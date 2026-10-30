@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import { NavigationProvider, useNavigation } from "./app/navigation.tsx";
+import { NavigationProvider, type Route, useNavigation } from "./app/navigation.tsx";
 import {
   ConstellationRoute,
   NewSessionRoute,
@@ -77,8 +77,6 @@ const Tabs = () => {
             actions={{
               openSession: (hostId, sessionId) =>
                 navigation.push({ screen: "thread", hostId, sessionId }),
-              openReview: (hostId, sessionId) =>
-                navigation.push({ screen: "review", hostId, sessionId, turnId: null }),
               openConstellation: (hostId, constellationId) =>
                 navigation.push({ screen: "constellation", hostId, constellationId }),
               openHosts,
@@ -130,40 +128,37 @@ const Screen = () => {
   // through "Linked this iPhone" and moves on by itself.
   if (mustLink || pairing) return <LinkScreen onLinked={() => setPairing(false)} />;
 
-  const screen = Match.value(navigation.top).pipe(
-    Match.discriminatorsExhaustive("screen")({
-      tabs: () => <Tabs />,
-      hosts: () => <HostsScreen onBack={navigation.back} />,
-      thread: ({ hostId, sessionId, rise }) => (
-        <ThreadRoute hostId={hostId} sessionId={sessionId} rise={rise} onBack={navigation.back} />
-      ),
-      newSession: ({ workspaceId }) => (
-        <NewSessionRoute workspaceId={workspaceId} onBack={navigation.back} />
-      ),
-      constellation: ({ hostId, constellationId }) => (
-        <ConstellationRoute
-          hostId={hostId}
-          constellationId={constellationId}
-          onBack={navigation.back}
-        />
-      ),
-      review: ({ hostId, sessionId, turnId }) => (
-        <ReviewRoute
-          hostId={hostId}
-          sessionId={sessionId}
-          turnId={turnId}
-          onBack={navigation.back}
-        />
-      ),
-      link: () => <LinkScreen onLinked={navigation.back} onCancel={navigation.back} />,
-    })
-  );
+  const render = (route: Route) =>
+    Match.value(route).pipe(
+      Match.discriminatorsExhaustive("screen")({
+        tabs: () => <Tabs />,
+        hosts: () => <HostsScreen onBack={navigation.back} />,
+        thread: ({ hostId, sessionId, rise }) => (
+          <ThreadRoute hostId={hostId} sessionId={sessionId} rise={rise} onBack={navigation.back} />
+        ),
+        newSession: ({ workspaceId }) => (
+          <NewSessionRoute workspaceId={workspaceId} onBack={navigation.back} />
+        ),
+        constellation: ({ hostId, constellationId }) => (
+          <ConstellationRoute
+            hostId={hostId}
+            constellationId={constellationId}
+            onBack={navigation.back}
+          />
+        ),
+        review: ({ hostId, sessionId, turnId }) => (
+          <ReviewRoute
+            hostId={hostId}
+            sessionId={sessionId}
+            turnId={turnId}
+            onBack={navigation.back}
+          />
+        ),
+        link: () => <LinkScreen onLinked={navigation.back} onCancel={navigation.back} />,
+      })
+    );
 
-  return navigation.top.screen === "tabs" ? (
-    screen
-  ) : (
-    <SwipeBack onBack={navigation.back}>{screen}</SwipeBack>
-  );
+  return <SwipeBack layers={navigation.layers} render={render} onBack={navigation.back} />;
 };
 
 /** Registers for push and the Live Activity with each linked Host, and answers from both. */

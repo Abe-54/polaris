@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { finding } from "./daemon.testing.ts";
-import { chipAction, suggestions } from "./suggestions.ts";
+import { canReview, chipAction, suggestions } from "./suggestions.ts";
 
 describe("suggested chips", () => {
   test("after a finished Turn, Open review opens the session's Review route", () => {
@@ -19,4 +19,15 @@ describe("suggested chips", () => {
       text: 'Fix the critical finding "Secret-like value committed" at serve.ts:4.',
     });
   });
+});
+
+// ENG-640: Review is a button in the session's header, not where a Home row goes.
+test.each([
+  [[], false],
+  [["working"], false],
+  [["completed", "working"], true],
+  [["interrupted"], true],
+  [["failed"], true],
+] as const)("turns %p can be reviewed: %p", (turns, expected) => {
+  expect(canReview(turns)).toBe(expected);
 });

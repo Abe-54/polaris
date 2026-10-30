@@ -28,7 +28,7 @@ let liveBodyTones: [String: [UInt32]] = [
 let liveHarnessTones: [String: [UInt32]] = [
   "claude": [0xEBAB97, 0xD97757, 0x713B2A, 0xF9E1D9, 0x5CF59A],
   "codex": [0xA9DFC3, 0x6FCBA0, 0x376952, 0xE1F4EA, 0x5CF59A],
-  "opencode": [0xF1BAC8, 0xE58FA8, 0x784856, 0xFBE6EB, 0x5CF59A],
+  "opencode": [0xF1C0D8, 0xE59AC1, 0x784E64, 0xFBE9F1, 0x5CF59A],
 ]
 
 /// An unknown or unhued Harness: text-subtle's tones.

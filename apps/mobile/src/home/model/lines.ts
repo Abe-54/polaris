@@ -29,10 +29,6 @@ const firstLine = (text: string | null): string | null => {
 export const hasUnreviewedTurns = (session: Session) =>
   session.turnCount > 0 && (session.acceptedThroughIndex ?? -1) < session.turnCount - 1;
 
-/** Where tapping a working or recent row goes: Review only for an idle, ready-to-review session. */
-export const rowDestination = (session: Session): "review" | "thread" =>
-  session.state === "idle" && hasUnreviewedTurns(session) ? "review" : "thread";
-
 const join = (...parts: ReadonlyArray<string | null>) =>
   parts.filter((part): part is string => part !== null && part !== "").join(" · ");
 

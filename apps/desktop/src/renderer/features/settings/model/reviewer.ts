@@ -1,10 +1,10 @@
 /**
  * Settings → Reviewer as data (Paper S7; ENG-222): the Reviewer every Host runs (its
  * settings live on each Host, so the page writes them to all), each Host's readiness for
- * it, and the Workspace overrides. Null means automatic: Claude Code Opus 5.5 high, else
- * Codex GPT-6.1-Sol, else Rules only.
+ * it, and the Workspace overrides. Null means automatic: the first of `AUTO_CHAIN` that is
+ * ready on the Host, else rules only.
  */
-import { HARNESS_CATALOGUE } from "@polaris/protocol";
+import { AUTO_REVIEWERS, HARNESS_CATALOGUE } from "@polaris/protocol";
 import type { Plain } from "../../../../shared/api.ts";
 import type { ReviewerChoice, ReviewerSettings, ResolvedReviewer } from "@polaris/protocol";
 import type { HostRow, ProbedHost } from "./harnesses.ts";
@@ -47,12 +47,23 @@ export const sharedDefault = (hosts: ReadonlyArray<HostReviewer>): SharedDefault
 export const harnessName = (kind: string) =>
   HARNESS_CATALOGUE.find((h) => h.kind === kind)?.name ?? kind;
 
+const capitalised = (part: string) =>
+  part === "gpt" ? "GPT" : part.charAt(0).toUpperCase() + part.slice(1);
+
+/** "claude-opus-5-5-20260101" → "Opus 5.5": Claude Code lists aliases, so full ids never match. */
+const claudeName = (rest: string) => {
+  const parts = rest.split("-").filter((p) => !/^\d{8}$/.test(p));
+  const words = parts.filter((p) => !/^\d+$/.test(p)).map(capitalised);
+  const version = parts.filter((p) => /^\d+$/.test(p)).join(".");
+
+  return [...words, version].filter((p) => p !== "").join(" ");
+};
+
 /** A Model id as a name until the Harness lists it: "gpt-6.1-sol" → "GPT-6.1-Sol". */
 export const prettyModel = (id: string) =>
-  id
-    .split("-")
-    .map((part) => (part === "gpt" ? "GPT" : part.charAt(0).toUpperCase() + part.slice(1)))
-    .join("-");
+  id.startsWith("claude-")
+    ? claudeName(id.slice("claude-".length))
+    : id.split("-").map(capitalised).join("-");
 
 /** "high" → "High", as Paper names efforts. */
 export const effortLabel = (effort: string) => effort.charAt(0).toUpperCase() + effort.slice(1);
@@ -73,8 +84,23 @@ export const reviewerTitle = (choice: Choice | null, modelName?: (id: string) =>
     ? "Picks a reviewer automatically"
     : `Reviews with ${choiceLabel(choice, modelName)}`;
 
-export const AUTO_CAPTION =
-  "Claude Code · Opus 5.5 high where it's ready, else Codex · GPT-6.1-Sol, else rules only";
+/** What automatic tries, best first, on each Host; rules only when none is ready there. */
+export const AUTO_CHAIN: ReadonlyArray<Choice> = AUTO_REVIEWERS.map((choice) => ({
+  harness: choice.harness,
+  model: choice.model,
+  effort: choice.effort,
+}));
+
+/** A link of the automatic chain: "Claude Code · Opus 5.5 high". */
+export const chainLabel = (choice: Choice, modelName: (id: string) => string = prettyModel) =>
+  [
+    harnessName(choice.harness),
+    [choice.model === null ? null : modelName(choice.model), choice.effort]
+      .filter((part) => part !== null)
+      .join(" "),
+  ]
+    .filter((part) => part !== "")
+    .join(" · ");
 
 export interface ReviewerHostRow {
   readonly hostKey: string;

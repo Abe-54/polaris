@@ -71,4 +71,15 @@ describe("About Update states", () => {
     for (const phase of ["checking", "downloading"] as const)
       expect(appUpdateRow(view({ phase })).action).toBeNull();
   });
+  test("no caption repeats the footer's last-checked time", () => {
+    const at = Date.UTC(2026, 9, 30, 14, 2);
+
+    for (const automatic of [true, false]) {
+      const caption = appUpdateRow(
+        view({ phase: "current", automatic, lastCheckedAt: at })
+      ).caption;
+
+      expect(caption).not.toMatch(/checked/i);
+    }
+  });
 });

@@ -105,7 +105,7 @@ export const makeOpenCodeDriver = (
 
     return {
       kind: "opencode",
-      capabilities: { steer: true, liveCoAttach: true, switchModel: true },
+      capabilities: { steer: true, steerAttachments: true, liveCoAttach: true, switchModel: true },
       probe: Effect.suspend(() => probeOpenCode(options.opencodePath())),
       listModels,
       listCommands,

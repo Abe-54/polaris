@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TurnItem } from "@polaris/protocol";
+import { Attachment, AttachmentId, TurnItem } from "@polaris/protocol";
 import {
   type ToolInput,
   completedItemView,
@@ -23,6 +23,22 @@ describe("item views", () => {
       startedAt,
       endedAt: null,
     });
+  });
+
+  test("a landed steer keeps the attachments it carried, for its row", () => {
+    const shot = new Attachment({
+      id: AttachmentId.make("a1"),
+      name: "shot.png",
+      mimeType: "image/png",
+      size: 4,
+      hostPath: "/stage/shot.png",
+      width: 2,
+      height: 2,
+    });
+
+    const item = TurnItem.cases.UserMessage.make({ id: "steer:1", text: "", attachments: [shot] });
+
+    expect(completedItemView(item)).toMatchObject({ kind: "user", text: "", attachments: [shot] });
   });
 
   test("a plan keeps each step's detail and its explanation", () => {

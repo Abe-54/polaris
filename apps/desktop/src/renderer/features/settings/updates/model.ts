@@ -28,6 +28,7 @@ const checkRow = (
   glyph: AppUpdateRow["glyph"] = "check"
 ): AppUpdateRow => ({ title, caption, glyph, action: "check", actionLabel: "Check now" });
 
+/** The row's caption never repeats when it checked: the card's footer carries that (SR-12). */
 export const appUpdateRow = (view: AppUpdateView): AppUpdateRow => {
   const release = view.availableVersion === null ? "Polaris" : `Polaris ${view.availableVersion}`;
 
@@ -80,17 +81,13 @@ export const appUpdateRow = (view: AppUpdateView): AppUpdateRow => {
         return checkRow(copy.unsupported, "This build doesn't check the update feed", "off");
 
       if (!view.automatic)
-        return checkRow(
-          "Automatic checks are off",
-          `Last checked: ${checkedAt(view.lastCheckedAt)}`,
-          "off"
-        );
+        return checkRow("Automatic checks are off", `You're on ${view.version}`, "off");
 
       return checkRow(
         view.phase === "current" ? "Polaris is up to date" : "Check for a new release",
         view.lastCheckedAt === null
           ? "Polaris downloads updates in the background"
-          : `${view.version} is the latest release · checked ${checkedAt(view.lastCheckedAt)}`
+          : `${view.version} is the latest release`
       );
   }
 };

@@ -122,6 +122,7 @@ describe("the choice of dark", () => {
           "hairline",
           "panel",
           "raised",
+          "raised-control",
           "surface-raised",
           "surface-sunken",
           "well",

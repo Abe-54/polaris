@@ -1,10 +1,15 @@
 /** Advanced → custom language servers on the picked Host: stdio servers with argv as an array and private environment. */
 import * as P from "@polaris/protocol";
-import { Button } from "@polaris/ui";
+import {
+  SettingsButton,
+  SettingsCard,
+  SettingsConfirmRow,
+  SettingsEmpty,
+  SettingsWell,
+} from "@polaris/ui";
 import { Schema } from "effect";
 import { useState } from "react";
-import { Group } from "../ui/parts.tsx";
-import { EntryRow, Field, FormBlock } from "./fields.tsx";
+import { Field, FormBlock } from "./fields.tsx";
 
 type Server = typeof P.LanguageCustomServer.Type;
 
@@ -80,10 +85,12 @@ const FIELDS: ReadonlyArray<{
 ];
 
 export const CustomServers = ({
+  host,
   servers,
   disabled,
   onChange,
 }: {
+  readonly host: string;
   readonly servers: ReadonlyArray<Server>;
   readonly disabled: boolean;
   readonly onChange: (servers: ReadonlyArray<Server>) => void;
@@ -120,60 +127,73 @@ export const CustomServers = ({
   };
 
   return (
-    <Group label="Custom language servers">
-      {servers.map((server) => (
-        <EntryRow key={server.id} title={server.id} detail={server.launch.executable}>
-          <Button
-            size="sm"
-            disabled={disabled}
-            onClick={() => {
-              setDraft(draftOf(server));
-              setEditing(server.id);
-              setError("");
-            }}
-          >
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disabled}
-            aria-label={`Remove ${server.id}`}
-            onClick={() => onChange(servers.filter((s) => s.id !== server.id))}
-          >
-            Remove
-          </Button>
-        </EntryRow>
-      ))}
-      <FormBlock>
-        {FIELDS.map((field) => (
-          <Field
-            key={field.key}
-            label={field.label}
-            {...(field.hint === undefined ? {} : { hint: field.hint })}
-            secret={field.secret ?? false}
-            multiline={field.multiline ?? false}
-            value={draft[field.key]}
-            disabled={disabled}
-            onChange={(value) => setDraft({ ...draft, [field.key]: value })}
-          />
-        ))}
-        {error && (
-          <p role="alert" className="text-caption text-text-default">
-            {error}
-          </p>
-        )}
-        <div className="flex gap-2">
-          <Button disabled={disabled} onClick={save}>
-            {editing === null ? "Add server" : "Save server"}
-          </Button>
-          {editing !== null && (
-            <Button variant="ghost" onClick={reset}>
-              Cancel
-            </Button>
+    <SettingsCard
+      aria-label="Custom language servers"
+      title="Custom language servers"
+      aside={`On ${host}`}
+    >
+      {servers.length === 0 ? (
+        <SettingsEmpty>No custom servers on {host}</SettingsEmpty>
+      ) : (
+        <SettingsWell>
+          {servers.map((server) => (
+            <SettingsConfirmRow
+              key={server.id}
+              title={server.id}
+              caption={<span className="font-mono">{server.launch.executable}</span>}
+              action="Remove"
+              consequence={`Removing it stops ${host} starting ${server.id}; its settings go too.`}
+              confirm={`Remove ${server.id}`}
+              onConfirm={() => onChange(servers.filter((s) => s.id !== server.id))}
+              {...(disabled ? { disabledReason: `Reading ${host}'s language settings…` } : {})}
+            >
+              <SettingsButton
+                variant="ghost"
+                disabled={disabled}
+                aria-label={`Edit ${server.id}`}
+                onClick={() => {
+                  setDraft(draftOf(server));
+                  setEditing(server.id);
+                  setError("");
+                }}
+              >
+                Edit
+              </SettingsButton>
+            </SettingsConfirmRow>
+          ))}
+        </SettingsWell>
+      )}
+      <SettingsWell rows={false} aria-label={editing === null ? "New server" : `Edit ${editing}`}>
+        <FormBlock>
+          {FIELDS.map((field) => (
+            <Field
+              key={field.key}
+              label={field.label}
+              {...(field.hint === undefined ? {} : { hint: field.hint })}
+              secret={field.secret ?? false}
+              multiline={field.multiline ?? false}
+              value={draft[field.key]}
+              disabled={disabled}
+              onChange={(value) => setDraft({ ...draft, [field.key]: value })}
+            />
+          ))}
+          {error && (
+            <p role="alert" className="text-caption text-text-default">
+              {error}
+            </p>
           )}
-        </div>
-      </FormBlock>
-    </Group>
+          <div className="flex gap-2">
+            <SettingsButton disabled={disabled} onClick={save}>
+              {editing === null ? "Add server" : "Save server"}
+            </SettingsButton>
+            {editing !== null && (
+              <SettingsButton variant="ghost" onClick={reset}>
+                Cancel
+              </SettingsButton>
+            )}
+          </div>
+        </FormBlock>
+      </SettingsWell>
+    </SettingsCard>
   );
 };

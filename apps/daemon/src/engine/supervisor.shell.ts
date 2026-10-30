@@ -43,9 +43,9 @@ export const shellTurns = (
         return yield* rt.failSession(sessionId, "The Harness stopped before it read the command");
       yield* live.session.sendTurn({ ...turnInput, shellCommand: run });
 
-      for (const text of job.steers)
+      for (const { text, attachments } of job.steers)
         yield* live.session
-          .steer(text)
+          .steer(text, attachments)
           .pipe(Effect.catch((error) => Effect.logWarning(`a held steer: ${error.message}`)));
     });
 

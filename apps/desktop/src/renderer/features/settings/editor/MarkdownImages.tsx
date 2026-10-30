@@ -4,20 +4,28 @@
  */
 import * as P from "@polaris/protocol";
 import { Schema } from "effect";
+import {
+  SettingsCard,
+  SettingsEmpty,
+  SettingsRow,
+  SettingsSelect,
+  SettingsWell,
+} from "@polaris/ui";
 import { useEffect, useId, useState } from "react";
 import type { LanguageApi } from "../../../../shared/api.ts";
-import { Group } from "../ui/parts.tsx";
 
 export interface PolicyWorkspace {
   readonly id: P.WorkspaceId;
   readonly name: string;
 }
 
-const CHOICES = [
-  ["ask", "Ask before loading"],
-  ["allow", "Allow"],
-  ["deny", "Block"],
-] as const;
+type Choice = P.LanguagePreviewPolicy["externalImages"];
+
+const CHOICES: ReadonlyArray<{ readonly value: Choice; readonly label: string }> = [
+  { value: "ask", label: "Ask before loading" },
+  { value: "allow", label: "Allow" },
+  { value: "deny", label: "Block" },
+];
 
 const WorkspaceImages = ({
   api,
@@ -55,12 +63,8 @@ const WorkspaceImages = ({
     };
   }, [api, hostKey, hostId, workspace.id]);
 
-  const choose = async (value: string) => {
+  const choose = async (externalImages: Choice) => {
     if (policy === null) return;
-
-    const externalImages = Schema.decodeUnknownSync(P.LanguagePreviewPolicy.fields.externalImages)(
-      value
-    );
 
     const reply = await api.request("languages.preview.policy.set", {
       hostKey,
@@ -74,31 +78,24 @@ const WorkspaceImages = ({
   };
 
   return (
-    <div className="px-panel flex items-center gap-3 py-[calc(var(--spacing-gap)+2px)]">
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <label htmlFor={id} className="text-body text-text-strong font-medium">
-          {workspace.name}
-        </label>
-        {failed && (
-          <span role="status" className="text-caption text-text-subtle">
-            Couldn't read or save this workspace's choice.
-          </span>
-        )}
-      </span>
-      <select
+    <SettingsRow
+      title={workspace.name}
+      htmlFor={id}
+      caption={
+        failed ? (
+          <span role="status">Couldn't read or save this workspace's choice.</span>
+        ) : undefined
+      }
+    >
+      <SettingsSelect
         id={id}
+        label={`External images in ${workspace.name}`}
         value={policy?.externalImages ?? "ask"}
+        options={CHOICES}
         disabled={policy === null}
-        onChange={(event) => void choose(event.target.value)}
-        className="border-hairline bg-bg rounded-control text-caption text-text-default h-7 shrink-0 border px-2"
-      >
-        {CHOICES.map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-    </div>
+        onChange={(value) => void choose(value)}
+      />
+    </SettingsRow>
   );
 };
 
@@ -115,23 +112,26 @@ export const MarkdownImages = ({
   readonly workspaces: ReadonlyArray<PolicyWorkspace>;
   readonly onSaved: (workspaceId: P.WorkspaceId) => void;
 }) => (
-  <Group label="External images in Markdown previews">
-    <p className="px-panel text-caption text-text-subtle py-3">
-      External images in Markdown previews, per workspace. Scripts never run.
-    </p>
+  <SettingsCard
+    aria-label="External images in Markdown previews"
+    title="External images in Markdown previews"
+    aside="Per workspace · scripts never run"
+  >
     {workspaces.length === 0 ? (
-      <p className="px-panel text-caption text-text-subtle py-3">No workspaces on this host yet.</p>
+      <SettingsEmpty>No workspaces on this host yet.</SettingsEmpty>
     ) : (
-      workspaces.map((workspace) => (
-        <WorkspaceImages
-          key={workspace.id}
-          api={api}
-          hostKey={hostKey}
-          hostId={hostId}
-          workspace={workspace}
-          onSaved={onSaved}
-        />
-      ))
+      <SettingsWell>
+        {workspaces.map((workspace) => (
+          <WorkspaceImages
+            key={workspace.id}
+            api={api}
+            hostKey={hostKey}
+            hostId={hostId}
+            workspace={workspace}
+            onSaved={onSaved}
+          />
+        ))}
+      </SettingsWell>
     )}
-  </Group>
+  </SettingsCard>
 );

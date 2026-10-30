@@ -261,6 +261,12 @@ export class ReviewerChoice extends Schema.Class<ReviewerChoice>("ReviewerChoice
   effort: Schema.NullOr(ReasoningEffort),
 }) {}
 
+/** The automatic picks, best first: Claude Code Opus 5.5 high, then Codex GPT-6.1-Sol. */
+export const AUTO_REVIEWERS: ReadonlyArray<ReviewerChoice> = [
+  ReviewerChoice.make({ harness: "claude", model: "claude-opus-5-5", effort: "high" }),
+  ReviewerChoice.make({ harness: "codex", model: "gpt-6.1-sol", effort: null }),
+];
+
 /**
  * Settings → Harnesses → Reviewer, kept on the Host (capability
  * `review.reviewer-settings`): a default, and overrides keyed by Workspace id.

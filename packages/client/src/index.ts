@@ -3,6 +3,8 @@
  * the Mobile App: connections to many Hosts' Daemons, Connection State,
  * reconnect with resume, and the Daemon install / upgrade flow over SSH.
  */
+export * from "./byteStreams.ts";
+
 export * from "./connection.ts";
 
 export * from "./failures.ts";

@@ -117,6 +117,8 @@ export * from "./components/polaris/effort-track";
 
 export * from "./components/polaris/section-header";
 
+export * from "./components/polaris/settings";
+
 export * from "./components/polaris/segmented-control";
 
 export * from "./components/polaris/severity-badge";

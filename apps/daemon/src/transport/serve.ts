@@ -39,6 +39,8 @@ import { Availability, AvailabilityRpcsLive } from "../harness/availability/inde
 import { HarnessRpcsLive } from "../harness/HarnessRpcs.ts";
 import { latestRolloutLimits, PlanLimitReporter } from "../harness/limits/index.ts";
 import { HarnessRegistryLive } from "../harness/registry.ts";
+import { BrowserMcp } from "../harness/browser/index.ts";
+import { AgentBrowser } from "../install/agentBrowser/index.ts";
 import { releaseMemory, releaseWhenQuiet } from "../memory/index.ts";
 import { userPath } from "../service/userPath.ts";
 import { takeHandoff } from "../service/upgrade.ts";
@@ -54,6 +56,14 @@ import { ResourceRpcsLive } from "../resources/rpc.ts";
 import { HostStats, HostStatsRpcsLive } from "../hostStats/index.ts";
 import { paths } from "../paths.ts";
 import { startServer } from "./server.ts";
+import { ByteStreamRpcsLive } from "./byteStreams.ts";
+import {
+  BrowserHosting,
+  browserHostingSlot,
+  ByteStreamQuota,
+  CdpRelay,
+  HostAddressStreams,
+} from "../browser/index.ts";
 import { configuredGatewayPort } from "../gateway/index.ts";
 import { workspaceTrustLayer } from "./workspaceTrust.ts";
 import {
@@ -87,8 +97,22 @@ const usageServices = lazyUsage(bench ? {} : { planLimitSeed: latestRolloutLimit
   Layer.provide(UsageSessions.layer)
 );
 
+/** The relay sits under the Engine; the hosting it uses is built with the transport and bound below. */
+const hostingSlot = browserHostingSlot();
+
+/** The per-session CDP relay (ENG-616), over the Browser hosting the byte-stream handlers bind. */
+const cdpRelay = Layer.suspend(() =>
+  CdpRelay.layer({ home: paths().root, version: VERSION }).pipe(Layer.provide(hostingSlot.layer))
+);
+
+const browserMcp = BrowserMcp.layer.pipe(
+  Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
+);
+
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
-const harnesses = HarnessRegistryLive.pipe(Layer.provide(PlanLimitReporter.layer));
+const harnesses = HarnessRegistryLive.pipe(
+  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp))
+);
 
 /**
  * The services behind the handlers: the event store and engine, git,
@@ -121,6 +145,15 @@ const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
 
 const daemonServices = lazyReviewer.pipe(Layer.provideMerge(engineServices));
 
+/** Host-address and Browser streams (ENG-613); `HostPresence` comes from the transport. */
+const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pipe(
+  Layer.provide(
+    Layer.mergeAll(HostAddressStreams.layer, BrowserHosting.layerLive()).pipe(
+      Layer.provideMerge(ByteStreamQuota.layer())
+    )
+  )
+);
+
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
   PredictionCapabilityLive,
@@ -148,7 +181,8 @@ export const daemonHandlers = Layer.mergeAll(
   lazyAcceptHandlers,
   ReviewerRpcsLive,
   TerminalRpcsLive.pipe(Layer.provide(TerminalsDaemonLive)),
-  VoiceRpcsLive.pipe(Layer.provide(Layer.merge(DeepgramLive, HostSecrets.layer)))
+  VoiceRpcsLive.pipe(Layer.provide(Layer.merge(DeepgramLive, HostSecrets.layer))),
+  byteStreamHandlers
 ).pipe(Layer.provide(daemonServices));
 
 /** What the lazy language handlers serve: unavailable where no language artifact runs. */
@@ -181,6 +215,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "remote-access",
   "host.restart",
   "linked-devices",
+  "linked-devices.presence",
   "presence",
   "voice",
   ...HARNESS_CATALOGUE.map((harness) => harness.capability),
@@ -191,6 +226,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "session.set-model",
   "session.service-tier",
   "session.steer",
+  "session.steer-attachments",
   "session.fork",
   "session.terminal-handoff",
   "session.terminal-command",
@@ -225,6 +261,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "git.init",
   "git.watch",
   "git.sync",
+  "git.log",
   "session.feedback",
   "session.accept",
   "review.checkouts",
@@ -246,6 +283,8 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "usage",
   "host.resources",
   "host.stats",
+  "host-address",
+  "browser.host",
 ];
 
 /**

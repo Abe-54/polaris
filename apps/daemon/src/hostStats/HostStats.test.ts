@@ -7,6 +7,8 @@ import type { HostProbe } from "./probe.ts";
 
 const INTERVAL = 2000;
 
+const FIRST = 500;
+
 /** A Host whose CPU is busy 25% of each interval; counts its reads. */
 const fakeProbe = () => {
   let reads = 0;
@@ -62,7 +64,7 @@ const run = <A>(
     body(fake.reads).pipe(
       Effect.scoped,
       Effect.provide(
-        HostStats.layer({ probe: fake.probe, intervalMs: INTERVAL }).pipe(
+        HostStats.layer({ probe: fake.probe, intervalMs: INTERVAL, firstSampleMs: FIRST }).pipe(
           Layer.provideMerge(TestClock.layer())
         )
       )
@@ -80,15 +82,29 @@ describe("HostStats", () => {
       })
     ));
 
+  test("a watch's first sample has its CPU measured, and comes well inside one interval", () =>
+    run(() =>
+      Effect.gen(function* () {
+        const first = yield* watcher;
+
+        expect(samplesOf(first.items)).toEqual([]);
+
+        yield* TestClock.adjust(FIRST);
+
+        expect(samplesOf(first.items).map((s) => s.cpuPercent)).toEqual([25]);
+      })
+    ));
+
   test("samples every interval while any Client watches, and stops with the last", () =>
     run((reads) =>
       Effect.gen(function* () {
         const first = yield* watcher;
         const second = yield* watcher;
-        yield* TestClock.adjust(INTERVAL * 2);
+        yield* TestClock.adjust(FIRST + INTERVAL * 2);
 
-        expect(reads()).toBe(3);
-        expect(samplesOf(first.items).map((s) => s.cpuPercent)).toEqual([null, 25, 25]);
+        // The baseline, then three samples.
+        expect(reads()).toBe(4);
+        expect(samplesOf(first.items).map((s) => s.cpuPercent)).toEqual([25, 25, 25]);
         expect([...historyOf(second.items).samples, ...samplesOf(second.items)]).toEqual(
           samplesOf(first.items)
         );
@@ -96,12 +112,12 @@ describe("HostStats", () => {
         yield* first.stop;
         yield* TestClock.adjust(INTERVAL);
 
-        expect(reads()).toBe(4);
+        expect(reads()).toBe(5);
 
         yield* second.stop;
         yield* TestClock.adjust("10 minutes");
 
-        expect(reads()).toBe(4);
+        expect(reads()).toBe(5);
       })
     ));
 
@@ -109,7 +125,7 @@ describe("HostStats", () => {
     run(() =>
       Effect.gen(function* () {
         const early = yield* watcher;
-        yield* TestClock.adjust(INTERVAL * (HOST_STATS_HISTORY + 4));
+        yield* TestClock.adjust(FIRST + INTERVAL * (HOST_STATS_HISTORY + 4));
         const late = yield* watcher;
         yield* TestClock.adjust(INTERVAL);
 
@@ -129,14 +145,15 @@ describe("HostStats", () => {
     run(() =>
       Effect.gen(function* () {
         const before = yield* watcher;
-        yield* TestClock.adjust(INTERVAL);
+        yield* TestClock.adjust(FIRST + INTERVAL);
         yield* before.stop;
         yield* TestClock.adjust("1 hour");
 
         const after = yield* watcher;
+        yield* TestClock.adjust(FIRST);
 
         expect(historyOf(after.items).samples).toHaveLength(2);
-        expect(samplesOf(after.items).map((s) => s.cpuPercent)).toEqual([null]);
+        expect(samplesOf(after.items).map((s) => s.cpuPercent)).toEqual([25]);
       })
     ));
 });

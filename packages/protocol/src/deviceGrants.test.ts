@@ -12,6 +12,11 @@ test("a Linked Device may send the Mobile App's Commands", () => {
   expect(outcome("dispatch", "RespondToApproval")).toBe("allowed");
 });
 
+// ENG-627: the model sheet changes an existing session's mode or Model, as StartSession may set them.
+test.each(["SetPermissionMode", "SetModel"])("a Linked Device may send %s", (tag) => {
+  expect(outcome("dispatch", tag)).toBe("allowed");
+});
+
 // ENG-559: Ask the reviewer (MX-S) runs on the phone; the walkthrough still runs from the Mac.
 test("a Linked Device may ask the reviewer, but not start a walkthrough", () => {
   expect(outcome("review.askFinding", null)).toBe("allowed");
@@ -64,6 +69,8 @@ test.each<[string, Partial<StartSession>]>([
   ["auto", { permissionMode: "auto" }],
   ["full-access", { permissionMode: "full-access" }],
   ["a null tier and origin", { serviceTier: null, origin: null }],
+  ["an effort", { effort: "high" }],
+  ["fast mode", { serviceTier: "priority" }],
 ])("a Linked Device may start a session: %s", (_, fields) => {
   expect(start(fields)).toBe("allowed");
 });
@@ -71,8 +78,6 @@ test.each<[string, Partial<StartSession>]>([
 test.each<[string, Partial<StartSession>]>([
   ["a reviewer origin", { origin: "reviewer" }],
   ["a walkthrough origin", { origin: "walkthrough" }],
-  ["an effort", { effort: "high" }],
-  ["a service tier", { serviceTier: "priority" }],
   [
     "a base ref",
     {

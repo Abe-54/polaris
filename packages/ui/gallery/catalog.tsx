@@ -9,6 +9,7 @@ import { IdentitySection, SignalSection } from "./sections/identity";
 import { ListSection } from "./sections/lists";
 import { MobileTypeSection } from "./sections/mobile";
 import { PixelWorldSection } from "./sections/pixel-world";
+import { SettingsKitSection } from "./sections/settings";
 import { WorstEdges, WorstSection } from "./sections/worst";
 
 export interface CatalogProps {
@@ -24,6 +25,7 @@ const SOLO = new Map<string, ReactNode>([
   ["coverage", <CoverageSection key="coverage" />],
   ["celestial", <CelestialSection key="celestial" />],
   ["worst", <WorstSection key="worst" />],
+  ["settings", <SettingsKitSection key="settings" />],
 ]);
 
 interface ColumnProps extends CatalogProps {
@@ -56,6 +58,7 @@ function Column({ theme, density, textSize, palette, only }: ColumnProps) {
           <ComposerSection />
           <FloatingSection />
           <PixelWorldSection />
+          <SettingsKitSection />
           <CoverageSection />
         </>
       )}
@@ -74,7 +77,8 @@ export function Catalog(props: CatalogProps) {
     );
 
   return (
-    <main className="flex min-w-[1920px]">
+    // The Settings kit alone gets its ~860px page column in each theme, so its cards go two-up.
+    <main className={props.only === "settings" ? "flex min-w-[2880px]" : "flex min-w-[1920px]"}>
       <Column theme="dark" {...props} />
       <Column theme="midnight" {...props} />
       <Column theme="light" {...props} />

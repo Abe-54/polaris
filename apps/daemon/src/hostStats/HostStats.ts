@@ -1,7 +1,9 @@
 /**
  * Host stats (ENG-565): a sample every interval while at least one Client
- * watches, none otherwise, so an idle Daemon never wakes for them. The last
- * HOST_STATS_HISTORY samples are kept for the next subscriber's sparkline.
+ * watches, none otherwise, so an idle Daemon never wakes for them. The first
+ * comes HOST_STATS_FIRST_SAMPLE_MS after a watch starts sampling, with its CPU
+ * measured from a baseline read then. The last HOST_STATS_HISTORY samples are
+ * kept for the next subscriber's sparkline.
  */
 import {
   HOST_STATS_HISTORY,
@@ -14,6 +16,9 @@ import { paths } from "../paths.ts";
 import type { CpuTimes, HostProbe } from "./probe.ts";
 
 export const HOST_STATS_INTERVAL_MS = 2000;
+
+/** How soon after sampling (re)starts the first sample comes: a baseline is read at the start. */
+export const HOST_STATS_FIRST_SAMPLE_MS = 500;
 
 /** The busy share of all cores between two readings, 0 to 100. */
 export const cpuPercent = (previous: CpuTimes, next: CpuTimes): number => {
@@ -45,10 +50,12 @@ export interface HostStatsOptions {
   /** Defaults to the real Host, its disk read at the Daemon home. */
   readonly probe?: HostProbe;
   readonly intervalMs?: number;
+  readonly firstSampleMs?: number;
 }
 
 const makeHostStats = Effect.fnUntraced(function* (options: HostStatsOptions) {
   const intervalMs = options.intervalMs ?? HOST_STATS_INTERVAL_MS;
+  const firstSampleMs = options.firstSampleMs ?? HOST_STATS_FIRST_SAMPLE_MS;
   const scope = yield* Effect.scope;
   // Sliding: a Client that stops reading loses old samples rather than growing the Daemon.
   const samples = yield* PubSub.sliding<HostStatsSample>(8);
@@ -79,12 +86,21 @@ const makeHostStats = Effect.fnUntraced(function* (options: HostStatsOptions) {
     yield* PubSub.publish(samples, sample);
   });
 
+  const logged = <A>(effect: Effect.Effect<A, unknown>) =>
+    effect.pipe(
+      Effect.catchCause((cause) => Effect.logWarning("host stats: a sample failed", cause))
+    );
+
+  // Unpublished: the first sample then measures CPU since it, not a whole interval later.
+  const baseline = (host: HostProbe) =>
+    Effect.try(() => {
+      previous = host.read().cpu;
+    });
+
   const sampling = (host: HostProbe) =>
-    Effect.repeat(
-      sampleOnce(host).pipe(
-        Effect.catchCause((cause) => Effect.logWarning("host stats: a sample failed", cause))
-      ),
-      Schedule.spaced(intervalMs)
+    logged(baseline(host)).pipe(
+      Effect.andThen(Effect.sleep(firstSampleMs)),
+      Effect.andThen(Effect.repeat(logged(sampleOnce(host)), Schedule.spaced(intervalMs)))
     );
 
   const watch = (host: HostProbe) =>
@@ -93,7 +109,7 @@ const makeHostStats = Effect.fnUntraced(function* (options: HostStatsOptions) {
         watchers += 1;
 
         if (sampler !== null) return Effect.void;
-        // A restart measures CPU afresh: the time since the last sample spans the pause.
+        // A restart measures CPU afresh from its baseline: the time since the last sample spans the pause.
         previous = null;
 
         return Effect.map(Effect.forkIn(sampling(host), scope), (fiber) => {

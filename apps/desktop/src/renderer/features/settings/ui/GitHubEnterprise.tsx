@@ -1,5 +1,5 @@
 /**
- * Settings → GitHub accounts → GitHub Enterprise: the servers accounts can sign in to
+ * Settings → GitHub accounts → GitHub Enterprise (SR-11): the servers accounts can sign in to
  * besides github.com, adding one with its OAuth App's client ID, and an account per
  * server. UI copy says "server": "Host" is a machine running a Daemon (CONTEXT.md).
  */
@@ -13,7 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Input,
-  PlusIcon,
+  SettingsButton,
+  SettingsCard,
+  SettingsWell,
 } from "@polaris/ui";
 import { useState } from "react";
 import {
@@ -22,7 +24,6 @@ import {
   type GitHubHostView,
 } from "../../../../shared/github.ts";
 import { polaris } from "../../bridge.ts";
-import { Group, Heading } from "./parts.tsx";
 
 const startSignIn = (host: string) => void polaris().request("github.signIn.start", { host });
 
@@ -68,19 +69,19 @@ const Server = ({
     data-testid="github-server"
   >
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-body text-text-strong truncate font-medium">{server.host}</span>
+      <span className="text-body text-text-default truncate">{server.host}</span>
       <span className="text-caption text-text-subtle truncate">
         {accountCount(view, server.host)} · OAuth App{" "}
         <span className="font-mono">{server.clientId}</span>
       </span>
     </span>
-    <Button
-      size="xs"
+    <SettingsButton
+      variant="ghost"
       disabled={!view.storageAvailable || view.signIn !== null}
       onClick={() => startSignIn(server.host)}
     >
       Add account
-    </Button>
+    </SettingsButton>
     <ServerMenu server={server} />
   </div>
 );
@@ -110,7 +111,7 @@ const AddServerForm = ({ onDone }: { readonly onDone: () => void }) => {
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-          <span className="text-label font-regular text-text-default">Server</span>
+          <span className="text-caption text-text-subtle">Server</span>
           <Input
             value={host}
             placeholder="github.acme.com"
@@ -120,7 +121,7 @@ const AddServerForm = ({ onDone }: { readonly onDone: () => void }) => {
           />
         </label>
         <label className="flex min-w-[200px] flex-1 flex-col gap-1">
-          <span className="text-label font-regular text-text-default">Client ID</span>
+          <span className="text-caption text-text-subtle">Client ID</span>
           <Input
             className="font-mono"
             value={clientId}
@@ -130,16 +131,16 @@ const AddServerForm = ({ onDone }: { readonly onDone: () => void }) => {
             onChange={(event) => setClientId(event.target.value)}
           />
         </label>
-        <Button
+        <SettingsButton
           type="submit"
           variant="primary"
           disabled={host.trim() === "" || clientId.trim() === ""}
         >
           Add server
-        </Button>
-        <Button type="button" variant="ghost" onClick={onDone}>
+        </SettingsButton>
+        <SettingsButton variant="ghost" onClick={onDone}>
           Cancel
-        </Button>
+        </SettingsButton>
       </div>
       <span
         role={error === null ? undefined : "alert"}
@@ -154,42 +155,41 @@ const AddServerForm = ({ onDone }: { readonly onDone: () => void }) => {
   );
 };
 
-/** Hidden until there is a server or the user asks to add one: most people only use github.com. */
+/** A dashed line until there is a server or the user asks to add one: most use github.com. */
 export const GitHubEnterprise = ({ view }: { readonly view: GitHubAccountsView }) => {
   const [adding, setAdding] = useState(false);
   const servers = (view.hosts ?? []).filter((h) => h.removable);
 
   if (servers.length === 0 && !adding) {
     return (
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="xs" onClick={() => setAdding(true)}>
-          <PlusIcon size={12} />
+      <div className="px-panel flex min-h-11 items-center gap-3 rounded-[16px] border border-dashed border-[light-dark(#00000026,#ffffff2e)] py-1.5">
+        <span className="text-caption text-text-subtle flex-1">
+          Using GitHub Enterprise Server?
+        </span>
+        <SettingsButton onClick={() => setAdding(true)}>
           Add a GitHub Enterprise server
-        </Button>
+        </SettingsButton>
       </div>
     );
   }
 
   return (
-    <section aria-label="GitHub Enterprise" className="flex flex-col gap-3">
-      <Heading
-        aside={
-          adding ? null : (
-            <Button variant="ghost" size="xs" onClick={() => setAdding(true)}>
-              <PlusIcon size={12} />
-              Add a server
-            </Button>
-          )
-        }
-      >
-        GitHub Enterprise
-      </Heading>
-      <Group label="GitHub Enterprise servers">
+    <SettingsCard
+      title="GitHub Enterprise"
+      aside={servers.length === 1 ? "1 server" : `${servers.length} servers`}
+      {...(adding
+        ? {}
+        : {
+            action: <SettingsButton onClick={() => setAdding(true)}>Add a server</SettingsButton>,
+          })}
+      status={adding ? undefined : "Each server signs in with its own OAuth App"}
+    >
+      <SettingsWell aria-label="GitHub Enterprise servers">
         {servers.map((server) => (
           <Server key={server.host} server={server} view={view} />
         ))}
         {adding ? <AddServerForm onDone={() => setAdding(false)} /> : null}
-      </Group>
-    </section>
+      </SettingsWell>
+    </SettingsCard>
   );
 };

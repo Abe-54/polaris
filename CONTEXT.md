@@ -317,6 +317,14 @@ _Avoid_: SQL client, database view, DB tab
 The view for inspecting the Traces that code run in the selected Agent Session's checkout sent to Polaris, by its agents or by the user, and the Turns that produced them.
 _Avoid_: Runtime view (Runtime is avoided for Harness), APM, observability tab
 
+**Browser**:
+An Agent Session's web browser in its Output, holding that session's own tabs, which the user and the session's agents (Subagents included) both use; its logins and cookies are shared across the Workspace.
+_Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
+
+**Host address**:
+A loopback URL opened in a Browser (`localhost`, any `*.localhost` name such as a Portless app, or a loopback IP), which always means the Agent Session's Host, never the machine the Client runs on; any other URL loads from the Client's own network.
+_Avoid_: Forwarded port, tunnel, local URL
+
 ### Data
 
 **Data Source**:

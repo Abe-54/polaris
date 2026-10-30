@@ -59,6 +59,8 @@ export interface RelayLinkOptions {
   readonly admit: (source: RelayAddress, deviceKey: Uint8Array, payload: Uint8Array) => Admission;
   /** A device's new session: the Daemon serves a connection over it. */
   readonly serve: (session: DeviceSession, deviceId: string) => void;
+  /** A device's session ended, whoever ended it. */
+  readonly ended?: (session: DeviceSession) => void;
   readonly onConnectedChange: (connected: boolean) => void;
   /** The relay says a Live Activity's token is gone (`live-gone`). */
   readonly onLiveGone?: (gone: typeof LiveGone.Type) => void;
@@ -316,6 +318,7 @@ export class RelayLink {
       send: (peer, records) => this.sendRecords(peer, records),
       ended: (ended) => {
         if (this.sessions.get(ended.peer) === ended) this.sessions.delete(ended.peer);
+        this.options.ended?.(ended);
       },
     });
 

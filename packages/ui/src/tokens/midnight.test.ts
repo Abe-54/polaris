@@ -105,6 +105,8 @@ describe("midnight", () => {
 
     expect(chromeHairline).toBe(hairline);
 
+    const control = /\*\*`raised-control` `(#[0-9A-F]{6})`\*\*/.exec(design)?.[1] ?? "";
+
     const {
       "diff-added-bg": added,
       "diff-removed-bg": removed,
@@ -119,6 +121,7 @@ describe("midnight", () => {
       ground: chromeGround.toLowerCase(),
       panel: panel.toLowerCase(),
       raised: chromeRaised.toLowerCase(),
+      "raised-control": control.toLowerCase(),
       well: well.toLowerCase(),
       "well-raised": well.toLowerCase(),
     });

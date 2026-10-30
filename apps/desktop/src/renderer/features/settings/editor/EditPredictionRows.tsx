@@ -1,12 +1,12 @@
 /**
- * Settings → Editor → Tab completion → the edit prediction rows (DESIGN.md, Edit Predictions EP7;
- * spec §7): Display, Aggressiveness, Accept key and Off for a language, kept the same on every
- * Host, and the outcome log's "Clear history".
+ * Tab completion's behaviour well (SR-02; Edit Predictions EP7, spec §7): Display,
+ * Aggressiveness, Accept key and Off in, kept the same on every Host, and "Clear history".
  */
 import {
-  Button,
   Kbd,
   SegmentedControl,
+  SettingsButton,
+  SettingsRow,
   Select,
   SelectContent,
   SelectItem,
@@ -29,7 +29,6 @@ import {
   setPreferencesEverywhere,
   usePrediction,
 } from "../../editor/prediction/store.ts";
-import { SettingRow } from "../ui/parts.tsx";
 
 type Display = PredictionPreferences["display"];
 
@@ -84,10 +83,7 @@ export const EditPredictionRows = ({
 
   return (
     <>
-      <SettingRow
-        title="Display"
-        caption={`Full shows the edit in place. Subtle shows a marker; hold ${modifierLabel("Alt")} to preview.`}
-      >
+      <SettingsRow title="Display" caption={`Subtle shows a marker; hold ${modifierLabel("Alt")}`}>
         <SegmentedControl
           variant="well"
           aria-label="Display"
@@ -95,11 +91,8 @@ export const EditPredictionRows = ({
           value={preferences.display}
           onValueChange={(display) => void set({ display })}
         />
-      </SettingRow>
-      <SettingRow
-        title="Aggressiveness"
-        caption="Pause length, how far jumps reach, and deletions over 5 lines."
-      >
+      </SettingsRow>
+      <SettingsRow title="Aggressiveness" caption="Pause, jump reach, deletions">
         <SegmentedControl
           variant="well"
           aria-label="Aggressiveness"
@@ -107,65 +100,58 @@ export const EditPredictionRows = ({
           value={preferences.aggressiveness}
           onValueChange={(aggressiveness) => void set({ aggressiveness })}
         />
-      </SettingRow>
-      <SettingRow
-        title="Accept key"
-        caption="Tab by default. Remapping it waits for a Keyboard page in Settings."
-      >
+      </SettingsRow>
+      <SettingsRow title="Accept key" caption="Tab by default · a Keyboard page will remap it">
         <Kbd aria-label={`Accept key: ${acceptKey()}`}>{acceptKey()}</Kbd>
-      </SettingRow>
-      <div className="px-panel flex flex-col gap-2 py-[calc(var(--spacing-gap)+4px)]">
-        <div className="flex items-center gap-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-label font-regular text-text-default">Off for a language</span>
-            <span className="text-caption text-text-subtle">
-              No predictions in these languages. Everything else stays on.
-            </span>
-          </div>
-          <Select
-            value={ADD}
-            disabled={!loaded || offered.length === 0}
-            onValueChange={(value) => {
-              if (isLanguageId(value)) void set({ disabledLanguages: [...disabled, value] });
-            }}
-          >
-            <SelectTrigger aria-label="Add language" className="w-[168px]">
-              <SelectValue>Add language</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ADD} className="hidden">
-                Add language
-              </SelectItem>
-              {offered.map((id) => (
-                <SelectItem key={id} value={id}>
-                  {LANGUAGES[id].name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      </SettingsRow>
+      <div className="px-panel flex flex-wrap items-center gap-2 py-[calc(var(--spacing-gap)+4px)]">
+        <span className="text-body text-text-default min-w-0 flex-1">Off in</span>
         {disabled.length > 0 && (
           <ul className="flex flex-wrap gap-1.5" aria-label="Languages with tab completion off">
             {disabled.map((id) => (
               <li
                 key={id}
-                className="bg-row-selected rounded-control text-caption text-text-default flex h-[26px] items-center gap-1 pr-1 pl-2"
+                className="bg-raised-control text-caption text-text-default flex h-6 items-center gap-1 rounded-full pr-1 pl-2.5"
               >
                 {LANGUAGES[id].name}
-                <Button
-                  variant="ghost"
-                  size="xs"
+                <button
+                  type="button"
                   aria-label={`Turn tab completion back on for ${LANGUAGES[id].name}`}
+                  className="text-text-subtle hover:text-text-default hover:bg-fill-hover flex size-5 cursor-default items-center justify-center rounded-full text-[11px]"
                   onClick={() =>
                     void set({ disabledLanguages: disabled.filter((item) => item !== id) })
                   }
                 >
                   ×
-                </Button>
+                </button>
               </li>
             ))}
           </ul>
         )}
+        <Select
+          value={ADD}
+          disabled={!loaded || offered.length === 0}
+          onValueChange={(value) => {
+            if (isLanguageId(value)) void set({ disabledLanguages: [...disabled, value] });
+          }}
+        >
+          <SelectTrigger
+            aria-label="Add language"
+            className="text-caption text-text-subtle h-6 w-auto gap-1.5 rounded-full border-dashed border-[light-dark(#00000026,#ffffff2e)] bg-transparent px-2.5"
+          >
+            <SelectValue>Add language</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ADD} className="hidden">
+              Add language
+            </SelectItem>
+            {offered.map((id) => (
+              <SelectItem key={id} value={id}>
+                {LANGUAGES[id].name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </>
   );
@@ -183,10 +169,7 @@ export const ClearHistoryRow = () => {
   };
 
   return (
-    <SettingRow
-      title="Clear edit prediction history"
-      caption="The counts on the status card. Kept on this machine, never uploaded."
-    >
+    <SettingsRow title="Prediction history" caption="The status card's counts · never uploaded">
       {state === "cleared" && (
         <span role="status" className="text-caption text-text-subtle">
           Cleared
@@ -197,9 +180,9 @@ export const ClearHistoryRow = () => {
           Couldn't clear it
         </span>
       )}
-      <Button variant="secondary" size="sm" disabled={state === "clearing"} onClick={clear}>
+      <SettingsButton disabled={state === "clearing"} onClick={clear}>
         {state === "clearing" ? "Clearing…" : "Clear history"}
-      </Button>
-    </SettingRow>
+      </SettingsButton>
+    </SettingsRow>
   );
 };

@@ -12,7 +12,7 @@ import type { DaemonRpcTag } from "./grants.ts";
 import { PermissionMode } from "./domain.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { AttachmentId, SessionId, WorkspaceId } from "./ids.ts";
-import { ModelId } from "./models.ts";
+import { addedNullable, ModelId, ReasoningEffort, ServiceTier } from "./models.ts";
 
 /** `device`: a Linked Device may call it. `local`: only a Client on this Host. */
 export type DeviceAccess = "device" | "local";
@@ -23,8 +23,9 @@ export type DeviceCommandAccess = DeviceAccess | ((command: Command) => boolean)
 const absentOrNull = Schema.optionalKey(Schema.Null);
 
 /**
- * StartSession as the Mobile App sends it, in any PermissionMode (RX3-1, ENG-458): exhaustive over
- * the Command's fields, so a new field fails typecheck until someone decides what a phone may put in it.
+ * StartSession as the Mobile App sends it, in any PermissionMode, effort and service tier (RX3-1,
+ * ENG-458, ENG-627): exhaustive over the Command's fields, so a new field fails typecheck until
+ * someone decides what a phone may put in it.
  */
 const DEVICE_START_SESSION = {
   _tag: Schema.tag("StartSession"),
@@ -37,8 +38,8 @@ const DEVICE_START_SESSION = {
   ]),
   permissionMode: PermissionMode,
   model: Schema.NullOr(ModelId),
-  effort: absentOrNull,
-  serviceTier: absentOrNull,
+  effort: addedNullable(ReasoningEffort),
+  serviceTier: Schema.optionalKey(Schema.NullOr(ServiceTier)),
   prompt: Schema.String,
   attachments: Schema.Array(AttachmentId),
   origin: absentOrNull,
@@ -91,6 +92,7 @@ export const DEVICE_RPCS = {
   "devices.unregisterPush": "device",
   "devices.registerLiveActivity": "device",
   "devices.unregisterLiveActivity": "device",
+  "devices.watch": "local",
   "voice.transcribe": "device",
   "voice.settings": "local",
   "voice.setKey": "local",
@@ -107,6 +109,13 @@ export const DEVICE_RPCS = {
   // A phone or an Extension must never quiet the pushes (ENG-495).
   "presence.report": "local",
   "host.stats.watch": "local",
+  "byteStream.credit": "local",
+  "hostAddress.open": "local",
+  "browser.host": "local",
+  "browser.claim": "local",
+  "browser.release": "local",
+  "browser.acceptStream": "local",
+  "browser.closeStream": "local",
   "attachments.stage": "device",
   "attachments.read": "device",
   "attachments.settings": "local",
@@ -143,6 +152,7 @@ export const DEVICE_RPCS = {
   "git.init": "local",
   "git.sync": "local",
   "git.watch": "local",
+  "git.log": "local",
   "review.checkoutStatus": "local",
   "review.runRiskSummary": "device",
   "review.runWalkthrough": "local",
@@ -271,8 +281,8 @@ export const DEVICE_COMMANDS = {
   RenameSession: "device",
   PinSession: "device",
   SetResumeAtReset: "local",
-  SetPermissionMode: "local",
-  SetModel: "local",
+  SetPermissionMode: "device",
+  SetModel: "device",
   ForkSession: "local",
   ArchiveSession: isDeviceArchive,
   UnarchiveSession: "device",

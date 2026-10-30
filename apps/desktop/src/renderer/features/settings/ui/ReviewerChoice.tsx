@@ -71,7 +71,7 @@ export const useModelName = (hostKey: string | null, harness: string) => {
   return (id: string) => models.find((m) => m.id === id)?.name ?? prettyModel(id);
 };
 
-const ModelChips = ({
+export const ModelChips = ({
   choice,
   modelHost,
   onChange,

@@ -11,6 +11,7 @@ import type { HarnessDriver } from "./HarnessDriver.ts";
 import { makeOpenCodeDriver } from "./opencode/OpenCodeDriver.ts";
 import { HarnessRegistry } from "../services.ts";
 import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
+import { BrowserMcp } from "./browser/index.ts";
 import { DRIVER_CAPABILITIES, harnessRegistryLayer, lazyDriver } from "./registry.ts";
 
 describe("lazyDriver", () => {
@@ -112,7 +113,9 @@ describe("bench mode", () => {
           })
         ).pipe(
           Effect.provide(
-            harnessRegistryLayer({ bench: true }).pipe(Layer.provide(PlanLimitReporter.none))
+            harnessRegistryLayer({ bench: true }).pipe(
+              Layer.provide(Layer.mergeAll(PlanLimitReporter.none, BrowserMcp.none))
+            )
           )
         )
       );

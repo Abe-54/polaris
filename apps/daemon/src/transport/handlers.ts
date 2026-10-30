@@ -44,6 +44,7 @@ import { admissionOf } from "../extensions/admission.ts";
 import { deviceOf } from "../linkedDevices/connection.ts";
 import { RelayRoute } from "../linkedDevices/route.ts";
 import { HostPresence } from "../presence/index.ts";
+import { browserDefaults } from "../browser/index.ts";
 
 const notADevice = () =>
   new PushRegistrationError({
@@ -75,6 +76,7 @@ export const defaultHandlers = (options: {
 }) =>
   ServerRpcs.toLayer({
     ...languageDefaults,
+    ...browserDefaults,
     "prediction.capability": () =>
       Effect.fail(
         new PredictionError({
@@ -380,6 +382,7 @@ export const defaultHandlers = (options: {
       Effect.flatMap(RelayRoute, (route) => route.cancelLink(linkId)),
     "devices.add": (device) => Effect.flatMap(RelayRoute, (route) => route.add(device)),
     "devices.list": () => Effect.flatMap(RelayRoute, (route) => route.list),
+    "devices.watch": () => Stream.unwrap(Effect.map(RelayRoute, (route) => route.watch)),
     "devices.unlink": ({ id }) => Effect.flatMap(RelayRoute, (route) => route.unlink(id)),
     "devices.unlinkSelf": (_, { client }) => {
       const device = deviceOf(client);
@@ -492,6 +495,7 @@ export const defaultHandlers = (options: {
     "git.status": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),
     "git.diff": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),
     "git.show": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),
+    "git.log": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),
     "git.stage": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),
     "git.unstage": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),
     "git.discard": ({ cwd }) => Effect.fail(new GitError({ cwd, message: notYet("git") })),

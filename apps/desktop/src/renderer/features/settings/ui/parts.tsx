@@ -1,7 +1,8 @@
 /**
  * The pieces every Settings page is built from (DESIGN.md, Settings): the page
  * header, a sub-heading, hairline groups with row dividers (never cards), a
- * setting row with fixed lanes, and the sunken footer strip.
+ * setting row with fixed lanes, and the sunken footer strip. Redesigned pages (ENG-573) use
+ * the Settings kit in @polaris/ui instead (packages/ui/src/components/polaris/settings).
  */
 import { cn } from "@polaris/ui";
 import type { ReactNode } from "react";

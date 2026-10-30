@@ -113,7 +113,7 @@ Starting never waits forever: the supervisor gives a Harness `harnessStartTimeou
 | `turn.send` | Idle (→ Working), Dormant, Failed, Limited, Needs You after a restart with nothing pending (→ Starting); a prompt during an autonomous Working Turn steers that Turn | "the session is Archived", "… In Terminal; return it first", "the session is working; wait for the Turn to end" |
 | `turn.continue` | the same states and Limited, and only when the last Turn is Interrupted | "there is no Interrupted Turn to continue", "the session is \<state\>" |
 | `turn.retry` | the same states, and only when the last Turn Failed; a new Turn with its prompt and attachments | "there is no Failed Turn to retry", "the session is \<state\>" |
-| `turn.steer` / `turn.interrupt` | a Turn in flight (steer: not In Terminal, and the Harness supports it) | "there is no Turn in flight …" |
+| `turn.steer` / `turn.interrupt` | a Turn in flight (steer: not In Terminal, the Harness supports it, and takes attachments in a steer if it carries any) | "there is no Turn in flight …" |
 | `approval.respond` | a pending request (the last answer in Needs You → Working, if a Turn is in flight) | "request … is already resolved" (first Client wins) |
 | `session.archive` | any state but Archived, only with no Turn in flight (withdraws anything still pending) | "interrupt the Turn in flight before archiving", "already Archived" |
 | `terminal.open` / `terminal.return` | Idle, Dormant, Failed / In Terminal | "the session is \<state\>" / "not In Terminal" |

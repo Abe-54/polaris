@@ -4,9 +4,27 @@
  * its staged path on the Host so Claude reads it with its own tools.
  */
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { Attachment } from "@polaris/protocol";
+import type { Attachment, TurnId } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
-import { HarnessError } from "../HarnessDriver.ts";
+import { HarnessError, HarnessEvent, type TurnInput } from "../HarnessDriver.ts";
+import { steerItem } from "../userMessage.ts";
+
+/** What a steer sends besides its text. */
+export type SteerInput = Pick<TurnInput, "attachments" | "shellCommand">;
+
+/** A steer sent that Claude Code hasn't folded into its Turn yet. */
+export interface SteerSent {
+  readonly turnId: TurnId;
+  readonly text: string;
+  readonly attachments: ReadonlyArray<Attachment>;
+}
+
+/** Claude Code took the steer in: it shows in its Turn from here, with what it carried. */
+export const landedSteer = (uuid: string, steer: SteerSent) =>
+  HarnessEvent.ItemCompleted({
+    turnId: steer.turnId,
+    item: steerItem(`steer:${uuid}`, steer.text, steer.attachments),
+  });
 
 /** Image types the Messages API accepts inline. */
 const InlineImageType = Schema.Literals(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -83,7 +101,8 @@ export const buildUserMessage = Effect.fn("claude.buildUserMessage")(function* (
   const text =
     others.length > 0 ? `${options.prompt}\n\n${attachmentNote(others)}` : options.prompt;
 
-  content.push({ type: "text", text });
+  // The API refuses an empty text block; an images-only message sends none.
+  if (text !== "" || content.length === 0) content.push({ type: "text", text });
 
   const message: SDKUserMessage = {
     type: "user",

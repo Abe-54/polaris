@@ -5,6 +5,7 @@ import {
   devicesOf,
   type HostRelay,
   lastSeenLine,
+  liveOn,
   relayLine,
   sharedLine,
   timeLeft,
@@ -92,4 +93,68 @@ test("the link's countdown", () => {
 
   expect(timeLeft(expiresAt, Date.parse("2026-10-27T12:00:28.000Z"))).toBe("4:32 left");
   expect(timeLeft(expiresAt, Date.parse("2026-10-27T12:06:00.000Z"))).toBe("0:00 left");
+});
+
+describe("a device counts as connected to a host by the Daemon's presence (ENG-629)", () => {
+  const now = Date.parse("2026-10-27T12:00:00.000Z");
+  const hourAgo = "2026-10-27T11:00:00.000Z";
+
+  test.each([
+    ["a session open for an hour", hourAgo, hourAgo, true, true],
+    ["no session, though used a minute ago", null, "2026-10-27T11:59:00.000Z", true, false],
+    ["a session open while the host's relay is disconnected", hourAgo, hourAgo, false, false],
+  ] as const)("%s", async (_, connectedSince, lastUsedAt, connected, live) => {
+    const host: HostRelay = {
+      key: "studio",
+      label: "Mac Studio",
+      kind: "ready",
+      route: await route("on", connected),
+      devices: [],
+    };
+
+    const { id } = await phone({ noiseKey: noiseKey() });
+
+    expect(liveOn(host, { hostKey: "studio", id, lastUsedAt, connectedSince }, now)).toBe(live);
+  });
+});
+
+describe("a device counts as connected to a host on an older Daemon (stopgap)", () => {
+  const now = Date.parse("2026-10-27T12:00:00.000Z");
+  const at = (ms: number) => new Date(now - ms).toISOString();
+
+  test.each([
+    ["used exactly 5 minutes ago", 5 * 60_000, true, true],
+    ["used 5 minutes and 1 ms ago", 5 * 60_000 + 1, true, false],
+    ["used just now, relay still connecting", 0, false, false],
+  ] as const)("%s", async (_, ago, connected, live) => {
+    const host: HostRelay = {
+      key: "studio",
+      label: "Mac Studio",
+      kind: "ready",
+      route: await route("on", connected),
+      devices: [],
+    };
+
+    expect(
+      liveOn(
+        host,
+        { hostKey: "studio", id: (await phone({ noiseKey: noiseKey() })).id, lastUsedAt: at(ago) },
+        now
+      )
+    ).toBe(live);
+  });
+
+  test("a device that never opened a session isn't connected", async () => {
+    const host: HostRelay = {
+      key: "studio",
+      label: "Mac Studio",
+      kind: "ready",
+      route: await route("on"),
+      devices: [],
+    };
+
+    const { id } = await phone({ noiseKey: noiseKey() });
+
+    expect(liveOn(host, { hostKey: "studio", id, lastUsedAt: null }, now)).toBe(false);
+  });
 });

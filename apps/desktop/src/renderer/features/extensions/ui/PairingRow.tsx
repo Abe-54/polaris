@@ -1,6 +1,6 @@
-/** A Pairing in a Host's list (Paper X1): its Grant and last use, and a two-step Revoke. */
+/** A Pairing in its host's card (Paper SR-07): its Grant, last use, and Revoke confirmed in place. */
 import type { Pairing } from "@polaris/protocol";
-import { Button, cn } from "@polaris/ui";
+import { SettingsConfirmRow } from "@polaris/ui";
 import { useState } from "react";
 import type { Plain } from "../../../../shared/api.ts";
 import { grantLine, usedLine } from "../model.ts";
@@ -14,52 +14,27 @@ export const PairingRow = ({
   readonly now: number;
   readonly onRevoke: () => Promise<void>;
 }) => {
-  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
 
   return (
-    <div
-      className={cn("px-panel flex h-14 items-center gap-3", asking && "bg-surface-sunken")}
-      data-testid="pairing-row"
-    >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-label text-text-strong truncate font-medium">{pairing.name}</span>
-        <span className="text-caption text-text-subtle truncate">
-          {asking
-            ? "Revoking disconnects it now. To use it again, pair it again."
-            : grantLine(pairing.grant)}
+    <div data-testid="pairing-row">
+      <SettingsConfirmRow
+        title={pairing.name}
+        caption={grantLine(pairing.grant)}
+        action="Revoke"
+        actionVariant="secondary"
+        consequence="Revoking disconnects it now. To use it again, pair it again."
+        confirm={`Revoke ${pairing.name}`}
+        onConfirm={() => {
+          setBusy(true);
+          void onRevoke().finally(() => setBusy(false));
+        }}
+        {...(busy ? { disabledReason: "Revoking…" } : {})}
+      >
+        <span className="text-text-subtle font-mono text-[11px] leading-4 whitespace-nowrap">
+          {usedLine(pairing, now)}
         </span>
-      </div>
-      {asking ? (
-        <>
-          <Button variant="ghost" disabled={busy} onClick={() => setAsking(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            disabled={busy}
-            data-testid="confirm-revoke"
-            onClick={() => {
-              setBusy(true);
-              void onRevoke().finally(() => {
-                setBusy(false);
-                setAsking(false);
-              });
-            }}
-          >
-            Revoke {pairing.name}
-          </Button>
-        </>
-      ) : (
-        <>
-          <span className="text-caption text-text-subtle shrink-0 whitespace-nowrap">
-            {usedLine(pairing, now)}
-          </span>
-          <Button variant="ghost" className="w-[72px]" onClick={() => setAsking(true)}>
-            Revoke
-          </Button>
-        </>
-      )}
+      </SettingsConfirmRow>
     </div>
   );
 };

@@ -1,25 +1,38 @@
 /**
- * Completion placement (DESIGN.md, Tab completion v1): one row per Host with where its
- * completion is served, then a model lane and a placement lane aligned down the group.
+ * Tab completion's placement well (SR-02; DESIGN.md, Tab completion v1): one row per Host led
+ * by its colour, with where its completion is served, then a model lane and a placement lane.
  */
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@polaris/ui";
+import {
+  cn,
+  Kicker,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SettingsWell,
+} from "@polaris/ui";
 import { Option, Schema } from "effect";
 import {
   PredictionPlacementChoice,
   type PredictionPreferences,
 } from "../../../../shared/predictionPlacement.ts";
-import { FooterStrip, Group, Heading } from "../ui/parts.tsx";
 import { modelName } from "../../editor/prediction/store.ts";
+import { ColourSquare } from "../../machines/page/parts.tsx";
 import type { PlacementRow } from "./placementRows.ts";
 
 const RECOMMENDED = "recommended";
 
-const MODEL_LANE = "w-[168px]";
+const MODEL_LANE = "w-[148px]";
+
+/** The kit's closed select: 26px on raised-control with a hairline edge. */
+const TRIGGER =
+  "bg-raised-control text-caption h-[26px] gap-1.5 rounded-[8px] border-[light-dark(#00000014,#ffffff14)] px-2.5";
 
 /** Radix drops SelectValue's className, so a long model id is truncated from the trigger. */
 const TRUNCATE_VALUE = "[&>span]:min-w-0 [&>span]:truncate [&>svg]:shrink-0";
 
-const PLACEMENT_LANE = "w-[132px]";
+const PLACEMENT_LANE = "w-[128px]";
 
 export type PreferencesChange = (
   hostKey: string,
@@ -43,7 +56,7 @@ const ModelSelect = ({
     <SelectTrigger
       aria-label={`Completion model for ${row.name}`}
       title={row.model ?? undefined}
-      className={`${MODEL_LANE} ${TRUNCATE_VALUE}`}
+      className={cn(TRIGGER, MODEL_LANE, TRUNCATE_VALUE)}
     >
       <SelectValue>{row.model === null ? "Recommended" : modelName(row.model)}</SelectValue>
     </SelectTrigger>
@@ -77,7 +90,10 @@ const PlacementSelect = ({
       if (Option.isSome(placement)) onChange(row.key, { placement: placement.value });
     }}
   >
-    <SelectTrigger aria-label={`Completion placement for ${row.name}`} className={PLACEMENT_LANE}>
+    <SelectTrigger
+      aria-label={`Completion placement for ${row.name}`}
+      className={cn(TRIGGER, PLACEMENT_LANE)}
+    >
       <SelectValue />
     </SelectTrigger>
     <SelectContent>
@@ -91,23 +107,26 @@ const PlacementSelect = ({
   </Select>
 );
 
-/** The name and where it's served on the left; the two lanes keep fixed widths so they align. */
+/** Colour square, name and where it's served; the two lanes keep fixed widths so they align. */
 const Row = ({
   row,
+  colour,
   onChange,
 }: {
   readonly row: PlacementRow;
+  readonly colour: string | null;
   readonly onChange: PreferencesChange;
 }) => (
   <div
-    className="px-panel flex items-center gap-4 py-[calc(var(--spacing-gap)+4px)]"
+    className="px-panel flex items-center gap-3 py-[calc(var(--spacing-gap)+3px)]"
     data-testid="placement-row"
   >
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-label text-text-default truncate" title={row.name}>
+    <ColourSquare colour={colour} size={8} />
+    <div className="flex min-w-0 flex-1 flex-col">
+      <span className="text-body text-text-default truncate" title={row.name}>
         {row.name}
       </span>
-      <span className="text-caption text-text-subtle">{row.caption}</span>
+      <span className="text-caption text-text-subtle truncate">{row.caption}</span>
     </div>
     <div className="flex shrink-0 items-center gap-3">
       <ModelSelect row={row} onChange={onChange} />
@@ -118,42 +137,26 @@ const Row = ({
 
 export const CompletionPlacement = ({
   rows,
-  memory,
+  colours,
   onChange,
 }: {
   readonly rows: ReadonlyArray<PlacementRow>;
-  /** The model server memory line; null while unknown. */
-  readonly memory: string | null;
+  /** Each Host's own colour by key; null when it has none. */
+  readonly colours: Readonly<Record<string, string | null>>;
   readonly onChange: PreferencesChange;
 }) => (
-  <div className="gap-gap flex flex-col" data-testid="completion-placement">
-    <Heading>Completion placement</Heading>
-    <p className="text-caption text-text-subtle">
-      Auto uses the stronger machine and falls back to the other. Recommended is Sweep Next-Edit
-      everywhere, or Zeta 2.1 once you choose it; a server of your own that offers no next-edit
-      model completes at the cursor only.
-    </p>
-    <Group label="Completion placement" className="mt-1">
-      <div
-        className="px-panel text-micro text-text-subtle flex items-center gap-4 py-1.5"
-        aria-hidden
-      >
-        <span className="flex-1">Host</span>
-        <span className="flex shrink-0 gap-3">
-          <span className={`${MODEL_LANE} pl-2.5`}>Model</span>
-          <span className={`${PLACEMENT_LANE} pl-2.5`}>Runs on</span>
-        </span>
-      </div>
-      {rows.map((row) => (
-        <Row key={row.key} row={row} onChange={onChange} />
-      ))}
-      {memory !== null && (
-        <FooterStrip>
-          <span className="text-caption text-text-subtle" data-testid="model-server-memory">
-            {memory}
-          </span>
-        </FooterStrip>
-      )}
-    </Group>
-  </div>
+  <SettingsWell aria-label="Completion placement" data-testid="completion-placement">
+    <div className="px-panel flex items-center gap-3 py-2">
+      <Kicker className="text-text-subtle min-w-0 flex-1 truncate">
+        Where each host's completion runs · Auto picks the stronger machine
+      </Kicker>
+      <Kicker className="text-text-subtle flex shrink-0 gap-3" aria-hidden>
+        <span className={MODEL_LANE}>Model</span>
+        <span className={PLACEMENT_LANE}>Runs on</span>
+      </Kicker>
+    </div>
+    {rows.map((row) => (
+      <Row key={row.key} row={row} colour={colours[row.key] ?? null} onChange={onChange} />
+    ))}
+  </SettingsWell>
 );

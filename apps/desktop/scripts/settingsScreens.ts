@@ -13,8 +13,16 @@ import { dirname, join } from "node:path";
 import { _electron as electron, type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
 import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import { PAIR, settingsChecks, stubDevices } from "./lib/settingsChecks.ts";
 
 const out = process.argv[2] ?? join(tmpdir(), "polaris-settings-screens");
+
+/** `--only sessions,about`: just those pages (and `checks` for the motion and keyboard checks). */
+const only = process.argv.includes("--only")
+  ? (process.argv[process.argv.indexOf("--only") + 1] ?? "").split(",")
+  : null;
+
+const wanted = (slug: string) => only === null || only.includes(slug);
 
 mkdirSync(out, { recursive: true });
 
@@ -24,7 +32,8 @@ const MACHINES = [
   { key: "pi", label: "Raspberry Pi 4" },
 ] as const;
 
-const home = mkdtempSync(join(tmpdir(), "polaris-settings-screens-"));
+// A short path: the Daemons' Unix sockets live under it.
+const home = mkdtempSync("/tmp/pgs-");
 
 /**
  * The Pi runs a real probe against a fake Claude Code 2.1.272 (what the real Pi ran): usable
@@ -193,11 +202,18 @@ const usagePinned = async (page: Page) => {
   await page.evaluate(`${USAGE_SCROLLER}.scrollTo(0, 0)`);
 };
 
-const SKIES = [
-  { name: "moonlit", patch: { theme: "dark", darkTheme: "moonlit" } },
-  { name: "midnight", patch: { theme: "dark", darkTheme: "midnight" } },
-  { name: "light", patch: { theme: "light" } },
-] as const;
+/** Usage → By constellation on the `#constellations/usage` fixture, each sky and density. */
+const byConstellation = async (page: Page) => {
+  await page.evaluate(`location.hash = "#constellations/usage"; location.reload()`);
+  await page.waitForLoadState("domcontentloaded");
+  await page.getByTestId("usage-constellation").first().waitFor({ timeout: 15_000 });
+
+  for (const look of MATRIX) {
+    await setAppearance(page, look.patch);
+    await page.getByTestId("usage-by-constellation").scrollIntoViewIfNeeded();
+    await shoot(page, `usage-by-constellation-${look.name}`);
+  }
+};
 
 const USAGE_SCROLLER = `document.querySelector('[data-section="usage"]')`;
 
@@ -205,9 +221,63 @@ const attached = (page: Page, selector: string) =>
   page.locator(selector).waitFor({ state: "attached", timeout: 5_000 });
 
 const shoot = async (page: Page, name: string) => {
+  // Off every control, so no hover fill shows.
+  await page.mouse.move(1430, 890);
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(out, `${name}.png`) });
   console.log(`settings-screens: saved ${name}.png`);
+};
+
+/** A page of Settings: its nav label, its file name, and what says it has painted. */
+const PAGES = [
+  { nav: "Appearance", slug: "appearance" },
+  { nav: "Sessions", slug: "sessions" },
+  { nav: "Editor", slug: "editor" },
+  { nav: "Harnesses", slug: "harnesses", ready: '[data-testid="harness-row"]' },
+  { nav: "Constellations", slug: "constellations" },
+  { nav: "Usage", slug: "usage", ready: '[data-testid="usage-figures"]' },
+  { nav: "Hosts", slug: "hosts" },
+  { nav: "Attachments", slug: "attachments" },
+  { nav: "Extensions", slug: "extensions" },
+  { nav: "Devices", slug: "devices", ready: '[data-testid="reach-map"]' },
+  { nav: "Voice", slug: "voice" },
+  { nav: "Reviewer", slug: "reviewer" },
+  { nav: "GitHub accounts", slug: "github-accounts" },
+] as const;
+
+/** Moonlit and Midnight at every density, light at Calm (the ENG-573 gate). */
+const MATRIX = [
+  ...["calm", "balanced", "compact"].flatMap((density) =>
+    ["moonlit", "midnight"].map((sky) => ({
+      name: `${sky}-${density}`,
+      patch: { theme: "dark", darkTheme: sky, density },
+    }))
+  ),
+  { name: "light-calm", patch: { theme: "light", density: "calm" } },
+];
+
+/** Scrolls the page's panel to `to` ("end" or 0); says whether it's taller than the panel. */
+const scroll = (page: Page, to: "end" | 0) =>
+  page.evaluate(`(() => {
+    const el = document.querySelector("[data-section]");
+    el.scrollTo(0, ${to === "end" ? "el.scrollHeight" : 0});
+    return el.scrollHeight > el.clientHeight + 40;
+  })()`);
+
+/** Each sky and density; a second shot scrolled to the end when the page is taller than the panel. */
+const eachLook = async (page: Page, slug: string) => {
+  for (const look of MATRIX) {
+    await setAppearance(page, look.patch);
+    const tall = await scroll(page, 0);
+
+    await shoot(page, `${slug}-${look.name}`);
+
+    if (tall === true) {
+      await scroll(page, "end");
+      await shoot(page, `${slug}-${look.name}-end`);
+      await scroll(page, 0);
+    }
+  }
 };
 
 try {
@@ -218,109 +288,64 @@ try {
   await page
     .locator('[data-host="local"][data-connection="connected"]')
     .waitFor({ timeout: 20_000 });
+  await stubDevices(app);
+  await page.evaluate(PAIR);
   await app.evaluate(({ Menu }) => {
     Menu.getApplicationMenu()?.getMenuItemById("settings.open")?.click();
   });
   await page.getByTestId("settings").waitFor({ timeout: 5_000 });
 
-  // X-J: Appearance, then each page, in Moonlit, Midnight and light.
-  const nav = (name: string) => page.getByRole("button", { name, exact: true }).click();
-
-  for (const sky of SKIES) {
-    await setAppearance(page, sky.patch);
-    await nav("Appearance");
-    await shoot(page, `appearance-${sky.name}`);
-  }
-
-  for (const density of ["balanced", "compact"]) {
-    await setAppearance(page, { ...SKIES[0].patch, density });
-    await shoot(page, `appearance-moonlit-${density}`);
-  }
-
-  await setAppearance(page, { density: "calm" });
+  const nav = (name: string) =>
+    page.getByTestId("settings").getByRole("button", { name, exact: true }).click();
 
   // A Moonlit preview keeps its moon while the app is Midnight: each sky follows its own card.
+  await nav("Appearance");
   await page.getByRole("radio", { name: "Midnight", exact: true }).click();
   await attached(page, 'html[data-theme-dark="midnight"]');
   await page.getByRole("radio", { name: "Moonlit", exact: true }).click();
   await attached(page, 'html[data-theme-dark="moonlit"]');
   console.log("settings-screens: the dark theme cards switched the dark theme live");
 
-  // Sessions, all three.
-  await nav("Sessions");
-  await page.locator('[data-section="sessions"]').waitFor({ timeout: 5_000 });
+  for (const p of PAGES.filter((p) => wanted(p.slug))) {
+    await nav(p.nav);
 
-  for (const sky of SKIES) {
-    await setAppearance(page, sky.patch);
-    await shoot(page, `sessions-${sky.name}`);
+    if ("ready" in p) await page.locator(p.ready).first().waitFor({ timeout: 30_000 });
+    await page.waitForTimeout(p.slug === "harnesses" ? 3_000 : 1_000);
+    await eachLook(page, p.slug);
   }
 
-  // S1: Harnesses.
-  await setAppearance(page, SKIES[0].patch);
-  await nav("Harnesses");
-  await page.getByTestId("harness-group").first().waitFor({ timeout: 10_000 });
-  await page.waitForTimeout(3_000);
-  // A Harness ready everywhere folds; open Claude Code's if it did.
-  const folded = page.locator('button[aria-expanded="false"]', { hasText: "Claude Code" });
+  // Usage: X-J's figures, then the chart's tooltip and pinned day.
+  await setAppearance(page, MATRIX[0]?.patch ?? {});
 
-  if ((await folded.count()) > 0) await folded.click();
+  if (wanted("usage")) {
+    await nav("Usage");
+    const figures = (await page.getByTestId("usage-figures").innerText()).split("\n");
 
-  for (const sky of SKIES) {
-    await setAppearance(page, sky.patch);
-    await shoot(page, `harnesses-${sky.name}`);
+    if (figures.length !== 6 || !/^api-equivalent/i.test(figures[3] ?? ""))
+      throw new Error(`usage figures: ${figures.join(" | ")}`);
+    await usageTooltip(page);
   }
 
-  // Usage: the plan limits and tokens instrument cards.
-  await setAppearance(page, SKIES[0].patch);
-  await nav("Usage");
-  await page.getByTestId("usage-figures").waitFor({ timeout: 30_000 });
-  const figures = (await page.getByTestId("usage-figures").innerText()).split("\n");
-
-  // X-J: tokens, cost, share, each a figure over its kicker.
-  if (figures.length !== 6 || !/^api-equivalent/i.test(figures[3] ?? ""))
-    throw new Error(`usage figures: ${figures.join(" | ")}`);
-  console.log(`settings-screens: figures ${figures.join(" | ")}`);
-
-  for (const sky of SKIES) {
-    await setAppearance(page, sky.patch);
-    await shoot(page, `usage-${sky.name}`);
-    await page.evaluate(`${USAGE_SCROLLER}.scrollTo(0, 1e6)`);
-    await shoot(page, `usage-${sky.name}-end`);
-    await page.evaluate(`${USAGE_SCROLLER}.scrollTo(0, 0)`);
+  // This Mac's page, from its row (the extra Daemons aren't saved hosts, so the list has one).
+  if (wanted("host-page")) {
+    await nav("Hosts");
+    await page.getByTestId("machine-local").getByRole("button").first().click();
+    await page.getByTestId("host-page").waitFor({ timeout: 10_000 });
+    await page.waitForTimeout(2_500);
+    await eachLook(page, "host-page");
   }
 
-  await setAppearance(page, SKIES[0].patch);
-  await usageTooltip(page);
-
-  // Other pages, restyled: each in all three.
-  const pages = ["Editor", "Constellations", "Hosts", "Devices", "Reviewer", "GitHub accounts"];
-
-  for (const name of pages) {
-    await nav(name);
-
-    for (const sky of SKIES) {
-      await setAppearance(page, sky.patch);
-      await shoot(page, `${name.toLowerCase().replaceAll(" ", "-")}-${sky.name}`);
-    }
+  if (wanted("about")) {
+    await page.getByRole("button", { name: /^About Polaris/ }).click();
+    await eachLook(page, "about");
   }
 
-  await page.getByRole("button", { name: /^About Polaris/ }).click();
+  await setAppearance(page, MATRIX[0]?.patch ?? {});
 
-  for (const sky of SKIES) {
-    await setAppearance(page, sky.patch);
-    await shoot(page, `about-${sky.name}`);
-  }
+  if (wanted("checks")) await settingsChecks({ app, page, nav, shoot, setAppearance });
 
-  await setAppearance(page, SKIES[0].patch);
-
-  // The gear in the sidebar footer and the K menu's Settings actions.
-  await page.keyboard.press("Escape");
-  await page.getByTestId("settings").waitFor({ state: "detached" });
-  await page.getByRole("button", { name: "Settings" }).hover();
-  await shoot(page, "entry-sidebar-gear-dark");
-  await page.keyboard.press("Meta+k");
-  await page.keyboard.type("settings");
-  await shoot(page, "entry-k-menu-dark");
+  // Last: the window reloads into the fixture, since the Daemons here have run no constellation.
+  if (wanted("usage-by-constellation")) await byConstellation(page);
 } finally {
   await app.close();
   await Promise.all(daemons.map((d) => d.stop()));

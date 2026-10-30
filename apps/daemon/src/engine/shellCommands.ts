@@ -3,7 +3,13 @@
  * reads them. Each records one `CommandExecution` item of the user's (`origin: "user"`),
  * streamed as `ItemProgress`, and Interrupt stops it. Loaded when a session first runs one.
  */
-import { DomainEvent, type SessionId, type TurnId, TurnItem } from "@polaris/protocol";
+import {
+  type Attachment,
+  DomainEvent,
+  type SessionId,
+  type TurnId,
+  TurnItem,
+} from "@polaris/protocol";
 import { Effect } from "effect";
 import type { ShellCommandRun } from "../harness/HarnessDriver.ts";
 import { childEnv, repositoryEnv } from "../service/childEnv.ts";
@@ -26,7 +32,10 @@ export interface ShellJob {
   /** Interrupt arrived: the Turn ends Interrupted and the Harness never reads it. */
   interrupted: boolean;
   /** Steers sent while it ran, for the Turn once the Harness has the command. */
-  readonly steers: Array<string>;
+  readonly steers: Array<{
+    readonly text: string;
+    readonly attachments: ReadonlyArray<Attachment>;
+  }>;
   /** Stops it: the Turn ends Interrupted and the Harness never reads it. */
   readonly interrupt: () => void;
 }

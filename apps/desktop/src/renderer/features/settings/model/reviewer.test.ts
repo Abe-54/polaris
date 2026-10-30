@@ -3,9 +3,12 @@ import type { HarnessAvailability } from "@polaris/protocol";
 import type { Plain } from "../../../../shared/api.ts";
 import type { ProbedHost } from "./harnesses.ts";
 import {
+  AUTO_CHAIN,
+  chainLabel,
   DEFAULT_POLICY,
   type HostReviewer,
   overridesOf,
+  prettyModel,
   readySummary,
   reviewerHostRows,
   reviewerTitle,
@@ -51,6 +54,14 @@ describe("the Reviewer every host runs", () => {
     expect(sharedDefault([loaded(), loaded()])).toEqual({ choice: SOL, differs: false });
     expect(sharedDefault([loaded(), { kind: "loading" }]).differs).toBe(false);
     expect(sharedDefault([loaded(), loaded({ ...SOL, effort: "low" })]).differs).toBe(true);
+  });
+
+  test("automatic reads as its chain, with Claude model ids named until the harness lists them", () => {
+    expect(AUTO_CHAIN.map((choice) => chainLabel(choice))).toEqual([
+      "Claude Code · Opus 5.5 high",
+      "Codex · GPT-6.1-Sol",
+    ]);
+    expect(chainLabel(SOL, () => "GPT-6.1 Sol")).toBe("Codex · GPT-6.1 Sol high");
   });
 
   test("the heading names it, or says it picks automatically", () => {
@@ -123,6 +134,18 @@ describe("the Reviewer every host runs", () => {
     expect(sharedPolicy([{ kind: "loading" }])).toEqual(DEFAULT_POLICY);
     expect(thresholdLabel(2000)).toBe("Over 2,000 lines");
     expect(thresholdLabel(null)).toBe("Never");
+  });
+});
+
+describe("a Model the Harness hasn't listed under its id", () => {
+  test.each([
+    ["claude-opus-5-5", "Opus 5.5"],
+    ["claude-haiku-5-5", "Haiku 5.5"],
+    ["claude-sonnet-4-5-20250929", "Sonnet 4.5"],
+    ["gpt-6.1-sol", "GPT-6.1-Sol"],
+    ["gpt-6-luna", "GPT-6-Luna"],
+  ])("%s reads as %s", (id, name) => {
+    expect(prettyModel(id)).toBe(name);
   });
 });
 

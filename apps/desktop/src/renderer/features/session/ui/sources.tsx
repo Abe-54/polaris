@@ -55,7 +55,14 @@ const SourceItem = ({ source }: { readonly source: Source }) =>
     </div>
   );
 
-export const SourcesPill = ({ sources }: { readonly sources: ReadonlyArray<Source> }) => {
+export const SourcesPill = ({
+  sources,
+  align = "start",
+}: {
+  readonly sources: ReadonlyArray<Source>;
+  /** Which edge of the pill the card lines up with: "end" where the pill sits at the right. */
+  readonly align?: "start" | "end";
+}) => {
   const label = sourcesLabel(sources);
   const dots = sourceDomains(sources).slice(0, DOTS);
 
@@ -83,7 +90,7 @@ export const SourcesPill = ({ sources }: { readonly sources: ReadonlyArray<Sourc
         </button>
       </PopoverTrigger>
       <InstrumentPopoverContent
-        align="start"
+        align={align}
         data-testid="sources-popover"
         header={{ title: "Sources", state: sources.length }}
         wells={[

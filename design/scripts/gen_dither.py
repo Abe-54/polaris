@@ -40,7 +40,7 @@ FRAMES = {
     "dither-claude-16-light": dict(w=16, h=16, color="#C4562F"),
     "dither-codex-16": dict(w=16, h=16, color="#6FCBA0", phase=1.5),
     "dither-codex-16-light": dict(w=16, h=16, color="#1E8A5C", phase=1.5),
-    "dither-opencode-16": dict(w=16, h=16, color="#E58FA8", phase=0.75),
+    "dither-opencode-16": dict(w=16, h=16, color="#E59AC1", phase=0.75),
     "dither-opencode-16-light": dict(w=16, h=16, color="#B8466A", phase=0.75),
     "dither-starlight-16": dict(w=16, h=16, color="#BCD3FF", phase=0.8),
     "dither-starlight-16-light": dict(w=16, h=16, color="#4F82E8", phase=0.8),

@@ -1,15 +1,26 @@
+/**
+ * SR-02's Tab completion card, behind one switch: behaviour beside the model on the picked
+ * machine, then where each host's completion runs, and a model server of your own.
+ */
 import { useEffect, useState } from "react";
 import { Option, Schema } from "effect";
-import { Button, DisclosureChevron, Input, Switch } from "@polaris/ui";
+import {
+  cn,
+  Input,
+  SettingsButton,
+  SettingsCard,
+  SettingsGrid,
+  SettingsSelect,
+  SettingsSwitch,
+  SettingsWell,
+} from "@polaris/ui";
 import type { HostView } from "../../../../shared/api.ts";
 import { clientCopy } from "../../../../shared/clientCopy.ts";
 import {
   ConfiguredPredictionEndpoint,
   type PredictionClientEndpoints,
 } from "../../../../shared/predictionPlacement.ts";
-import { commandShortcut } from "../../../../shared/keymap.ts";
 import { polaris } from "../../bridge.ts";
-import { Group, Heading, SettingRow } from "../ui/parts.tsx";
 import { CompletionPlacement } from "./CompletionPlacement.tsx";
 import { ClearHistoryRow, EditPredictionRows } from "./EditPredictionRows.tsx";
 import { ManagedModel } from "./ManagedModel.tsx";
@@ -87,14 +98,13 @@ const EndpointForm = ({
           >
             {endpoint.url}
           </span>
-          <Button
+          <SettingsButton
             variant="ghost"
-            size="xs"
             onClick={() => void remove(at)}
             aria-label={`Remove ${endpoint.url} on ${machine}`}
           >
             Remove
-          </Button>
+          </SettingsButton>
         </div>
       ))}
       <form
@@ -128,14 +138,12 @@ const EndpointForm = ({
           />
         </label>
         <div className="flex justify-end">
-          <Button
-            variant="secondary"
-            size="sm"
+          <SettingsButton
             type="submit"
             disabled={saving || url.trim().length === 0 || endpoints.length >= 16}
           >
             Add endpoint
-          </Button>
+          </SettingsButton>
         </div>
       </form>
       {error && (
@@ -213,100 +221,109 @@ export const TabCompletion = ({ hosts }: { readonly hosts: ReadonlyArray<HostVie
     }
   };
 
+  const machines = [
+    { value: "client", label: clientLabel },
+    ...hosts
+      .filter((host) => host.kind !== "local")
+      .map((host) => ({ value: host.key, label: host.label })),
+  ];
+
+  const ramBytes =
+    (scope === "client"
+      ? state.inspections[localKey]?.client.machine.ramBytes
+      : state.inspections[scope]?.host?.machine.ramBytes) ?? null;
+
   return (
-    <section id="tab-completion" aria-label="Tab completion" className="gap-section flex flex-col">
-      <Heading>Tab completion</Heading>
-      <Group label="Enable tab completion">
-        <SettingRow
-          htmlFor="enable-tab-completion"
-          title="Enable tab completion"
-          caption={`Suggest code as you type. Tab accepts; ${commandShortcut("editor.prediction.acceptWord")} accepts a word. Works before you trust a workspace; language-server context joins once you do.`}
-        >
-          <Switch
-            id="enable-tab-completion"
-            checked={state.enabled}
-            disabled={!state.loaded}
-            onCheckedChange={(on) => void enabled(on)}
-          />
-        </SettingRow>
-        <EditPredictionRows hosts={hosts} onError={setError} />
-      </Group>
-      <div className="gap-gap flex flex-col">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="text-heading-sm text-text-strong font-medium">Model</h3>
-          <select
-            value={scope}
-            onChange={(event) => setScope(event.target.value)}
-            aria-label="Model server machine"
-            className={`${CONTROL} max-w-64`}
-          >
-            <option value="client">{clientLabel}</option>
-            {hosts
-              .filter((host) => host.kind !== "local")
-              .map((host) => (
-                <option key={host.key} value={host.key}>
-                  {host.label}
-                </option>
-              ))}
-          </select>
-        </div>
-        <p className="text-caption text-text-subtle">
-          Polaris downloads one small next-edit model to the machine that serves completion and runs
-          it there. Nothing leaves that machine.
-        </p>
-        <ManagedModel
-          key={scope}
-          hostKey={scope === "client" ? localKey : scope}
-          side={scope === "client" ? "client" : "host"}
-          machine={machine}
-          connected={scope === "client" ? localConnected : hostConnected(hosts, scope)}
+    <SettingsCard
+      id="tab-completion"
+      aria-label="Tab completion"
+      title={
+        <span className="flex items-baseline gap-2">
+          Tab completion
+          <span className="text-caption text-text-subtle font-normal">
+            {state.enabled ? `Suggests as you type · models run on ${machine}` : "Off"}
+          </span>
+        </span>
+      }
+      aside={
+        <SettingsSwitch
+          aria-label="Enable tab completion"
+          checked={state.enabled}
+          disabled={!state.loaded}
+          onCheckedChange={(on) => void enabled(on)}
         />
-        <Group label="Use my own model server" className="mt-1">
-          <details open={ownOpen} onToggle={(event) => setOwnOpen(event.currentTarget.open)}>
-            <summary className="px-panel flex cursor-default list-none items-center gap-4 py-[calc(var(--spacing-gap)+4px)]">
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-label font-regular text-text-default">
-                  Use my own model server
-                </span>
-                <span className="text-caption text-text-subtle">
-                  Run llama-server, LM Studio or Ollama on {inSentence(machine)} and point Polaris
-                  at it. A next-edit model there is used before anything is downloaded.
-                </span>
+      }
+      status={memoryLine(memory, clientLabel) ?? "Nothing leaves the machine"}
+      action={
+        <SettingsButton aria-expanded={ownOpen} onClick={() => setOwnOpen(!ownOpen)}>
+          Use my own model server…
+        </SettingsButton>
+      }
+    >
+      <div
+        className={cn(
+          "gap-gap flex flex-col transition-opacity duration-120",
+          !state.enabled && "opacity-(--opacity-dimmed)"
+        )}
+      >
+        <SettingsGrid>
+          <SettingsWell>
+            <EditPredictionRows hosts={hosts} onError={setError} />
+          </SettingsWell>
+          <ManagedModel
+            key={scope}
+            hostKey={scope === "client" ? localKey : scope}
+            side={scope === "client" ? "client" : "host"}
+            machine={machine}
+            connected={scope === "client" ? localConnected : hostConnected(hosts, scope)}
+            ramBytes={ramBytes}
+            picker={
+              <SettingsSelect
+                label="Model server machine"
+                value={scope}
+                options={machines}
+                onChange={setScope}
+              />
+            }
+          >
+            <ClearHistoryRow />
+          </ManagedModel>
+        </SettingsGrid>
+        <CompletionPlacement
+          rows={hosts.map((host) =>
+            placementRow({
+              host: { key: host.key, label: host.label, state: host.status.state },
+              preferences: state.preferences[host.key] ?? preferencesOf(host.key),
+              inspection: state.inspections[host.key],
+              result: state.results[host.key],
+              clientName: clientLabel,
+            })
+          )}
+          colours={Object.fromEntries(hosts.map((host) => [host.key, host.colour]))}
+          onChange={(hostKey, patch) =>
+            void setPredictionPreferences(polaris(), hostKey, {
+              ...preferencesOf(hostKey),
+              ...patch,
+            }).catch((cause) => setError(String(cause)))
+          }
+        />
+        {ownOpen ? (
+          <SettingsWell aria-label="Use my own model server" rows={false}>
+            <div className="px-panel gap-gap flex flex-col py-[calc(var(--spacing-panel)-2px)]">
+              <span className="text-caption text-text-subtle">
+                Run llama-server, LM Studio or Ollama on {inSentence(machine)}; a next-edit model
+                there is used before anything is downloaded.
               </span>
-              <DisclosureChevron open={ownOpen} className="text-text-subtle" />
-            </summary>
-            <div className="border-hairline px-panel gap-gap flex flex-col border-t py-[calc(var(--spacing-gap)+4px)]">
               <EndpointForm key={scope} endpoints={endpoints} machine={machine} save={save} />
             </div>
-          </details>
-        </Group>
-        <Group label="Edit prediction history" className="mt-1">
-          <ClearHistoryRow />
-        </Group>
-      </div>
-      <CompletionPlacement
-        rows={hosts.map((host) =>
-          placementRow({
-            host: { key: host.key, label: host.label, state: host.status.state },
-            preferences: state.preferences[host.key] ?? preferencesOf(host.key),
-            inspection: state.inspections[host.key],
-            result: state.results[host.key],
-            clientName: clientLabel,
-          })
+          </SettingsWell>
+        ) : null}
+        {error && (
+          <p role="status" className="px-gap text-caption text-text-subtle">
+            {error}
+          </p>
         )}
-        memory={memoryLine(memory, clientLabel)}
-        onChange={(hostKey, patch) =>
-          void setPredictionPreferences(polaris(), hostKey, {
-            ...preferencesOf(hostKey),
-            ...patch,
-          }).catch((cause) => setError(String(cause)))
-        }
-      />
-      {error && (
-        <p role="status" className="text-caption text-text-subtle">
-          {error}
-        </p>
-      )}
-    </section>
+      </div>
+    </SettingsCard>
   );
 };

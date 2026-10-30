@@ -47,6 +47,7 @@ import { SessionTargetContext } from "./polarisTool/target.ts";
 import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
+import { SourcesPill } from "./sources.tsx";
 import type { SecretOutcome } from "../model/secret.ts";
 import { provideSecret } from "../secrets.ts";
 import type { SessionChrome } from "../chrome.ts";
@@ -347,6 +348,11 @@ const Agent = ({ row, ctx }: { row: Extract<Row, { kind: "item" }>; ctx: RowCont
           />
         </SessionTargetContext.Provider>
       </div>
+      {row.sources === undefined ? null : (
+        <div className="shrink-0">
+          <SourcesPill sources={row.sources} align="end" />
+        </div>
+      )}
     </div>
   </TurnMenu>
 );
@@ -549,6 +555,12 @@ export const ConversationRow = ({ row, ctx }: { row: Row; ctx: RowContext }) => 
         }) ?? (
           <Steered
             text={row.entry.item.text}
+            above={
+              <SentAttachments
+                hostKey={ctx.diff.hostKey}
+                attachments={row.entry.item.attachments}
+              />
+            }
             time={row.startedAt === null ? null : <TurnTime iso={row.startedAt} />}
           />
         ))

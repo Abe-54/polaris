@@ -23,6 +23,7 @@ import { quietOpening } from "./idleCompaction.ts";
 import type { ShellView } from "./items.ts";
 import type { Outgoing } from "./outbox.ts";
 import type { Entry } from "./runs.ts";
+import type { Source } from "./sources/index.ts";
 import { groupTurns, lastView, openingView, shownItems, type TurnGroup } from "./turnGroups.ts";
 import { noTitles, type SubagentTitles, subagentTitles } from "./subagentTitles.ts";
 import { partRows } from "./turnRows.ts";
@@ -125,6 +126,8 @@ export type Row =
       readonly latest: boolean;
       /** When a single item started (ISO); null for runs, Subagents, or no stamp. */
       readonly startedAt: string | null;
+      /** On the lead row: the Turn's sources, shown across from the avatar. */
+      readonly sources?: ReadonlyArray<Source> | undefined;
     }
   | {
       readonly kind: "approval";

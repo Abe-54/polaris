@@ -1,10 +1,18 @@
 /**
- * Settings → Sessions → Working verbs (DESIGN.md, Working strip): the list the
- * strip rotates through for every Harness, edited in place (add, remove,
- * reset). Claude Code sessions follow `spinnerVerbs` from Claude Code's own
- * settings first, as Claude Code does.
+ * Settings → Sessions' "Working verbs" card (DESIGN.md, Working strip): the list the strip
+ * rotates through for every Harness, edited in place (add, remove, reset). Claude Code
+ * sessions follow `spinnerVerbs` from Claude Code's own settings first, as Claude Code does.
  */
-import { Button, CloseIcon, IconButton, Input } from "@polaris/ui";
+import {
+  CloseIcon,
+  Dither,
+  IconButton,
+  Input,
+  Kicker,
+  SettingsButton,
+  SettingsCard,
+  SettingsWell,
+} from "@polaris/ui";
 import { useState } from "react";
 import {
   addVerb,
@@ -14,7 +22,6 @@ import {
   removeVerb,
 } from "../../session/verbs/index.ts";
 import { setSessionPrefs, useSettings } from "../store.ts";
-import { FooterStrip, Group } from "./parts.tsx";
 
 const save = (verbs: ReadonlyArray<string>) => setSessionPrefs({ spinnerVerbs: [...verbs] });
 
@@ -32,7 +39,7 @@ const AddVerb = ({ app }: { readonly app: ReadonlyArray<string> | null }) => {
 
   return (
     <form
-      className="px-panel flex items-center gap-3 py-[calc(var(--spacing-gap)+4px)]"
+      className="flex items-center gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         add();
@@ -40,63 +47,82 @@ const AddVerb = ({ app }: { readonly app: ReadonlyArray<string> | null }) => {
     >
       <Input
         aria-label="New verb"
-        className="flex-1"
+        className="h-7 flex-1"
         placeholder="Reticulating splines…"
         value={draft}
         maxLength={120}
         onChange={(event) => setDraft(event.target.value)}
         data-testid="verb-input"
       />
-      <Button type="submit" disabled={!adds || verbs.length >= MAX_VERBS}>
+      <SettingsButton type="submit" disabled={!adds || verbs.length >= MAX_VERBS}>
         Add
-      </Button>
+      </SettingsButton>
     </form>
   );
 };
 
+/** Chips shown before "+n more". */
+const SHOWN = 4;
+
 export const WorkingVerbs = () => {
   const app = useSettings((s) => s.sessions.spinnerVerbs);
   const verbs = editableVerbs(app);
+  const [all, setAll] = useState(false);
+  const shown = all ? verbs : verbs.slice(0, SHOWN);
 
   return (
-    <Group label="Working verbs">
-      <div className="px-panel flex flex-col gap-2.5 py-[calc(var(--spacing-gap)+4px)]">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-label font-regular text-text-default">Working verbs</span>
-          <span className="text-caption text-text-subtle">
-            The Working strip shows one at a time while a turn runs, a new one every few seconds
+    <SettingsCard
+      title="Working verbs"
+      aside={`${verbs.length} of ${MAX_VERBS}`}
+      status="Claude Code's spinnerVerbs come first"
+      action={
+        app === null ? undefined : (
+          <SettingsButton variant="quiet" onClick={() => setSessionPrefs({ spinnerVerbs: null })}>
+            Reset
+          </SettingsButton>
+        )
+      }
+    >
+      <SettingsWell>
+        <div className="px-panel flex items-center gap-2.5 py-[calc(var(--spacing-gap)+4px)]">
+          <Dither hue="claude-code" size={12} />
+          <span className="text-body text-text-default min-w-0 flex-1 truncate">
+            {verbs[0] ?? ""}
           </span>
+          <Kicker>As the strip shows it</Kicker>
         </div>
-        <ul className="flex flex-wrap gap-1.5" aria-label="Verbs" data-testid="verb-list">
-          {verbs.map((verb, index) => (
-            <li
-              key={verb}
-              className="rounded-control border-hairline text-caption text-text-default flex h-7 items-center gap-0.5 border pr-0.5 pl-2.5"
-            >
-              {verb}
-              <IconButton
-                size="sm"
-                label={`Remove ${verb}`}
-                disabled={verbs.length === 1}
-                icon={<CloseIcon size={10} />}
-                onClick={() => save(removeVerb(app, index))}
-              />
-            </li>
-          ))}
-        </ul>
-      </div>
-      <AddVerb app={app} />
-      <FooterStrip>
-        <span className="text-caption text-text-subtle flex-1">
-          Claude Code sessions use <code className="text-code-inline font-mono">spinnerVerbs</code>{" "}
-          from Claude Code&apos;s settings first
-        </span>
-        {app === null ? null : (
-          <Button variant="ghost" size="xs" onClick={() => setSessionPrefs({ spinnerVerbs: null })}>
-            Reset to the built-in verbs
-          </Button>
-        )}
-      </FooterStrip>
-    </Group>
+        <div className="px-panel flex flex-col gap-3 py-[calc(var(--spacing-gap)+4px)]">
+          <ul
+            className="flex flex-wrap items-center gap-1.5"
+            aria-label="Verbs"
+            data-testid="verb-list"
+          >
+            {shown.map((verb, index) => (
+              <li
+                key={verb}
+                className="border-hairline text-caption text-text-default flex h-7 max-w-full items-center gap-0.5 rounded-full border pr-0.5 pl-2.5"
+              >
+                <span className="truncate">{verb}</span>
+                <IconButton
+                  size="sm"
+                  label={`Remove ${verb}`}
+                  disabled={verbs.length === 1}
+                  icon={<CloseIcon size={10} />}
+                  onClick={() => save(removeVerb(app, index))}
+                />
+              </li>
+            ))}
+            {verbs.length > SHOWN ? (
+              <li>
+                <SettingsButton variant="ghost" onClick={() => setAll(!all)}>
+                  {all ? "Show fewer" : `+${verbs.length - SHOWN} more`}
+                </SettingsButton>
+              </li>
+            ) : null}
+          </ul>
+          <AddVerb app={app} />
+        </div>
+      </SettingsWell>
+    </SettingsCard>
   );
 };

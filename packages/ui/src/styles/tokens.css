@@ -26,6 +26,8 @@
   --color-well: light-dark(#f6f7f9, #222327);
   /* A well inside a raised surface, one step off it; data-surface="raised" swaps it in. */
   --color-well-raised: light-dark(#f6f7f9, #1a1b1d);
+  /* A control on a raised surface: the selected nav item, a closed select (Settings redesign). */
+  --color-raised-control: light-dark(#ffffff, #26272b);
   /* The flat scrim under a modal (Paper's jump menu, "no blur"). */
   --color-scrim: light-dark(#0a0b0c33, #0a0b0c8c);
   --color-text-strong: light-dark(#17181a, #f4f5f7);
@@ -92,7 +94,7 @@
   /* Harness identity hues; the light variants come from the Paper file. */
   --color-harness-claude-code: light-dark(#c4562f, #d97757);
   --color-harness-codex: light-dark(#1e8a5c, #6fcba0);
-  --color-harness-opencode: light-dark(#b8466a, #e58fa8);
+  --color-harness-opencode: light-dark(#b8466a, #e59ac1);
   --color-harness-claude-code-text: light-dark(#ac4824, #d97757);
   --color-harness-codex-text: light-dark(#167550, #6fcba0);
 

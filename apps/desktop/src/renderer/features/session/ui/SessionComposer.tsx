@@ -207,6 +207,10 @@ export const SessionComposer = (props: SessionComposerProps) => {
     canSteer: hasCapability(host, "session.steer"),
   });
 
+  const steersAttachments =
+    useHarnessModels(hostKey, session.harness).steersAttachments &&
+    hasCapability(host, "session.steer-attachments");
+
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contextDismissedAt, setContextDismissedAt] = useState<number | null>(null);
   const compact = useCompact(hostKey, session);
@@ -274,12 +278,12 @@ export const SessionComposer = (props: SessionComposerProps) => {
 
     if (command === null) return;
 
-    // A steer carries text only: a draft with attachments waits for the next Turn instead.
-    if (mode.kind === "steer" && ui.attachments.length > 0) return queue();
+    // Where a steer can't carry attachments, a draft with them waits for the next Turn instead.
+    if (mode.kind === "steer" && ui.attachments.length > 0 && !steersAttachments) return queue();
 
     if (mode.kind === "steer") {
-      props.outbox.steer(text);
-      patchSessionUi(uiKey, () => ({ draft: "" }));
+      props.outbox.steer(text, ui.attachments);
+      patchSessionUi(uiKey, () => ({ draft: "", attachments: [] }));
 
       return;
     }

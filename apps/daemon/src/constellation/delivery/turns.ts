@@ -172,7 +172,7 @@ const deliveryEvents = Effect.fnUntraced(function* (
 
   const decision = decideSession(
     record,
-    working ? { type: "turn.steer", canSteer } : { type: "turn.send", turn }
+    working ? { type: "turn.steer", canSteer, takesAttachments: true } : { type: "turn.send", turn }
   );
 
   if (decision.rejection !== null || (!working && !takesDelivery(record, turn)))

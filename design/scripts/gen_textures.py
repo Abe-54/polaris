@@ -224,7 +224,7 @@ def main():
     # Birds at dawn are distant silhouettes in the cabin's roof brown.
     save_motion(dawn_motion, dawn_cabin, 'scene-dawn.json', {'kind': 'dawn', 'bird': CABIN_DAWN['R']})
 
-    for seed,(hue,n) in enumerate([('#D97757','claude'),('#6FCBA0','codex'),('#9DBAF5','starlight'),('#F2C84B','needs'),('#E58FA8','opencode')]):
+    for seed,(hue,n) in enumerate([('#D97757','claude'),('#6FCBA0','codex'),('#9DBAF5','starlight'),('#F2C84B','needs'),('#E59AC1','opencode')]):
         wash(hue,'#222327',f'wash-{n}-dark.png',seed=20+seed,strength=(0.16,0.62))
         wash(hue,'#FFFFFF',f'wash-{n}-light.png',seed=20+seed,strength=(0.08,0.40))
     # wide wash for toast/banner
@@ -232,7 +232,7 @@ def main():
     wash('#D97757','#FFFFFF','wash-claude-light-wide.png',w=90,h=24,seed=6,strength=(0.06,0.34))
 
     # one per identity hue and theme; light halos use the -light hue on bg-light
-    for n,dark,light in (('claude','#D97757','#C4562F'),('codex','#6FCBA0','#1E8A5C'),('opencode','#E58FA8','#B8466A')):
+    for n,dark,light in (('claude','#D97757','#C4562F'),('codex','#6FCBA0','#1E8A5C'),('opencode','#E59AC1','#B8466A')):
         halo(dark,f'halo-{n}.png')
         halo(light,f'halo-{n}-light.png')
     halo('#BCD3FF','halo-starlight.png',peak=0.6)

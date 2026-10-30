@@ -55,16 +55,22 @@ describe("the WSL section of Add a host", () => {
     expect(hostWhere({ kind: "ssh", alias: "pi" })).toBe("ssh pi");
     expect(hostWhere({ kind: "local", alias: null })).toBe(clientCopy().localHost);
     expect(wslFooter("Ubuntu")).toContain("\\\\wsl.localhost\\Ubuntu");
-    expect(hostsIntro(false, clientCopy("darwin"))).toContain("this Mac installs");
-    expect(hostsIntro(true, clientCopy("win32"))).toContain("inside WSL on this PC");
+    expect(hostsIntro(false, clientCopy("darwin"))).toBe(
+      "The machines your agents run on. Each runs its own daemon; this Mac reaches the others over SSH."
+    );
+    expect(hostsIntro(true, clientCopy("win32"))).toContain(
+      "this PC reaches the others over SSH or WSL"
+    );
     expect(addHint(false)).toBe(
       "Pick an alias from ~/.ssh/config; the first install asks for your approval."
     );
   });
 
   test("a PC without WSL, or a Linux Client, never reads as a Mac", () => {
-    expect(hostsIntro(false, clientCopy("win32"))).toContain("this PC installs");
-    expect(hostsIntro(false, clientCopy("linux"))).toContain("this computer installs");
+    expect(hostsIntro(false, clientCopy("win32"))).toContain(
+      "this PC reaches the others over SSH."
+    );
+    expect(hostsIntro(false, clientCopy("linux"))).toContain("this computer reaches");
     setClientPlatform("linux");
 
     try {

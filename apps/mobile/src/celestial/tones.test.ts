@@ -41,7 +41,7 @@ describe("celestial tones", () => {
     ["#d97757", 0.62, "#000000", "#713b2a"],
     ["#d97757", 0.22, "#ffffff", "#f9e1d9"],
     ["#6fcba0", 0.62, "#000000", "#376952"],
-    ["#e58fa8", 0.22, "#ffffff", "#fbe6eb"],
+    ["#e59ac1", 0.22, "#ffffff", "#fbe9f1"],
     ["#ffffff", 0.5, "#000000", "#636363"],
   ])("color-mix(in oklab, %s %p, %s) is the browser's %s", (a, share, b, browser) => {
     expect(mixOklab(a, share, b)).toBe(browser);

@@ -24,6 +24,7 @@ import { HarnessEvent } from "../src/harness/HarnessDriver.ts";
 import { scratchXdg } from "../src/harness/opencode/OpenCodeDriver.ts";
 import { PlanLimitReporter } from "../src/harness/limits/PlanLimitReporter.ts";
 import { HarnessRegistryLive } from "../src/harness/registry.ts";
+import { BrowserMcp } from "../src/harness/browser/index.ts";
 import { HarnessRegistry } from "../src/services.ts";
 
 if (process.env.POLARIS_E2E_OPENCODE_TUI !== "1") {
@@ -211,7 +212,11 @@ const program = Effect.gen(function* () {
 try {
   await Effect.runPromise(
     Effect.scoped(program).pipe(
-      Effect.provide(HarnessRegistryLive.pipe(Layer.provide(PlanLimitReporter.none)))
+      Effect.provide(
+        HarnessRegistryLive.pipe(
+          Layer.provide(Layer.mergeAll(PlanLimitReporter.none, BrowserMcp.none))
+        )
+      )
     )
   );
   check("the server stopped with the session", !existsSync(stateFile));

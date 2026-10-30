@@ -111,9 +111,12 @@ test("a Pairing lists with its Grant, and Revoke asks before revoking it", async
 
   expect(row.getByText("Read · approve · send turns")).toBeTruthy();
   expect(row.getByText("not used yet")).toBeTruthy();
+  // Neutral until it asks (SR-07); only the confirming button is danger.
+  expect(row.getByRole("button", { name: "Revoke" }).dataset.variant).toBe("secondary");
 
   fireEvent.click(row.getByRole("button", { name: "Revoke" }));
   expect(fake.sent("extensions.revoke")).toEqual([]);
+  expect(row.getByRole("button", { name: "Revoke Raycast" }).dataset.variant).toBe("danger");
 
   fireEvent.click(row.getByRole("button", { name: "Revoke Raycast" }));
   await waitFor(() =>

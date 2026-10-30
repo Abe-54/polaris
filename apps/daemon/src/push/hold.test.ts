@@ -62,6 +62,7 @@ const withNotifier = (
           cancelLink: () => unused,
           add: () => unused,
           list: unused,
+          watch: Stream.empty,
           unlink: () => unused,
           unlinkSelf: () => unused,
           registerPush: () => unused,

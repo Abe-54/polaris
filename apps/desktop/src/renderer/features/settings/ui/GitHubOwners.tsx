@@ -1,82 +1,43 @@
 /**
- * Settings → GitHub accounts' "Account per owner" (Paper S5): an account per owner or org,
- * each owner's access problem with its one fix, "Everyone else" on the default, and the
- * Workspaces that override their owner.
+ * Settings → GitHub accounts' "Account per owner" (DESIGN.md, Settings redesign SR-11): a
+ * table of an account per owner or org, "Choose account" dashed until set, each owner's
+ * access problem with its one fix, "Everyone else" on the default, and the workspaces that
+ * override their owner, edited in place.
  */
 import {
-  Button,
   ChevronDownIcon,
-  cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Kicker,
+  SettingsButton,
+  SettingsCard,
+  type SettingsOption,
+  SettingsOverrideRow,
+  SettingsRow,
+  SettingsSelect,
+  SettingsWell,
 } from "@polaris/ui";
+import { type ReactNode, useState } from "react";
 import type { GitHubAccountsView, PullListView } from "../../../../shared/github.ts";
 import { useApp } from "../../../shell/hooks.ts";
 import { polaris } from "../../bridge.ts";
-import { AccountMark } from "../../pulls/index.ts";
 import { type OwnerRow, ownerTable, workspaceOverrides } from "../model/github.ts";
-import { Heading } from "./parts.tsx";
-import { workspaceLabel } from "../model/workspaces.ts";
-import {
-  OverrideStrip,
-  overrideCount,
-  useWorkspaceOptions,
-  WorkspaceOverrides,
-} from "./WorkspaceOverrides.tsx";
+import type { WorkspaceOption } from "../model/workspaces.ts";
+import { overrideCount, useWorkspaceOptions } from "./WorkspaceOverrides.tsx";
+
+/** Moves `id` to the front: the default is the first account. */
+export const setDefaultAccount = (view: GitHubAccountsView, id: number) =>
+  void polaris().request("github.accounts.reorder", {
+    accountIds: [id, ...view.accounts.map((a) => a.id).filter((a) => a !== id)],
+  });
 
 /** The Select value that clears a mapping (the default account answers). */
 const DEFAULT = "default";
 
-const AccountSelect = ({
-  view,
-  value,
-  label,
-  onChange,
-}: {
-  readonly view: GitHubAccountsView;
-  readonly value: number | null;
-  readonly label: string;
-  readonly onChange: (accountId: number | null) => void;
-}) => {
-  const index = view.accounts.findIndex((a) => a.id === value);
-
-  return (
-    <Select
-      value={value === null ? "" : String(value)}
-      onValueChange={(v) => onChange(v === DEFAULT ? null : Number(v))}
-    >
-      <SelectTrigger
-        aria-label={label}
-        className={cn(
-          "px-gap w-[180px] gap-2",
-          value === null
-            ? "text-caption text-text-default font-regular data-[placeholder]:text-text-default border-dashed bg-transparent"
-            : "bg-surface-sunken"
-        )}
-      >
-        {index < 0 ? null : <AccountMark index={index} />}
-        <span className="flex-1 truncate text-left">
-          <SelectValue placeholder="Choose account" />
-        </span>
-      </SelectTrigger>
-      <SelectContent>
-        {view.accounts.map((a) => (
-          <SelectItem key={a.id} value={String(a.id)}>
-            {a.login}
-          </SelectItem>
-        ))}
-        {value === null ? null : <SelectItem value={DEFAULT}>Use the default</SelectItem>}
-      </SelectContent>
-    </Select>
-  );
-};
+const accountOptions = (view: GitHubAccountsView): ReadonlyArray<SettingsOption<string>> =>
+  view.accounts.map((a) => ({ value: String(a.id), label: a.login }));
 
 const recheck = (repo: string) => {
   const [owner = "", name = ""] = repo.split("/");
@@ -94,26 +55,24 @@ const AccessLine = ({ row }: { readonly row: OwnerRow }) => {
 
   if (access.kind === "not-found") {
     return (
-      <div className="flex items-center gap-2 pt-1">
-        <span className="text-caption text-text-subtle flex-1">
-          No account here can see {access.repo}. Choose one that can, or add it.
-        </span>
-      </div>
+      <span className="text-caption text-text-subtle">
+        No account here can see {access.repo}. Choose one that can, or add it.
+      </span>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 pt-1">
-      <span className="text-caption text-text-subtle flex-1">
+    <div className="flex items-center gap-2">
+      <span className="text-caption text-text-subtle min-w-0 flex-1 truncate">
         {row.owner} hasn&apos;t approved Polaris, so {access.repo} is hidden
       </span>
       {/* One action per row (DESIGN.md, Settings); its menu holds the three ways in. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="xs">
+          <SettingsButton variant="ghost">
             Get access
-            <ChevronDownIcon size={12} />
-          </Button>
+            <ChevronDownIcon size={10} />
+          </SettingsButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {access.approvalUrl === null ? null : (
@@ -133,36 +92,116 @@ const AccessLine = ({ row }: { readonly row: OwnerRow }) => {
   );
 };
 
+/** The table's lanes: owner, its workspaces, then the account. */
+const Lanes = ({
+  owner,
+  workspaces,
+  account,
+}: {
+  readonly owner: ReactNode;
+  readonly workspaces: ReactNode;
+  readonly account: ReactNode;
+}) => (
+  <div className="flex items-center gap-3">
+    <span className="min-w-0 flex-1 truncate">{owner}</span>
+    <span className="text-caption text-text-subtle w-[200px] shrink-0 truncate">{workspaces}</span>
+    <span className="flex w-[200px] shrink-0 justify-end">{account}</span>
+  </div>
+);
+
+const ROW = "px-panel flex flex-col gap-1.5 py-[calc(var(--spacing-gap)+3px)]";
+
 const Owner = ({ row, view }: { readonly row: OwnerRow; readonly view: GitHubAccountsView }) => (
-  <div className="px-panel py-gap flex flex-col" data-testid="github-owner">
-    <div className="min-h-tree-row flex items-center gap-3">
-      <span className="text-body text-text-default flex-1 truncate">{row.owner}</span>
-      <span className="text-caption text-text-subtle w-[120px] shrink-0 truncate">
-        {row.workspaces}
-      </span>
-      <AccountSelect
-        view={view}
-        value={row.accountId}
-        label={`Account for ${row.owner}`}
-        onChange={(accountId) =>
-          void polaris().request("github.routing.setOwner", { owner: row.owner, accountId })
-        }
-      />
-    </div>
+  <div className={ROW} data-testid="github-owner">
+    <Lanes
+      owner={<span className="text-body text-text-default font-mono">{row.owner}</span>}
+      workspaces={row.workspaces}
+      account={
+        <SettingsSelect
+          label={`Account for ${row.owner}`}
+          value={row.accountId === null ? undefined : String(row.accountId)}
+          placeholder="Choose account"
+          options={[
+            ...accountOptions(view),
+            ...(row.accountId === null ? [] : [{ value: DEFAULT, label: "Use the default" }]),
+          ]}
+          onChange={(v) =>
+            void polaris().request("github.routing.setOwner", {
+              owner: row.owner,
+              accountId: v === DEFAULT ? null : Number(v),
+            })
+          }
+        />
+      }
+    />
     <AccessLine row={row} />
   </div>
 );
 
-const Overrides = ({
+const EveryoneElse = ({
   view,
-  pulls,
+  workspaces,
 }: {
   readonly view: GitHubAccountsView;
-  readonly pulls: PullListView | null;
+  readonly workspaces: string;
 }) => {
-  const options = useWorkspaceOptions().filter((o) => o.isGitRepo);
-  const overrides = workspaceOverrides(view, pulls);
-  const login = (id: number | null) => view.accounts.find((a) => a.id === id)?.login ?? "another";
+  const fallback = view.accounts[0];
+
+  return (
+    <div className={ROW}>
+      <Lanes
+        owner={<span className="text-body text-text-subtle">Everyone else</span>}
+        workspaces={workspaces}
+        account={
+          <SettingsSelect
+            label="Default account, for everyone else"
+            value={fallback === undefined ? undefined : String(fallback.id)}
+            options={view.accounts.map((a) => ({
+              value: String(a.id),
+              label: a.login,
+              short: `Default · ${a.login}`,
+            }))}
+            onChange={(v) => setDefaultAccount(view, Number(v))}
+          />
+        }
+      />
+    </div>
+  );
+};
+
+const AddWorkspace = ({
+  options,
+  onAdd,
+}: {
+  readonly options: ReadonlyArray<WorkspaceOption>;
+  readonly onAdd: (key: string) => void;
+}) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild disabled={options.length === 0}>
+      <SettingsButton variant="ghost">Add a workspace…</SettingsButton>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end">
+      {options.map((o) => (
+        <DropdownMenuItem key={o.key} onSelect={() => onAdd(o.key)}>
+          {o.name} · {o.hostLabel}
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
+
+/** The workspaces whose account isn't their owner's, each under its owner's account. */
+const OverridesWell = ({
+  view,
+  overrides,
+  options,
+}: {
+  readonly view: GitHubAccountsView;
+  readonly overrides: ReturnType<typeof workspaceOverrides>;
+  readonly options: ReadonlyArray<WorkspaceOption>;
+}) => {
+  const login = (id: number | null) =>
+    view.accounts.find((a) => a.id === id)?.login ?? view.accounts[0]?.login ?? "the default";
 
   const set = (key: string, accountId: number | null) => {
     const option = options.find((o) => o.key === key);
@@ -176,32 +215,38 @@ const Overrides = ({
     });
   };
 
-  const [first] = overrides;
-
-  const detail =
-    first === undefined
-      ? null
-      : `${workspaceLabel(options, first.key)} uses ${login(first.accountId)}${first.insteadOf === null ? "" : ` instead of ${login(first.insteadOf)}`}`;
+  const keys = overrides.map((o) => o.key);
 
   return (
-    <OverrideStrip summary={overrideCount(overrides.length, "its owner")} detail={detail}>
-      <WorkspaceOverrides
-        label="Workspace accounts"
-        keys={overrides.map((o) => o.key)}
-        options={options}
-        addLabel="A workspace can use another account than its owner's."
-        onAdd={(key) => set(key, view.accounts[0]?.id ?? null)}
-        onRemove={(key) => set(key, null)}
-        control={(key) => (
-          <AccountSelect
-            view={view}
-            value={view.workspaces[key] ?? null}
-            label="Account for this workspace"
-            onChange={(accountId) => set(key, accountId)}
+    <SettingsWell aria-label="Workspace accounts">
+      {overrides.map(({ key, accountId, insteadOf }) => {
+        const option = options.find((o) => o.key === key);
+        const name = option?.name ?? key;
+
+        return (
+          <SettingsOverrideRow
+            key={key}
+            name={name}
+            caption={`${option?.hostLabel ?? "Not on any connected host"} · overrides its owner`}
+            value={String(accountId)}
+            options={accountOptions(view)}
+            defaultLabel={login(insteadOf)}
+            parent="its owner"
+            clearLabel={`Remove the override for ${name}`}
+            onChange={(next) => set(key, next === null ? null : Number(next))}
           />
-        )}
-      />
-    </OverrideStrip>
+        );
+      })}
+      <SettingsRow
+        title={keys.length === 0 ? "Every workspace uses its owner's account" : "Another workspace"}
+        caption="A workspace can use another account than its owner's"
+      >
+        <AddWorkspace
+          options={options.filter((o) => !keys.includes(o.key))}
+          onAdd={(key) => set(key, view.accounts[0]?.id ?? null)}
+        />
+      </SettingsRow>
+    </SettingsWell>
   );
 };
 
@@ -215,42 +260,35 @@ export const OwnerTable = ({
   const hosts = useApp((s) => s.hosts);
   const hostLabel = (key: string) => hosts.find((h) => h.key === key)?.label ?? key;
   const table = ownerTable(view, pulls, hostLabel);
-  const fallback = view.accounts[0];
+  const options = useWorkspaceOptions().filter((o) => o.isGitRepo);
+  const overrides = workspaceOverrides(view, pulls);
+  const [editing, setEditing] = useState(false);
 
   return (
-    <>
-      <section aria-label="Account per owner" className="flex flex-col gap-3 pt-3">
-        <div className="flex flex-col gap-1">
-          <Heading>Account per owner</Heading>
-          <p className="text-body text-text-subtle">
-            Matched by each workspace&apos;s git remote. New owners use the default until you
-            choose.
-          </p>
+    <SettingsCard
+      title="Account per owner"
+      aside="Matched by each workspace's git remote"
+      status={overrideCount(overrides.length, "its owner's account")}
+      action={
+        <SettingsButton aria-expanded={editing} onClick={() => setEditing(!editing)}>
+          {editing ? "Done" : "Edit overrides"}
+        </SettingsButton>
+      }
+    >
+      <SettingsWell aria-label="Account per owner">
+        <div className="px-panel pt-[calc(var(--spacing-gap)+2px)] pb-1.5">
+          <Lanes
+            owner={<Kicker>Owner</Kicker>}
+            workspaces={<Kicker>Workspaces</Kicker>}
+            account={<Kicker>Account</Kicker>}
+          />
         </div>
-        <div className="rounded-card border-hairline divide-hairline flex flex-col divide-y overflow-clip border bg-[light-dark(var(--color-surface-raised),transparent)]">
-          <div className="h-row px-panel text-caption text-text-subtle flex items-center gap-3">
-            <span className="flex-1">Owner</span>
-            <span className="w-[120px] shrink-0">Workspaces</span>
-            <span className="w-[180px] shrink-0">Account</span>
-          </div>
-          {table.rows.map((row) => (
-            <Owner key={row.owner} row={row} view={view} />
-          ))}
-          <div className="px-panel py-gap flex items-center gap-3">
-            <span className="text-body text-text-subtle min-h-tree-row flex flex-1 items-center">
-              Everyone else
-            </span>
-            <span className="text-caption text-text-subtle w-[120px] shrink-0">
-              {table.everyoneElse}
-            </span>
-            <span className="px-gap text-caption text-text-subtle flex w-[180px] shrink-0 items-center gap-2">
-              <AccountMark index={0} />
-              {fallback?.login ?? "—"} · default
-            </span>
-          </div>
-        </div>
-      </section>
-      <Overrides view={view} pulls={pulls} />
-    </>
+        {table.rows.map((row) => (
+          <Owner key={row.owner} row={row} view={view} />
+        ))}
+        <EveryoneElse view={view} workspaces={table.everyoneElse} />
+      </SettingsWell>
+      {editing ? <OverridesWell view={view} overrides={overrides} options={options} /> : null}
+    </SettingsCard>
   );
 };

@@ -5,10 +5,17 @@ import * as P from "@polaris/protocol";
 import { Schema } from "effect";
 import type { ConnectionState } from "@polaris/protocol";
 import type { HostView, IpcError, LanguageApi } from "../../../../shared/api.ts";
-import { EditorSettings } from "./EditorSettings.tsx";
+import { standInBridge } from "../../bridge.ts";
+import { installFakeBridge } from "../../../test/bridge.testing.ts";
+import { EditorSettings, type EditorSettingsProps } from "./EditorSettings.tsx";
 import { HOST_ID, catalog, hostState } from "./fixture.testing.ts";
 
-const host = (key: string, label: string, state: ConnectionState = "connected"): HostView => ({
+const host = (
+  key: string,
+  label: string,
+  state: ConnectionState = "connected",
+  capabilities: HostView["status"]["capabilities"] = ["languages"]
+): HostView => ({
   key,
   label,
   colour: null,
@@ -32,7 +39,7 @@ const host = (key: string, label: string, state: ConnectionState = "connected"):
             startedAt: "2026-10-07T00:00:00Z",
           })
         : null,
-    capabilities: ["languages"],
+    capabilities,
     epoch: 0,
     latencyMs: null,
     lastSeenAt: null,
@@ -153,7 +160,8 @@ const fakeApi = () => {
 
 const renderPage = (
   hosts: ReadonlyArray<HostView> = [host("local", "this Mac")],
-  fake = fakeApi()
+  fake = fakeApi(),
+  extra: Partial<EditorSettingsProps> = {}
 ) => {
   const refreshed: Array<string | null> = [];
 
@@ -172,6 +180,7 @@ const renderPage = (
       }}
       refreshEditors={(hostKey) => refreshed.push(hostKey)}
       refreshPreviews={() => {}}
+      {...extra}
     />
   );
 
@@ -317,14 +326,89 @@ describe("advanced", () => {
     );
     const { refreshed } = renderPage(undefined, fake);
     fireEvent.click(page().getByRole("button", { name: /Advanced/ }));
-    const remove = await page().findByRole("button", { name: "Remove zls" });
+    const servers = within(await page().findByRole("region", { name: "Custom language servers" }));
 
-    expect(page().getByText("/usr/local/bin/zls")).toBeTruthy();
-    await act(async () => fireEvent.click(remove));
+    expect(servers.getByText("/usr/local/bin/zls")).toBeTruthy();
+    fireEvent.click(servers.getByRole("button", { name: "Remove" }));
+    expect(fake.records.get(JSON.stringify(scope))?.revision).toBe(3);
+    await act(async () => fireEvent.click(servers.getByRole("button", { name: "Remove zls" })));
 
     await waitFor(() => expect(fake.records.get(JSON.stringify(scope))?.revision).toBe(4));
     expect(fake.records.get(JSON.stringify(scope))?.settings.customServers).toBeUndefined();
     expect(refreshed).toEqual(["local"]);
     expect(page().getAllByLabelText("Environment")[0]?.getAttribute("type")).toBe("password");
+  });
+});
+
+describe("commit messages", () => {
+  const repo = { hostKey: "local", cwd: "/Users/me/polaris" };
+  const withLog = [host("local", "this Mac", "connected", ["languages", "git.log"])];
+
+  const keys = {
+    vim: false,
+    autosave: false,
+    inlineDiagnostics: true,
+    onVim: () => {},
+    onAutosave: () => {},
+    onInlineDiagnostics: () => {},
+    commitMessages: "chips",
+  };
+
+  const renderCard = (hosts: ReadonlyArray<HostView>) =>
+    renderPage(hosts, fakeApi(), { commitWorkspace: repo, keys });
+
+  const preview = () => page().getByTestId("commit-preview").textContent ?? "";
+
+  afterEach(() => standInBridge(null));
+
+  test("shows the workspace's last commit from git.log", async () => {
+    const bridge = installFakeBridge();
+    bridge.answerOk("git.log", {
+      commits: [
+        new P.GitLogCommit({
+          sha: "a1b2c3",
+          subject: "feat(ui): the Settings kit",
+          body: "Cards and wells.",
+          author: "Test",
+          date: "2026-10-30T09:00:00Z",
+        }),
+      ],
+    });
+    renderCard(withLog);
+
+    await waitFor(() => expect(preview()).toContain("feat(ui): the Settings kit"));
+    expect(preview()).toContain("Like your last commit");
+    expect(preview()).toContain("Cards and wells.");
+    expect(bridge.sent("git.log")).toEqual([{ ...repo, limit: 1 }]);
+  });
+
+  test.each([
+    [
+      "an empty log",
+      (b: ReturnType<typeof installFakeBridge>) => b.answerOk("git.log", { commits: [] }),
+    ],
+    [
+      "a failed read",
+      (b: ReturnType<typeof installFakeBridge>) =>
+        b.refuse("git.log", { code: "GitError", message: "not a git repository" }),
+    ],
+  ])("falls back to the example on %s", async (_, answer) => {
+    const bridge = installFakeBridge();
+    answer(bridge);
+    renderCard(withLog);
+
+    await waitFor(() => expect(bridge.sent("git.log").length).toBe(1));
+    await act(async () => {});
+    expect(preview()).toContain("A draft looks like");
+    expect(preview()).toContain("a cancel reaches queued requests");
+  });
+
+  test("a Daemon without git.log isn't asked and shows the example", async () => {
+    const bridge = installFakeBridge();
+    renderCard([host("local", "this Mac")]);
+
+    await act(async () => {});
+    expect(bridge.sent("git.log")).toEqual([]);
+    expect(preview()).toContain("A draft looks like");
   });
 });

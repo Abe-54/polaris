@@ -3,7 +3,7 @@
  * code and a pairing string to copy, and how it reaches the Host.
  */
 import { decodePairingString } from "@polaris/protocol";
-import { Button, CopyButton } from "@polaris/ui";
+import { CopyButton, SettingsButton, SettingsWell } from "@polaris/ui";
 import { Option } from "effect";
 import type { Paired } from "../useExtensions.ts";
 import { QrCode } from "./QrCode.tsx";
@@ -27,14 +27,11 @@ export const Reveal = ({
   const reach = reachOf(paired.pairingString);
 
   return (
-    <div
-      className="rounded-card border-hairline bg-surface-raised p-panel flex gap-5 border"
-      data-testid="pairing-reveal"
-    >
+    <SettingsWell rows={false} className="p-panel flex-row gap-5" data-testid="pairing-reveal">
       <QrCode text={paired.pairingString} size={172} />
       <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h3 className="text-label text-text-strong font-medium">
+          <h3 className="text-body text-text-default font-medium">
             {paired.pairing.name} is paired with {hostLabel}
           </h3>
           <p className="text-body text-text-subtle">
@@ -53,16 +50,16 @@ export const Reveal = ({
         </div>
         <p className="text-caption text-text-subtle">
           {reach === null
-            ? `Remote access is off, so only extensions on ${hostLabel} can connect with it`
+            ? `Remote access is off, so only extensions running on ${hostLabel} can connect, through its daemon's socket`
             : `Reaches ${hostLabel} at ${reach} through remote access`}
         </p>
         <span className="flex-1" />
         <div className="flex justify-end">
-          <Button variant="primary" onClick={onDone}>
+          <SettingsButton variant="primary" onClick={onDone}>
             Done
-          </Button>
+          </SettingsButton>
         </div>
       </div>
-    </div>
+    </SettingsWell>
   );
 };

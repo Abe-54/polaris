@@ -35,6 +35,13 @@ Client power, once its Noise key is linked here (ADR 0083). The relay's contract
 - `devices.unlink` marks the device unlinked, sends `peers` without it and ends its session:
   the Wire's input ends and the connection's finalizers run.
 
+## Presence
+
+`devices.list` and `devices.watch` give each device's `connectedSince`: when its open relay
+session began, or null. The route records it when a session is served and clears it when the
+session ends (`RelayLink`'s `ended`), and `devices.watch` sends the list again on each change,
+link and unlink. Nothing polls: the relay's `presence` and the socket end sessions.
+
 Push to Linked Devices (`devices.registerPush`, `wake`) is in `../push/README.md`.
 
 ## Linking

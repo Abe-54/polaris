@@ -211,8 +211,14 @@ export interface HarnessSession {
   readonly sendTurn: (input: TurnInput) => Effect.Effect<void, HarnessError>;
   /** Atomically steer input and attachments into this live Turn; false if it ended. */
   readonly steerTurn?: (input: TurnInput) => Effect.Effect<boolean, HarnessError>;
-  /** Add guidance to the Turn in flight; fails if the Harness lacks `steer`. */
-  readonly steer: (text: string) => Effect.Effect<void, HarnessError>;
+  /**
+   * Add guidance to the Turn in flight; fails if the Harness lacks `steer`. `attachments`
+   * need `steerAttachments`; a driver without it never gets any.
+   */
+  readonly steer: (
+    text: string,
+    attachments?: ReadonlyArray<Attachment>
+  ) => Effect.Effect<void, HarnessError>;
   readonly interrupt: Effect.Effect<void, HarnessError>;
   /** Stop these background tasks (ids from `BackgroundTasksChanged`); needs `stopBackground`. */
   readonly stopBackground?: (taskIds: ReadonlyArray<string>) => Effect.Effect<void, HarnessError>;
@@ -244,6 +250,8 @@ export interface HarnessDriver {
   readonly kind: HarnessKind;
   readonly capabilities: {
     readonly steer: boolean;
+    /** A steer can carry attachments (`Steer.attachments`), images inline where the Harness reads them. */
+    readonly steerAttachments?: boolean;
     /** Terminal UI can attach while Polaris stays attached (Codex). */
     readonly liveCoAttach: boolean;
     /** The Harness can change a session's Model between Turns (`SetModel`). */

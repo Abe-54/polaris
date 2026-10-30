@@ -369,11 +369,12 @@ export const syntaxOnly = (catalog: Catalog): ReadonlyArray<string> => {
     .map((id) => LANGUAGES[id].name);
 };
 
+/** The Languages card's footer (SR-02): "Java · C# · C · C++ +12 highlight only". */
 export const syntaxOnlyLine = (names: ReadonlyArray<string>) => {
   if (names.length === 0) return null;
-  const subject = names.length <= 4 ? listed(names) : `${names.slice(0, 4).join(", ")} and others`;
+  const more = names.length > 4 ? ` +${names.length - 4}` : "";
 
-  return `${subject} highlight their syntax, with no language server yet.`;
+  return `${names.slice(0, 4).join(" · ")}${more} highlight only`;
 };
 
 /** Off means every language of the row has an explicit empty provider list. */

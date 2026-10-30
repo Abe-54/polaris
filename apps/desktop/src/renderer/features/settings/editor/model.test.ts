@@ -151,11 +151,8 @@ describe("the syntax-only foot line", () => {
     expect(names.slice(0, 3)).toEqual(["Java", "C#", "C"]);
     expect(names).not.toContain("Markdown");
     expect(names).not.toContain("TypeScript");
-    expect(syntaxOnlyLine(names)).toBe(
-      "Java, C#, C, C++ and others highlight their syntax, with no language server yet."
-    );
-    expect(syntaxOnlyLine(["Go", "SQL"])).toBe(
-      "Go and SQL highlight their syntax, with no language server yet."
-    );
+    expect(syntaxOnlyLine(names)).toBe(`Java · C# · C · C++ +${names.length - 4} highlight only`);
+    expect(syntaxOnlyLine(["Go", "SQL"])).toBe("Go · SQL highlight only");
+    expect(syntaxOnlyLine([])).toBeNull();
   });
 });

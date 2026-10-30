@@ -33,6 +33,10 @@ export const suggestions = (ctx: SuggestionContext): ReadonlyArray<Suggestion> =
   ];
 };
 
+/** The header's Review button: there's an ended Turn to review, even while the next one runs. */
+export const canReview = (turns: ReadonlyArray<TurnStatus>): boolean =>
+  turns.some((status) => status !== "working");
+
 /** What "Fix the critical finding" puts in the composer, for the user to send. */
 export const fixPrompt = (finding: RiskFinding): string =>
   `Fix the critical finding "${finding.title}" at ${finding.path}:${finding.lines.start}.`;

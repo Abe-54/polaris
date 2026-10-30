@@ -7,6 +7,8 @@ import {
   type CommitMessageStreamItem,
   type GitCommitItem,
   type GitInit,
+  type GitLog,
+  MAX_GIT_LOG,
   type GitStatus,
   GitSyncAction,
   type GitSyncItem,
@@ -33,6 +35,12 @@ export const GitRequestInputs = {
   "git.unstage": Schema.Struct(Paths),
   /** Tracked paths only; the Changes tab trashes an untracked file with `files.delete`. */
   "git.discard": Schema.Struct(Paths),
+  /** Capability `git.log`: the newest commits from HEAD, for Settings' Commit messages preview. */
+  "git.log": Schema.Struct({
+    hostKey: HostKey,
+    cwd: Schema.String,
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_GIT_LOG })),
+  }),
 };
 
 export interface GitRequestOutputs {
@@ -41,6 +49,7 @@ export interface GitRequestOutputs {
   "git.stage": null;
   "git.unstage": null;
   "git.discard": null;
+  "git.log": Rpc.Success<typeof GitLog>;
 }
 
 export const GitSubscriptionInputs = {

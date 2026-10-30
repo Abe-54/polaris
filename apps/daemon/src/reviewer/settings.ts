@@ -6,6 +6,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  AUTO_REVIEWERS,
   type HostHarnesses,
   ResolvedReviewer,
   ReviewerChoice,
@@ -15,12 +16,6 @@ import {
 import { Effect, Option, Schema } from "effect";
 import { polarisHome } from "../paths.ts";
 import { ServiceError } from "../services.ts";
-
-/** The automatic picks, best first: Claude Code Opus 5.5 high, then Codex GPT-6.1-Sol. */
-export const AUTO_REVIEWERS: ReadonlyArray<ReviewerChoice> = [
-  ReviewerChoice.make({ harness: "claude", model: "claude-opus-5-5", effort: "high" }),
-  ReviewerChoice.make({ harness: "codex", model: "gpt-6.1-sol", effort: null }),
-];
 
 export const RULES_ONLY_NOTE =
   "Rules only: no Reviewer is available on this Host. Install or sign in to Claude Code or Codex.";

@@ -1,10 +1,20 @@
 /**
  * Output collapsed (DESIGN.md, Output): a 240px rail of facts about the
  * session's Workspace, so the conversation gets the room. The session's
- * first edit in a Turn opens the panel; so do the chevron, the changes row
- * and ⌘⌥B.
+ * first edit in a Turn opens the panel; so do the chevron, the changes row,
+ * the Browser row and ⌘⌥B.
  */
-import { BranchIcon, ChevronLeftIcon, cn, FolderIcon, IconButton, ServerIcon } from "@polaris/ui";
+import {
+  BranchIcon,
+  ChevronLeftIcon,
+  cn,
+  FolderIcon,
+  GlobeIcon,
+  hueVar,
+  IconButton,
+  ServerIcon,
+  type TintHue,
+} from "@polaris/ui";
 import type { TurnId } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { type ReactNode, useEffect, useRef } from "react";
@@ -18,6 +28,8 @@ import { uiKey } from "../state.ts";
 import { openForEdit, setOutputOpen } from "./open.ts";
 import { diffRevision, useTurnDiff } from "../turnDiff.ts";
 import type { SessionViewProps } from "../ui/SessionIntent.tsx";
+import { useBrowserUi } from "../../browser/index.ts";
+import { pickBrowser } from "./browser.ts";
 import { type GitFacts, useGitFacts } from "./gitStatus.ts";
 import { RAIL_WIDTH } from "./layout.ts";
 import { useSettings } from "../../settings/index.ts";
@@ -100,6 +112,37 @@ const changesText = (git: GitFacts) => {
 
   // git status folds a new directory into one entry, so these are changes, not files.
   return git.changed === 0 ? "No changes" : plural(git.changed, "change");
+};
+
+/** The session's Browser: its tab count, and the activity dot an agent's new tab left. */
+const BrowserRow = ({ hostKey, sessionId, harness }: SessionViewProps & { harness: TintHue }) => {
+  const { tabs, dot } = useBrowserUi(uiKey(hostKey, sessionId));
+
+  const show = () => {
+    pickBrowser(hostKey, sessionId);
+    setOutputOpen(uiKey(hostKey, sessionId), true);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={show}
+      className="hover:bg-fill-hover h-row px-row-x gap-row-x flex cursor-default items-center text-left"
+      data-testid="output-rail-browser"
+    >
+      <GlobeIcon size={14} className="text-text-subtle shrink-0" />
+      <span className="text-label text-text-default tabular min-w-0 flex-1 truncate">
+        {tabs.tabs.length === 0 ? "Browser" : `Browser · ${plural(tabs.tabs.length, "tab")}`}
+      </span>
+      {dot ? (
+        <span
+          className="size-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: hueVar(harness) }}
+          aria-label="An agent opened a tab"
+        />
+      ) : null}
+    </button>
+  );
 };
 
 export const OutputRail = ({ hostKey, sessionId }: SessionViewProps) => {
@@ -188,6 +231,11 @@ export const OutputRail = ({ hostKey, sessionId }: SessionViewProps) => {
             </span>
           </button>
         ) : null}
+        <BrowserRow
+          hostKey={hostKey}
+          sessionId={sessionId}
+          harness={session?.harness ?? "starlight"}
+        />
       </div>
     </section>
   );

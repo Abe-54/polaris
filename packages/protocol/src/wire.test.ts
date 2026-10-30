@@ -288,6 +288,43 @@ describe("wire", () => {
     expect(result.stats.bufferedBlobBytes).toBe(0);
   });
 
+  test("a long-lived blob stream carries more than maxBlobBytes in total and never idles out", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { a, b } = yield* makePair();
+        const wa = yield* makeWire(a, () => Effect.void);
+
+        const wb = yield* makeWire(b, () => Effect.void, {
+          maxBlobBytes: 1024,
+          blobIdleTimeoutMs: 100,
+        });
+
+        // 4 KiB in total through a 1 KiB limit, with a pause past the idle timeout in the middle.
+        const source = Stream.concat(
+          Stream.fromIterable(Array.from({ length: 2 }, () => bytes(1024))),
+          Stream.fromEffect(Effect.as(Effect.sleep(300), bytes(2048)))
+        );
+
+        const tunnel = yield* wa.offerBlob(source);
+
+        const carried = yield* wb.takeBlobStream(tunnel, { longLived: true }).pipe(
+          Stream.runFold(
+            () => 0,
+            (n, chunk) => n + chunk.byteLength
+          )
+        );
+
+        // The same source as an ordinary stream take still fails the limit.
+        const ordinary = yield* wa.offerBlob(Stream.fromIterable([bytes(1024), bytes(1024)]));
+        const limited = yield* Effect.flip(Stream.runDrain(wb.takeBlobStream(ordinary)));
+
+        return { carried, limited: limited.reason };
+      })
+    );
+
+    expect(result).toEqual({ carried: 4096, limited: "too-large" });
+  });
+
   test("closed fails on malformed input", async () => {
     const err = await run(
       Effect.gen(function* () {
@@ -304,5 +341,138 @@ describe("wire", () => {
     );
 
     expect(err._tag).toBe("TransportError");
+  });
+
+  test("a windowed take rejects a sender over the window at ingestion, complete or still receiving", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { a, b } = yield* makePair();
+        const wa = yield* makeWire(a, () => Effect.void);
+        const wb = yield* makeWire(b, () => Effect.void);
+
+        // A whole blob of 200 bytes that fully arrives and completes before the consumer claims,
+        // against a 100-byte window: the completed blob must still be rejected.
+        const completed = yield* wa.offerBlob(bytes(200));
+        yield* Effect.sleep("80 millis");
+
+        const afterComplete = yield* wb
+          .takeBlobStream(completed, { longLived: true, maxUnread: 100 })
+          .pipe(Stream.runCollect, Effect.flip);
+
+        // A sender that pushes 900 bytes with none consumed, stream still open: rejected as the
+        // frame arrives, not only once the buffer limit or the connection cap is hit.
+        const flooding = yield* wa.offerBlob(
+          Stream.fromIterable([bytes(900)]).pipe(Stream.concat(Stream.never))
+        );
+
+        const whileReceiving = yield* wb
+          .takeBlobStream(flooding, { longLived: true, maxUnread: 100 })
+          .pipe(Stream.runCollect, Effect.flip);
+
+        // A compliant sender inside the window still transfers whole.
+        const under = yield* wa.offerBlob(bytes(80, 7));
+        yield* Effect.sleep("40 millis");
+
+        const total = yield* wb.takeBlobStream(under, { longLived: true, maxUnread: 100 }).pipe(
+          Stream.runFold(
+            () => 0,
+            (n, chunk) => n + chunk.byteLength
+          )
+        );
+
+        return { afterComplete, whileReceiving, total };
+      })
+    );
+
+    expect(result.afterComplete.reason).toBe("too-large");
+    expect(result.afterComplete.message).toContain("receive window");
+    expect(result.whileReceiving.reason).toBe("too-large");
+    expect(result.total).toBe(80);
+  });
+
+  test("an eager stream claim whose Stream is never run is swept, not pinned forever", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { a, b } = yield* makePair();
+        const wa = yield* makeWire(a, () => Effect.void);
+
+        const wb = yield* makeWire(b, () => Effect.void, {
+          blobIdleTimeoutMs: 200,
+          unclaimedBlobTtlMs: 150,
+        });
+
+        const id = yield* wa.offerBlob(bytes(128));
+        yield* Effect.sleep("80 millis");
+
+        // Claim the blob but drop the Stream without ever running it: the eager claim must not
+        // keep it buffered past the unclaimed TTL, or a sender can pin entries against the cap.
+        const _dropped = wb.takeBlobStream(id);
+        const claimed = wb.stats();
+        yield* Effect.sleep("300 millis");
+        const swept = wb.stats();
+
+        return { claimed, swept };
+      })
+    );
+
+    expect(result.claimed.incomingBlobs).toBe(1);
+    expect(result.swept.incomingBlobs).toBe(0);
+    expect(result.swept.bufferedBlobBytes).toBe(0);
+  });
+
+  test("the receive window counts bytes pulled but not yet consumed by a stalled consumer", async () => {
+    const outcome = await run(
+      Effect.gen(function* () {
+        const { a, b } = yield* makePair();
+        const wa = yield* makeWire(a, () => Effect.void);
+        const wb = yield* makeWire(b, () => Effect.void);
+
+        const feed = yield* Queue.unbounded<Uint8Array, Cause.Done>();
+        const id = yield* wa.offerBlob(Stream.fromQueue(feed));
+
+        const firstConsumed = yield* Deferred.make<void>();
+        const unstall = yield* Deferred.make<void>();
+        let first = true;
+
+        const reader = yield* Effect.forkChild(
+          wb.takeBlobStream(id, { longLived: true, maxUnread: 100 }).pipe(
+            Stream.runForEach(() =>
+              Effect.gen(function* () {
+                if (first) {
+                  first = false;
+                  yield* Deferred.succeed(firstConsumed, undefined);
+
+                  return;
+                }
+
+                // Hold the large second batch without pulling again: it stays uncredited.
+                yield* Deferred.await(unstall);
+              })
+            ),
+            Effect.as("ok"),
+            Effect.catch((error) => Effect.succeed(error.reason))
+          )
+        );
+
+        // A small chunk the consumer consumes and credits, then a 90-byte batch it holds unread.
+        yield* Queue.offer(feed, bytes(10, 1));
+        yield* Deferred.await(firstConsumed);
+        yield* Queue.offer(feed, bytes(90, 2));
+        yield* Effect.sleep("50 millis");
+
+        // 100 more against a 100-byte window while 90 sit uncredited: only 10 fit, the rest must be
+        // rejected at arrival. The buggy accounting forgot the delivered 90 and accepted all of it.
+        for (let i = 0; i < 10; i++) yield* Queue.offer(feed, bytes(10, 3));
+        yield* Effect.sleep("50 millis");
+        yield* Effect.sync(() => Queue.endUnsafe(feed));
+        yield* Effect.sleep("50 millis");
+
+        yield* Deferred.succeed(unstall, undefined);
+
+        return yield* Fiber.join(reader);
+      })
+    );
+
+    expect(outcome).toBe("too-large");
   });
 });

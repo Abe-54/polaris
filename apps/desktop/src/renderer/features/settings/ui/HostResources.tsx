@@ -1,10 +1,10 @@
 /**
- * Settings → Hosts, an open host's Constellation part (spec §8): how many workers it runs at
- * once, and its resources with who holds each, the queue, Release past the hold limit, Add
- * and Remove. Hidden on a Daemon that doesn't manage resources.
+ * The host page's Resources… (spec §8): its resources with who holds each, the queue, Release
+ * past the hold limit, Add and Remove. Workers at once is Capacity's own stepper. Hidden on a
+ * Daemon that doesn't manage resources.
  */
 import type { ResourceLease } from "@polaris/protocol";
-import { Button, cn, Input, PlusIcon } from "@polaris/ui";
+import { Button, cn, Input } from "@polaris/ui";
 import { useMemo, useState } from "react";
 import { age } from "../../../shell/copy.ts";
 import { useApp } from "../../../shell/hooks.ts";
@@ -12,15 +12,11 @@ import { useNow } from "../../../shell/useNow.ts";
 import type { Plain } from "../../../store/plain.ts";
 import { useAllConstellations } from "../../sessions/source.ts";
 import {
-  capInForce,
-  capLine,
-  isAutomatic,
   holdLine,
   RESOURCE_NAME,
   resourceRows,
   type ResourceRow,
   validCapacity,
-  type WorkerCap,
 } from "../model/resources.ts";
 import { useHostResources } from "../resources.ts";
 
@@ -42,55 +38,6 @@ const useHolderName = (hostKey: string) => {
       (lease.attemptId == null ? undefined : tasks.get(lease.attemptId)) ??
       (lease.sessionId == null ? null : (sessions?.get(lease.sessionId)?.session.title ?? null));
   }, [views, sessions]);
-};
-
-const Stepper = ({
-  hostKey,
-  cap,
-  run,
-}: {
-  readonly hostKey: string;
-  readonly cap: WorkerCap;
-  readonly run: Run;
-}) => {
-  const value = capInForce(cap);
-
-  const set = (next: number | null) =>
-    void run("Couldn't change the worker cap", (c) => c.setCap(hostKey, next));
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <Button
-        variant="ghost"
-        size="xs"
-        aria-label="Fewer workers"
-        disabled={value <= Math.max(1, cap.working)}
-        title={
-          value <= cap.working && value > 1
-            ? "Workers are running in every slot; lower it once one finishes"
-            : undefined
-        }
-        onClick={() => set(value - 1)}
-      >
-        <span aria-hidden="true" className="text-label leading-none">
-          −
-        </span>
-      </Button>
-      <span className="text-label text-text-strong tabular w-5 text-center" aria-live="polite">
-        {value}
-      </span>
-      <Button variant="ghost" size="xs" aria-label="More workers" onClick={() => set(value + 1)}>
-        <PlusIcon size={12} />
-      </Button>
-      {isAutomatic(cap) ? (
-        <span className="text-caption text-text-subtle">automatic</span>
-      ) : (
-        <Button variant="ghost" size="xs" onClick={() => set(null)}>
-          Automatic ({cap.default})
-        </Button>
-      )}
-    </div>
-  );
 };
 
 const Resource = ({
@@ -201,34 +148,22 @@ export const HostResources = ({ hostKey }: { readonly hostKey: string }) => {
   const rows = resourceRows(snapshot, nameOf);
 
   return (
-    <div className="border-hairline flex flex-col gap-3 border-t pt-3" data-testid="host-resources">
-      <div className="flex items-center gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-label text-text-default">Workers at once</span>
-          <span className="text-caption text-text-subtle">
-            {capLine(snapshot.workerCap)}. More start as slots free up.
-          </span>
-        </div>
-        <Stepper hostKey={hostKey} cap={snapshot.workerCap} run={run} />
-      </div>
-      <div className="flex flex-col gap-0.5">
-        <span className="text-label text-text-default">Resources</span>
-        <span className="text-caption text-text-subtle">
-          Things only so many commands may use at once. A command takes one with{" "}
-          <span className="font-mono">polaris lease &lt;name&gt; -- &lt;command&gt;</span> and holds
-          it while it runs; others queue in order.
-        </span>
-        {rows.length === 0 ? (
-          <p className="text-caption text-text-subtle pt-1.5">None on this host.</p>
-        ) : (
-          <ul className="divide-hairline flex flex-col divide-y">
-            {rows.map((row) => (
-              <Resource key={row.name} hostKey={hostKey} row={row} run={run} now={now} />
-            ))}
-          </ul>
-        )}
-        <AddResource hostKey={hostKey} run={run} />
-      </div>
+    <div className="flex flex-col gap-0.5" data-testid="host-resources">
+      <span className="text-caption text-text-subtle">
+        Things only so many commands may use at once. A command takes one with{" "}
+        <span className="font-mono">polaris lease &lt;name&gt; -- &lt;command&gt;</span> and holds
+        it while it runs; others queue in order.
+      </span>
+      {rows.length === 0 ? (
+        <p className="text-caption text-text-subtle pt-1.5">None on this host.</p>
+      ) : (
+        <ul className="divide-hairline flex flex-col divide-y">
+          {rows.map((row) => (
+            <Resource key={row.name} hostKey={hostKey} row={row} run={run} now={now} />
+          ))}
+        </ul>
+      )}
+      <AddResource hostKey={hostKey} run={run} />
     </div>
   );
 };

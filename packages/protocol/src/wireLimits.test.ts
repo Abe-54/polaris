@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Deferred, Effect, Fiber, Queue, Stream } from "effect";
 import { encodeBlobFrame, encodeJsonFrame } from "./frame.ts";
-import { makeWire } from "./wire.ts";
+import { BlobError, makeWire } from "./wire.ts";
 
 test.each(["complete", "receiving", "aborted"] as const)(
   "a flood of zero-byte %s blobs closes at the metadata limit",
@@ -113,4 +113,81 @@ test("expiry frees unclaimed metadata capacity", async () => {
       })
     )
   );
+});
+
+// A Host-address stream whose socket closes stops reading its upstream blob mid-way (ENG-612).
+test.each([false, true])(
+  "a blob its consumer stopped reading frees capacity when the sender ends it (aborted %p)",
+  async (aborted) => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const incoming = yield* Queue.unbounded<Uint8Array>();
+          const received = yield* Queue.unbounded<void>();
+
+          const wire = yield* makeWire(
+            {
+              incoming: Stream.fromQueue(incoming),
+              write: () => Effect.void,
+              close: Effect.void,
+            },
+            () => Queue.offer(received, undefined).pipe(Effect.asVoid),
+            { maxIncomingBlobs: 1 }
+          );
+
+          const barrier = Effect.gen(function* () {
+            yield* Queue.offer(incoming, encodeJsonFrame("barrier"));
+            yield* Queue.take(received);
+          });
+
+          yield* Queue.offer(incoming, encodeBlobFrame("upstream", new Uint8Array([1]), false));
+          yield* barrier;
+
+          const first = yield* Stream.runCollect(
+            wire.takeBlobStream("upstream", { longLived: true }).pipe(Stream.take(1))
+          );
+
+          expect(first).toEqual([new Uint8Array([1])]);
+          yield* Queue.offer(
+            incoming,
+            encodeBlobFrame("upstream", new Uint8Array(), true, aborted)
+          );
+          yield* barrier;
+          expect(wire.stats().incomingBlobs).toBe(0);
+
+          yield* Queue.offer(incoming, encodeBlobFrame("next", new Uint8Array([2]), true));
+          yield* barrier;
+          expect(yield* wire.takeBlob("next")).toEqual(new Uint8Array([2]));
+        })
+      )
+    );
+  }
+);
+
+// Only a tombstone the consumer left goes at the sender's end; a too-large one waits for its take.
+test("an over-limit blob ended before anyone takes it still fails the take as too large", async () => {
+  const error = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const incoming = yield* Queue.unbounded<Uint8Array>();
+        const received = yield* Queue.unbounded<void>();
+
+        const wire = yield* makeWire(
+          { incoming: Stream.fromQueue(incoming), write: () => Effect.void, close: Effect.void },
+          () => Queue.offer(received, undefined).pipe(Effect.asVoid),
+          { maxBlobBytes: 4 }
+        );
+
+        yield* Queue.offer(incoming, encodeBlobFrame("big", new Uint8Array(8), false));
+        yield* Queue.offer(incoming, encodeBlobFrame("big", new Uint8Array(), true));
+        yield* Queue.offer(incoming, encodeJsonFrame("barrier"));
+        yield* Queue.take(received);
+
+        return yield* wire.takeBlob("big").pipe(Effect.timeout("1 second"), Effect.flip);
+      })
+    )
+  );
+
+  expect(error).toBeInstanceOf(BlobError);
+  expect(error instanceof BlobError ? error.reason : null).toBe("too-large");
 });

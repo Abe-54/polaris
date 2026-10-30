@@ -83,3 +83,21 @@
   animation: none;
   will-change: auto;
 }
+
+/* The live field's tint (Paper 02 · WORKING): ~9% hue from the top-left, ~3.5% by midway; light ×0.6. */
+.polaris-dither-field {
+  background-image: radial-gradient(
+    circle farthest-corner at 0% 0% in oklab,
+    light-dark(
+        color-mix(in oklab, var(--dither-hue) 5.4%, transparent),
+        color-mix(in oklab, var(--dither-hue) 9%, transparent)
+      )
+      0%,
+    light-dark(
+        color-mix(in oklab, var(--dither-hue) 2.1%, transparent),
+        color-mix(in oklab, var(--dither-hue) 3.5%, transparent)
+      )
+      55%,
+    transparent 100%
+  );
+}

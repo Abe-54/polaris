@@ -1,12 +1,13 @@
 /**
- * Settings → Devices' data: each Host's Relay route and Linked Devices, asked
- * when the page opens and again after each change it makes.
+ * Settings → Devices' data: each Host's Relay route and Linked Devices, asked when the page
+ * opens and after each change it makes; a Host with presence also pushes its devices live.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HostView } from "../../../shared/api.ts";
 import { polaris } from "../bridge.ts";
 import { showRefusal } from "../session/dispatch.ts";
-import { CAPABILITY, type DeviceSummary, type HostRelay } from "./model.ts";
+import type { LinkedDeviceView } from "../../../shared/linkedDevicesContract.ts";
+import { CAPABILITY, type DeviceSummary, type HostRelay, PRESENCE_CAPABILITY } from "./model.ts";
 
 const label = (host: HostView) => ({ key: host.key, label: host.label });
 
@@ -35,13 +36,71 @@ const pending = (host: HostView): HostRelay =>
     ? { ...label(host), kind: "loading" }
     : { ...label(host), kind: "offline", state: host.status.state };
 
+/** Each Host's devices from `devices.watch`, while its feed runs, by host key. */
+const useWatched = (hosts: ReadonlyArray<HostView>, roster: string) => {
+  const [watched, setWatched] = useState<ReadonlyMap<string, ReadonlyArray<LinkedDeviceView>>>(
+    () => new Map()
+  );
+
+  const latest = useRef(hosts);
+  latest.current = hosts;
+
+  useEffect(() => {
+    const keys = latest.current
+      .filter(
+        (h) => h.status.state === "connected" && h.status.capabilities.includes(PRESENCE_CAPABILITY)
+      )
+      .map((h) => h.key);
+
+    const set = (hostKey: string, devices: ReadonlyArray<LinkedDeviceView> | null) =>
+      setWatched((current) => {
+        const next = new Map(current);
+
+        if (devices === null) next.delete(hostKey);
+        else next.set(hostKey, devices);
+
+        return next;
+      });
+
+    const stops = keys.map((hostKey) =>
+      polaris().subscribe(
+        "devices.watch",
+        { hostKey },
+        {
+          items: (items) => {
+            const last = items.at(-1);
+
+            if (last !== undefined) set(hostKey, last);
+          },
+          end: () => set(hostKey, null),
+        }
+      )
+    );
+
+    return () => stops.forEach((stop) => stop());
+  }, [roster]);
+
+  return watched;
+};
+
 export const useDevices = (hosts: ReadonlyArray<HostView>) => {
-  const [relays, setRelays] = useState<ReadonlyArray<HostRelay>>(() => hosts.map(pending));
+  const [answered, setRelays] = useState<ReadonlyArray<HostRelay>>(() => hosts.map(pending));
   const [asked, setAsked] = useState(0);
   const latest = useRef(hosts);
   latest.current = hosts;
   // Hosts change identity on every feed item; reload only when who is connected changes.
   const roster = hosts.map((h) => `${h.key}:${h.label}:${h.status.state}`).join("|");
+  const watched = useWatched(hosts, roster);
+
+  const relays = useMemo(
+    () =>
+      answered.map((relay) => {
+        const devices = watched.get(relay.key);
+
+        return relay.kind === "ready" && devices !== undefined ? { ...relay, devices } : relay;
+      }),
+    [answered, watched]
+  );
 
   useEffect(() => {
     let live = true;

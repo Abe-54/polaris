@@ -8,6 +8,8 @@ import { Platform, Settings } from "react-native";
 import {
   type HomeTab,
   initialNavigation,
+  type Layer,
+  layersOf,
   type NavigationState,
   opened,
   pushed,
@@ -18,10 +20,12 @@ import {
 } from "./navigationState.ts";
 import type { Route } from "./route.ts";
 
-export type { HomeTab, Route };
+export type { HomeTab, Layer, Route };
 
 export interface Navigation {
   readonly top: Route;
+  /** The top screen and the one beneath it, which a swipe back uncovers. */
+  readonly layers: ReadonlyArray<Layer>;
   readonly tab: HomeTab;
   readonly selectTab: (tab: HomeTab) => void;
   readonly push: (route: Route) => void;
@@ -55,6 +59,7 @@ export const NavigationProvider = ({ children }: { readonly children: ReactNode 
   const navigation = useMemo<Navigation>(
     () => ({
       top: topOf(state),
+      layers: layersOf(state),
       tab: state.tab,
       selectTab: (tab) => setState((current) => selected(current, tab)),
       push: (route) => setState((current) => pushed(current, route)),

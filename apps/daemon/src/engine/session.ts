@@ -394,6 +394,9 @@ export const sessionMachine = createMachine({
 
       if (!event.canSteer)
         return reject(enq, `${record.session.harness} does not support steering`);
+
+      if (!event.takesAttachments)
+        return reject(enq, `${record.session.harness} can't take attachments in a steer`);
     },
     "background.stop": ({ context, event }, enq) =>
       reject(enq, backgroundStopRefusal(need(context), event)),

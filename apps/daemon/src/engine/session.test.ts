@@ -162,7 +162,8 @@ describe("session machine", () => {
 
     test("steering needs a Turn in flight, outside the terminal, on a Harness that steers", () => {
       const steer = (snapshot: ModelSnapshot, canSteer = true) =>
-        decideSession(record(snapshot), { type: "turn.steer", canSteer }).rejection;
+        decideSession(record(snapshot), { type: "turn.steer", canSteer, takesAttachments: true })
+          .rejection;
 
       expect(steer(run(["start"]))).toBeNull();
       expect(steer(run(["start", "complete"]))).toBe("there is no Turn in flight to steer");

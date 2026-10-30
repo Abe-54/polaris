@@ -12,6 +12,7 @@ import type {
   HarnessKind,
   PlanLimit,
   SessionId,
+  TakeStreamOptions,
   TurnId,
   WorkspaceId,
 } from "@polaris/protocol";
@@ -55,7 +56,10 @@ export class BlobChannel extends Context.Service<
      * The same blob chunk by chunk as it arrives, never held whole (uploads
      * written straight to disk). A blob is taken once, either way.
      */
-    readonly takeStream: (blobId: BlobId) => Stream.Stream<Uint8Array, ServiceError>;
+    readonly takeStream: (
+      blobId: BlobId,
+      options?: TakeStreamOptions
+    ) => Stream.Stream<Uint8Array, ServiceError>;
   }
 >()("polaris/daemon/BlobChannel") {}
 

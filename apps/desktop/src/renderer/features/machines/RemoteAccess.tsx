@@ -1,5 +1,5 @@
 /**
- * Settings → Hosts, an open connected host's remote access switch (ENG-400): `tailscale serve`
+ * The host page's Tailscale route (ENG-400): `tailscale serve`
  * on that host, through its own Daemon, so a remote host's works over its existing link.
  */
 import type { RemoteAccessStatus } from "@polaris/protocol";
@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import type { Plain } from "../../store/plain.ts";
 import { polaris } from "../bridge.ts";
 import { call } from "./hooks.tsx";
+import { FlowLine } from "./page/FlowLine.tsx";
 
 type Status = Plain<RemoteAccessStatus>;
 
@@ -54,27 +55,48 @@ export interface RemoteAccessRowProps {
   readonly onChange: (on: boolean) => void;
 }
 
-export const RemoteAccessRow = ({ status, busy, onChange }: RemoteAccessRowProps) => (
-  <div className="flex items-center gap-3" data-testid="remote-access">
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-label text-text-default">Tailscale · for extensions</span>
-      {remoteAccessLines(status).map((line) => (
-        <span key={line} className="text-caption text-text-subtle break-words">
-          {line}
-        </span>
-      ))}
+/** "ON · FOR EXTENSIONS", in the row's mono line. */
+const stateLine = (status: Status | null) => {
+  if (status === null) return "Checking…";
+
+  return status.state === "unavailable" ? "Unavailable" : `${status.state} · for extensions`;
+};
+
+/** Paper HS-D's row: the flow line, "Tailscale" over its mono state, the switch; then any note. */
+export const RemoteAccessRow = ({ status, busy, onChange }: RemoteAccessRowProps) => {
+  const on = status?.state === "on";
+  const quiet = status === null || (status.state === "off" && status.reason === null);
+
+  return (
+    <div className="flex flex-col gap-1.5 px-4 py-3.5" data-testid="remote-access">
+      <div className="flex items-center gap-2.5" title={remoteAccessLines(status).join(" ")}>
+        <FlowLine flow={on && status.reason === null ? "live" : "off"} via="direct" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-body text-text-default">Tailscale</span>
+          <span className="text-text-subtle truncate font-mono text-[10px] leading-[14px] uppercase">
+            {stateLine(status)}
+          </span>
+        </div>
+        <Switch
+          aria-label="Tailscale"
+          checked={on}
+          disabled={busy || status === null || !switchable(status)}
+          onCheckedChange={onChange}
+        />
+      </div>
+      {quiet
+        ? null
+        : remoteAccessLines(status).map((line) => (
+            <span key={line} className="text-caption text-text-subtle pl-[130px] break-words">
+              {line}
+            </span>
+          ))}
     </div>
-    <Switch
-      aria-label="Tailscale"
-      checked={status?.state === "on"}
-      disabled={busy || status === null || !switchable(status)}
-      onCheckedChange={onChange}
-    />
-  </div>
-);
+  );
+};
 
 /** Read when shown; a failed switch keeps the last answer and toasts. */
-export const RemoteAccess = ({ hostKey }: { readonly hostKey: string }) => {
+export const useRemoteAccess = (hostKey: string) => {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -105,5 +127,9 @@ export const RemoteAccess = ({ hostKey }: { readonly hostKey: string }) => {
     }
   };
 
-  return <RemoteAccessRow status={status} busy={busy} onChange={(on) => void change(on)} />;
+  return { status, busy, onChange: (on: boolean) => void change(on) };
 };
+
+export const RemoteAccess = ({ hostKey }: { readonly hostKey: string }) => (
+  <RemoteAccessRow {...useRemoteAccess(hostKey)} />
+);

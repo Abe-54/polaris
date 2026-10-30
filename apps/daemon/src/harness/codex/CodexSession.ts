@@ -9,6 +9,7 @@
  */
 import {
   ApprovalDecision,
+  type Attachment,
   type PermissionMode,
   RequestId,
   SECRET_REQUEST_MAX_TIMEOUT_MS,
@@ -65,6 +66,8 @@ import { polarisInstructions } from "../../constellation/skills/preamble.ts";
 import type { ConstellationAttachment } from "../constellation/attachment.ts";
 import { type HarnessCall, harnessCallOf } from "./slash.ts";
 import { logStart } from "../startLog.ts";
+import type { BrowserMcp } from "../browser/index.ts";
+import { codexBrowserConfig } from "./browser.ts";
 
 export interface SessionConfig {
   readonly appServer: AppServer;
@@ -72,6 +75,8 @@ export interface SessionConfig {
   readonly clientVersion: string;
   /** Where the account's Plan Limits go; null, they aren't read. */
   readonly planLimits: CodexPlanLimits | null;
+  /** The Browser's MCP server for each thread that isn't read-only. */
+  readonly browser?: BrowserMcp["Service"] | undefined;
 }
 
 type PendingRequest = Data.TaggedEnum<{
@@ -220,6 +225,8 @@ export const openSession = (
       );
     }
 
+    const browser = yield* codexBrowserConfig(config.browser, options);
+
     common.developerInstructions = polarisInstructions(options);
 
     if (
@@ -229,7 +236,9 @@ export const openSession = (
     )
       common.config = { ...common.config, "shell_environment_policy.set": options.environment };
 
-    if (sandboxing.config !== null) common.config = { ...common.config, ...sandboxing.config };
+    const extra = { ...browser, ...sandboxing.config };
+
+    if (Object.keys(extra).length > 0) common.config = { ...common.config, ...extra };
 
     if (options.model !== null) common.model = options.model;
 
@@ -797,17 +806,24 @@ export const openSession = (
         bindStarted(started.turn.id, turnId, prompt);
       });
 
-    const steerText = (text: string) =>
+    const steerText = (text: string, attachments: ReadonlyArray<Attachment> = []) =>
       Effect.gen(function* () {
         const codexTurnId = activeCodexTurn;
 
         if (codexTurnId === null) return yield* codexError("No Turn is in progress to steer");
+        const input = turnInput(text, attachments);
         yield* conn.request("turn/steer", {
           threadId,
-          input: [{ type: "text", text, text_elements: [] }],
+          input,
           expectedTurnId: codexTurnId,
         } satisfies P.ClientParams["turn/steer"]);
-        steers.fromResponse(codexTurnId, text);
+        // What Codex echoes: its text inputs, the files' note included.
+        const sent = input.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+        steers.fromResponse(
+          codexTurnId,
+          sent,
+          attachments.length === 0 ? null : { text, attachments }
+        );
       });
 
     const session: HarnessSession = {

@@ -57,22 +57,3 @@ export const FormBlock = ({ children }: { readonly children: ReactNode }) => (
     {children}
   </div>
 );
-
-/** A saved entry: its id and executable in mono, then its actions. */
-export const EntryRow = ({
-  title,
-  detail,
-  children,
-}: {
-  readonly title: string;
-  readonly detail: string;
-  readonly children: ReactNode;
-}) => (
-  <div className="px-panel flex min-w-0 items-center gap-3 py-[calc(var(--spacing-gap)+2px)]">
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-body text-text-strong font-medium break-all">{title}</span>
-      <span className="text-caption text-text-subtle font-mono break-all">{detail}</span>
-    </span>
-    <span className="flex shrink-0 gap-2">{children}</span>
-  </div>
-);

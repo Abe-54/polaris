@@ -81,7 +81,7 @@ extension ThemePalette {
     failedText: ThemeColour(0xF37B72),
     harnessClaudeCode: ThemeColour(0xD97757),
     harnessCodex: ThemeColour(0x6FCBA0),
-    harnessOpencode: ThemeColour(0xE58FA8),
+    harnessOpencode: ThemeColour(0xE59AC1),
     ridgeBack: ThemeColour(0x151A3A),
     ridgeFront: ThemeColour(0x0B1026)
   )
@@ -103,7 +103,7 @@ extension ThemePalette {
     failedText: ThemeColour(0xF37B72),
     harnessClaudeCode: ThemeColour(0xD97757),
     harnessCodex: ThemeColour(0x6FCBA0),
-    harnessOpencode: ThemeColour(0xE58FA8),
+    harnessOpencode: ThemeColour(0xE59AC1),
     ridgeBack: ThemeColour(0x262B45),
     ridgeFront: ThemeColour(0x1E2236)
   )

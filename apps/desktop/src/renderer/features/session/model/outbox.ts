@@ -71,12 +71,13 @@ const findTurn = (turns: ReadonlyArray<TurnView>, turnId: string | null) =>
 export const steerOutgoing = <A extends OutboxAttachment>(
   turns: ReadonlyArray<TurnView>,
   turnId: string,
-  text: string
+  text: string,
+  attachments: ReadonlyArray<A> = []
 ): Outgoing<A> => ({
   id: outgoingId(),
   kind: "steer",
   text: text.trim(),
-  attachments: [],
+  attachments,
   turnId,
   baseline: steersOf(findTurn(turns, turnId)).length,
   status: "sending",

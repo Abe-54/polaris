@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Regenerates src/icons/nucleo/{ui,ui-more,pixel}.tsx from a licensed Nucleo install.
+ * Regenerates src/icons/nucleo/{ui,ui-more,ui-sync,ui-browser,pixel}.tsx from a licensed Nucleo install.
  *
  *   NUCLEO_DIR=~/.nucleo/skills bun scripts/vendor-nucleo.ts && bunx oxfmt src/icons/nucleo
  *
@@ -62,6 +62,16 @@ const UI_SYNC: ReadonlyArray<readonly [string, string]> = [
   ["MicrophoneIcon", "MicrophoneOutline18"],
   ["MobileIcon", "MobileOutline18"],
   ["ShieldIcon", "ShieldOutline18"],
+];
+
+/** A fourth UI file: the Browser's chrome in Output. */
+const UI_BROWSER: ReadonlyArray<readonly [string, string]> = [
+  ["LockIcon", "LockOutline18"],
+  ["GlobeIcon", "GlobeOutline18"],
+  ["ReloadIcon", "ArrowRotateClockwiseOutline18"],
+  ["CursorIcon", "CursorDefaultOutline18"],
+  ["CodeIcon", "CodeOutline18"],
+  ["PickElementIcon", "SquareDashedCursorOutline18"],
 ];
 
 /** Polaris name → Nucleo pixel outline 24px component. Polaris-owned concepts only. */
@@ -223,6 +233,8 @@ writeFileSync(join(OUT, "ui.tsx"), uiFile(UI, false));
 writeFileSync(join(OUT, "ui-more.tsx"), uiFile(UI_MORE, true));
 
 writeFileSync(join(OUT, "ui-sync.tsx"), uiFile(UI_SYNC, true));
+
+writeFileSync(join(OUT, "ui-browser.tsx"), uiFile(UI_BROWSER, true));
 
 writeFileSync(join(OUT, "pixel.tsx"), pixelFile());
 

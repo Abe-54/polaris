@@ -1,41 +1,62 @@
-/** Pairing an Extension with one Host (Paper X1): a name and the Grant, read only at first. */
+/**
+ * Pairing an Extension inside its host's card (Paper SR-07): a name, and the Grant as chips,
+ * read only at first. A Grant is fixed once paired.
+ */
 import type { Grant, GrantKind } from "@polaris/protocol";
-import { Button, Input } from "@polaris/ui";
+import { cn, Input, SettingsButton, SettingsRow, SettingsWell } from "@polaris/ui";
 import { useState } from "react";
-import { DEFAULT_GRANT, GRANT_CHOICES, pairName, toggleGrant } from "../model.ts";
+import { DEFAULT_GRANT, GRANT_CHOICES, type GrantChoice, pairName, toggleGrant } from "../model.ts";
 
-const GrantRow = ({
+const Check = () => (
+  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden className="shrink-0">
+    <path d="M2 5.2l2 2L8 3" fill="none" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+
+const Chip = ({
   id,
-  label,
-  help,
+  choice,
   checked,
   onToggle,
+  onHint,
 }: {
   readonly id: string;
-  readonly label: string;
-  readonly help: string;
+  readonly choice: GrantChoice;
   readonly checked: boolean;
   readonly onToggle: () => void;
+  readonly onHint: (help: string | null) => void;
 }) => (
-  <div className="flex items-start gap-2.5 py-1.5">
+  <label
+    htmlFor={id}
+    onPointerEnter={() => onHint(choice.help)}
+    onPointerLeave={() => onHint(null)}
+    className={cn(
+      "text-caption flex h-7 cursor-default items-center gap-1.5 rounded-full border px-3 select-none has-focus-visible:outline-2 has-focus-visible:outline-starlight",
+      checked
+        ? "text-text-strong border-[light-dark(#00000029,#ffffff29)] bg-[light-dark(#0000000f,#ffffff0f)]"
+        : "text-text-subtle border-[light-dark(#00000014,#ffffff14)]"
+    )}
+  >
     <input
       type="checkbox"
       id={id}
       checked={checked}
       onChange={onToggle}
+      onFocus={() => onHint(choice.help)}
+      onBlur={() => onHint(null)}
       aria-describedby={`${id}-help`}
-      className="mt-0.5 size-3.5 shrink-0 accent-current"
+      className="sr-only"
     />
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <label htmlFor={id} className="text-label text-text-strong">
-        {label}
-      </label>
-      <span id={`${id}-help`} className="text-caption text-text-subtle">
-        {help}
-      </span>
-    </div>
-  </div>
+    {checked ? <Check /> : null}
+    {choice.label}
+  </label>
 );
+
+/** What the chosen Grant allows, one line: "See agent sessions… · Allow or deny approvals…". */
+const allows = (grant: ReadonlyArray<GrantKind>) =>
+  GRANT_CHOICES.filter((c) => grant.includes(c.kind))
+    .map((c) => c.help)
+    .join(" · ") || "Nothing yet. Choose at least what it needs.";
 
 export const PairForm = ({
   hostKey,
@@ -50,8 +71,10 @@ export const PairForm = ({
 }) => {
   const [draft, setDraft] = useState("");
   const [grant, setGrant] = useState<ReadonlyArray<GrantKind>>(DEFAULT_GRANT);
+  const [hint, setHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const name = pairName(draft);
+  const nameId = `pair-name-${hostKey}`;
 
   const submit = () => {
     if (name === null || busy) return;
@@ -61,7 +84,7 @@ export const PairForm = ({
 
   return (
     <form
-      className="rounded-card border-hairline bg-surface-raised p-panel flex flex-col gap-4 border"
+      className="gap-gap flex flex-col"
       aria-label={`Pair an extension with ${hostLabel}`}
       data-testid="pair-form"
       onSubmit={(event) => {
@@ -69,45 +92,51 @@ export const PairForm = ({
         submit();
       }}
     >
-      <h3 className="text-label text-text-strong font-medium">
-        Pair an extension with {hostLabel}
-      </h3>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={`pair-name-${hostKey}`} className="text-caption text-text-subtle">
-          Name
-        </label>
-        <Input
-          id={`pair-name-${hostKey}`}
-          autoFocus
-          value={draft}
-          placeholder="Raycast"
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          className="w-80"
-        />
-      </div>
-      <fieldset className="flex flex-col gap-0.5">
-        <legend className="text-caption text-text-subtle pb-1.5">Allow it to</legend>
-        {GRANT_CHOICES.map((choice) => (
-          <GrantRow
-            key={choice.kind}
-            id={`grant-${hostKey}-${choice.kind}`}
-            label={choice.label}
-            help={choice.help}
-            checked={grant.includes(choice.kind)}
-            onToggle={() => setGrant((g) => toggleGrant(g, choice.kind))}
+      <SettingsWell>
+        <SettingsRow title="Name" htmlFor={nameId}>
+          <Input
+            id={nameId}
+            autoFocus
+            value={draft}
+            placeholder="Raycast"
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            className="bg-raised-control h-7 w-60 font-mono text-[12px]"
           />
-        ))}
-      </fieldset>
-      <div className="border-hairline flex items-center gap-2 border-t pt-3">
-        <span className="text-caption text-text-subtle flex-1">
+        </SettingsRow>
+        <fieldset className="px-panel flex flex-col gap-2.5 py-[calc(var(--spacing-gap)+4px)]">
+          <legend className="text-body text-text-default float-left w-full">Allow it to</legend>
+          <div className="flex flex-wrap gap-2">
+            {GRANT_CHOICES.map((choice) => (
+              <Chip
+                key={choice.kind}
+                id={`grant-${hostKey}-${choice.kind}`}
+                choice={choice}
+                checked={grant.includes(choice.kind)}
+                onToggle={() => setGrant((g) => toggleGrant(g, choice.kind))}
+                onHint={setHint}
+              />
+            ))}
+          </div>
+          {GRANT_CHOICES.map((choice) => (
+            <span key={choice.kind} id={`grant-${hostKey}-${choice.kind}-help`} className="sr-only">
+              {choice.help}
+            </span>
+          ))}
+          <p className="text-caption text-text-subtle" aria-live="polite">
+            {hint ?? allows(grant)}
+          </p>
+        </fieldset>
+      </SettingsWell>
+      <div className="pl-gap flex min-h-10 items-center gap-2">
+        <span className="text-caption text-text-subtle min-w-0 flex-1 truncate">
           You can't change a grant later; revoke and pair again instead.
         </span>
-        <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>
+        <SettingsButton variant="ghost" disabled={busy} onClick={onCancel}>
           Cancel
-        </Button>
-        <Button type="submit" variant="primary" disabled={name === null || busy}>
+        </SettingsButton>
+        <SettingsButton type="submit" variant="primary" disabled={name === null || busy}>
           Pair
-        </Button>
+        </SettingsButton>
       </div>
     </form>
   );

@@ -67,6 +67,7 @@ export const registerIpc = ({ runtime, context, trusted }: IpcInput) => {
       subs = windowSubscriptions({
         runtime,
         prediction: context.predictionBridge,
+        browser: context.browser,
         target: {
           isDestroyed: () => sender.isDestroyed(),
           send: (channel, entries) => sender.send(channel, entries),

@@ -36,6 +36,7 @@
   --color-raised: light-dark(#ffffff, #26272b);
   --color-well: light-dark(#f6f7f9, #222327);
   --color-well-raised: light-dark(#f6f7f9, #1a1b1d);
+  --color-raised-control: light-dark(#ffffff, #26272b);
   --midnight: 0;
 }
 
@@ -50,6 +51,8 @@
   --color-raised: light-dark(#ffffff, #141518);
   --color-well: light-dark(#f6f7f9, #0e0f12);
   --color-well-raised: light-dark(#f6f7f9, #0e0f12);
+  /* Lifted off raised #141518, which a control would vanish into on black. */
+  --color-raised-control: light-dark(#ffffff, #1c1d21);
   /* 1 under Midnight: inherited, so the nearest theme wins (the horizon reads it). */
   --midnight: 1;
   /* On a black panel the diff's line fills sit a few percent lower than Moonlit's 10%. */

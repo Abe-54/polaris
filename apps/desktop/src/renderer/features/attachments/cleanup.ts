@@ -1,8 +1,8 @@
 /**
  * Settings → Attachments, pure: the cleanup choices a select offers, their
- * words, and edits to a Host's settings (the default, a Workspace's override).
+ * words, edits to a Host's settings (the default, a Workspace's override), and the disk-use bar.
  */
-import type { AttachmentCleanup, AttachmentSettings } from "@polaris/protocol";
+import type { AttachmentCleanup, AttachmentSettings, AttachmentUsage } from "@polaris/protocol";
 import type { Plain } from "../../../shared/api.ts";
 import { formatSize } from "./model.ts";
 
@@ -79,3 +79,47 @@ export const amountLine = (
   amount === undefined || amount.files === 0
     ? "Nothing staged"
     : `${formatSize(amount.bytes)} in ${filesLine(amount.files)}`;
+
+/** A narrow select's closed label: "When archived", "After 7 days", "Never". */
+export const policyShort = (policy: AttachmentCleanup): string => {
+  switch (policy.kind) {
+    case "on-archive":
+      return "When archived";
+    case "never":
+      return "Never";
+    case "after-days":
+      return policyLabel(policy);
+  }
+};
+
+export interface UsageSegment {
+  /** A Workspace id, or "other" for the rest. */
+  readonly key: string;
+  readonly label: string;
+  readonly bytes: number;
+}
+
+/** Workspaces drawn in the disk-use bar before the rest join "Other". */
+const BAR_WORKSPACES = 3;
+
+/**
+ * The disk-use bar, largest first: up to three Workspaces, then "Other" for the rest and for
+ * what is staged under Workspaces this Host no longer lists.
+ */
+export const usageSegments = (
+  workspaces: ReadonlyArray<{ readonly id: string; readonly name: string }>,
+  usage: Plain<AttachmentUsage>
+): ReadonlyArray<UsageSegment> => {
+  const named = workspaces
+    .flatMap((w) => {
+      const bytes = usage.workspaces[w.id]?.bytes ?? 0;
+
+      return bytes > 0 ? [{ key: w.id, label: w.name, bytes }] : [];
+    })
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, BAR_WORKSPACES);
+
+  const rest = usage.total.bytes - named.reduce((sum, s) => sum + s.bytes, 0);
+
+  return rest > 0 ? [...named, { key: "other", label: "Other", bytes: rest }] : named;
+};

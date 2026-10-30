@@ -92,6 +92,8 @@ export class Engine extends Context.Service<
     ) => Stream.Stream<SessionStreamItem, NotFound>;
     readonly readTurnPage: (options: TurnPageRequest) => Effect.Effect<TurnPage, NotFound>;
     readonly hasSession: (sessionId: SessionId) => Effect.Effect<boolean>;
+    /** Whether `sessionId` is a session this Host knows and has not archived (can host its Browser). */
+    readonly hostableSession: (sessionId: SessionId) => Effect.Effect<boolean>;
     /** How to launch the Harness's own TUI for a session that is In Terminal, once known. */
     readonly terminalCommand: (sessionId: SessionId) => Effect.Effect<TerminalLaunch | null>;
     /**
@@ -229,6 +231,12 @@ const make = Effect.gen(function* () {
     readTurnPage: streams.readTurnPage,
     hasSession: (sessionId) =>
       Effect.map(runtime.store.model, (model) => model.sessions.has(sessionId)),
+    hostableSession: (sessionId) =>
+      Effect.map(runtime.store.model, (model) => {
+        const record = model.sessions.get(sessionId);
+
+        return record !== undefined && record.session.state !== "archived";
+      }),
     terminalCommand: (sessionId) =>
       Effect.sync(() => runtime.terminalLaunch.get(sessionId) ?? null),
     prepareForUpgrade,

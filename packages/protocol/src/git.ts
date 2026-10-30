@@ -1,5 +1,5 @@
 /**
- * Git errors, the Changes tab's writes (capability `git.write`) and `git.watch`;
+ * Git errors, the Changes tab's writes (capability `git.write`), `git.watch` and `git.log`;
  * `git.status`, `git.diff` and `git.show` stay in `rpc.ts`.
  */
 import { Schema } from "effect";
@@ -70,6 +70,34 @@ export const GitWatch = Rpc.make("git.watch", {
 });
 
 export class GitWatchRpcs extends RpcGroup.make(GitWatch) {}
+
+/** One commit as `git.log` reads it; `date` is the author date, ISO-8601. */
+export class GitLogCommit extends Schema.Class<GitLogCommit>("GitLogCommit")({
+  sha: Schema.String,
+  subject: Schema.String,
+  /** The message after the subject line, trailing newlines trimmed; empty when there is none. */
+  body: Schema.String,
+  author: Schema.String,
+  date: Schema.String,
+}) {}
+
+/** The most `git.log` answers in one call. */
+export const MAX_GIT_LOG = 100;
+
+/**
+ * The newest `limit` commits reachable from HEAD at `cwd`, newest first (capability `git.log`);
+ * empty on an unborn branch. Read-only: no hook or config command runs.
+ */
+export const GitLog = Rpc.make("git.log", {
+  payload: {
+    cwd: Schema.String,
+    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_GIT_LOG })),
+  },
+  success: Schema.Struct({ commits: Schema.Array(GitLogCommit) }),
+  error: GitError,
+});
+
+export class GitLogRpcs extends RpcGroup.make(GitLog) {}
 
 /**
  * How the branch stands against its upstream, beside `git.status`'s ahead and

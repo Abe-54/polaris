@@ -18,6 +18,16 @@ export interface StagedAttachment {
   readonly hostPath: string;
   readonly width: number | null;
   readonly height: number | null;
+  /** Set on the files of an element picked in the Browser: they show as one chip (ENG-618). */
+  readonly pick?: PickedElement;
+}
+
+export interface PickedElement {
+  /** Shared by the pick's screenshot and its note. */
+  readonly key: string;
+  readonly selector: string;
+  readonly url: string;
+  readonly html: string;
 }
 
 export interface SessionUi {

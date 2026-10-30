@@ -46,6 +46,7 @@ const mount = async (capabilities: ReadonlyArray<Capability>, backgroundsCommand
     switchesModel: true,
     backgroundsCommands,
     runsShellCommands: false,
+    steersAttachments: false,
     fetchedAt: "2026-10-20T00:00:00.000Z",
   });
 

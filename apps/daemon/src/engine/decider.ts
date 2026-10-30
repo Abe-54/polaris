@@ -57,12 +57,14 @@ export interface DecideContext {
   /** Fresh ids, used only by the commands that create something. */
   readonly newTurnId: TurnId;
   readonly newWorkspaceId: WorkspaceId;
-  /** Attachments of StartSession / SendTurn, resolved from the AttachmentStore. */
+  /** Attachments of StartSession / SendTurn / Steer, resolved from the AttachmentStore. */
   readonly attachments: ReadonlyArray<Attachment>;
   /** For RegisterWorkspace: what is at `path`. */
   readonly pathProbe: { readonly isDirectory: boolean; readonly isGitRepo: boolean } | null;
   /** For Steer: whether the session's Harness supports it. */
   readonly canSteer: boolean;
+  /** For Steer: whether the session's Harness takes attachments in a steer. */
+  readonly canSteerAttachments?: boolean;
   /** For SetModel: whether the session's Harness can change Model mid-session. */
   readonly canSwitchModel: boolean;
   /** For StopBackgroundTasks: whether the session's Harness can stop its background tasks. */
@@ -559,7 +561,12 @@ export const decide = (model: ReadModel, command: Command, ctx: DecideContext): 
     CompactSession: (c) => compactSession(d, c),
     Continue: (c) => onSession(d, c.sessionId, { type: "turn.continue" }),
     Retry: (c) => retry(d, c),
-    Steer: (c) => onSession(d, c.sessionId, { type: "turn.steer", canSteer: ctx.canSteer }),
+    Steer: (c) =>
+      onSession(d, c.sessionId, {
+        type: "turn.steer",
+        canSteer: ctx.canSteer,
+        takesAttachments: (c.attachments ?? []).length === 0 || ctx.canSteerAttachments === true,
+      }),
     Interrupt: (c) => onSession(d, c.sessionId, { type: "turn.interrupt" }),
     StopBackgroundTasks: (c) =>
       onSession(d, c.sessionId, {

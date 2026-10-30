@@ -1,16 +1,23 @@
 /**
- * The Languages group (DESIGN.md, Settings: Editor · languages; Paper L4): a row
- * per Language Integration with its state, parts on disclosure and an on/off switch.
+ * SR-02's Languages card: the automatic download switch, then a row per Language Integration
+ * with its state, parts on disclosure and an on/off switch, on the host the picker names.
  */
-import { cn, DisclosureChevron, Switch } from "@polaris/ui";
-import { useState } from "react";
-import { Group } from "../ui/parts.tsx";
+import {
+  cn,
+  DisclosureChevron,
+  SettingsCard,
+  SettingsEmpty,
+  SettingsSwitch,
+  SettingsToggleRow,
+  SettingsWell,
+} from "@polaris/ui";
+import { useState, type ReactNode } from "react";
 import type { Fact, LanguageRow } from "./model.ts";
 
 const Monogram = ({ text }: { readonly text: string }) => (
   <span
     aria-hidden
-    className="bg-fill-selected rounded-control text-text-default flex size-7 shrink-0 items-center justify-center font-mono text-[11px] leading-3 font-semibold"
+    className="bg-raised-control rounded-control text-text-default flex size-6 shrink-0 items-center justify-center font-mono text-[10px] leading-3 font-medium"
   >
     {text}
   </span>
@@ -28,6 +35,8 @@ const FactRow = ({ fact }: { readonly fact: Fact }) => (
   </div>
 );
 
+const ROW = "px-panel flex flex-col gap-3 py-[calc(var(--spacing-gap)+4px)]";
+
 /** Fixed lanes: tile, name and state, disclosure, switch; an empty switch slot keeps them aligned. */
 export const IntegrationRow = ({
   row,
@@ -44,7 +53,7 @@ export const IntegrationRow = ({
   const factsId = `language-facts-${row.id}`;
 
   return (
-    <div className="px-panel flex flex-col gap-3 py-[calc(var(--spacing-gap)+4px)]">
+    <div className={ROW}>
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -55,14 +64,14 @@ export const IntegrationRow = ({
         >
           <Monogram text={row.monogram} />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-body text-text-strong font-medium">{row.name}</span>
-            <span className="text-caption text-text-subtle">{row.state}</span>
+            <span className="text-body text-text-default truncate">{row.name}</span>
+            <span className="text-caption text-text-subtle truncate">{row.state}</span>
           </span>
           <DisclosureChevron open={open} size={12} className="text-text-subtle" />
         </button>
-        <span className="flex w-[26px] shrink-0 justify-end">
+        <span className="flex w-[30px] shrink-0 justify-end">
           {switchable && (
-            <Switch
+            <SettingsSwitch
               aria-label={`${row.name} language tools`}
               checked={enabled}
               onCheckedChange={onToggle}
@@ -71,7 +80,7 @@ export const IntegrationRow = ({
         </span>
       </div>
       {open && (
-        <dl id={factsId} className="flex flex-col gap-2 pl-10">
+        <dl id={factsId} className="flex flex-col gap-2 pl-9">
           {row.facts.length === 0 ? (
             <p className="text-caption text-text-subtle">No parts reported by this host yet.</p>
           ) : (
@@ -84,56 +93,97 @@ export const IntegrationRow = ({
 };
 
 const MarkdownRow = () => (
-  <div className="px-panel flex items-center gap-3 py-[calc(var(--spacing-gap)+4px)]">
-    <Monogram text="MD" />
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span className="text-body text-text-strong font-medium">Markdown</span>
-      <span className="text-caption text-text-subtle">
-        Highlighting and preview · no language server needed
+  <div className={ROW}>
+    <div className="flex items-center gap-3">
+      <Monogram text="Md" />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-body text-text-default">Markdown</span>
+        <span className="text-caption text-text-subtle truncate">
+          Highlighting and preview · no language server needed
+        </span>
       </span>
-    </span>
-    <span className="w-[26px] shrink-0" />
+      <span className="w-[30px] shrink-0" />
+    </div>
   </div>
 );
 
-export const LanguageList = ({
+/** "4 ready on Mac Studio", beside the title. */
+export const readySummary = (rows: ReadonlyArray<LanguageRow>, host: string) =>
+  `${rows.filter((row) => row.state.startsWith("Ready")).length} ready on ${host}`;
+
+export interface LanguagesCardProps {
+  readonly rows: ReadonlyArray<LanguageRow>;
+  readonly enabled: (row: LanguageRow) => boolean;
+  readonly onToggle: (row: LanguageRow, on: boolean) => void;
+  /** The syntax-only languages, in the footer. */
+  readonly footLine: string | null;
+  /** Shown in place of the rows while the Host's facts load or can't be read. */
+  readonly notice: string | null;
+  /** "4 ready on Mac Studio"; null while there are no rows. */
+  readonly summary: string | null;
+  readonly picker: ReactNode;
+  readonly download: {
+    readonly checked: boolean;
+    readonly disabled: boolean;
+    readonly onChange: (on: boolean) => void;
+  };
+  /** The Advanced… button. */
+  readonly action: ReactNode;
+}
+
+export const LanguagesCard = ({
   rows,
   enabled,
   onToggle,
   footLine,
   notice,
-}: {
-  readonly rows: ReadonlyArray<LanguageRow>;
-  readonly enabled: (row: LanguageRow) => boolean;
-  readonly onToggle: (row: LanguageRow, on: boolean) => void;
-  readonly footLine: string | null;
-  /** Shown in place of the rows while the Host's facts load or can't be read. */
-  readonly notice: string | null;
-}) => (
-  <Group label="Languages">
-    {notice !== null ? (
-      <p role="status" className="px-panel text-caption text-text-subtle py-3">
-        {notice}
-      </p>
-    ) : (
-      <>
-        {rows.map((row) => (
-          <IntegrationRow
-            key={row.id}
-            row={row}
-            enabled={enabled(row)}
-            switchable={row.syntaxIds.length > 0}
-            onToggle={(on) => onToggle(row, on)}
-          />
-        ))}
-        <MarkdownRow />
-        {footLine && (
-          <div className="px-panel flex items-center gap-3 py-[calc(var(--spacing-gap)+4px)]">
-            <span className="w-7 shrink-0" />
-            <span className="text-caption text-text-subtle">{footLine}</span>
-          </div>
+  summary,
+  picker,
+  download,
+  action,
+}: LanguagesCardProps) => (
+  <SettingsCard
+    aria-label="Languages"
+    title={
+      <span className="flex items-baseline gap-2">
+        Languages
+        {summary === null ? null : (
+          <span className="text-caption text-text-subtle font-normal">{summary}</span>
         )}
-      </>
-    )}
-  </Group>
+      </span>
+    }
+    aside={picker}
+    status={notice === null ? (footLine ?? "") : ""}
+    action={action}
+  >
+    <SettingsWell>
+      <SettingsToggleRow
+        title="Download language tools automatically"
+        caption="Fetches a pinned server the first time you open a file; toolchains stay yours"
+        checked={download.checked}
+        disabled={download.disabled}
+        onCheckedChange={download.onChange}
+      />
+    </SettingsWell>
+    <SettingsWell>
+      {notice !== null ? (
+        <div role="status">
+          <SettingsEmpty>{notice}</SettingsEmpty>
+        </div>
+      ) : (
+        <>
+          {rows.map((row) => (
+            <IntegrationRow
+              key={row.id}
+              row={row}
+              enabled={enabled(row)}
+              switchable={row.syntaxIds.length > 0}
+              onToggle={(on) => onToggle(row, on)}
+            />
+          ))}
+          <MarkdownRow />
+        </>
+      )}
+    </SettingsWell>
+  </SettingsCard>
 );

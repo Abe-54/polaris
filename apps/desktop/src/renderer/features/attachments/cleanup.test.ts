@@ -6,6 +6,7 @@ import {
   policyKey,
   policyLabel,
   policyOf,
+  usageSegments,
   withDefault,
   withWorkspace,
 } from "./cleanup.ts";
@@ -66,5 +67,33 @@ describe("attachment cleanup", () => {
     expect(amountLine({ bytes: 0, files: 0 })).toBe("Nothing staged");
     expect(amountLine({ bytes: 1536, files: 1 })).toBe("1.5 KB in 1 file");
     expect(amountLine({ bytes: 3 * 1024 * 1024, files: 4 })).toBe("3.0 MB in 4 files");
+  });
+
+  test("the disk-use bar draws the three largest workspaces, then the rest as Other", () => {
+    const workspaces = ["a", "b", "c", "d", "empty"].map((id) => ({ id, name: `ws-${id}` }));
+
+    const usage = {
+      total: { bytes: 1_000, files: 9 },
+      workspaces: {
+        a: { bytes: 100, files: 1 },
+        b: { bytes: 400, files: 3 },
+        c: { bytes: 200, files: 2 },
+        d: { bytes: 50, files: 1 },
+        gone: { bytes: 250, files: 2 },
+      },
+    };
+
+    expect(usageSegments(workspaces, usage).map((s) => [s.label, s.bytes])).toEqual([
+      ["ws-b", 400],
+      ["ws-c", 200],
+      ["ws-a", 100],
+      ["Other", 300],
+    ]);
+  });
+
+  test("nothing staged draws no segment", () => {
+    expect(
+      usageSegments([{ id: "a", name: "a" }], { total: { bytes: 0, files: 0 }, workspaces: {} })
+    ).toEqual([]);
   });
 });
