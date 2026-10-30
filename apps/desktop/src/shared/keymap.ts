@@ -720,6 +720,7 @@ export const PC_KEYS: Partial<Record<CommandId, ReadonlyArray<string>>> = {
   "view.orchestrate": ["Alt+1"],
   "view.review": ["Alt+2"],
   "view.edit": ["Alt+3"],
+  "view.data": ["Alt+4"],
   "view.output": ["CmdOrCtrl+Shift+B"],
   "session.next": ["CmdOrCtrl+PageDown", "Ctrl+Tab"],
   "session.previous": ["CmdOrCtrl+PageUp", "Ctrl+Shift+Tab"],

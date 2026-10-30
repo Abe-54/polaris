@@ -144,6 +144,7 @@ describe("Windows and Linux keys", () => {
       "view.orchestrate": "Alt+1",
       "view.review": "Alt+2",
       "view.edit": "Alt+3",
+      "view.data": "Alt+4",
       "view.output": "Ctrl+Shift+B",
       "session.next": "Ctrl+Page Down / Ctrl+Tab",
       "session.previous": "Ctrl+Page Up / Ctrl+Shift+Tab",
