@@ -1,0 +1,24 @@
+{
+  "command": "bash docs/research/data-bun-sql/run.sh /tmp/polaris-data-final",
+  "exitCode": 0,
+  "runtime": "Docker 29.4.0 via OrbStack; macOS arm64 Bun 1.4.4",
+  "containers": [
+    {
+      "image": "postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c",
+      "imageId": "sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c",
+      "created": "2026-10-30T23:22:31.582058605Z"
+    },
+    {
+      "image": "mysql:8.4@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7",
+      "imageId": "sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7",
+      "created": "2026-10-30T23:22:32.042134203Z"
+    }
+  ],
+  "recordings": {
+    "sqllens-postgres.ndjson": "d03eca3e9050ac48a164f92ce1db84430d4b238d9968b7a7433c6e530a42bc5f",
+    "lexical-checks.ndjson": "e1a8065231784ae074105ccfda9df3cdbbcef0eafc95a2e698ddcb50fcc70cb1",
+    "mysql.ndjson": "5cf12e2026bd83b596a74de3149a57c67c7e29d5e11223784b129a7d96d6ac47",
+    "sqllens-mysql.ndjson": "1236bddc3b803e0caa066158e322ae00c98daef8f2383fbfd931127486e96a18",
+    "postgres.ndjson": "220a1ca1b783de4d6243deb8cb7824ebdd3e3252198ae28cf22621679432f7ef"
+  }
+}
