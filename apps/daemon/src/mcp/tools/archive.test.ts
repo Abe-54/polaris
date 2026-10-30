@@ -48,13 +48,15 @@ const layerFor = (root: string) =>
 const Outcome = Schema.Struct({
   isError: Schema.optionalKey(Schema.Boolean),
   structuredContent: Schema.optionalKey(
-    Schema.Struct({ findings: Schema.Array(Schema.Struct({ code: Schema.String })) })
+    Schema.Struct({
+      findings: Schema.optionalKey(Schema.Array(Schema.Struct({ code: Schema.String }))),
+    })
   ),
 });
 
 /** "ok", or the first finding's code. */
 const outcome = (result: typeof Outcome.Type) =>
-  result.isError === true ? (result.structuredContent?.findings[0]?.code ?? "error") : "ok";
+  result.isError === true ? (result.structuredContent?.findings?.[0]?.code ?? "error") : "ok";
 
 const decodeOutcome = Schema.decodeUnknownSync(Outcome);
 

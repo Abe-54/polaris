@@ -10,6 +10,7 @@ import { historyTools } from "./history.ts";
 import { memoryVisualizations, visualizeTool } from "./visualize.ts";
 import type { VisualizationLog } from "../tokens.ts";
 import { unavailableSessions, type SessionTools } from "../sessions/index.ts";
+import { dataTools } from "./data.ts";
 import { requestSecretTool } from "./secret.ts";
 import {
   toolFactory,
@@ -133,7 +134,7 @@ export const constellationTools = (
             if (
               result.structuredContent?.graph !== null ||
               result.structuredContent.revision !== 0 ||
-              !result.structuredContent.findings.some((finding) => finding.code === "E-NOT-FOUND")
+              !result.structuredContent.findings?.some((finding) => finding.code === "E-NOT-FOUND")
             )
               return result;
 
@@ -156,6 +157,7 @@ export const constellationTools = (
     notifyTool(binding.sessionId, sessions, idsFor(commands)),
     requestSecretTool(binding.sessionId, sessions),
     ...historyTools(binding.sessionId, sessions),
+    ...dataTools(binding.sessionId, sessions),
     ...(options.visualize === false
       ? []
       : [visualizeTool(binding.sessionId, visualizationsFor(commands))]),
