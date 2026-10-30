@@ -118,3 +118,9 @@ export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) =
     },
   });
 };
+
+/** The Data Source the focused SQL tab runs on; null when the focused tab isn't a SQL tab. */
+export const useSqlSource = (at: DataSessionKey, active: DataTab | null): string | null =>
+  useStore(sqlTabs, (all) =>
+    active?.kind === "sql" ? (all[keyOf(at, active.id)]?.source ?? active.sourceId) : null
+  );
