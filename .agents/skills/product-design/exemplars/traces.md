@@ -1,7 +1,7 @@
 # Exemplar: Traces
 
 Status: proposed (owner, 2026-10-30: decisions grilled and mockups requested; not built)
-Surface: Paper, "Traces (⌘5)" page: T1 "Waterfall", T2 "Profile under the
+Surface: Paper, "Traces (⌘5)" page: T1 "Waterfall" (Axiom-aligned), T2 "Profile under the
 waterfall", T3 "Traces in Orchestrate", T4 "Setup". ENG-655.
 Why exemplary: a debugging tool cut down to what helps an agent or helps you
 audit one, with every object linking back into Edit, Data and Orchestrate.
@@ -21,6 +21,17 @@ audit one, with every object linking back into Edit, Data and Orchestrate.
 - Rules exercised: rule/signals-are-rare; rule/colour-means-something.
 - Evidence: T1, T2.
 - Repeat when: any timeline or chart of agent work.
+
+### Axiom's workflow, Polaris's colour
+- What: the waterfall follows Axiom's trace view (minimap, start and end
+  times, tree connectors with descendant-count badges, FAST/SLOW, a right
+  span panel with Fields/Events/Links and a field filter) so the owner's
+  habits carry over; its blue bars and service colours do not.
+- Rules exercised: rule/signals-are-rare.
+- Evidence: T1, T2; owner, 2026-10-30: "I'm pretty used to Axiom's OTel
+  UI/UX. It would be nice to be more aligned with this workflow."
+- Repeat when: a view has a tool its users already know well; borrow the
+  workflow and layout, keep Polaris's tokens.
 
 ### Every object opens somewhere else
 - What: a span opens its code (⌘3) or its query in Data (⌘4); a Tool Call chip
