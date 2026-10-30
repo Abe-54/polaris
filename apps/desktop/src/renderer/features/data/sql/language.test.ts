@@ -65,10 +65,17 @@ describe("SQL tab completion from the loaded schema", () => {
     ]);
   });
 
-  test("a table whose detail isn't read yet still completes, without columns", async () => {
-    const options = await complete("select * from pay|", "postgres", catalogOf(FIXTURE_SCHEMA));
+  test("before a table's detail is read, its columns complete from the schema tree, without keys", async () => {
+    const options = await complete(
+      "select i.| from invoices i",
+      "postgres",
+      catalogOf(FIXTURE_SCHEMA)
+    );
 
-    expect(options.find((o) => o.label === "payments")?.detail).toBe("962 rows");
+    const byLabel = new Map(options.map((o) => [o.label, o]));
+
+    expect(byLabel.get("customer_id")?.detail).toBe("uuid");
+    expect(byLabel.get("paid_at")?.detail).toBe("timestamptz");
   });
 });
 

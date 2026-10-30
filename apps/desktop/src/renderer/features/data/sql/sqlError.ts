@@ -13,8 +13,8 @@ export interface ErrorSpan {
   readonly column: number;
 }
 
-/** The structured position, once the contract carries one (1-based character offset). */
-export type DataIpcError = IpcError & { readonly position?: number };
+/** A Data failure over IPC: a 1-based character `position` (Postgres) or `line` (MySQL). */
+export type DataIpcError = IpcError & { readonly position?: number; readonly line?: number };
 
 const IDENT = /[\w$]/;
 
@@ -62,6 +62,19 @@ const mysqlNear = (sql: string, message: string): ErrorSpan | null => {
   return at === -1 ? null : spanAt(sql, at, wordLength(sql, at));
 };
 
+/** Only a line: its first token. */
+const lineOnly = (sql: string, line: number | undefined): ErrorSpan | null => {
+  if (line === undefined || !Number.isInteger(line) || line < 1) return null;
+  const start = lineStart(sql, line);
+
+  if (start === null) return null;
+  const token = /\S/.exec(sql.slice(start));
+
+  return token === null
+    ? null
+    : spanAt(sql, start + token.index, wordLength(sql, start + token.index));
+};
+
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Postgres: `column "total" does not exist`, `relation "invoice" does not exist`. */
@@ -78,8 +91,8 @@ const quotedName = (sql: string, message: string): ErrorSpan | null => {
 };
 
 export const errorSpan = (sql: string, error: IpcError): ErrorSpan | null => {
-  // SAFETY: an optional field the contract may add; used only as an integer within the query.
-  const { position } = error as DataIpcError;
+  // SAFETY: optional fields Data's IPC mapper adds; each is used only as an in-range integer.
+  const { position, line } = error as DataIpcError;
 
   if (
     Number.isInteger(position) &&
@@ -89,5 +102,5 @@ export const errorSpan = (sql: string, error: IpcError): ErrorSpan | null => {
   )
     return spanAt(sql, position - 1, wordLength(sql, position - 1));
 
-  return mysqlNear(sql, error.message) ?? quotedName(sql, error.message);
+  return mysqlNear(sql, error.message) ?? quotedName(sql, error.message) ?? lineOnly(sql, line);
 };

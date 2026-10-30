@@ -9,7 +9,8 @@ import type { SchemaTree, TableDetail } from "@polaris/protocol";
 export interface CatalogColumn {
   readonly name: string;
   readonly type: string;
-  readonly nullable: boolean;
+  /** Null until the table's detail has been read; the schema tree has only names and types. */
+  readonly nullable: boolean | null;
   readonly pk: boolean;
   readonly fk: { readonly schema: string; readonly table: string; readonly column: string } | null;
 }
@@ -18,8 +19,7 @@ export interface CatalogTable {
   readonly schema: string;
   readonly name: string;
   readonly rowEstimate: number | null;
-  /** Null until the table's detail has been read. */
-  readonly columns: ReadonlyArray<CatalogColumn> | null;
+  readonly columns: ReadonlyArray<CatalogColumn>;
 }
 
 export interface Catalog {
@@ -42,7 +42,15 @@ const trim = (n: number) =>
 
 const detailKey = (schema: string, table: string) => `${schema}.${table}`;
 
-/** The tree's tables, with columns from whichever details have been read. */
+const bare = (column: { readonly name: string; readonly type: string }): CatalogColumn => ({
+  name: column.name,
+  type: column.type,
+  nullable: null,
+  pk: false,
+  fk: null,
+});
+
+/** The tree's tables and columns, with keys and nullability from whichever details were read. */
 export const catalogOf = (
   tree: SchemaTree,
   details: ReadonlyMap<string, TableDetail> = new Map()
@@ -55,7 +63,7 @@ export const catalogOf = (
         schema: schema.name,
         name: table.name,
         rowEstimate: table.rowEstimate,
-        columns: detail?.columns ?? null,
+        columns: detail?.columns ?? table.columns.map(bare),
       };
     })
   );
@@ -73,7 +81,7 @@ export const columnDetail = (column: CatalogColumn): string => {
 
   if (column.pk) return `${column.type} · primary key`;
 
-  return column.nullable ? `${column.type} · nullable` : column.type;
+  return column.nullable === true ? `${column.type} · nullable` : column.type;
 };
 
 const rows = (table: CatalogTable) =>
@@ -84,7 +92,7 @@ export const columnInfo = (table: CatalogTable, column: CatalogColumn): string =
   `${table.name}.${column.name} · ${rows(table)}`;
 
 export const tableDetail = (table: CatalogTable): string =>
-  table.columns === null ? rows(table) : `${rows(table)} · ${table.columns.length} columns`;
+  `${rows(table)} · ${table.columns.length} columns`;
 
 const columnCompletion = (table: CatalogTable, column: CatalogColumn): Completion => ({
   label: column.name,
@@ -103,7 +111,7 @@ const tableCompletion = (table: CatalogTable): Completion => ({
 
 const tableEntry = (table: CatalogTable): SQLNamespace => ({
   self: tableCompletion(table),
-  children: (table.columns ?? []).map((column) => columnCompletion(table, column)),
+  children: table.columns.map((column) => columnCompletion(table, column)),
 });
 
 /** lang-sql's `schema`: schema → table → columns, each with its detail and info. */

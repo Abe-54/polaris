@@ -1,14 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { type DataIpcError, errorSpan } from "./sqlError.ts";
 
-const err = (message: string, position?: number) => {
-  const error: DataIpcError = { code: "DataError", message };
-
-  return position === undefined ? error : { ...error, position };
-};
-
-const marked = (sql: string, message: string, position?: number) => {
-  const span = errorSpan(sql, err(message, position));
+const marked = (sql: string, message: string, at: Partial<DataIpcError> = {}) => {
+  const span = errorSpan(sql, { code: "E-DATA-SQL", message, ...at });
 
   return span === null
     ? null
@@ -17,7 +11,7 @@ const marked = (sql: string, message: string, position?: number) => {
 
 describe("where a database error points", () => {
   test("the Host's position marks the token there", () => {
-    expect(marked("select totl\nfrom invoices", "syntax error", 8)).toEqual({
+    expect(marked("select totl\nfrom invoices", "syntax error", { position: 8 })).toEqual({
       text: "totl",
       at: [1, 8],
     });
@@ -42,8 +36,17 @@ describe("where a database error points", () => {
     expect(marked("select 1", 'relation "invoices" does not exist')).toBeNull();
   });
 
+  test("MySQL's line alone marks that line's first token", () => {
+    expect(marked("select 1\n  frm invoices", "syntax error", { line: 2 })).toEqual({
+      text: "frm",
+      at: [2, 3],
+    });
+  });
+
   test("a position past the query falls back to the message", () => {
-    expect(marked("select total from t", 'column "total" does not exist', 99)).toEqual({
+    expect(
+      marked("select total from t", 'column "total" does not exist', { position: 99 })
+    ).toEqual({
       text: "total",
       at: [1, 8],
     });
