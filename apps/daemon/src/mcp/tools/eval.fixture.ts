@@ -432,12 +432,12 @@ export const toolCounter = () => {
     if (expected === undefined) expect(result.isError).not.toBe(true);
     else {
       expect(result.isError).toBe(true);
-      expect(result.structuredContent?.findings.map((item) => item.code)).toContain(expected);
+      expect(result.structuredContent?.findings?.map((item) => item.code)).toContain(expected);
     }
 
     if (result.isError) {
       stats.errors++;
-      findings.push(...(result.structuredContent?.findings.map((item) => item.code) ?? []));
+      findings.push(...(result.structuredContent?.findings?.map((item) => item.code) ?? []));
     }
 
     return result;
