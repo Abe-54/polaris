@@ -17,6 +17,9 @@ import { TreeRow } from "./TreeRow.tsx";
 import { useSchemaTrees } from "./useSchemaTrees.ts";
 
 /** Tree-row heights per density step (DESIGN.md, Density), the virtualizer's first guess. */
+/** The sidebar's list before it is measured: its width and a window's height. */
+const INITIAL_RECT = { width: 246, height: 800 };
+
 const ROW = { calm: 28, balanced: 24, compact: 22 } as const;
 
 const NO_CHANGES = [] as const;
@@ -99,6 +102,8 @@ const Tree = ({
     count: rows.length + 1,
     getScrollElement: () => scroller.current,
     estimateSize: () => ROW[density],
+    // The first paint, before the list is measured (and in tests, where nothing is).
+    initialRect: INITIAL_RECT,
     overscan: 12,
   });
 

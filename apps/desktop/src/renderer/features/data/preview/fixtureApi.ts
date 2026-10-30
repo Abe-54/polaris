@@ -115,20 +115,19 @@ const feed = <A>(initial: ReadonlyArray<A>) => {
   };
 };
 
-const LOOPBACK = /^(localhost|127\.|::1$)/;
-
+/** A saved source is remote until its Host says otherwise, as the Daemon fails closed. */
 const savedSource = (input: SaveSourceInput) =>
   new DataSource({
     id: `src-manual-${input.name}`,
     name: input.name,
     engine: input.engine,
-    locality: LOOPBACK.test(input.host) ? "local" : "remote",
+    locality: "remote",
     host: input.host,
     port: input.port,
     database: input.database,
     user: input.user,
     foundIn: { kind: "manual" },
-    access: LOOPBACK.test(input.host) ? "read" : "needs-approval",
+    access: "needs-approval",
     writes: "ask",
     label: input.label,
     reachable: true,

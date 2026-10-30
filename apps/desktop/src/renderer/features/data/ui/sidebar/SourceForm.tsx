@@ -17,7 +17,7 @@ import {
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useDataApi } from "../../data/hooks.tsx";
 import { closeSourceForm, type SourceForm as Form, useSourceForm } from "../../model/sidebar.ts";
-import { defaultLabel, isLoopback } from "../../model/source.ts";
+import { MANUAL_LABEL } from "../../model/source.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { LabelSwatches } from "../connection/LabelSwatches.tsx";
 
@@ -31,7 +31,7 @@ export interface Draft {
   readonly database: string;
   readonly user: string;
   readonly password: string;
-  /** null until the user picks one: it follows the host (rule/data-source-label's defaults). */
+  /** null until the user picks one (`MANUAL_LABEL`). */
   readonly label: DataSourceLabel | null;
 }
 
@@ -96,7 +96,7 @@ const Fields = ({
   set: (patch: Partial<Draft>) => void;
   editing: boolean;
 }) => {
-  const label = draft.label ?? defaultLabel(isLoopback(draft.host));
+  const label = draft.label ?? MANUAL_LABEL;
 
   return (
     <div className="flex flex-col gap-3 px-5 pb-4">
@@ -196,7 +196,7 @@ const Body = ({ at, form }: { readonly at: DataSessionKey; readonly form: Form }
       port: draft.port === "" ? PORTS[draft.engine] : Number(draft.port),
       database: draft.database.trim(),
       user: draft.user.trim(),
-      label: draft.label ?? defaultLabel(isLoopback(draft.host)),
+      label: draft.label ?? MANUAL_LABEL,
     };
 
     const result = await api.saveSource(

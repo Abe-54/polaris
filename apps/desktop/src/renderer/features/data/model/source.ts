@@ -70,13 +70,11 @@ export const kickerText = (source: DataSource, text = source.label.text): string
   return (source.branch?.name ?? source.locality).toUpperCase();
 };
 
-/** rule/data-source-label's default for a source the user adds: local uncoloured, remote red. */
-export const defaultLabel = (local: boolean): DataSourceLabel =>
-  local ? { text: "LOCAL", colour: "none" } : { text: "REMOTE", colour: "red" };
-
-/** Loopback or a Unix socket: what makes a Data Source Local (CONTEXT.md, Local Data Source). */
-export const isLoopback = (host: string) =>
-  /^(localhost|127\.\d+\.\d+\.\d+|::1|\[::1\])$/i.test(host.trim()) || host.trim().startsWith("/");
+/**
+ * A source the user adds starts red with no text: only the Host knows whether a database
+ * server is its own (a loopback port may be a tunnel), so the label fails closed until chosen.
+ */
+export const MANUAL_LABEL: DataSourceLabel = { text: "", colour: "red" };
 
 const ENGINES: Record<DataSource["engine"], string> = { postgres: "PostgreSQL", mysql: "MySQL" };
 

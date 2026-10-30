@@ -13,7 +13,10 @@ import { type LogLookups, type LogRow, logRows } from "../../model/queryLog.ts";
 import { type DataSessionKey, openSqlTab } from "../../model/store.ts";
 import type { QueryLogEntry } from "@polaris/protocol";
 
-/** Two lines of text and the row's padding, per density (the virtualizer's guess). */
+/** The sidebar's list before it is measured: its width and a window's height. */
+const INITIAL_RECT = { width: 246, height: 800 };
+
+/** Two lines of text and the row's padding (the virtualizer's guess). */
 const ROW_HEIGHT = 46;
 
 const Marker = ({ row }: { readonly row: LogRow }) => {
@@ -126,6 +129,8 @@ export const QueryLogView = ({ at, log, lookups }: QueryLogViewProps) => {
     count: rows.length,
     getScrollElement: () => scroller.current,
     estimateSize: () => ROW_HEIGHT,
+    // The first paint, before the list is measured (and in tests, where nothing is).
+    initialRect: INITIAL_RECT,
     overscan: 8,
   });
 
