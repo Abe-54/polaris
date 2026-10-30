@@ -58,6 +58,8 @@ export const runFixtureQuery = (sql: string, limit = DEFAULT_LIMIT): Result<Quer
       columns,
       rows: rows.slice(0, limit),
       rowCount: rows.length,
+      returned: Math.min(rows.length, limit),
+      total: rows.length,
       truncated: rows.length > limit,
       elapsedMs: 9,
     }),

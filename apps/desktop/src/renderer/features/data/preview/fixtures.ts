@@ -4,8 +4,10 @@
  */
 import {
   DataSource,
+  type DataValue,
   QueryLogEntry,
   type QueryResult,
+  RequestId,
   SchemaTree,
   SessionId,
   TableDetail,
@@ -154,7 +156,11 @@ const ROW_ESTIMATES = new Map<string, number>(
 
 export const FIXTURE_TABLES = [...TABLE_COLUMNS.keys()];
 
+export const fixtureColumns = (table: string) =>
+  TABLE_COLUMNS.get(table)?.map((c) => ({ name: c.name, type: c.type })) ?? null;
+
 export const FIXTURE_SCHEMA = new SchemaTree({
+  loadedAt: new Date(FIXTURE_NOW - 4_000).toISOString(),
   schemas: [
     {
       name: "public",
@@ -164,6 +170,7 @@ export const FIXTURE_SCHEMA = new SchemaTree({
             name,
             rowEstimate: ROW_ESTIMATES.get(name) ?? null,
             columnCount: TABLE_COLUMNS.get(name)?.length ?? 0,
+            columns: fixtureColumns(name) ?? [],
           })
       ),
       views: [],
@@ -244,7 +251,7 @@ const pick = <A>(values: ReadonlyArray<A>, next: () => number): A =>
   values[Math.floor(next() * values.length)] as A;
 
 /** 500 invoices: the table D1 shows, with overdue rows, NULL currencies and NULL paid_at. */
-export const FIXTURE_INVOICES: ReadonlyArray<ReadonlyArray<unknown>> = (() => {
+export const FIXTURE_INVOICES: ReadonlyArray<ReadonlyArray<DataValue>> = (() => {
   const next = seeded(42);
 
   return Array.from({ length: 500 }, (_, i) => {
@@ -284,7 +291,7 @@ const CURRENCY_ROWS = [
 ];
 
 /** Every fixture table's rows: invoices and currencies by hand, the rest generated. */
-export const fixtureRows = (table: string): ReadonlyArray<ReadonlyArray<unknown>> | null => {
+export const fixtureRows = (table: string): ReadonlyArray<ReadonlyArray<DataValue>> | null => {
   if (table === "invoices") return FIXTURE_INVOICES;
 
   if (table === "currencies") return CURRENCY_ROWS;
@@ -296,9 +303,6 @@ export const fixtureRows = (table: string): ReadonlyArray<ReadonlyArray<unknown>
 
   return Array.from({ length: count }, (_, i) => columns.map((c) => genericCell(c, i, next)));
 };
-
-export const fixtureColumns = (table: string) =>
-  TABLE_COLUMNS.get(table)?.map((c) => ({ name: c.name, type: c.type })) ?? null;
 
 const turn = (n: number) => TurnId.make(`turn-${n}`);
 
@@ -320,6 +324,8 @@ const READS = [
 /** The pending write: an agent's update waiting for the user's approval (D3). */
 export const FIXTURE_PENDING_WRITE_ID = "q-backfill-write";
 
+export const FIXTURE_PENDING_APPROVAL_ID = RequestId.make("r-backfill-write");
+
 /** 30 entries, oldest first: agent reads, the user's queries, a failure, a `psql` outside Polaris, a pending write. */
 export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
   ...Array.from({ length: 24 }, (_, i) => {
@@ -337,6 +343,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
         turn: turn(overdue ? 12 : 4),
       },
       tool: "data_query",
+      state: "completed",
       rows: (i * 37) % 214,
       elapsedMs: 3 + ((i * 7) % 40),
       at: at(120 - i * 4),
@@ -353,6 +360,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
       turn: turn(4),
       command: `psql $DATABASE_URL -c "select count(*) from invoices where currency is null"`,
     },
+    state: "completed",
     at: at(14),
   }),
   new QueryLogEntry({
@@ -361,6 +369,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     source: app,
     sql: "select * from invoices where status = 'overdue' and due_at < now() - interval '30 days'",
     author: { kind: "user" },
+    state: "completed",
     rows: 214,
     elapsedMs: 9,
     at: at(8),
@@ -371,6 +380,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     source: app,
     sql: "select * from invoices where currency is null",
     author: { kind: "user" },
+    state: "completed",
     rows: 38,
     elapsedMs: 4,
     at: at(6),
@@ -382,6 +392,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     sql: "select total from invoices",
     author: { kind: "agent", sessionId: FIXTURE_SESSIONS.overdue.id, turn: turn(12) },
     tool: "data_query",
+    state: "failed",
     error: 'column "total" does not exist',
     elapsedMs: 2,
     at: at(5),
@@ -393,6 +404,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     sql: "select count(*) from invoices where status = 'overdue'",
     author: { kind: "agent", sessionId: FIXTURE_SESSIONS.overdue.id, turn: turn(12) },
     tool: "data_query",
+    state: "completed",
     rows: 1,
     elapsedMs: 31,
     at: at(2),
@@ -404,6 +416,8 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     sql: "update invoices set currency = 'USD' where currency is null",
     author: { kind: "agent", sessionId: FIXTURE_SESSIONS.backfill.id, turn: turn(5) },
     tool: "data_query",
+    state: "waiting-approval",
+    approval: { id: FIXTURE_PENDING_APPROVAL_ID, status: "pending" },
     at: at(0),
   }),
 ];
