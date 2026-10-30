@@ -1,3 +1,4 @@
+import { DataRequestInputs, DataSubscriptionInputs } from "./dataContract.ts";
 import { PredictionPlacementInputs } from "./predictionPlacement.ts";
 import { PredictionOutcomeInputs } from "./predictionOutcomes.ts";
 /**
@@ -590,6 +591,7 @@ export const RequestInputs = {
   ...VoiceRequestInputs,
   ...BrowserRequestInputs,
   ...SecretRequestInputs,
+  ...DataRequestInputs,
 } as const;
 
 export type RequestMethod = keyof typeof RequestInputs;
@@ -647,6 +649,7 @@ export const SubscriptionInputs = {
   ...GitHubSubscriptionInputs,
   ...GitSubscriptionInputs,
   ...BrowserSubscriptionInputs,
+  ...DataSubscriptionInputs,
   /** One Constellation's stream (`constellation.subscribe`): Snapshot, Synchronized, then events. */
   constellation: Schema.Struct({
     hostKey: HostKey,

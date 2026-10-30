@@ -36,3 +36,5 @@ export * from "./files.ts";
 export * from "./languages/index.ts";
 
 export { isPipePath } from "./windowsPipe/trust.ts";
+
+export * from "./data.ts";

@@ -1,3 +1,4 @@
+import { DataRpcsLive, DataSources, DataQueries } from "../data/index.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
 import { PredictionServerLive } from "../prediction/server.ts";
 /**
@@ -156,6 +157,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
+  DataRpcsLive.pipe(Layer.provide(Layer.merge(DataSources.layer, DataQueries.layer))),
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -209,6 +211,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "prediction.managed",
   "commit.suggest-message",
   "approval.secret",
+  "data",
   "constellation",
   "constellation.defaults",
   "extensions",
