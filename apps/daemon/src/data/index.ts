@@ -6,6 +6,7 @@ import {
   type DataError,
   type NotFound,
   type DataSource,
+  type SessionId,
   type SchemaTree,
   type TableDetail,
   type QueryResult,
@@ -19,7 +20,14 @@ import {
   type LabelDataSource,
   type DecideDataApproval,
 } from "@polaris/protocol";
-import { Context, Effect, Layer, Stream } from "effect";
+import { Context, Effect, Layer, Stream, type Redacted } from "effect";
+import type { DataConnection } from "./connection.ts";
+
+export type { DataConnection } from "./connection.ts";
+
+import { sources, sourceDependencies } from "./sources.ts";
+
+export { DataSourceAccess } from "./access.ts";
 
 type Failure = DataError | NotFound | Unsupported;
 
@@ -31,6 +39,21 @@ const unsupported = () => Effect.fail(new Unsupported({ capability: DATA_CAPABIL
 export class DataSources extends Context.Service<
   DataSources,
   {
+    readonly list: (input: {
+      readonly sessionId: SessionId;
+    }) => Effect.Effect<ReadonlyArray<DataSource>, Failure>;
+    /** Daemon internal only; always re-read credentials before connecting. */
+    readonly resolve: (input: {
+      readonly sessionId: SessionId;
+      readonly source: string;
+    }) => Effect.Effect<
+      {
+        readonly source: DataSource;
+        readonly connection: DataConnection;
+        readonly url: Redacted.Redacted<string>;
+      },
+      Failure
+    >;
     readonly watch: (
       input: Input<typeof WatchDataSources>
     ) => Stream.Stream<ReadonlyArray<DataSource>, Failure>;
@@ -39,15 +62,7 @@ export class DataSources extends Context.Service<
     readonly label: (input: Input<typeof LabelDataSource>) => Effect.Effect<DataSource, Failure>;
   }
 >()("polaris/daemon/data/DataSources") {
-  static readonly layer = Layer.succeed(
-    DataSources,
-    DataSources.of({
-      watch: () => Stream.succeed([]),
-      save: unsupported,
-      remove: unsupported,
-      label: unsupported,
-    })
-  );
+  static readonly layer = Layer.effect(DataSources, Effect.flatMap(sourceDependencies, sources));
 }
 
 export class DataQueries extends Context.Service<
