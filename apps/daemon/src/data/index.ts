@@ -3,7 +3,8 @@ import {
   DataRpcs,
   DATA_CAPABILITY,
   Unsupported,
-  type DataError,
+  DataError,
+  type RequestId,
   type NotFound,
   type DataSource,
   type SessionId,
@@ -28,6 +29,13 @@ export type { DataConnection } from "./connection.ts";
 import { sources, sourceDependencies } from "./sources.ts";
 
 export { DataSourceAccess } from "./access.ts";
+
+import {
+  DataApprovalRequired,
+  type DataApprovalOutcome,
+  type DataAgentContext,
+  type OutsideInput,
+} from "./approvalRequired.ts";
 
 type Failure = DataError | NotFound | Unsupported;
 
@@ -69,10 +77,17 @@ export class DataQueries extends Context.Service<
   DataQueries,
   {
     readonly describe: (
-      input: Input<typeof DescribeData>
-    ) => Effect.Effect<SchemaTree | TableDetail, Failure>;
+      input: Input<typeof DescribeData> & DataAgentContext
+    ) => Effect.Effect<SchemaTree | TableDetail, Failure | DataApprovalRequired>;
     /** Desktop Queries use the same read-only path as agents, with author `user`. */
-    readonly query: (input: Input<typeof QueryData>) => Effect.Effect<QueryResult, Failure>;
+    readonly query: (
+      input: Input<typeof QueryData> & DataAgentContext
+    ) => Effect.Effect<QueryResult, Failure | DataApprovalRequired>;
+    readonly awaitApproval: (
+      approvalId: RequestId,
+      timeoutMs: number
+    ) => Effect.Effect<DataApprovalOutcome>;
+    readonly recordOutside: (input: OutsideInput) => Effect.Effect<void, Failure>;
     readonly watchLog: (
       input: Input<typeof WatchDataQueryLog>
     ) => Stream.Stream<ReadonlyArray<QueryLogEntry>, Failure>;
@@ -82,6 +97,8 @@ export class DataQueries extends Context.Service<
   static readonly layer = Layer.succeed(
     DataQueries,
     DataQueries.of({
+      awaitApproval: () => Effect.succeed({ status: "pending" }),
+      recordOutside: () => Effect.void,
       describe: unsupported,
       query: unsupported,
       watchLog: () => Stream.succeed([]),
@@ -97,8 +114,30 @@ export const DataRpcsLive = DataRpcs.toLayer(
 
     return {
       "data.sources.watch": sources.watch,
-      "data.describe": queries.describe,
-      "data.query": queries.query,
+      "data.describe": (input) =>
+        queries.describe(input).pipe(
+          Effect.catchTag("DataApprovalRequired", () =>
+            Effect.fail(
+              new DataError({
+                code: "E-DATA-DENIED",
+                message: "This data source needs approval",
+                fix: "Approve it in Data (⌘4).",
+              })
+            )
+          )
+        ),
+      "data.query": (input) =>
+        queries.query(input).pipe(
+          Effect.catchTag("DataApprovalRequired", () =>
+            Effect.fail(
+              new DataError({
+                code: "E-DATA-DENIED",
+                message: "This data source needs approval",
+                fix: "Approve it in Data (⌘4).",
+              })
+            )
+          )
+        ),
       "data.queryLog.watch": queries.watchLog,
       "data.source.save": sources.save,
       "data.source.remove": sources.remove,
