@@ -50,6 +50,7 @@ export type CommandId =
   | "editor.findInWorkspace"
   | "editor.inlineChat"
   | "editor.addToSession"
+  | "data.addRowsToSession"
   | "editor.markdownPreview"
   | "git.writeMessage"
   | "editor.save"
@@ -416,6 +417,14 @@ export const KEYMAP: ReadonlyArray<KeyBinding> = [
     keys: ["CmdOrCtrl+L"],
     menu: "Session",
     palette: WORKSPACE({ keywords: ["prompt", "message"] }),
+  },
+  // Only in Data, on a grid's rows: the selected rows, or all shown, to the shown session.
+  {
+    id: "data.addRowsToSession",
+    title: "Add rows to agent session",
+    keys: ["CmdOrCtrl+L"],
+    shares: "session.focusComposer",
+    palette: WORKSPACE({ keywords: ["data", "table", "rows", "attach"] }),
   },
   {
     id: "session.interrupt",
