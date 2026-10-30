@@ -1,5 +1,13 @@
 /** Wire values and credential scrubbing shared by Data producers (ENG-644). */
-import { Match, Predicate, Redacted, Schema, SchemaTransformation } from "effect";
+import {
+  Array as Arrays,
+  Match,
+  Option,
+  Predicate,
+  Redacted,
+  Schema,
+  SchemaTransformation,
+} from "effect";
 
 /** Known credentials must include URL-decoded and percent-encoded forms from the resolver. */
 export const scrubCredentials = (
@@ -24,7 +32,7 @@ export const scrubCredentials = (
       (url) => url.slice(0, url.indexOf("://") + 3) + "[redacted]@"
     )
     .replace(
-      /\b((?:PGPASSWORD|MYSQL_PWD|password|passwd|pwd)\s*=\s*)(?:'[^']*'|"[^"]*"|[^\s;&]+)/gi,
+      /\b((?:PGPASSWORD|MYSQL_PWD|password|passwd|pwd)\s*=\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?:\\.|[^\s;&])+)/gi,
       "$1[redacted]"
     );
 };
@@ -83,6 +91,27 @@ export const DataValue = Schema.Union([
 
 export type DataValue = typeof DataValue.Type;
 
+const scrubJsonValue = (
+  value: Schema.Json,
+  known: ReadonlyArray<Redacted.Redacted<string>>
+): Schema.Json => {
+  if (Predicate.isString(value)) return scrubCredentials(value, known);
+
+  if (Arrays.isArray<Schema.Json>(value)) return value.map((item) => scrubJsonValue(item, known));
+
+  if (value === null || Predicate.isNumber(value) || Predicate.isBoolean(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, scrubJsonValue(item, known)])
+  );
+};
+
+const scrubJsonText = (text: string, known: ReadonlyArray<Redacted.Redacted<string>>): string =>
+  Option.match(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))(text), {
+    onNone: () => scrubCredentials(text, known),
+    onSome: (value) => JSON.stringify(scrubJsonValue(value, known)),
+  });
+
 /** Apply known credentials to every string value, regardless of the column name. */
 export const scrubDataValue = (
   value: DataValue,
@@ -102,9 +131,7 @@ export const scrubDataValue = (
           })
     ),
     Match.tag("BigInt", "Numeric", (v) => ({ ...v, value: scrubCredentials(v.value, known) })),
-    Match.tag("Json", (v) =>
-      DataValueTags.cases.Json.make({ text: scrubCredentials(v.text, known) })
-    ),
+    Match.tag("Json", (v) => DataValueTags.cases.Json.make({ text: scrubJsonText(v.text, known) })),
     Match.tag("Timestamp", (v) =>
       DataValueTags.cases.Timestamp.make({ iso: scrubCredentials(v.iso, known) })
     ),
