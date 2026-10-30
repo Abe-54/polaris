@@ -1,0 +1,53 @@
+---
+status: accepted
+---
+
+# Agents query Data Sources through the Daemon, never with credentials
+
+## Context
+
+Agents are bad at databases mostly because they are blind: they guess the schema, run ad-hoc
+`psql` with a URL copied from `.env`, and misread the output. Data (⌘4, ENG-643) gives them a way
+to see the data, and gives the user a record of what they ran. That means deciding where Queries
+run, what an agent is handed, and what stops it from writing where it shouldn't.
+
+Constraints already in place: Polaris never touches provider credentials (ADR 0001), repository
+code gets an allowlisted environment (ADR 0054), and a secret never enters the event log
+(ADR 0089). The Daemon runs on Bun ≥ 1.3.9, whose `Bun.SQL` has native `postgres` and `mysql`
+adapters (checked on 1.4.4).
+
+## Decision
+
+**Every Query runs in the Daemon, on the Host, against a Data Source the agent names; the agent
+never sees a URL or a password, and the database itself enforces read-only.**
+
+- **Execution.** The Daemon opens connections with `Bun.SQL`; the Desktop App and Mobile App only
+  send Queries and receive rows. No driver, pool or credential lives in a Client.
+- **Naming.** Data Sources are discovered per checkout (`.env*` files, framework config, compose
+  services) or added by the user. Agents call `data_sources`, `describe`, `query` and `execute`
+  (Polaris MCP tools on every binding) with a Data Source's name. Discovered URLs are re-read from
+  the checkout on each connect and never persisted; a manual Data Source's password lives in
+  Secure Storage (ADR 0044).
+- **Read-only by the database.** `query` runs inside `SET TRANSACTION READ ONLY` (Postgres) or
+  `START TRANSACTION READ ONLY` (MySQL), with a 30 s statement timeout and results capped at
+  200 rows / 16k characters. We do not classify SQL by parsing it: functions, CTEs and vendor
+  syntax make a parser an incomplete guard, while the server's read-only transaction is not.
+- **Local and Remote.** A Local Data Source (loopback, a Unix socket, a compose service on the
+  Host) is readable by agents without asking. A Remote one needs a Data Source Approval: per
+  Host, for its exact server, database and user (or the whole server); a target that changes needs
+  a new one.
+- **Writes.** `execute` always asks the user. Before asking, the Daemon runs the statement in a
+  transaction and rolls it back, so the approval shows the affected count and before/after rows.
+  Approved, it runs again for real. On a Remote Data Source the user must also have allowed writes.
+- **Record.** Every Query, the user's and the agents', goes into the Query Log with its Agent
+  Session and Turn. `psql` and `mysql` Tool Calls are matched and logged as "outside Polaris": we
+  can't stop an agent with a shell from connecting itself, but we can make it visible.
+
+## Consequences
+
+- An agent that reads `.env` itself can still connect directly; the Query Log marks it and the
+  tools make the direct route unnecessary, but this is not a sandbox.
+- A dry run executes the write's reads and locks once more; long-running or side-effecting
+  statements (sequences, triggers that call out) are visible in the approval, not prevented.
+- Adding a database engine means a `Bun.SQL` adapter and its read-only transaction statement;
+  SQLite (ENG-646) is next.
