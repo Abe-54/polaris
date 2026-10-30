@@ -2,7 +2,7 @@
 
 Status: proposed (owner, 2026-10-30: decisions grilled and mockups requested; not built)
 Surface: Paper, "Traces (⌘5)" page: T1 "Waterfall" (Axiom-aligned), T2 "Profile under the
-waterfall", T3 "Traces in Orchestrate", T4 "Setup". ENG-655.
+waterfall", T3 "Traces in Orchestrate", T4 "Setup", T5 "Service map". ENG-655.
 Why exemplary: a debugging tool cut down to what helps an agent or helps you
 audit one, with every object linking back into Edit, Data and Orchestrate.
 
@@ -15,18 +15,30 @@ audit one, with every object linking back into Edit, Data and Orchestrate.
 - Evidence: T1.
 - Repeat when: listing anything agents produced over a session.
 
-### Neutral bars, colour only for failure
-- What: waterfall and flame frames are greys; only error spans are critical
-  red, and a collapsed repeat count is tan. Selection is lightness, not hue.
-- Rules exercised: rule/signals-are-rare; rule/colour-means-something.
-- Evidence: T1, T2.
-- Repeat when: any timeline or chart of agent work.
+### Service hues from the series palette, failure stays critical
+- What: waterfall bars take their service's colour from the series hues
+  (the context-category set, apart from every signal), named wherever they
+  appear; error spans stay critical, slowness is a badge, a collapsed repeat
+  count is tan, flame frames stay grey.
+- Rules exercised: rule/context-categories; rule/no-colour-alone;
+  rule/signals-are-rare.
+- Evidence: T1, T2; owner, 2026-10-30: "we should use different colors on
+  the traces to represent each service".
+- Repeat when: a chart needs categories that aren't signals.
+
+### The service map borrows the Hosts card
+- What: one trace's services drawn as the Hosts card's isometric servers and
+  dashed connectors, a light in the service hue, inferred databases dashed,
+  the agent's command and Turn as the caller.
+- Evidence: T5; owner, 2026-10-30: "We can use the hosts diagram as
+  reference for the service map".
+- Repeat when: drawing what connects to what; reuse the Hosts art.
 
 ### Axiom's workflow, Polaris's colour
 - What: the waterfall follows Axiom's trace view (minimap, start and end
   times, tree connectors with descendant-count badges, FAST/SLOW, a right
   span panel with Fields/Events/Links and a field filter) so the owner's
-  habits carry over; its blue bars and service colours do not.
+  habits carry over; service colours come from the series palette.
 - Rules exercised: rule/signals-are-rare.
 - Evidence: T1, T2; owner, 2026-10-30: "I'm pretty used to Axiom's OTel
   UI/UX. It would be nice to be more aligned with this workflow."
