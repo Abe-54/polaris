@@ -2,7 +2,7 @@
 
 Status: proposed (owner, 2026-10-30: decisions grilled and mockups requested; not built)
 Surface: Paper, "Traces (⌘5)" page: T1 "Waterfall" (Axiom-aligned), T2 "Profile under the
-waterfall", T3 "Traces in Orchestrate", T4 "Setup", T5 "Service map". ENG-655.
+waterfall", T3 "Traces in Orchestrate", T4 "Setup", T5 "Service map", T6 "Table". ENG-655.
 Why exemplary: a debugging tool cut down to what helps an agent or helps you
 audit one, with every object linking back into Edit, Data and Orchestrate.
 
