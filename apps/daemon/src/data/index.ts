@@ -4,7 +4,6 @@ import {
   DATA_CAPABILITY,
   Unsupported,
   type DataError,
-  type NotFound,
   type DataSource,
   type SchemaTree,
   type TableDetail,
@@ -17,11 +16,15 @@ import {
   type SaveDataSource,
   type RemoveDataSource,
   type LabelDataSource,
-  type DecideDataApproval,
+  type QueryDataStream,
+  type QueryDataStreamItem,
+  type PageDataQueryLog,
+  type DataQueryLogPage,
+  type SetDataSourceAccess,
 } from "@polaris/protocol";
 import { Context, Effect, Layer, Stream } from "effect";
 
-type Failure = DataError | NotFound | Unsupported;
+type Failure = DataError | Unsupported;
 
 type Input<R extends { readonly payloadSchema: { readonly Type: unknown } }> =
   R["payloadSchema"]["Type"];
@@ -36,6 +39,9 @@ export class DataSources extends Context.Service<
     ) => Stream.Stream<ReadonlyArray<DataSource>, Failure>;
     readonly save: (input: Input<typeof SaveDataSource>) => Effect.Effect<DataSource, Failure>;
     readonly remove: (input: Input<typeof RemoveDataSource>) => Effect.Effect<void, Failure>;
+    readonly access: (
+      input: Input<typeof SetDataSourceAccess>
+    ) => Effect.Effect<DataSource, Failure>;
     readonly label: (input: Input<typeof LabelDataSource>) => Effect.Effect<DataSource, Failure>;
   }
 >()("polaris/daemon/data/DataSources") {
@@ -46,6 +52,7 @@ export class DataSources extends Context.Service<
       save: unsupported,
       remove: unsupported,
       label: unsupported,
+      access: unsupported,
     })
   );
 }
@@ -61,7 +68,12 @@ export class DataQueries extends Context.Service<
     readonly watchLog: (
       input: Input<typeof WatchDataQueryLog>
     ) => Stream.Stream<ReadonlyArray<QueryLogEntry>, Failure>;
-    readonly decide: (input: Input<typeof DecideDataApproval>) => Effect.Effect<void, Failure>;
+    readonly queryStream: (
+      input: Input<typeof QueryDataStream>
+    ) => Stream.Stream<QueryDataStreamItem, Failure>;
+    readonly pageLog: (
+      input: Input<typeof PageDataQueryLog>
+    ) => Effect.Effect<typeof DataQueryLogPage.Type, Failure>;
   }
 >()("polaris/daemon/data/DataQueries") {
   static readonly layer = Layer.succeed(
@@ -70,7 +82,8 @@ export class DataQueries extends Context.Service<
       describe: unsupported,
       query: unsupported,
       watchLog: () => Stream.succeed([]),
-      decide: unsupported,
+      queryStream: () => Stream.fail(new Unsupported({ capability: DATA_CAPABILITY })),
+      pageLog: unsupported,
     })
   );
 }
@@ -88,7 +101,9 @@ export const DataRpcsLive = DataRpcs.toLayer(
       "data.source.save": sources.save,
       "data.source.remove": sources.remove,
       "data.source.label": sources.label,
-      "data.approval.decide": queries.decide,
+      "data.query.stream": (input) => queries.queryStream(input).pipe(Stream.rechunk(1)),
+      "data.queryLog.page": queries.pageLog,
+      "data.source.access": sources.access,
     };
   })
 );

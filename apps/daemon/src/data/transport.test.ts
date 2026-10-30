@@ -8,7 +8,7 @@ import {
   watchDataSources,
   watchDataQueryLog,
 } from "@polaris/client";
-import { DaemonRpcs, RequestId, SessionId, Unsupported } from "@polaris/protocol";
+import { DaemonRpcs, SessionId, Unsupported } from "@polaris/protocol";
 import { Effect, Layer, Redacted, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -19,7 +19,7 @@ const sessionId = SessionId.make("data-session");
 
 const label = { text: "Local", colour: "none" } as const;
 
-test("Data capability serves empty watches and typed Unsupported for every request", () =>
+test("Stub Data layer serves empty watches and typed Unsupported for every request", () =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -76,11 +76,8 @@ test("Data capability serves empty watches and typed Unsupported for every reque
           }),
           client["data.source.remove"](source),
           client["data.source.label"]({ ...source, label }),
-          client["data.approval.decide"]({
-            approvalId: RequestId.make("approval"),
-            decision: "deny",
-            scope: "target",
-          }),
+          client["data.source.access"]({ ...source, writes: "off", revoke: true }),
+          client["data.queryLog.page"]({ sessionId }),
         ];
 
         for (const request of requests) {

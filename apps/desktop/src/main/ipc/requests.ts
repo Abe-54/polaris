@@ -1,14 +1,14 @@
+/**
+ * The handlers behind `window.polaris.request`: one per method, each taking the
+ * decoded input and returning a structured-clone-friendly output. Blobs the
+ * Daemon sends (file contents, diffs) are taken here and cross IPC as bytes.
+ */
 import { dataHandlers } from "./data.ts";
 import { modelServerResources } from "@polaris/client/prediction/probe";
 import type { MainPredictionPlacement } from "../prediction/placement.ts";
 import type { PredictionSettings } from "../prediction/preferences.ts";
 import type { PredictionOutcomes } from "../prediction/outcomes.ts";
 import { predictionPreferenceView } from "../../shared/predictionPlacement.ts";
-/**
- * The handlers behind `window.polaris.request`: one per method, each taking the
- * decoded input and returning a structured-clone-friendly output. Blobs the
- * Daemon sends (file contents, diffs) are taken here and cross IPC as bytes.
- */
 import { clientCopy } from "../../shared/clientCopy.ts";
 import type { HostConnection, LiveSession } from "@polaris/client";
 import { FileContent, FileVersion } from "@polaris/protocol";

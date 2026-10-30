@@ -1,12 +1,12 @@
-import { DataRpcsLive, DataSources, DataQueries } from "../data/index.ts";
-import { PredictionCapabilityLive } from "../prediction/capability.ts";
-import { PredictionServerLive } from "../prediction/server.ts";
 /**
  * `polaris serve`: run the Daemon until SIGINT / SIGTERM.
  *
  * Handler layers from other Daemon modules are added to `daemonHandlers`
  * below as they land; `startServer` falls back to placeholders for the rest.
  */
+import { DataRpcsLive, DataSources, DataQueries } from "../data/index.ts";
+import { PredictionCapabilityLive } from "../prediction/capability.ts";
+import { PredictionServerLive } from "../prediction/server.ts";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
@@ -211,7 +211,6 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "prediction.managed",
   "commit.suggest-message",
   "approval.secret",
-  "data",
   "constellation",
   "constellation.defaults",
   "extensions",
