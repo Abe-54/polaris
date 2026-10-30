@@ -5,7 +5,7 @@
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@polaris/ui";
-import { memo, type KeyboardEvent, type ReactNode, useRef, useState } from "react";
+import { memo, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { CellInspector } from "./CellInspector.tsx";
 import { type GridColumn, type LaidColumn, typeLabel } from "./columns.ts";
@@ -42,7 +42,11 @@ export interface DataGridProps {
   readonly label: string;
   /** Shown under the header when there are no rows. */
   readonly empty?: ReactNode;
+  /** Scrolled within a hundred rows of the end: time for the next page. */
+  readonly onNearEnd?: () => void;
 }
+
+const NEAR_END = 100;
 
 const gutterWidth = (rows: number) => Math.max(44, String(rows).length * 7.2 + 20);
 
@@ -146,6 +150,7 @@ export const DataGrid = ({
   onCopy,
   label,
   empty,
+  onNearEnd,
 }: DataGridProps) => {
   const scroller = useRef<HTMLDivElement>(null);
   const density = useApp((s) => s.density);
@@ -177,6 +182,13 @@ export const DataGrid = ({
   const last = virtualCols.at(-1)?.index ?? -1;
   const offset = virtualCols[0]?.start ?? 0;
   const width = gutter + colVirtualizer.getTotalSize();
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const lastRow = virtualRows.at(-1)?.index ?? -1;
+  const nearEnd = rows.length > 0 && lastRow >= rows.length - NEAR_END;
+
+  useEffect(() => {
+    if (nearEnd) onNearEnd?.();
+  }, [nearEnd, rows.length, onNearEnd]);
 
   const focus = (next: GridSelection) => {
     onSelectionChange(next);
@@ -267,7 +279,7 @@ export const DataGrid = ({
               return column === undefined ? null : <HeaderCell key={c.index} column={column} />;
             })}
           </div>
-          {rowVirtualizer.getVirtualItems().map((r) => {
+          {virtualRows.map((r) => {
             const row = rows[r.index];
 
             return row === undefined ? null : (
