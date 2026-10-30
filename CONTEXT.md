@@ -313,6 +313,10 @@ _Avoid_: Command menu, action bar
 The view for browsing and querying the Data Sources of the selected Agent Session's checkout, and for inspecting the Queries its agents ran.
 _Avoid_: SQL client, database view, DB tab
 
+**Traces**:
+The view for inspecting the Traces that code run in the selected Agent Session's checkout sent to Polaris, by its agents or by the user, and the Turns that produced them.
+_Avoid_: Runtime view (Runtime is avoided for Harness), APM, observability tab
+
 ### Data
 
 **Data Source**:
@@ -339,6 +343,20 @@ _Avoid_: Query history (alone), audit log
 **Schema Diff**:
 What changed in the tables, columns and indexes of a Data Source an Agent Session used, between the start and end of a Turn; Review shows it beside the code that caused it, such as a migration.
 _Avoid_: Migration diff, DDL diff
+
+### Traces
+
+**Trace**:
+The record of one operation through running code, such as an HTTP request or a test, made of Spans, sent to Polaris by code that runs with Polaris's endpoint.
+_Avoid_: Request (an HTTP request is one kind of Span), log
+
+**Span**:
+One timed step of a Trace, with its attributes and the log records written during it; a Span whose operation failed is an error Span.
+_Avoid_: Event (that is the event log's)
+
+**Profile**:
+A CPU profile of one process Polaris launched, recorded over a stretch of time and shown as a flame chart beside the Spans it overlaps.
+_Avoid_: Flame graph (that is how a Profile is drawn), trace
 
 ### Language tooling
 
