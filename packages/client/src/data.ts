@@ -9,7 +9,9 @@ import {
   type SaveDataSource,
   type RemoveDataSource,
   type LabelDataSource,
-  type DecideDataApproval,
+  type QueryDataStream,
+  type PageDataQueryLog,
+  type SetDataSourceAccess,
 } from "@polaris/protocol";
 import { Effect, Stream } from "effect";
 import type { LiveSession } from "./HostConnection.ts";
@@ -30,12 +32,15 @@ export type DataSession = Pick<LiveSession, "capabilities"> & {
     | "data.source.save"
     | "data.source.remove"
     | "data.source.label"
-    | "data.approval.decide"
+    | "data.query.stream"
+    | "data.queryLog.page"
+    | "data.source.access"
   >;
 };
 
 const unsupported = () => Effect.fail(new Unsupported({ capability: DATA_CAPABILITY }));
 
+/** On older Daemons watches end without a snapshot; callers must check supportsData before waiting. */
 export const watchDataSources = (session: DataSession, input: Input<typeof WatchDataSources>) =>
   supportsData(session) ? session.client["data.sources.watch"](input) : Stream.empty;
 
@@ -57,7 +62,16 @@ export const removeDataSource = (session: DataSession, input: Input<typeof Remov
 export const labelDataSource = (session: DataSession, input: Input<typeof LabelDataSource>) =>
   supportsData(session) ? session.client["data.source.label"](input) : unsupported();
 
-export const decideDataApproval = (
+/** Desktop cancellation closes this stream and interrupts the upstream RPC scope. */
+export const queryDataStream = (session: DataSession, input: Input<typeof QueryDataStream>) =>
+  supportsData(session)
+    ? session.client["data.query.stream"](input)
+    : Stream.fail(new Unsupported({ capability: DATA_CAPABILITY }));
+
+export const pageDataQueryLog = (session: DataSession, input: Input<typeof PageDataQueryLog>) =>
+  supportsData(session) ? session.client["data.queryLog.page"](input) : unsupported();
+
+export const setDataSourceAccess = (
   session: DataSession,
-  input: Input<typeof DecideDataApproval>
-) => (supportsData(session) ? session.client["data.approval.decide"](input) : unsupported());
+  input: Input<typeof SetDataSourceAccess>
+) => (supportsData(session) ? session.client["data.source.access"](input) : unsupported());
