@@ -605,7 +605,10 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
 }) {}
 
 export const ApprovalDecision = Schema.TaggedUnion({
-  Allow: { remember: Schema.Boolean },
+  Allow: {
+    remember: Schema.Boolean,
+    dataScope: Schema.optionalKey(Schema.Literals(["target", "server"])),
+  },
   Deny: { reason: Schema.NullOr(Schema.String) },
   Answer: {
     /** The whole answer as text, for a Harness or Daemon that reads only this. */
