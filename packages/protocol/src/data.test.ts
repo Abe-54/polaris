@@ -21,7 +21,9 @@ test.each([
   "data.source.save",
   "data.source.remove",
   "data.source.label",
-  "data.approval.decide",
+  "data.query.stream",
+  "data.queryLog.page",
+  "data.source.access",
 ])("%s is available to Desktop Clients and refused to Extensions and Linked Devices", (method) => {
   expect(decideAccess(null, method, null)).toBeNull();
   expect(decideAccess(extension, method, null)).toEqual(
