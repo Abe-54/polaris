@@ -6,7 +6,13 @@ import type { DataSource, QueryLogEntry, SchemaTree, TableDetail } from "@polari
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import type { IpcError } from "../../../../shared/api.ts";
 import type { DataSessionKey } from "../model/store.ts";
-import { type DataApi, type DescribeInput, liveDataApi, type Snapshots } from "./api.ts";
+import {
+  type DataApi,
+  type DescribeInput,
+  liveDataApi,
+  type Snapshots,
+  type TableChange,
+} from "./api.ts";
 
 const ApiContext = createContext<DataApi>(liveDataApi);
 
@@ -60,6 +66,12 @@ export const useDataSources = (at: DataSessionKey): Loaded<ReadonlyArray<DataSou
 /** The checkout's Query Log, newest last, live. */
 export const useQueryLog = (at: DataSessionKey): Loaded<ReadonlyArray<QueryLogEntry>> =>
   useWatch(at, queryLog);
+
+const tableChanges = (api: DataApi) => api.watchTableChanges;
+
+/** Tables agents added or changed this Turn, live. */
+export const useTableChanges = (at: DataSessionKey): Loaded<ReadonlyArray<TableChange>> =>
+  useWatch(at, tableChanges);
 
 /** A Data Source's schema tree, or one table's detail when `table` is given. */
 export const useDescribe = (
