@@ -135,13 +135,16 @@ fields must come from the parsed target, never the raw connection string.
 2. `{_tag: "Rows", rows: DataValue[][]}` chunks, at most 500 rows and 1 MiB of JSON per chunk.
 3. `{_tag: "End", returned, total?, truncated, elapsedMs}` once work completes.
 
-All stream items, including the header, are capped at 1 MiB before RPC framing. Producers split
+The RPC handler rechunks to one item per RPC frame, so Effect cannot batch bounded items into an
+oversized frame. All stream items, including the header, are capped at 1 MiB before RPC framing. Producers split
 chunks by encoded bytes as well as rows. A single overly wide row must be clipped with cell
 markers to fit a chunk. Consumers must not assume a full 500 rows in each chunk. The stream owns
 the executor scope and read-only transaction: renderer unsubscribe, window close, connection loss
 or interruption cancels server work and rolls back/releases it. Interruption is the live wire
 signal (no terminal chunk is promised after unsubscribe); `E-DATA-CANCELLED` names the retained
-Query Log outcome. SQL errors use the typed stream error. IPC preserves `{code,message,fix}`;
+Query Log outcome. SQL errors use the typed stream error. IPC preserves `{code,message,fix,position?,line?}`; `position` is a database-reported one-based
+character offset in submitted SQL, `line` a one-based line number, both omitted when unknown (the protocol names the latter `DataError.sqlLine` to avoid
+Bun Error’s unrelated stack `line` field);
 Unsupported gives an upgrade explanation rather than an empty message.
 
 The Daemon advertises `data` only when its real discovery, Query, Query Log and approval Layers

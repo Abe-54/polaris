@@ -80,6 +80,7 @@ test.each([
   ['host=db password="hunter 2" dbname=app', "host=db password=[redacted] dbname=app"],
   ["mysql://app:hun%40ter@db/app", "mysql://[redacted]@db/app"],
   ["password=hunter2; next", "password=[redacted]; next"],
+  [String.raw`password='hun\'ter2' host=db`, "password=[redacted] host=db"],
 ])("F1: scrubs credential syntax %s", (input, expected) => {
   expect(scrubCredentials(input)).toBe(expected);
 });
@@ -275,4 +276,11 @@ test("F10: password actions reject ambiguous set/keep/clear combinations", () =>
       })
     ).toThrow();
   }
+});
+
+test("F1: JSON escapes cannot hide a known credential in an innocuous nested value", () => {
+  const value = DataValueTags.cases.Json.make({ text: JSON.stringify({ note: ['hun"ter2'] }) });
+  expect(scrubDataValue(value, [Redacted.make('hun"ter2')])).toEqual(
+    DataValueTags.cases.Json.make({ text: '{"note":["[redacted]"]}' })
+  );
 });
