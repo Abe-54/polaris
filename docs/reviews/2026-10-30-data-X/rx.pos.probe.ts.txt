@@ -1,0 +1,8 @@
+import { setup } from "./rx.probe.setup.ts";
+for (const engine of ["postgres", "mysql"] as const) {
+  const { pools, admin, run } = setup(engine);
+  for (const sql of ["SELECT 1 FROM nowhere_table", "SELECT 1 FROMM x"]) {
+    try { await run(sql); } catch (e) { console.log(engine, JSON.stringify(sql), "=>", JSON.stringify(e)); }
+  }
+  await pools.close(); await admin.close({ timeout: 0 });
+}

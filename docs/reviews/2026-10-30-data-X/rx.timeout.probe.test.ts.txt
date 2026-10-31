@@ -1,0 +1,62 @@
+/** RX probe: 30 s timeout, cancel, KILL QUERY targeting, pool exhaustion and leaks. Not committed. */
+import { test } from "bun:test";
+import { setup } from "./rx.probe.test.ts";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const settle = async (p: Promise<unknown>) => { const t = performance.now();
+  try { await p; return `ok ${Math.round(performance.now() - t)}ms`; }
+  catch (e) { return `${(e as { code?: string }).code} ${Math.round(performance.now() - t)}ms`; } };
+
+for (const engine of ["postgres", "mysql"] as const)
+  test(`${engine} timeout/cancel`, async () => {
+    const { admin, pools, run } = setup(engine);
+    const fn = engine === "postgres" ? "pg_sleep" : "SLEEP";
+    const active = async () => engine === "postgres"
+      ? (await admin.unsafe("SELECT pid, state, left(query,40) AS q FROM pg_stat_activity WHERE query LIKE '%sleep(%' AND pid <> pg_backend_pid() AND state <> 'idle'"))
+      : (await admin.unsafe("SELECT ID AS id, TIME AS t, LEFT(INFO,50) AS q FROM information_schema.PROCESSLIST WHERE INFO LIKE '%SLEEP(%' AND ID <> CONNECTION_ID()"));
+    const conns = async () => engine === "postgres"
+      ? (await admin.unsafe("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname='ledger' AND pid <> pg_backend_pid() AND backend_type='client backend'"))[0].n
+      : (await admin.unsafe("SELECT count(*) AS n FROM information_schema.PROCESSLIST WHERE DB='ledger' AND ID <> CONNECTION_ID()"))[0].n;
+    try {
+      console.log(`[${engine}] baseline other conns`, await conns());
+      console.log(`[${engine}] T1 ${fn}(40) default 30s:`, await settle(run(`SELECT ${fn}(40)`)));
+      console.log(`[${engine}] T1 server still running sleep:`, JSON.stringify(await active()));
+      console.log(`[${engine}] T1 next query:`, await settle(run("SELECT 1")));
+
+      const a = new AbortController();
+      const A = settle(run(`SELECT ${fn}(10) AS a`, { signal: a.signal }));
+      const B = settle(run(`SELECT ${fn}(3) AS b`));
+      await sleep(800);
+      console.log(`[${engine}] T3 running before cancel:`, JSON.stringify(await active()));
+      a.abort();
+      await sleep(300);
+      console.log(`[${engine}] T3 running after cancelling A:`, JSON.stringify(await active()));
+      console.log(`[${engine}] T3 A:`, await A, "B:", await B);
+
+      const hold = [settle(run(`SELECT ${fn}(3)`)), settle(run(`SELECT ${fn}(3)`))];
+      await sleep(200);
+      const c = new AbortController();
+      const C = settle(run("SELECT 1", { signal: c.signal }));
+      setTimeout(() => c.abort(), 500);
+      console.log(`[${engine}] T4 3rd query while 2 held, aborted at 500ms:`, await C, "holders:", await Promise.all(hold));
+      const D = settle(run("SELECT 1"));
+      console.log(`[${engine}] T4 next after pool free:`, await D);
+
+      for (let i = 0; i < 20; i++) {
+        const x = new AbortController();
+        const p = settle(run(`SELECT ${fn}(5)`, { signal: x.signal }));
+        setTimeout(() => x.abort(), 50 + (i % 5) * 20);
+        await p;
+      }
+      await sleep(300);
+      console.log(`[${engine}] T5 conns after 20 cancels:`, await conns(), "active:", JSON.stringify(await active()));
+      console.log(`[${engine}] T5 query after cancels:`, await settle(run("SELECT 1")));
+      await sleep(6500);
+      console.log(`[${engine}] T6 conns after 6.5s idle:`, await conns());
+    } finally {
+      await pools.close();
+      await sleep(200);
+      console.log(`[${engine}] after pools.close conns:`, await conns());
+      await admin.close({ timeout: 0 });
+    }
+  }, 180000);
