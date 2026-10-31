@@ -1,5 +1,6 @@
 /** Per-Host decisions projected from durable approval events into data.sqlite. */
 import { Database } from "bun:sqlite";
+import { WriteApprovalStore } from "./writeApprovalStore.ts";
 import {
   DataSourceApproval,
   type ApprovalRequest,
@@ -34,7 +35,9 @@ interface SourcePolicy {
 const decodeTarget = Schema.decodeUnknownSync(Schema.fromJsonString(DataSourceApproval));
 
 export class ApprovalStore {
+  readonly writes: WriteApprovalStore;
   constructor(readonly db: Database) {
+    this.writes = new WriteApprovalStore(db);
     db.exec(`CREATE TABLE IF NOT EXISTS data_approval_cursor (id INTEGER PRIMARY KEY, seq INTEGER NOT NULL);
       INSERT OR IGNORE INTO data_approval_cursor VALUES (1,0);
       CREATE TABLE IF NOT EXISTS data_approval_requests (id TEXT PRIMARY KEY, session TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, reason TEXT);
@@ -57,7 +60,9 @@ export class ApprovalStore {
   }
   apply(events: ReadonlyArray<EventEnvelope>, cut: number) {
     this.db.transaction(() => {
-      for (const { event } of events)
+      for (const envelope of events) {
+        this.writes.apply(envelope);
+        const { event } = envelope;
         Match.value(event).pipe(
           Match.tag("ApprovalRequested", ({ request }) => this.opened(request)),
           Match.tag("ApprovalResolved", ({ requestId, decision }) => {
@@ -100,6 +105,8 @@ export class ApprovalStore {
           }),
           Match.orElse(() => {})
         );
+      }
+
       this.db.query("UPDATE data_approval_cursor SET seq=? WHERE id=1").run(cut);
     })();
   }
@@ -172,11 +179,14 @@ export class ApprovalStore {
     );
   }
   outcome(id: string) {
-    return this.db
-      .query<
-        { status: "approved" | "denied" | "pending"; reason: string | null; session: string },
-        [string]
-      >("SELECT status,reason,session FROM data_approval_requests WHERE id=?")
-      .get(id);
+    return (
+      this.writes.outcome(id) ??
+      this.db
+        .query<
+          { status: "approved" | "denied" | "pending"; reason: string | null; session: string },
+          [string]
+        >("SELECT status,reason,session FROM data_approval_requests WHERE id=?")
+        .get(id)
+    );
   }
 }

@@ -121,6 +121,18 @@ run("Data approval safety", [
   `--seed=${seed}`,
 ]);
 
+run("Data write scenarios", ["test", "polaris.qnt", "--main=data_writes"]);
+
+run("Data write safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_writes",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
 for (const mutant of ["default", "once", "cards"]) {
   const main = `data_approvals_${mutant}_mutant`;
   run(`Data approval ${mutant} regression witness`, ["test", "polaris.qnt", `--main=${main}`]);

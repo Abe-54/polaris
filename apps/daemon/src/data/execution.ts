@@ -197,27 +197,37 @@ async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active)
         "Use describe, or SELECT from information_schema."
       );
 
-    const metadata =
-      tx<RawResult>`${tx.unsafe(`SELECT * FROM (\n${checked.sql}\n) AS polaris_capped LIMIT 0`, params)}`.raw();
-
-    active.query = metadata;
-
-    const described = await metadata.catch((error) => {
-      throw queryError(error, knownCredentials(input.connection), {
-        sql: checked.sql,
-        prefix: "SELECT * FROM (\n",
-      });
-    });
-
-    if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
-    const projection = budgetProjection(checked.sql, described.columns, "mysql", input.limit + 1);
-    const query = tx<RawResult>`${tx.unsafe(projection.sql, params)}`.raw();
-    active.query = query;
-
-    return unpackBudget(await query, projection.columns, projection.tooWide);
+    return mysqlRead(tx, active, checked.sql, params, input.limit + 1);
   }
 
   return cursorRead(tx, active, checked.sql, params, input.limit + 1);
+}
+
+export async function mysqlRead(
+  tx: TransactionSQL,
+  active: Active,
+  sql: string,
+  params: Array<ReturnType<typeof bindValues>[number] | Uint8Array>,
+  limit: number
+) {
+  const metadata =
+    tx<RawResult>`${tx.unsafe(`SELECT * FROM (\n${sql}\n) AS polaris_capped LIMIT 0`, params)}`.raw();
+
+  active.query = metadata;
+
+  const described = await metadata.catch((error) => {
+    throw queryError(error, [], {
+      sql,
+      prefix: "SELECT * FROM (\n",
+    });
+  });
+
+  if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
+  const projection = budgetProjection(sql, described.columns, "mysql", limit);
+  const query = tx<RawResult>`${tx.unsafe(projection.sql, params)}`.raw();
+  active.query = query;
+
+  return unpackBudget(await query, projection.columns, projection.tooWide);
 }
 
 export async function cursorRead(

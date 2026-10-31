@@ -173,6 +173,8 @@ for (const binding of bindings)
               Layer.succeed(
                 DataQueries,
                 DataQueries.of({
+                  execute: () => Effect.die("Unexpected execute"),
+                  commitEdits: () => Effect.die("Unexpected commit"),
                   describe: (input) => {
                     reads.push(input);
 

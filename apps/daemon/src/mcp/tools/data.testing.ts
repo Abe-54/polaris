@@ -121,6 +121,7 @@ export const toolsWithData = (
     data: {
       sources: () => Effect.succeed({ checkout: "~/code/ledger", sources: [source] }),
       describe: (input) => Effect.succeed(input.table === undefined ? tree : table),
+      execute: () => Effect.die("Unexpected execute"),
       query: () => Effect.succeed(result),
       credentials: () => Effect.succeed([]),
       awaitApproval: () => Effect.succeed({ status: "approved" }),

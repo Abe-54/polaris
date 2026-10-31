@@ -11,7 +11,7 @@ export const decisionRefusal = (
 ): string | null => {
   const request = record.pending.get(requestId);
   const secret = request?.kind === "secret";
-  const data = request?.dataSource !== undefined;
+  const data = request?.dataSource !== undefined || request?.dataWrite !== undefined;
 
   return ApprovalDecision.match(decision, {
     Allow: () => (secret ? "a Secret Request takes a secret or a decline" : null),
@@ -54,7 +54,18 @@ export const canRequestDataApproval = (
 ) => {
   const target = event.request.dataSource;
 
-  if (event.type === "harness.approvalRequested") return target === undefined;
+  const write = event.request.dataWrite;
+
+  if (event.type === "harness.approvalRequested")
+    return target === undefined && write === undefined;
+
+  if (write !== undefined)
+    return (
+      target === undefined &&
+      ![...record.pending.values()].some(
+        (request) => request.dataWrite?.fingerprint === write.fingerprint
+      )
+    );
 
   if (target === undefined) return false;
 

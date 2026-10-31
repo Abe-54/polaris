@@ -3,6 +3,7 @@ import {
   describeData,
   getDataSchemaDiff,
   queryData,
+  commitDataEdits,
   saveDataSource,
   removeDataSource,
   labelDataSource,
@@ -61,6 +62,8 @@ export const dataHandlers = {
     onHost(hostKey, (session) => getDataSchemaDiff(session, input)),
   "data.describe": ({ hostKey, ...input }: RequestInput<"data.describe">) =>
     onHost(hostKey, (session) => describeData(session, input)),
+  "data.edits.commit": ({ hostKey, ...input }: RequestInput<"data.edits.commit">) =>
+    onHost(hostKey, (session) => commitDataEdits(session, input)),
   "data.query": ({ hostKey, ...input }: RequestInput<"data.query">) =>
     onHost(hostKey, (session) => queryData(session, input)),
   "data.source.save": ({ hostKey, password, ...input }: RequestInput<"data.source.save">) =>

@@ -18,6 +18,8 @@ export * from "./dataValues.ts";
 
 export const DATA_CAPABILITY = "data";
 
+export const DATA_WRITE_CAPABILITY = "data.writes";
+
 const Name = Schema.String.check(Schema.isMinLength(1));
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -80,6 +82,23 @@ export class QueryResult extends Schema.Class<QueryResult>("QueryResult")({
   truncated: Schema.Boolean,
   elapsedMs: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
 }) {}
+
+export class DataWriteResult extends Schema.Class<DataWriteResult>("DataWriteResult")({
+  queryId: Name,
+  affected: Count,
+  elapsedMs: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
+}) {}
+
+export const ExecuteDataInput = Schema.Struct({
+  sessionId: SessionId,
+  requestId: Schema.optionalKey(
+    Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
+  ),
+  source: Name,
+  sql: Name.check(Schema.isMaxLength(32000)),
+  params: Schema.optionalKey(Schema.Array(DataValue).check(Schema.isMaxLength(10000))),
+  reason: Name.check(Schema.isMaxLength(4000)),
+});
 
 export class TableSummary extends Schema.Class<TableSummary>("TableSummary")({
   name: Name,
@@ -167,6 +186,9 @@ export class QueryLogEntry extends Schema.Class<QueryLogEntry>("QueryLogEntry")(
   ),
   tool: Schema.optionalKey(Schema.String),
   rows: Schema.optionalKey(Count),
+  affected: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ schema: Schema.optionalKey(Name), table: Name, rows: Count }))
+  ),
   elapsedMs: Schema.optionalKey(Schema.Number),
   error: Schema.optionalKey(ScrubbedText),
   at: Timestamp,
@@ -317,6 +339,23 @@ export const SetDataSourceAccess = Rpc.make("data.source.access", {
   error: Errors,
 });
 
+export const CommitDataEdits = Rpc.make("data.edits.commit", {
+  payload: {
+    ...OnSource,
+    table: Schema.Struct({ schema: Name, name: Name }),
+    primaryKey: Schema.Array(Name).check(Schema.isMinLength(1)),
+    edits: Schema.Array(
+      Schema.Struct({
+        key: Schema.Array(DataValue),
+        column: Name,
+        value: DataValue,
+      })
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(10000)),
+  },
+  success: DataWriteResult,
+  error: Errors,
+});
+
 export const GetDataSchemaDiff = Rpc.make("data.schemaDiff", {
   payload: { sessionId: SessionId, turn: Schema.optionalKey(TurnId) },
   success: DataSchemaDiff,
@@ -334,5 +373,6 @@ export class DataRpcs extends RpcGroup.make(
   LabelDataSource,
   QueryDataStream,
   PageDataQueryLog,
-  SetDataSourceAccess
+  SetDataSourceAccess,
+  CommitDataEdits
 ) {}

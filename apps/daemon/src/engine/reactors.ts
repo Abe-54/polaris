@@ -307,11 +307,15 @@ const make = Effect.gen(function* () {
       Interrupt: (command) => interrupt(command.sessionId),
       StopBackgroundTasks: (command) => stopBackground(command.sessionId, command.taskIds),
       BackgroundCommand: (command) => backgroundCommand(command.sessionId, command.itemId),
-      RespondToApproval: (command) =>
-        committed.before.sessions.get(command.sessionId)?.pending.get(command.requestId)
-          ?.dataSource !== undefined
+      RespondToApproval: (command) => {
+        const request = committed.before.sessions
+          .get(command.sessionId)
+          ?.pending.get(command.requestId);
+
+        return request?.dataSource !== undefined || request?.dataWrite !== undefined
           ? Effect.void
-          : respond(command.sessionId, command.requestId, command.decision),
+          : respond(command.sessionId, command.requestId, command.decision);
+      },
       SetPermissionMode: (command) =>
         Effect.suspend(
           () =>

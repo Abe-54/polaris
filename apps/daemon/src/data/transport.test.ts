@@ -62,6 +62,8 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
                 Layer.succeed(
                   DataQueries,
                   DataQueries.of({
+                    execute: () => Effect.fail(new Unsupported({ capability: "data" })),
+                    commitEdits: () => Effect.fail(new Unsupported({ capability: "data" })),
                     query: () => Effect.fail(new Unsupported({ capability: "data" })),
                     describe: () => Effect.fail(new Unsupported({ capability: "data" })),
                     queryStream: () => Stream.empty,

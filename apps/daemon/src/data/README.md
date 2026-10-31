@@ -141,6 +141,72 @@ without including the raw value. `catalog.test.ts` covers these driver value sha
 field-specific failures; the live suite also checks views, routines, defaults, indexes
 and check constraints.
 
+## Writes (ENG-645)
+
+`DataQueries.execute` uses the same pools, single-statement lexer, transaction deadline and
+cancellation boundary as reads. A preview runs in a writable transaction and is rolled back
+before `data.approvalRequested` opens a write card. `RespondToApproval` decides that card;
+ending the Turn, stopping the Agent Session, or recovery denies pending cards. Remote execute
+requires remembered read access for the exact target or server **as this user**, and writes set
+to `ask`; a one-request read approval cannot authorize a preview. Each write still needs its
+own approval, regardless of the Session's permission mode or `remember` choice.
+
+An explicit `execute.requestId` binds a retry to its Agent Session and durable argument hash.
+Completed receipts are returned before checking for an active Turn or opening the source.
+A different payload under the same key is refused; a different key requests a separate write.
+Uncompleted approvals remain bound to their original Turn. Calls without a key retain the
+exact-argument, per-Turn fingerprint.
+
+Without a requestId, a fingerprint binds the Agent Session, Turn, source id, target, SQL, parameters and reason.
+Retries share one card. A durable compare-and-set consumes approved authority before the
+transaction starts, and a completed retry returns the original result. Concurrent retries
+cannot execute twice. If a process or connection fails after consumption, automatic replay is
+refused: inspect the Query Log and database before requesting another write. This is an
+at-most-once dispatch guarantee, not an atomic commit spanning SQLite and an external database.
+
+The real transaction must affect exactly the previewed count or it rolls back. UPDATE/DELETE
+previews read up to 20 rows, ordered by primary key; UPDATE after-rows use the original keys.
+The card is capped at 16,000 bytes of row data, with the existing per-cell clipping. Tables
+without a primary key show the count and say why rows aren't shown. Preview values are scrubbed
+only for display; subsequent key lookups bind original values. A resolved table is qualified in
+the statement and its metadata is locked through the transaction.
+
+`data.edits.commit` groups staged cells by their primary-key tuple. It verifies the actual
+primary key, updates each row once, requires one matched row per update (including MySQL
+no-op assignments), and rolls back the entire batch on any mismatch. Its one Query Log entry
+has author `user`. Completed writes carry `affected: [{schema, table, rows}]` for exact target
+attribution; read result counts never populate that field. Clients negotiate `data.writes`
+before sending this RPC. The Desktop App owns the remote bulk confirmation.
+
+### Write limits (ENG-669)
+
+- INSERT, UPDATE and DELETE must name one explicit table. Read-only subqueries in SET/WHERE
+  and INSERT … SELECT are supported. Joins, aliases, CTEs, RETURNING, ORDER/LIMIT and tuple
+  assignments are refused with rewrite or migration guidance.
+- Primary-key assignments are refused. A trigger that moves a sampled key also makes the
+  preview or real transaction roll back when after-rows cannot be read. Change keys through
+  a migration or the app's own code, not execute.
+- DDL is local Postgres only. MySQL DDL commits implicitly and cannot be previewed; remote
+  DDL is refused. MySQL row writes require an InnoDB target, checked under its metadata lock.
+- Rollback protects transactional rows, not every effect of executing SQL. Sequences (including
+  `nextval` and auto-increment allocation) can advance. External or independently committed
+  effects in user functions/triggers can survive; a restricted database role remains necessary.
+  Non-InnoDB writes survive rollback, which is why those targets are refused. PostgreSQL NOTIFY
+  is transactional and is not delivered on rollback. Direct function-call restrictions use the shared lexical and
+  catalog guard before the preview or real write. User-defined wrappers remain a database-role
+  boundary.
+- Preview reads use the same server byte budget and cell projection as ordinary reads.
+  Missing or clipped primary keys refuse mutation, and omitted rows or columns are noted.
+
+```sh
+POLARIS_TEST_PG_URL='<disposable Postgres 16 URL>' \
+POLARIS_TEST_MYSQL_URL='<disposable MySQL 8.4 URL>' \
+POLARIS_DATA_WRITE_TRACE_DIR=/private/tmp/polaris-w-traces \
+bun test apps/daemon/src/data/writeExecution.real.test.ts apps/daemon/src/data/writes.real.test.ts
+bun packages/spec/scripts/replay-data-write.ts /private/tmp/polaris-w-traces/postgres.json
+bun packages/spec/scripts/replay-data-write.ts /private/tmp/polaris-w-traces/mysql.json
+```
+
 ## Schema Diff (ENG-645)
 
 `SchemaSnapshots.get({sessionId, turn?})` is the internal Review accessor;

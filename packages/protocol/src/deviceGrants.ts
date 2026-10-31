@@ -111,6 +111,7 @@ export const DEVICE_RPCS = {
   "data.sources.watch": "local",
   "data.schemaDiff": "local",
   "data.describe": "local",
+  "data.edits.commit": "local",
   "data.query": "local",
   "data.queryLog.watch": "local",
   "data.source.save": "local",

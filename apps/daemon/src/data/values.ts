@@ -82,7 +82,7 @@ function mysqlTime(buffer: Buffer): string {
   return `${buffer[0] ? "-" : ""}${pad(hours)}:${pad(buffer[6]!)}:${pad(buffer[7]!)}${buffer.length >= 12 ? `.${pad(buffer.readUInt32LE(8), 6)}` : ""}`;
 }
 
-function mysqlValue(buffer: Buffer, column: Column, catalogText: boolean): DataValue {
+export function mysqlValue(buffer: Buffer, column: Column, catalogText: boolean): DataValue {
   const unsigned = ((column.flags ?? 0) & 32) !== 0;
 
   switch (column.type) {
