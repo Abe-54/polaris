@@ -137,6 +137,7 @@ describe("Review's route timings", () => {
         ["test overdue-totals", "compared"],
         ["GET /customers/:id", "no-baseline"],
         ["GET /invoices?status=overdue", "no-baseline"],
+        ["settlements.run", "not-run"],
       ]
     );
   });
