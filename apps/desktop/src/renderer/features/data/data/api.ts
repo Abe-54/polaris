@@ -1,8 +1,9 @@
 /**
  * Data's boundary: the calls Data mode makes (sources and Query Log watches, describe, query,
- * and saving, labelling and removing a source). `liveDataApi` goes over IPC (shared/dataContract.ts); fixtures swap in for previews.
+ * saving, labelling and removing a source, and the Schema Diff Review reads). `liveDataApi` goes over IPC (shared/dataContract.ts); fixtures swap in for previews.
  */
 import type {
+  DataSchemaDiff,
   DataSource,
   DataValue,
   DataSourceLabel,
@@ -10,6 +11,7 @@ import type {
   QueryResult,
   SchemaTree,
   TableDetail,
+  TurnId,
 } from "@polaris/protocol";
 import { Match } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
@@ -111,6 +113,14 @@ export interface DataApi {
   ) => Promise<Result<DataSource>>;
   /** Tables changed this Turn; no Host serves them yet, so the live feed stays empty. */
   readonly watchTableChanges: (at: DataSessionKey, on: Snapshots<TableChange>) => () => void;
+  /**
+   * The session's Schema Diff (`data.schemaDiff`): one Turn's, or the whole session's when
+   * `turn` is omitted. Request/response; fails `Unsupported` on Daemons without it.
+   */
+  readonly schemaDiff: (
+    at: DataSessionKey,
+    turn: TurnId | undefined
+  ) => Promise<Result<DataSchemaDiff>>;
 }
 
 const session = (at: DataSessionKey) => ({ hostKey: at.hostKey, sessionId: at.sessionId });
@@ -163,6 +173,11 @@ export const liveDataApi: DataApi = {
   removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
     polaris().request("data.source.label", { ...session(at), source, label }),
+  schemaDiff: (at, turn) =>
+    polaris().request(
+      "data.schemaDiff",
+      turn === undefined ? session(at) : { ...session(at), turn }
+    ),
   watchTableChanges: (_at, on) => {
     on.next([]);
 
