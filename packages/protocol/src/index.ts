@@ -110,4 +110,6 @@ export * from "./predictionRpcs.ts";
 
 export * from "./data.ts";
 
+export * from "./traces.ts";
+
 export * from "./schemaDiff.ts";
