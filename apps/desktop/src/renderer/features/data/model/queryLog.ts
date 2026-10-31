@@ -260,16 +260,20 @@ const callsFunction = (masked: string) =>
     ([, name]) => name !== undefined && !NOT_CALLS.has(name.toLowerCase())
   );
 
+const plainSelect = (text: string) =>
+  /^select\b/i.test(text) && !text.includes(";") && !CHANGES.test(text) && !callsFunction(text);
+
+/** Text an engine may read differently from `maskLiterals`: `\'`, `/*! … *\/`, `#` comments. */
+const AMBIGUOUS = /\\|\/\*|#/;
+
 /**
- * Only a lone plain SELECT that calls no function re-runs straight away; anything else (a
- * function may act, as `pg_terminate_backend` does) opens in a SQL tab to run with ⌘↵.
+ * Only a lone plain SELECT that calls no function re-runs straight away, judged on the raw text
+ * and the masked one alike; anything else opens in a SQL tab to run with ⌘↵.
  */
 export const runsOnOpen = (sql: string) => {
-  const text = maskLiterals(sql).trim().replace(/;\s*$/, "");
+  const raw = sql.trim().replace(/;\s*$/, "");
 
-  return (
-    /^select\b/i.test(text) && !text.includes(";") && !CHANGES.test(text) && !callsFunction(text)
-  );
+  return !AMBIGUOUS.test(raw) && plainSelect(raw) && plainSelect(maskLiterals(raw).trim());
 };
 
 const DDL = /^\s*(create|alter|drop|truncate|rename|comment)\b/i;

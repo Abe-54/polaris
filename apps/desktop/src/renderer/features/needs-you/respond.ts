@@ -4,7 +4,7 @@
  */
 import type { ApprovalDecision, ApprovalRequest, RequestId, SessionId } from "@polaris/protocol";
 import { Commands, Decisions } from "../../commands.ts";
-import { allowFor, forgetDecision, noteDecision } from "../data/approval/decide.ts";
+import { allowFor, forgetDecision, noteDecision, noteGrant } from "../data/approval/decide.ts";
 import { send } from "../session/dispatch.ts";
 import { markAnswered } from "./answered.ts";
 
@@ -42,10 +42,11 @@ export const decide = async (
   { hostKey, sessionId, request }: ApprovalTarget,
   decision: ApprovalDecision
 ) => {
-  noteDecision(hostKey, request, decision);
+  noteDecision(request, decision);
   const sent = await respond({ hostKey, sessionId, requestId: request.id, decision });
 
-  if (!sent) forgetDecision(request.id);
+  if (sent) noteGrant(hostKey, request, decision);
+  else forgetDecision(request.id);
 
   return sent;
 };

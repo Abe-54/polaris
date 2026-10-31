@@ -78,24 +78,29 @@ export const sourceForTarget = (
   target: DataSourceTarget
 ): DataSource | undefined => sources.find((s) => sameTarget(target, s));
 
-/** Records a decision sent here, so every view of the request, and others it covers, agree. */
-export const noteDecision = (
+/** Records a decision being sent, so every view of the request shows it at once. */
+export const noteDecision = (request: ApprovalRequest, decision: ApprovalDecision) => {
+  if (dataSourceTarget(request) === null) return;
+  const approved = Predicate.isTagged(decision, "Allow");
+
+  decisionStore.setState((s) => ({
+    ...s,
+    decided: { ...s.decided, [request.id]: approved ? "approved" : "denied" },
+  }));
+};
+
+/** After the Host accepted an Approve: other requests it covers are answered too. */
+export const noteGrant = (
   hostKey: string,
   request: ApprovalRequest,
   decision: ApprovalDecision
 ) => {
   const target = dataSourceTarget(request);
 
-  if (target === null) return;
-  const allow = Predicate.isTagged(decision, "Allow") ? decision : null;
-  const approved = allow !== null;
-  const scope = allow === null ? null : (allow.dataScope ?? "target");
+  if (target === null || !Predicate.isTagged(decision, "Allow")) return;
+  const grant = { hostKey, target, scope: decision.dataScope ?? "target" };
 
-  decisionStore.setState((s) => ({
-    ...s,
-    decided: { ...s.decided, [request.id]: approved ? "approved" : "denied" },
-    grants: scope === null ? s.grants : [...s.grants, { hostKey, target, scope }],
-  }));
+  decisionStore.setState((s) => ({ ...s, grants: [...s.grants, grant] }));
 };
 
 const settled = new Set<string>();

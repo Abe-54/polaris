@@ -91,7 +91,8 @@ const Settler = () => {
   return null;
 };
 
-test("approving one session's request answers another's for the same target (F3)", async () => {
+/** Two sessions on the data Host, each asking for the same target, with the settler mounted. */
+const twoAsking = () => {
   const model = dataHostModel();
   const sessions = new Map(model.sessions);
   const ids = [FIXTURE_SESSIONS.backfill.id, FIXTURE_SESSIONS.overdue.id] as const;
@@ -131,20 +132,42 @@ test("approving one session's request answers another's for the same target (F3)
     </AppProvider>
   );
 
+  return { ids, first };
+};
+
+const answered = () =>
+  bridge
+    .sent("dispatch")
+    .flatMap(({ command }) =>
+      Predicate.isTagged(command, "RespondToApproval")
+        ? [[command.sessionId, command.decision]]
+        : []
+    );
+
+const ALLOW = Decisions.Allow({ remember: true, dataScope: "target" });
+
+test("approving one session's request answers another's for the same target (F3)", async () => {
+  const { ids, first } = twoAsking();
+
   await approve({ hostKey: DATA_AT.hostKey, sessionId: ids[0], request: first });
 
   await waitFor(() =>
-    expect(
-      bridge
-        .sent("dispatch")
-        .flatMap(({ command }) =>
-          Predicate.isTagged(command, "RespondToApproval")
-            ? [[command.sessionId, command.decision]]
-            : []
-        )
-    ).toEqual([
-      [ids[0], Decisions.Allow({ remember: true, dataScope: "target" })],
-      [ids[1], Decisions.Allow({ remember: true, dataScope: "target" })],
+    expect(answered()).toEqual([
+      [ids[0], ALLOW],
+      [ids[1], ALLOW],
     ])
   );
+});
+
+test("a refused Approve grants nothing, so no other request is answered for it", async () => {
+  bridge.refuse("dispatch", { code: "CommandRejected", message: "no such request" });
+  const { ids, first } = twoAsking();
+
+  expect(await approve({ hostKey: DATA_AT.hostKey, sessionId: ids[0], request: first })).toBe(
+    false
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  expect(answered()).toEqual([[ids[0], ALLOW]]);
+  expect(decisionStore.getState().grants).toEqual([]);
 });

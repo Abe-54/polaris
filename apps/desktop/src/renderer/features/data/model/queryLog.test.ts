@@ -226,6 +226,12 @@ describe("only a lone plain SELECT that calls no function re-runs on open (F10)"
     ["select 1; drop table invoices", false],
     ["select * from invoices for update", false],
     ["select pg_sleep(1); select 1", false],
+    // Where an engine may lex differently from the mask, it isn't run on open.
+    ["select '\\' as a, pg_sleep(10) as b --'", false],
+    ["select 1 /*! , sleep(10) */", false],
+    ["select 1 /*+ max_execution_time(1) */ from invoices", false],
+    ["select 1 # comment", false],
+    ["select ';' as semicolon", false],
   ])("%s", (sql, runs) => {
     expect(runsOnOpen(sql)).toBe(runs);
   });
