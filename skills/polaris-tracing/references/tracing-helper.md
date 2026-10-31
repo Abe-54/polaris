@@ -1,6 +1,6 @@
 # The tracing helper
 
-One file for Node and Bun: `traced` wraps a unit of work in a span with its `code.*` location and records failures; `log` emits a log record inside the active span. Save it as `src/tracing.ts` (or beside the code that uses it) and import it where you add spans.
+One file for Node ESM, compiled CommonJS and Bun: `traced` wraps a unit of work in a span with its `code.*` location and records failures; `log` emits a log record inside the active span. Save it as `src/tracing.ts` (or beside the code that uses it) and import it where you add spans.
 
 ```ts
 import { logs, SeverityNumber, SpanStatusCode, trace, type Attributes, type Span } from "@opentelemetry/api";
@@ -11,15 +11,17 @@ const logger = logs.getLogger("app");
 
 // A stack frame: "at fn (path:line:col)" or "at path:line:col".
 const FRAME = /^\s*at\s+(?:(.+?)\s+\()?(.+?):(\d+):\d+\)?\s*$/;
-const HELPER = fileURLToPath(import.meta.url);
 
 /** The first frame outside this file: where traced() was called. */
 const callerLocation = (fallbackName: string): Attributes => {
-  for (const text of new Error().stack?.split("\n").slice(1) ?? []) {
+  const holder = { stack: "" };
+  Error.captureStackTrace(holder, traced);
+
+  for (const text of holder.stack.split("\n").slice(1)) {
     const [, fn, raw = "", line] = FRAME.exec(text) ?? [];
     const path = raw.startsWith("file://") ? fileURLToPath(raw) : raw;
 
-    if (path === "" || path === HELPER) continue;
+    if (path === "") continue;
     const name = fn?.replace(/^async /, "");
 
     return {
@@ -61,6 +63,8 @@ export function log(message: string, attributes: Attributes = {}, severity: Seve
   logger.emit({ body: message, severityText: severity, severityNumber: SeverityNumber[severity], attributes });
 }
 ```
+
+For CommonJS, compile this TypeScript file with the app (`module: "commonjs"`), or translate imports/exports to `require`/`module.exports`. It uses no `import.meta`; Node 24 cannot `require` TypeScript containing ESM exports in a `type: "commonjs"` package.
 
 Use it on the project's own code, where the instrumentations can't see:
 

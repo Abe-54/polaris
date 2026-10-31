@@ -1,0 +1,108 @@
+bun test v1.4.4 (38afee6c8)
+
+../../../../../../../../private/tmp/uf7/negative/stack-redaction.test.ts:
+10 |   "    at /app/src/session.js:40:3",
+11 | ];
+12 |
+13 | test.each(frames)("exception stack retains source locations: %s", (frame) => {
+14 |   const stack = `Error: denied\n${frame}`;
+15 |   expect(attributeValue({ stringValue: stack })).toBe(stack);
+                                                      ^
+error: expect(received).toBe(expected)
+
+- "Error: denied
+-     at login (/app/src/auth.cjs:1:26)
+-     at Object.<anonymous> (/app/src/auth.cjs:2:7)"
++ "[redacted]"
+
+- Expected  - 3
++ Received  + 1
+
+      at <anonymous> (/private/tmp/uf7/negative/stack-redaction.test.ts:15:50)
+(fail) exception stack retains source locations:     at login (/app/src/auth.cjs:1:26)
+    at Object.<anonymous> (/app/src/auth.cjs:2:7) [0.56ms]
+10 |   "    at /app/src/session.js:40:3",
+11 | ];
+12 |
+13 | test.each(frames)("exception stack retains source locations: %s", (frame) => {
+14 |   const stack = `Error: denied\n${frame}`;
+15 |   expect(attributeValue({ stringValue: stack })).toBe(stack);
+                                                      ^
+error: expect(received).toBe(expected)
+
+- "Error: denied
+-     at login (/app/src/auth.ts:1:30)
+-     at /app/src/auth.ts:2:7"
++ "[redacted]"
+
+- Expected  - 3
++ Received  + 1
+
+      at <anonymous> (/private/tmp/uf7/negative/stack-redaction.test.ts:15:50)
+(fail) exception stack retains source locations:     at login (/app/src/auth.ts:1:30)
+    at /app/src/auth.ts:2:7 [0.05ms]
+10 |   "    at /app/src/session.js:40:3",
+11 | ];
+12 |
+13 | test.each(frames)("exception stack retains source locations: %s", (frame) => {
+14 |   const stack = `Error: denied\n${frame}`;
+15 |   expect(attributeValue({ stringValue: stack })).toBe(stack);
+                                                      ^
+error: expect(received).toBe(expected)
+
+- "Error: denied
+-     at load (/app/src/session.ts:40:3)"
++ "[redacted]"
+
+- Expected  - 2
++ Received  + 1
+
+      at <anonymous> (/private/tmp/uf7/negative/stack-redaction.test.ts:15:50)
+(fail) exception stack retains source locations:     at load (/app/src/session.ts:40:3) [0.04ms]
+10 |   "    at /app/src/session.js:40:3",
+11 | ];
+12 |
+13 | test.each(frames)("exception stack retains source locations: %s", (frame) => {
+14 |   const stack = `Error: denied\n${frame}`;
+15 |   expect(attributeValue({ stringValue: stack })).toBe(stack);
+                                                      ^
+error: expect(received).toBe(expected)
+
+- "Error: denied
+-     at refresh (/app/src/tokens.ts:8:1)"
++ "[redacted]"
+
+- Expected  - 2
++ Received  + 1
+
+      at <anonymous> (/private/tmp/uf7/negative/stack-redaction.test.ts:15:50)
+(fail) exception stack retains source locations:     at refresh (/app/src/tokens.ts:8:1) [0.03ms]
+10 |   "    at /app/src/session.js:40:3",
+11 | ];
+12 |
+13 | test.each(frames)("exception stack retains source locations: %s", (frame) => {
+14 |   const stack = `Error: denied\n${frame}`;
+15 |   expect(attributeValue({ stringValue: stack })).toBe(stack);
+                                                      ^
+error: expect(received).toBe(expected)
+
+- "Error: denied
+-     at /app/src/session.js:40:3"
++ "[redacted]"
+
+- Expected  - 2
++ Received  + 1
+
+      at <anonymous> (/private/tmp/uf7/negative/stack-redaction.test.ts:15:50)
+(fail) exception stack retains source locations:     at /app/src/session.js:40:3 [0.03ms]
+(pass) stack recognition still redacts credentials: auth.ts:123:456 [0.01ms]
+(pass) stack recognition still redacts credentials: session.ts: secret
+(pass) stack recognition still redacts credentials:     at login (/app/src/auth.ts:secret)
+(pass) stack recognition still redacts credentials:     at login (/app/src/auth.ts:12:9?token=secret)
+(pass) stack recognition still redacts credentials: Error: password=secret
+    at login (/app/src/auth.ts:12:9)
+
+ 5 pass
+ 5 fail
+ 10 expect() calls
+Ran 10 tests across 1 file. [6.00ms]

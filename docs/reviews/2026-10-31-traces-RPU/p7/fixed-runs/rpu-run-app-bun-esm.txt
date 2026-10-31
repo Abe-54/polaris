@@ -1,0 +1,52 @@
+== app stdout
+listening 46285
+53 |     },
+54 |     async (span) => {
+55 |       try {
+56 |         const headers = Object.fromEntries(req.headers);
+57 |         propagation.inject(context.active(), headers);
+58 |         const res = await fetch(new Request(req, { headers }));
+                               ^
+TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?
+  path: "http://127.0.0.1:1/",
+ errno: 0,
+  code: "ECONNREFUSED"
+
+      at /private/tmp/uf7/bun-esm/http.ts:58:27
+      at handle (/private/tmp/uf7/bun-esm/server.ts:26:11)
+      at /private/tmp/uf7/bun-esm/http.ts:26:29
+GET - http://127.0.0.1:46285/orders/42 failed
+ 9 |     return 1.08;
+10 |   });
+11 |
+12 | async function charge() {
+13 |   await traced("orders.charge", async () => { // EXPECT orders.charge line 12
+14 |     throw new TypeError("card declined for customer 42");
+                   ^
+TypeError: card declined for customer 42
+      at /private/tmp/uf7/bun-esm/server.ts:14:15
+      at /private/tmp/uf7/bun-esm/tracing.ts:44:20
+      at run (node:async_hooks:144:29)
+      at charge (/private/tmp/uf7/bun-esm/server.ts:13:9)
+      at handle (/private/tmp/uf7/bun-esm/server.ts:30:11)
+      at /private/tmp/uf7/bun-esm/http.ts:26:29
+      at run (node:async_hooks:144:29)
+GET - /fail failed
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+2026-10-31T23:10:17.279Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=3841
+2026-10-31T23:10:17.287Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=142
+== spans
+{"name":"GET unmatched","kind":"server","status":"unset","statusMessage":"","trace":"34b5cbf0","parent":null,"span":"67b60e","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET 127.0.0.1","kind":"client","status":"error","statusMessage":"ECONNREFUSED: Unable to connect. Is the computer able to access the url?","trace":"3ada8ce0","parent":"7e89f9","span":"9af635","scope":"http","service":"rates-api","code":[null,null,null],"exception":{"type":"ECONNREFUSED","message":"ECONNREFUSED: Unable to connect. Is the computer able to access the url?","stack":"TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url? |     at async <anonymous> (/private/tmp/uf7/bun-esm/http.ts:58:27) |     at async handle (/private/tmp/uf7/bun-esm/server.ts:26:11)"}}
+{"name":"GET unmatched","kind":"server","status":"error","statusMessage":"ECONNREFUSED: Unable to connect. Is the computer able to access the url?","trace":"3ada8ce0","parent":null,"span":"7e89f9","scope":"http","service":"rates-api","code":[null,null,null],"exception":{"type":"ECONNREFUSED","message":"ECONNREFUSED: Unable to connect. Is the computer able to access the url?","stack":"TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url? |     at async <anonymous> (/private/tmp/uf7/bun-esm/http.ts:58:27) |     at async handle (/private/tmp/uf7/bun-esm/server.ts:26:11)"}}
+{"name":"GET /rates/:currency","kind":"server","status":"unset","statusMessage":"","trace":"bd6f99ff","parent":null,"span":"dc3ce7","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET unmatched","kind":"server","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"b7ad6b","span":"3ee88c","scope":"http","service":"rates-api","code":[null,null,null],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at <anonymous> (/private/tmp/uf7/bun-esm/server.ts:14:15) |     at <anonymous> (/private/tmp/uf7/bun-esm/tracing.ts:44:20)"}}
+{"name":"tail.call","kind":"internal","status":"unset","statusMessage":"","trace":"3ada8ce0","parent":"7e89f9","span":"8ded34","scope":"app","service":"rates-api","code":["handle","/private/tmp/uf7/bun-esm/server.ts","25"]}
+{"name":"rates.load","kind":"internal","status":"unset","statusMessage":"","trace":"bd6f99ff","parent":"dc3ce7","span":"27b247","scope":"app","service":"rates-api","code":["rates.load","/private/tmp/uf7/bun-esm/server.ts","6"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"3ee88c","span":"67a9ea","scope":"app","service":"rates-api","code":["charge","/private/tmp/uf7/bun-esm/server.ts","13"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at <anonymous> (/private/tmp/uf7/bun-esm/server.ts:14:15) |     at <anonymous> (/private/tmp/uf7/bun-esm/tracing.ts:44:20)"}}
+== logs
+{"body":"loaded rate","severity":"INFO","trace":"bd6f99ff","span":"27b247"}
+/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7/docs/reviews/2026-10-31-traces-RPU/p7/run-app.sh: line 30: 54031 Terminated: 15          bun "$HERE/collector.ts" "$OUT" > "$OUT/collector.stdout" 2>&1  (wd: ~/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7)

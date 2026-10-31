@@ -1,0 +1,40 @@
+{
+  "case": "node-esm",
+  "command": [
+    "node",
+    "--import",
+    "./instrumentation.ts",
+    "server.ts"
+  ],
+  "exit": 3,
+  "spans": 6,
+  "logs": 1,
+  "manual": [
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "loadOrders",
+        "code.file.path": "/private/tmp/uf7/node-esm/server.ts",
+        "code.line.number": "7",
+        "customer.id": "42"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.charge",
+      "code": {
+        "code.function.name": "charge",
+        "code.file.path": "/private/tmp/uf7/node-esm/server.ts",
+        "code.line.number": "14"
+      },
+      "status": "error"
+    }
+  ],
+  "outgoingTraceparents": []
+}
+2026-10-31T23:09:23.519Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=4199
+2026-10-31T23:09:23.557Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=887
+
+listening 63449
+app: SIGTERM, draining
+app: drained

@@ -1,0 +1,40 @@
+{
+  "case": "bun-cjs",
+  "command": [
+    "bun",
+    "--preload",
+    "./instrumentation.cjs",
+    "server.cjs"
+  ],
+  "exit": 3,
+  "spans": 6,
+  "logs": 1,
+  "manual": [
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "orders.load",
+        "code.file.path": "/private/tmp/uf7/node-cjs/server.cjs",
+        "code.line.number": "6",
+        "customer.id": "42"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.charge",
+      "code": {
+        "code.function.name": "charge",
+        "code.file.path": "/private/tmp/uf7/node-cjs/server.cjs",
+        "code.line.number": "12"
+      },
+      "status": "error"
+    }
+  ],
+  "outgoingTraceparents": []
+}
+2026-10-31T23:09:27.793Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=3880
+2026-10-31T23:09:27.827Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=839
+
+listening 63517
+app: SIGTERM, draining
+app: drained

@@ -1,0 +1,58 @@
+{
+  "case": "bun-esm",
+  "command": [
+    "bun",
+    "--preload",
+    "./instrumentation.ts",
+    "server.ts"
+  ],
+  "exit": 3,
+  "spans": 8,
+  "logs": 1,
+  "manual": [
+    {
+      "name": "rates.load",
+      "code": {
+        "code.function.name": "rates.load",
+        "code.file.path": "/private/tmp/uf7/bun-esm/server.ts",
+        "code.line.number": "6",
+        "currency": "eur"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.charge",
+      "code": {
+        "code.function.name": "charge",
+        "code.file.path": "/private/tmp/uf7/bun-esm/server.ts",
+        "code.line.number": "13"
+      },
+      "status": "error"
+    }
+  ],
+  "outgoingTraceparents": [
+    "00-68fbe2b80be800d93cd74328bc736060-6923700c6bee68f6-01"
+  ]
+}
+2026-10-31T23:09:26.106Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=2823
+2026-10-31T23:09:26.148Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=142
+
+listening 63501
+ 9 |     return 1.08;
+10 |   });
+11 |
+12 | async function charge() {
+13 |   await traced("orders.charge", async () => { // EXPECT orders.charge line 12
+14 |     throw new TypeError("card declined for customer 42");
+                   ^
+TypeError: card declined for customer 42
+      at /private/tmp/uf7/bun-esm/server.ts:14:15
+      at /private/tmp/uf7/bun-esm/tracing.ts:44:20
+      at run (node:async_hooks:144:29)
+      at charge (/private/tmp/uf7/bun-esm/server.ts:13:9)
+      at handle (/private/tmp/uf7/bun-esm/server.ts:30:11)
+      at /private/tmp/uf7/bun-esm/http.ts:26:29
+      at run (node:async_hooks:144:29)
+GET - /fail failed
+app: SIGTERM, draining
+app: drained
