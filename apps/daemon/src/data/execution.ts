@@ -4,6 +4,8 @@ import { DataError, scrubCredentials, type DataSource, type DataValue } from "@p
 import { Effect, Match, Option, Predicate, Redacted, Schema } from "effect";
 import type { DataConnection } from "./connection.ts";
 import { guardSql } from "./guard.ts";
+import { budgetProjection, unpackBudget } from "./resultBudget.ts";
+import { guardFunctions } from "./functionGuard.ts";
 import { DataPools } from "./pools.ts";
 import { decodeResult, type RawResult, typeName } from "./values.ts";
 
@@ -12,6 +14,7 @@ const DriverError = Schema.Struct({
   code: Schema.optionalKey(Schema.String),
   errno: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
   sqlState: Schema.optionalKey(Schema.String),
+  position: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
 });
 
 const errorFields = Schema.decodeUnknownOption(DriverError);
@@ -21,13 +24,36 @@ const invalid = (message: string, fix: string) =>
 
 export function queryError(
   cause: unknown,
-  known: ReadonlyArray<Redacted.Redacted<string>>
+  known: ReadonlyArray<Redacted.Redacted<string>>,
+  location?: { sql: string; prefix: string }
 ): DataError {
-  if (Predicate.isTagged(cause, "DataError")) return Schema.decodeUnknownSync(DataError)(cause);
+  if (Predicate.isTagged(cause, "DataError")) {
+    const error = Schema.decodeUnknownSync(DataError)(cause);
+
+    return new DataError({
+      ...Schema.encodeSync(DataError)(error),
+      message: scrubCredentials(error.message, known),
+      fix: scrubCredentials(error.fix, known),
+    });
+  }
+
   const parsed = errorFields(cause);
   const fields = Option.isSome(parsed) ? parsed.value : {};
   const state = String(fields.errno ?? fields.sqlState ?? "");
   const message = scrubCredentials(fields.message ?? "The database query failed.", known);
+  const position = Number(fields.position) - (location?.prefix.length ?? 0);
+  const mysqlLine = message.match(/ at line (\d+)$/)?.[1];
+
+  const sqlLine =
+    location && mysqlLine
+      ? Math.max(1, Number(mysqlLine) - location.prefix.split("\n").length + 1)
+      : undefined;
+
+  const clean = location
+    ? message
+        .replace(/\n\) AS polaris_capped LIMIT \d+/g, "")
+        .replace(/ at line \d+$/, sqlLine ? ` at line ${sqlLine}` : "")
+    : message;
 
   if (["25006", "1792"].includes(state))
     return new DataError({
@@ -53,7 +79,22 @@ export function queryError(
       fix: "The user can check this data source in Data (⌘4).",
     });
 
-  return invalid(message, "Check the statement and parameter types.");
+  return new DataError({
+    code: "E-DATA-SQL",
+    message: clean,
+    fix: "Check the statement and parameter types.",
+    ...(location &&
+    Number.isInteger(position) &&
+    position > 0 &&
+    position <= location.sql.length + 1
+      ? {
+          position,
+          sqlLine: location.sql.slice(0, position - 1).split("\n").length,
+        }
+      : sqlLine
+        ? { sqlLine }
+        : {}),
+  });
 }
 
 export function bindValues(params: ReadonlyArray<DataValue>) {
@@ -144,6 +185,7 @@ export async function configure(tx: TransactionSQL, engine: "postgres" | "mysql"
 async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active) {
   const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
   const checked = guardSql(input.sql, mode);
+  await guardFunctions(tx, checked.sql, mode);
 
   if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
   const params = bindValues(input.params ?? []);
@@ -154,14 +196,38 @@ async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active)
         "Polaris can't bound this statement's output on MySQL yet.",
         "Use describe, or SELECT from information_schema."
       );
-    const sql = `SELECT * FROM (\n${checked.sql}\n) AS polaris_capped LIMIT ${input.limit + 1}`;
-    const query = tx<RawResult>`${tx.unsafe(sql, params)}`.raw();
-    active.query = query;
 
-    return await query;
+    return mysqlRead(tx, active, checked.sql, params, input.limit + 1);
   }
 
   return cursorRead(tx, active, checked.sql, params, input.limit + 1);
+}
+
+export async function mysqlRead(
+  tx: TransactionSQL,
+  active: Active,
+  sql: string,
+  params: Array<ReturnType<typeof bindValues>[number] | Uint8Array>,
+  limit: number
+) {
+  const metadata =
+    tx<RawResult>`${tx.unsafe(`SELECT * FROM (\n${sql}\n) AS polaris_capped LIMIT 0`, params)}`.raw();
+
+  active.query = metadata;
+
+  const described = await metadata.catch((error) => {
+    throw queryError(error, [], {
+      sql,
+      prefix: "SELECT * FROM (\n",
+    });
+  });
+
+  if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
+  const projection = budgetProjection(sql, described.columns, "mysql", limit);
+  const query = tx<RawResult>`${tx.unsafe(projection.sql, params)}`.raw();
+  active.query = query;
+
+  return unpackBudget(await query, projection.columns, projection.tooWide);
 }
 
 export async function cursorRead(
@@ -173,16 +239,35 @@ export async function cursorRead(
 ) {
   const declare = tx`${tx.unsafe(`DECLARE polaris_data NO SCROLL CURSOR FOR\n${sql}`, params)}`;
   active.query = declare;
-  await declare;
+  await declare.catch((error) => {
+    throw queryError(error, [], { sql, prefix: "DECLARE polaris_data NO SCROLL CURSOR FOR\n" });
+  });
 
-  // Only this Daemon-authored FETCH uses text protocol; user SQL always uses the tagged path.
-  const query = tx.unsafe<RawResult>(`FETCH FORWARD ${limit} FROM polaris_data`).simple().raw();
+  const describe = tx.unsafe<RawResult>("FETCH FORWARD 0 FROM polaris_data").simple().raw();
+  active.query = describe;
+  const metadata = await describe;
+  await tx`CLOSE polaris_data`;
+  const projection = budgetProjection(sql, metadata.columns, "postgres", limit);
+  active.query = tx`${tx.unsafe(`DECLARE polaris_data NO SCROLL CURSOR FOR\n${projection.sql}`, params)}`;
+  await active.query;
+  const result: RawResult = Object.assign([], { columns: metadata.columns });
 
-  active.query = query;
-  const result = await query;
+  while (result.length < limit) {
+    const query = tx
+      .unsafe<RawResult>(`FETCH FORWARD ${Math.min(16, limit - result.length)} FROM polaris_data`)
+      .simple()
+      .raw();
+
+    active.query = query;
+    const batch = await query;
+    result.push(...batch);
+
+    if (batch.length < 16 || active.stopped) break;
+  }
+
   await tx`CLOSE polaris_data`;
 
-  return result;
+  return unpackBudget(result, projection.columns, projection.tooWide);
 }
 
 export async function executeTransaction<A>(
@@ -192,16 +277,23 @@ export async function executeTransaction<A>(
   options: string,
   work: (tx: TransactionSQL, active: Active) => Promise<A>
 ) {
-  const lease = await pools.acquire(input.source, input.connection);
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), input.timeoutMs ?? 30000);
+  const combined = AbortSignal.any([signal, deadline.signal]);
+
+  const lease = await pools.acquire(input.source, input.connection).catch((error) => {
+    clearTimeout(timer);
+    throw queryError(error, knownCredentials(input.connection));
+  });
+
   let reserved: ReservedSQL | undefined;
   const active: Active = { stopped: false, kill: Promise.resolve() };
-  let timer: ReturnType<typeof setTimeout> | undefined;
   let abort = () => {};
 
-  let expired = false;
+  const expired = () => deadline.signal.aborted;
 
   try {
-    reserved = await lease.sql.reserve({ signal });
+    reserved = await lease.sql.reserve({ signal: combined });
     const connection = reserved;
 
     const ids =
@@ -211,13 +303,9 @@ export async function executeTransaction<A>(
 
     const id = Schema.decodeUnknownSync(Schema.Int)(ids[0]?.id);
     abort = () => cancellation(active, connection, lease.control, input.source.engine, id);
-    signal.addEventListener("abort", abort, { once: true });
+    combined.addEventListener("abort", abort, { once: true });
 
-    if (signal.aborted) abort();
-    timer = setTimeout(() => {
-      expired = true;
-      abort();
-    }, input.timeoutMs ?? 30000);
+    if (combined.aborted) abort();
 
     const result = await connection.begin(options, async (tx) => {
       try {
@@ -225,7 +313,7 @@ export async function executeTransaction<A>(
 
         if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
 
-        return result;
+        return { value: result };
       } finally {
         await active.kill;
       }
@@ -233,12 +321,12 @@ export async function executeTransaction<A>(
 
     if (active.stopped)
       throw new DataError({
-        code: expired ? "E-DATA-TIMEOUT" : "E-DATA-CANCELLED",
-        message: expired ? "The query exceeded its time limit." : "The query was cancelled.",
+        code: expired() ? "E-DATA-TIMEOUT" : "E-DATA-CANCELLED",
+        message: expired() ? "The query exceeded its time limit." : "The query was cancelled.",
         fix: "Narrow the query before trying again.",
       });
 
-    return result;
+    return result.value;
   } catch (error) {
     if (signal.aborted)
       throw new DataError({
@@ -247,7 +335,7 @@ export async function executeTransaction<A>(
         fix: "Run it again when needed.",
       });
 
-    if (expired)
+    if (expired())
       throw new DataError({
         code: "E-DATA-TIMEOUT",
         message: "The query exceeded its time limit.",
@@ -256,10 +344,27 @@ export async function executeTransaction<A>(
     throw queryError(error, knownCredentials(input.connection));
   } finally {
     clearTimeout(timer);
-    signal.removeEventListener("abort", abort);
+    combined.removeEventListener("abort", abort);
     await active.kill;
-    reserved?.release();
+
+    await releaseConnection(reserved, input.source.engine);
+
     await lease.release();
+  }
+}
+
+async function releaseConnection(reserved: ReservedSQL | undefined, engine: "postgres" | "mysql") {
+  if (!reserved) return;
+
+  try {
+    if (engine === "mysql") await reserved.close({ timeout: 0 });
+    else {
+      await reserved`SELECT pg_advisory_unlock_all()`;
+      await reserved`RESET ALL`;
+      reserved.release();
+    }
+  } catch {
+    await reserved.close({ timeout: 0 });
   }
 }
 
@@ -283,7 +388,8 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
   return {
     columns,
     rows: decoded.rows.slice(0, input.limit).map((row) => row.slice(0, 256)),
-    truncated: decoded.rows.length > input.limit || decoded.columns.length > 256,
+    truncated:
+      raw.truncated === true || decoded.rows.length > input.limit || decoded.columns.length > 256,
   };
 }
 

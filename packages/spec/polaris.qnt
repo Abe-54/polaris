@@ -1251,56 +1251,37 @@ module removal {
   ).*
 }
 
-/** Data approvals refine HRequest/Respond: targets, remembered scope, and non-cancelling waits. */
+/** Data approvals refine HRequest/Respond with locality, shared waiters and one-request grants. */
 module data_approvals {
-  type DataState = { turn: bool, pending: Set[str], exact: Set[str], servers: Set[str],
-    denied: Set[str], revoked: Set[str], opened: int, reads: int }
-  var data: DataState
-  pure val targets = Set("server1/db1/user1", "server1/db2/user1", "server2/db1/user1")
-  pure def server(t: str): str = if (t == "server2/db1/user1") "server2" else "server1"
-  def allowed(t: str): bool = not(data.denied.contains(t)) and not(data.revoked.contains(t)) and
-    (data.exact.contains(t) or data.servers.contains(server(t)))
-  action init = data' = { turn: true, pending: Set(), exact: Set(), servers: Set(),
-    denied: Set(), revoked: Set(), opened: 0, reads: 0 }
-  action request(t: str): bool = all {
-    data.turn, not(allowed(t)), not(data.denied.contains(t)),
-    data' = { ...data, pending: data.pending.union(Set(t)),
-      opened: data.opened + (if (data.pending.contains(t)) 0 else 1) }
-  }
-  action waitExpired = data' = data
-  action allow(t: str, wholeServer: bool): bool = all {
-    data.pending.contains(t),
-    data' = { ...data, pending: data.pending.exclude(Set(t)),
-      exact: data.exact.union(Set(t)),
-      servers: if (wholeServer) data.servers.union(Set(server(t))) else data.servers,
-      denied: data.denied.exclude(Set(t)), revoked: data.revoked.exclude(Set(t)) }
-  }
-  action deny(t: str): bool = all {
-    data.pending.contains(t),
-    data' = { ...data, pending: data.pending.exclude(Set(t)), denied: data.denied.union(Set(t)) }
-  }
-  action revoke(t: str): bool = data' = { ...data, revoked: data.revoked.union(Set(t)) }
-  action read(t: str): bool = all { data.turn, allowed(t), data' = { ...data, reads: data.reads + 1 } }
-  action restart = data' = { ...data, turn: false, pending: Set() }
-  action continueTurn = data' = { ...data, turn: true }
-  action step = {
-    nondet t = targets.oneOf()
-    any { request(t), waitExpired, allow(t,false), allow(t,true), deny(t), revoke(t), read(t), restart, continueTurn }
-  }
-  val safety = all { data.turn or data.pending.size() == 0,
-    targets.forall(t => data.denied.contains(t) implies not(allowed(t))),
-    targets.forall(t => data.revoked.contains(t) implies not(allowed(t))) }
-  run duplicateWaitTest = init.then(request("server1/db1/user1")).then(request("server1/db1/user1"))
-    .then(waitExpired).expect(data.pending.size() == 1 and data.opened == 1 and safety)
-  run exactTargetTest = init.then(request("server1/db1/user1")).then(allow("server1/db1/user1",false))
-    .expect(allowed("server1/db1/user1") and not(allowed("server1/db2/user1")) and safety)
-  run serverScopeTest = init.then(request("server1/db1/user1")).then(allow("server1/db1/user1",true))
-    .then(restart).then(continueTurn)
-    .expect(allowed("server1/db2/user1") and not(allowed("server2/db1/user1")) and safety)
-  run revokeOverridesServerTest = init.then(request("server1/db1/user1")).then(allow("server1/db1/user1",true))
-    .then(revoke("server1/db2/user1")).expect(not(allowed("server1/db2/user1")) and safety)
-  run deniedRetryTest = init.then(request("server1/db1/user1")).then(deny("server1/db1/user1"))
-    .expect(data.pending.size() == 0 and not(allowed("server1/db1/user1")) and safety)
+  import data_approvals_model(BUG_DEFAULT_GRANT=false,BUG_REUSE_ONCE=false,BUG_SESSION_CARDS=false).* from "./data-approvals"
+  run localDefaultTest = init.then(locality("s1/d1/u1",true)).then(changeWrites("s1/d1/u1"))
+    .then(read(1,"s1/d1/u1")).then(locality("s1/d1/u1",false))
+    .expect(not(admitted(1,"s1/d1/u1")) and safety)
+  run duplicateWaitTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1"))
+    .then(waitExpired).expect(data.pending.size() == 2 and data.cards.size() == 1 and safety)
+    .then(allow("s1/d1/u1",false,false)).then(read(1,"s1/d1/u1")).then(read(2,"s1/d1/u1"))
+    .expect(data.pending.size() == 0 and not(admitted(1,"s1/d1/u1")) and not(admitted(2,"s1/d1/u1")) and safety)
+  run serverScopeTest = init.then(request(1,"s1/d1/u1")).then(allow("s1/d1/u1",true,true))
+    .expect(admitted(2,"s1/d2/u1") and not(admitted(2,"s1/d1/u2")) and safety)
+    .then(revoke("s1/d2/u1")).expect(not(admitted(1,"s1/d1/u1")) and safety)
+  run turnEndTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1"))
+    .then(endTurn(1)).expect(data.pending.size() == 0 and data.cards.size() == 0 and safety)
+    .then(continueTurn(1)).then(request(1,"s1/d1/u1")).then(allow("s1/d1/u1",false,false))
+    .then(endTurn(1)).then(continueTurn(1)).expect(not(admitted(1,"s1/d1/u1")) and safety)
+}
+module data_approvals_default_mutant {
+  import data_approvals_model(BUG_DEFAULT_GRANT=true,BUG_REUSE_ONCE=false,BUG_SESSION_CARDS=false).* from "./data-approvals"
+  run exposesDefaultGrantTest = init.then(locality("s1/d1/u1",true)).then(changeWrites("s1/d1/u1"))
+    .then(locality("s1/d1/u1",false)).then(read(1,"s1/d1/u1")).expect(not(safety))
+}
+module data_approvals_once_mutant {
+  import data_approvals_model(BUG_DEFAULT_GRANT=false,BUG_REUSE_ONCE=true,BUG_SESSION_CARDS=false).* from "./data-approvals"
+  run exposesReusableGrantTest = init.then(request(1,"s1/d1/u1")).then(allow("s1/d1/u1",false,false))
+    .then(read(1,"s1/d1/u1")).then(read(1,"s1/d1/u1")).expect(not(safety))
+}
+module data_approvals_cards_mutant {
+  import data_approvals_model(BUG_DEFAULT_GRANT=false,BUG_REUSE_ONCE=false,BUG_SESSION_CARDS=true).* from "./data-approvals"
+  run exposesDuplicateCardsTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1")).expect(not(safety))
 }
 
 /** Transactional writes: rollback before request, one-shot authority and count-drift rollback. */

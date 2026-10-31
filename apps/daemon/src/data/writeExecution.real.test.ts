@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { DataSource, SessionId } from "@polaris/protocol";
-import { Redacted } from "effect";
+import { Predicate, Redacted } from "effect";
 import { parseConnection } from "./connection.ts";
 import { DataPools, sqlOptions } from "./pools.ts";
 import { executeWrite, executeEdits } from "./writeExecution.ts";
@@ -22,6 +22,8 @@ for (const engine of ["postgres", "mysql"] as const) {
       const table = `polaris_w_${crypto.randomUUID().replaceAll("-", "")}`;
       const noKey = `${table}_nokey`;
       const textKey = `${table}_textkey`;
+      const wide = `${table}_wide`;
+      const privileged = `${table}_privileged`;
 
       const source = new DataSource({
         id: table,
@@ -204,6 +206,27 @@ for (const engine of ["postgres", "mysql"] as const) {
         ).toEqual([{ v: 41, other: 9 }]);
         expect((await edits([{ key: [1], column: "v", value: 41 }])).affected).toBe(1);
 
+        const extraColumns = Array.from({ length: 253 }, (_, i) => `extra_${i} INT`).join(",");
+        await admin.unsafe(
+          `CREATE TABLE ${wide} (id VARCHAR(700) PRIMARY KEY,v INT,payload ${engine === "mysql" ? "LONGTEXT" : "TEXT"},${extraColumns})`
+        );
+        await admin.unsafe(`INSERT INTO ${wide} (id,v,payload) VALUES (${p},1,${p2})`, [
+          "k".repeat(700),
+          "p".repeat(2 * 1024 * 1024),
+        ]);
+        await Promise.resolve(
+          expect(run(`UPDATE ${wide} SET v=2`, true)).rejects.toMatchObject({
+            code: "E-DATA-SQL",
+            message: "A primary key was omitted or clipped in the preview.",
+          })
+        );
+        expect((await admin.unsafe<Array<{ v: number }>>(`SELECT v FROM ${wide}`))[0]?.v).toBe(1);
+        await admin.unsafe(`UPDATE ${wide} SET id='short'`);
+        const bounded = await run(`UPDATE ${wide} SET v=2`, true);
+        expect(Predicate.isTagged(bounded.before[0]?.[2], "Truncated")).toBe(true);
+        expect(bounded.note).toContain("omitted by the result budget");
+        expect((await admin.unsafe<Array<{ v: number }>>(`SELECT v FROM ${wide}`))[0]?.v).toBe(1);
+
         if (engine === "mysql") {
           await Promise.resolve(
             expect(run(`CREATE TABLE ${table}_ddl (id INT)`, true)).rejects.toMatchObject({
@@ -222,6 +245,14 @@ for (const engine of ["postgres", "mysql"] as const) {
             )
           ).toEqual([]);
         } else {
+          await admin.unsafe(
+            `CREATE FUNCTION ${privileged}() RETURNS int LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$`
+          );
+          await Promise.resolve(
+            expect(run(`UPDATE ${table} SET v=${privileged}()`, true)).rejects.toMatchObject({
+              code: "E-DATA-READ-ONLY",
+            })
+          );
           await run(`ALTER TABLE ${table} ADD COLUMN preview_only INT`, true);
           expect(
             Array.from(
@@ -233,7 +264,9 @@ for (const engine of ["postgres", "mysql"] as const) {
         }
       } finally {
         await pools.close();
-        await admin.unsafe(`DROP TABLE IF EXISTS ${table},${noKey},${textKey}`);
+        await admin.unsafe(`DROP TABLE IF EXISTS ${table},${noKey},${textKey},${wide}`);
+
+        if (engine === "postgres") await admin.unsafe(`DROP FUNCTION IF EXISTS ${privileged}()`);
         await admin.close();
       }
     },

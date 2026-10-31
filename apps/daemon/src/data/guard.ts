@@ -92,6 +92,7 @@ function literalEnd(sql: string, i: number, mode: LexicalMode): number | null {
 export interface Token {
   end: number;
   token?: string;
+  identifier?: string;
 }
 
 export function tokenAt(sql: string, i: number, mode: LexicalMode): Token {
@@ -111,10 +112,28 @@ export function tokenAt(sql: string, i: number, mode: LexicalMode): Token {
 
   const literal = literalEnd(sql, i, mode);
 
-  if (literal !== null) return { end: literal, token: "literal" };
-  const word = sql.slice(i).match(/^[a-z_][a-z0-9_$]*/i)?.[0];
+  if (literal !== null) {
+    const quote = sql[i]!;
 
-  return { end: i + (word?.length ?? 1), token: word?.toUpperCase() ?? sql[i]! };
+    const identifier =
+      (pg && quote === '"') ||
+      (!pg && (quote === "`" || (quote === '"' && mode.sqlMode?.includes("ANSI_QUOTES"))));
+
+    const result: Token = { end: literal, token: "literal" };
+
+    if (identifier)
+      result.identifier = sql.slice(i + 1, literal - 1).replaceAll(quote + quote, quote);
+
+    return result;
+  }
+
+  const word = sql.slice(i).match(/^[a-z_\u{80}-\u{10ffff}][a-z0-9_$\u{80}-\u{10ffff}]*/iu)?.[0];
+
+  const result: Token = { end: i + (word?.length ?? 1), token: word?.toUpperCase() ?? sql[i]! };
+
+  if (word) result.identifier = word.replace(/[A-Z]/g, (char) => char.toLowerCase());
+
+  return result;
 }
 
 /** Returns SQL without its optional terminator, for safe nesting in a capped query. */
@@ -154,6 +173,18 @@ function singleStatement(sql: string, mode: LexicalMode) {
 export function guardSql(sql: string, mode: LexicalMode, write = false) {
   if (mode.engine === "mysql") mysqlRawGuard(sql, mode);
   const { terminator, keyword } = singleStatement(sql, mode);
+  guardFunctionCalls(sql, mode);
+
+  if (
+    !write &&
+    mode.engine === "mysql" &&
+    /\b(?:FOR SHARE|LOCK IN SHARE MODE)\b/.test(
+      sqlTokens(sql, mode)
+        .map((t) => t.token)
+        .join(" ")
+    )
+  )
+    refuse("Remove shared locking clauses from read-only Queries.");
 
   if (!keyword) refuse("Supply one SQL statement.");
 
@@ -167,4 +198,56 @@ export function guardSql(sql: string, mode: LexicalMode, write = false) {
     );
 
   return { sql: terminator === undefined ? sql : sql.slice(0, terminator), keyword };
+}
+
+export function sqlTokens(sql: string, mode: LexicalMode): Token[] {
+  const tokens: Token[] = [];
+
+  for (let i = 0; i < sql.length;) {
+    const next = tokenAt(sql, i, mode);
+
+    if (next.token !== undefined) tokens.push(next);
+    i = next.end;
+  }
+
+  return tokens;
+}
+
+export function functionCalls(sql: string, mode: LexicalMode) {
+  const tokens = sqlTokens(sql, mode);
+  const calls: Array<{ name: string; schema?: string }> = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const name = tokens[i]?.identifier;
+
+    if (name === undefined || tokens[i + 1]?.token !== "(") continue;
+    const schema = tokens[i - 1]?.token === "." ? tokens[i - 2]?.identifier : undefined;
+    calls.push(schema === undefined ? { name } : { name, schema });
+  }
+
+  return calls;
+}
+
+/** Also used by execute: a write approval cannot authorize out-of-transaction effects. */
+export function guardFunctionCalls(sql: string, mode: LexicalMode) {
+  const tokens = sqlTokens(sql, mode);
+
+  if (tokens.some((t, i) => t.token === "U" && tokens[i + 1]?.token === "&"))
+    refuse("Use ordinary quoted identifiers instead of Unicode-escaped identifiers.");
+
+  if (
+    mode.engine === "mysql" &&
+    tokens.some((t, i) => t.token === ":" && tokens[i + 1]?.token === "=")
+  )
+    refuse("Remove user-variable assignments from Data statements.");
+
+  const denied =
+    mode.engine === "postgres"
+      ? /^(?:dblink|postgres_fdw|lo_|pg_file_|pg_read_.*file|pg_ls_|pg_stat_file$|pg_terminate_backend$|pg_cancel_backend$|pg_reload_conf$|pg_rotate_logfile$|pg_notify$|pg_(?:try_)?advisory_|set_config$|txid_current|pg_current_xact_id|pg_sleep_|.*_to_xml)/i
+      : /^(?:get_lock$|release_.*lock(?:s)?$|is_.*_lock$|benchmark$|sleep$)/i;
+
+  if (functionCalls(sql, mode).some((call) => denied.test(call.name)))
+    refuse(
+      "Use a SELECT-only database user and remove functions with external or session effects."
+    );
 }

@@ -67,3 +67,45 @@ never sees a URL or a password, and the database itself enforces read-only.**
   dispatch but cannot make SQLite and an external database one atomic transaction.
 - Adding a database engine means a `Bun.SQL` adapter and its read-only transaction statement;
   SQLite (ENG-646) is next.
+
+## Guard matrix after RX (ENG-644)
+
+A SELECT-only database user is the recommended connection. Read-only transactions prevent writes
+on that connection; they do not prevent privileged functions, external connections or server
+administration. The connection card reports observed superuser, `pg_signal_backend`,
+`pg_read_server_files`, EXECUTE on dblink, MySQL SUPER and FILE privileges after connecting.
+An unavailable privilege check is shown explicitly. These warnings do not grant access.
+
+| Boundary | Postgres | MySQL |
+| --- | --- | --- |
+| One statement | Lexer handles quotes, dollar strings, nested comments; refuses Unicode-escaped identifiers | Lexer uses observed `sql_mode`; rejects executable comments and hints |
+| Read transaction | `BEGIN READ ONLY`, local statement deadline | `START TRANSACTION READ ONLY`, server execution deadline plus targeted KILL |
+| Functions | Deny external/admin/file/large-object/advisory/session functions, `*_to_xml` and `pg_sleep_*`; ordinary `pg_sleep` stays deadline-bound, `pg_backend_pid` stays available | Deny GET_LOCK, RELEASE_*LOCK(S), IS_*_LOCK BENCHMARK, SLEEP and user-variable assignments (`:=`); refuse names in `mysql.func` |
+| Catalog check | Same reservation resolves called names in `pg_proc`; reject dblink/postgres_fdw/adminpack extension members and superuser-owned SECURITY DEFINER functions | UDF catalog visibility is required for statements containing function calls; lookup errors fail closed |
+| Shared locking reads | Server refuses them | Lexer refuses FOR SHARE and LOCK IN SHARE MODE, including comment-separated keywords |
+| Receive budget | Metadata-only FETCH, then server projection and 16-row FETCH batches | Metadata-only LIMIT 0, then server projection and cumulative byte limit |
+| Pool release | Advisory unlock-all and RESET ALL outside the transaction; close on failure | Close the reservation, clearing locks, user variables and other session state |
+
+The result projection retains the original column types, clips cells on the server (at most
+32 KiB per cell, reduced for wide rows), and returns a 128-character Truncated preview with the
+original text byte count. A 1 MiB receive budget includes metadata allowances. Results report
+`truncated` when any cell, row or column limit is hit. This is deliberately below the 1 MiB cell
+ceiling and the 64 MiB Daemon RSS budget. Server work remains bounded by the Query deadline;
+projection cannot bound the database server's own memory. Custom operators, casts, invoker
+functions and database triggers are reasons to use restricted credentials, not a substitute for
+them. The function guard also applies to execute; write approval does not authorize external
+side effects.
+
+The deadline starts before waiting for a pooled connection. PostgreSQL error positions subtract
+the cursor prefix; MySQL syntax errors remove the wrapper and report the user's SQL line.
+Query Log retention is per Host: 30 days, 10,000 entries and 16 MiB of serialized entries, oldest
+first. Age pruning runs on writes and reads, with no idle timer.
+
+Source rules distinguish decisions from defaults. A Local default is recomputed on every
+require and never grants Remote access. Writes-policy changes do not create read grants.
+Remembered server scope is engine, host, port and user. Revoke removes all exact/server rules
+covering the target and restores the Local default when applicable. Pending approvals share one
+card per target across sessions. `remember:false` authorizes only the joined query/describe
+request, consumed once for its session and active Turn; it never authorizes a write dry run.
+Remote execute still requires remembered read approval, writes enabled and a separate approval
+for each statement.

@@ -27,7 +27,8 @@ export class DataApprovals extends Context.Service<
     readonly require: (
       sessionId: SessionId,
       source: DataSource,
-      turn?: TurnId
+      turn?: TurnId,
+      approvalId?: RequestId
     ) => Effect.Effect<void, DataError | DataApprovalRequired>;
     readonly awaitApproval: (
       id: RequestId,
@@ -101,11 +102,16 @@ export class DataApprovals extends Context.Service<
       const require = Effect.fnUntraced(function* (
         sessionId: SessionId,
         source: DataSource,
-        turn?: TurnId
+        turn?: TurnId,
+        grantedId?: RequestId
       ) {
         const access = yield* read(source);
 
-        if (access.access === "read" || access.access === "approved") return;
+        if (
+          (source.locality === "local" && access.access === "read") ||
+          access.access === "approved"
+        )
+          return;
 
         if (access.access === "denied")
           return yield* new DataError({
@@ -113,6 +119,16 @@ export class DataApprovals extends Context.Service<
             message: "The user denied this data source.",
             fix: "Don't retry; ask the user.",
           });
+        const record = (yield* events.model).sessions.get(sessionId);
+        const activeTurn = record === undefined ? undefined : workingTurn(record);
+
+        if (
+          grantedId &&
+          activeTurn &&
+          (turn === undefined || turn === activeTurn.id) &&
+          repository.consume(grantedId, sessionId, activeTurn.id, source)
+        )
+          return;
         const target = targetOf(source);
         let approvalId: RequestId | undefined;
         yield* events
@@ -129,12 +145,13 @@ export class DataApprovals extends Context.Service<
               )
                 return Effect.succeed([]);
 
-              const pending = [...record.pending.values()].find(
-                (request) =>
-                  request.dataSource !== undefined &&
-                  request.dataSource.sourceId === source.id &&
-                  targetKey(request.dataSource) === targetKey(target)
-              );
+              const pending = [...model.sessions.values()]
+                .flatMap((session) => [...session.pending.values()])
+                .find(
+                  (request) =>
+                    request.dataSource !== undefined &&
+                    targetKey(request.dataSource) === targetKey(target)
+                );
 
               if (pending) {
                 approvalId = pending.id;
@@ -173,6 +190,8 @@ export class DataApprovals extends Context.Service<
             message: "There is no active turn for this data source approval.",
             fix: "Start a turn before asking to read this remote data source.",
           });
+
+        if (activeTurn) repository.join(approvalId, sessionId, activeTurn.id);
 
         return yield* new DataApprovalRequired({
           approvalId,

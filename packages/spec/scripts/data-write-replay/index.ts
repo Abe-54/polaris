@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -39,7 +39,9 @@ export async function replayDataWrite(input: typeof DataWriteTrace.Type) {
   const directory = await mkdtemp(join(tmpdir(), "data-write-replay-"));
 
   try {
-    await writeFile(join(directory, "polaris.qnt"), await readFile(join(root, "polaris.qnt")));
+    for (const file of await readdir(root)) {
+      if (file.endsWith(".qnt")) await copyFile(join(root, file), join(directory, file));
+    }
 
     const steps = trace.steps
       .map(

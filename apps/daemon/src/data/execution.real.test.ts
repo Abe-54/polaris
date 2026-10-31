@@ -74,6 +74,7 @@ for (const engine of ["postgres", "mysql"] as const) {
             : `CREATE FUNCTION ${func}() RETURNS INT DETERMINISTIC MODIFIES SQL DATA BEGIN UPDATE ${table} SET v=99; RETURN 1; END`;
 
         await admin.unsafe(functionSql);
+
         await Promise.resolve(
           expect(run(`SELECT ${func}()`)).rejects.toMatchObject({ code: "E-DATA-READ-ONLY" })
         );
@@ -104,17 +105,23 @@ for (const engine of ["postgres", "mysql"] as const) {
 
         await admin.unsafe(`CREATE TABLE ${million} AS ${rowsSql}`);
         const capped = await run(`SELECT id FROM ${million}`);
+
         expect(capped.rows).toHaveLength(200);
         expect(capped.truncated).toBe(true);
         expect((await run(`SELECT id FROM ${million}`, [], 10000)).rows).toHaveLength(10000);
-        const sleep = engine === "postgres" ? "pg_sleep" : "SLEEP";
+
+        const slow =
+          engine === "postgres"
+            ? "SELECT pg_sleep(2)"
+            : `SELECT SUM(a.id + b.id + RAND()) AS n FROM ${million} a CROSS JOIN ${million} b`;
+
         await Promise.resolve(
-          expect(run(`SELECT ${sleep}(2)`, [], 200, 100)).rejects.toMatchObject({
+          expect(run(slow, [], 200, 100)).rejects.toMatchObject({
             code: "E-DATA-TIMEOUT",
           })
         );
         const abort = new AbortController();
-        const pending = run(`SELECT ${sleep}(2)`, [], 200, 30000, abort.signal);
+        const pending = run(slow, [], 200, 30000, abort.signal);
         const timer = setTimeout(() => abort.abort(), 100);
 
         try {
@@ -197,7 +204,11 @@ async function checkMysql(run: Run, admin: SQL, table: string, func: string, pre
   }
 
   for (const lock of ["LOCK IN SHARE MODE", "FOR SHARE"]) {
-    await run(`SELECT * FROM ${table} ${lock}`);
+    await Promise.resolve(
+      expect(run(`SELECT * FROM ${table} ${lock}`)).rejects.toMatchObject({
+        code: "E-DATA-READ-ONLY",
+      })
+    );
     await admin.unsafe(`UPDATE ${table} SET v=0 WHERE id=1`);
   }
 }

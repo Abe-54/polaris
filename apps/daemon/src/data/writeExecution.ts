@@ -6,6 +6,7 @@ import {
   bindValues,
   configure,
   cursorRead,
+  mysqlRead,
   executeTransaction,
   knownCredentials,
   queryError,
@@ -18,6 +19,7 @@ import { writePlan, sqlTokens, identifier, writeError, updatedColumns } from "./
 import { writeTable, type WriteTable } from "./writeTable.ts";
 import { editStatements, type EditInput } from "./writeEdits.ts";
 import type { LexicalMode } from "./guard.ts";
+import { guardFunctions } from "./functionGuard.ts";
 
 export interface WriteInput extends Omit<ReadInput, "limit" | "catalogText"> {
   dryRun: boolean;
@@ -54,11 +56,7 @@ async function rawRead(
   let raw: PreviewRaw;
 
   if (input.source.engine === "postgres") raw = await cursorRead(tx, active, sql, params, 20);
-  else {
-    const query = tx<RawResult>`${tx.unsafe(sql, params)}`.raw();
-    active.query = query;
-    raw = await query;
-  }
+  else raw = await mysqlRead(tx, active, sql, params, 20);
 
   return { ...decodeResult(raw, input.source.engine, knownCredentials(input.connection)), raw };
 }
@@ -215,6 +213,7 @@ function cappedPreview(
 async function write(tx: TransactionSQL, active: Active, input: WriteInput): Promise<WritePreview> {
   const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
   const plan = writePlan(input.sql, input.source, mode);
+  await guardFunctions(tx, plan.sql, mode);
   const table = plan.target ? await writeTable(tx, input.source, plan.target) : undefined;
 
   if (

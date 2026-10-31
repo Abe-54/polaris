@@ -103,15 +103,14 @@ test("grid cells for one primary key form one statement and keep identifiers out
   ]);
 });
 
-// TODO ENG-645: enable when XF's shared function guard is integrated (RX F2).
-test.todo("execute rejects cross-connection writes, signals and session locks", () => {
+test("execute rejects cross-connection writes, signals and session locks", () => {
   const calls = {
     postgres: [
       "dblink_exec('dbname=x','UPDATE x SET v=1')",
       "pg_terminate_backend(1)",
       "pg_advisory_lock(1)",
     ],
-    mysql: ["GET_LOCK('x',0)", "BENCHMARK(10,1)"],
+    mysql: ["GET_LOCK('x',0)", "BENCHMARK(10,1)", "SLEEP(1)", "(@x := 1)"],
   };
 
   for (const engine of ["postgres", "mysql"] as const)

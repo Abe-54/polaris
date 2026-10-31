@@ -22,10 +22,15 @@ export const targetOf = (source: DataSource) =>
   });
 
 export const serverKey = (target: DataSourceApproval) =>
-  JSON.stringify([target.engine, target.host, target.port]);
+  JSON.stringify([target.engine, target.host, target.port, target.user]);
 
 export const targetKey = (target: DataSourceApproval) =>
   JSON.stringify([target.engine, target.host, target.port, target.database, target.user]);
+
+interface SourcePolicy {
+  access: DataSource["access"];
+  writes: DataSource["writes"];
+}
 
 const decodeTarget = Schema.decodeUnknownSync(Schema.fromJsonString(DataSourceApproval));
 
@@ -36,7 +41,17 @@ export class ApprovalStore {
     db.exec(`CREATE TABLE IF NOT EXISTS data_approval_cursor (id INTEGER PRIMARY KEY, seq INTEGER NOT NULL);
       INSERT OR IGNORE INTO data_approval_cursor VALUES (1,0);
       CREATE TABLE IF NOT EXISTS data_approval_requests (id TEXT PRIMARY KEY, session TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, reason TEXT);
+      CREATE TABLE IF NOT EXISTS data_approval_waiters (request TEXT NOT NULL, session TEXT NOT NULL, turn TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(request,session,turn));
       CREATE TABLE IF NOT EXISTS data_approval_rules (key TEXT PRIMARY KEY, access TEXT NOT NULL, writes TEXT NOT NULL DEFAULT 'off');`);
+    const columns = db.query<{ name: string }, []>("PRAGMA table_info(data_approval_rules)").all();
+
+    if (!columns.some((column) => column.name === "origin")) {
+      db.exec("ALTER TABLE data_approval_rules ADD COLUMN origin TEXT NOT NULL DEFAULT 'decision'");
+      db.exec(
+        "UPDATE data_approval_rules SET origin='default' WHERE access='read' OR access='needs-approval'"
+      );
+      db.exec("DELETE FROM data_approval_rules WHERE json_array_length(key)=3");
+    }
   }
   get cursor() {
     return this.db
@@ -64,9 +79,13 @@ export class ApprovalStore {
                 this.db
                   .query("UPDATE data_approval_requests SET status='approved' WHERE id=?")
                   .run(requestId);
-                this.set(targetKey(target), "approved");
 
-                if (choice.dataScope === "server") this.set(serverKey(target), "approved");
+                if (choice.remember) {
+                  this.set(
+                    choice.dataScope === "server" ? serverKey(target) : targetKey(target),
+                    "approved"
+                  );
+                }
               }),
               Match.tag("Deny", ({ reason }) => {
                 this.db
@@ -100,37 +119,64 @@ export class ApprovalStore {
   private set(key: string, access: string) {
     this.db
       .query(
-        "INSERT INTO data_approval_rules(key,access) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET access=excluded.access"
+        "INSERT INTO data_approval_rules(key,access,origin) VALUES (?,?,'decision') ON CONFLICT(key) DO UPDATE SET access=excluded.access,origin='decision'"
       )
       .run(key, access);
   }
-  read(source: DataSource): { access: DataSource["access"]; writes: DataSource["writes"] } {
+  read(source: DataSource): SourcePolicy {
     const target = targetOf(source);
 
     const query = this.db.query<
-      { access: DataSource["access"]; writes: DataSource["writes"] },
+      { access: DataSource["access"]; writes: DataSource["writes"]; origin: string },
       [string]
-    >("SELECT access,writes FROM data_approval_rules WHERE key=?");
+    >("SELECT access,writes,origin FROM data_approval_rules WHERE key=?");
 
     const exact = query.get(targetKey(target));
     const server = query.get(serverKey(target));
+    const decision = exact?.origin === "decision" ? exact : server;
+    const local = source.locality === "local";
 
-    return (
-      exact ??
-      server ?? {
-        access: source.locality === "local" ? "read" : "needs-approval",
-        writes: source.locality === "local" ? "ask" : "off",
-      }
-    );
+    return {
+      access: decision?.origin === "decision" ? decision.access : local ? "read" : "needs-approval",
+      writes: exact?.writes ?? (local ? "ask" : "off"),
+    };
   }
   change(source: DataSource, writes?: DataSource["writes"], revoke?: boolean) {
-    const key = targetKey(targetOf(source));
+    const target = targetOf(source);
+    const key = targetKey(target);
     const current = this.read(source);
+    this.db.transaction(() => {
+      if (revoke) {
+        this.db
+          .query("DELETE FROM data_approval_rules WHERE key IN (?,?)")
+          .run(key, serverKey(target));
+        this.db
+          .query(
+            "UPDATE data_approval_requests SET status='denied',reason='Access revoked' WHERE json_extract(target,'$.engine')=? AND json_extract(target,'$.host')=? AND json_extract(target,'$.port')=? AND json_extract(target,'$.user')=?"
+          )
+          .run(target.engine, target.host, target.port, target.user);
+      }
+
+      this.db
+        .query(
+          "INSERT INTO data_approval_rules(key,access,writes,origin) VALUES (?,'needs-approval',?,'default') ON CONFLICT(key) DO UPDATE SET writes=excluded.writes"
+        )
+        .run(key, writes ?? current.writes);
+    })();
+  }
+  join(id: string, session: string, turn: string) {
     this.db
-      .query(
-        "INSERT INTO data_approval_rules VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET access=excluded.access,writes=excluded.writes"
-      )
-      .run(key, revoke ? "needs-approval" : current.access, writes ?? current.writes);
+      .query("INSERT OR IGNORE INTO data_approval_waiters(request,session,turn) VALUES (?,?,?)")
+      .run(id, session, turn);
+  }
+  consume(id: string, session: string, turn: string, source: DataSource) {
+    return (
+      this.db
+        .query(`UPDATE data_approval_waiters SET used=1
+      WHERE request=? AND session=? AND turn=? AND used=0 AND EXISTS (
+        SELECT 1 FROM data_approval_requests WHERE id=? AND status='approved' AND json_array(json_extract(target,'$.engine'),json_extract(target,'$.host'),json_extract(target,'$.port'),json_extract(target,'$.database'),json_extract(target,'$.user'))=?)`)
+        .run(id, session, turn, id, targetKey(targetOf(source))).changes === 1
+    );
   }
   outcome(id: string) {
     return (

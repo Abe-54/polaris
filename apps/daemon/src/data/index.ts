@@ -72,6 +72,10 @@ export class DataSources extends Context.Service<
       },
       Failure
     >;
+    readonly inspect?: (
+      source: DataSource,
+      connection: DataConnection
+    ) => Effect.Effect<void, DataError>;
     readonly watch: (
       input: Input<typeof WatchDataSources>
     ) => Stream.Stream<ReadonlyArray<DataSource>, Failure>;

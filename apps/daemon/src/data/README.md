@@ -192,11 +192,11 @@ before sending this RPC. The Desktop App owns the remote bulk confirmation.
   `nextval` and auto-increment allocation) can advance. External or independently committed
   effects in user functions/triggers can survive; a restricted database role remains necessary.
   Non-InnoDB writes survive rollback, which is why those targets are refused. PostgreSQL NOTIFY
-  is transactional and is not delivered on rollback. Direct function-call restrictions depend
-  on XF integration; `writeSql.test.ts` retains the named regression todo until then. User-defined
-  wrappers remain a database-role boundary.
-- As with reads, a large individual cell reaches the driver before clipping. The bounded card
-  is not a claim that driver memory is bounded for arbitrarily wide rows.
+  is transactional and is not delivered on rollback. Direct function-call restrictions use the shared lexical and
+  catalog guard before the preview or real write. User-defined wrappers remain a database-role
+  boundary.
+- Preview reads use the same server byte budget and cell projection as ordinary reads.
+  Missing or clipped primary keys refuse mutation, and omitted rows or columns are noted.
 
 ```sh
 POLARIS_TEST_PG_URL='<disposable Postgres 16 URL>' \
@@ -260,3 +260,11 @@ The native fixture writes an actual migration file between git checkpoints,
 adds a column and index, renames a table, and reads the stored per-Turn comparison.
 Unit tests establish policy/persistence/lifecycle behavior; they do not establish
 native database or idle-performance acceptance.
+
+Result column metadata currently comes from a zero-row probe before the bounded projection.
+MySQL may evaluate constant expressions while optimizing that probe, so it is not an independent
+side-effect boundary: it runs after the function/UDF guard in the same read-only transaction,
+on the same reservation, under the same total deadline. SLEEP, BENCHMARK, lock functions and
+user-variable assignments are refused before probing; session release clears any remaining user
+variables. Use SELECT-only credentials (ADR 0091's guard matrix). ENG-670 tracks a driver path
+that obtains prepared-statement column metadata without executing a probe.
