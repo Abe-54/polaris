@@ -8,6 +8,7 @@ import { cn } from "@polaris/ui";
 import { type KeyboardEvent, useMemo } from "react";
 import type { Loaded } from "../../data/hooks.tsx";
 import { lengthLabel, originLabel, processLabel } from "../../model/profile/labels.ts";
+import { useRequestedHere } from "../../model/profile/restarts.ts";
 import { selectProfile, useProfileSelection } from "../../model/profile/store.ts";
 import type { TracesSessionKey } from "../../model/session.ts";
 import { groupItemsByTurn, profilesLabel, turnKicker } from "../../model/sidebar.ts";
@@ -27,40 +28,46 @@ const ProfileRow = ({
   readonly at: TracesSessionKey;
   readonly profile: Profile;
   readonly open: boolean;
-}) => (
-  <button
-    type="button"
-    data-testid="profiles-row"
-    data-profile={profile.id}
-    aria-current={open ? "true" : undefined}
-    title={`${profile.command} · pid ${profile.pid}`}
-    onClick={() => selectProfile(at, open ? null : profile)}
-    className={cn(
-      "min-h-session-row hover:bg-fill-hover focus-visible:ring-starlight rounded-card flex w-full shrink-0 cursor-default flex-col justify-center gap-0.5 px-3 py-1 text-left outline-none focus-visible:ring-2",
-      open && "bg-raised ring-hairline hover:bg-raised ring-1 ring-inset"
-    )}
-  >
-    <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
-      <span
-        className={cn(
-          "text-code-inline min-w-0 truncate font-mono",
-          open ? "text-text-strong" : "text-text-default"
-        )}
-      >
-        {processLabel(profile)}
+}) => {
+  const requestedHere = useRequestedHere(at, profile.id);
+
+  return (
+    <button
+      type="button"
+      data-testid="profiles-row"
+      data-profile={profile.id}
+      aria-current={open ? "true" : undefined}
+      title={`${profile.command} · pid ${profile.pid}`}
+      onClick={() => selectProfile(at, open ? null : profile)}
+      className={cn(
+        "min-h-session-row hover:bg-fill-hover focus-visible:ring-starlight rounded-card flex w-full shrink-0 cursor-default flex-col justify-center gap-0.5 px-3 py-1 text-left outline-none focus-visible:ring-2",
+        open && "bg-raised ring-hairline hover:bg-raised ring-1 ring-inset"
+      )}
+    >
+      <span className="flex w-full min-w-0 items-baseline justify-between gap-2">
+        <span
+          className={cn(
+            "text-code-inline min-w-0 truncate font-mono",
+            open ? "text-text-strong" : "text-text-default"
+          )}
+        >
+          {processLabel(profile)}
+        </span>
+        <span
+          className={cn(
+            "tabular shrink-0 font-mono text-[11px] leading-[14px]",
+            open ? "text-text-strong" : "text-text-subtle"
+          )}
+        >
+          {lengthLabel(profile)}
+        </span>
       </span>
-      <span
-        className={cn(
-          "tabular shrink-0 font-mono text-[11px] leading-[14px]",
-          open ? "text-text-strong" : "text-text-subtle"
-        )}
-      >
-        {lengthLabel(profile)}
+      <span className="text-caption text-text-subtle min-w-0 truncate">
+        {originLabel(profile, requestedHere)}
       </span>
-    </span>
-    <span className="text-caption text-text-subtle min-w-0 truncate">{originLabel(profile)}</span>
-  </button>
-);
+    </button>
+  );
+};
 
 /** Up and Down move between recordings and open the one reached. */
 const moveFocus = (event: KeyboardEvent<HTMLElement>) => {

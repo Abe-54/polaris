@@ -97,7 +97,7 @@ const useGrowth = (traceId: string | null, version: string | null) => {
 };
 
 /** The Host's connection: its epoch, which moves on each reconnect, and whether it's connected. */
-const useConnectionOf = (hostKey: string) => {
+export const useConnectionOf = (hostKey: string) => {
   const epoch = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.status.epoch ?? 0);
 
   const connected = useApp(

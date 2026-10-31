@@ -36,13 +36,14 @@ const recording = (change: Partial<Profile>): Profile => ({ ...LEDGER_PROFILE, .
 
 describe("how a Profile was made", () => {
   test.each([
-    [{}, "Restarted with profiling by the agent"],
-    [{ turn: null }, "Restarted with profiling by you"],
-    [{ origin: "command" as const }, "Whole command"],
-    [{ status: "recording" as const }, "Restarted with profiling by the agent · recording"],
-    [{ status: "failed" as const }, "Recording failed"],
-  ])("%o reads %s", (change, label) => {
-    expect(originLabel(recording(change))).toBe(label);
+    [{}, false, "Restarted with profiling"],
+    [{}, true, "Restarted with profiling by you"],
+    [{ turn: null }, false, "Restarted with profiling by you"],
+    [{ origin: "command" as const }, false, "Whole command"],
+    [{ status: "recording" as const }, false, "Restarted with profiling · recording"],
+    [{ status: "failed" as const }, true, "Recording failed"],
+  ])("%o, asked for here: %p, reads %s", (change, requestedHere, label) => {
+    expect(originLabel(recording(change), requestedHere)).toBe(label);
   });
 
   test("a Daemon that doesn't say how falls back to the Turn and time", () => {

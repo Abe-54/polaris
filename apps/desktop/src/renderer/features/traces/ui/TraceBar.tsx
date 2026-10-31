@@ -10,6 +10,7 @@ import { commandShortcut } from "../../../../shared/keymap.ts";
 import { useApp, useCommands } from "../../../shell/hooks.ts";
 import { showBidi } from "../../data/grid/value.ts";
 import { useOpenTrace } from "../model/openTrace.ts";
+import { useProfileFocused } from "../model/profile/store.ts";
 import { traceReference } from "../model/reference.ts";
 import { OTHER_SESSION } from "../model/sidebar.ts";
 import type { TracesSessionKey } from "../model/session.ts";
@@ -41,11 +42,15 @@ export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
   const detail = useOpenTrace(at, traceId);
   const add = useAddTrace(at, detail, spanId);
   const commands = useCommands();
+  // The open Profile takes ⌘L while focus is in it, however often this re-registers.
+  const profileFocused = useProfileFocused(at);
 
   useEffect(
     () =>
-      detail === null ? undefined : commands.register({ "traces.addToSession": { run: add } }),
-    [commands, detail, add]
+      detail === null || profileFocused
+        ? undefined
+        : commands.register({ "traces.addToSession": { run: add } }),
+    [commands, detail, add, profileFocused]
   );
 
   if (detail === null) return null;

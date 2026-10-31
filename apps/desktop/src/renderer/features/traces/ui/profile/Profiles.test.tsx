@@ -1,105 +1,18 @@
-import "../../../../test/dom.testing.ts";
-// The app's own load order: the shell's slots before the features that read them.
-import "../../../../app/slots.tsx";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test } from "bun:test";
-import { TooltipProvider } from "@polaris/ui";
-import { createStore } from "zustand/vanilla";
 import type { HostView } from "../../../../../shared/api.ts";
-import { createCommandRegistry } from "../../../../routes/commands.ts";
 import { editorRoute } from "../../../../routes/editor.ts";
-import { createNavigation } from "../../../../routes/navigation.ts";
-import { AppProvider } from "../../../../shell/hooks.ts";
-import type { AppState } from "../../../../store/store.ts";
-import { DataLayer } from "../../../data/data/hooks.tsx";
-import { fixtureDataApi } from "../../../data/preview/fixtureApi.ts";
 import { onDraftChange, updateDraft } from "../../../session/state.ts";
-import { TracesLayer } from "../../data/hooks.tsx";
-import { ProfilesLayer } from "../../data/profiles.tsx";
 import type { ProfilesApi } from "../../data/profilesApi.ts";
 import { profileSelection, selectProfile } from "../../model/profile/store.ts";
-import { selectSpan, selectTrace, useTracesSelection } from "../../model/store.ts";
-import { fixtureAppState, HOST, host } from "../../preview/appState.ts";
-import { fixturePid } from "../../preview/build.ts";
-import { fixtureTracesApi } from "../../preview/fixtureApi.ts";
-import { BIG_TRACE, FIXTURE_SESSION } from "../../preview/fixtures.ts";
+import { selectSpan } from "../../model/store.ts";
+import { host } from "../../preview/appState.ts";
 import { fixtureProfilesApi, LEDGER_PROFILE } from "../../preview/profiles.ts";
-import type { TracesSessionKey } from "../../model/session.ts";
-import { TracesSidebar } from "../Sidebar.tsx";
-import { SpanPanel } from "../SpanPanel.tsx";
-import { TraceMain } from "../TraceMain.tsx";
-import { ProfilePanel } from "./ProfilePanel.tsx";
+import { mountProfiles as mount, openProfilesTab } from "./profiles.testing.tsx";
 
 afterEach(cleanup);
 
 const RECALCULATE = "b30e4d1a7c2f9e05";
-
-const LEDGER_PID = Number(fixturePid("ledger-api"));
-
-/** The slots that show a Profile, as TracesMode lays them out, for one Agent Session. */
-const Slots = ({ at }: { readonly at: TracesSessionKey }) => {
-  const props = { at, hostKey: at.hostKey, workspaceId: "ledger", ...useTracesSelection(at) };
-
-  return (
-    <>
-      <TracesSidebar {...props} />
-      <TraceMain {...props} />
-      <SpanPanel {...props} />
-      <ProfilePanel {...props} />
-    </>
-  );
-};
-
-const mount = ({
-  profiles = fixtureProfilesApi({ owned: [LEDGER_PID] }),
-  shown = host,
-}: { readonly profiles?: ProfilesApi; readonly shown?: HostView } = {}) => {
-  const at = { hostKey: HOST, sessionId: FIXTURE_SESSION };
-  const store = createStore<AppState>(() => ({ ...fixtureAppState(shown), density: "calm" }));
-  const navigation = createNavigation({ app: store, storage: null });
-  const commands = createCommandRegistry({ platform: "mac" });
-
-  navigation.actions.selectSession(at);
-  navigation.actions.setMode("traces");
-  // The shell provides this fact while Traces shows (shell/commands.ts).
-  commands.provide(() => ({ keys: ["mode.traces"] }));
-
-  // The per-session stores outlive a test.
-  selectProfile(at, null);
-  selectTrace(at, BIG_TRACE.id);
-
-  render(
-    <AppProvider
-      value={{
-        connection: {
-          store,
-          openSession: () => () => undefined,
-          setDensity: () => undefined,
-          setAppearance: () => undefined,
-        },
-        navigation,
-        commands,
-      }}
-    >
-      <TooltipProvider>
-        <DataLayer api={fixtureDataApi()}>
-          <TracesLayer api={fixtureTracesApi()}>
-            <ProfilesLayer api={profiles}>
-              <Slots at={at} />
-            </ProfilesLayer>
-          </TracesLayer>
-        </DataLayer>
-      </TooltipProvider>
-    </AppProvider>
-  );
-
-  return { at, navigation, commands };
-};
-
-const openProfilesTab = async () => {
-  fireEvent.click(screen.getByRole("radio", { name: /Profiles/ }));
-  await screen.findByTestId("profiles-list");
-};
 
 test("Profiles lists recordings under their Turn, with process and how each was made", async () => {
   mount();
@@ -120,7 +33,7 @@ test("Profiles lists recordings under their Turn, with process and how each was 
   expect(turns[0]).toEqual({
     kicker: "TURN 12 · NOW2 profiles",
     rows: [
-      "ledger-api · bun12 sRestarted with profiling by the agent",
+      "ledger-api · bun12 sRestarted with profiling",
       "bun test overdue-totals3.1 sWhole command",
     ],
   });
@@ -262,4 +175,42 @@ test("a Daemon without traces.profiles is never asked, and Profiles names the up
     "Profiles need a newer daemon on Mac Studio. Update it in Settings → Hosts."
   );
   expect(watched).toBe(0);
+});
+
+test("a restart the user clicked reads as theirs, and its recording waits for the process to stop", async () => {
+  mount();
+  await screen.findByTestId("waterfall");
+  await openProfilesTab();
+  fireEvent.click(await screen.findByTestId("profiles-restart"));
+  const panel = await screen.findByTestId("profile-panel");
+  const newest = screen.getAllByTestId("profiles-row")[0];
+
+  expect(newest?.getAttribute("aria-current")).toBe("true");
+  expect(newest?.textContent).toContain("Restarted with profiling by you · recording");
+  // The runtime writes the profile when it stops: no read is tried, so no read failure shows.
+  await waitFor(() => expect(within(panel).queryByText("Reading the profile…")).toBeNull());
+  expect(panel.textContent).toContain("The flame chart shows once the process stops");
+  expect(panel.textContent).not.toContain("Record it again");
+});
+
+test("⌘L in the profile panel still adds the Profile after the trace bar re-registers", async () => {
+  const { at, commands } = mount();
+  const drafts: Array<string> = [];
+
+  updateDraft(at.hostKey, at.sessionId, () => "");
+  await screen.findByTestId("waterfall");
+  act(() => selectProfile(at, LEDGER_PROFILE));
+  await screen.findByTestId("profile-add-to-session");
+  act(() => screen.getByTestId("flame-chart").focus());
+
+  // The trace bar's handler changes (here a span; live, the open trace re-reading as it grows).
+  act(() => selectSpan(at, RECALCULATE));
+  const stop = onDraftChange((_key, draft) => drafts.push(draft));
+
+  act(() => {
+    commands.run("traces.addToSession");
+  });
+  stop();
+
+  expect(drafts.at(-1)).toStartWith("Profile `prof-ledger-api-12`");
 });

@@ -17,16 +17,24 @@ const clock = (iso: string) => {
 export const processLabel = (profile: Profile): string =>
   profile.service === undefined ? profile.command : `${profile.service} · ${profile.runtime}`;
 
-const ORIGIN: Record<NonNullable<Profile["origin"]>, (byAgent: boolean) => string> = {
-  restart: (byAgent) => `Restarted with profiling by ${byAgent ? "the agent" : "you"}`,
+/**
+ * A restart in a Turn may be the agent's (the profile tool) or the user's, so it says "by you"
+ * only when this window asked for it or no Turn was open; the Daemon doesn't record who.
+ */
+const ORIGIN: Record<NonNullable<Profile["origin"]>, (byYou: boolean) => string> = {
+  restart: (byYou) => (byYou ? "Restarted with profiling by you" : "Restarted with profiling"),
   command: () => "Whole command",
   attach: () => "Attached while it ran",
 };
 
 /** How the recording was made, or, from a Daemon that doesn't say, when. */
-export const originLabel = (profile: Profile): string => {
+export const originLabel = (profile: Profile, requestedHere = false): string => {
   if (profile.status === "failed") return "Recording failed";
-  const made = profile.origin === undefined ? null : ORIGIN[profile.origin](profile.turn !== null);
+
+  const made =
+    profile.origin === undefined
+      ? null
+      : ORIGIN[profile.origin](requestedHere || profile.turn === null);
 
   if (profile.status === "recording") return made === null ? "Recording…" : `${made} · recording`;
 

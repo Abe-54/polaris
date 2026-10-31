@@ -25,6 +25,7 @@ import { useTurnTraces } from "../output/useTurnTraces.ts";
 import { TraceList } from "./sidebar/TraceList.tsx";
 import { afterEach, expect, test } from "bun:test";
 import type { TracesSessionKey } from "../model/session.ts";
+import { selectProfile } from "../model/profile/store.ts";
 import { selectSpan, selectTrace } from "../model/store.ts";
 import { fixtureTracesApi } from "../preview/fixtureApi.ts";
 import { BIG_TRACE, ERROR_TRACE, FIXTURE_DETAILS } from "../preview/fixtures.ts";
@@ -34,7 +35,10 @@ useLayout();
 
 afterEach(() => {
   cleanup();
-  act(() => selectTrace(AT, null));
+  act(() => {
+    selectTrace(AT, null);
+    selectProfile(AT, null);
+  });
 });
 
 const listening = (details: ReadonlyArray<TraceDetail>): TracesSnapshot => ({
@@ -393,4 +397,21 @@ test("finding 18: Output reads the first five failing traces, the rest when aske
   fireEvent.click(screen.getByRole("button", { name: "3 more failing" }));
   expect(screen.getAllByTestId("traces-output-failure")).toHaveLength(8);
   expect(fake.gets).toHaveLength(8);
+});
+
+test("a Profile listed in a checkout with no traces opens under the setup page", async () => {
+  mountTraces(scripted(() => []).api);
+  await screen.findByTestId("traces-setup-empty");
+  fireEvent.click(screen.getByRole("radio", { name: /Profiles/ }));
+  const rows = await screen.findAllByTestId("profiles-row");
+  const wholeCommand = rows.find((row) => row.textContent?.includes("Whole command"));
+
+  fireEvent.click(wholeCommand ?? document.body);
+
+  const panel = await screen.findByTestId("profile-panel");
+
+  expect(within(panel).getByTestId("profile-header").textContent).toContain("bun test");
+  // The recording reads into its flame chart; the setup page stays above it.
+  await within(panel).findByTestId("flame-chart");
+  expect(screen.queryByTestId("traces-setup-empty")).not.toBeNull();
 });
