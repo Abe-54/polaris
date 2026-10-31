@@ -6,19 +6,21 @@
 import { cn } from "@polaris/ui";
 import { useMemo, useState } from "react";
 import {
+  type Caller,
   mapLayout,
   serviceMap,
   servicePanel,
   type ServiceMap as Map_,
+  startedWords,
 } from "../../model/map/index.ts";
 import type { TraceView } from "../waterfall/useTraceView.ts";
-import { LINK, MapLayer } from "./MapLayer.tsx";
+import { labelBox, LINK, MapLayer } from "./MapLayer.tsx";
 import { ServicePanel } from "./ServicePanel.tsx";
 import { usePanZoom } from "./usePanZoom.ts";
 
 const HINT = "text-text-subtle font-mono text-[11px] leading-[14px]";
 
-const Legend = ({ startedByAgent }: { readonly startedByAgent: boolean }) => (
+const Legend = ({ caller }: { readonly caller: Caller }) => (
   <div className="text-caption text-text-subtle flex items-center gap-4">
     <span className="flex items-center gap-1.5">
       <svg width="18" height="6" aria-hidden>
@@ -45,7 +47,7 @@ const Legend = ({ startedByAgent }: { readonly startedByAgent: boolean }) => (
       <svg width="12" height="12" aria-hidden>
         <path d="M6 0V12" style={{ stroke: LINK }} strokeDasharray="1 3" />
       </svg>
-      {startedByAgent ? "Started by the agent" : "Started between turns"}
+      {startedWords(caller)}
     </span>
   </div>
 );
@@ -81,7 +83,9 @@ export const ServiceMap = ({
 }) => {
   const map = useMemo(() => serviceMap(trace.times), [trace.times]);
   const layout = useMemo(() => mapLayout(map), [map]);
-  const size = useMemo(() => ({ width: layout.width, height: layout.height }), [layout]);
+  const { width, height } = layout;
+  // Keyed on the numbers: a growing trace's new layout mustn't re-open the view.
+  const size = useMemo(() => ({ width, height }), [width, height]);
 
   const [selected, setSelected] = useState<string | null>(
     () => map.caller.roots.keys().next().value ?? map.nodes[0]?.name ?? null
@@ -93,7 +97,8 @@ export const ServiceMap = ({
   );
 
   const lit = useLit(trace, map);
-  const { canvas, layer, handlers, wasDrag } = usePanZoom(size);
+  const { canvas, layer, handlers, wasDrag, reveal } = usePanZoom(size);
+  const at = useMemo(() => new Map(layout.placed.map((p) => [p.node.name, p])), [layout]);
 
   return (
     <div className="flex min-h-0 flex-1" data-testid="service-map">
@@ -118,14 +123,19 @@ export const ServiceMap = ({
             layout={layout}
             selected={selected}
             lit={lit}
-            onSelect={(name) => {
-              if (!wasDrag()) setSelected(name);
+            onSelect={(name, byPointer) => {
+              if (!byPointer || !wasDrag()) setSelected(name);
+            }}
+            onFocus={(name) => {
+              const p = at.get(name);
+
+              if (p !== undefined) reveal(labelBox(p.x, p.base));
             }}
           />
         </div>
         {/* The foot sits on the well, so the map passes under it. */}
         <div className="bg-well rounded-b-row pointer-events-none absolute inset-x-px bottom-px flex h-11 items-center justify-between px-4">
-          <Legend startedByAgent={map.caller.turn !== null} />
+          <Legend caller={map.caller} />
           <Hints />
         </div>
       </div>

@@ -62,8 +62,8 @@ describe("the overdue run's map", () => {
     ]);
   });
 
-  test("a request from outside the trace has no command; the Turn still starts it", () => {
-    expect(callerWords(map.caller)).toEqual(["turn 12"]);
+  test("a request from outside the trace has no command; it ran during its Turn", () => {
+    expect(callerWords(map.caller)).toEqual(["during turn 12"]);
     expect([...map.caller.roots]).toEqual([["ledger-api", 1]]);
   });
 
@@ -150,7 +150,7 @@ describe("the settlement run's map", () => {
   });
 
   test("the script's command and Turn are the caller", () => {
-    expect(callerWords(map.caller)).toEqual(["bun run settle.ts", "turn 11"]);
+    expect(callerWords(map.caller)).toEqual(["bun run settle.ts", "during turn 11"]);
     expect(servicePanel(map, "settle-job")?.startedBy?.command).toBe(
       "bun run scripts/settle.ts --month 2026-10"
     );
@@ -211,7 +211,7 @@ describe("the failing test's map", () => {
       "ledger-api → postgresql ×1 · SQL",
       "ledger-tests → ledger-api ×1 · HTTP",
     ]);
-    expect(callerWords(map.caller)).toEqual(["bun test overdue-totals", "turn 12"]);
+    expect(callerWords(map.caller)).toEqual(["bun test overdue-totals", "during turn 12"]);
   });
 });
 
@@ -238,14 +238,21 @@ describe("inferTarget", () => {
     expect(inferTarget(attributes)).toEqual(target);
   });
 
-  test("a host names a traced service by itself or its first label, never a partial word", () => {
+  test("a host names a traced service by itself, or its first label under a private suffix", () => {
     const services = new Set(["fx-rates", "api"]);
 
     expect(
-      ["fx-rates", "fx-rates.internal", "fx.internal", "api.stripe.com", "rates"].map((n) =>
-        matchService(n, services)
-      )
-    ).toEqual(["fx-rates", "fx-rates", null, "api", null]);
+      [
+        "fx-rates",
+        "fx-rates.internal",
+        "fx-rates.ledger.svc.cluster.local",
+        "api.local",
+        "fx.internal",
+        "api.stripe.com",
+        "api.v1.Users",
+        "rates",
+      ].map((n) => matchService(n, services))
+    ).toEqual(["fx-rates", "fx-rates", "fx-rates", "api", null, null, null, null]);
   });
 });
 
@@ -313,7 +320,7 @@ describe("the viewport", () => {
     expect(wide.x).toBe(24);
   });
 
-  test("a map that only fits unreadably small opens at OPEN_ZOOM from the top, centred across", () => {
+  test("a map too wide to read whole opens at OPEN_ZOOM from the top, centred across", () => {
     const canvas = { width: 800, height: 600 };
     const small = { width: 376, height: 262 };
 

@@ -6,8 +6,7 @@
 import { CloseIcon, cn, IconButton } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { formatDuration } from "../../model/format.ts";
-import type { NodeKind, ServicePanelModel } from "../../model/map/index.ts";
-import { turnWords } from "../../model/map/words.ts";
+import { type NodeKind, type ServicePanelModel, turnWords } from "../../model/map/index.ts";
 import { serviceHue } from "../../model/waterfall/index.ts";
 import { KICKER } from "../span/parts.tsx";
 
@@ -172,6 +171,9 @@ const Slowest = ({
             >
               {s.span.name}
             </span>
+            {s.span.status === "error" ? (
+              <span className="text-micro text-severity-critical-text shrink-0">error</span>
+            ) : null}
             <span className="tabular text-text-subtle shrink-0 font-mono text-[11px] leading-[14px]">
               {formatDuration(s.end - s.start)}
             </span>
@@ -237,7 +239,10 @@ export const ServicePanel = ({
           value={formatDuration(node.requestMs)}
           label={node.kind === "service" ? "Request time" : "Call time"}
         />
-        <Tile value={String(node.spans)} label="Spans" />
+        <Tile
+          value={String(node.spans)}
+          label={node.kind === "service" ? "Spans" : "Client spans"}
+        />
         <Tile value={String(node.errors)} label="Errors" />
       </div>
       {model.calls.length === 0 ? null : <Calls model={model} onSelect={onSelect} />}

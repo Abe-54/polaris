@@ -140,8 +140,26 @@ const place = (map: ServiceMap, layer: ReadonlyMap<string, number>) => {
   return { placed, width, depth };
 };
 
-/** A connector down to the callee's label, or round below and up into its art when it sits higher. */
-const routesOf = (map: ServiceMap, placed: ReadonlyArray<PlacedNode>): ReadonlyArray<Route> => {
+/** Where a connector's label sits from the lane it runs in. */
+const LABEL_GAP = 9;
+
+/** Room kept right of a side lane for its label ("×214 · HTTP"). */
+const LABEL_ROOM = 96;
+
+/** A route back up turns in under the callee's art, above the callee's own bus. */
+const TURN_IN = 14;
+
+interface Drawn extends Route {
+  /** The lowest and rightmost points it reaches, for the map's size. */
+  readonly bottom: number;
+  readonly right: number;
+}
+
+/**
+ * A connector down to the callee's label, or round below into the art of one in its own layer. One
+ * up to a higher layer climbs a side lane right of both ends, so it never retraces a call down.
+ */
+const routesOf = (map: ServiceMap, placed: ReadonlyArray<PlacedNode>): ReadonlyArray<Drawn> => {
   const at = new Map(placed.map((p) => [p.node.name, p]));
 
   const busOf = new Map(
@@ -152,7 +170,7 @@ const routesOf = (map: ServiceMap, placed: ReadonlyArray<PlacedNode>): ReadonlyA
 
   const into = Map.groupBy(map.edges, (e) => e.to);
 
-  return map.edges.flatMap((edge): ReadonlyArray<Route> => {
+  return map.edges.flatMap((edge): ReadonlyArray<Drawn> => {
     const from = at.get(edge.from);
     const to = at.get(edge.to);
 
@@ -164,17 +182,41 @@ const routesOf = (map: ServiceMap, placed: ReadonlyArray<PlacedNode>): ReadonlyA
 
     const j = arriving.indexOf(edge) - (arriving.length - 1) / 2;
     const last = (arriving.length - 1) / 2;
-    const ex = to.x + j * ENTRY_STEP;
     const bus = from.base + DROP + (busOf.get(edge.from) ?? 0);
-    const end = to.layer > from.layer ? to.base - ARRIVE_ABOVE : to.base + 6;
-    const mid = Math.round((bus + end) / 2 + j * LABEL_STEP);
+
+    if (to.layer >= from.layer) {
+      const ex = to.x + j * ENTRY_STEP;
+      const end = to.layer > from.layer ? to.base - ARRIVE_ABOVE : to.base + 6;
+      const mid = Math.round((bus + end) / 2 + j * LABEL_STEP);
+      const label = { x: to.x + last * ENTRY_STEP + LABEL_GAP, y: mid };
+
+      return [
+        {
+          edge,
+          path: `M${from.x} ${from.base + 2}V${bus}H${ex}V${end}`,
+          light: { x: ex, y: mid },
+          label,
+          bottom: bus,
+          right: label.x + LABEL_ROOM,
+        },
+      ];
+    }
+
+    const back = arriving.filter((e) => (at.get(e.from)?.layer ?? 0) > to.layer);
+    const k = back.indexOf(edge);
+    const lane = Math.max(from.x, to.x) + SLOT / 2 + k * BUS_STEP;
+    const ex = to.x + (k + 1) * ENTRY_STEP;
+    const turn = to.base + TURN_IN + k * BUS_STEP;
+    const mid = Math.round((bus + turn) / 2);
 
     return [
       {
         edge,
-        path: `M${from.x} ${from.base + 2}V${bus}H${ex}V${end}`,
-        light: { x: ex, y: mid },
-        label: { x: to.x + last * ENTRY_STEP + 9, y: mid },
+        path: `M${from.x} ${from.base + 2}V${bus}H${lane}V${turn}H${ex}V${to.base + 6}`,
+        light: { x: lane, y: mid },
+        label: { x: lane + LABEL_GAP, y: mid },
+        bottom: bus,
+        right: lane + LABEL_GAP + LABEL_ROOM,
       },
     ];
   });
@@ -198,15 +240,20 @@ const callerOf = (map: ServiceMap, placed: ReadonlyArray<PlacedNode>) => {
   };
 };
 
+/** Below the last layer's label boxes. */
+const FOOT_ROOM = 8;
+
 export const mapLayout = (map: ServiceMap): MapLayout => {
   const { placed, width, depth } = place(map, layersOf(map));
+  const drawn = routesOf(map, placed);
+  const lowest = FIRST_BASE + (depth - 1) * PITCH + FOOT_ROOM;
 
   return {
-    width,
-    // Room under the last layer for connectors that turn back up.
-    height: FIRST_BASE + (depth - 1) * PITCH + DROP + BUSES * BUS_STEP,
+    width: Math.max(width, ...drawn.map((r) => r.right)),
+    // Room under the last layer only for connectors that leave it.
+    height: Math.max(lowest, ...drawn.map((r) => r.bottom + FOOT_ROOM)),
     placed,
-    routes: routesOf(map, placed),
+    routes: drawn.map(({ edge, path, light, label }) => ({ edge, path, light, label })),
     caller: callerOf(map, placed),
   };
 };
