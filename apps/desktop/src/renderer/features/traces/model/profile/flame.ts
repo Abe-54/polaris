@@ -170,6 +170,19 @@ export const frameAt = (layout: FlameLayout, ms: number, level: number): number 
   return null;
 };
 
+/** The first root frame that shows in `window`: where the keyboard starts. */
+export const firstRootIn = (layout: FlameLayout, window: FlameWindow): number | null => {
+  const total = layout.order.length;
+
+  for (let p = 0; p < total; p = layout.after[p] ?? total) {
+    const node = layout.order[p] ?? 0;
+
+    if ((layout.end[node] ?? 0) > window.from && (layout.start[node] ?? 0) < window.to) return node;
+  }
+
+  return null;
+};
+
 /** Keyboard moves: Up to the parent, Down to the first child, Left/Right to a sibling. */
 export const frameMove = (
   layout: FlameLayout,

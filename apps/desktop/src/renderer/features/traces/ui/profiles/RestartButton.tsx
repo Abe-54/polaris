@@ -70,10 +70,10 @@ export const RestartButton = ({
         disabled={state.kind === "pending"}
         data-testid="profiles-restart"
         title={`Restart ${target.service} (pid ${target.pid}) with profiling`}
-        className="border-text-strong/12 hover:bg-fill-hover focus-visible:ring-starlight flex h-[30px] w-full shrink-0 cursor-default items-center gap-2 rounded-full border px-3 outline-none focus-visible:ring-2 disabled:opacity-(--opacity-dimmed)"
+        className="border-text-strong/12 hover:bg-fill-hover focus-visible:ring-starlight flex h-[30px] w-full shrink-0 cursor-default items-center gap-1.5 rounded-full border px-2.5 outline-none focus-visible:ring-2 disabled:opacity-(--opacity-dimmed)"
       >
-        <span className="bg-text-subtle size-2 shrink-0 rounded-full" aria-hidden />
-        <span className="text-label text-text-default min-w-0 truncate font-medium">
+        <span className="bg-text-subtle size-1.5 shrink-0 rounded-full" aria-hidden />
+        <span className="text-caption text-text-default min-w-0 truncate font-medium">
           {state.kind === "pending"
             ? `Restarting ${target.service}…`
             : `Restart ${target.service} with profiling`}

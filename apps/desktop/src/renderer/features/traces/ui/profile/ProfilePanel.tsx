@@ -186,13 +186,15 @@ const Body = ({
 
   const { hostKey, sessionId } = at;
   const key = useMemo(() => ({ hostKey, sessionId }), [hostKey, sessionId]);
+  // A Profile opens on the stretch it shares with the open trace; a reset shows all of it.
+  const opening = mark ?? whole;
 
   return (
     <div className="px-panel pb-panel flex gap-6 pt-1">
       <FlameChart
         detail={detail}
         layout={layout}
-        window={window ?? whole}
+        window={window ?? opening}
         frame={frame}
         mark={mark}
         checkout={checkout}
@@ -202,7 +204,7 @@ const Body = ({
 
           if (fn !== undefined && opensInEditor(fn, checkout)) onOpen(fn);
         }}
-        onWindow={(next) => setFlameWindow(key, next)}
+        onWindow={(next) => setFlameWindow(key, next ?? whole)}
       />
       <HotFunctions detail={detail} checkout={checkout} onOpen={onOpen} />
     </div>

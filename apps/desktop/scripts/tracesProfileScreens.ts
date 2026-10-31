@@ -86,10 +86,9 @@ const profile = async (page: Page) => {
 };
 
 const screens = async (page: Page) => {
-  await open(page, "profile");
-
   for (const look of THEMES)
     for (const density of DENSITIES) {
+      await open(page, "profile");
       await appearance(page, look, density);
       await profile(page);
       await shoot(page, `profile-${look.name}-${density}`);

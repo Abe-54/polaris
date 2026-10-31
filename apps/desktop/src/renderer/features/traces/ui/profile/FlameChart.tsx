@@ -10,6 +10,7 @@ import { useApp } from "../../../../shell/hooks.ts";
 import {
   type FlameLayout,
   type FlameWindow,
+  firstRootIn,
   frameAt,
   frameMove,
   panned,
@@ -183,7 +184,7 @@ const onKey = (event: KeyboardEvent<HTMLDivElement>, props: FlameChartProps) => 
   const arrow = ARROWS.get(event.key);
 
   if (arrow !== undefined) {
-    const next = frame === null ? (layout.order[0] ?? null) : frameMove(layout, frame, arrow);
+    const next = frame === null ? firstRootIn(layout, window) : frameMove(layout, frame, arrow);
 
     if (next !== null) onFrame(next);
   } else if (event.key === "Enter" && frame !== null) onOpen(frame);

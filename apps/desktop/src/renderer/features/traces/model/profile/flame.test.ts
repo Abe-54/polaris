@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import type { ProfileNode } from "@polaris/protocol";
 import { FIXTURE_SESSION } from "../../preview/fixtures.ts";
 import { fixtureProfilesApi, LARGE_PROFILE } from "../../preview/profiles.ts";
-import { eachVisibleFrame, flameLayout, frameAt, frameMove, panned, zoomed } from "./flame.ts";
+import {
+  eachVisibleFrame,
+  firstRootIn,
+  flameLayout,
+  frameAt,
+  frameMove,
+  panned,
+  zoomed,
+} from "./flame.ts";
 
 const node = (parent: number | null, startMs: number, durationMs: number): ProfileNode => ({
   parent,
@@ -82,6 +90,14 @@ describe("frameAt and frameMove", () => {
       3, 2, 4,
     ]);
     expect([frameAt(layout, 95, 1), frameAt(layout, 145, 0)]).toEqual([null, null]);
+  });
+
+  test("the keyboard starts on the first root inside the window, skipping earlier ones", () => {
+    expect([
+      firstRootIn(layout, { from: 0, to: 200 }),
+      firstRootIn(layout, { from: 110, to: 200 }),
+      firstRootIn(layout, { from: 141, to: 149 }),
+    ]).toEqual([0, 4, null]);
   });
 
   test("Up, Down, Left and Right walk parent, first child and siblings", () => {
