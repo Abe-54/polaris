@@ -3,9 +3,14 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { loadavg, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { _electron as electron } from "playwright-core";
 import { startDaemon } from "../lib/daemon.ts";
-import { APP_DIR, REPO_ROOT, stockElectronBinary, sizeWindow } from "../lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  stockElectronBinary,
+  sizeWindow,
+} from "../lib/electron.ts";
 import { Snapshot, summarizeLatency, type LatencySample } from "./summary.ts";
 import { modelServerMemory } from "../lib/modelServerMemory.ts";
 

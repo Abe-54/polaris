@@ -4,13 +4,19 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import * as P from "@polaris/protocol";
 import { Predicate, Schema } from "effect";
 import { localHost, remoteHost, type SmokeHost } from "./lib/rustLuaHost.ts";
 import { seenUserData } from "./lib/userData.ts";
 import { assertStatusBarShown, longFile } from "./lib/statusBar.ts";
-import { APP_DIR, REPO_ROOT, sizeWindow, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  sizeWindow,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 
 const home = realpathSync(
   process.env.POLARIS_SMOKE_HOME ?? mkdtempSync(join(tmpdir(), "polaris-rust-lua-desktop-"))

@@ -22,10 +22,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import type { MachineView, PolarisApi } from "../src/shared/api.ts";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary, REPO_ROOT } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  REPO_ROOT,
+} from "./lib/electron.ts";
 import { seenUserData } from "./lib/userData.ts";
 
 declare const window: { readonly polaris: PolarisApi };

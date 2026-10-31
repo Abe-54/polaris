@@ -3,14 +3,14 @@
  * Launches an installed Windows app with This PC on, its Daemon in a throwaway home, and waits
  * for the app to install that Daemon from its own Resources and reach Connected for This PC.
  *
- *   node scripts/packaging/windowsConnect.ts <app-x.y.z\Polaris.exe> <throwaway home> [timeout s]
+ *   POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL=1 node scripts/packaging/windowsConnect.ts <app-x.y.z\Polaris.exe> <throwaway home> [timeout s]
  *
  * `windows-smoke.ps1` runs it and uninstalls the home afterwards; this script never does.
  */
+import { scriptedElectron as electron, scriptedLocalInstall } from "../lib/electron.ts";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { localEndpoint } from "@polaris/protocol/endpoint";
-import { _electron as electron } from "playwright-core";
 import type { PolarisApi } from "../../src/shared/api.ts";
 
 declare const window: { readonly polaris: PolarisApi };
@@ -24,7 +24,9 @@ if (executable === undefined || home === undefined) {
 
 const timeoutMs = Number(timeoutArg ?? "120") * 1000;
 
-const polarisHome = join(home, ".polaris");
+const installEnv = scriptedLocalInstall(home);
+
+const polarisHome = join(installEnv.POLARIS_DESKTOP_LOCAL_HOME, ".polaris");
 
 const userData = join(home, "user-data");
 
@@ -42,7 +44,7 @@ const app = await electron.launch({
     ...process.env,
     POLARIS_DESKTOP_USER_DATA: userData,
     POLARIS_DESKTOP_LOCAL_SOCKET: localEndpoint(polarisHome, "win32"),
-    POLARIS_DESKTOP_LOCAL_HOME: home,
+    ...installEnv,
   },
 });
 

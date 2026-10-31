@@ -186,9 +186,10 @@ export const traceHistory = (
   );
 
   const spans: Record<string, number> = {};
+  const samples: Record<string, number> = {};
   const root = rootRows[0]?.usual ?? null;
 
-  if (!includeSpans) return { root, spans };
+  if (!includeSpans) return { root, spans, samples };
   const trace = getTrace(db, checkout, summary.id);
 
   const medians = Schema.decodeUnknownSync(
@@ -197,6 +198,7 @@ export const traceHistory = (
         name: Schema.String,
         parent: Schema.NullOr(Schema.String),
         usual: Schema.Number,
+        samples: Schema.Number,
       })
     )
   )(
@@ -217,21 +219,24 @@ export const traceHistory = (
     ), ranked AS (
       SELECT *,row_number() OVER (PARTITION BY name,parent ORDER BY ms) AS position,
         count(*) OVER (PARTITION BY name,parent) AS count FROM samples
-    ) SELECT name,parent,avg(ms) AS usual FROM ranked
+    ) SELECT name,parent,avg(ms) AS usual,max(count) AS samples FROM ranked
       WHERE count>=5 AND position IN ((count+1)/2,(count+2)/2) GROUP BY name,parent
   `)
       .all(checkout, trace.summary.id, checkout, before, trace.summary.id)
   );
 
   const byId = new Map(trace.spans.map((span) => [span.id, span]));
-  const lookup = new Map(medians.map((row) => [JSON.stringify([row.name, row.parent]), row.usual]));
+  const lookup = new Map(medians.map((row) => [JSON.stringify([row.name, row.parent]), row]));
 
   for (const span of trace.spans) {
     const parent = span.parentId === null ? null : (byId.get(span.parentId)?.name ?? null);
     const usual = lookup.get(JSON.stringify([span.name, parent]));
 
-    if (usual !== undefined) spans[span.id] = usual;
+    if (usual !== undefined) {
+      spans[span.id] = usual.usual;
+      samples[span.id] = usual.samples;
+    }
   }
 
-  return { root, spans };
+  return { root, spans, samples };
 };

@@ -214,6 +214,7 @@ export const Waterfall = ({ trace, mark = null, spanId, onSelect }: WaterfallPro
                 >
                   <SpanRow
                     row={row}
+                    usual={trace.usual}
                     hue={serviceHue(hues.get(row.node.service))}
                     selected={item.index === at}
                     collapsed={collapsed.has(row.node.key)}

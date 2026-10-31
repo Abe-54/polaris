@@ -7,6 +7,34 @@ import { Effect } from "effect";
 import { nodeChildProcess } from "../process/index.ts";
 import { runCommand, shellQuote, Ssh, SshError } from "./Ssh.ts";
 
+test.skipIf(process.platform === "win32")(
+  "local install commands pin POLARIS_HOME to the selected home",
+  async () => {
+    const home = mkdtempSync(join(tmpdir(), "sx-install-"));
+
+    try {
+      const code = `
+      import { Effect } from "effect";
+      import { Ssh } from ${JSON.stringify(join(import.meta.dir, "Ssh.ts"))};
+      const result = await Effect.runPromise(Ssh.use(ssh => ssh.exec("local", ${JSON.stringify('printf "%s" "$POLARIS_HOME"')})).pipe(Effect.provide(Ssh.local(${JSON.stringify(home)}))));
+      console.log(result.stdout);
+    `;
+
+      const child = Bun.spawn(["bun", "--eval", code], {
+        env: { ...process.env, HOME: home, POLARIS_HOME: join(home, "other-daemon") },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const output = await new Response(child.stdout).text();
+      expect(await child.exited).toBe(0);
+      expect(output.trim()).toBe(join(home, ".polaris"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }
+);
+
 describe("runCommand", () => {
   test("hides each install command's console window on Windows", async () => {
     const seen: Array<SpawnOptions> = [];

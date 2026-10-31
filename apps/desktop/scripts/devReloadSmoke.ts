@@ -8,9 +8,14 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, mkdtempSync, realpathSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { createServer } from "vite";
-import { APP_DIR, REPO_ROOT, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 import { startDaemon } from "./lib/daemon.ts";
 
 const PORT = 5297;
