@@ -107,6 +107,12 @@ const screens = async (page: Page) => {
     await page.getByTestId("waterfall-errors-only").click();
     await openTrace(page, "POST /invoices/import");
     await shoot(page, `partial-${look.name}-calm`);
+    await openTrace(page, "test overdue-totals");
+    await shoot(page, `error-rows-${look.name}-calm`);
+    await openTrace(page, "POST /invoices/overdue");
+    await page.getByRole("button", { name: "List each of the 214 calls" }).first().click();
+    await shoot(page, `listed-fold-${look.name}-calm`);
+    await page.getByRole("button", { name: "Fold the 214 calls" }).first().click();
   }
 };
 

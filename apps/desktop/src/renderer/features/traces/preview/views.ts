@@ -1,6 +1,7 @@
 /**
  * What a Traces preview shows beyond its scene, from `#traces/<scene>?view=<view>`: a span open in
- * the panel (a database span, the failing test), or the receiver still being read or reconnecting.
+ * the panel (a database span, the failing test), the receiver still being read, or the Host away
+ * (reconnecting, offline, needing attention).
  */
 import type { TracesApi } from "../data/api.ts";
 import type { TracesSessionKey } from "../model/session.ts";
@@ -16,7 +17,19 @@ const SPANS = {
   "span-timeout": { trace: ERROR_TRACE.id, span: "85cae0a4b6d8fa25" },
 } as const;
 
-export type PreviewView = keyof typeof SPANS | "loading" | "reconnecting" | null;
+/** Views whose watch never answers: the first read, or a Host away. */
+const STATES = {
+  loading: true,
+  reconnecting: true,
+  offline: true,
+  "needs-attention": true,
+} as const;
+
+type StateView = keyof typeof STATES;
+
+export const isStateView = (name: string): name is StateView => Object.hasOwn(STATES, name);
+
+export type PreviewView = keyof typeof SPANS | StateView | null;
 
 const isSpanView = (name: string): name is keyof typeof SPANS => Object.hasOwn(SPANS, name);
 
@@ -25,8 +38,7 @@ export const previewOf = (hash: string) => {
   const [name = "", query = ""] = hash.replace(/^#traces\//, "").split("?");
   const view = new URLSearchParams(query).get("view") ?? "";
 
-  const shown: PreviewView =
-    isSpanView(view) || view === "loading" || view === "reconnecting" ? view : null;
+  const shown: PreviewView = isSpanView(view) || isStateView(view) ? view : null;
 
   return { name, view: shown };
 };
