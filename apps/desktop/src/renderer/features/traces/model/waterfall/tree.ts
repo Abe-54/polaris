@@ -14,6 +14,8 @@ export interface SpanNode {
   readonly spans: ReadonlyArray<TimedSpan>;
   /** True for a ×n node, which `expanded` can open into its spans. */
   readonly fold: boolean;
+  /** On the first call of a fold that `expanded` lists, the fold to put back; else null. */
+  readonly refold: { readonly key: string; readonly count: number } | null;
   readonly name: string;
   readonly service: string;
   /** Extent: the first start to the last end, in ms after the trace's start. */
@@ -46,7 +48,8 @@ const nodeOf = (
   ctx: Context,
   spans: ReadonlyArray<TimedSpan>,
   fold: string | null,
-  parentService: string | null
+  parentService: string | null,
+  refold: SpanNode["refold"] = null
 ): SpanNode => {
   const [first] = spans;
 
@@ -59,6 +62,7 @@ const nodeOf = (
     key,
     spans,
     fold: fold !== null,
+    refold,
     name: first.span.name,
     service: first.span.service,
     start: first.start,
@@ -95,8 +99,13 @@ const nodesOf = (
     const group = groups.get(groupKey(s)) ?? [s];
     const fold = `${parentKey}/${groupKey(s)}`;
 
-    if (group.length < FOLD_AT || ctx.expanded.has(fold))
-      return [nodeOf(ctx, [s], null, parentService)];
+    if (group.length < FOLD_AT) return [nodeOf(ctx, [s], null, parentService)];
+
+    if (ctx.expanded.has(fold)) {
+      const first = group[0] === s ? { key: fold, count: group.length } : null;
+
+      return [nodeOf(ctx, [s], null, parentService, first)];
+    }
 
     if (placed.has(fold)) return [];
     placed.add(fold);

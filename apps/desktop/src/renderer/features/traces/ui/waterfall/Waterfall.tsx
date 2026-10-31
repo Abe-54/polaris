@@ -4,7 +4,7 @@
  * shows), and "ENDED" with the span count and depth at the foot.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
+import { type KeyboardEvent, useEffect, useId, useMemo, useRef } from "react";
 import {
   clockLabel,
   rulerTicks,
@@ -67,7 +67,7 @@ const Ended = ({ trace }: { readonly trace: TraceView }) => {
       </span>
       {partial ? (
         <span className="text-text-default" data-testid="waterfall-partial">
-          · partial: retention removed some of its spans
+          · partial: some spans were removed
         </span>
       ) : null}
     </div>
@@ -139,6 +139,16 @@ export const Waterfall = ({ trace, spanId, onSelect }: WaterfallProps) => {
 
   const nodes = useMemo(() => rows.map((r) => r.node), [rows]);
   const at = selectedIndex(nodes, spanId);
+  const ids = useId();
+  const rowId = (index: number) => `${ids}-row-${index}`;
+  const selectedAt = useRef(at);
+
+  selectedAt.current = at;
+
+  // A span selected elsewhere (Output, Links) scrolls into view, as one reached by keys does.
+  useEffect(() => {
+    if (selectedAt.current >= 0) virtualizer.scrollToIndex(selectedAt.current, { align: "auto" });
+  }, [virtualizer, spanId]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape" && spanId !== null) {
@@ -154,6 +164,7 @@ export const Waterfall = ({ trace, spanId, onSelect }: WaterfallProps) => {
     if (next === null || row === undefined) return;
     event.preventDefault();
     onSelect(row.node.spans[0]?.span.id ?? null);
+    // A fold toggled in place keeps the same span: scroll here, as the effect won't.
     virtualizer.scrollToIndex(next, { align: "auto" });
   };
 
@@ -166,6 +177,7 @@ export const Waterfall = ({ trace, spanId, onSelect }: WaterfallProps) => {
         role="treegrid"
         aria-label="Spans"
         aria-rowcount={rows.length}
+        aria-activedescendant={at >= 0 ? rowId(at) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
         className="focus-visible:ring-starlight min-h-0 flex-1 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset"
@@ -187,6 +199,7 @@ export const Waterfall = ({ trace, spanId, onSelect }: WaterfallProps) => {
                   style={{ transform: `translateY(${item.start}px)` }}
                 >
                   <SpanRow
+                    id={rowId(item.index)}
                     row={row}
                     usual={trace.usual}
                     hue={serviceHue(hues.get(row.node.service))}

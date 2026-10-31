@@ -7,7 +7,13 @@ import type { TraceDetail } from "@polaris/protocol";
 import { durationVerdict } from "../../model/usual.ts";
 import { cn } from "@polaris/ui";
 import { memo } from "react";
-import { durationLabel, ERROR_HUE, type WaterfallRow } from "../../model/waterfall/index.ts";
+import { showBidi } from "../../../data/grid/value.ts";
+import {
+  durationLabel,
+  ERROR_HUE,
+  type SpanNode,
+  type WaterfallRow,
+} from "../../model/waterfall/index.ts";
 import type { TimeWindow } from "./useTraceView.ts";
 
 /** A level's indent; the root's marker is centred at `MARKER_AT` (Paper T1's 20px steps from 30). */
@@ -16,6 +22,9 @@ const INDENT = 20;
 const MARKER_AT = 30;
 
 const markerAt = (depth: number) => MARKER_AT + INDENT * depth;
+
+/** Deeper levels share this one's indent, under a "+n", so names keep the column. */
+const MAX_INDENT = 12;
 
 /** The connectors, drawn in a 28-high box that stretches to the row's density height. */
 const Gutter = ({ row }: { readonly row: WaterfallRow }) => {
@@ -52,6 +61,28 @@ const Gutter = ({ row }: { readonly row: WaterfallRow }) => {
   );
 };
 
+/** On a listed fold's first call: "×214 · listed", which folds the calls back into one row. */
+const Refold = ({ node, actions }: { readonly node: SpanNode; readonly actions: RowActions }) => {
+  const { refold } = node;
+
+  if (refold === null) return null;
+
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      aria-label={`Fold the ${refold.count} calls`}
+      onClick={(event) => {
+        event.stopPropagation();
+        actions.onFold(refold.key);
+      }}
+      className="text-git-modified-text hover:bg-git-modified/12 shrink-0 cursor-default rounded-[4px] px-1 font-mono text-[10px] leading-4"
+    >
+      ×{refold.count} · listed
+    </button>
+  );
+};
+
 export interface RowActions {
   readonly onSelect: (row: WaterfallRow) => void;
   readonly onCollapse: (key: string) => void;
@@ -75,6 +106,7 @@ const Marker = ({
     return (
       <button
         type="button"
+        tabIndex={-1}
         aria-label={`List each of the ${node.spans.length} calls`}
         onClick={(event) => {
           event.stopPropagation();
@@ -90,6 +122,7 @@ const Marker = ({
     return (
       <button
         type="button"
+        tabIndex={-1}
         aria-expanded={!collapsed}
         aria-label={`${collapsed ? "Show" : "Hide"} the ${node.descendants} spans under it`}
         onClick={(event) => {
@@ -162,6 +195,8 @@ const Bar = ({
 };
 
 export interface SpanRowProps {
+  /** The row's element id, which the treegrid's aria-activedescendant names. */
+  readonly id: string;
   readonly row: WaterfallRow;
   readonly usual?: TraceDetail["usual"];
   readonly hue: string;
@@ -174,8 +209,10 @@ export interface SpanRowProps {
 }
 
 export const SpanRow = memo(
-  ({ row, usual, hue, selected, collapsed, range, dim, actions }: SpanRowProps) => {
+  ({ id, row, usual, hue, selected, collapsed, range, dim, actions }: SpanRowProps) => {
     const { node } = row;
+    const indent = Math.min(row.depth, MAX_INDENT);
+    const drawn = indent === row.depth ? row : { ...row, depth: indent };
     const tone = node.error ? ERROR_HUE : hue;
     const span = node.spans[0]?.span;
     const baseline = span === undefined || node.fold ? undefined : usual?.[span.id];
@@ -183,6 +220,7 @@ export const SpanRow = memo(
 
     return (
       <div
+        id={id}
         role="row"
         aria-selected={selected}
         aria-level={row.depth + 1}
@@ -198,19 +236,38 @@ export const SpanRow = memo(
         <div
           role="gridcell"
           className="relative flex h-full min-w-0 items-center gap-[5px] overflow-clip pr-2"
-          style={{ paddingLeft: markerAt(row.depth) - 13 }}
+          style={{ paddingLeft: markerAt(indent) - 13 }}
         >
-          <Gutter row={row} />
+          <Gutter row={drawn} />
+          {indent < row.depth ? (
+            <span
+              className="text-micro text-text-faint absolute font-mono"
+              style={{ left: markerAt(indent - 1) - 4 }}
+              title={`${row.depth - indent} more levels deep`}
+            >
+              +{row.depth - indent}
+            </span>
+          ) : null}
           <Marker row={row} hue={tone} collapsed={collapsed} actions={actions} />
           <span
             className={cn(
-              "text-code-inline relative shrink-0 font-mono whitespace-nowrap",
+              "text-code-inline relative min-w-0 truncate font-mono whitespace-nowrap",
               node.error && "text-severity-critical-text",
               !node.error && (selected ? "text-text-strong" : "text-text-default")
             )}
+            title={node.name}
           >
-            {node.name}
+            {showBidi(node.name)}
           </span>
+          {node.error ? (
+            <span
+              className="text-micro text-severity-critical-text shrink-0"
+              data-testid="row-error"
+            >
+              error
+            </span>
+          ) : null}
+          <Refold node={node} actions={actions} />
           {node.newService ? (
             <span className="text-micro text-text-subtle shrink-0 font-mono">{node.service}</span>
           ) : null}

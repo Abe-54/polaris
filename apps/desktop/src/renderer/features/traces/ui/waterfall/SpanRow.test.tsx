@@ -19,6 +19,7 @@ const mount = (name: string, usual = detail.usual) => {
 
   render(
     <SpanRow
+      id="row"
       row={row}
       usual={usual}
       hue="var(--pv-series-1)"

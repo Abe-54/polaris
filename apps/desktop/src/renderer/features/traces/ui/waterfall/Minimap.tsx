@@ -63,6 +63,34 @@ type Drag =
 
 const MIN_SHARE = 0.005;
 
+/** One arrow key's step, as a share of the trace. */
+const STEP = 0.1;
+
+/**
+ * Left and Right pan the window by a tenth of the trace; with Shift they move its end, narrowing
+ * or widening it. Null for any other key.
+ */
+export const nudged = (
+  range: TimeWindow,
+  total: number,
+  key: string,
+  shift: boolean
+): TimeWindow | null => {
+  if (key !== "ArrowLeft" && key !== "ArrowRight") return null;
+  const step = (key === "ArrowRight" ? 1 : -1) * total * STEP;
+
+  if (shift) {
+    const to = Math.min(total, Math.max(range.from + total * MIN_SHARE, range.to + step));
+
+    return { from: range.from, to };
+  }
+
+  const length = range.to - range.from;
+  const from = Math.min(total - length, Math.max(0, range.from + step));
+
+  return { from, to: from + length };
+};
+
 export const Minimap = ({
   times,
   range,
@@ -163,7 +191,15 @@ export const Minimap = ({
         if (event.key === "Escape" && !whole) {
           event.stopPropagation();
           onRange(null);
+
+          return;
         }
+
+        const next = nudged(range, total, event.key, event.shiftKey);
+
+        if (next === null) return;
+        event.preventDefault();
+        onRange(next);
       }}
       className="bg-well ring-hairline focus-visible:ring-starlight rounded-control relative mr-3 mb-1.5 ml-4 h-9 shrink-0 cursor-default touch-none overflow-hidden ring-1 outline-none ring-inset focus-visible:ring-2"
     >
