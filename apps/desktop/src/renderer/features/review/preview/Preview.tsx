@@ -95,6 +95,7 @@ const patchFor = (scene: string, spec: GitDiffSpec) => {
 /** What the stand-in reads of a request's input. */
 interface PreviewInput {
   readonly spec?: GitDiffSpec;
+  readonly turn?: string;
 }
 
 const ok = <A,>(value: A): Promise<Result<A>> => Promise.resolve({ ok: true, value });
@@ -147,7 +148,7 @@ const request = (scene: string) => (method: string, input: PreviewInput) => {
 
   if (method === "review.verdicts") return ok([]);
 
-  if (method === "data.schemaDiff") return schemaDiffAnswer(scene, SESSION.id);
+  if (method === "data.schemaDiff") return schemaDiffAnswer(scene, SESSION.id, input.turn);
 
   const merging = mergeAnswer(scene, method);
 
@@ -330,7 +331,7 @@ export const mountReviewPreview = (root: HTMLElement, hash: string) => {
     openSessionReview(navigation.actions, "local", SESSION.id);
     markOlderTurnsViewed(subjectKey({ kind: "session", hostKey: "local", sessionId: SESSION.id }));
 
-    if (isSchemaScene(scene) && scene !== "session-data-diff")
+    if (isSchemaScene(scene) && scene !== "session-data-diff" && scene !== "session-data-pruned")
       openSchemaDiff(
         subjectKey({ kind: "session", hostKey: "local", sessionId: SESSION.id }),
         scene === "session-data-worst"

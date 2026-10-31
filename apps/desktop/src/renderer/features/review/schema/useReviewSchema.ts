@@ -1,6 +1,7 @@
 /**
  * An Agent Session's Review reads its Schema Diff: the Turn picked (or the whole session),
- * refetched as Turns end, and "Open in Data" on the session's own Data tabs.
+ * refetched as Turns end, the Turns' numbers for its provenance, and "Open in Data" on the
+ * session's own Data tabs.
  */
 import { SCHEMA_DIFF_CAPABILITY, type SessionId } from "@polaris/protocol";
 import { useCallback, useMemo } from "react";
@@ -10,6 +11,7 @@ import type { TurnView } from "../../../store/sessionModel.ts";
 import { openTable } from "../../data/index.ts";
 import { hasCapability } from "../../session/hooks.ts";
 import type { ReviewTurn, TurnPick } from "../data/source.ts";
+import { prunedNote } from "./copy.ts";
 import { shownSources } from "./model.ts";
 import type { ReviewSchema } from "./section.ts";
 import { useSchemaDiff } from "./useSchemaDiff.ts";
@@ -62,9 +64,21 @@ export const useReviewSchema = ({
 
   const sources = useMemo(() => shownSources(diff), [diff]);
   const scope = schemaScope(turns, pick);
+  const turn = pick.kind === "turn" ? pick.turnId : undefined;
+
+  const turnNumber = useMemo(() => {
+    const numbers = new Map<string, number>(
+      turns.flatMap((t) => t.turns.map((x) => [x.id, t.number] as const))
+    );
+
+    return (id: string) => numbers.get(id);
+  }, [turns]);
 
   return useMemo(
-    () => (diff === null ? null : { sources, scope, onOpenTable }),
-    [diff, sources, scope, onOpenTable]
+    () =>
+      diff === null
+        ? null
+        : { sources, scope, turn, turnNumber, pruned: prunedNote(diff), onOpenTable },
+    [diff, sources, scope, turn, turnNumber, onOpenTable]
   );
 };
