@@ -1,7 +1,7 @@
 /**
  * Traces in place of a trace when there is none to show (DESIGN.md, Traces → Setup; Paper T4):
  * no traces yet with "Set up tracing", the endpoint and the fixed-exporter card, the receiver
- * unavailable, the app exporting on its own, reading, reconnecting, and a failed read.
+ * unavailable, the app exporting on its own, reading, the Host away, and a failed read.
  */
 import { Button, EmptyState, PixelAlertIcon, PlugIcon } from "@polaris/ui";
 import { Match } from "effect";
@@ -147,6 +147,24 @@ export const TracesSetup = ({
             icon={<PlugIcon size={20} className="text-text-strong" />}
             title={`Reconnecting to ${host}…`}
             fact="Traces show again once its daemon answers"
+          />
+        </Centered>
+      ),
+      offline: ({ host }) => (
+        <Centered testId="traces-setup-offline">
+          <EmptyState
+            icon={<PlugIcon size={20} className="text-text-strong" />}
+            title={`${host} is offline`}
+            fact="Polaris keeps trying; its traces show again once its daemon answers"
+          />
+        </Centered>
+      ),
+      needsAttention: ({ host }) => (
+        <Centered testId="traces-setup-needs-attention">
+          <EmptyState
+            icon={<PixelAlertIcon size={24} className="text-text-strong" />}
+            title={`${host} needs attention`}
+            fact="Settings → Hosts says what happened; its traces show once it's connected"
           />
         </Centered>
       ),

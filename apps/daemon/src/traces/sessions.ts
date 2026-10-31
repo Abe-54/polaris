@@ -1,9 +1,15 @@
 import { realpath } from "node:fs/promises";
 import { relative } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { TraceError, TraceTurn, type SessionId, type WorkspaceId } from "@polaris/protocol";
+import {
+  TraceError,
+  TraceTurn,
+  type SessionId,
+  type WorkspaceId,
+  type Turn,
+} from "@polaris/protocol";
 import { EventStore } from "../store/EventStore.ts";
-import type { SessionRecord } from "../store/model.ts";
+import type { ReadModel } from "../store/model.ts";
 import type { IngestContext } from "./ingest.ts";
 
 const noSession = () =>
@@ -15,6 +21,16 @@ const noSession = () =>
 
 const canonical = (path: string) =>
   Effect.tryPromise({ try: () => realpath(path), catch: noSession });
+
+const interval = (id: SessionId, turn: Turn) => ({
+  turn: TraceTurn.make({
+    sessionId: id,
+    id: turn.id,
+    number: turn.userTurnNumber ?? turn.index + 1,
+  }),
+  start: epochNano(turn.startedAt),
+  end: turn.endedAt === null ? null : epochNano(turn.endedAt),
+});
 
 const epochNano = (iso: string) => (BigInt(Date.parse(iso)) * 1000000n).toString();
 
@@ -38,53 +54,28 @@ export class TraceSessions extends Context.Service<
     TraceSessions,
     Effect.gen(function* () {
       const store = yield* EventStore;
-      const cache = new Map<SessionId, { record: SessionRecord; context: IngestContext }>();
+
+      const cache = new Map<
+        SessionId,
+        {
+          boundary: string;
+          count: number;
+          cwd: string;
+          workspaces: ReadModel["workspaces"];
+          worktrees: ReadModel["worktrees"];
+          context: IngestContext;
+        }
+      >();
 
       const active = (id: SessionId) =>
         Effect.map(store.model, (model) => {
-          const session = model.sessions.get(id)?.session;
+          const record = model.sessions.get(id);
+          const state = record?.session.state;
 
-          return (
-            session !== undefined && session.state !== "archived" && session.state !== "failed"
-          );
+          return state !== undefined && state !== "archived" && state !== "failed";
         });
 
-      const session = Effect.fnUntraced(function* (id: SessionId) {
-        const model = yield* store.model;
-        const record = model.sessions.get(id);
-
-        if (record === undefined) return yield* noSession();
-        const existing = cache.get(id);
-
-        if (existing?.record === record) return existing.context;
-        const checkout = yield* canonical(record.session.cwd);
-
-        const turns = yield* store
-          .readTurns({ sessionId: id, beforeIndex: null, limit: null })
-          .pipe(Effect.mapError(noSession));
-
-        const context: IngestContext = {
-          checkout,
-          workspaceId: record.session.workspaceId,
-          sessionId: id,
-          turns: turns.map((turn) => ({
-            turn: TraceTurn.make({
-              sessionId: id,
-              id: turn.id,
-              number: turn.userTurnNumber ?? turn.index + 1,
-            }),
-            start: epochNano(turn.startedAt),
-            end: turn.endedAt === null ? null : epochNano(turn.endedAt),
-          })),
-        };
-
-        if (cache.size >= 64) cache.delete(cache.keys().next().value!);
-        cache.set(id, { record, context });
-
-        return context;
-      });
-
-      const workspace = Effect.fnUntraced(function* (cwd: string) {
+      const workspace = Effect.fnUntraced(function* (cwd: string, workspaceId?: WorkspaceId) {
         const checkout = yield* canonical(cwd);
         const model = yield* store.model;
 
@@ -94,7 +85,9 @@ export class TraceSessions extends Context.Service<
             path: w.path,
             workspaceId: w.workspaceId,
           })),
-        ].sort((a, b) => b.path.length - a.path.length);
+        ]
+          .filter((root) => workspaceId === undefined || root.workspaceId === workspaceId)
+          .sort((a, b) => b.path.length - a.path.length);
 
         for (const root of roots) {
           const path = yield* canonical(root.path).pipe(Effect.orElseSucceed(() => null));
@@ -109,6 +102,73 @@ export class TraceSessions extends Context.Service<
         }
 
         return yield* noSession();
+      });
+
+      const session = Effect.fnUntraced(function* (id: SessionId) {
+        const model = yield* store.model;
+        const record = model.sessions.get(id);
+
+        if (record === undefined) {
+          cache.delete(id);
+
+          return yield* noSession();
+        }
+
+        const last = record.turns.at(-1);
+
+        const boundary = JSON.stringify([
+          record.session.turnCount,
+          last?.id,
+          last?.startedAt,
+          last?.endedAt,
+          last?.userTurnNumber,
+        ]);
+
+        const existing = cache.get(id);
+
+        const sameCheckout =
+          existing !== undefined &&
+          existing.cwd === record.session.cwd &&
+          existing.workspaces === model.workspaces &&
+          existing.worktrees === model.worktrees &&
+          existing.context.workspaceId === record.session.workspaceId;
+
+        if (sameCheckout && existing.boundary === boundary) return existing.context;
+
+        const checkout = sameCheckout
+          ? existing.context.checkout
+          : (yield* workspace(record.session.cwd, record.session.workspaceId)).checkout;
+
+        const firstIndex = record.turns[0]?.index ?? record.session.turnCount;
+
+        const turns =
+          existing !== undefined && existing.count >= firstIndex
+            ? [
+                ...existing.context.turns.slice(0, firstIndex),
+                ...record.turns.map((turn) => interval(id, turn)),
+              ]
+            : (yield* store
+                .readTurns({ sessionId: id, beforeIndex: null, limit: null })
+                .pipe(Effect.mapError(noSession))).map((turn) => interval(id, turn));
+
+        const context: IngestContext = {
+          checkout,
+          workspaceId: record.session.workspaceId,
+          sessionId: id,
+          turns,
+        };
+
+        if (cache.size >= 64 && !cache.has(id)) cache.delete(cache.keys().next().value!);
+        cache.set(id, {
+          boundary,
+          count: record.session.turnCount,
+          cwd: record.session.cwd,
+          workspaces: model.workspaces,
+          worktrees: model.worktrees,
+          context,
+        });
+
+        return context;
       });
 
       return TraceSessions.of({

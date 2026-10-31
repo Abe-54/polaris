@@ -46,6 +46,7 @@ export const TracePageSchema = Schema.Struct({
 export const TraceHistory = Schema.Struct({
   root: Schema.NullOr(Schema.Number),
   spans: Schema.Record(Schema.String, Schema.Number),
+  samples: Schema.Record(Schema.String, Schema.Number),
 });
 
 export type TraceHistory = typeof TraceHistory.Type;

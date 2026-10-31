@@ -16,7 +16,7 @@ import type { TracesSessionKey } from "../model/session.ts";
 import { locationLabel } from "../model/span/code.ts";
 import { selectSpan, selectTrace } from "../model/store.ts";
 import { KICKER, Pill } from "../ui/span/parts.tsx";
-import { foldedLine, type TraceRow, traceFailure, type TurnTraces } from "./model.ts";
+import { foldedLine, LISTED, type TraceRow, traceFailure, type TurnTraces } from "./model.ts";
 
 export interface TracesOutputProps {
   readonly hostKey: string;
@@ -135,7 +135,11 @@ export const TracesOutput = ({ hostKey, sessionId, traces, turnNumber }: TracesO
   const at = { hostKey, sessionId };
   const open = useOpenTrace(at);
   const [unfolded, setUnfolded] = useState(false);
+  const [allFailing, setAllFailing] = useState(false);
   const rows = unfolded ? [...traces.listed, ...traces.folded] : traces.listed;
+  // Each card reads its trace in full, so only the first few do until the rest are asked for.
+  const cards = allFailing ? traces.failing : traces.failing.slice(0, LISTED);
+  const moreFailing = traces.failing.length - cards.length;
 
   return (
     <div
@@ -150,9 +154,19 @@ export const TracesOutput = ({ hostKey, sessionId, traces, turnNumber }: TracesO
           <span className="text-caption text-text-faint">Slowest first</span>
         ) : null}
       </div>
-      {traces.failing.map((t) => (
+      {cards.map((t) => (
         <FailureCard key={t.id} at={at} trace={t} onOpen={open} />
       ))}
+      {moreFailing === 0 ? null : (
+        <button
+          type="button"
+          onClick={() => setAllFailing(true)}
+          data-testid="traces-output-more-failing"
+          className="text-caption text-text-subtle hover:text-text-default focus-visible:ring-starlight rounded-control cursor-default self-start px-2 py-1 outline-none focus-visible:ring-2"
+        >
+          {moreFailing} more failing
+        </button>
+      )}
       {rows.length === 0 && traces.folded.length === 0 ? null : (
         <ul className="flex flex-col">
           {rows.map((row) => (

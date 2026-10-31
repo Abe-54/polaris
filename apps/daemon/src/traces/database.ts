@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Option, Schema } from "effect";
 import { Span, TraceSummary } from "@polaris/protocol";
-import type { TraceBatch } from "./ingest.ts";
+import { serializeRecord, type TraceBatch } from "./ingest.ts";
 
 export interface Retention {
   readonly maxBytes: number;
@@ -174,7 +174,7 @@ export const writeBatch = (db: Database, batch: TraceBatch): Map<string, Set<str
   const logInsert = db.query("INSERT INTO logs VALUES (?,?,?,?,?,?,?,?,?)");
 
   for (const span of batch.spans) {
-    const value = JSON.stringify(span);
+    const { json: value, bytes } = serializeRecord(span);
     spanInsert.run(
       span.polaris.checkout,
       span.traceId,
@@ -185,14 +185,14 @@ export const writeBatch = (db: Database, batch: TraceBatch): Map<string, Set<str
       span.service,
       span.status,
       Number(BigInt(span.startTimeUnixNano) / 1000000n),
-      Buffer.byteLength(value) + 192,
+      bytes + 192,
       value
     );
     mark(span.polaris.checkout, span.traceId);
   }
 
   for (const log of batch.logs) {
-    const value = JSON.stringify(log);
+    const { json: value, bytes } = serializeRecord(log);
     logInsert.run(
       log.polaris.checkout,
       log.id,
@@ -203,7 +203,7 @@ export const writeBatch = (db: Database, batch: TraceBatch): Map<string, Set<str
       Number(
         BigInt(log.timeUnixNano === "0" ? log.observedTimeUnixNano : log.timeUnixNano) / 1000000n
       ),
-      Buffer.byteLength(value) + 128,
+      bytes + 128,
       value
     );
     mark(log.polaris.checkout, log.traceId);

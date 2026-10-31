@@ -3,6 +3,7 @@ import type { LiveSession } from "@polaris/client";
 import {
   type Capability,
   TRACES_CAPABILITY,
+  TRACES_COMPARE_CAPABILITY,
   TRACES_SETTINGS_CAPABILITY,
   TraceError,
   TraceSettingsError,
@@ -15,6 +16,13 @@ import { HostDirectory, toIpcError } from "../hosts.ts";
 
 type Tagged = { readonly _tag: string; readonly message: string };
 
+const UNSUPPORTED_TRACES = "Traces need a newer daemon on this host";
+
+const UNSUPPORTED = new Map<string, string>([
+  [TRACES_SETTINGS_CAPABILITY, "Traces settings need a newer daemon on this host"],
+  [TRACES_COMPARE_CAPABILITY, "Comparing traces needs a newer daemon on this host"],
+]);
+
 /** A TraceError keeps its E-TRACE code and fix; an older Daemon names the upgrade. */
 export const toTracesIpcError = (error: Tagged): IpcError => {
   if (Schema.is(TraceError)(error) || Schema.is(TraceSettingsError)(error))
@@ -23,10 +31,7 @@ export const toTracesIpcError = (error: Tagged): IpcError => {
   if (Schema.is(Unsupported)(error))
     return {
       code: "Unsupported",
-      message:
-        error.capability === TRACES_SETTINGS_CAPABILITY
-          ? "Traces settings need a newer daemon on this host"
-          : "Traces need a newer daemon on this host",
+      message: UNSUPPORTED.get(error.capability) ?? UNSUPPORTED_TRACES,
     };
 
   return toIpcError(error);
@@ -70,6 +75,12 @@ export const tracesHandlers = {
       hostKey,
       (session) => session.client["traces.setSettings"](input),
       TRACES_SETTINGS_CAPABILITY
+    ),
+  "traces.compare": ({ hostKey, ...input }: RequestInput<"traces.compare">) =>
+    onHost(
+      hostKey,
+      (session) => session.client["traces.compare"](input),
+      TRACES_COMPARE_CAPABILITY
     ),
 };
 

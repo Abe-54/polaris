@@ -41,6 +41,9 @@ import { useThemeType } from "../../diffs/index.ts";
 import { type PullViewed, useReviewModel } from "./useReviewModel.ts";
 import { SchemaDiffBody } from "../schema/SchemaDiffBody.tsx";
 import { type ReviewSchema, useSchemaSection } from "../schema/section.ts";
+import { TracesCompareBody } from "../traces/TracesCompareBody.tsx";
+import { useTracesSection } from "../traces/section.ts";
+import type { ReviewTraces } from "../traces/useReviewTraces.ts";
 
 export interface Placeholder {
   readonly title: string;
@@ -65,6 +68,8 @@ export interface ReviewBodyProps {
   readonly header: ReactNode;
   /** An Agent Session's Schema Diff (ENG-645); null for a pull request or without one. */
   readonly schema: ReviewSchema | null;
+  /** An Agent Session's route timings (ENG-660); null for a pull request or without them. */
+  readonly traces: ReviewTraces | null;
 }
 
 /** The right panel: the Risk Summary card and its foot (the Reviewer's composer). */
@@ -162,8 +167,12 @@ const Ready = ({
   mergeBase,
   header,
   schema,
+  traces,
 }: ReviewBodyProps & { readonly diff: Extract<ReviewDiff, { readonly kind: "ready" }> }) => {
   const section = useSchemaSection(subjectKey, schema);
+  const timings = useTracesSection(subjectKey, traces);
+  // A Schema Diff or Route timings stands in for the diff until a file is opened.
+  const replaced = section.shown !== null || timings.shown;
   const surface = useStore(surfaceStore, (s) => s[subjectKey] ?? emptySurface);
   const themeType = useThemeType();
   const risk = useRisk(subjectKey);
@@ -224,6 +233,7 @@ const Ready = ({
           onOpen={(file) => {
             setTab(subjectKey, "changes");
             section.closeSchema();
+            timings.closeTraces();
             model.open(file);
           }}
           onViewed={model.setViewed}
@@ -233,6 +243,7 @@ const Ready = ({
           mode={listMode}
           onMode={setListGrouping}
           data={section.data}
+          traces={timings.list}
         />
       </InFilesSlot>
       <DiffPanel header={header}>
@@ -250,7 +261,7 @@ const Ready = ({
               data-complete={diff.complete ? "" : undefined}
               data-files={model.files.length}
             >
-              {session !== null && pane.kind !== "message" && section.shown === null && (
+              {session !== null && pane.kind !== "message" && !replaced && (
                 <SessionGroupingBar grouping={model.grouping} />
               )}
               {section.shown !== null && schema !== null && (
@@ -265,17 +276,17 @@ const Ready = ({
                   }
                 />
               )}
+              {timings.shown && traces !== null && (
+                <TracesCompareBody
+                  answer={traces.answer}
+                  plan={traces.plan}
+                  onOpenRoute={traces.onOpenRoute}
+                />
+              )}
               {pane.kind === "message" ? (
-                section.shown === null && (
-                  <Waiting placeholder={{ title: pane.title, fact: pane.fact }} />
-                )
+                !replaced && <Waiting placeholder={{ title: pane.title, fact: pane.fact }} />
               ) : (
-                <div
-                  className={cn(
-                    "flex min-h-0 min-w-0 flex-1 flex-col",
-                    section.shown !== null && "hidden"
-                  )}
-                >
+                <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", replaced && "hidden")}>
                   <DiffPane
                     items={model.items}
                     marksCss={model.marksCss}

@@ -33,7 +33,7 @@ import {
   FIXTURE_SNAPSHOTS,
   type TracesScene,
 } from "./fixtures.ts";
-import { openViewSpan, previewOf, type PreviewView, silent } from "./views.ts";
+import { isStateView, openViewSpan, previewOf, type PreviewView, silent } from "./views.ts";
 
 const HOST = "local";
 
@@ -70,8 +70,8 @@ const host: HostView = {
 const appState = (view: PreviewView): AppState => ({
   ...initialState,
   hosts: [
-    view === "reconnecting"
-      ? { ...host, status: { ...host.status, state: "reconnecting", attempt: 2 } }
+    view === "reconnecting" || view === "offline" || view === "needs-attention"
+      ? { ...host, status: { ...host.status, state: view, attempt: 2 } }
       : host,
   ],
   hostsListed: true,
@@ -155,7 +155,7 @@ export const mountTracesPreview = (
   if (opensSettings(hash)) navigation.actions.openSettings("traces");
 
   createRoot(root).render(
-    <TracesLayer api={view === "loading" || view === "reconnecting" ? silent(api) : api}>
+    <TracesLayer api={view !== null && isStateView(view) ? silent(api) : api}>
       <TracesSettingsLayer api={previewSettingsApi(hash)}>
         <DataLayer api={fixtureDataApi()}>
           <App

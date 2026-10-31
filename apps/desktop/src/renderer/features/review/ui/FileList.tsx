@@ -15,8 +15,9 @@ import type { MarkSeverity } from "../model/marks.ts";
 import type { ViewedProgress } from "../model/viewed.ts";
 import { FileRow, FoldRow } from "./FileRows.tsx";
 import { GroupList } from "./GroupList.tsx";
-import { DataRow } from "../schema/DataRows.tsx";
-import { type DataListRow, isDataRow, isMigrationPath, placeData } from "../schema/model.ts";
+import { type DataListRow, isMigrationPath, placeData } from "../schema/model.ts";
+import type { FileListTraces } from "../traces/section.ts";
+import { isSectionRow, SectionRow, type SectionListRow, sectionRows } from "./SectionRow.tsx";
 
 /** The Data section (DESIGN.md, Data → In Review): its rows, and the source the pane shows. */
 export interface FileListData {
@@ -45,9 +46,11 @@ export interface FileListProps {
   readonly onMode: (mode: ListGrouping) => void;
   /** An Agent Session's Data section; null for a pull request or a Daemon without it. */
   readonly data: FileListData | null;
+  /** An Agent Session's Traces section; null for a pull request, an older Daemon or no traces. */
+  readonly traces: FileListTraces | null;
 }
 
-type FlatRow = FileListRow | DataListRow;
+type FlatRow = FileListRow | SectionListRow;
 
 const isMigrationRow = (row: FlatRow) => row.kind === "file" && isMigrationPath(row.file.file.path);
 
@@ -64,7 +67,7 @@ const FlatList = ({ props }: { readonly props: FileListProps }) => {
 
   const rows = placeData<FlatRow>(
     fileListRows(props.files, props.viewedOf, open, props.tests),
-    props.data?.rows ?? [],
+    sectionRows(props.data, props.traces),
     isMigrationRow,
     (row) => row.kind === "fold"
   );
@@ -89,7 +92,7 @@ const FlatList = ({ props }: { readonly props: FileListProps }) => {
 
       if (row === undefined) return index;
 
-      if (isDataRow(row)) return row.key;
+      if (isSectionRow(row)) return row.key;
 
       return row.kind === "fold" ? `fold:${row.fold}` : row.file.key;
     },
@@ -97,10 +100,7 @@ const FlatList = ({ props }: { readonly props: FileListProps }) => {
   });
 
   const render = (row: FlatRow) => {
-    if (isDataRow(row))
-      return props.data === null ? null : (
-        <DataRow row={row} open={props.data.open} onOpen={props.data.onOpen} />
-      );
+    if (isSectionRow(row)) return <SectionRow row={row} data={props.data} traces={props.traces} />;
 
     return row.kind === "fold" ? (
       <FoldRow row={row} onToggle={toggle} />
@@ -182,6 +182,7 @@ export const FileList = (props: FileListProps) => (
         onOpen={props.onOpen}
         onViewed={props.onViewed}
         data={props.data}
+        traces={props.traces}
       />
     ) : (
       <FlatList props={props} />

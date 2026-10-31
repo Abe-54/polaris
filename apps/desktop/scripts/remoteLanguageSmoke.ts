@@ -4,10 +4,16 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { Schema } from "effect";
 import * as P from "@polaris/protocol";
-import { APP_DIR, REPO_ROOT, sizeWindow, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  sizeWindow,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 
 const alias = "lucas-rpi";
 

@@ -8,9 +8,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { seedSource } from "./lib/seed.ts";
 
 const out = process.argv[2] ?? join(tmpdir(), "polaris-data-screens");

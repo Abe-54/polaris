@@ -9,8 +9,10 @@ import { useCallback, useEffect } from "react";
 import { commandShortcut } from "../../../../shared/keymap.ts";
 import { useApp, useCommands, useShellActions } from "../../../shell/hooks.ts";
 import { updateDraft } from "../../session/state.ts";
+import { showBidi } from "../../data/grid/value.ts";
 import { useOpenTrace } from "../model/openTrace.ts";
 import { appendReference, traceReference } from "../model/reference.ts";
+import { OTHER_SESSION } from "../model/sidebar.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { durationLabel, shortHex } from "../model/waterfall/time.ts";
 import type { TracesSlotProps } from "./slots.ts";
@@ -21,12 +23,17 @@ const count = (n: number, one: string) =>
 const useAddTrace = (at: TracesSessionKey, detail: TraceDetail | null, spanId: string | null) => {
   const { hostKey, sessionId } = at;
   const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title);
+  const owner = detail?.summary.turn?.sessionId ?? sessionId;
+  const ownerTitle = useApp((s) => s.hostModels[hostKey]?.sessions.get(owner)?.session.title);
+  // A trace from another session's Turn names that session, so the agent reads the right Turn.
+  const named = ownerTitle === undefined || ownerTitle === "" ? OTHER_SESSION : ownerTitle;
+  const other = owner === sessionId ? null : named;
   const { setMode, selectSession } = useShellActions();
 
   return useCallback(() => {
     if (detail === null) return;
     const span = spanId === null ? null : (detail.spans.find((s) => s.id === spanId) ?? null);
-    const text = traceReference(detail.summary, span);
+    const text = traceReference(detail.summary, span, other);
     let fits = false;
 
     updateDraft(hostKey, sessionId, (draft) => {
@@ -55,7 +62,7 @@ const useAddTrace = (at: TracesSessionKey, detail: TraceDetail | null, spanId: s
         },
       },
     });
-  }, [detail, spanId, hostKey, sessionId, title, setMode, selectSession]);
+  }, [detail, spanId, hostKey, sessionId, title, other, setMode, selectSession]);
 };
 
 export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
@@ -90,7 +97,7 @@ export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
       <span className="bg-hairline h-3.5 w-px shrink-0" />
       <span className="text-code-inline text-text-default min-w-0 flex-1 truncate font-mono">
         <span className="text-text-strong font-medium" title={summary.root}>
-          {summary.root}
+          {showBidi(summary.root)}
         </span>
         {` · ${facts.join(" · ")} · `}
         <span title={summary.id}>{shortHex(summary.id)}</span>

@@ -3,11 +3,14 @@
  * and close, the name, service, kind and duration, Open in Data and the code location, then
  * `Fields | Logs n | Events n | Links n`. Shown while a span is selected.
  */
-import type { SpanDetail } from "@polaris/protocol";
+import type { SpanDetail, TraceDetail } from "@polaris/protocol";
 import { CloseIcon, CopyButton, cn, IconButton } from "@polaris/ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { EditorPlaceProvider } from "../../editor-links/index.ts";
 import { useApp } from "../../../shell/hooks.ts";
 import { useSpan } from "../data/hooks.tsx";
+import { useOpenTrace } from "../model/openTrace.ts";
+import { durationVerdict } from "../model/usual.ts";
 import { formatDuration, shortId } from "../model/format.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { codeLocation } from "../model/span/code.ts";
@@ -81,14 +84,18 @@ const Body = ({
   at,
   detail,
   sessionTitle,
+  usual,
 }: {
   readonly at: TracesSessionKey;
   readonly detail: SpanDetail;
   readonly sessionTitle: string | null;
+  readonly usual: TraceDetail["usual"];
 }) => {
   const [tab, setTab] = useState<Tab>("fields");
   const { span } = detail;
   const checkout = span.polaris.checkout;
+  const baseline = usual?.[span.id];
+  const verdict = durationVerdict(span.durationMs, baseline);
 
   const openLink = (traceId: string, spanId: string) => {
     selectTrace(at, traceId);
@@ -110,6 +117,11 @@ const Body = ({
         <p className="text-code-inline text-text-subtle font-mono">
           {span.service} · {span.kind} · {formatDuration(span.durationMs)}
         </p>
+        {verdict === "SLOW" ? (
+          <p className="text-caption text-text-subtle" data-testid="span-usual">
+            Slow: usually {formatDuration(baseline!.usualMs)} in this checkout
+          </p>
+        ) : null}
         {span.status === "error" && span.statusMessage !== "" ? (
           <p className="text-caption text-severity-critical-text [overflow-wrap:anywhere]">
             {span.statusMessage}
@@ -153,12 +165,23 @@ const Body = ({
 
 export const SpanPanel = ({ at, hostKey, traceId, spanId }: TracesSlotProps) => {
   const loaded = useSpan(at, traceId, spanId);
+  const trace = useOpenTrace(at, traceId);
   const sessionId = loaded.status === "ready" ? loaded.value.span.polaris.sessionId : null;
 
   const sessionTitle = useApp((s) =>
     sessionId === null
       ? null
       : (s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? null)
+  );
+
+  const polaris = loaded.status === "ready" ? loaded.value.span.polaris : null;
+  const checkout = polaris?.checkout ?? null;
+  const workspaceId = polaris?.workspaceId ?? null;
+
+  // Exception frames and code locations open in the Editor, relative to the span's checkout.
+  const place = useMemo(
+    () => ({ hostKey, root: checkout, workspaceId }),
+    [hostKey, checkout, workspaceId]
   );
 
   if (spanId === null) return null;
@@ -186,12 +209,15 @@ export const SpanPanel = ({ at, hostKey, traceId, spanId }: TracesSlotProps) => 
       ) : null}
       {loaded.status === "ready" ? (
         // Each span starts on Fields with its own filter.
-        <Body
-          key={loaded.value.span.id}
-          at={at}
-          detail={loaded.value}
-          sessionTitle={sessionTitle}
-        />
+        <EditorPlaceProvider value={place}>
+          <Body
+            key={loaded.value.span.id}
+            at={at}
+            detail={loaded.value}
+            sessionTitle={sessionTitle}
+            usual={trace?.usual}
+          />
+        </EditorPlaceProvider>
       ) : null}
     </aside>
   );

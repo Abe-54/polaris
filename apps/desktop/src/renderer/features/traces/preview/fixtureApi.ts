@@ -2,10 +2,25 @@
  * A `TracesApi` over the fixtures, for `<TracesLayer api={fixtureTracesApi(scene)}>` in previews
  * and tests. Filters, ordering, limits and id prefixes follow the protocol's documented rules.
  */
-import type { TraceDetail, TraceFilter, TraceSummary, TracesSnapshot } from "@polaris/protocol";
+import type {
+  TraceCompareSelector,
+  TraceComparison,
+  TraceDetail,
+  TraceFilter,
+  TraceRouteStats,
+  TraceSummary,
+  TracesSnapshot,
+} from "@polaris/protocol";
+import { Match } from "effect";
 import type { Result } from "../../../../shared/api.ts";
 import type { TracesApi } from "../data/api.ts";
-import { FIXTURE_DETAILS, FIXTURE_LOGS, FIXTURE_SNAPSHOTS, type TracesScene } from "./fixtures.ts";
+import {
+  FIXTURE_DETAILS,
+  FIXTURE_LOGS,
+  FIXTURE_SNAPSHOTS,
+  FIXTURE_TURNS,
+  type TracesScene,
+} from "./fixtures.ts";
 
 const DEFAULT_LIMIT = 50;
 
@@ -39,7 +54,8 @@ const newestFirst = (a: TraceSummary, b: TraceSummary) => {
   return a.id < b.id ? -1 : 1;
 };
 
-const details = (scene: TracesScene) => (scene === "traces" ? FIXTURE_DETAILS : []);
+const details = (scene: TracesScene) =>
+  scene === "traces" || scene === "unavailableStored" ? FIXTURE_DETAILS : [];
 
 /** The snapshot `traces.watch` would emit for `filter` in `scene`. */
 export const fixtureSnapshot = (scene: TracesScene, filter: TraceFilter = {}): TracesSnapshot => {
@@ -78,6 +94,71 @@ export const findTrace = (scene: TracesScene, prefix: string): Result<TraceDetai
   return { ok: true, value: only };
 };
 
+/** Nearest-rank percentile `p` (0–100) of `values`; null with no values. */
+export const nearestRank = (values: ReadonlyArray<number>, p: number): number | null => {
+  const sorted = values.toSorted((a, b) => a - b);
+
+  return sorted.length === 0
+    ? null
+    : (sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)] ?? null);
+};
+
+const stats = (traces: ReadonlyArray<TraceSummary>): TraceRouteStats => {
+  const ms = traces.map((t) => t.durationMs);
+
+  return { p50Ms: nearestRank(ms, 50), p95Ms: nearestRank(ms, 95), count: ms.length };
+};
+
+/** A selector's traces: a Turn's attributed ones (an unknown Turn fails), or one trace. */
+const selected = (
+  scene: TracesScene,
+  selector: TraceCompareSelector
+): Result<ReadonlyArray<TraceSummary>> =>
+  Match.valueTags(selector, {
+    Turn: ({ turnId }): Result<ReadonlyArray<TraceSummary>> => {
+      const traces = details(scene).filter((d) => d.summary.turn?.id === turnId);
+
+      return traces.length === 0 && !Object.values(FIXTURE_TURNS).some((t) => t.id === turnId)
+        ? fail("E-TRACE-NOT-FOUND", `No turn ${turnId} in this session`, "Pick another turn")
+        : { ok: true, value: traces.map((d) => d.summary) };
+    },
+    Trace: ({ traceId }): Result<ReadonlyArray<TraceSummary>> => {
+      const trace = findTrace(scene, traceId);
+
+      return trace.ok ? { ok: true, value: [trace.value.summary] } : trace;
+    },
+  });
+
+const routeKey = (t: TraceSummary) => `${t.service}\u0000${t.root}`;
+
+/** What `traces.compare` would answer: every service and root on either side, sorted. */
+export const fixtureComparison = (
+  scene: TracesScene,
+  a: TraceCompareSelector,
+  b: TraceCompareSelector
+): Result<TraceComparison> => {
+  const before = selected(scene, a);
+  const after = selected(scene, b);
+
+  if (!before.ok) return before;
+
+  if (!after.ok) return after;
+  const keys = new Map([...before.value, ...after.value].map((t) => [routeKey(t), t]));
+
+  const routes = [...keys.values()]
+    .map((t) => ({
+      service: t.service,
+      route: t.root,
+      before: stats(before.value.filter((x) => routeKey(x) === routeKey(t))),
+      after: stats(after.value.filter((x) => routeKey(x) === routeKey(t))),
+    }))
+    .toSorted((x, y) =>
+      x.service === y.service ? x.route.localeCompare(y.route) : x.service.localeCompare(y.service)
+    );
+
+  return { ok: true, value: { a, b, routes } };
+};
+
 export const fixtureTracesApi = (scene: TracesScene = "traces"): TracesApi => ({
   watch: (_at, filter, on) => {
     on.next(fixtureSnapshot(scene, filter));
@@ -102,4 +183,5 @@ export const fixtureTracesApi = (scene: TracesScene = "traces"): TracesApi => ({
       value: { span, logs: logs.slice(0, LOG_LIMIT), logCount: logs.length },
     });
   },
+  compare: (_at, a, b) => Promise.resolve(fixtureComparison(scene, a, b)),
 });

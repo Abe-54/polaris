@@ -7,6 +7,7 @@ import { TraceRuntime } from "./runtime.ts";
 import { TraceSessions } from "./sessions.ts";
 import { TraceStore } from "./store.ts";
 import type { TraceWorkerOptions } from "./workerClient.ts";
+import type { ExportTraces } from "./otlp.ts";
 import type { IngestContext } from "./ingest.ts";
 
 export const TEST_SESSION = SessionId.make("trace-test");
@@ -183,7 +184,7 @@ export const withTraceFixture = async (
   }
 };
 
-export const postTraces = (endpoint: string, data = traceFixture()) =>
+export const postTraces = (endpoint: string, data: typeof ExportTraces.Type = traceFixture()) =>
   fetch(`${endpoint}/v1/traces`, {
     method: "POST",
     headers: { "content-type": "application/json" },

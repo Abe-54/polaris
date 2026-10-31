@@ -47,7 +47,47 @@ const removeCandidate = (
   else db.query("DELETE FROM logs WHERE checkout=? AND id=?").run(checkout, row.id);
 };
 
-/** Error Spans and explicitly linked Traces are a soft-budget exception; attribution alone does not pin. */
+interface PruneState {
+  bytes: number;
+  removed: boolean;
+  readonly changed: Set<string>;
+}
+
+const pruneRecords = (
+  db: Database,
+  checkout: string,
+  cutoff: number,
+  policy: { span: string; log: string; budget: number },
+  state: PruneState
+) => {
+  while (true) {
+    const pressure = state.bytes > policy.budget;
+
+    const rows = decodeCandidates(
+      db
+        .query(`SELECT id,trace_id,bytes,kind FROM (
+      SELECT s.id,s.trace_id,s.bytes,s.age,'span' AS kind FROM spans s WHERE s.checkout=? AND ${policy.span} AND (? OR s.age<?)
+      UNION ALL
+      SELECT s.id,s.trace_id,s.bytes,s.age,'log' AS kind FROM logs s WHERE s.checkout=? AND ${policy.log} AND (? OR s.age<?)
+    ) ORDER BY age,id LIMIT 512`)
+        .all(checkout, Number(pressure), cutoff, checkout, Number(pressure), cutoff)
+    );
+
+    if (rows.length === 0) return;
+
+    for (const row of rows) {
+      removeCandidate(db, checkout, row);
+
+      if (row.kind === "span" && row.trace_id !== null) state.changed.add(row.trace_id);
+      state.bytes -= row.bytes;
+      state.removed = true;
+
+      if (pressure && state.bytes <= policy.budget) return;
+    }
+  }
+};
+
+/** Pinned Traces survive; errors get a bounded pressure allowance, never an age exemption. */
 export const pruneCheckout = (
   db: Database,
   checkout: string,
@@ -55,38 +95,23 @@ export const pruneCheckout = (
   now: number
 ): boolean => {
   const cutoff = now - retention.maxAgeMs;
-  const changed = new Set<string>();
-  let bytes = checkoutBytes(db, checkout);
-  let removed = false;
 
-  while (true) {
-    const pressure = bytes > retention.maxBytes;
+  const state: PruneState = {
+    bytes: checkoutBytes(db, checkout),
+    removed: false,
+    changed: new Set(),
+  };
 
-    const rows = decodeCandidates(
-      db
-        .query(`SELECT id,trace_id,bytes,kind FROM (
-      SELECT s.id,s.trace_id,s.bytes,s.age,'span' AS kind FROM spans s WHERE s.checkout=? AND ${droppableSpan} AND (? OR s.age<?)
-      UNION ALL
-      SELECT s.id,s.trace_id,s.bytes,s.age,'log' AS kind FROM logs s WHERE s.checkout=? AND ${droppableLog} AND (? OR s.age<?)
-    ) ORDER BY age,id LIMIT 512`)
-        .all(checkout, Number(pressure), cutoff, checkout, Number(pressure), cutoff)
-    );
+  pruneRecords(db, checkout, cutoff, { span: unpinned, log: unpinned, budget: Infinity }, state);
 
-    if (rows.length === 0) break;
-
-    for (const row of rows) {
-      removeCandidate(db, checkout, row);
-
-      if (row.kind === "span" && row.trace_id !== null) changed.add(row.trace_id);
-      bytes -= row.bytes;
-      removed = true;
-
-      // Once pressure is relieved, a new query selects only records beyond the age limit.
-      if (pressure && bytes <= retention.maxBytes) break;
-    }
+  for (const policy of [
+    { span: droppableSpan, log: droppableLog, budget: retention.maxBytes },
+    { span: unpinned, log: unpinned, budget: retention.maxBytes * 2 },
+  ]) {
+    if (state.bytes > policy.budget) pruneRecords(db, checkout, cutoff, policy, state);
   }
 
-  for (const id of changed) refreshSummary(db, checkout, id, true);
+  for (const id of state.changed) refreshSummary(db, checkout, id, true);
 
-  return removed;
+  return state.removed;
 };

@@ -1,10 +1,12 @@
 /** Traces over IPC (ADR 0094): the protocol's payloads plus the Host, and its answers unchanged. */
 import {
+  CompareTraces,
   GetSpan,
   GetTrace,
   GetWorkspaceTracesSettings,
   SetWorkspaceTracesSettings,
   type SpanDetail,
+  type TraceComparison,
   type TraceDetail,
   type TracesSnapshot,
   WatchTraces,
@@ -25,6 +27,7 @@ export const TracesRequestInputs = {
     ...OnHost,
     ...SetWorkspaceTracesSettings.payloadSchema.fields,
   }),
+  "traces.compare": Schema.Struct({ ...OnHost, ...CompareTraces.payloadSchema.fields }),
 } as const;
 
 export interface TracesRequestOutputs {
@@ -33,6 +36,8 @@ export interface TracesRequestOutputs {
   /** Workspace policy and detected exporters; header values never cross IPC. */
   readonly "traces.settings": WorkspaceTracesSettings;
   readonly "traces.setSettings": WorkspaceTracesSettings;
+  /** Gated on `traces.compare`, apart from the rest of Traces. */
+  readonly "traces.compare": TraceComparison;
 }
 
 export const TracesSubscriptionInputs = {

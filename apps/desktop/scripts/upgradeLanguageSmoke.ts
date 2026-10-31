@@ -14,9 +14,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { _electron as electron } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, REPO_ROOT, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 
 const home = await mkdtemp(join(await realpath("/tmp"), "polaris-upgrade-ui-"));
 

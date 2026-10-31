@@ -11,10 +11,15 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { seenUserData } from "./lib/userData.ts";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { initRepo } from "./lib/sessionFlow.ts";
 
 const args = process.argv.slice(2);

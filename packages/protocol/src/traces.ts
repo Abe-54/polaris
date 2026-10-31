@@ -159,6 +159,16 @@ export const TraceDetail = Schema.Struct({
   summary: TraceSummary,
   /** All retained Spans, in start-time order with id as the tie-breaker. */
   spans: Schema.Array(Span),
+  /** Earlier retained observations in this checkout, matched by Span name and parent name. */
+  usual: Schema.optional(
+    Schema.Record(
+      SpanId,
+      Schema.Struct({
+        usualMs: Milliseconds,
+        samples: Count,
+      })
+    )
+  ),
 });
 
 export type TraceDetail = typeof TraceDetail.Type;
@@ -185,7 +195,7 @@ export const TracesSnapshot = Schema.Struct({
   availability: TraceAvailability,
   /** True when the user's exporter endpoint prevented injection for this Agent Session. */
   userExported: Schema.Boolean,
-  /** This session's token-bearing base URL, or null when unavailable/user-exported. Never persist it. */
+  /** Token-bearing URL on the first watch page only; null on later pages or when disabled. Never persist it. */
   endpoint: Schema.NullOr(Schema.String),
   traces: Schema.Array(TraceSummary),
   /** Number matching the filters before the limit. */
