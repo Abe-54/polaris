@@ -5,3 +5,7 @@ import { daemonCapabilities } from "./serve.ts";
 test("the Daemon announces linked-devices, so Clients offer the Relay route and Linked Devices", () => {
   expect(daemonCapabilities).toContain("linked-devices");
 });
+
+test("F7: stub Data services do not advertise a working Data capability", () => {
+  expect(daemonCapabilities).not.toContain("data");
+});

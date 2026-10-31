@@ -3,6 +3,7 @@
  * checkout's three Data Sources, a seven-table schema, 500 invoices and 30 Query Log entries.
  */
 import {
+  type DataValue,
   DataSource,
   QueryLogEntry,
   type QueryResult,
@@ -155,6 +156,7 @@ const ROW_ESTIMATES = new Map<string, number>(
 export const FIXTURE_TABLES = [...TABLE_COLUMNS.keys()];
 
 export const FIXTURE_SCHEMA = new SchemaTree({
+  loadedAt: "2026-10-30T12:00:00Z",
   schemas: [
     {
       name: "public",
@@ -164,6 +166,7 @@ export const FIXTURE_SCHEMA = new SchemaTree({
             name,
             rowEstimate: ROW_ESTIMATES.get(name) ?? null,
             columnCount: TABLE_COLUMNS.get(name)?.length ?? 0,
+            columns: TABLE_COLUMNS.get(name) ?? [],
           })
       ),
       views: [],
@@ -244,7 +247,7 @@ const pick = <A>(values: ReadonlyArray<A>, next: () => number): A =>
   values[Math.floor(next() * values.length)] as A;
 
 /** 500 invoices: the table D1 shows, with overdue rows, NULL currencies and NULL paid_at. */
-export const FIXTURE_INVOICES: ReadonlyArray<ReadonlyArray<unknown>> = (() => {
+export const FIXTURE_INVOICES: ReadonlyArray<ReadonlyArray<DataValue>> = (() => {
   const next = seeded(42);
 
   return Array.from({ length: 500 }, (_, i) => {
@@ -284,7 +287,7 @@ const CURRENCY_ROWS = [
 ];
 
 /** Every fixture table's rows: invoices and currencies by hand, the rest generated. */
-export const fixtureRows = (table: string): ReadonlyArray<ReadonlyArray<unknown>> | null => {
+export const fixtureRows = (table: string): ReadonlyArray<ReadonlyArray<DataValue>> | null => {
   if (table === "invoices") return FIXTURE_INVOICES;
 
   if (table === "currencies") return CURRENCY_ROWS;
@@ -327,6 +330,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     const overdue = i % 3 !== 2;
 
     return new QueryLogEntry({
+      state: "completed",
       id: `q-${i + 1}`,
       checkout: CHECKOUT,
       source: i % 8 === 7 ? branch : app,
@@ -343,6 +347,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     });
   }),
   new QueryLogEntry({
+    state: "completed",
     id: "q-outside",
     checkout: CHECKOUT,
     source: app,
@@ -356,6 +361,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     at: at(14),
   }),
   new QueryLogEntry({
+    state: "completed",
     id: "q-user-1",
     checkout: CHECKOUT,
     source: app,
@@ -366,6 +372,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     at: at(8),
   }),
   new QueryLogEntry({
+    state: "completed",
     id: "q-user-2",
     checkout: CHECKOUT,
     source: app,
@@ -376,6 +383,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     at: at(6),
   }),
   new QueryLogEntry({
+    state: "failed",
     id: "q-failed",
     checkout: CHECKOUT,
     source: app,
@@ -387,6 +395,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     at: at(5),
   }),
   new QueryLogEntry({
+    state: "completed",
     id: "q-branch-read",
     checkout: CHECKOUT,
     source: branch,
@@ -398,6 +407,7 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     at: at(2),
   }),
   new QueryLogEntry({
+    state: "waiting-approval",
     id: FIXTURE_PENDING_WRITE_ID,
     checkout: CHECKOUT,
     source: app,

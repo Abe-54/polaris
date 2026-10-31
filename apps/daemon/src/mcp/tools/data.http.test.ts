@@ -116,6 +116,7 @@ for (const binding of bindings)
                   save: () => Effect.succeed(source),
                   remove: () => Effect.void,
                   label: () => Effect.succeed(source),
+                  access: () => Effect.succeed(source),
                 })
               ),
               Layer.succeed(
@@ -134,7 +135,8 @@ for (const binding of bindings)
                   awaitApproval: () => Effect.succeed({ status: "pending" }),
                   recordOutside: () => Effect.void,
                   watchLog: () => Stream.succeed([]),
-                  decide: () => Effect.void,
+                  queryStream: () => Stream.empty,
+                  pageLog: () => Effect.succeed({ entries: [], next: null }),
                 })
               )
             )

@@ -19,7 +19,9 @@ const session: DataSession = {
     "data.source.save": notCalled,
     "data.source.remove": notCalled,
     "data.source.label": notCalled,
-    "data.approval.decide": notCalled,
+    "data.query.stream": watchNotCalled,
+    "data.queryLog.page": notCalled,
+    "data.source.access": notCalled,
   },
 };
 

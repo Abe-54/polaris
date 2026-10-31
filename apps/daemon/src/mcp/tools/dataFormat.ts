@@ -1,6 +1,13 @@
 /** Text-first Data output; the JSON view uses the same sanitized, clipped values. */
-import { Schema, Predicate, type Redacted } from "effect";
-import { SchemaTree, type DataSource, type QueryResult, type TableDetail } from "@polaris/protocol";
+import { Array as Arrays, Match, Schema, Predicate, type Redacted } from "effect";
+import {
+  DataValueTags,
+  SchemaTree,
+  TableSummary,
+  type DataSource,
+  type QueryResult,
+  type TableDetail,
+} from "@polaris/protocol";
 
 import { scrubKnown } from "../../data/knownCredentials.ts";
 
@@ -23,7 +30,7 @@ export const safeDataText = (value: string, known: Known = []): string =>
 const clip = (value: string) =>
   value.length > 200 ? `${value.slice(0, 200)}…(+${value.length - 200} chars)` : value;
 
-type DataCell = QueryResult["rows"][number][number];
+type DataCell = Schema.Json;
 
 export const dataValue = (
   value: DataCell,
@@ -34,24 +41,35 @@ export const dataValue = (
 
   if (value === null || value === undefined) return null;
 
-  if (value instanceof Uint8Array) return `<bytes ${value.byteLength}>`;
-
-  if (value instanceof Date) return value.toISOString();
+  if (Schema.is(DataValueTags)(value))
+    return Match.value(value).pipe(
+      Match.tag("Bytes", (v) => `<bytes ${v.length}>`),
+      Match.tag("BigInt", "Numeric", (v) => safeDataText(v.value, known)),
+      Match.tag("Timestamp", (v) => safeDataText(v.iso, known)),
+      Match.tag("Truncated", (v) => clip(safeDataText(v.preview, known))),
+      Match.tag("Json", (v) =>
+        clip(
+          safeDataText(v.text, known).replace(
+            /("(?:\\.|[^"\\])*")(\s*:\s*)("(?:\\.|[^"\\])*")/g,
+            (entry, key: string, separator: string) =>
+              sensitive.test(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.String))(key))
+                ? `${key}${separator}"[redacted]"`
+                : entry
+          )
+        )
+      ),
+      Match.exhaustive
+    );
 
   if (Predicate.isString(value)) return clip(safeDataText(value, known));
 
-  if (Predicate.isBigInt(value)) return value.toString();
-
-  if (Array.isArray(value)) return value.map((item) => dataValue(item, "", known));
-
-  if (Predicate.isObject(value))
-    return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [safeDataText(k, known), dataValue(v, k, known)])
-    );
+  if (Arrays.isArray<Schema.Json>(value)) return value.map((item) => dataValue(item, "", known));
 
   if (Predicate.isNumber(value) || Predicate.isBoolean(value)) return value;
 
-  return "[unsupported value]";
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) => [safeDataText(k, known), dataValue(v, k, known)])
+  );
 };
 
 const dataObject = (value: DataCell, known: Known) =>
@@ -183,7 +201,7 @@ export const sourcesView = (
       `${sources.length} data sources in ${safeDataText(checkout, known)}`,
       ...lines.map((line) => safeDataText(line, known)),
     ],
-    data: { sources: dataValue(data, "", known) },
+    data: { sources: dataValue(Schema.decodeUnknownSync(Schema.Json)(data), "", known) },
   };
 };
 
@@ -235,9 +253,11 @@ export const describeView = (value: SchemaTree | TableDetail, known: Known = [])
     return {
       lines: tableLines(value, known).map((line) => safeDataText(line, known)),
       data: dataObject(
-        Object.assign(
-          detail,
-          value.sample === undefined ? undefined : { sample: queryView(value.sample, known).data }
+        Schema.decodeUnknownSync(Schema.Json)(
+          Object.assign(
+            detail,
+            value.sample === undefined ? undefined : { sample: queryView(value.sample, known).data }
+          )
         ),
         known
       ),
@@ -252,7 +272,11 @@ export const describeView = (value: SchemaTree | TableDetail, known: Known = [])
     remaining -= tables.length;
     dropped += schema.tables.length - tables.length;
 
-    return { ...schema, tables };
+    return {
+      ...schema,
+      tables: tables.map((table) => Schema.encodeSync(TableSummary)(table)),
+      views: schema.views.map((view) => Schema.encodeSync(TableSummary)(view)),
+    };
   });
 
   const lines = schemas.flatMap((schema) => [
@@ -270,7 +294,10 @@ export const describeView = (value: SchemaTree | TableDetail, known: Known = [])
 
   return {
     lines: lines.map((line) => safeDataText(line, known)),
-    data: dataObject({ schemas, truncatedTables: dropped }, known),
+    data: dataObject(
+      Schema.decodeUnknownSync(Schema.Json)({ schemas, truncatedTables: dropped }),
+      known
+    ),
   };
 };
 
