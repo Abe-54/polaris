@@ -2,7 +2,7 @@
  * Turn items as the conversation shows them: one shape for a completed
  * `TurnItem` and for an item still streaming (its `ItemProgress` and deltas).
  */
-import type { Attachment, ToolKind, TurnItem } from "@polaris/protocol";
+import type { Attachment, ReplyStats, ToolKind, TurnItem } from "@polaris/protocol";
 import { Match, Predicate } from "effect";
 import type { LiveItem } from "../../../store/sessionModel.ts";
 import { type NativeCall, nativeCall, nativeSummary } from "./nativeTools/index.ts";
@@ -43,7 +43,12 @@ interface Base {
 }
 
 export type ItemView =
-  | (Base & { readonly kind: "message"; readonly text: string })
+  | (Base & {
+      readonly kind: "message";
+      readonly text: string;
+      /** Its model call's stats, for the advanced view; absent while streaming or unreported. */
+      readonly stats?: ReplyStats | null;
+    })
   /** A steer the Harness took, where it landed in the Turn. */
   | (Base & {
       readonly kind: "user";
@@ -277,7 +282,13 @@ export const withNativeCall = (
 const fromItem = (item: TurnItem, live: boolean): ItemView =>
   Match.value(item).pipe(
     Match.tagsExhaustive({
-      AssistantMessage: (i): ItemView => ({ kind: "message", id: i.id, live, text: i.text }),
+      AssistantMessage: (i): ItemView => ({
+        kind: "message",
+        id: i.id,
+        live,
+        text: i.text,
+        stats: i.stats,
+      }),
       UserMessage: (i): ItemView => ({
         kind: "user",
         id: i.id,

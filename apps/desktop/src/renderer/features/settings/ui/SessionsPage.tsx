@@ -115,6 +115,12 @@ const WhileSessionsRunCard = () => {
           checked={prefs.openOutputOnEdit}
           onCheckedChange={(on) => setSessionPrefs({ openOutputOnEdit: on })}
         />
+        <SettingsToggleRow
+          title="Advanced view"
+          caption="Each reply's latency, tokens and tokens per second, by its time"
+          checked={prefs.advancedView}
+          onCheckedChange={(on) => setSessionPrefs({ advancedView: on })}
+        />
       </SettingsWell>
       <SettingsWell aria-label="Notify me">
         <Kicker className="px-panel pt-[calc(var(--spacing-gap)+2px)]">
