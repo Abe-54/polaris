@@ -1,14 +1,20 @@
 /**
- * Traces' sidebar (DESIGN.md, Traces → Sidebar; Paper T1): the Workspace header, the filter well,
- * traces under Turn kickers newest first, and "Agents in this worktree" at the foot. While the
- * Host is Reconnecting or Offline it shows the last answer, dimmed (rule/remote-is-normal).
+ * Traces' sidebar (DESIGN.md, Traces → Sidebar; Paper T1, T2): the Workspace header, the
+ * `Traces | Profiles` switch, then the filter well and traces under Turn kickers newest first, or
+ * the Profiles; "Agents in this worktree" at the foot. While the Host is Reconnecting or Offline it
+ * shows the last answer, dimmed (rule/remote-is-normal).
  */
 import type { TraceFilter } from "@polaris/protocol";
-import { cn } from "@polaris/ui";
-import { useRef, useState } from "react";
+import { cn, SegmentedControl } from "@polaris/ui";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
+import { useProfiles } from "../data/profiles.tsx";
+import { useProfilesUnavailable } from "../model/availability.ts";
+import { refreshProfile } from "../model/profile/store.ts";
+import type { TracesSessionKey } from "../model/session.ts";
 import { selectTrace } from "../model/store.ts";
+import { ProfileList } from "./profiles/ProfileList.tsx";
 import { AgentsHere } from "./sidebar/AgentsHere.tsx";
 import { FilterWell } from "./sidebar/FilterWell.tsx";
 import { Header } from "./sidebar/Header.tsx";
@@ -20,6 +26,25 @@ const Quiet = ({ children }: { readonly children: string }) => (
     {children}
   </p>
 );
+
+const useLatestTurn = (at: TracesSessionKey) =>
+  useApp((s) => s.hostModels[at.hostKey]?.sessions.get(at.sessionId)?.session.turnCount ?? null);
+
+type SidebarView = "traces" | "profiles";
+
+/** The checkout's recordings, kept here so the switch counts them and the open one stays fresh. */
+const useSidebarProfiles = (at: TracesSessionKey) => {
+  const snapshot = useProfiles(at);
+  const unavailable = useProfilesUnavailable(at.hostKey);
+  const profiles = snapshot.status === "ready" ? snapshot.value.profiles : null;
+  const { hostKey, sessionId } = at;
+
+  useEffect(() => {
+    if (profiles !== null) refreshProfile({ hostKey, sessionId }, profiles);
+  }, [hostKey, sessionId, profiles]);
+
+  return { snapshot, unavailable, count: profiles?.length ?? 0 };
+};
 
 const Body = ({
   props,
@@ -36,9 +61,7 @@ const Body = ({
   if (answer.status !== "loading") last.current = answer;
   const snapshot = last.current;
 
-  const latestTurn = useApp(
-    (s) => s.hostModels[at.hostKey]?.sessions.get(at.sessionId)?.session.turnCount ?? null
-  );
+  const latestTurn = useLatestTurn(at);
 
   if (snapshot.status === "loading") return null;
 
@@ -65,6 +88,9 @@ const Body = ({
 
 export const TracesSidebar = (props: TracesSlotProps) => {
   const [filter, setFilter] = useState<TraceFilter | undefined>(undefined);
+  const [view, setView] = useState<SidebarView>("traces");
+  const profiles = useSidebarProfiles(props.at);
+  const latestTurn = useLatestTurn(props.at);
 
   const connected = useApp(
     (s) => s.hosts.find((h) => h.key === props.hostKey)?.status.state === "connected"
@@ -78,7 +104,29 @@ export const TracesSidebar = (props: TracesSlotProps) => {
     >
       <div className="px-panel pt-panel flex flex-col gap-[calc(var(--spacing-panel)*0.75)] pb-1">
         <Header {...props} />
-        <FilterWell onFilter={setFilter} />
+        <SegmentedControl<SidebarView>
+          aria-label="Traces or profiles"
+          variant="fill"
+          value={view}
+          onValueChange={setView}
+          options={[
+            { value: "traces", label: "Traces" },
+            {
+              value: "profiles",
+              label: "Profiles",
+              badge:
+                profiles.count === 0 ? undefined : (
+                  <span className="text-micro text-text-subtle tabular font-normal">
+                    {profiles.count}
+                  </span>
+                ),
+            },
+          ]}
+        />
+        {/* Hidden, not unmounted, so its words and the filter they made survive the switch. */}
+        <div hidden={view !== "traces"}>
+          <FilterWell onFilter={setFilter} />
+        </div>
       </div>
       <div
         className={cn(
@@ -87,7 +135,17 @@ export const TracesSidebar = (props: TracesSlotProps) => {
         )}
         data-testid="traces-sidebar-body"
       >
-        <Body props={props} filter={filter} />
+        {view === "traces" ? (
+          <Body props={props} filter={filter} />
+        ) : (
+          <ProfileList
+            at={props.at}
+            traceId={props.traceId}
+            snapshot={profiles.snapshot}
+            unavailable={profiles.unavailable}
+            latestTurn={latestTurn}
+          />
+        )}
       </div>
       <AgentsHere at={props.at} />
     </aside>

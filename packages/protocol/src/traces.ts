@@ -361,6 +361,13 @@ export const Profile = Schema.Struct({
   /** Absolute .cpuprofile path on the Host; null until an artifact exists. Never a read authority. */
   path: Schema.NullOr(Schema.String),
   status: Schema.Literals(["recording", "completed", "failed"]),
+  /**
+   * How the recording was made: `command` profiled a whole command, `restart` restarted a process
+   * with profiling, `attach` profiled a running process. Omitted by Daemons that predate it.
+   */
+  origin: Schema.optionalKey(Schema.Literals(["command", "restart", "attach"])),
+  /** The profiled process's `service.name`, when known. Omitted by Daemons that predate it. */
+  service: Schema.optionalKey(Schema.String),
 });
 
 export type Profile = typeof Profile.Type;

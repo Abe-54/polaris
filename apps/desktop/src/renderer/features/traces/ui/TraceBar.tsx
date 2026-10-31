@@ -3,59 +3,30 @@
  * `TRACE`, the root span, service, duration, span and service counts and the trace id, then
  * "Add to agent session ⌘L", which puts a reference to the trace (and selected span) in the draft.
  */
-import { MAX_DRAFT_LENGTH, type TraceDetail } from "@polaris/protocol";
-import { Kbd, PixelCheckIcon, showToast } from "@polaris/ui";
+import type { TraceDetail } from "@polaris/protocol";
+import { Kbd } from "@polaris/ui";
 import { useCallback, useEffect } from "react";
 import { commandShortcut } from "../../../../shared/keymap.ts";
-import { useApp, useCommands, useShellActions } from "../../../shell/hooks.ts";
-import { updateDraft } from "../../session/state.ts";
+import { useCommands } from "../../../shell/hooks.ts";
 import { useOpenTrace } from "../model/openTrace.ts";
-import { appendReference, traceReference } from "../model/reference.ts";
+import { traceReference } from "../model/reference.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { durationLabel, shortHex } from "../model/waterfall/time.ts";
 import type { TracesSlotProps } from "./slots.ts";
+import { useAddToSession } from "./useAddToSession.tsx";
 
 const count = (n: number, one: string) =>
   `${n.toLocaleString("en-US")} ${one}${n === 1 ? "" : "s"}`;
 
 const useAddTrace = (at: TracesSessionKey, detail: TraceDetail | null, spanId: string | null) => {
-  const { hostKey, sessionId } = at;
-  const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title);
-  const { setMode, selectSession } = useShellActions();
+  const add = useAddToSession(at);
 
   return useCallback(() => {
     if (detail === null) return;
     const span = spanId === null ? null : (detail.spans.find((s) => s.id === spanId) ?? null);
-    const text = traceReference(detail.summary, span);
-    let fits = false;
 
-    updateDraft(hostKey, sessionId, (draft) => {
-      const next = appendReference(draft, text);
-
-      fits = next.length <= MAX_DRAFT_LENGTH;
-
-      return fits ? next : draft;
-    });
-    const name = title === undefined || title === "" ? "the agent session" : title;
-
-    showToast({
-      source: "starlight",
-      icon: <PixelCheckIcon size={16} />,
-      title: fits
-        ? `Added the ${span === null ? "trace" : "span"} to ${name}`
-        : `The draft in ${name} is full`,
-      message: fits
-        ? "It's in the composer; nothing is sent yet."
-        : `A draft holds ${MAX_DRAFT_LENGTH.toLocaleString("en-US")} characters. Send or shorten it, then add the trace again.`,
-      action: {
-        label: "Open session",
-        onAction: () => {
-          selectSession({ hostKey, sessionId });
-          setMode("orchestrate");
-        },
-      },
-    });
-  }, [detail, spanId, hostKey, sessionId, title, setMode, selectSession]);
+    add(traceReference(detail.summary, span), span === null ? "trace" : "span");
+  }, [add, detail, spanId]);
 };
 
 export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {

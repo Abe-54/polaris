@@ -1,6 +1,16 @@
-/** Desktop Traces calls (ADR 0094): only on a Host whose Daemon has the `traces` capability. */
+/**
+ * Desktop Traces calls (ADR 0094): only on a Host whose Daemon has the capability each needs,
+ * `traces` for traces and spans, `traces.profiles` for Profiles.
+ */
 import type { LiveSession } from "@polaris/client";
-import { TRACES_CAPABILITY, TraceError, Unsupported } from "@polaris/protocol";
+import {
+  type Capability,
+  ProfileError,
+  TRACES_CAPABILITY,
+  TRACES_PROFILES_CAPABILITY,
+  TraceError,
+  Unsupported,
+} from "@polaris/protocol";
 import { Effect, Schema, Stream } from "effect";
 import type { IpcError } from "../../shared/api.ts";
 import type { RequestInput, SubscriptionInput } from "../../shared/contract.ts";
@@ -8,20 +18,27 @@ import { HostDirectory, toIpcError } from "../hosts.ts";
 
 type Tagged = { readonly _tag: string; readonly message: string };
 
-/** A TraceError keeps its E-TRACE code and fix; an older Daemon names the upgrade. */
+const UPGRADE = {
+  [TRACES_CAPABILITY]: "Traces need a newer daemon on this host",
+  [TRACES_PROFILES_CAPABILITY]: "Profiles need a newer daemon on this host",
+} satisfies Partial<Record<Capability, string>>;
+
+/** A TraceError or ProfileError keeps its code and fix; an older Daemon names the upgrade. */
 export const toTracesIpcError = (error: Tagged): IpcError => {
-  if (Schema.is(TraceError)(error))
+  if (Schema.is(TraceError)(error) || Schema.is(ProfileError)(error))
     return { code: error.code, message: error.message, fix: error.fix };
 
   if (Schema.is(Unsupported)(error))
-    return { code: "Unsupported", message: "Traces need a newer daemon on this host" };
+    return {
+      code: "Unsupported",
+      message:
+        error.capability === TRACES_PROFILES_CAPABILITY
+          ? UPGRADE[TRACES_PROFILES_CAPABILITY]
+          : UPGRADE[TRACES_CAPABILITY],
+    };
 
   return toIpcError(error);
 };
-
-const supported = (session: LiveSession) => session.capabilities.includes(TRACES_CAPABILITY);
-
-const unsupported = new Unsupported({ capability: TRACES_CAPABILITY });
 
 const live = (hostKey: string) =>
   HostDirectory.use((dir) => dir.connection(hostKey)).pipe(
@@ -30,28 +47,53 @@ const live = (hostKey: string) =>
 
 const onHost = <A, E extends Tagged>(
   hostKey: string,
+  capability: Capability,
   use: (session: LiveSession) => Effect.Effect<A, E>
 ) =>
   live(hostKey).pipe(
     Effect.flatMap((session): Effect.Effect<A, E | Unsupported> =>
-      supported(session) ? use(session) : Effect.fail(unsupported)
+      session.capabilities.includes(capability)
+        ? use(session)
+        : Effect.fail(new Unsupported({ capability }))
     ),
     Effect.mapError(toTracesIpcError)
   );
 
+/** Ends with the connection; the renderer resubscribes. */
+const watchOnHost = <A, E extends Tagged>(
+  hostKey: string,
+  capability: Capability,
+  open: (session: LiveSession) => Stream.Stream<A, E>
+) =>
+  Stream.unwrap(
+    Effect.map(live(hostKey), (session): Stream.Stream<A, E | Unsupported> =>
+      session.capabilities.includes(capability)
+        ? open(session)
+        : Stream.fail(new Unsupported({ capability }))
+    )
+  ).pipe(Stream.mapError(toTracesIpcError));
+
 export const tracesHandlers = {
   "traces.get": ({ hostKey, ...input }: RequestInput<"traces.get">) =>
-    onHost(hostKey, (session) => session.client["traces.get"](input)),
+    onHost(hostKey, TRACES_CAPABILITY, (session) => session.client["traces.get"](input)),
   "traces.span": ({ hostKey, ...input }: RequestInput<"traces.span">) =>
-    onHost(hostKey, (session) => session.client["traces.span"](input)),
+    onHost(hostKey, TRACES_CAPABILITY, (session) => session.client["traces.span"](input)),
+  "profiles.get": ({ hostKey, ...input }: RequestInput<"profiles.get">) =>
+    onHost(hostKey, TRACES_PROFILES_CAPABILITY, (session) => session.client["profiles.get"](input)),
+  "profiles.restartWithProfiling": ({
+    hostKey,
+    ...input
+  }: RequestInput<"profiles.restartWithProfiling">) =>
+    onHost(hostKey, TRACES_PROFILES_CAPABILITY, (session) =>
+      session.client["profiles.restartWithProfiling"](input)
+    ),
 };
 
-/** Ends with the connection; the renderer resubscribes. */
 export const tracesOpeners = {
   "traces.watch": ({ hostKey, ...input }: SubscriptionInput<"traces.watch">) =>
-    Stream.unwrap(
-      Effect.map(live(hostKey), (session) =>
-        supported(session) ? session.client["traces.watch"](input) : Stream.fail(unsupported)
-      )
-    ).pipe(Stream.mapError(toTracesIpcError)),
+    watchOnHost(hostKey, TRACES_CAPABILITY, (session) => session.client["traces.watch"](input)),
+  "profiles.watch": ({ hostKey, ...input }: SubscriptionInput<"profiles.watch">) =>
+    watchOnHost(hostKey, TRACES_PROFILES_CAPABILITY, (session) =>
+      session.client["profiles.watch"](input)
+    ),
 };

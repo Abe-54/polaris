@@ -1,6 +1,6 @@
 /**
  * The waterfall (DESIGN.md, Traces → Waterfall; Paper T1): the minimap, a ruler with the absolute
- * start and millisecond ticks, the span rows (virtualised: a 10,000-span trace renders only what
+ * start and millisecond ticks (and the open Profile's overlap under them), the span rows (virtualised: a 10,000-span trace renders only what
  * shows), and "ENDED" with the span count and depth at the foot.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -14,11 +14,34 @@ import {
 import { Minimap } from "./Minimap.tsx";
 import { type RowActions, SpanRow } from "./SpanRow.tsx";
 import { movedTo, selectedIndex, useTreeRowHeight } from "./useRowKeys.ts";
-import type { TraceView } from "./useTraceView.ts";
+import type { TimeWindow, TraceView } from "./useTraceView.ts";
 
 const COLUMNS = "grid grid-cols-[minmax(200px,40%)_44px_minmax(0,1fr)]";
 
-const Ruler = ({ trace }: { readonly trace: TraceView }) => {
+/** The open Profile's overlap as a line under the ticks, clipped to the shown range. */
+const Mark = ({ mark, range }: { readonly mark: TimeWindow; readonly range: TimeWindow }) => {
+  const span = range.to - range.from;
+  const left = Math.max(0, (mark.from - range.from) / span);
+  const right = Math.min(1, (mark.to - range.from) / span);
+
+  if (right <= left) return null;
+
+  return (
+    <div
+      data-testid="waterfall-profile-mark"
+      className="bg-text-strong absolute bottom-[3px] h-0.5 min-w-0.5 rounded-[1px]"
+      style={{ left: `${left * 100}%`, width: `${(right - left) * 100}%` }}
+    />
+  );
+};
+
+const Ruler = ({
+  trace,
+  mark,
+}: {
+  readonly trace: TraceView;
+  readonly mark: TimeWindow | null;
+}) => {
   const { range, times } = trace;
   const span = range.to - range.from;
   const ticks = rulerTicks(range.from, range.to);
@@ -44,6 +67,7 @@ const Ruler = ({ trace }: { readonly trace: TraceView }) => {
               {tick.label}
             </span>
           ))}
+          {mark === null ? null : <Mark mark={mark} range={range} />}
         </div>
       </div>
     </div>
@@ -76,6 +100,8 @@ const Ended = ({ trace }: { readonly trace: TraceView }) => {
 
 export interface WaterfallProps {
   readonly trace: TraceView;
+  /** The open Profile's overlap, in ms of the trace; marked under the ruler. */
+  readonly mark?: TimeWindow | null;
   readonly spanId: string | null;
   readonly onSelect: (spanId: string | null) => void;
 }
@@ -111,7 +137,7 @@ const sideways = (
   return at;
 };
 
-export const Waterfall = ({ trace, spanId, onSelect }: WaterfallProps) => {
+export const Waterfall = ({ trace, mark = null, spanId, onSelect }: WaterfallProps) => {
   const scroller = useRef<HTMLDivElement>(null);
   const height = useTreeRowHeight();
   const { rows, times, range, hovered, collapsed } = trace;
@@ -160,7 +186,7 @@ export const Waterfall = ({ trace, spanId, onSelect }: WaterfallProps) => {
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="waterfall">
       <Minimap times={times} range={range} onRange={trace.setRange} />
-      <Ruler trace={trace} />
+      <Ruler trace={trace} mark={mark} />
       <div
         ref={scroller}
         role="treegrid"

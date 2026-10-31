@@ -65,8 +65,16 @@ const SCOPES: Record<Span["kind"], string> = {
   consumer: "@opentelemetry/api",
 };
 
+/** A stable process id per service, as an int64 decimal string (TraceAttributes). */
+export const fixturePid = (service: string) =>
+  String(
+    40_000 +
+      Array.from(service, (c) => c.charCodeAt(0)).reduce((sum, c) => (sum * 31 + c) % 9_000, 0)
+  );
+
 const resource = (service: string): TraceAttributes => ({
   "service.name": service,
+  "process.pid": fixturePid(service),
   "telemetry.sdk.language": "nodejs",
   "telemetry.sdk.name": "opentelemetry",
   "telemetry.sdk.version": "2.2.0",

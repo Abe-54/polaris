@@ -62,45 +62,58 @@ export const parseTraceFilter = (text: string): TraceFilter | undefined => {
   return Object.keys(filter).length === 0 ? undefined : filter;
 };
 
-export interface TraceGroup {
-  /** The Turn's id, or "between:<first trace id>" for a run between Turns. */
+export interface TurnGroup<A> {
+  /** The Turn's id, or "between:<first item's id>" for a run between Turns. */
   readonly key: string;
   readonly turn: TraceTurn | null;
-  readonly traces: ReadonlyArray<TraceSummary>;
+  readonly items: ReadonlyArray<A>;
 }
 
 /**
- * Newest first, as listed: a Turn's traces together under its kicker, and each run of traces
+ * Newest first, as listed: a Turn's items together under its kicker, and each run of items
  * between Turns under its own, where it fell in time.
  */
-export const groupByTurn = (traces: ReadonlyArray<TraceSummary>): ReadonlyArray<TraceGroup> => {
-  const groups: Array<{ key: string; turn: TraceTurn | null; traces: Array<TraceSummary> }> = [];
+export const groupItemsByTurn = <
+  A extends { readonly id: string; readonly turn: TraceTurn | null },
+>(
+  items: ReadonlyArray<A>
+): ReadonlyArray<TurnGroup<A>> => {
+  const groups: Array<{ key: string; turn: TraceTurn | null; items: Array<A> }> = [];
   const byTurn = new Map<string, (typeof groups)[number]>();
 
-  for (const trace of traces) {
+  for (const item of items) {
     const last = groups.at(-1);
 
-    if (trace.turn === null) {
-      if (last !== undefined && last.turn === null) last.traces.push(trace);
-      else groups.push({ key: `between:${trace.id}`, turn: null, traces: [trace] });
+    if (item.turn === null) {
+      if (last !== undefined && last.turn === null) last.items.push(item);
+      else groups.push({ key: `between:${item.id}`, turn: null, items: [item] });
       continue;
     }
 
-    const known = byTurn.get(trace.turn.id);
+    const known = byTurn.get(item.turn.id);
 
     if (known !== undefined) {
-      known.traces.push(trace);
+      known.items.push(item);
       continue;
     }
 
-    const group = { key: trace.turn.id, turn: trace.turn, traces: [trace] };
+    const group = { key: item.turn.id, turn: item.turn, items: [item] };
 
-    byTurn.set(trace.turn.id, group);
+    byTurn.set(item.turn.id, group);
     groups.push(group);
   }
 
   return groups;
 };
+
+export interface TraceGroup {
+  readonly key: string;
+  readonly turn: TraceTurn | null;
+  readonly traces: ReadonlyArray<TraceSummary>;
+}
+
+export const groupByTurn = (traces: ReadonlyArray<TraceSummary>): ReadonlyArray<TraceGroup> =>
+  groupItemsByTurn(traces).map(({ key, turn, items }) => ({ key, turn, traces: items }));
 
 /** "TURN 12 · NOW" for the session's latest Turn, "BETWEEN TURNS" for none. */
 export const turnKicker = (turn: TraceTurn | null, latest: number | null): string => {
@@ -110,3 +123,5 @@ export const turnKicker = (turn: TraceTurn | null, latest: number | null): strin
 };
 
 export const tracesLabel = (n: number) => (n === 1 ? "1 trace" : `${n} traces`);
+
+export const profilesLabel = (n: number) => (n === 1 ? "1 profile" : `${n} profiles`);
