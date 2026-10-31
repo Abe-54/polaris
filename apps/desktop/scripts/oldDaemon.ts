@@ -2,10 +2,11 @@
 /**
  * This Mac's installed Daemon predates `harness.commands`: the app on a dev
  * build upgrades it on connection, the `/` menu says what is going on (here a
- * first upgrade fails, so "Try again"), and once upgraded the list arrives. All
+ * first upgrade fails, so "Try again"), and once upgraded the list arrives.
+ * CI or a disposable VM only on macOS (launchd shares the real Daemon's label). All
  * in a temporary home; the old Daemon runs from a checkout of an older commit.
  *
- *   node scripts/oldDaemon.ts --old <repo checked out before harness.commands> [--shots <dir>]
+ *   POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL=1 node scripts/oldDaemon.ts --old <repo checked out before harness.commands> [--shots <dir>]
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -19,9 +20,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { hostPlatform, standInPolaris, writeDist } from "../src/main/machines/fakeHost.testing.ts";
-import { APP_DIR, electronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  scriptedLocalInstall,
+} from "./lib/electron.ts";
 
 const args = process.argv.slice(2);
 
@@ -44,6 +50,8 @@ const platform = hostPlatform();
 const root = mkdtempSync(join(tmpdir(), "polaris-old-daemon-"));
 
 const home = join(root, "home");
+
+const installEnv = scriptedLocalInstall(home);
 
 const polaris = join(home, ".polaris");
 
@@ -94,7 +102,7 @@ const app = await electron.launch({
   env: {
     ...process.env,
     POLARIS_DESKTOP_LOCAL_SOCKET: join(polaris, "daemon.sock"),
-    POLARIS_DESKTOP_LOCAL_HOME: home,
+    ...installEnv,
     POLARIS_DESKTOP_DAEMON_DIST: dist,
     POLARIS_DESKTOP_BENCH_HARNESS: "1",
     POLARIS_BENCH_HARNESS: "1",

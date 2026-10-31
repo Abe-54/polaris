@@ -29,8 +29,13 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright-core";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import { type ElectronApplication, type Page } from "playwright-core";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 
 const args = process.argv.slice(2);
 
