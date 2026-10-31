@@ -16,6 +16,8 @@ if (process.argv[2] !== "bare") {
       if (path === "/stats" && req.method === "GET") {
         return Response.json({ spans, batches, requests });
       }
+      // Drain rejected requests too: Bun 1.3 can otherwise misread the next keep-alive request.
+      const bytes = new Uint8Array(await req.arrayBuffer());
       if (!["/v1/traces", "/vendor/v1/traces", "/otlp/spike/v1/traces"].includes(path)) {
         return new Response(null, { status: 404 });
       }
@@ -25,7 +27,6 @@ if (process.argv[2] !== "bare") {
         return new Response(null, { status: 415 });
       }
       try {
-        const bytes = new Uint8Array(await req.arrayBuffer());
         const result = summary(decode(bytes, type));
         spans += result.spans;
         batches++;
