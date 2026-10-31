@@ -8,7 +8,13 @@ import {
   watchDataSources,
   watchDataQueryLog,
 } from "@polaris/client";
-import { DaemonRpcs, SessionId, Unsupported } from "@polaris/protocol";
+import {
+  DaemonRpcs,
+  SessionId,
+  TurnId,
+  Unsupported,
+  type SchemaSourceDiff,
+} from "@polaris/protocol";
 import { Effect, Layer, Redacted, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -20,6 +26,32 @@ import { memorySecrets } from "../secrets/index.ts";
 import { DataSources, DataQueries, DataRpcsLive } from "./index.ts";
 
 const sessionId = SessionId.make("data-session");
+
+const schemaDiffSource = {
+  source: { id: "app", name: "app" },
+  status: "complete",
+  baseline: "first-use",
+  baselineTurn: TurnId.make("original-capture"),
+  baselineCapturedAt: "2026-10-30T00:00:00.000Z",
+  concurrent: true,
+  capturedLate: true,
+  errorCode: "E-DATA-SQL",
+  beforeAt: "2026-10-30T00:00:00.000Z",
+  afterAt: "2026-10-30T00:01:00.000Z",
+  truncated: false,
+  tables: [
+    {
+      kind: "changed",
+      before: { schema: "public", name: "wide" },
+      after: { schema: "public", name: "wide" },
+      columns: [],
+      indexes: [],
+      constraints: [],
+      detailsTruncated: true,
+      rows: { kind: "unknown", value: null },
+    },
+  ],
+} satisfies SchemaSourceDiff;
 
 const label = { text: "Local", colour: "none" } as const;
 
@@ -54,7 +86,8 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
                 Layer.succeed(
                   SchemaSnapshots,
                   SchemaSnapshots.of({
-                    get: (input) => Effect.succeed({ ...input, sources: [] }),
+                    get: (input) =>
+                      Effect.succeed({ ...input, pruned: true, sources: [schemaDiffSource] }),
                     remove: () => Effect.void,
                   })
                 ),
@@ -93,7 +126,11 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
         });
 
         expect(capabilities).toContain("data");
-        expect(yield* client["data.schemaDiff"]({ sessionId })).toEqual({ sessionId, sources: [] });
+        expect(yield* client["data.schemaDiff"]({ sessionId })).toEqual({
+          sessionId,
+          pruned: true,
+          sources: [schemaDiffSource],
+        });
         expect(
           yield* Stream.runCollect(
             watchDataSources({ client, capabilities }, { sessionId }).pipe(Stream.take(1))

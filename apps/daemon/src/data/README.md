@@ -228,50 +228,96 @@ bun packages/spec/scripts/replay-data-write.ts /private/tmp/polaris-w-traces/*.j
 
 ## Schema Diff (ENG-645)
 
-`SchemaSnapshots.get({sessionId, turn?})` is the internal Review accessor;
-`data.schemaDiff` and the Client/IPC `getDataSchemaDiff` expose the same result.
-The separate `data.schemaDiff` capability keeps older Data Daemons out of this RPC.
-Omitting `turn` compares the first captured baseline with the last end catalog for
-each source in the session. Changed targets never form a cross-database diff.
+`SchemaSnapshots.get({sessionId, turn?})`, `data.schemaDiff` and the Client/IPC
+`getDataSchemaDiff` expose the same result, behind the `data.schemaDiff` capability.
+Omitting `turn` compares the first retained baseline with the last retained end for
+that source. Changed targets never form a cross-database comparison.
 
-The scoped worker subscribes after committed Turn events and Query Log activity.
-It does no catalog I/O in decide, acknowledgement or query execution. Describe
-publishes first-use activity too; outside commands use matching running item
-progress and the completed Query Log entry. Catalogs are metadata only, capped at
-500 tables and a 30-second snapshot deadline. A single consumer serializes catalog
-work, including sessions sharing a checkout; adjacent starts coalesce until Data
-activity. No periodic timer or idle watcher is added. Source discovery only runs on Turn
-boundaries or Data activity, and a checkout without Data never opens a SQL pool.
+The worker observes committed Turn boundaries, completed commands and Query Log
+activity. Catalog I/O stays outside Session decide, acknowledgement and commit.
+First use by a Polaris write waits for a baseline before the statement; other
+first-use captures may happen after work started. `beforeAt`/`afterAt` are capture
+times, and `capturedLate` warns when capture followed Turn start. This does not
+claim that a late baseline includes the Turn's earliest changes. Up to four
+captures run at once, with catalog reads serialized per target. No periodic timer,
+idle watcher or shared cross-session catalog cache is added.
 
-A migration-capable checkout has discovered sources and a known migration path:
-`prisma/migrations`, `drizzle`, `db/migrate`, `*/migrations`, `supabase/migrations`.
-Only Local sources get candidate Turn-start baselines. A previous Turn's end is
-reused when its target is unchanged, no other session has since used the checkout's
-Data, and another session is not currently working there. Reused baselines carry
-`previous-turn-end`, because outside changes between Turns may be included.
-Candidates stay out of Review unless the Turn used the source or its checkpoint
-diff changed a migration. Remote sources join only on first use with an existing
-approval. The snapshot path never calls the approval-opening service.
+A migration-capable checkout has `prisma/migrations`, `drizzle`, `db/migrate`,
+`*/migrations` or `supabase/migrations`. Only Local sources receive candidate
+baselines at Turn start. Sessions that have used Data are also eligible. Discovery
+candidates are cached per checkout and invalidated by env, compose or framework
+file metadata changes. Ordinary `bun test` progress causes no discovery. Recognized
+push/migration commands (`prisma db push`, `drizzle-kit push`, `supabase db reset`,
+`prisma migrate`, `psql`/`mysql`, including `docker compose exec`) trigger comparison
+at end even without a changed migration file. Committed command completions avoid
+loss of ephemeral progress items. Unknown scripts can still escape attribution.
 
-`complete`, `pending` and `unavailable` distinguish a ready comparison from a
-missing baseline/end or a failed capture. A bounded/incomplete catalog sets
-`truncated`; unmatched objects then cannot establish additions or removals.
-Renames require a unique same-schema match of the old columns in the new table.
-Column, index and constraint changes preserve both sides. Row cards use completed
-Query Log `affected` entries from this session's agent writes and user
-`data.edits.commit` writes, with separate `agent` and `user` counts. Otherwise they
-carry an explicitly labelled row-estimate delta (or unknown); reads, dry runs and
-other sessions' writes never become exact counts. Exact counts persist with each
-Turn, independently of Query Log retention. Catalogs persist in `data.sqlite`
-and are deleted on session archive and Workspace removal; late captures cannot
-resurrect removed records. Restart also removes orphaned catalogs.
+Reuse, staleness and concurrency use the target (engine, Host, port, database,
+user), independently of checkout and source name. Query Log activity, including
+the user's own Data writes, invalidates the reused baseline. Activity from another
+session on the target during the capture window sets `concurrent`; its changes
+must not be presented as exclusively the Turn's. Unknown writers outside Polaris
+cannot be detected. Changes outside Polaris between captures can be included.
 
-Native acceptance uses disposable Postgres 16 and MySQL 8.4 databases:
+`previous-turn-end` means an actual capture at the immediately previous Turn's
+end. Unused Turns capture nothing: they carry the existing content by reference,
+with its original time and Turn. Older carried content uses `first-use`, with
+optional `baselineTurn` and `baselineCapturedAt` for a “Since <time>” label.
+Remote sources join only on first use with an existing approval; snapshotting
+never opens an approval, and end capture rechecks target, locality and access.
+
+Catalogs are content-addressed in `data.sqlite`; an unchanged catalog has one
+content row. Turn reads use the `(session, Turn)` index. Retention keeps at most
+50 Turns per session and 64 MiB of catalog content and reference metadata per
+Host, evicting oldest references first and collecting unused content. SQLite can
+reuse freed pages; the cap is retained logical bytes, not the physical file's
+high-water mark. `pruned: true` distinguishes evicted history from an empty diff.
+Archive and Workspace removal collect catalogs; late saves cannot resurrect them.
+
+`complete`, `pending` and `unavailable` distinguish a comparison, missing capture,
+and failure. `errorCode` preserves the real capture failure. Catalog capture uses
+six Postgres or seven typical MySQL relation-set requests rather than per-table
+transactions (MySQL CHECK names batch at 60,000). MySQL filters detail/identity
+reads with bound selected names and reads CHECK clauses separately: joining
+information_schema constraint views caused quadratic work at 5,000 tables. A native
+Mac run of that fixture took 1.388 s after the fix, with the identity lookup taking
+847 ms; no stats refresh or longer deadline is required. The table
+list is capped at 500; `truncated` then suppresses unmatched table additions and
+removals. Each table independently keeps its first 256 columns/indexes/constraints;
+`detailsTruncated` marks omissions without hiding unrelated table changes. Exactly
+256 details are complete. Renames require stable engine identity (`pg_class.oid`
+or InnoDB `TABLE_ID`); absent identity means removed plus added, never a guessed
+rename. Drop/create at the same name also preserves removal and addition.
+
+Compared objects include columns (defaults, generated expressions, collations,
+MySQL ON UPDATE), ordered indexes (prefixes and descending keys), constraints,
+view definitions, triggers and Postgres RLS enable/force flags. Trigger and view
+changes appear in the constraints collection with their object kind. Column
+comments, routine/trigger function bodies, RLS policy definitions, partition bounds,
+sequences, grants, table options, column identity options, MySQL foreign-key
+actions/check enforcement/index visibility and non-InnoDB stable identities remain outside
+coverage. SQL literals and known credentials in persisted catalog text are
+redacted; fingerprints preserve detection when only a redacted literal changes.
+
+Row cards mean **rows matched by writes through Polaris**. Exact counts describe
+only those recorded operations, never the table's total change. They keep agent and user counts
+separate, including user grid commits, and persist the counts with the Turn after
+Query Log pruning. MySQL uses `foundRows:true`: unchanged matched UPDATE rows count,
+as on Postgres. MySQL upserts/REPLACE retain the driver's affected-row semantics;
+these are write-operation counts, not a count of distinct final rows. Only
+completed, counted writes qualify for exact cards. Uncounted commands, migrations
+or concurrent target activity make the total unknown or estimated while keeping
+known agent/user counts. Estimates can lag ANALYZE/autovacuum or MySQL's statistics
+cache; an unchanged estimate is not proof of no writes. Writers Polaris cannot see are not counted.
+
+Native acceptance uses disposable Postgres 16 and MySQL 8.4 databases. Cost and
+catalog-regression fixtures create a unique database and drop it in `finally`:
 
 ```sh
 POLARIS_TEST_PG_URL='<disposable Postgres URL>' \
 POLARIS_TEST_MYSQL_URL='<disposable MySQL URL>' \
-bun test apps/daemon/src/data/schemaSnapshots.real.test.ts
+bun test apps/daemon/src/data/schemaSnapshots.real.test.ts apps/daemon/src/data/schemaCatalog.regression.real.test.ts apps/daemon/src/data/schemaCatalog.cost.real.test.ts apps/daemon/src/data/schemaSnapshots.cost.test.ts
+POLARIS_SCHEMA_COST=1 bun test apps/daemon/src/data/schemaSnapshots.cost.test.ts
 bun run bench idle --runs 3 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c.json
 ```
 

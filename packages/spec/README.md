@@ -910,17 +910,35 @@ apps/daemon/src/verification/engine.model.test.ts`, then `cd packages/spec && bu
 
 ### Schema Diff observation (ENG-645)
 
-`data/schemaSnapshots.ts` consumes committed Turn boundaries and Data activity in a
-scoped background fiber. `data.schemaDiff` reads the resulting per-Turn catalogs
-from data.sqlite; it never decides, acknowledges or commits a Session command,
-opens an approval, or changes stream/resume/recovery semantics. It therefore adds
-no Quint transition. `data/schemaSnapshots.test.ts` checks a blocked catalog does
-not block a Turn commit, remote snapshots do not open approvals, previous-end
-baseline reuse and stale-checkout invalidation, and late saves after archive are
-discarded. `data/schemaSnapshots.real.test.ts` checks migration checkpoints against
-real Postgres/MySQL catalogs; `data/schemaStore.test.ts` checks attribution and
-pruning. Existing Data approval model/trace checks remain the authority for
-approval state transitions.
+`data/schemaSnapshots.ts` consumes committed Turn boundaries, completed commands
+and target-keyed Query Log activity in a scoped background worker. Snapshotting
+never decides, acknowledges or commits a Session command, opens an approval or
+changes stream/resume/recovery semantics. A synchronous pre-write baseline only
+joins the authorized Data write path, outside Session commit.
+
+`polaris.qnt`, module `data_snapshots`, models the sidecar's target revisions,
+adjacent-end reuse, carried original provenance, user invalidation and concurrent
+writer uncertainty. Its scenarios and safety simulation run with `bun run spec`.
+This is separate from Session receipts: it adds no Session transition.
+`data/schemaSnapshots.regression.test.ts` checks these policies against the real
+worker and SQLite, including cross-checkout activity and same-session users.
+The additive `baselineTurn`/`baselineCapturedAt` fields identify the actual capture;
+only an actual immediately previous end uses `previous-turn-end`, older carried
+content uses `first-use`. `concurrent`, `capturedLate`, `errorCode`, `pruned` and
+per-table `detailsTruncated` expose attribution and retention limits on the wire.
+
+`data/schemaSnapshots.test.ts` and `engine/Engine.schemaSnapshots.test.ts` cover
+commit independence, Remote approval boundaries and archive cleanup.
+`data/schemaStore.test.ts` checks content deduplication, indexed Turn reads,
+50-Turn/Host-byte retention, pruning notices and persisted author counts.
+`data/schemaCatalog.regression.real.test.ts` checks stable identity, detail bounds,
+expressions, ordered indexes, views, triggers and redacted text against disposable
+Postgres/MySQL; `schemaCatalog.cost.real.test.ts` and `schemaSnapshots.cost.test.ts`
+measure RSD C1/W7. Native tests are opt-in via `POLARIS_TEST_PG_URL` and
+`POLARIS_TEST_MYSQL_URL`; worker cost also accepts `POLARIS_SCHEMA_COST=1`.
+Existing Data approval model/trace checks remain the authority for approval
+transitions. Unknown writers outside Polaris and catalog changes during a
+multi-query capture remain observational limits, not receipt guarantees.
 
 RX fix-round coverage (ENG-644): `data-approvals.qnt` supplies the refined model imported by
 `data_approvals`. It models two sessions, Local/Remote changes, writes-policy changes, shared
