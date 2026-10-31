@@ -2,7 +2,8 @@
  * Data mode's sidebar, connection bar and status bar on fixtures, for screenshots against
  * Paper D1/D3: `#data-sidebar/<scene>` renders the real shell in Data. Its own chunk.
  */
-import type { ConnectionState } from "@polaris/protocol";
+import { type ConnectionState, DataSource } from "@polaris/protocol";
+import { Schema } from "effect";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
 import { App } from "../../../app/App.tsx";
@@ -26,31 +27,66 @@ const SCENES = [
   "unreachable",
   "reconnecting",
   "offline",
+  "gone",
+  "params",
+  "narrow",
+  "manual",
+  "edit",
+  "name",
+  "keys",
 ] as const;
 
 type Scene = (typeof SCENES)[number];
 
-const apiFor = (scene: Scene): DataApi =>
-  scene === "empty" ? fixtureDataApi({ sources: [] }) : worstCaseDataApi();
+/** A source the user added: a remote with a 40-character red label, not approved yet. */
+const MANUAL = new DataSource({
+  ...Schema.encodeSync(DataSource)(REPLICA),
+  id: "src-manual-billing-primary",
+  name: "billing-primary",
+  host: "billing-primary.eu-central-1.rds.example.com",
+  foundIn: { kind: "manual" },
+  access: "needs-approval",
+  label: { text: "PRODUCTION · BILLING · EU-CENTRAL-1 · PRI", colour: "red" },
+});
+
+const WITH_MANUAL: ReadonlyArray<Scene> = ["narrow", "manual", "edit"];
+
+const apiFor = (scene: Scene): DataApi => {
+  if (scene === "empty") return fixtureDataApi({ sources: [] });
+
+  return worstCaseDataApi(WITH_MANUAL.includes(scene) ? [MANUAL] : []);
+};
 
 const stateOf = (scene: Scene): ConnectionState =>
   scene === "reconnecting" || scene === "offline" ? scene : "connected";
 
-/** What each scene opens once Data has mounted; "card" is opened by the screenshot script. */
+/** The scenes that open one SQL tab, by what it holds. */
+const SQL_SCENES: Partial<Record<Scene, Parameters<typeof openSqlTab>>> = {
+  unreachable: ["select * from documents limit 50", "search", DATA_AT],
+  gone: ["select count(*) from page_views", "warehouse-old", DATA_AT],
+  params: [
+    "select * from invoices where customer_id = $1 and status = $2",
+    "billing",
+    DATA_AT,
+    ["c-42", "overdue"],
+  ],
+};
+
+/** What each scene opens once Data has mounted; the script opens cards and types. */
 const prepare = (scene: Scene) => {
   if (scene === "empty") return;
+  const sql = SQL_SCENES[scene];
 
-  if (scene === "unreachable") {
-    openSqlTab("select * from documents limit 50", "search", DATA_AT);
+  if (sql !== undefined) return openSqlTab(...sql);
 
-    return;
-  }
-
-  openTable(REPLICA.name, WORST_LONG_TABLE, DATA_AT);
+  if (WITH_MANUAL.includes(scene)) openTable(MANUAL.name, "invoices", DATA_AT);
+  else openTable(REPLICA.name, WORST_LONG_TABLE, DATA_AT);
 
   if (scene === "log") setSidebarView(DATA_AT, "log");
 
-  if (scene === "form") openSourceForm({ mode: "add" });
+  if (scene === "form" || scene === "name") openSourceForm(DATA_AT, { mode: "add" });
+
+  if (scene === "edit") openSourceForm(DATA_AT, { mode: "edit", source: MANUAL });
 };
 
 const sceneOf = (hash: string): Scene => {

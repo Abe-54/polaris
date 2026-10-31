@@ -14,9 +14,10 @@ import {
   type SessionId,
   type Turn,
 } from "@polaris/protocol";
-import { Context, Effect, Inspectable, Layer, Predicate, Option, Stream } from "effect";
+import { Context, Effect, Inspectable, Layer, Predicate, Option } from "effect";
 import { DataSources, DataQueries } from "../data/index.ts";
-import { recordOutsideCommand } from "../data/outside.ts";
+import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
+import { watchOutsideCommands } from "../data/outsideSubscriber.ts";
 import { revertAfterAccept } from "../accept/reactor.ts";
 import { sessionRestartNote } from "../constellation/restartNote.ts";
 import type { HarnessError } from "../harness/HarnessDriver.ts";
@@ -63,29 +64,10 @@ const make = Effect.gen(function* () {
   const { live } = rt;
   const sources = yield* Effect.serviceOption(DataSources);
   const queries = yield* Effect.serviceOption(DataQueries);
+  const snapshots = yield* Effect.serviceOption(SchemaSnapshots);
 
   if (Option.isSome(sources) && Option.isSome(queries)) {
-    const dataSources = sources.value;
-    const dataQueries = queries.value;
-
-    const completed = yield* rt.store.subscribe({
-      filter: (item) =>
-        Predicate.isTagged(item, "Event") &&
-        Predicate.isTagged(item.envelope.event, "TurnItemCompleted") &&
-        Predicate.isTagged(item.envelope.event.item, "CommandExecution"),
-    });
-
-    yield* completed.pipe(
-      Stream.runForEach((item) =>
-        Predicate.isTagged(item, "Event") &&
-        Predicate.isTagged(item.envelope.event, "TurnItemCompleted")
-          ? recordOutsideCommand(item.envelope.event, dataSources, dataQueries).pipe(
-              Effect.catch(() => Effect.logWarning("Couldn't record an outside Polaris command"))
-            )
-          : Effect.void
-      ),
-      Effect.forkScoped
-    );
+    yield* watchOutsideCommands(rt.store, sources.value, queries.value).pipe(Effect.forkScoped);
   }
 
   const runStartedTurn = (sessionId: SessionId, envelopes: ReadonlyArray<EventEnvelope>) => {
@@ -226,6 +208,9 @@ const make = Effect.gen(function* () {
   const archive = (command: CommandOf<"ArchiveSession">) =>
     Effect.gen(function* () {
       const { sessionId } = command;
+
+      if (Option.isSome(snapshots)) yield* snapshots.value.remove(sessionId).pipe(Effect.ignore);
+
       yield* rt.cancelIdle(sessionId);
       yield* rt.stopHarness(sessionId);
       yield* terminal.stopFollower(sessionId, false);
@@ -247,7 +232,21 @@ const make = Effect.gen(function* () {
     Effect.suspend(() => {
       // The removal purged the Workspace and its sessions, so look them up in the model before it.
       const workspace = before.workspaces.get(command.workspaceId);
-      const staged = rt.attachmentStore.onWorkspaceRemoved(command.workspaceId);
+
+      const dataCleanup = Option.isSome(snapshots)
+        ? Effect.forEach(
+            [...before.sessions.values()].filter(
+              (x) => x.session.workspaceId === command.workspaceId
+            ),
+            (x) => snapshots.value.remove(x.session.id).pipe(Effect.ignore),
+            { discard: true }
+          )
+        : Effect.void;
+
+      const staged = Effect.all(
+        [rt.attachmentStore.onWorkspaceRemoved(command.workspaceId), dataCleanup],
+        { discard: true }
+      );
 
       if (workspace === undefined || !workspace.isGitRepo) return staged;
 

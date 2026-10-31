@@ -1,14 +1,17 @@
 /**
- * Data's boundary: the four calls Data mode makes (sources and Query Log watches, describe,
- * query). `liveDataApi` goes over IPC (shared/dataContract.ts); fixtures swap in for previews.
+ * Data's boundary: the calls Data mode makes (sources and Query Log watches, describe, query,
+ * saving, labelling and removing a source, and the Schema Diff Review reads). `liveDataApi` goes over IPC (shared/dataContract.ts); fixtures swap in for previews.
  */
 import type {
+  DataSchemaDiff,
   DataSource,
+  DataValue,
   DataSourceLabel,
   QueryLogEntry,
   QueryResult,
   SchemaTree,
   TableDetail,
+  TurnId,
 } from "@polaris/protocol";
 import { Match } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
@@ -33,6 +36,8 @@ export interface DescribeInput {
 export interface QueryInput {
   readonly source: string;
   readonly sql: string;
+  /** Bound to `$1`, `$2`…; omitted when there are none. */
+  readonly params?: ReadonlyArray<DataValue>;
   /** Rows returned, 1–200. */
   readonly limit?: number;
 }
@@ -40,6 +45,8 @@ export interface QueryInput {
 export interface QueryStreamInput {
   readonly source: string;
   readonly sql: string;
+  /** Bound to `$1`, `$2`…; omitted when there are none. */
+  readonly params?: ReadonlyArray<DataValue>;
   /** Rows returned, 1–10,000. */
   readonly limit?: number;
 }
@@ -70,6 +77,8 @@ export interface SaveSourceInput {
   readonly database: string;
   readonly user: string;
   readonly password?: string;
+  /** Removes the saved password; sent without one. */
+  readonly passwordAction?: "clear";
   readonly label: DataSourceLabel;
 }
 
@@ -97,6 +106,8 @@ export interface DataApi {
     on: QueryStream
   ) => () => void;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
+  /** Removes a source the user added (`data.source.remove`); discovered ones can't be. */
+  readonly removeSource: (at: DataSessionKey, source: string) => Promise<Result<null>>;
   readonly labelSource: (
     at: DataSessionKey,
     source: string,
@@ -104,6 +115,14 @@ export interface DataApi {
   ) => Promise<Result<DataSource>>;
   /** Tables changed this Turn; no Host serves them yet, so the live feed stays empty. */
   readonly watchTableChanges: (at: DataSessionKey, on: Snapshots<TableChange>) => () => void;
+  /**
+   * The session's Schema Diff (`data.schemaDiff`): one Turn's, or the whole session's when
+   * `turn` is omitted. Request/response; fails `Unsupported` on Daemons without it.
+   */
+  readonly schemaDiff: (
+    at: DataSessionKey,
+    turn: TurnId | undefined
+  ) => Promise<Result<DataSchemaDiff>>;
 }
 
 const session = (at: DataSessionKey) => ({ hostKey: at.hostKey, sessionId: at.sessionId });
@@ -131,12 +150,13 @@ export const liveDataApi: DataApi = {
     );
   },
   query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
-  queryStream: (at, { source, sql, limit }, on) => {
+  queryStream: (at, { source, sql, params, limit }, on) => {
     const base = { ...session(at), source, sql };
+    const bound = params === undefined ? base : { ...base, params };
 
     return polaris().subscribe(
       "data.query.stream",
-      limit === undefined ? base : { ...base, limit },
+      limit === undefined ? bound : { ...bound, limit },
       {
         items: (items) => {
           for (const item of items)
@@ -153,8 +173,14 @@ export const liveDataApi: DataApi = {
     );
   },
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
+  removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
     polaris().request("data.source.label", { ...session(at), source, label }),
+  schemaDiff: (at, turn) =>
+    polaris().request(
+      "data.schemaDiff",
+      turn === undefined ? session(at) : { ...session(at), turn }
+    ),
   watchTableChanges: (_at, on) => {
     on.next([]);
 

@@ -89,7 +89,7 @@ export const SQL_SCENES = {
   "sql-running": { api: hanging, play: run(OVERDUE) },
   "sql-gone": {
     api,
-    play: (at) => openSqlTab(OVERDUE, "", at, goneSourceNotice("app-before-rename")),
+    play: (at) => openSqlTab(OVERDUE, "", at, [], goneSourceNotice("app-before-rename")),
   },
   working: {
     api: inFlight("select * from invoices where status = 'overdue'", "running"),

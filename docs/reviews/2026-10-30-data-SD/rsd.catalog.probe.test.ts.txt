@@ -1,0 +1,232 @@
+/** RSD probe: SD's real snapshotCatalog + compareCatalogs against disposable Postgres/MySQL. Not committed. */
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { SQL } from "bun";
+import { DataSource } from "@polaris/protocol";
+import { Effect, Redacted } from "effect";
+import { parseConnection } from "./connection.ts";
+import { DataPools, sqlOptions } from "./pools.ts";
+import { snapshotCatalog, type ResolvedSource } from "./schemaCatalog.ts";
+import { compareCatalogs } from "./schemaCompare.ts";
+
+const DB = "rsd_sd_probe";
+const BASE = { postgres: process.env.RSD_PG_URL!, mysql: process.env.RSD_MYSQL_URL! } as const;
+type Engine = keyof typeof BASE;
+
+const urlFor = (engine: Engine) => BASE[engine].replace(/\/[^/]*$/, `/${DB}`);
+
+const resolvedFor = (engine: Engine): ResolvedSource => {
+  const url = Redacted.make(urlFor(engine));
+  const { connection } = parseConnection({ name: "rsd", url, foundIn: { kind: "manual" } })!;
+  const source = new DataSource({
+    id: `rsd-${engine}`, name: "rsd", engine, host: connection.hostname, port: connection.port, database: connection.database,
+    user: connection.username, locality: "local", foundIn: { kind: "manual" }, access: "read", writes: "ask",
+    label: { text: "", colour: "none" }, reachable: true,
+  });
+  return { source, connection, matchUrl: url } as ResolvedSource;
+};
+
+const admin = (engine: Engine, db?: string) =>
+  new SQL({ url: db ? urlFor(engine) : BASE[engine], max: 2, ...(engine === "mysql" ? { allowPublicKeyRetrieval: true } : {}) } as never);
+
+const pools = new DataPools();
+const snapshot = (engine: Engine) => Effect.runPromise(snapshotCatalog(pools, resolvedFor(engine)));
+const timed = async (engine: Engine) => {
+  const t = performance.now();
+  const s = await snapshot(engine);
+  return { s, ms: Math.round(performance.now() - t), bytes: JSON.stringify(s).length };
+};
+const summary = (d: ReturnType<typeof compareCatalogs>) =>
+  d.map((t) => ({ kind: t.kind, from: t.before?.name, to: t.after?.name, cols: t.columns.map((c) => c.name), idx: t.indexes.map((c) => c.name), con: t.constraints.map((c) => c.name), rows: t.rows }));
+
+let pg: SQL, my: SQL;
+
+beforeAll(async () => {
+  const p = admin("postgres");
+  await p.unsafe(`DROP DATABASE IF EXISTS ${DB}`);
+  await p.unsafe(`CREATE DATABASE ${DB}`);
+  await p.close();
+  const m = admin("mysql");
+  await m.unsafe(`DROP DATABASE IF EXISTS ${DB}`);
+  await m.unsafe(`CREATE DATABASE ${DB}`);
+  await m.close();
+  pg = admin("postgres", DB);
+  my = admin("mysql", DB);
+});
+
+afterAll(async () => {
+  await pools.close();
+  await pg.close();
+  await my.close();
+  const p = admin("postgres");
+  await p.unsafe(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`);
+  await p.close();
+  const m = admin("mysql");
+  await m.unsafe(`DROP DATABASE IF EXISTS ${DB}`);
+  await m.close();
+});
+
+const reset = async () => {
+  await pg.unsafe("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+  const rows = await my.unsafe("SELECT TABLE_NAME n, TABLE_TYPE t FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()");
+  await my.unsafe("SET FOREIGN_KEY_CHECKS=0");
+  for (const r of rows as { n: string; t: string }[]) await my.unsafe(`DROP ${r.t === "VIEW" ? "VIEW" : "TABLE"} \`${r.n}\``);
+};
+
+test("C1: catalog cost and size for 500 tables x 12 columns, then 5,000 tables", async () => {
+  await reset();
+  const make = async (n: number, from = 0) => {
+    const pgSql: string[] = [];
+    for (let i = from; i < n; i++) {
+      const cols = Array.from({ length: 11 }, (_, c) => `c${c} varchar(255)`).join(",");
+      pgSql.push(`CREATE TABLE t_${String(i).padStart(5, "0")} (id bigint PRIMARY KEY, ${cols}, CHECK (c0 <> ''));CREATE INDEX ON t_${String(i).padStart(5, "0")}(c1);`);
+    }
+    for (let i = 0; i < pgSql.length; i += 200) await pg.unsafe(pgSql.slice(i, i + 200).join(""));
+    for (let i = from; i < n; i++) {
+      const cols = Array.from({ length: 11 }, (_, c) => `c${c} varchar(255)`).join(",");
+      await my.unsafe(`CREATE TABLE t_${String(i).padStart(5, "0")} (id bigint PRIMARY KEY, ${cols}, KEY (c1), CHECK (c0 <> ''))`);
+    }
+  };
+  await make(500);
+  for (const engine of ["postgres", "mysql"] as const) {
+    const a = await timed(engine);
+    console.log(`C1 ${engine} 500 tables: ${a.ms} ms, ${(a.bytes / 1024).toFixed(0)} KiB JSON, ${a.s.tables.length} tables, truncated=${a.s.truncated}`);
+  }
+  await make(5000, 500);
+  for (const engine of ["postgres", "mysql"] as const) {
+    const a = await timed(engine);
+    console.log(`C1 ${engine} 5000 tables: ${a.ms} ms, ${(a.bytes / 1024).toFixed(0)} KiB JSON, ${a.s.tables.length} tables, truncated=${a.s.truncated}`);
+    expect(a.s.truncated).toBe(true);
+  }
+}, 600_000);
+
+test("C2: one wide table marks the whole catalog truncated and hides a CREATE TABLE / DROP TABLE", async () => {
+  await reset();
+  const wide = Array.from({ length: 300 }, (_, c) => `w${c} int`).join(",");
+  await pg.unsafe(`CREATE TABLE events_wide (id int PRIMARY KEY, ${wide}); CREATE TABLE legacy (id int PRIMARY KEY, v text);`);
+  await my.unsafe(`CREATE TABLE events_wide (id int PRIMARY KEY, ${wide})`);
+  await my.unsafe(`CREATE TABLE legacy (id int PRIMARY KEY, v text)`);
+  for (const engine of ["postgres", "mysql"] as const) {
+    const before = await snapshot(engine);
+    const db = engine === "postgres" ? pg : my;
+    await db.unsafe("DROP TABLE legacy");
+    await db.unsafe("CREATE TABLE payouts (id int PRIMARY KEY, amount int)");
+    const after = await snapshot(engine);
+    const diff = summary(compareCatalogs(before, after));
+    console.log(`C2 ${engine}: truncated=${after.truncated}, wide columns kept=${after.tables.find((t) => t.name === "events_wide")?.columns.length}, diff=${JSON.stringify(diff)}`);
+    expect(diff).toEqual([]);
+  }
+});
+
+test("C3: dropping one partition and creating the next is reported as a rename", async () => {
+  await reset();
+  await pg.unsafe(`CREATE TABLE audit (id int, at date, body text) PARTITION BY RANGE (at);
+    CREATE TABLE audit_2026_09 PARTITION OF audit FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
+    INSERT INTO audit VALUES (1,'2026-09-02','x'); ANALYZE audit_2026_09;`);
+  await my.unsafe("CREATE TABLE audit_2025 (id int PRIMARY KEY, at date, body text)");
+  await my.unsafe("INSERT INTO audit_2025 VALUES (1,'2025-01-01','x')");
+  for (const engine of ["postgres", "mysql"] as const) {
+    const before = await snapshot(engine);
+    const db = engine === "postgres" ? pg : my;
+    if (engine === "postgres")
+      await db.unsafe(`DROP TABLE audit_2026_09; CREATE TABLE audit_2026_10 PARTITION OF audit FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');`);
+    else {
+      await db.unsafe("DROP TABLE audit_2025");
+      await db.unsafe("CREATE TABLE audit_2026 (id int PRIMARY KEY, at date, body text, note text)");
+    }
+    const after = await snapshot(engine);
+    const diff = summary(compareCatalogs(before, after));
+    console.log(`C3 ${engine} drop+create: ${JSON.stringify(diff)}`);
+    expect(diff.some((t) => t.kind === "renamed")).toBe(true);
+  }
+});
+
+test("C4: rename edge cases (two renames, rename + alter, identical tables)", async () => {
+  await reset();
+  await pg.unsafe(`CREATE TABLE a (id int, x int); CREATE TABLE b (id int, y int); CREATE TABLE c (id int, z int);
+    CREATE TABLE twin1 (id int, v int); CREATE TABLE twin2 (id int, v int);`);
+  const before = await snapshot("postgres");
+  await pg.unsafe(`ALTER TABLE a RENAME TO a2; ALTER TABLE b RENAME TO b2; ALTER TABLE c RENAME TO c2; ALTER TABLE c2 RENAME COLUMN z TO zz;
+    ALTER TABLE twin1 RENAME TO twin_one;`);
+  const after = await snapshot("postgres");
+  console.log(`C4 postgres: ${JSON.stringify(summary(compareCatalogs(before, after)).map((t) => [t.kind, t.from, t.to]))}`);
+});
+
+test("C5: changes the comparison can't see", async () => {
+  await reset();
+  await pg.unsafe(`CREATE TABLE f (id int PRIMARY KEY, a int, name text COLLATE "C", g int GENERATED ALWAYS AS (a * 2) STORED);
+    CREATE VIEW f_view AS SELECT id FROM f;
+    CREATE FUNCTION f_trg() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;`);
+  await my.unsafe("CREATE TABLE f (id int PRIMARY KEY, a int, b int, name varchar(20) COLLATE utf8mb4_bin, g int GENERATED ALWAYS AS (a * 2) STORED, updated timestamp NULL, KEY ab (a, b), KEY nm (name))");
+  await my.unsafe("CREATE VIEW f_view AS SELECT id FROM f");
+  const pgBefore = await snapshot("postgres");
+  const myBefore = await snapshot("mysql");
+  await pg.unsafe(`ALTER TABLE f ALTER COLUMN name TYPE text COLLATE "en_US.utf8";
+    CREATE OR REPLACE VIEW f_view AS SELECT id, a FROM f;
+    CREATE TRIGGER f_audit BEFORE UPDATE ON f FOR EACH ROW EXECUTE FUNCTION f_trg();
+    ALTER TABLE f ENABLE ROW LEVEL SECURITY;
+    COMMENT ON COLUMN f.a IS 'cents';`);
+  await my.unsafe("ALTER TABLE f MODIFY g int GENERATED ALWAYS AS (a * 3) STORED");
+  await my.unsafe("ALTER TABLE f MODIFY name varchar(20) COLLATE utf8mb4_general_ci");
+  await my.unsafe("ALTER TABLE f DROP INDEX ab, ADD INDEX ab (b, a)");
+  await my.unsafe("ALTER TABLE f DROP INDEX nm, ADD INDEX nm (name(4))");
+  await my.unsafe("ALTER TABLE f MODIFY updated timestamp NULL ON UPDATE CURRENT_TIMESTAMP");
+  await my.unsafe("CREATE OR REPLACE VIEW f_view AS SELECT id, a FROM f");
+  const pgAfter = await snapshot("postgres");
+  const myAfter = await snapshot("mysql");
+  const pgDiff = summary(compareCatalogs(pgBefore, pgAfter));
+  const myDiff = summary(compareCatalogs(myBefore, myAfter));
+  console.log(`C5 postgres (collation, view, trigger, RLS, comment): ${JSON.stringify(pgDiff)}`);
+  console.log(`C5 postgres generated column as seen: ${JSON.stringify(pgAfter.tables[0]?.columns.find((c) => c.name === "g"))}`);
+  console.log(`C5 mysql (generated expr, collation, index order, prefix, ON UPDATE, view): ${JSON.stringify(myDiff)}`);
+  console.log(`C5 mysql index ab before/after: ${JSON.stringify(myBefore.tables[0]?.indexes.find((i) => i.name === "ab"))} ${JSON.stringify(myAfter.tables[0]?.indexes.find((i) => i.name === "ab"))}`);
+  console.log(`C5 views captured: ${pgAfter.tables.some((t) => t.name === "f_view")} ${myAfter.tables.some((t) => t.name === "f_view")}`);
+});
+
+test("C6: estimates after outside writes; reltuples -1 stays unknown", async () => {
+  await reset();
+  await pg.unsafe("CREATE TABLE ledger_rows (id int PRIMARY KEY, v int); INSERT INTO ledger_rows SELECT g, g FROM generate_series(1,100) g; ANALYZE ledger_rows;");
+  await my.unsafe("CREATE TABLE ledger_rows (id int PRIMARY KEY, v int)");
+  await my.unsafe("INSERT INTO ledger_rows WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n<100) SELECT n, n FROM s");
+  await my.unsafe("ANALYZE TABLE ledger_rows");
+  for (const engine of ["postgres", "mysql"] as const) {
+    const before = await snapshot(engine);
+    const db = engine === "postgres" ? pg : my;
+    if (engine === "postgres") await db.unsafe("INSERT INTO ledger_rows SELECT g, g FROM generate_series(101,5000) g; CREATE TABLE fresh (id int);");
+    else {
+      await db.unsafe("INSERT INTO ledger_rows SELECT 100 + a.i * 100 + b.i + 1, 0 FROM (WITH RECURSIVE s(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM s WHERE i<48) SELECT i FROM s) a CROSS JOIN (WITH RECURSIVE s(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM s WHERE i<99) SELECT i FROM s) b");
+      await db.unsafe("CREATE TABLE fresh (id int)");
+    }
+    const after = await snapshot(engine);
+    const diff = summary(compareCatalogs(before, after));
+    console.log(`C6 ${engine} +4900 rows, no ANALYZE: estimates ${before.tables.find((t) => t.name === "ledger_rows")?.rowEstimate} -> ${after.tables.find((t) => t.name === "ledger_rows")?.rowEstimate}; diff=${JSON.stringify(diff.map((t) => [t.kind, t.to ?? t.from, t.rows]))}`);
+  }
+});
+
+test("C7: secrets in defaults, checks and partial indexes are copied into the stored catalog", async () => {
+  await reset();
+  await pg.unsafe(`CREATE TABLE integrations (id int PRIMARY KEY, token text DEFAULT 'sk_live_51RSDsecretDEFAULT',
+    CONSTRAINT not_leaked CHECK (token <> 'sk_live_51RSDsecretCHECK'));
+    CREATE INDEX hot ON integrations(id) WHERE token = 'sk_live_51RSDsecretINDEX';`);
+  await my.unsafe("CREATE TABLE integrations (id int PRIMARY KEY, token varchar(64) DEFAULT 'sk_live_51RSDsecretDEFAULT', CONSTRAINT not_leaked CHECK (token <> 'sk_live_51RSDsecretCHECK'))");
+  for (const engine of ["postgres", "mysql"] as const) {
+    const json = JSON.stringify(await snapshot(engine));
+    console.log(`C7 ${engine}: ${(json.match(/sk_live_51RSDsecret[A-Z]+/g) ?? []).join(", ")}`);
+  }
+});
+
+test("C8: MySQL and Postgres affected-row semantics a W producer would report", async () => {
+  await reset();
+  await my.unsafe("CREATE TABLE ar (id int PRIMARY KEY, v int)");
+  await my.unsafe("INSERT INTO ar VALUES (1,1),(2,2)");
+  const out: Record<string, unknown> = {};
+  out.updateSameValue = (await my.unsafe("UPDATE ar SET v=1 WHERE id=1")).affectedRows;
+  out.upsertExisting = (await my.unsafe("INSERT INTO ar VALUES (2,20) ON DUPLICATE KEY UPDATE v=VALUES(v)")).affectedRows;
+  out.replaceExisting = (await my.unsafe("REPLACE INTO ar VALUES (1,10)")).affectedRows;
+  out.deleteAll = (await my.unsafe("DELETE FROM ar")).affectedRows;
+  await pg.unsafe("CREATE TABLE ar (id int PRIMARY KEY, v int); INSERT INTO ar VALUES (1,1),(2,2);");
+  const pgSame = await pg.unsafe("UPDATE ar SET v=1 WHERE id=1");
+  const pgUpsert = await pg.unsafe("INSERT INTO ar VALUES (2,20) ON CONFLICT (id) DO UPDATE SET v=excluded.v");
+  out.pgUpdateSameValue = [pgSame.count, pgSame.affectedRows];
+  out.pgUpsertExisting = [pgUpsert.count, pgUpsert.affectedRows];
+  console.log(`C8 ${JSON.stringify(out)}`);
+});

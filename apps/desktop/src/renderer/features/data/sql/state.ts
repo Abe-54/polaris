@@ -5,7 +5,7 @@
 import type { DataValue } from "@polaris/protocol";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { DataApi } from "../data/api.ts";
+import type { DataApi, QueryInput } from "../data/api.ts";
 import { type DataSessionKey, dataSessionKey, dataTabsStore } from "../model/store.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { type DataIpcError, type ErrorSpan, errorSpan } from "./sqlError.ts";
@@ -44,6 +44,8 @@ export interface SqlTabState {
   readonly text: string;
   /** The Data Source's name. */
   readonly source: string;
+  /** Bound on Run; a re-run's params until the user unbinds them. */
+  readonly params: ReadonlyArray<DataValue>;
   readonly run: SqlRun;
   /** Why the tab opened without running, e.g. a Query Log re-run whose source is gone. */
   readonly notice: string | null;
@@ -58,6 +60,7 @@ const keyOf = (at: DataSessionKey, tabId: string) => `${dataSessionKey(at)}\u000
 const initial = (tab: SqlTab): SqlTabState => ({
   text: tab.sql,
   source: tab.sourceId,
+  params: tab.params,
   run: IDLE,
   notice: tab.notice ?? null,
 });
@@ -68,8 +71,10 @@ const patch = (at: DataSessionKey, tab: SqlTab, change: Partial<SqlTabState>) =>
   sqlTabs.setState((all) => ({ ...all, [key]: { ...(all[key] ?? initial(tab)), ...change } }));
 };
 
-const read = (at: DataSessionKey, tab: SqlTab) =>
+export const readSqlTab = (at: DataSessionKey, tab: SqlTab) =>
   sqlTabs.getState()[keyOf(at, tab.id)] ?? initial(tab);
+
+const read = readSqlTab;
 
 export const useSqlTab = (at: DataSessionKey, tab: SqlTab): SqlTabState =>
   useStore(sqlTabs, (all) => all[keyOf(at, tab.id)]) ?? initial(tab);
@@ -103,11 +108,16 @@ export const setSqlSource = (at: DataSessionKey, tab: SqlTab, source: string) =>
   patch(at, tab, { source, run: IDLE, notice: null });
 };
 
-// A closed tab's query is cancelled and its state dropped.
+// A closed tab's running query is cancelled and its state dropped.
 dataTabsStore.subscribe(({ sessions }) => {
-  for (const [key, { session, tabId }] of inFlight)
-    if (sessions[session]?.tabs.some((t) => t.id === tabId) !== true) stop(key);
+  for (const [key, { session, tabId }] of inFlight) {
+    if (sessions[session]?.tabs.some((t) => t.id === tabId) === true) continue;
+    stop(key);
+    sqlTabs.setState(({ [key]: _closed, ...open }) => open, true);
+  }
 });
+
+export const unbindSqlParams = (at: DataSessionKey, tab: SqlTab) => patch(at, tab, { params: [] });
 
 let runs = 0;
 
@@ -127,8 +137,8 @@ interface Outcome {
 }
 
 /** The query through data.query.stream, which a cancel stops on the Host; else data.query. */
-const start = (api: DataApi, at: DataSessionKey, source: string, sql: string, on: Outcome) => {
-  const input = { source, sql, limit: RESULT_LIMIT };
+const start = (api: DataApi, at: DataSessionKey, query: QueryInput, on: Outcome) => {
+  const input = { ...query, limit: RESULT_LIMIT };
 
   if (api.queryStream !== undefined) {
     let columns: ResultSet["columns"] = [];
@@ -165,7 +175,7 @@ const start = (api: DataApi, at: DataSessionKey, source: string, sql: string, on
 
 /** Runs the tab's text on its Data Source; nothing while a run is already going (⌘↵ held). */
 export const runSqlTab = (api: DataApi, at: DataSessionKey, tab: SqlTab) => {
-  const { text, source, run } = read(at, tab);
+  const { text, source, params, run } = read(at, tab);
   // Sent as written, so the Host's error positions line up with the editor's text.
   const sql = text;
 
@@ -182,7 +192,9 @@ export const runSqlTab = (api: DataApi, at: DataSessionKey, tab: SqlTab) => {
     patch(at, tab, { run: next });
   };
 
-  const cancel = start(api, at, source, sql, {
+  const query = params.length === 0 ? { source, sql } : { source, sql, params };
+
+  const cancel = start(api, at, query, {
     done: (result) => settle({ status: "done", id, sql, result }),
     failed: (error) => settle({ status: "failed", id, sql, error, span: errorSpan(sql, error) }),
   });

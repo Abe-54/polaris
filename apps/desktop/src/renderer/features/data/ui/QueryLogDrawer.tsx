@@ -37,8 +37,8 @@ export const goneSourceNotice = (name: string) =>
   `This ran on ${name}, which is gone or renamed. Choose a data source to run it.`;
 
 /**
- * Opens the query in a new SQL tab on the source it ran on, found by id, running it when it's
- * a plain read. A gone or renamed source opens with no source, not running, and says why.
+ * Opens the query in a new SQL tab on the source it ran on, found by id, with its params, running
+ * it when it's a plain read. A gone or renamed source opens with no source, not running, and says why.
  */
 export const rerunInSqlTab = (
   at: DataSessionKey,
@@ -46,20 +46,18 @@ export const rerunInSqlTab = (
   sources: ReadonlyArray<DataSource> | null
 ) => {
   const source = sources?.find((s) => s.id === entry.source.id);
+  const params = entry.params ?? [];
 
   // Before the sources are listed, it opens with none chosen and says nothing yet.
   if (source === undefined) {
-    openSqlTab(
-      entry.sql,
-      "",
-      at,
-      sources === null ? undefined : goneSourceNotice(entry.source.name)
-    );
+    const notice = sources === null ? undefined : goneSourceNotice(entry.source.name);
+
+    openSqlTab(entry.sql, "", at, params, notice);
 
     return;
   }
 
-  openSqlTab(entry.sql, source.name, at);
+  openSqlTab(entry.sql, source.name, at, params);
   const opened = dataTabsStore.getState().sessions[dataSessionKey(at)]?.active;
 
   if (opened != null && runsOnOpen(entry.sql)) queueRun(at, opened);

@@ -3,7 +3,7 @@ import "../../../test/dom.testing.ts";
 import "../../../app/slots.tsx";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
-import { SessionId } from "@polaris/protocol";
+import { type DataValue, SessionId } from "@polaris/protocol";
 import { TooltipProvider } from "@polaris/ui";
 import { createStore } from "zustand/vanilla";
 import { type CommandRegistry, createCommandRegistry } from "../../../routes/commands.ts";
@@ -16,7 +16,7 @@ import { DataLayer } from "../data/hooks.tsx";
 import { closeDataTab, dataSessionKey, dataTabsStore, openSqlTab } from "../model/store.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
-import { setSqlSource } from "../sql/state.ts";
+import { readSqlTab, setSqlSource } from "../sql/state.ts";
 import { SqlTabBody } from "./SqlTab.tsx";
 
 afterEach(cleanup);
@@ -25,17 +25,23 @@ const at = { hostKey: "local", sessionId: SessionId.make("s-overdue-totals") };
 
 let next = 0;
 
-const sqlTab = (sql: string, sourceId = "app"): Extract<DataTab, { kind: "sql" }> => ({
+const sqlTab = (
+  sql: string,
+  sourceId = "app",
+  params: ReadonlyArray<DataValue> = []
+): Extract<DataTab, { kind: "sql" }> => ({
   kind: "sql",
   id: `sql-test-${++next}`,
   sourceId,
   sql,
+  params,
   title: `Query ${next}`,
 });
 
 const mount = (
   tab: Extract<DataTab, { kind: "sql" }>,
-  api: DataApi = fixtureDataApi()
+  api: DataApi = fixtureDataApi(),
+  where = at
 ): CommandRegistry => {
   const store = createStore<AppState>(() => ({ ...initialState, density: "calm" }));
   const commands = createCommandRegistry({ platform: "mac" });
@@ -55,7 +61,7 @@ const mount = (
     >
       <TooltipProvider>
         <DataLayer api={api}>
-          <SqlTabBody at={at} tab={tab} />
+          <SqlTabBody at={where} tab={tab} />
         </DataLayer>
       </TooltipProvider>
     </AppProvider>
@@ -201,19 +207,22 @@ describe("a running query (F1, F2)", () => {
     expect(streams[0]?.cancelled).toBe(true);
   });
 
-  test("closing its tab cancels it", async () => {
+  test("closing its tab cancels it and drops its state", async () => {
     const { api, streams } = hangingApi();
+    // Its own session, so the tab it opens and closes touches no other test's.
+    const own = { hostKey: "local", sessionId: SessionId.make("s-close-cancels") };
 
-    openSqlTab("select * from invoices", "app", at);
-    const tabs = dataTabsStore.getState().sessions[dataSessionKey(at)];
+    openSqlTab("select * from invoices", "app", own);
+    const tabs = dataTabsStore.getState().sessions[dataSessionKey(own)];
     const tab = tabs?.tabs.find((t) => t.id === tabs.active);
 
     if (tab?.kind !== "sql") throw new Error("no SQL tab");
-    mount(tab, api);
+    mount(tab, api, own);
     await run();
-    act(() => closeDataTab(tab.id, at));
+    act(() => closeDataTab(tab.id, own));
 
     expect(streams[0]?.cancelled).toBe(true);
+    expect(readSqlTab(own, tab).run.status).toBe("idle");
   });
 });
 
@@ -223,4 +232,33 @@ test("a tab opened with a notice says why it didn't run, with no source chosen (
   expect((await screen.findByTestId("data-sql-notice")).textContent).toContain("ghost");
   expect(screen.getByTestId("data-sql-source").textContent).toContain("Choose a data source");
   expect(screen.getByTestId("data-sql-run").hasAttribute("disabled")).toBe(true);
+});
+
+test("a re-run's params show in the run bar and are bound on Run, until unbound", async () => {
+  const api = fixtureDataApi();
+  const sent: Array<QueryStreamInput> = [];
+  const sql = "select * from invoices where customer_id = $1 and status = $2";
+
+  // Answers at once with no rows: the test is about what was sent, not the grid.
+  mount(sqlTab(sql, "app", ["c-42", "overdue"]), {
+    ...api,
+    queryStream: (_at, input, on) => {
+      sent.push(input);
+      on.header({ queryId: `q-${sent.length}`, columns: [] });
+      on.end({ returned: 0, truncated: false, elapsedMs: 1 });
+
+      return () => undefined;
+    },
+  });
+
+  expect(screen.getByTestId("data-sql-params").textContent).toBe("$1 = c-42 · $2 = overdue");
+  await run();
+  await waitFor(() => expect(sent).toHaveLength(1));
+  await waitFor(() => expect(screen.queryByTestId("data-sql-cancel")).toBeNull());
+  fireEvent.click(screen.getByTestId("data-sql-unbind"));
+  await run();
+  await waitFor(() => expect(sent).toHaveLength(2));
+
+  expect(sent.map((input) => input.params)).toEqual([["c-42", "overdue"], undefined]);
+  expect(screen.queryByTestId("data-sql-params")).toBeNull();
 });

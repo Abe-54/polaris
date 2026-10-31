@@ -1,6 +1,8 @@
 /** Data over IPC: main wraps the write-only password before forwarding it to the Host. */
 import {
   DescribeData,
+  GetDataSchemaDiff,
+  type DataSchemaDiff,
   QueryData,
   SaveDataSource,
   RemoveDataSource,
@@ -23,6 +25,7 @@ import { Schema } from "effect";
 const OnHost = { hostKey: Schema.String.check(Schema.isMinLength(1)) };
 
 export const DataRequestInputs = {
+  "data.schemaDiff": Schema.Struct({ ...OnHost, ...GetDataSchemaDiff.payloadSchema.fields }),
   "data.describe": Schema.Struct({ ...OnHost, ...DescribeData.payloadSchema.fields }),
   "data.query": Schema.Struct({ ...OnHost, ...QueryData.payloadSchema.fields }),
   "data.source.save": Schema.Struct({
@@ -37,6 +40,7 @@ export const DataRequestInputs = {
 } as const;
 
 export interface DataRequestOutputs {
+  readonly "data.schemaDiff": DataSchemaDiff;
   readonly "data.describe": SchemaTree | TableDetail;
   readonly "data.query": QueryResult;
   readonly "data.source.save": DataSource;

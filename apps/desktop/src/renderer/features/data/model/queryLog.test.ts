@@ -88,6 +88,17 @@ describe("the Query log's rows", () => {
     expect(logRows([entry], lookups)[0]?.state).toBe(state);
   });
 
+  test("a query outside Polaris keeps the Turn it ran in", () => {
+    const outside = FIXTURE_QUERY_LOG.filter((e) => e.id === "q-outside");
+
+    const [row] = logRows(outside, {
+      ...lookups,
+      turn: (_id, turn) => (turn === "turn-4" ? 4 : null),
+    });
+
+    expect(row?.author.kind === "outside" ? row.author.turn : "not outside").toBe(4);
+  });
+
   test("each author reads as the Query log shows it", () => {
     const byId = new Map(rows.map((row) => [row.id, row]));
 
@@ -107,6 +118,7 @@ describe("the Query log's rows", () => {
         kind: "outside",
         title: "Backfill currency",
         harness: "codex",
+        turn: null,
         command: `psql $DATABASE_URL -c "select count(*) from invoices where currency is null"`,
       },
       {

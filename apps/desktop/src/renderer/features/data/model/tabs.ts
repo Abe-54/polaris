@@ -2,6 +2,7 @@
  * Data's open tabs per Agent Session (DESIGN.md, Data): a Table tab per table and any number of
  * SQL tabs. Pure transitions, so the store and the tests share them.
  */
+import type { DataValue } from "@polaris/protocol";
 
 export type DataTab =
   | {
@@ -16,6 +17,8 @@ export type DataTab =
       readonly id: string;
       readonly sourceId: string;
       readonly sql: string;
+      /** Bound to `$1`, `$2`… on Run: a Query Log re-run keeps the params the query ran with. */
+      readonly params: ReadonlyArray<DataValue>;
       /** "Query 1", "Query 2"…, numbered per session and never reused. */
       readonly title: string;
       /** Shown over the editor until the next run, e.g. why a re-run didn't run. */
@@ -50,11 +53,12 @@ export const openSqlTab = (
   state: DataTabs,
   sql: string,
   sourceId: string,
+  params: ReadonlyArray<DataValue> = [],
   notice?: string
 ): DataTabs => {
   const n = state.nextQuery;
-
-  const opened = { kind: "sql", id: `sql\u0000${n}`, sourceId, sql, title: `Query ${n}` } as const;
+  const id = `sql\u0000${n}`;
+  const opened = { kind: "sql", id, sourceId, sql, params, title: `Query ${n}` } as const;
   const tab: DataTab = notice === undefined ? opened : { ...opened, notice };
 
   return { ...insertAfterActive(state, tab), nextQuery: n + 1 };

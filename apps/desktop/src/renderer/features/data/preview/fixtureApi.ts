@@ -4,6 +4,7 @@
  * can add tables of its own (the bench's 10,000 rows, the worst case's 60 columns).
  */
 import {
+  type DataSchemaDiff,
   DataSource,
   type QueryLogEntry,
   QueryResult,
@@ -174,6 +175,8 @@ export interface FixtureData {
   readonly tables?: FixtureTables;
   /** What each subscribe re-lists, as the Daemon re-discovers then; current sources when omitted. */
   readonly relist?: () => ReadonlyArray<DataSource>;
+  /** `data.schemaDiff`'s answer per Turn (`all` without one); "unsupported" as an older Daemon. */
+  readonly schemaDiff?: ((turn: string) => DataSchemaDiff) | "unsupported";
 }
 
 /** An agent added `currencies` on app this Turn (D1's tree). */
@@ -239,6 +242,19 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
     },
     watchQueryLog: (_at, on) => queryLog.watch(on),
     watchTableChanges: (_at, on) => changes.watch(on),
+    schemaDiff: async (at, turn) => {
+      const answer = data.schemaDiff;
+
+      if (answer === "unsupported")
+        return fail(
+          "Unsupported",
+          "Data is unavailable on this Host. Upgrade the Daemon to use Data."
+        );
+
+      return answer === undefined
+        ? { ok: true, value: { sessionId: at.sessionId, sources: [] } }
+        : { ok: true, value: answer(turn ?? "all") };
+    },
     describe: async (_at, { source, table, sample }) => {
       const reached = reach(source, sources.get());
 
@@ -271,6 +287,15 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
       sources.set([...sources.get().filter((s) => s.name !== input.name), saved]);
 
       return { ok: true, value: saved };
+    },
+    removeSource: async (_at, name) => {
+      const source = sources.get().find((s) => s.name === name);
+
+      if (source?.foundIn.kind !== "manual")
+        return fail("E-DATA-UNKNOWN-SOURCE", "No data source by that name in this checkout.");
+      sources.set(sources.get().filter((s) => s.name !== name));
+
+      return { ok: true, value: null };
     },
     labelSource: async (_at, name, label) => {
       const source = sources.get().find((s) => s.name === name);

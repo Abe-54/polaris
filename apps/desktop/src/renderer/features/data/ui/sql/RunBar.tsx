@@ -2,7 +2,7 @@
  * The SQL tab's run bar (DESIGN.md, Data → SQL tab; Paper D2): the Data Source picker, "Schema
  * loaded 4s ago · 7 tables", Format and Run ⌘↵.
  */
-import type { DataSource } from "@polaris/protocol";
+import type { DataSource, DataValue } from "@polaris/protocol";
 import {
   Button,
   ChevronDownIcon,
@@ -15,6 +15,7 @@ import {
 } from "@polaris/ui";
 import { shortcutLabel } from "../../../../../shared/chord.ts";
 import { useNow } from "../../../../shell/useNow.ts";
+import { cellOf, displayOf } from "../../grid/value.ts";
 import { cmShortcut } from "../../../editor/cm/keys.ts";
 import { schemaLine } from "../../sql/copy.ts";
 import type { CatalogState } from "../../sql/useCatalog.ts";
@@ -24,6 +25,9 @@ export interface RunBarProps {
   readonly source: DataSource | undefined;
   readonly catalog: CatalogState;
   readonly running: boolean;
+  /** A re-run's params, bound to `$1`, `$2`… on Run. */
+  readonly params: ReadonlyArray<DataValue>;
+  readonly onUnbind: () => void;
   /** Why Format last failed, until the text changes. */
   readonly formatProblem: string | null;
   readonly onSource: (name: string) => void;
@@ -52,6 +56,32 @@ const SchemaStatus = ({ catalog }: { readonly catalog: CatalogState }) => {
   return catalog.status === "loading" ? <span>Reading the schema…</span> : null;
 };
 
+/** "$1 = c-42 · $2 = overdue": what Run binds, with Unbind to run the text alone. */
+const Params = ({
+  params,
+  onUnbind,
+}: {
+  readonly params: ReadonlyArray<DataValue>;
+  readonly onUnbind: () => void;
+}) => {
+  const bound = params.map((p, i) => `$${i + 1} = ${displayOf(cellOf(p))}`).join(" · ");
+
+  return (
+    <span className="flex min-w-0 shrink items-center gap-1.5">
+      <span
+        className="text-micro text-text-default min-w-0 truncate font-mono"
+        title={bound}
+        data-testid="data-sql-params"
+      >
+        {bound}
+      </span>
+      <Button variant="ghost" size="sm" onClick={onUnbind} data-testid="data-sql-unbind">
+        Unbind
+      </Button>
+    </span>
+  );
+};
+
 const PlayGlyph = () => (
   <svg width="8" height="10" viewBox="0 0 8 10" aria-hidden="true">
     <path d="M1 1.2v7.6L7.2 5z" fill="currentColor" />
@@ -63,6 +93,8 @@ export const RunBar = ({
   source,
   catalog,
   running,
+  params,
+  onUnbind,
   formatProblem,
   onSource,
   onFormat,
@@ -102,6 +134,7 @@ export const RunBar = ({
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+    {params.length === 0 ? null : <Params params={params} onUnbind={onUnbind} />}
     <span className="text-caption text-text-subtle min-w-0 flex-1 truncate">
       {formatProblem === null ? (
         <SchemaStatus catalog={catalog} />

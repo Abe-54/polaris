@@ -1,0 +1,28 @@
+/** RX probe: read-only escapes through X's executeRead on disposable databases. Not committed. */
+import { SQL } from "bun";
+import { DataSource } from "@polaris/protocol";
+import { Redacted } from "effect";
+import { parseConnection } from "./connection.ts";
+import { executeRead } from "./execution.ts";
+import { DataPools, sqlOptions } from "./pools.ts";
+
+const URLS = {
+  postgres: process.env.RX_PG_URL!,
+  mysql: process.env.RX_MYSQL_URL!,
+} as const;
+export function setup(engine: "postgres" | "mysql") {
+  const { connection } = parseConnection({ name: "rx", url: Redacted.make(URLS[engine]), foundIn: { kind: "manual" } })!;
+  const source = new DataSource({ id: `rx-${engine}`, name: "rx", engine, host: connection.hostname,
+    port: connection.port, database: connection.database, user: connection.username, locality: "local",
+    foundIn: { kind: "manual" }, access: "read", writes: "ask", label: { text: "", colour: "none" }, reachable: true });
+  const admin = new SQL({ ...sqlOptions(source, connection), max: 4, allowPublicKeyRetrieval: engine === "mysql" });
+  const pools = new DataPools();
+  const run = (sql: string, opts: { limit?: number; timeoutMs?: number; signal?: AbortSignal; params?: never[] } = {}) =>
+    executeRead(pools, { source, connection, sql, params: opts.params ?? [], limit: opts.limit ?? 200,
+      timeoutMs: opts.timeoutMs ?? 30000 }, opts.signal ?? new AbortController().signal);
+  const outcome = async (sql: string) => {
+    try { const r = await run(sql); return `ok ${JSON.stringify(r.rows).slice(0, 80)}`; }
+    catch (e) { const x = e as { code?: string; message?: string }; return `${x.code} ${String(x.message).slice(0, 90)}`; }
+  };
+  return { source, connection, admin, pools, run, outcome };
+}

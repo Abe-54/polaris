@@ -12,6 +12,7 @@ import {
   setSqlText,
   type SqlTab,
   takeQueuedRun,
+  unbindSqlParams,
   useSqlTab,
 } from "../sql/state.ts";
 import { reloadSchema, useCatalog } from "../sql/useCatalog.ts";
@@ -66,6 +67,8 @@ export const SqlTabBody = ({ at, tab }: DataTabProps<SqlTab>) => {
         source={source}
         catalog={catalog}
         running={running}
+        params={state.params}
+        onUnbind={() => unbindSqlParams(at, tab)}
         formatProblem={formatProblem}
         onSource={(name) => setSqlSource(at, tab, name)}
         onFormat={() => void format()}

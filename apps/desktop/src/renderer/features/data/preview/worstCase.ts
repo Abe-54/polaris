@@ -207,9 +207,9 @@ export const WORST_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
 ];
 
 /** The worst case behind the fixture api: the 400-table schema for the long-named replica. */
-export const worstCaseDataApi = (): DataApi =>
+export const worstCaseDataApi = (extra: ReadonlyArray<DataSource> = []): DataApi =>
   fixtureDataApi({
-    sources: WORST_SOURCES,
+    sources: [...WORST_SOURCES, ...extra],
     queryLog: WORST_QUERY_LOG,
     tableChanges: WORST_CHANGES,
     schema: (name) => (name === REPLICA.name ? WORST_SCHEMA : FIXTURE_SCHEMA),

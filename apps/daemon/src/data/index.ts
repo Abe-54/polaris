@@ -24,12 +24,13 @@ import {
   type RemoveDataSource,
   type LabelDataSource,
 } from "@polaris/protocol";
-import { Context, Effect, Layer, Predicate, Stream, type Redacted } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Stream, type Redacted } from "effect";
 import type { DataConnection } from "./connection.ts";
 
 export type { DataConnection } from "./connection.ts";
 
 import { sources, sourceDependencies } from "./sources.ts";
+import { SchemaSnapshots } from "./schemaSnapshots.ts";
 import { queries } from "./queries.ts";
 import {
   DataApprovalRequired,
@@ -128,8 +129,13 @@ export const DataRpcsLive = DataRpcs.toLayer(
   Effect.gen(function* () {
     const sources = yield* DataSources;
     const queries = yield* DataQueries;
+    const snapshots = yield* Effect.serviceOption(SchemaSnapshots);
 
     return {
+      "data.schemaDiff": (input) =>
+        Option.isSome(snapshots)
+          ? snapshots.value.get(input)
+          : Effect.fail(new Unsupported({ capability: "data.schemaDiff" })),
       "data.sources.watch": (input) => sources.watch(input).pipe(Stream.mapError(wireFailure)),
       "data.describe": (input) => queries.describe(input).pipe(Effect.mapError(wireFailure)),
       "data.query": (input) => queries.query(input).pipe(Effect.mapError(wireFailure)),

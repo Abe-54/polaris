@@ -14,6 +14,8 @@ import type { MarkSeverity } from "../model/marks.ts";
 import type { PatchFileStatus } from "../model/patch.ts";
 import { ReviewFileMenu } from "./fileMenu.tsx";
 import { IntentGlyph } from "./IntentGlyph.tsx";
+import { isMigrationPath } from "../schema/model.ts";
+import { openSchemaDiff, useSchemaLink } from "../schema/store.ts";
 
 export interface HeaderModel {
   readonly path: string;
@@ -119,6 +121,27 @@ const Divider = ({ divider }: { readonly divider: DividerRow }) => {
   );
 };
 
+/** A migration's link to the Schema Diff it caused (DESIGN.md, Data → In Review). */
+const SchemaLink = ({ path }: { readonly path: string }) => {
+  const link = useSchemaLink();
+
+  if (link === null || !isMigrationPath(path)) return null;
+
+  return (
+    <button
+      type="button"
+      data-testid="review-schema-link"
+      onClick={(event) => {
+        event.stopPropagation();
+        openSchemaDiff(link.subjectKey, link.sourceId);
+      }}
+      className="text-caption text-text-subtle hover:text-text-default shrink-0 cursor-default"
+    >
+      Schema diff
+    </button>
+  );
+};
+
 const Header = ({ id }: { readonly id: string }) => {
   const row = useStore(headerStore, (s) => s.rows[id]);
   const actions = useStore(headerStore, (s) => s.actions);
@@ -173,6 +196,7 @@ const Header = ({ id }: { readonly id: string }) => {
             </span>
           )}
           <span className="flex-1" />
+          <SchemaLink path={row.path} />
           {row.note !== null && (
             <span className="text-caption text-text-subtle shrink-0">{row.note}</span>
           )}

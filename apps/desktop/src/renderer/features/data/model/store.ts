@@ -2,7 +2,7 @@
  * The tab store: each Agent Session's tabs, and which session Data shows. `openTable` and
  * `openSqlTab` act on the shown session unless given one, so "Open in Data" can target any.
  */
-import type { SessionId } from "@polaris/protocol";
+import type { DataValue, SessionId } from "@polaris/protocol";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import * as tabs from "./tabs.ts";
@@ -43,8 +43,13 @@ export const showDataSession = (at: DataSessionKey | null) =>
 export const openTable = (sourceId: string, table: string, at?: DataSessionKey) =>
   update(at, (s) => tabs.openTable(s, sourceId, table));
 
-export const openSqlTab = (sql: string, sourceId: string, at?: DataSessionKey, notice?: string) =>
-  update(at, (s) => tabs.openSqlTab(s, sql, sourceId, notice));
+export const openSqlTab = (
+  sql: string,
+  sourceId: string,
+  at?: DataSessionKey,
+  params: ReadonlyArray<DataValue> = [],
+  notice?: string
+) => update(at, (s) => tabs.openSqlTab(s, sql, sourceId, params, notice));
 
 export const focusDataTab = (id: string, at?: DataSessionKey) =>
   update(at, (s) => tabs.focusTab(s, id));
