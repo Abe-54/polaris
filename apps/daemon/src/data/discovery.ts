@@ -1,12 +1,10 @@
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir } from "node:fs/promises";
 import { Option, Redacted, Schema } from "effect";
 import { connectionUrl, metadata, sourceName, type Candidate } from "./connection.ts";
-import { blocks, literalTarget, unquote } from "./literals.ts";
+import { blocks, namedBlocks, literalTarget, unquote } from "./literals.ts";
 import { composeSources, throughCompose } from "./formats.ts";
 
-export const read = (checkout: string, file: string) =>
-  readFile(join(checkout, file), "utf8").catch(() => "");
+import { read } from "./read.ts";
 
 const envValues = (text: string) => {
   const values: Record<string, string> = {};
@@ -14,7 +12,11 @@ const envValues = (text: string) => {
   for (const line of text.split(/\r?\n/)) {
     const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
 
-    if (match?.[1] && match[2] !== undefined) values[match[1]] = unquote(match[2]);
+    if (match?.[1] && match[2] !== undefined) {
+      const value = unquote(match[2]);
+
+      if (!/\$(?:\{|[A-Za-z_])/.test(value)) values[match[1]] = value;
+    }
   }
 
   return values;
@@ -66,16 +68,15 @@ const frameworkObject = (
   ];
 };
 
-const prisma = (text: string, file: string, env: Record<string, string>) => {
+export const prisma = (text: string, file: string, env: Record<string, string>) => {
   const found: Candidate[] = [];
 
-  for (const datasource of text.matchAll(/datasource\s+(\w+)\s*\{([^}]+)\}/g)) {
-    const body = datasource[2] ?? "";
+  for (const { name, body } of namedBlocks(text, /\bdatasource\s+(\w+)\s*\{/g)) {
     const key = /\burl\s*=\s*env\(["']([^"']+)["']\)/.exec(body)?.[1];
     const literal = /\burl\s*=\s*["']([^"']+)["']/.exec(body)?.[1];
     const url = key ? env[key] : literal;
 
-    if (url) found.push(candidate(key ?? datasource[1] ?? "app", url, file, key ?? "url"));
+    if (url) found.push(candidate(key ?? name, url, file, key ?? "url"));
   }
 
   return found;
@@ -150,27 +151,33 @@ const rails = (text: string, file: string, env: Record<string, string>) => {
 };
 
 /** Reads only known configuration files and one directory level for Django projects. No code is loaded. */
-export const discover = async (checkout: string): Promise<Candidate[]> => {
+export const discover = async (checkout: string, signal?: AbortSignal): Promise<Candidate[]> => {
   const entries = await readdir(checkout, { withFileTypes: true }).catch(() => []);
   const env: Record<string, string> = {};
   const origins = new Map<string, string>();
 
-  const envFiles = entries
-    .filter((e) => e.isFile() && /^\.env(?:\.[\w.-]+)?$/.test(e.name))
-    .map((e) => e.name)
-    .sort((a, b) => envRank(a) - envRank(b) || a.localeCompare(b));
+  const envFiles = [".env", ".env.local", ".env.development", ".env.development.local"];
 
-  for (const file of envFiles)
+  for (const file of envFiles) {
+    signal?.throwIfAborted();
+
     for (const [key, value] of Object.entries(envValues(await read(checkout, file)))) {
       env[key] = value;
       origins.set(key, file);
     }
+  }
 
-  const found: Candidate[] = Object.entries(env)
-    .filter(([key]) =>
-      /^(DATABASE_URL|DIRECT_URL|POSTGRES_URL\w*|MYSQL_URL|\w+_DATABASE_URL)$/.test(key)
-    )
-    .map(([key, url]) => candidate(key, url, origins.get(key) ?? ".env", key, "env"));
+  const found = envCandidates(env, (key) => origins.get(key) ?? ".env");
+
+  for (const environment of ["production", "staging", "test"]) {
+    const file = `.env.${environment}`;
+    found.push(
+      ...envCandidates(envValues(await read(checkout, file)), () => file).map((item) => ({
+        ...item,
+        name: `${item.name} (${environment})`,
+      }))
+    );
+  }
 
   const frameworkFiles = [
     "schema.prisma",
@@ -189,6 +196,7 @@ export const discover = async (checkout: string): Promise<Candidate[]> => {
   ];
 
   for (const file of frameworkFiles) {
+    signal?.throwIfAborted();
     const text = await read(checkout, file);
 
     if (file.endsWith(".prisma")) found.push(...prisma(text, file, env));
@@ -213,14 +221,9 @@ export const discover = async (checkout: string): Promise<Candidate[]> => {
   });
 };
 
-const envRank = (file: string) => {
-  if (file === ".env") return 0;
-
-  if (file === ".env.local") return 3;
-
-  if (file === ".env.development") return 2;
-
-  if (file === ".env.development.local") return 4;
-
-  return 1;
-};
+const envCandidates = (env: Record<string, string>, file: (key: string) => string) =>
+  Object.entries(env)
+    .filter(([key]) =>
+      /^(DATABASE_URL|DIRECT_URL|POSTGRES_URL\w*|MYSQL_URL|\w+_DATABASE_URL)$/.test(key)
+    )
+    .map(([key, url]) => candidate(key, url, file(key), key, "env"));

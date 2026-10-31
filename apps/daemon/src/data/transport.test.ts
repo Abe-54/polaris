@@ -115,7 +115,7 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
         expect(snapshots[0]?.[0]).toMatchObject({
           name: "manual",
           database: "ledger",
-          locality: "local",
+          locality: "remote",
           label: { text: "LOCAL", colour: "none" },
         });
         expect(JSON.stringify({ saved, labelled, snapshots })).not.toMatch(
