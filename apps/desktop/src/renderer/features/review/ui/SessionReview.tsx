@@ -20,6 +20,7 @@ import { reviewSlots, subjectKey } from "../surface.ts";
 import { ReviewBody } from "./ReviewBody.tsx";
 import { SessionHeader } from "./SubjectHeader.tsx";
 import { useWorkerCaption } from "../constellation/useWorkerCaption.ts";
+import { useReviewSchema } from "../schema/useReviewSchema.ts";
 
 const ALL: TurnPick = { kind: "all" };
 
@@ -45,6 +46,7 @@ export const SessionReview = ({ subject }: { readonly subject: SessionSubject })
     session === null ? undefined : (workspaces?.get(session.workspaceId)?.name ?? undefined);
 
   const worker = useWorkerCaption(hostKey, sessionId);
+  const schema = useReviewSchema({ hostKey, sessionId, host, turns, pick, views: model.turns });
 
   const caption = [
     session === null ? null : harnessHue(session.harness).name,
@@ -82,6 +84,7 @@ export const SessionReview = ({ subject }: { readonly subject: SessionSubject })
           session === null ? null : { hostKey, root: session.cwd, workspaceId: session.workspaceId }
         }
         diff={diff}
+        schema={schema}
         pullViewed={null}
         mergeBase={null}
         session={{
