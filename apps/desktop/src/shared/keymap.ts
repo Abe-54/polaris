@@ -9,6 +9,7 @@ import { Predicate } from "effect";
 import { acceleratorLabel, currentKeyPlatform, type KeyPlatform } from "./chord.ts";
 import { DATA_BINDINGS, type DataCommandId } from "./keymapData.ts";
 import { DIFF_BINDINGS, type DiffCommandId } from "./keymapDiff.ts";
+import { TRACES_BINDINGS, type TracesCommandId } from "./keymapTraces.ts";
 import { VIEW_BINDINGS, type ViewCommandId } from "./keymapView.ts";
 
 export type CommandId =
@@ -52,6 +53,7 @@ export type CommandId =
   | "editor.inlineChat"
   | "editor.addToSession"
   | DataCommandId
+  | TracesCommandId
   | "editor.markdownPreview"
   | "git.writeMessage"
   | "editor.save"
@@ -424,6 +426,7 @@ export const KEYMAP: ReadonlyArray<KeyBinding> = [
     palette: WORKSPACE({ keywords: ["prompt", "message"] }),
   },
   ...DATA_BINDINGS,
+  ...TRACES_BINDINGS,
   {
     id: "session.interrupt",
     title: "Stop the turn",

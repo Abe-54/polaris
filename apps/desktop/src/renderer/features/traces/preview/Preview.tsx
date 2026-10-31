@@ -23,6 +23,7 @@ import { DataLayer } from "../../data/data/hooks.tsx";
 import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import { TracesLayer } from "../data/hooks.tsx";
 import { fixtureTracesApi } from "./fixtureApi.ts";
+import { withLargeTrace } from "./large.ts";
 import {
   FIXTURE_CHECKOUT,
   FIXTURE_SESSION,
@@ -133,7 +134,7 @@ export const mountTracesPreview = (
 ) => {
   const { view } = previewOf(hash);
   const store = createStore<AppState>(() => ({ ...appState(view), ...shown }));
-  const api = fixtureTracesApi(sceneOf(hash));
+  const api = withLargeTrace(hash, fixtureTracesApi(sceneOf(hash)));
 
   const connection: Connection = {
     store,

@@ -1,16 +1,74 @@
 /**
- * Placeholder: the `Traces | Profiles` switch, the filter well, traces under Turn kickers and
- * "Agents in this worktree" (DESIGN.md, Traces → Sidebar) replace this file.
+ * Traces' sidebar (DESIGN.md, Traces → Sidebar; Paper T1): the Workspace header, the filter well,
+ * traces under Turn kickers newest first, and "Agents in this worktree" at the foot. While the
+ * Host is Reconnecting or Offline it shows the last answer, dimmed (rule/remote-is-normal).
  */
+import type { TraceFilter } from "@polaris/protocol";
+import { cn } from "@polaris/ui";
+import { useRef, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
 import { selectTrace } from "../model/store.ts";
+import { AgentsHere } from "./sidebar/AgentsHere.tsx";
+import { FilterWell } from "./sidebar/FilterWell.tsx";
+import { Header } from "./sidebar/Header.tsx";
+import { TraceList } from "./sidebar/TraceList.tsx";
 import type { TracesSlotProps } from "./slots.ts";
 
-export const TracesSidebar = ({ at, hostKey, workspaceId, traceId }: TracesSlotProps) => {
-  const workspace = useApp((s) => s.hostModels[hostKey]?.workspaces.get(workspaceId));
-  const snapshot = useTraces(at);
-  const traces = snapshot.status === "ready" ? snapshot.value.traces : [];
+const Quiet = ({ children }: { readonly children: string }) => (
+  <p className="text-caption text-text-subtle px-2 py-2" data-testid="traces-sidebar-quiet">
+    {children}
+  </p>
+);
+
+const Body = ({
+  props,
+  filter,
+}: {
+  readonly props: TracesSlotProps;
+  readonly filter: TraceFilter | undefined;
+}) => {
+  const { at, traceId } = props;
+  const answer = useTraces(at, filter);
+  // A new filter reads again; the last list stays until its answer comes.
+  const last = useRef(answer);
+
+  if (answer.status !== "loading") last.current = answer;
+  const snapshot = last.current;
+
+  const latestTurn = useApp(
+    (s) => s.hostModels[at.hostKey]?.sessions.get(at.sessionId)?.session.turnCount ?? null
+  );
+
+  if (snapshot.status === "loading") return null;
+
+  if (snapshot.status === "failed") return <Quiet>{snapshot.error.message}</Quiet>;
+  const { traces, total } = snapshot.value;
+
+  if (traces.length === 0)
+    return <Quiet>{filter === undefined ? "No traces yet" : "No traces match the filter"}</Quiet>;
+
+  return (
+    <>
+      <TraceList
+        traces={traces}
+        openId={traceId}
+        latestTurn={latestTurn}
+        onOpen={(id) => selectTrace(at, id)}
+      />
+      {total > traces.length ? (
+        <Quiet>{`The newest ${traces.length} of ${total}; filter to find older ones`}</Quiet>
+      ) : null}
+    </>
+  );
+};
+
+export const TracesSidebar = (props: TracesSlotProps) => {
+  const [filter, setFilter] = useState<TraceFilter | undefined>(undefined);
+
+  const connected = useApp(
+    (s) => s.hosts.find((h) => h.key === props.hostKey)?.status.state === "connected"
+  );
 
   return (
     <aside
@@ -18,29 +76,20 @@ export const TracesSidebar = ({ at, hostKey, workspaceId, traceId }: TracesSlotP
       data-testid="traces-sidebar"
       className="flex min-h-0 w-[270px] flex-1 flex-col"
     >
-      <div className="px-panel pt-panel flex min-h-0 flex-col gap-3">
-        <h1 className="text-heading text-text-strong min-w-0 truncate">{workspace?.name ?? ""}</h1>
-        <p className="text-micro text-text-subtle font-mono tracking-wide uppercase">
-          Traces · {snapshot.status === "ready" ? snapshot.value.total : 0}
-        </p>
-        <ul className="flex min-h-0 flex-col overflow-auto">
-          {traces.map((trace) => (
-            <li key={trace.id}>
-              <button
-                type="button"
-                aria-pressed={trace.id === traceId}
-                onClick={() => selectTrace(at, trace.id)}
-                className="text-code-inline aria-pressed:bg-row-selected rounded-row flex h-7 w-full cursor-default items-center justify-between gap-2 px-2 font-mono"
-              >
-                <span className="text-text-default truncate">{trace.root}</span>
-                <span className="text-text-subtle tabular shrink-0">
-                  {Math.round(trace.durationMs)} ms
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      <div className="px-panel pt-panel flex flex-col gap-[calc(var(--spacing-panel)*0.75)] pb-1">
+        <Header {...props} />
+        <FilterWell onFilter={setFilter} />
       </div>
+      <div
+        className={cn(
+          "px-panel flex min-h-0 flex-1 flex-col overflow-y-auto pb-2",
+          !connected && "opacity-(--opacity-dimmed)"
+        )}
+        data-testid="traces-sidebar-body"
+      >
+        <Body props={props} filter={filter} />
+      </div>
+      <AgentsHere at={props.at} />
     </aside>
   );
 };
