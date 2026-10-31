@@ -14,6 +14,7 @@ import {
   TableSummary,
   TurnId,
 } from "@polaris/protocol";
+import type { SessionLookup } from "../model/queryLog.ts";
 
 export const FIXTURE_NOW = Date.parse("2026-10-30T18:00:00Z");
 
@@ -21,6 +22,35 @@ export const FIXTURE_SESSIONS = {
   overdue: { id: SessionId.make("s-overdue-totals"), title: "Fix overdue totals" },
   backfill: { id: SessionId.make("s-backfill-currency"), title: "Backfill currency" },
 } as const;
+
+/** The two Agent Sessions as the Host's session list has them: Fix overdue totals is Working. */
+export const fixtureSessionLookup: SessionLookup = (id) => {
+  if (id === FIXTURE_SESSIONS.overdue.id)
+    return {
+      title: FIXTURE_SESSIONS.overdue.title,
+      harness: "claude",
+      working: true,
+      turn: {
+        id: TurnId.make("turn-12"),
+        number: 12,
+        startedAt: new Date(FIXTURE_NOW - 125 * 60_000).toISOString(),
+      },
+    };
+
+  if (id === FIXTURE_SESSIONS.backfill.id)
+    return {
+      title: FIXTURE_SESSIONS.backfill.title,
+      harness: "codex",
+      working: false,
+      turn: {
+        id: TurnId.make("turn-5"),
+        number: 5,
+        startedAt: new Date(FIXTURE_NOW - 3 * 60_000).toISOString(),
+      },
+    };
+
+  return null;
+};
 
 const CHECKOUT = "/Users/lucas/code/ledger.worktrees/overdue-totals";
 

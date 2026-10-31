@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { TurnId } from "@polaris/protocol";
-import { FIXTURE_NOW, FIXTURE_QUERY_LOG, FIXTURE_SESSIONS } from "../preview/fixtures.ts";
+import {
+  FIXTURE_NOW,
+  FIXTURE_QUERY_LOG,
+  fixtureSessionLookup as lookup,
+} from "../preview/fixtures.ts";
 import {
   ageText,
   authorText,
@@ -9,28 +12,7 @@ import {
   mentionsTable,
   rowsText,
   runsOnOpen,
-  type SessionLookup,
 } from "./queryLog.ts";
-
-const lookup: SessionLookup = (id) => {
-  if (id === FIXTURE_SESSIONS.overdue.id)
-    return {
-      title: "Fix overdue totals",
-      harness: "claude",
-      working: true,
-      turn: { id: TurnId.make("turn-12"), number: 12 },
-    };
-
-  if (id === FIXTURE_SESSIONS.backfill.id)
-    return {
-      title: "Backfill currency",
-      harness: "codex",
-      working: false,
-      turn: { id: TurnId.make("turn-5"), number: 5 },
-    };
-
-  return null;
-};
 
 const rows = (scope: Parameters<typeof logRows>[2] = null) =>
   logRows(FIXTURE_QUERY_LOG, lookup, scope);

@@ -9,8 +9,12 @@ export interface SessionFacts {
   readonly title: string;
   readonly harness: HarnessKind;
   readonly working: boolean;
-  /** The user Turn in flight or last run: its id and 1-based number. */
-  readonly turn: { readonly id: TurnId; readonly number: number } | null;
+  /** The user Turn in flight or last run: its id, 1-based number and start (ISO). */
+  readonly turn: {
+    readonly id: TurnId;
+    readonly number: number;
+    readonly startedAt: string;
+  } | null;
 }
 
 export type SessionLookup = (id: SessionId) => SessionFacts | null;

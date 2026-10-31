@@ -18,7 +18,10 @@ export const useSessionLookup = (hostKey: string): SessionLookup => {
         title: session.title,
         harness: session.harness,
         working: session.state === "working",
-        turn: turn === null ? null : { id: turn.turnId, number: turn.number },
+        turn:
+          turn === null
+            ? null
+            : { id: turn.turnId, number: turn.number, startedAt: turn.startedAt },
       };
     },
     [sessions]
