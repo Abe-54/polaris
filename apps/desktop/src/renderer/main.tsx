@@ -116,6 +116,9 @@ const completionCardPreview = location.hash.startsWith("#completion-card/");
 // `#edit-prediction/<scene>`: the Editor with an Edit Prediction drawn on fixtures (features/editor/prediction/preview).
 const editPredictionPreview = location.hash.startsWith("#edit-prediction/");
 
+// `#data/<scene>`: Data mode on fixtures, each lane's scenes (features/data/preview/scenes).
+const dataPreview = location.hash.startsWith("#data/");
+
 // `#settings/<scene>`: Settings on worst-case fixtures (features/settings/preview).
 const settingsPreview = location.hash.startsWith("#settings/");
 
@@ -219,6 +222,10 @@ if (root !== null && preview) {
 } else if (root !== null && settingsPreview) {
   void import("./features/settings/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountSettingsPreview(root, location.hash);
+  });
+} else if (root !== null && dataPreview) {
+  void import("./features/data/preview/Preview.tsx").then((m) => {
+    setPreviewDensity = m.mountDataPreview(root, location.hash);
   });
 } else if (root !== null && tabCompletionPreview) {
   void import("./features/settings/editor/preview/Preview.tsx").then((m) => {

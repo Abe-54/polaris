@@ -2,7 +2,6 @@
  * One grid cell (DESIGN.md, Data: Table tab): mono, one clipped line, NULL faint, numbers
  * right-aligned tabular, a foreign key in the link colour with →. `staged` is phase 2's edit.
  */
-import { cn } from "@polaris/ui";
 import { memo } from "react";
 import type { LaidColumn } from "./columns.ts";
 import { cellOf, displayOf, type DataValue } from "./value.ts";
@@ -15,11 +14,33 @@ export interface GridCellProps {
   readonly active: boolean;
   /** A staged edit (phase 2): the modified ground and inset ring (rule/git-is-a-letter). */
   readonly staged?: boolean;
-  readonly onForeignKey?: ((column: LaidColumn, value: DataValue | undefined) => void) | undefined;
+  /** The row height, so one line centres without a wrapper. */
+  readonly height: number;
 }
 
-const BASE = "flex h-full shrink-0 items-center overflow-hidden px-2.5 whitespace-pre";
+const BASE = "h-full shrink-0 overflow-hidden px-2.5 text-ellipsis whitespace-pre";
 
+/** Class names joined by hand: a cell renders thousands of times a second while scrolling. */
+const classes = (column: LaidColumn, kind: string, active: boolean, staged: boolean) => {
+  let name = BASE;
+
+  if (column.numeric) name += " tabular text-right";
+
+  if (kind === "null") name += " text-text-faint";
+  else if (staged) name += " bg-git-modified/12 text-git-modified-text";
+  else if (column.fk != null) name += " text-starlight-text cursor-pointer hover:underline";
+  else name += " text-text-default";
+
+  if (staged) name += " ring-1 ring-inset ring-git-modified/40";
+  else if (active) name += " ring-1 ring-inset ring-starlight";
+
+  return name;
+};
+
+/**
+ * A cell is one element. A foreign key's value carries `data-fk`; the grid follows it on click
+ * or ⌘↵, so cells hold no handlers of their own.
+ */
 export const GridCell = memo(function GridCell({
   column,
   value,
@@ -27,11 +48,11 @@ export const GridCell = memo(function GridCell({
   col,
   active,
   staged = false,
-  onForeignKey,
+  height,
 }: GridCellProps) {
   const cell = cellOf(value);
-  const text = displayOf(cell);
-  const link = column.fk != null && cell.raw !== null && onForeignKey !== undefined;
+  const text = displayOf(cell, column);
+  const link = column.fk != null && cell.raw !== null;
 
   return (
     <div
@@ -42,33 +63,12 @@ export const GridCell = memo(function GridCell({
       data-col={col}
       data-kind={cell.kind}
       data-staged={staged || undefined}
-      style={{ width: column.width }}
-      className={cn(
-        BASE,
-        column.numeric && "tabular justify-end",
-        cell.raw === null ? "text-text-faint" : "text-text-default",
-        staged &&
-          "bg-git-modified/12 text-git-modified-text ring-git-modified/40 ring-1 ring-inset",
-        active && !staged && "ring-starlight ring-1 ring-inset"
-      )}
+      data-fk={link || undefined}
+      data-testid={link ? "data-fk" : undefined}
+      style={{ width: column.width, lineHeight: `${height}px` }}
+      className={classes(column, cell.kind, active, staged)}
     >
-      {link ? (
-        <button
-          type="button"
-          tabIndex={-1}
-          data-testid="data-fk"
-          title={`Open ${column.fk?.table ?? ""} where ${column.fk?.column ?? ""} = ${cell.raw ?? ""}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onForeignKey(column, value);
-          }}
-          className="text-starlight-text min-w-0 cursor-default truncate hover:underline"
-        >
-          {text} →
-        </button>
-      ) : (
-        <span className="min-w-0 truncate">{text}</span>
-      )}
+      {link ? `${text} →` : text}
     </div>
   );
 });

@@ -35,8 +35,9 @@ describe("the Table tab's SQL", () => {
     ).toBe("SELECT * FROM `order``s` LIMIT 200");
   });
 
-  test("a foreign key's filter escapes the value", () => {
-    expect(keyFilter("postgres", "name", "O'Brien")).toBe(`"name" = 'O''Brien'`);
+  test("a foreign key's filter keeps the value inside its literal on either engine", () => {
+    expect(keyFilter("postgres", "name", "O'Brien\\")).toBe(`"name" = 'O''Brien\\'`);
+    expect(keyFilter("mysql", "name", "x\\' or 1=1 -- ")).toBe("`name` = 'x\\\\'' or 1=1 -- '");
   });
 });
 

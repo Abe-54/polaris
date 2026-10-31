@@ -81,11 +81,22 @@ export const groupDigits = (raw: string): string => {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+/** How a column reads its values: numbers grouped even when the driver sends them as strings. */
+export interface DisplayHint {
+  readonly numeric?: boolean;
+}
+
 /** One line for the grid: NULL spelled out, uuids shortened, numbers grouped, newlines shown. */
-export const displayOf = (cell: Cell): string => {
+export const displayOf = (cell: Cell, hint: DisplayHint = {}): string => {
   if (cell.raw === null) return "NULL";
 
-  if (cell.kind === "number") return groupDigits(cell.raw);
+  if (cell.kind === "number" || (hint.numeric === true && cell.kind === "text"))
+    return groupDigits(cell.raw);
+
+  if (cell.kind === "time" || (cell.kind === "text" && TIME.test(cell.raw)))
+    return cell.raw.replace("T", " ").replace(/\.000(?=Z?$)/, "");
 
   if (UUID.test(cell.raw)) return `${cell.raw.slice(0, 4)}…${cell.raw.slice(-3)}`;
   const line = cell.raw.slice(0, DISPLAY_CHARS).replace(/\r?\n/g, "⏎");

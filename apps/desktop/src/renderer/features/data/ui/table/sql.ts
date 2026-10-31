@@ -9,7 +9,12 @@ export type Engine = DataSource["engine"];
 export const quoteIdent = (engine: Engine, name: string) =>
   engine === "mysql" ? `\`${name.replaceAll("`", "``")}\`` : `"${name.replaceAll('"', '""')}"`;
 
-export const quoteValue = (raw: string) => `'${raw.replaceAll("'", "''")}'`;
+/** A string literal; MySQL also reads backslash escapes inside quotes, so those double too. */
+export const quoteValue = (engine: Engine, raw: string) => {
+  const escaped = engine === "mysql" ? raw.replaceAll("\\", "\\\\") : raw;
+
+  return `'${escaped.replaceAll("'", "''")}'`;
+};
 
 /** The filter as typed, without a leading WHERE or trailing semicolons. */
 export const cleanFilter = (filter: string) =>
@@ -45,4 +50,4 @@ export const tableSql = ({ engine, table, filter, orderBy, limit, offset }: Tabl
 
 /** The filter a foreign key opens its table with: the referenced column equal to the value. */
 export const keyFilter = (engine: Engine, column: string, raw: string) =>
-  `${quoteIdent(engine, column)} = ${quoteValue(raw)}`;
+  `${quoteIdent(engine, column)} = ${quoteValue(engine, raw)}`;

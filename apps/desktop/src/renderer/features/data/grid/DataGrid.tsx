@@ -26,6 +26,8 @@ export const GRID_ROW = { calm: 32, balanced: 28, compact: 24 } as const;
 
 const HEADER = 44;
 
+const COLUMN_BLOCK = 8;
+
 /** Until the grid is measured: enough rows and columns for a first paint without a blank frame. */
 const FIRST_RECT = { width: 1200, height: 800 };
 
@@ -63,8 +65,10 @@ interface RowProps {
   readonly selected: boolean;
   readonly activeCol: number | null;
   readonly isStaged: DataGridProps["isStaged"];
-  readonly onForeignKey: DataGridProps["onForeignKey"];
 }
+
+const ROW_CLASS =
+  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono";
 
 const GridRow = memo(function GridRow(props: RowProps) {
   const { index, row, columns, first, last, offset, start, height, gutter, selected } = props;
@@ -83,7 +87,7 @@ const GridRow = memo(function GridRow(props: RowProps) {
         col={col}
         active={props.activeCol === col}
         staged={props.isStaged?.(index, col) ?? false}
-        onForeignKey={props.onForeignKey}
+        height={props.height}
       />
     );
   }
@@ -94,10 +98,7 @@ const GridRow = memo(function GridRow(props: RowProps) {
       aria-rowindex={index + 2}
       aria-selected={selected}
       data-testid="data-grid-row"
-      className={cn(
-        "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono",
-        selected ? "bg-starlight/8" : "hover:bg-fill-hover"
-      )}
+      className={selected ? `${ROW_CLASS} bg-starlight/8` : `${ROW_CLASS} hover:bg-fill-hover`}
       style={{ height, transform: `translateY(${start}px)` }}
     >
       <div
@@ -163,7 +164,7 @@ export const DataGrid = ({
     count: rows.length,
     getScrollElement: () => scroller.current,
     estimateSize: () => height,
-    overscan: 12,
+    overscan: 6,
     paddingStart: HEADER,
     initialRect: FIRST_RECT,
   });
@@ -178,9 +179,15 @@ export const DataGrid = ({
   });
 
   const virtualCols = colVirtualizer.getVirtualItems();
-  const first = virtualCols[0]?.index ?? 0;
-  const last = virtualCols.at(-1)?.index ?? -1;
-  const offset = virtualCols[0]?.start ?? 0;
+  // Whole blocks of columns, so a horizontal scroll re-renders rows only when it crosses one.
+  const first = Math.floor((virtualCols[0]?.index ?? 0) / COLUMN_BLOCK) * COLUMN_BLOCK;
+
+  const last = Math.min(
+    laid.length - 1,
+    (Math.floor((virtualCols.at(-1)?.index ?? -1) / COLUMN_BLOCK) + 1) * COLUMN_BLOCK - 1
+  );
+
+  const offset = colVirtualizer.measurementsCache[first]?.start ?? 0;
   const width = gutter + colVirtualizer.getTotalSize();
   const virtualRows = rowVirtualizer.getVirtualItems();
   const lastRow = virtualRows.at(-1)?.index ?? -1;
@@ -198,32 +205,44 @@ export const DataGrid = ({
     colVirtualizer.scrollToIndex(next.active.col);
   };
 
+  const follow = (at: CellAt) => {
+    const column = laid[at.col];
+
+    if (column?.fk != null) onForeignKey?.(column, rows[at.row]?.[at.col]);
+  };
+
+  const arrow = (move: Move, event: KeyboardEvent<HTMLDivElement>) => {
+    const far = (event.metaKey || event.ctrlKey) && (move === "up" || move === "down");
+    const to = far ? (move === "up" ? "home" : "end") : move;
+
+    focus(
+      moveActive(selection, to, { rows: rows.length, cols: laid.length }, { range: event.shiftKey })
+    );
+  };
+
+  /** ⌘A, ⌘C and ⌘↵ (follow a foreign key); true when the key was one of them. */
+  const chord = (key: string) => {
+    if (key === "a") onSelectionChange(selectAll(selection, rows.length));
+    else if (key === "c" && onCopy !== undefined) onCopy();
+    else if (key === "Enter" && selection.active !== null) follow(selection.active);
+    else return false;
+
+    return true;
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const move = MOVES.get(event.key);
-    const command = event.metaKey || event.ctrlKey;
+    const active = selection.active;
 
     if (move !== undefined) {
       event.preventDefault();
-      const far = command && (move === "up" || move === "down");
-
-      focus(
-        moveActive(
-          selection,
-          far ? (move === "up" ? "home" : "end") : move,
-          { rows: rows.length, cols: laid.length },
-          { range: event.shiftKey }
-        )
-      );
-    } else if (command && event.key === "a") {
+      arrow(move, event);
+    } else if ((event.metaKey || event.ctrlKey) && chord(event.key)) {
       event.preventDefault();
-      onSelectionChange(selectAll(selection, rows.length));
-    } else if (command && event.key === "c" && onCopy !== undefined) {
+    } else if ((event.key === "Enter" || event.key === " ") && active !== null) {
       event.preventDefault();
-      onCopy();
-    } else if ((event.key === "Enter" || event.key === " ") && selection.active !== null) {
-      event.preventDefault();
-      setInspect(selection.active);
-    } else if (event.key === "Escape" && inspect !== null) {
+      setInspect(active);
+    } else if (event.key === "Escape") {
       setInspect(null);
     }
   };
@@ -262,22 +281,29 @@ export const DataGrid = ({
             })
           );
         }}
+        onClick={(event) => {
+          const at = cellAt(event.target);
+
+          if (at !== null && event.target instanceof HTMLElement && event.target.dataset["fk"])
+            follow(at);
+        }}
         onDoubleClick={(event) => setInspect(cellAt(event.target))}
         className="focus-visible:outline-starlight relative min-h-0 flex-1 overflow-auto overscroll-contain [contain:strict] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
       >
-        <div className="relative" style={{ width, height: rowVirtualizer.getTotalSize() }}>
+        <div
+          className="relative min-w-full"
+          style={{ width, height: rowVirtualizer.getTotalSize() }}
+        >
           <div
             role="row"
-            className="border-hairline bg-well sticky top-0 z-[2] flex border-b"
+            className="border-hairline bg-well sticky top-0 z-[2] flex min-w-full border-b"
             style={{ height: HEADER, width }}
           >
             <div className="bg-well sticky left-0 z-[1] shrink-0" style={{ width: gutter }} />
             <div className="shrink-0" style={{ width: offset }} />
-            {virtualCols.map((c) => {
-              const column = laid[c.index];
-
-              return column === undefined ? null : <HeaderCell key={c.index} column={column} />;
-            })}
+            {laid.slice(first, last + 1).map((column, i) => (
+              <HeaderCell key={first + i} column={column} />
+            ))}
           </div>
           {virtualRows.map((r) => {
             const row = rows[r.index];
@@ -297,7 +323,6 @@ export const DataGrid = ({
                 selected={selection.rows.has(r.index)}
                 activeCol={selection.active?.row === r.index ? selection.active.col : null}
                 isStaged={isStaged}
-                onForeignKey={onForeignKey}
               />
             );
           })}
