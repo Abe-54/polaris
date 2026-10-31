@@ -3,10 +3,12 @@
  * new scene is a new key, never an edit to another lane's.
  */
 import type { DataScene } from "./scene.ts";
+import { SQL_SCENES } from "./sql.ts";
 import { TABLE_SCENES } from "./table.ts";
 
 const ALL = {
   ...TABLE_SCENES,
+  ...SQL_SCENES,
 } satisfies Record<string, DataScene>;
 
 const SCENES: ReadonlyMap<string, DataScene> = new Map(Object.entries(ALL));

@@ -453,29 +453,40 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
   }),
 ];
 
-const approvalRequest = {
-  id: RequestId.make("r-analytics-read"),
-  sessionId: FIXTURE_SESSIONS.backfill.id,
-  turnId: TurnId.make("turn-5"),
-  kind: "tool",
-  title: "Read analytics",
-  detail: null,
-  options: [],
-  questions: [],
-  placeholder: null,
-  expiresAt: null,
-  openedAt: new Date(FIXTURE_NOW - 40_000).toISOString(),
-  dataSource: {
-    sourceId: "src-analytics",
-    sourceName: "analytics",
-    engine: "mysql",
-    host: "aws.connect.psdb.cloud",
-    port: 3306,
-    database: "analytics",
-    user: "u_7kq2xmz4p1",
-    branch: { provider: "planetscale", name: "backfill-currency" },
-  },
-} as const;
-
 /** A Data Source Approval as X's event carries it, until the protocol has `dataSource`. */
-export const FIXTURE_DATA_APPROVAL: ApprovalRequest = approvalRequest;
+export const fixtureDataApproval = (
+  sessionId: SessionId,
+  turnId: TurnId,
+  openedAt = new Date(FIXTURE_NOW - 40_000).toISOString()
+): ApprovalRequest => {
+  const request = {
+    id: RequestId.make("r-analytics-read"),
+    sessionId,
+    turnId,
+    kind: "tool",
+    title: "Read analytics",
+    detail: null,
+    options: [],
+    questions: [],
+    placeholder: null,
+    expiresAt: null,
+    openedAt,
+    dataSource: {
+      sourceId: "src-analytics",
+      sourceName: "analytics",
+      engine: "mysql",
+      host: "aws.connect.psdb.cloud",
+      port: 3306,
+      database: "analytics",
+      user: "u_7kq2xmz4p1",
+      branch: { provider: "planetscale", name: "backfill-currency" },
+    },
+  } as const;
+
+  return request;
+};
+
+export const FIXTURE_DATA_APPROVAL = fixtureDataApproval(
+  FIXTURE_SESSIONS.backfill.id,
+  TurnId.make("turn-5")
+);
