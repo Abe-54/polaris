@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Schema } from "effect";
 import {
   ApprovalDecision,
   ApprovalRequest,
@@ -128,4 +129,35 @@ test("F10: replay verifies actual approval events, projection, log and database 
       })
     ).steps
   ).toBe(3);
+}, 60000);
+
+test("withdrawals replay as expired with the recorded reason, separately from denials", async () => {
+  const reason = "The Turn ended";
+
+  const expired = {
+    ...step("expired"),
+    log: new QueryLogEntry({
+      ...Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields))(log("expired")),
+      approval: { id: request.id, status: "expired", reason },
+      error: reason,
+    }),
+    events: [
+      opened,
+      envelope(
+        DomainEvent.cases.ApprovalWithdrawn.make({
+          sessionId: request.sessionId,
+          requestId: request.id,
+          withdrawnBy: "harness",
+          reason,
+        })
+      ),
+    ],
+  };
+
+  expect((await replayDataWrite({ ...trace, steps: [step("pending"), expired] })).steps).toBe(2);
+  await Promise.resolve(
+    expect(
+      replayDataWrite({ ...trace, steps: [step("pending"), { ...expired, log: log("failed") }] })
+    ).rejects.toThrow("persisted evidence")
+  );
 }, 60000);

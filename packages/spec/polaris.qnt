@@ -1325,11 +1325,11 @@ module data_writes {
   action unknown(n: int): bool = all { write.phase == "started", write.sent,
     write' = { ...write, phase: "unknown", runs: 1, affected: n, value: n } }
   action endTurn = write' = { ...write, turn: false,
-    phase: if (write.phase == "pending") "denied" else write.phase,
-    approval: if (write.approval == "pending") "denied" else write.approval }
+    phase: if (write.phase == "pending") "expired" else write.phase,
+    approval: if (write.approval == "pending") "expired" else write.approval }
   action restart = write' = { ...write, turn: false,
-    phase: if (write.phase == "started") "unknown" else if (write.phase == "pending") "denied" else write.phase,
-    approval: if (write.approval == "pending") "denied" else write.approval }
+    phase: if (write.phase == "started") "unknown" else if (write.phase == "pending") "expired" else write.phase,
+    approval: if (write.approval == "pending") "expired" else write.approval }
   action retry = write' = write
   action step = {
     nondet n = Set(0,1,2).oneOf()
@@ -1340,7 +1340,7 @@ module data_writes {
   val safety = all {
     write.claims <= 1, write.runs <= write.claims,
     write.claims > 0 implies write.approval == "approved",
-    write.approval == "denied" implies write.runs == 0,
+    Set("denied","expired").contains(write.approval) implies write.runs == 0,
     write.approval != "none" implies (write.previewed or write.triggers or write.ddl),
     write.dryRuns > 0 implies write.safe and not(write.triggers) and not(write.ddl) and write.external == 0,
     write.value != 0 implies Set("completed","unknown").contains(write.phase),
@@ -1354,8 +1354,8 @@ module data_writes {
     .then(endTurn).then(restart).then(retry).expect(write.phase == "completed" and write.runs == 1 and write.value == 1 and safety)
   run deniedNeverRunsTest = init.then(dryRun(2)).then(request).then(deny).then(retry)
     .expect(write.value == 0 and write.claims == 0 and write.runs == 0 and safety)
-  run turnEndDeniesTest = init.then(dryRun(2)).then(request).then(endTurn).expect(write.approval == "denied" and safety)
-  run restartDeniesTest = init.then(dryRun(2)).then(request).then(restart).expect(write.approval == "denied" and safety)
+  run turnEndExpiresTest = init.then(dryRun(2)).then(request).then(endTurn).expect(write.approval == "expired" and safety)
+  run restartExpiresTest = init.then(dryRun(2)).then(request).then(restart).expect(write.approval == "expired" and safety)
   run countDriftRollsBackTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(execute(2))
     .expect(write.phase == "failed" and write.value == 0 and safety)
   run identityDriftRollsBackTest = init.then(dryRun(2)).then(request).then(allow).then(rows("different")).then(claim).then(execute(2))

@@ -45,7 +45,7 @@ export class WriteApprovalStore {
       Match.tag("ApprovalWithdrawn", ({ requestId, reason }) =>
         this.db
           .query(
-            "UPDATE data_write_requests SET status='denied',reason=? WHERE id=? AND status='pending'"
+            "UPDATE data_write_requests SET status='expired',reason=? WHERE id=? AND status='pending'"
           )
           .run(reason, requestId)
       ),
@@ -85,6 +85,7 @@ export class WriteApprovalStore {
       status: Match.value(row.status).pipe(
         Match.when("pending", () => "pending" as const),
         Match.when("denied", () => "denied" as const),
+        Match.when("expired", () => "expired" as const),
         Match.orElse(() => "approved" as const)
       ),
       reason: row.reason || (row.status === "denied" ? "The user denied this write." : null),

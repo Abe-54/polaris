@@ -24,6 +24,28 @@ const Name = Schema.String.check(Schema.isMinLength(1));
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
+/** Indexes refer to the capped write grids; values remain scrubbed on both sides. */
+export const DataWritePreviewFacts = {
+  redactedCells: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        row: Count,
+        column: Count,
+        changed: Schema.Boolean,
+      })
+    )
+  ),
+  databaseFilledColumns: Schema.optionalKey(Schema.Array(Schema.String)),
+  previewFacts: Schema.optionalKey(
+    Schema.Struct({
+      capped: Schema.Boolean,
+      truncated: Schema.Boolean,
+      readByKey: Schema.Boolean,
+      sequences: Schema.Boolean,
+    })
+  ),
+};
+
 const DataColumn = Schema.Struct({ name: Schema.String, type: Schema.String });
 
 const DataRow = Schema.Array(ScrubbedDataValue).check(Schema.isMaxLength(256));
@@ -187,6 +209,7 @@ export class QueryLogEntry extends Schema.Class<QueryLogEntry>("QueryLogEntry")(
     "dry-run",
     "unknown",
     "cancelled",
+    "expired",
   ]),
   author: Schema.Union([
     Schema.Struct({ kind: Schema.Literal("agent"), sessionId: SessionId, turn: TurnId }),
@@ -203,7 +226,11 @@ export class QueryLogEntry extends Schema.Class<QueryLogEntry>("QueryLogEntry")(
     }),
   ]),
   approval: Schema.optionalKey(
-    Schema.Struct({ id: RequestId, status: Schema.Literals(["pending", "approved", "denied"]) })
+    Schema.Struct({
+      id: RequestId,
+      status: Schema.Literals(["pending", "approved", "denied", "expired"]),
+      reason: Schema.optionalKey(ScrubbedText),
+    })
   ),
   tool: Schema.optionalKey(Schema.String),
   rows: Schema.optionalKey(Count),
