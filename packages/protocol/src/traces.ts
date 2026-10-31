@@ -27,7 +27,12 @@ export const TraceStatus = Schema.Literals(["unset", "ok", "error"]);
 
 export type TraceStatus = typeof TraceStatus.Type;
 
-/** Redacted OTLP attributes. int64 values are decimal strings; bytes are base64 strings. */
+/**
+ * Redacted OTLP attributes. int64 values are decimal strings; bytes are base64 strings.
+ * Attribute keys are retained. Sensitive values are replaced in full by the literal JSON string
+ * "[redacted]", never removed or wrapped in an object. This applies to Span, event, link, resource,
+ * scope and log attributes, and matching values in log bodies.
+ */
 export const TraceAttributes = Schema.Record(Schema.String, Schema.Json);
 
 export type TraceAttributes = typeof TraceAttributes.Type;

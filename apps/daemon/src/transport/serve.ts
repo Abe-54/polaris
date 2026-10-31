@@ -1,4 +1,11 @@
 import { DataDatabase } from "../data/database.ts";
+import {
+  TraceReceiverLive,
+  TraceRuntime,
+  TraceSessions,
+  TraceStore,
+  TracesRpcsLive,
+} from "../traces/index.ts";
 import { DataApprovals } from "../data/approvals.ts";
 import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
 import { QueryLog } from "../data/queryLog.ts";
@@ -134,6 +141,13 @@ export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer
   Layer.provideMerge(HostSecrets.layer)
 );
 
+/** One receiver, one token authority and one lazy trace worker per Host. */
+export const traceServices = TraceReceiverLive.pipe(
+  Layer.provideMerge(TraceRuntime.layer),
+  Layer.provideMerge(TraceSessions.layer),
+  Layer.provideMerge(TraceStore.layer)
+);
+
 export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
@@ -155,6 +169,7 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   Layer.provideMerge(usageServices),
   Layer.provideMerge(ReviewerSessions.layer),
   Layer.provideMerge(dataServices),
+  Layer.provideMerge(traceServices),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -172,6 +187,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
   DataRpcsLive,
+  TracesRpcsLive,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -228,6 +244,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data",
   "data.writes",
   "data.schemaDiff",
+  "traces",
   "constellation",
   "constellation.defaults",
   "extensions",

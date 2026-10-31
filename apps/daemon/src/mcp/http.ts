@@ -13,6 +13,7 @@ import {
 import { DataSources, DataQueries } from "../data/index.ts";
 import { sessionDataTools } from "./sessions/data.ts";
 import { McpTokens } from "./tokens.ts";
+import { loopbackRequest } from "../transport/loopbackHttp.ts";
 
 const Message = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
@@ -39,24 +40,6 @@ const protocolVersion = "2025-11-25";
 
 const rpcError = (id: string | number | null, code: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id, error: { code, message } });
-
-const safeOrigin = (request: Request) => {
-  const origin = request.headers.get("origin");
-
-  if (origin === null) return true;
-
-  try {
-    const url = new URL(origin);
-
-    return (
-      url.protocol === "http:" &&
-      url.hostname === "127.0.0.1" &&
-      url.host === new URL(request.url).host
-    );
-  } catch {
-    return false;
-  }
-};
 
 const responseFor = async (
   binding: McpBinding,
@@ -169,8 +152,7 @@ export const mcpHttp = (
           fetch: async (request) => {
             const url = new URL(request.url);
 
-            if (url.hostname !== "127.0.0.1" || !safeOrigin(request))
-              return new Response(null, { status: 403 });
+            if (!loopbackRequest(request)) return new Response(null, { status: 403 });
             const token = /^\/mcp\/([a-f0-9]{64})$/.exec(url.pathname)?.[1];
 
             const binding =
