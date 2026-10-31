@@ -160,6 +160,8 @@ export const scripted = (details: () => ReadonlyArray<TraceDetail>) => {
     },
     span: () =>
       Promise.resolve({ ok: false, error: { code: "E-TRACE-NOT-FOUND", message: "No span" } }),
+    compare: () =>
+      Promise.resolve({ ok: false, error: { code: "E-TRACE-NONE", message: "No comparison" } }),
   };
 
   return {
