@@ -193,8 +193,12 @@ against a Turn `b`; it explicitly selects that route's earlier attributed traces
 in the checkout, before the target Turn's start and within retention. Omitted
 MCP `a` means Baseline; equal explicit selectors compare with themselves. Turn
 selectors resolve in the caller's Agent Session; Trace selectors resolve in its
-checkout. Baseline as `b`, mixed explicit selector types and Baseline against a
-Trace return `E-INPUT` with accepted input forms. This is the Lead's owner decision
+checkout. Additive `{_tag: "Turns", firstTurnId, lastTurnId}` selects every Turn
+from the first through the last in session order (a user Turn and its
+continuations) and pairs wherever Turn does; `compare.ts` resolves it to Turn ids
+for the worker, and Baseline starts before its first Turn. Baseline as `b`, mixed
+explicit selector types, Baseline against a Trace and a reversed range return
+`E-INPUT` with accepted input forms. This is the Lead's owner decision
 for ENG-660; it supersedes the original contract's absence of a baseline mode.
 Routes are grouped by service and Trace root name, sorted by service then route.
 Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; fewer than

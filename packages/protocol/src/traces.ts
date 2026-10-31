@@ -463,10 +463,15 @@ export const RestartWithProfiling = Rpc.make("profiles.restartWithProfiling", {
   error: ProfileErrors,
 });
 
-/** Tagged selectors distinguish Turn ids and hex Trace ids; Baseline is only valid before a Turn. */
+/**
+ * Tagged selectors distinguish Turn ids and hex Trace ids; Baseline is only valid before a Turn.
+ * Turns selects every Turn from `firstTurnId` through `lastTurnId` in the session, in order
+ * (one user Turn and its continuations); it pairs wherever Turn does.
+ */
 export const TraceCompareSelector = Schema.TaggedUnion({
   Baseline: {},
   Turn: { turnId: TurnId },
+  Turns: { firstTurnId: TurnId, lastTurnId: TurnId },
   Trace: { traceId: TraceIdPrefix },
 });
 
@@ -510,7 +515,7 @@ export const TraceComparison = Schema.Struct({
 
 export type TraceComparison = typeof TraceComparison.Type;
 
-/** Capability `traces.compare`; a Turn selects its attributed Traces, a Trace selects one exact/prefix match. */
+/** Capability `traces.compare`; a Turn (or Turns) selects its attributed Traces, a Trace one exact/prefix match. */
 export const CompareTraces = Rpc.make("traces.compare", {
   payload: { sessionId: SessionId, a: TraceCompareSelector, b: TraceCompareSelector },
   success: TraceComparison,

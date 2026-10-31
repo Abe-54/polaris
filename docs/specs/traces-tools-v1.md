@@ -81,18 +81,23 @@ only a unique matching target gets `dataSource`. A null launched Turn has no lau
 
 ## `compare {a?, b}` (ENG-660)
 
-Selectors are `{_tag: "Turn", turnId}`, `{_tag: "Trace", traceId}` (full or unique
-prefix of at least eight hex characters), or `{_tag: "Baseline"}`. Omitted `a`
-means Baseline; `b` is required. Explicit pairs select two Turns in the caller's
-agent session or two traces in its checkout. The same explicit selector on both
-sides compares it with itself. Baseline is valid only as `a`, against a Turn `b`;
-other combinations return `E-INPUT` with the accepted forms.
+Selectors are `{_tag: "Turn", turnId}`, `{_tag: "Turns", firstTurnId, lastTurnId}`,
+`{_tag: "Trace", traceId}` (full or unique prefix of at least eight hex characters),
+or `{_tag: "Baseline"}`. Turns selects every Turn of the caller's agent session from
+`firstTurnId` through `lastTurnId` in session order: one user Turn and the Harness
+continuations that followed it, as Review groups them (ENG-660). It pairs wherever
+Turn does. Omitted `a` means Baseline; `b` is required. Explicit pairs select two
+Turns or Turn ranges in the caller's agent session, or two traces in its checkout.
+The same explicit selector on both sides compares it with itself. Baseline is valid
+only as `a`, against a Turn or Turns `b`; other combinations, and a range that ends
+before it starts, return `E-INPUT` with the accepted forms. A range end outside the
+session returns `E-TRACE-NOT-FOUND`.
 
 The Lead's owner decision: for a Turn, before means the same service/root route's
 traces in this checkout from earlier Turns within retention, and after means
 that Turn's traces. Baseline includes attributed traces starting before the
-target Turn starts, across agent sessions in this checkout; it excludes the
-target Turn, between-Turn traces, later traces and partial traces. Explicit pairs
+target Turn starts (a range's first Turn), across agent sessions in this checkout;
+it excludes the target Turns, between-Turn traces, later traces and partial traces. Explicit pairs
 use their selected traces instead of searching history. There is no sample cap
 or implicit baseline outside Baseline mode. Reads never pin traces.
 

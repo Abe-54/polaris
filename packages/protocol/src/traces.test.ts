@@ -6,6 +6,7 @@ import { Pairing } from "./extensions.ts";
 import { decideAccess } from "./grants.ts";
 import { PairingId, TurnId } from "./ids.ts";
 import {
+  CompareTraces,
   Profile,
   TraceComparison,
   TraceCompareSelector,
@@ -147,5 +148,28 @@ test("compare wire round-trips legacy Turn pairs and additive Baseline/new-span 
 
   expect(json(Schema.encodeSync(codec)(Schema.decodeUnknownSync(codec)(additive)))).toEqual(
     json(additive)
+  );
+});
+
+test("a Turn range is additive: its wire form names both ends, and Turn pairs decode as before", () => {
+  const payload = Schema.decodeUnknownSync(
+    Schema.fromJsonString(Schema.Struct(CompareTraces.payloadSchema.fields))
+  );
+
+  const wire = (a: string, b: string) => `{"sessionId":"s","a":${a},"b":${b}}`;
+
+  expect(
+    payload(wire('{"_tag":"Baseline"}', '{"_tag":"Turns","firstTurnId":"t4","lastTurnId":"t5"}')).b
+  ).toEqual(
+    TraceCompareSelector.cases.Turns.make({
+      firstTurnId: TurnId.make("t4"),
+      lastTurnId: TurnId.make("t5"),
+    })
+  );
+  expect(() =>
+    payload(wire('{"_tag":"Baseline"}', '{"_tag":"Turns","firstTurnId":"t4"}'))
+  ).toThrow();
+  expect(payload(wire('{"_tag":"Turn","turnId":"t3"}', '{"_tag":"Turn","turnId":"t4"}')).a).toEqual(
+    TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("t3") })
   );
 });

@@ -31,7 +31,14 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
     ...OnCheckout,
     a: TraceCompareSelector,
     b: TraceCompareSelector,
-    baselineStart: Schema.optionalKey(Schema.String),
+    /** Baseline's start, and the Turn ids each Turn or Turns side resolved to, in order. */
+    turns: Schema.optionalKey(
+      Schema.Struct({
+        baselineStart: Schema.optionalKey(Schema.String),
+        a: Schema.optionalKey(Schema.Array(Schema.String)),
+        b: Schema.optionalKey(Schema.Array(Schema.String)),
+      })
+    ),
   },
   List: { ...OnCheckout, filter: TraceFilter },
   Overlap: { ...OnCheckout, start: Schema.String, end: Schema.String },

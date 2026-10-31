@@ -52,20 +52,52 @@ describe("the fixture traces.compare", () => {
   const turn = (n: 10 | 11 | 12) =>
     TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make(`t-overdue-${n}`) });
 
-  test("each service and root on either side, before against after, missing sides empty", () => {
+  const facts = (result: ReturnType<typeof fixtureComparison>) =>
+    result.ok
+      ? result.value.routes.map((r) => [r.route, r.before.count, r.after.count, r.partial ?? null])
+      : result.error.code;
+
+  test("each service and root on either side; under three runs a side, no percentiles", () => {
     const result = fixtureComparison("traces", turn(11), turn(12));
 
-    if (!result.ok) throw new Error(result.error.message);
-    expect(
-      result.value.routes.map((r) => [r.service, r.route, r.before.p50Ms, r.after.p50Ms])
-    ).toEqual([
-      ["ledger-api", "GET /customers/:id", null, 38],
-      ["ledger-api", "GET /invoices?status=overdue", null, 212],
-      ["ledger-api", "POST /invoices/overdue", 122, 840],
-      ["ledger-tests", "test overdue-totals", 1400, 3100],
-      ["settle-job", "settlements.run", 1240, null],
+    expect(facts(result)).toEqual([
+      ["GET /customers/:id", 0, 1, null],
+      ["GET /invoices?status=overdue", 0, 1, null],
+      ["POST /invoices/overdue", 1, 1, null],
+      ["test overdue-totals", 1, 1, null],
+      ["settlements.run", 1, 0, null],
     ]);
-    expect(result.value.routes[0]?.before).toEqual({ p50Ms: null, p95Ms: null, count: 0 });
+    expect(
+      result.ok ? result.value.routes.map((r) => [r.before.p50Ms, r.after.p50Ms]) : null
+    ).toEqual(Array.from({ length: 5 }, () => [null, null]));
+  });
+
+  test("Baseline is every earlier Turn's traces of the later Turn's routes", () => {
+    expect(
+      facts(fixtureComparison("traces", TraceCompareSelector.cases.Baseline.make({}), turn(12)))
+    ).toEqual([
+      ["GET /customers/:id", 0, 1, null],
+      ["GET /invoices?status=overdue", 0, 1, null],
+      ["POST /invoices/overdue", 1, 1, null],
+      ["test overdue-totals", 1, 1, null],
+    ]);
+  });
+
+  test("a Turn range takes every Turn in it, and partial traces are counted apart", () => {
+    const range = TraceCompareSelector.cases.Turns.make({
+      firstTurnId: TurnId.make("t-overdue-10"),
+      lastTurnId: TurnId.make("t-overdue-11"),
+    });
+
+    expect(facts(fixtureComparison("traces", range, turn(12)))).toEqual([
+      ["GET /customers/:id", 0, 1, null],
+      ["GET /health", 1, 0, null],
+      ["GET /invoices?status=overdue", 0, 1, null],
+      ["POST /invoices/import", 0, 0, { before: 1, after: 0 }],
+      ["POST /invoices/overdue", 1, 1, null],
+      ["test overdue-totals", 1, 1, null],
+      ["settlements.run", 1, 0, null],
+    ]);
   });
 
   test("an unknown Turn fails as the Daemon would, rather than comparing nothing", () => {

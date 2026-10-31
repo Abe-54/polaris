@@ -2,14 +2,14 @@
  * A `TracesApi` over the fixtures, for `<TracesLayer api={fixtureTracesApi(scene)}>` in previews
  * and tests. Filters, ordering, limits and id prefixes follow the protocol's documented rules.
  */
-import type {
+import {
   TraceCompareSelector,
-  TraceComparison,
-  TraceDetail,
-  TraceFilter,
-  TraceRouteStats,
-  TraceSummary,
-  TracesSnapshot,
+  type TraceComparison,
+  type TraceDetail,
+  type TraceFilter,
+  type TraceRouteStats,
+  type TraceSummary,
+  type TracesSnapshot,
 } from "@polaris/protocol";
 import { Match } from "effect";
 import type { Result } from "../../../../shared/api.ts";
@@ -103,39 +103,95 @@ export const nearestRank = (values: ReadonlyArray<number>, p: number): number | 
     : (sorted[Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)] ?? null);
 };
 
-const stats = (traces: ReadonlyArray<TraceSummary>): TraceRouteStats => {
+/** The Daemon's rule: fewer than three complete runs on either side gives no percentiles. */
+const MIN_RUNS = 3;
+
+const stats = (traces: ReadonlyArray<TraceSummary>, enough: boolean): TraceRouteStats => {
   const ms = traces.map((t) => t.durationMs);
 
-  return { p50Ms: nearestRank(ms, 50), p95Ms: nearestRank(ms, 95), count: ms.length };
+  return enough
+    ? { p50Ms: nearestRank(ms, 50), p95Ms: nearestRank(ms, 95), count: ms.length }
+    : { p50Ms: null, p95Ms: null, count: ms.length };
 };
 
-/** A selector's traces: a Turn's attributed ones (an unknown Turn fails), or one trace. */
+const notFound = (turnId: string) =>
+  fail("E-TRACE-NOT-FOUND", `No turn ${turnId} in this session`, "Pick another turn");
+
+const baselineMisplaced = () =>
+  fail("E-INPUT", "Baseline can only be a, against a turn.", "Send a turn as b");
+
+const turnNumber = (turnId: string) =>
+  Object.values(FIXTURE_TURNS).find((t) => t.id === turnId)?.number;
+
+/** A Turn or Turns selector's first and last Turn numbers, as the Daemon resolves them. */
+const turnRange = (selector: TraceCompareSelector): Result<readonly [number, number]> | null => {
+  const ends = Match.valueTags(selector, {
+    Turn: ({ turnId }) => [turnId, turnId] as const,
+    Turns: ({ firstTurnId, lastTurnId }) => [firstTurnId, lastTurnId] as const,
+    Baseline: () => null,
+    Trace: () => null,
+  });
+
+  if (ends === null) return null;
+  const [first, last] = ends;
+  const from = turnNumber(first);
+  const to = turnNumber(last);
+
+  if (from === undefined) return notFound(first);
+
+  if (to === undefined) return notFound(last);
+
+  return to < from
+    ? fail("E-INPUT", "The turn range ends before it starts.", "Send the first turn first")
+    : { ok: true, value: [from, to] };
+};
+
+const inTurns = (scene: TracesScene, from: number, to: number) =>
+  details(scene)
+    .map((d) => d.summary)
+    .filter((t) => t.turn !== null && t.turn.number >= from && t.turn.number <= to);
+
+/** A selector's traces: its Turns' attributed ones (an unknown Turn fails), or one trace. */
 const selected = (
   scene: TracesScene,
   selector: TraceCompareSelector
-): Result<ReadonlyArray<TraceSummary>> =>
-  Match.valueTags(selector, {
-    Baseline: () =>
-      fail(
-        "E-INPUT",
-        "This preview requires explicit comparison selectors.",
-        "Use two Turn selectors or two Trace selectors."
-      ),
-    Turn: ({ turnId }): Result<ReadonlyArray<TraceSummary>> => {
-      const traces = details(scene).filter((d) => d.summary.turn?.id === turnId);
+): Result<ReadonlyArray<TraceSummary>> => {
+  const range = turnRange(selector);
 
-      return traces.length === 0 && !Object.values(FIXTURE_TURNS).some((t) => t.id === turnId)
-        ? fail("E-TRACE-NOT-FOUND", `No turn ${turnId} in this session`, "Pick another turn")
-        : { ok: true, value: traces.map((d) => d.summary) };
-    },
-    Trace: ({ traceId }): Result<ReadonlyArray<TraceSummary>> => {
-      const trace = findTrace(scene, traceId);
+  if (range !== null) return range.ok ? { ok: true, value: inTurns(scene, ...range.value) } : range;
 
-      return trace.ok ? { ok: true, value: [trace.value.summary] } : trace;
-    },
-  });
+  if (!TraceCompareSelector.guards.Trace(selector)) return baselineMisplaced();
+  const trace = findTrace(scene, selector.traceId);
+
+  return trace.ok ? { ok: true, value: [trace.value.summary] } : trace;
+};
 
 const routeKey = (t: TraceSummary) => `${t.service}\u0000${t.root}`;
+
+/** Baseline: attributed traces of the after side's routes from Turns before its first. */
+const baselineFor = (
+  scene: TracesScene,
+  b: TraceCompareSelector,
+  after: ReadonlyArray<TraceSummary>
+): Result<ReadonlyArray<TraceSummary>> => {
+  const range = turnRange(b);
+
+  if (range === null) return baselineMisplaced();
+
+  if (!range.ok) return range;
+  const routes = new Set(after.map(routeKey));
+
+  return {
+    ok: true,
+    value: inTurns(scene, 0, range.value[0] - 1).filter((t) => routes.has(routeKey(t))),
+  };
+};
+
+const sideOf = (traces: ReadonlyArray<TraceSummary>, key: string) => {
+  const route = traces.filter((t) => routeKey(t) === key);
+
+  return { complete: route.filter((t) => !t.partial), partial: route.filter((t) => t.partial) };
+};
 
 /** What `traces.compare` would answer: every service and root on either side, sorted. */
 export const fixtureComparison = (
@@ -143,21 +199,32 @@ export const fixtureComparison = (
   a: TraceCompareSelector,
   b: TraceCompareSelector
 ): Result<TraceComparison> => {
-  const before = selected(scene, a);
   const after = selected(scene, b);
 
-  if (!before.ok) return before;
-
   if (!after.ok) return after;
+
+  const before = TraceCompareSelector.guards.Baseline(a)
+    ? baselineFor(scene, b, after.value)
+    : selected(scene, a);
+
+  if (!before.ok) return before;
   const keys = new Map([...before.value, ...after.value].map((t) => [routeKey(t), t]));
 
-  const routes = [...keys.values()]
-    .map((t) => ({
-      service: t.service,
-      route: t.root,
-      before: stats(before.value.filter((x) => routeKey(x) === routeKey(t))),
-      after: stats(after.value.filter((x) => routeKey(x) === routeKey(t))),
-    }))
+  const routes = [...keys.entries()]
+    .map(([key, t]) => {
+      const was = sideOf(before.value, key);
+      const now = sideOf(after.value, key);
+      const enough = was.complete.length >= MIN_RUNS && now.complete.length >= MIN_RUNS;
+      const partial = { before: was.partial.length, after: now.partial.length };
+
+      return {
+        service: t.service,
+        route: t.root,
+        before: stats(was.complete, enough),
+        after: stats(now.complete, enough),
+        ...(partial.before + partial.after === 0 ? undefined : { partial }),
+      };
+    })
     .toSorted((x, y) =>
       x.service === y.service ? x.route.localeCompare(y.route) : x.service.localeCompare(y.service)
     );

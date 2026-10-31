@@ -160,13 +160,7 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
     return records;
   }),
   Match.tag("Compare", (request) =>
-    compareTraces(
-      prune(request.checkout),
-      request.checkout,
-      request.a,
-      request.b,
-      request.baselineStart
-    )
+    compareTraces(prune(request.checkout), request.checkout, request.a, request.b, request.turns)
   ),
   Match.tag("List", (request) =>
     listTraces(prune(request.checkout), request.checkout, request.filter)

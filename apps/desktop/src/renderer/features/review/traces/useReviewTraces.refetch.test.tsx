@@ -1,20 +1,16 @@
-/** @jsxImportSource ../../../../apps/desktop/node_modules/react */
 /**
- * P8U repros on useReviewTraces over the fixture Traces API: refetch and pane behaviour.
- * Each test fails on 99ca0343d and should pass once its finding is fixed.
+ * useReviewTraces over the fixture Traces API: refetch on reconnect and the pane while a pick
+ * loads. Each test failed on 99ca0343d (RPU, P8U).
  */
 import { afterEach, expect, test } from "bun:test";
-import { TurnId } from "../../../../packages/protocol/src/index.ts";
-import { act, cleanup, waitFor } from "./deps.ts";
-import type { TracesApi } from "../../../../apps/desktop/src/renderer/features/traces/index.ts";
-import { fixtureTracesApi } from "../../../../apps/desktop/src/renderer/features/traces/preview/fixtureApi.ts";
-import type { ReviewTurn } from "../../../../apps/desktop/src/renderer/features/review/data/source.ts";
-import { useTracesSection } from "../../../../apps/desktop/src/renderer/features/review/traces/section.ts";
-import {
-  closeTracesCompare,
-  openTracesCompare,
-} from "../../../../apps/desktop/src/renderer/features/review/traces/store.ts";
-import { host, mount, mountWith } from "./harness.tsx";
+import { TurnId } from "@polaris/protocol";
+import { act, cleanup, waitFor } from "@testing-library/react";
+import type { TracesApi } from "../../traces/index.ts";
+import { fixtureTracesApi } from "../../traces/preview/fixtureApi.ts";
+import type { ReviewTurn } from "../data/source.ts";
+import { useTracesSection } from "./section.ts";
+import { closeTracesCompare, openTracesCompare } from "./store.ts";
+import { host, mount, mountWith } from "./daemonFit.testing.tsx";
 
 afterEach(() => {
   closeTracesCompare("s");
@@ -41,7 +37,7 @@ const TURNS: ReadonlyArray<ReviewTurn> = [10, 11, 12].map((number) => ({
 const pick = (number: number) =>
   ({ kind: "turn", turnId: TurnId.make(`t-overdue-${number}`) }) as const;
 
-test("finding P8U-5: a comparison that failed while the Host was away is asked again on reconnect", async () => {
+test("P8U-5: a comparison that failed while the Host was away is asked again on reconnect", async () => {
   const base = fixtureTracesApi();
   let calls = 0;
 
@@ -65,7 +61,7 @@ test("finding P8U-5: a comparison that failed while the Host was away is asked a
   await waitFor(() => expect(result.current?.answer.status).toBe("ready"), { timeout: 500 });
 });
 
-test("finding P8U-6: Route timings keeps the diff pane while a new pick's comparison loads", async () => {
+test("P8U-6: Route timings keeps the diff pane while a new pick's comparison loads", async () => {
   const base = fixtureTracesApi();
   let calls = 0;
 
