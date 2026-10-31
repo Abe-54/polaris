@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { hostView } from "../../../routes/fixtures.testing.ts";
-import { tracesUnavailable } from "./availability.ts";
+import { profilesUnavailable, tracesUnavailable } from "./availability.ts";
 
-const host = (state: "connected" | "reconnecting", capabilities: ReadonlyArray<"traces">) => {
+const host = (
+  state: "connected" | "reconnecting",
+  capabilities: ReadonlyArray<"traces" | "traces.profiles">
+) => {
   const view = hostView("studio", state);
 
   return { ...view, label: "Mac Studio", status: { ...view.status, capabilities } };
@@ -21,5 +24,15 @@ describe("tracesUnavailable", () => {
       tracesUnavailable(host("connected", ["traces"])),
       tracesUnavailable(undefined),
     ]).toEqual([null, null, null]);
+  });
+});
+
+describe("profilesUnavailable", () => {
+  test("a Daemon with traces but not traces.profiles can't list Profiles", () => {
+    expect(profilesUnavailable(host("connected", ["traces"]))).toBe(
+      "Profiles need a newer daemon on Mac Studio"
+    );
+    expect(profilesUnavailable(host("connected", ["traces", "traces.profiles"]))).toBeNull();
+    expect(profilesUnavailable(host("reconnecting", []))).toBeNull();
   });
 });

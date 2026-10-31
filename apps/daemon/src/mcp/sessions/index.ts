@@ -58,7 +58,10 @@ import type { DataSessionTools } from "./data.ts";
 
 import type { TraceSessionTools } from "../tools/traces.ts";
 
+import type { ProfileSessionTools } from "../tools/profile.ts";
+
 export interface SessionTools {
+  readonly profiles?: ProfileSessionTools;
   readonly traces?: TraceSessionTools;
   readonly data?: DataSessionTools;
   /** The session's Turns as text; null when this Daemon doesn't hold the session. */

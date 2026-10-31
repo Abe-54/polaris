@@ -265,9 +265,11 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
       // The fff worker (apps/daemon/src/files/search/fff.ts) is its own entrypoint.
       join(daemonDir, "src", "files", "search", "fffWorker.ts"),
       join(daemonDir, "src", "traces", "worker.ts"),
+      join(daemonDir, "src", "traces", "profiles", "worker.ts"),
     ],
     compile: { target, outfile: binary },
     minify: true,
+
     // Lazily imported commands and Harness drivers become separate chunks, parsed only
     // when imported: `serve` never parses the Claude Agent SDK, `bridge` not the Daemon.
     splitting: true,

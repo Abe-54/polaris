@@ -147,3 +147,148 @@ Raw results are under `docs/reviews/2026-10-31-traces-RT1/`: `before-idle.json`,
 `after-traces-before-close.json` and `retirement-diagnostic.json`.
 Initial sandbox runs could not bind sockets/sample processes; all numbers here
 come from native runs. No production Pi or full release build was run.
+
+## Forwarding (ENG-674, ENG-675)
+
+2026-10-31, native Mac14,13 / M2 Max / Bun 1.4.4, source Daemon over the bridge.
+All runs used the Host's `bench` lease. No committed baseline or threshold changed.
+The assigned-base trace run uses a detached worktree at
+`c4a1ce26f2a8820181b874b28166ee809b8fba6f`. Dependency directories were symlinked
+from P1; the result reports `gitDirty: true`. The driver made no source edits,
+but did not capture a porcelain listing before removing the temporary worktree.
+The P1 runs use the implementation committed with this record. Each full trace run
+sends 200,000 Spans, requires 200 successful responses and checks the final batch
+has 1,000 stored Spans. Concurrent RPCs are sampled, followed by 32 seconds of quiet.
+That quiet sample allows worker retirement but does not require the forwarding
+queue to have drained; pending collector retries can outlast it.
+
+Commands:
+
+```sh
+bun run bench traces --runs 1 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+POLARIS_BENCH_TRACE_FORWARDING=down bun run bench traces --runs 3 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+POLARIS_BENCH_TRACE_FORWARDING=off bun run bench traces --runs 3 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+bun run bench idle --quick --runs 3 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-m31-idle-quick.json
+```
+
+`down` configures the unavailable collector at `127.0.0.1:1`; an exported collector
+that overrides it fails the scenario before ingest. The unconfigured control uses
+the same P1 code with no target, so the forwarding queue receives no batches.
+P1's queue limit is 32 requests / 8 MiB, including headers and URL accounting.
+
+| Metric | Committed baseline | Assigned base, 1 run | P1 unconfigured, median (range), 3 runs | P1 collector down, median (range), 3 runs |
+| --- | ---: | ---: | ---: | ---: |
+| Spans/s | 13322.53 | 16836.27 | 16139.85 (14165.87–16433.85) | 16796.65 (15258.14–16925.70) |
+| Ingest, ms | 15012.16 | 11879.12 | 12391.69 (12170.00–14118.44) | 11907.13 (11816.35–13107.76) |
+| CPU, % one core | 91.53 | 106.20 | 104.45 (98.70–104.84) | 106.60 (102.83–106.91) |
+| Peak RSS over initial, MiB | 153.06 | 185.02 | 197.81 (159.73–199.42) | 217.11 (214.80–222.33) |
+| RSS after quiet, MiB | 184.84 | 292.69 | 304.83 (235.56–305.17) | 303.31 (254.62–321.84) |
+| Concurrent RPC p99, ms | 16.34 | 2.96 | 6.03 (5.89–6.66) | 2.83 (2.49–4.08) |
+
+The assigned base fails the post-quiet RSS gate. Both the P1 unconfigured control and
+the outage run fail the peak and post-quiet RSS gates. These are failed comparisons,
+not performance passes. The single assigned-base sample alone cannot establish a reliable
+regression size. The unconfigured control's peak range also shows substantial
+variation. The existing [ENG-682](https://linear.app/luxdev/issue/ENG-682) follow-up
+covers reconciliation of native RSS and physical footprint; this work does not
+resolve that discrepancy or change the metric.
+
+CPU and throughput comparisons carry the runner's busy-machine warning. Busy cores
+at start: committed trace baseline 11.1, assigned base 6.1, P1 unconfigured 3.5, and
+P1 outage 3.2. No controlled CPU/throughput improvement is claimed.
+
+### Queue-cap and profile diagnostics
+
+A controlled, temporary edit changed only the default request count from 32 to 8,
+leaving the 8 MiB byte cap unchanged. Three outage runs produced peak RSS
+199.88 (181.11–210.97) MiB and post-quiet RSS
+308.78 (280.23–320.23) MiB. Both RSS gates still failed;
+12 busy cores at start limit the comparison. The original 32-request default was
+restored after the experiment; no capacity change was adopted from this
+uncontrolled comparison.
+
+```sh
+POLARIS_BENCH_TRACE_FORWARDING=down bun run bench traces --runs 1 --profile --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+```
+
+The scenario now captures heaps after ingest and after the quiet sample when
+profiling is requested. The profiled run reported peak RSS
+184.42 MiB and post-quiet RSS
+83.00 MiB and passed the comparison. Heap snapshots perturb
+collection and memory use, so that result cannot replace the failed unprofiled
+runs. The V8-format snapshots reported ArrayBuffer self sizes of 16,030,236 bytes
+after ingest and 15,159,501 after quiet across the process; these are not a
+measurement of the forwarding queue alone and do not explain native RSS.
+`heap-summary.json` contains aggregate counts, without heap contents. CPU profiles
+and heaps remain in the ignored local result directory
+`2026-10-31T22-07-42-359Z/traces-run1`; they are not shipped as fixtures.
+
+### Idle
+
+The pre-integration and final three-run idle comparisons both pass their gates.
+The initial run was recorded on the dirty P1 worktree before receiver/runtime
+integration. Both use the existing 10-second quick windows after a settle.
+
+| Metric | Committed baseline | Pre-integration median, 3 runs | P1 final median (range), 3 runs |
+| --- | ---: | ---: | ---: |
+| Client CPU, % one core | 0.52 | 0.58 | 0.58 (0.49–0.72) |
+| Client footprint, MiB | 98.11 | 64.83 | 65.58 (64.70–65.79) |
+| Client wakeups/s | 13.10 | 9.60 | 10.20 (10.10–10.40) |
+| No-client CPU, % one core | 0.36 | 0.19 | 0.25 (0.23–0.29) |
+| No-client RSS, MiB | 133.41 | 100.80 | 109.61 (107.56–109.64) |
+| No-client footprint, MiB | 97.19 | 64.56 | 64.88 (64.49–65.42) |
+| No-client wakeups/s | 10.50 | 6.90 | 7.40 (7.40–7.40) |
+| Processes | 1.00 | 1.00 | 1.00 (1.00–1.00) |
+
+Client maximum CPU was 6.05% versus the baseline's 1.33%, an informational,
+non-gating result. Idle background load was 4.4 busy cores in the baseline, 12 in
+the initial run and 4.2 in the final run; CPU comparisons carry the same warning.
+An unused forwarding queue adds no timer.
+
+Raw results are under
+[`packages/bench/measurements/eng-674`](../../../../packages/bench/measurements/eng-674).
+They are evidence, not new baselines. The earlier trace run interrupted during
+Host resource exhaustion and the retry that found port 4319 occupied produced no
+usable before/after comparison and are excluded. No production Pi or hosted
+collector measurement is claimed.
+
+## Turn comparison (ENG-660)
+
+2026-10-31, same Mac14,13 / M2 Max / Bun 1.4.4, one full run per side,
+sequentially under the Host's `bench` lease. Before is an isolated `git archive`
+of assigned base `c4a1ce26f2a8820181b874b28166ee809b8fba6f`; workspace dependency
+links resolve into that archive. After contains P8's compare implementation.
+Both run the existing 200k-Span receiver/SQLite/concurrent-RPC scenario and its
+32-second quiet window. This checks the shared ingest path, not compare-query
+latency. Compare adds only an on-demand worker request and no idle timer.
+
+Command on each source tree:
+
+```sh
+bun packages/bench/src/cli.ts traces --runs 1 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+```
+
+| Metric | Committed baseline | Assigned base | P8 |
+| --- | ---: | ---: | ---: |
+| Spans/s | 13,323 | 17,543 | 17,249 |
+| Ingest, ms | 15,012 | 11,400 | 11,595 |
+| CPU, % one core | 91.53 | 106.2 | 107.2 |
+| Peak RSS over initial, MiB | 153.1 | 202.7 | 184.5 |
+| RSS after quiet, MiB | 184.8 | 309.8 | 292.9 |
+| Concurrent RPC p99, ms | 16.34 | 3.78 | 3.00 |
+
+Both comparisons exit 1: the assigned base fails peak and post-quiet RSS gates;
+P8 fails the post-quiet gate. This reproduces the existing ENG-682 limitation on
+the unchanged base; the committed baseline is unchanged. These single runs do
+not establish a statistically reliable improvement or regression from P8.
+Background load was 2.8/2.4 busy cores; the committed baseline had 11.1, so its
+CPU and throughput comparison carries the runner's warning. The recorded
+one-minute load averages at benchmark start were 6.18 and 4.03.
+
+Logs and raw results from this run are `/private/tmp/p8-leased-bench-base.log`,
+`/private/tmp/p8-leased-bench-after.log`, `/private/tmp/p8-leased-base-bench.json`
+and `/private/tmp/p8-leased-after-bench.json`. An earlier quick run had different
+sizes and 11.9 busy cores and cannot serve as a before/after comparison. An
+initial full archived-base attempt failed because port 4319 was occupied and
+produced no metrics. No production Pi or compare-query latency measurement is
+claimed.

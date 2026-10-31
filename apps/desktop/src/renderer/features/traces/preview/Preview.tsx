@@ -1,122 +1,40 @@
 /**
  * Traces on fixtures, for screenshots: `#traces/<scene>` (traces, empty, unavailable,
- * userExported) renders the whole app on Traces with "Fix overdue totals" in the ledger
- * Workspace selected, its TracesApi the scene's, no Daemon involved.
+ * userExported; `?view=profile` and others in views.ts) renders the whole app on Traces with "Fix
+ * overdue totals" in the ledger Workspace selected, its TracesApi the scene's, no Daemon involved.
+ * `settings` and `page` pick the Workspace's Traces settings and open Settings → Traces (settings.ts).
  */
-import {
-  AgentSession,
-  Capability,
-  HostId,
-  Sequence,
-  SessionSummary,
-  Workspace,
-} from "@polaris/protocol";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
-import type { HostView } from "../../../../shared/api.ts";
 import { App } from "../../../app/App.tsx";
 import { createCommandRegistry } from "../../../routes/commands.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
-import { modelFromSnapshot } from "../../../store/hostModel.ts";
-import { type AppState, type Connection, initialState } from "../../../store/store.ts";
+import type { AppState, Connection } from "../../../store/store.ts";
 import { DataLayer } from "../../data/data/hooks.tsx";
 import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import { TracesLayer } from "../data/hooks.tsx";
+import { ProfilesLayer } from "../data/profiles.tsx";
+import { fixtureAppState, HOST, host } from "./appState.ts";
 import { fixtureTracesApi } from "./fixtureApi.ts";
 import { withLargeTrace } from "./large.ts";
+import { TracesSettingsLayer } from "../settings/hooks.tsx";
+import { FIXTURE_SESSION, FIXTURE_SNAPSHOTS, type TracesScene } from "./fixtures.ts";
+import { opensSettings, previewSettingsApi } from "./settings.ts";
 import {
-  FIXTURE_CHECKOUT,
-  FIXTURE_SESSION,
-  FIXTURE_SNAPSHOTS,
-  type TracesScene,
-} from "./fixtures.ts";
-import { isStateView, openViewSpan, previewOf, type PreviewView, silent } from "./views.ts";
+  isStateView,
+  openViewSpan,
+  previewOf,
+  type PreviewView,
+  silent,
+  viewProfilesApi,
+} from "./views.ts";
 
-const HOST = "local";
-
-const NOW = "2026-10-31T14:03:00.000Z";
-
-const host: HostView = {
-  key: HOST,
-  label: "Mac Studio",
-  colour: null,
-  alias: null,
-  kind: "local",
-  proofHarness: false,
-  status: {
-    state: "connected",
-    failure: null,
-    attempt: 0,
-    since: 0,
-    nextAttemptAt: null,
-    host: {
-      hostId: HostId.make("h-studio"),
-      hostname: "studio",
-      platform: "darwin-arm64",
-      daemonVersion: "0.0.0",
-      homeDir: "/Users/lucas",
-      startedAt: "2026-10-31T00:00:00.000Z",
-    },
-    capabilities: Capability.literals,
-    epoch: 1,
-    latencyMs: null,
-    lastSeenAt: null,
-  },
-};
-
-const appState = (view: PreviewView): AppState => ({
-  ...initialState,
-  hosts: [
+const appState = (view: PreviewView): AppState =>
+  fixtureAppState(
     view === "reconnecting" || view === "offline" || view === "needs-attention"
       ? { ...host, status: { ...host.status, state: view, attempt: 2 } }
-      : host,
-  ],
-  hostsListed: true,
-  hostModels: {
-    [HOST]: modelFromSnapshot({
-      sequence: Sequence.make(1),
-      workspaces: [
-        new Workspace({
-          id: FIXTURE_CHECKOUT.workspaceId,
-          path: "/Users/lucas/code/ledger",
-          name: "ledger",
-          isGitRepo: true,
-          worktreeRoot: "/Users/lucas/code/ledger.worktrees",
-          hidden: false,
-          registeredAt: NOW,
-        }),
-      ],
-      worktrees: [],
-      sessions: [
-        new SessionSummary({
-          session: new AgentSession({
-            id: FIXTURE_SESSION,
-            workspaceId: FIXTURE_CHECKOUT.workspaceId,
-            harness: "claude",
-            title: "Fix overdue totals",
-            cwd: FIXTURE_CHECKOUT.checkout,
-            worktreeId: null,
-            state: "idle",
-            permissionMode: "supervised",
-            model: null,
-            effort: null,
-            parentSessionId: null,
-            forkedFromTurnId: null,
-            harnessCursor: null,
-            turnCount: 12,
-            contextUsage: null,
-            lastError: null,
-            createdAt: NOW,
-            updatedAt: NOW,
-          }),
-          pendingApprovals: [],
-          lastTurnPreview: null,
-          subagents: [],
-        }),
-      ],
-    }),
-  },
-});
+      : host
+  );
 
 const isScene = (name: string): name is TracesScene => Object.hasOwn(FIXTURE_SNAPSHOTS, name);
 
@@ -149,13 +67,23 @@ export const mountTracesPreview = (
   navigation.actions.setMode("traces");
   openViewSpan({ hostKey: HOST, sessionId: FIXTURE_SESSION }, view);
 
+  if (opensSettings(hash)) navigation.actions.openSettings("traces");
+
   createRoot(root).render(
     <TracesLayer api={view !== null && isStateView(view) ? silent(api) : api}>
-      <DataLayer api={fixtureDataApi()}>
-        <App
-          value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
-        />
-      </DataLayer>
+      <ProfilesLayer api={viewProfilesApi(view)}>
+        <TracesSettingsLayer api={previewSettingsApi(hash)}>
+          <DataLayer api={fixtureDataApi()}>
+            <App
+              value={{
+                connection,
+                navigation,
+                commands: createCommandRegistry({ platform: "mac" }),
+              }}
+            />
+          </DataLayer>
+        </TracesSettingsLayer>
+      </ProfilesLayer>
     </TracesLayer>
   );
 

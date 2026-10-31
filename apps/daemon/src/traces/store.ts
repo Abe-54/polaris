@@ -1,7 +1,15 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect";
-import { TraceDetail, TraceError, TraceFilter, TraceSummary, SpanDetail } from "@polaris/protocol";
+import {
+  TraceComparison,
+  type TraceCompareSelector,
+  TraceDetail,
+  TraceError,
+  TraceFilter,
+  TraceSummary,
+  SpanDetail,
+} from "@polaris/protocol";
 import { releaseMemory } from "../memory/release.ts";
 import { polarisHome } from "../paths.ts";
 import { TraceWorkerClient, WorkerFailure, type TraceWorkerOptions } from "./workerClient.ts";
@@ -21,7 +29,18 @@ export class TraceStore extends Context.Service<
       readonly contentType: "application/json" | "application/x-protobuf";
       readonly context: IngestContext;
     }) => Effect.Effect<number, IngestError>;
+    readonly compare: (
+      checkout: string,
+      a: TraceCompareSelector,
+      b: TraceCompareSelector,
+      baselineStart?: string
+    ) => Effect.Effect<TraceComparison, TraceError>;
     readonly list: (checkout: string, filter?: TraceFilter) => Effect.Effect<TracePage, TraceError>;
+    readonly overlapping: (
+      checkout: string,
+      start: string,
+      end: string
+    ) => Effect.Effect<TracePage, TraceError>;
     readonly get: (checkout: string, traceId: string) => Effect.Effect<TraceDetail, TraceError>;
     readonly span: (
       checkout: string,
@@ -130,7 +149,19 @@ export class TraceStore extends Context.Service<
                   "Trace ingest refused"
                 ),
             }),
+          compare: (checkout, a, b, baselineStart) =>
+            read(
+              TraceWorkerRequest.cases.Compare.make({
+                checkout,
+                a,
+                b,
+                ...(baselineStart === undefined ? undefined : { baselineStart }),
+              }),
+              TraceComparison
+            ),
           list,
+          overlapping: (checkout, start, end) =>
+            read(TraceWorkerRequest.cases.Overlap.make({ checkout, start, end }), TracePage),
           get: (checkout, traceId) =>
             read(TraceWorkerRequest.cases.Get.make({ checkout, traceId }), TraceDetail),
           span: (checkout, traceId, spanId) =>

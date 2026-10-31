@@ -12,6 +12,7 @@ export const IngestContext = Schema.Struct({
   workspaceId: WorkspaceId,
   sessionId: Schema.NullOr(SessionId),
   turns: Schema.Array(TurnInterval),
+  launchedTurn: Schema.optionalKey(Schema.NullOr(TraceTurn)),
 });
 
 export type IngestContext = typeof IngestContext.Type;

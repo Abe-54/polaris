@@ -1,0 +1,10 @@
+●   claude-code_2-1-316_agent  Agent detected — installing non-interactively
+│
+◇  Source: https://github.com/luxdotdev/polaris.git
+│
+│
+◇  Found 1 skill
+│
+■  No matching skills found for: polaris-tracing
+●  Available skills:
+│    - product-design

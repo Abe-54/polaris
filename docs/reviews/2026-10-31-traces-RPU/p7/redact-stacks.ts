@@ -1,0 +1,15 @@
+// What the Daemon stores for exception.stacktrace / code.file.path values the skill's helper produces.
+import { attributeValue } from "../../../../apps/daemon/src/traces/redact.ts";
+
+const cases: Record<string, string> = {
+  "node esm, plain file": "TypeError: x\n    at charge (file:///app/src/orders.ts:12:9)",
+  "node esm, src/auth.ts": "TypeError: x\n    at login (file:///app/src/auth.ts:12:9)",
+  "bun, plain file": "TypeError: x\n    at charge (/app/src/orders.ts:12:9)",
+  "bun, src/auth.ts": "TypeError: x\n    at login (/app/src/auth.ts:12:9)",
+  "bun, src/session.ts": "TypeError: x\n    at load (/app/src/session.ts:40:3)",
+  "node cjs, express-session": "Error: x\n    at session (/app/node_modules/express-session/index.js:478:7)",
+  "bun, tokens.ts": "Error: x\n    at refresh (/app/src/tokens.ts:8:1)",
+  "code.file.path bun auth": "/app/src/auth.ts",
+};
+for (const [name, text] of Object.entries(cases))
+  console.log(`${name.padEnd(28)} -> ${JSON.stringify(attributeValue({ stringValue: text }))}`);

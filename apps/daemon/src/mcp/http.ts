@@ -1,3 +1,5 @@
+import { Profiles } from "../traces/profiles/index.ts";
+import { sessionProfileTools } from "./sessions/profiles.ts";
 import { Effect, Option, Schema } from "effect";
 import type { McpBinding } from "./binding.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -129,6 +131,7 @@ export const mcpHttp = (
     const traceStore = yield* Effect.serviceOption(TraceStore);
     const traceRuntime = yield* Effect.serviceOption(TraceRuntime);
     const traceSessions = yield* Effect.serviceOption(TraceSessions);
+    const profiles = yield* Effect.serviceOption(Profiles);
 
     if (Option.isSome(store) && notifications !== null) {
       const sessions = sessionTools(store.value, notifications, requestSecret);
@@ -152,6 +155,11 @@ export const mcpHttp = (
           ),
         });
       }
+
+      if (Option.isSome(profiles) && Option.isSome(traceSessions) && Option.isSome(traceStore))
+        Object.assign(sessions, {
+          profiles: sessionProfileTools(profiles.value, traceSessions.value, traceStore.value),
+        });
 
       attachSessionTools(
         commands,

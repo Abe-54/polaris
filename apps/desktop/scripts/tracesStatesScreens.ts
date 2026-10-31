@@ -70,6 +70,26 @@ const SHOTS: ReadonlyArray<Shot> = [
     ready: "traces-receiver",
   },
   { name: "output", hash: "#preview/traces-output", ready: "traces-output" },
+  {
+    name: "fixed-exporter",
+    hash: "#traces/empty?settings=sightline",
+    ready: "traces-fixed-exporter",
+  },
+  {
+    name: "fixed-exporter-user-exported",
+    hash: "#traces/userExported?settings=sightline",
+    ready: "traces-fixed-exporter",
+  },
+  {
+    name: "settings-traces",
+    hash: "#traces/empty?settings=sightline&page=settings",
+    ready: "settings-traces-card",
+  },
+  {
+    name: "settings-traces-fresh",
+    hash: "#traces/empty?page=settings",
+    ready: "settings-traces-card",
+  },
 ];
 
 const THEMES = [

@@ -9,7 +9,7 @@ import {
   type TraceFilter,
   type SpanDetail,
 } from "@polaris/protocol";
-import { decodeValueRows, refreshSummary } from "./database.ts";
+import { decodeValueRows, refreshSummary, sortableTime } from "./database.ts";
 
 const decodeSummary = Schema.decodeUnknownSync(Schema.fromJsonString(TraceSummary));
 
@@ -239,4 +239,24 @@ export const traceHistory = (
   }
 
   return { root, spans, samples };
+};
+
+/** Span-level overlap, including traces older than the newest listing page. */
+export const overlappingTraces = (db: Database, checkout: string, start: string, end: string) => {
+  const sql =
+    "s.checkout=? AND EXISTS (SELECT 1 FROM spans p WHERE p.checkout=s.checkout AND p.trace_id=s.trace_id AND p.start<=? AND p.end>=?)";
+
+  const bindings = [checkout, sortableTime(end), sortableTime(start)];
+
+  const total = decodeCount(
+    db.query(`SELECT count(*) AS count FROM summaries s WHERE ${sql}`).get(...bindings)
+  ).count;
+
+  const traces = decodeValueRows(
+    db
+      .query(`SELECT value FROM summaries s WHERE ${sql} ORDER BY start DESC,trace_id LIMIT 200`)
+      .all(...bindings)
+  ).map((row) => decodeSummary(row.value));
+
+  return { traces, total };
 };

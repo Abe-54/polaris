@@ -1,6 +1,7 @@
 /**
- * The span panel's actions (Paper T1): "Open in Data ⌘4" on a database span whose Data Source
- * this checkout has, and the code location ("overdue.ts:61 ⌘3"), which opens in the Editor.
+ * The span panel's actions (Paper T1, T2): "Open profile range" when the open Profile recorded
+ * part of the span, "Open in Data ⌘4" on a database span whose Data Source this checkout has,
+ * and the code location ("overdue.ts:61 ⌘3"), which opens in the Editor.
  */
 import type { Span } from "@polaris/protocol";
 import { useShellActions } from "../../../../shell/hooks.ts";
@@ -9,6 +10,9 @@ import { useDataSources } from "../../../data/data/hooks.tsx";
 import { openSqlTab, openTable } from "../../../data/model/store.ts";
 import { defaultSchema } from "../../../data/output/model.ts";
 import { useOpenInEditor } from "../../../editor-links/index.ts";
+import { useOpenTrace } from "../../model/openTrace.ts";
+import { overlap, rangeLabel } from "../../model/profile/overlap.ts";
+import { setFlameWindow, useProfileSelection } from "../../model/profile/store.ts";
 import type { TracesSessionKey } from "../../model/session.ts";
 import { type CodeLocation, locationLabel } from "../../model/span/code.ts";
 import { spanDataSource, spanTable } from "../../model/span/dataSource.ts";
@@ -53,6 +57,25 @@ const OpenInData = ({ at, span }: { readonly at: TracesSessionKey; readonly span
 const isDatabase = (span: Span) =>
   span.attributes["db.system.name"] !== undefined || span.attributes["db.system"] !== undefined;
 
+/** The part of the span the open Profile recorded, in ms of the Profile and of the trace. */
+const useProfiledPart = (at: TracesSessionKey, span: Span) => {
+  const { profile } = useProfileSelection(at);
+  const trace = useOpenTrace(at, span.traceId);
+  const startNs = BigInt(span.startTimeUnixNano);
+  const shared = profile === null ? null : overlap(profile, startNs, BigInt(span.endTimeUnixNano));
+
+  if (shared === null) return null;
+  // The pill names the range as the profile header does: in ms of the trace.
+
+  const shift =
+    trace === null ? 0 : Number(startNs - BigInt(trace.summary.startTimeUnixNano)) / 1e6;
+
+  return {
+    profile: shared.profile,
+    trace: { from: shared.stretch.from + shift, to: shared.stretch.to + shift },
+  };
+};
+
 export const SpanActions = ({
   at,
   span,
@@ -63,11 +86,22 @@ export const SpanActions = ({
   readonly location: CodeLocation | null;
 }) => {
   const openInEditor = useOpenInEditor();
+  const profiled = useProfiledPart(at, span);
 
-  if (!isDatabase(span) && location === null) return null;
+  if (!isDatabase(span) && location === null && profiled === null) return null;
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pb-3.5">
+      {profiled === null ? null : (
+        <Pill
+          onClick={() => setFlameWindow(at, profiled.profile)}
+          hint={rangeLabel(profiled.trace)}
+          title="Show this span's part of the profile in the flame chart"
+          testId="span-open-profile-range"
+        >
+          Open profile range
+        </Pill>
+      )}
       {isDatabase(span) ? <OpenInData at={at} span={span} /> : null}
       {location === null ? null : (
         <Pill

@@ -7,9 +7,9 @@ import type { HostArt } from "./model.ts";
 
 export const LINE = "var(--color-text-subtle)";
 
-const INNER = "color-mix(in oklab, var(--color-text-strong) 14%, transparent)";
+export const INNER = "color-mix(in oklab, var(--color-text-strong) 14%, transparent)";
 
-const DETAIL = "color-mix(in oklab, var(--color-text-strong) 28%, transparent)";
+export const DETAIL = "color-mix(in oklab, var(--color-text-strong) 28%, transparent)";
 
 const LIGHT = "var(--color-starlight)";
 
@@ -17,19 +17,19 @@ const face = (percent: number) =>
   `color-mix(in oklab, var(--color-text-strong) ${percent}%, var(--color-well))`;
 
 /** Left, right and top faces, lightest on top. */
-const LEFT = face(4);
+export const LEFT = face(4);
 
-const RIGHT = face(2);
+export const RIGHT = face(2);
 
-const TOP = face(8);
+export const TOP = face(8);
 
-interface At {
+export interface At {
   readonly x: number;
   readonly y: number;
 }
 
 /** Moves Paper's coordinates (drawn about `origin`) to `at`. */
-const Placed = ({
+export const Placed = ({
   at,
   origin,
   children,
@@ -40,7 +40,7 @@ const Placed = ({
 }) => <g transform={`translate(${at.x - origin.x} ${at.y - origin.y})`}>{children}</g>;
 
 /** An isometric box: left and right sides and the top, from three point lists. */
-const Box = ({
+export const Box = ({
   left,
   right,
   top,
@@ -78,8 +78,8 @@ const Mac = ({ lit }: { readonly lit: boolean }) => (
 
 const BAYS = "M223 126L249 138M223 116L249 128M223 106L249 118M223 96L249 108";
 
-/** A rack server; dashed when the machine is virtual (a WSL distro). */
-const Server = ({ lit, dashed }: { readonly lit: boolean; readonly dashed: boolean }) => (
+/** A rack server with its light in `light`; dashed when the machine is virtual (a WSL distro). */
+const Server = ({ light, dashed }: { readonly light: string; readonly dashed: boolean }) => (
   <>
     <Box
       left="220,134 252,150 252,106 220,90"
@@ -89,8 +89,26 @@ const Server = ({ lit, dashed }: { readonly lit: boolean; readonly dashed: boole
     />
     <path d={BAYS} style={{ fill: "none", stroke: INNER }} />
     <path d="M245 141h2v2h-2zM245 131h2v2h-2zM245 121h2v2h-2z" style={{ fill: DETAIL }} />
-    <rect x="245" y="111" width="2" height="2" style={{ fill: lit ? LIGHT : DETAIL }} />
+    <rect x="245" y="111" width="2" height="2" style={{ fill: light }} />
   </>
+);
+
+/**
+ * A rack server about its bottom vertex at `at`, its light in any colour (the service map lights
+ * it in its service's hue); `light` null leaves it dark.
+ */
+export const ServerGlyph = ({
+  at,
+  light,
+  dashed = false,
+}: {
+  readonly at: At;
+  readonly light: string | null;
+  readonly dashed?: boolean;
+}) => (
+  <Placed at={at} origin={{ x: 252, y: 150 }}>
+    <Server light={light ?? DETAIL} dashed={dashed} />
+  </Placed>
 );
 
 /** A flat board with a few chips on it: a single-board computer. */
@@ -144,11 +162,7 @@ export const HostGlyph = ({
       </Placed>
     );
 
-  return (
-    <Placed at={at} origin={{ x: 252, y: 150 }}>
-      <Server lit={lit} dashed={art === "virtual"} />
-    </Placed>
-  );
+  return <ServerGlyph at={at} light={lit ? LIGHT : null} dashed={art === "virtual"} />;
 };
 
 /** The open laptop the card is seen from: this machine. Its hinge's top is at `at`. */

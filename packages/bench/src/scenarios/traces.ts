@@ -48,6 +48,20 @@ export const traces: Scenario = {
       const client = yield* connect(daemon, ctx.transport, "traces");
       const rpc = client.connection.client;
       const workspaceId = yield* registerWorkspace(client, cwd, "traces");
+
+      if (process.env.POLARIS_BENCH_TRACE_FORWARDING === "down") {
+        const settings = yield* rpc["traces.setSettings"]({
+          workspaceId,
+          settings: {
+            forwarding: true,
+            forwardTo: { url: "http://127.0.0.1:1/v1/traces", headerNames: [] },
+          },
+        });
+
+        if (settings.forwardTo?.url !== "http://127.0.0.1:1/v1/traces")
+          return yield* Effect.die(new Error("An exported collector overrides the outage fixture"));
+      }
+
       const sessionId = SessionId.make("trace-bench");
       yield* startSession(client, { sessionId, workspaceId, script: { items: 1 } });
       const watch = yield* watchSession(client, sessionId);
@@ -98,8 +112,10 @@ export const traces: Scenario = {
       if (last.spans.length !== 1000) return yield* Effect.die(new Error("Trace batch lost spans"));
       const elapsed = performance.now() - began;
       const report = sampler.report(base.t - 1, sampler.sample().t);
+      yield* ctx.peak(daemon, "traces-ingested");
       yield* settle(32_000);
       const settled = sampler.sample();
+      yield* ctx.peak(daemon, "traces-quiet");
       latencies.sort((a, b) => a - b);
 
       return {
@@ -112,6 +128,7 @@ export const traces: Scenario = {
           rpc_during_p99_ms: latency(latencies[Math.ceil(latencies.length * 0.99) - 1]!),
         },
         notes: [
+          `Forwarding: ${process.env.POLARIS_BENCH_TRACE_FORWARDING === "down" ? "enabled, collector unavailable at loopback port 1" : "unconfigured"}.`,
           `${count * 1000} spans in ${count} JSON batches; real receiver, SQLite worker, concurrent files.stat; 32s quiet worker retirement.`,
         ],
       };

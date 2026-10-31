@@ -24,19 +24,19 @@ export type Loaded<A> =
 
 const LOADING = { status: "loading" } as const;
 
-type Load<A> = (api: TracesApi, set: (next: Loaded<A>) => void) => () => void;
+type Load<A, Api = TracesApi> = (api: Api, set: (next: Loaded<A>) => void) => () => void;
 
 /**
- * Reads again when the api, `key` or `generation` changes (`key` names everything `load` reads);
+ * Reads again when `api`, `key` or `generation` changes (`key` names everything `load` reads);
  * loading shows only when `key` changes, so a new api or generation keeps the last answer until
  * the fresh one arrives. A null `key` reads nothing and drops the last answer.
  */
-const useLoaded = <A,>(
+export const useLoadedWith = <Api, A>(
+  api: Api,
   key: string | null,
-  load: Load<A>,
+  load: Load<A, Api>,
   generation: number | string = 0
 ): Loaded<A> => {
-  const api = useTracesApi();
   const [state, setState] = useState<Loaded<A>>(LOADING);
   const shown = useRef<string | null>(null);
   const latest = useRef(load);
@@ -55,8 +55,14 @@ const useLoaded = <A,>(
   return state;
 };
 
-const settle =
-  <A,>(request: (api: TracesApi) => Promise<Result<A>>): Load<A> =>
+const useLoaded = <A,>(
+  key: string | null,
+  load: Load<A>,
+  generation: number | string = 0
+): Loaded<A> => useLoadedWith(useTracesApi(), key, load, generation);
+
+export const settle =
+  <A, Api = TracesApi>(request: (api: Api) => Promise<Result<A>>): Load<A, Api> =>
   (api, set) => {
     let live = true;
 
@@ -74,7 +80,7 @@ const settle =
     };
   };
 
-const keyOf = (...parts: ReadonlyArray<unknown>) => JSON.stringify(parts);
+export const keyOf = (...parts: ReadonlyArray<unknown>) => JSON.stringify(parts);
 
 /**
  * Counts the changes of `version` for one trace, from its first known value: the first listing

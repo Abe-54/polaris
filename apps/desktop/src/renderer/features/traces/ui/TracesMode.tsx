@@ -1,7 +1,7 @@
 /**
  * Traces (⌘5; DESIGN.md, Traces): Data's shell with no assistant panel. The Workspace bar, the
  * sidebar on the ground over the horizon, and one panel holding the trace bar, the waterfall or
- * Table with the span panel beside it, the drawer under them, and the status bar. Each slot is
+ * Table with the span panel beside it, the open Profile and the drawer under them, and the status bar. Each slot is
  * its own file (slots.ts) so its owner replaces it alone.
  */
 import type { SessionId } from "@polaris/protocol";
@@ -10,10 +10,12 @@ import { TopBar } from "../../../shell/TopBar.tsx";
 import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
 import { useTracesUnavailable } from "../model/availability.ts";
+import { useMainView } from "../model/mainView.ts";
 import type { TracesSessionKey } from "../model/session.ts";
-import { setupState } from "../model/setup.ts";
+import { type SetupState, setupState } from "../model/setup.ts";
 import { useTracesSelection } from "../model/store.ts";
 import { TracesDrawer } from "./Drawer.tsx";
+import { ProfilePanel } from "./profile/ProfilePanel.tsx";
 import { TracesSidebar } from "./Sidebar.tsx";
 import type { TracesSlotProps } from "./slots.ts";
 import { SpanPanel } from "./SpanPanel.tsx";
@@ -21,6 +23,7 @@ import { TracesStatusBar } from "./StatusBar.tsx";
 import { TraceBar } from "./TraceBar.tsx";
 import { TraceMain } from "./TraceMain.tsx";
 import { TracesSetup } from "./setup/TracesSetup.tsx";
+import { useSetupPlace } from "./setup/useSetupPlace.ts";
 
 /** One trace is enough to know the checkout has some; the sidebar reads the list. */
 const PROBE = { limit: 1 } as const;
@@ -39,6 +42,17 @@ const useSetup = (at: TracesSessionKey) => {
     receiver: snapshot.status === "ready" ? snapshot.value : null,
   };
 };
+
+/** Setup with what it reads beside the snapshot; only mounted while there is no trace to show. */
+const SetupAt = ({
+  state,
+  at,
+  workspaceId,
+}: {
+  state: SetupState;
+  at: TracesSessionKey;
+  workspaceId: string;
+}) => <TracesSetup state={state} place={useSetupPlace(at, workspaceId)} />;
 
 const Centered = ({
   testId,
@@ -60,6 +74,8 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
   const selection = useTracesSelection(slot.at);
   const props = { ...slot, ...selection };
   const { setup, receiver } = useSetup(slot.at);
+  // The service map brings its own panel; the span panel waits for Waterfall or Table.
+  const map = useMainView(slot.at) === "map";
 
   return (
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="traces-mode">
@@ -75,12 +91,13 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
               <div className="flex min-w-0 flex-1 flex-col">
                 <TraceMain {...props} />
               </div>
-              <SpanPanel {...props} />
+              {map ? null : <SpanPanel {...props} />}
             </div>
+            <ProfilePanel {...props} />
             <TracesDrawer {...props} />
           </>
         ) : (
-          <TracesSetup state={setup} />
+          <SetupAt state={setup} at={slot.at} workspaceId={slot.workspaceId} />
         )}
         <TracesStatusBar {...props} receiver={receiver} />
       </section>
