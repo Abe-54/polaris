@@ -223,7 +223,7 @@ export const zoomed = (
 ): FlameWindow => {
   const length = Math.min(total, Math.max(0.01, (window.to - window.from) * factor));
   const share = (ms - window.from) / Math.max(window.to - window.from, 1e-9);
-  const from = Math.min(total - length, Math.max(0, ms - share * length));
+  const from = Math.max(0, Math.min(total - length, ms - share * length));
 
   return { from, to: from + length };
 };
@@ -231,7 +231,22 @@ export const zoomed = (
 /** Moves `window` by `ms`, kept inside [0, total]. */
 export const panned = (window: FlameWindow, ms: number, total: number): FlameWindow => {
   const length = window.to - window.from;
-  const from = Math.min(total - length, Math.max(0, window.from + ms));
+  const from = Math.max(0, Math.min(total - length, window.from + ms));
 
   return { from, to: from + length };
+};
+
+/** `window` moved the least that shows part of `node`; unchanged when it already does. */
+export const revealed = (
+  layout: FlameLayout,
+  window: FlameWindow,
+  node: number,
+  total: number
+): FlameWindow => {
+  const start = layout.start[node] ?? 0;
+  const end = layout.end[node] ?? 0;
+
+  if (end > window.from && start < window.to) return window;
+
+  return panned(window, end <= window.from ? start - window.from : end - window.to, total);
 };

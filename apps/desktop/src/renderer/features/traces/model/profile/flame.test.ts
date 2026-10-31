@@ -9,6 +9,7 @@ import {
   frameAt,
   frameMove,
   panned,
+  revealed,
   zoomed,
 } from "./flame.ts";
 
@@ -121,5 +122,19 @@ describe("zoomed and panned", () => {
     expect(zoomed({ from: 25, to: 75 }, 4, 50, 100)).toEqual({ from: 0, to: 100 });
     expect(panned({ from: 10, to: 30 }, 100, 100)).toEqual({ from: 80, to: 100 });
     expect(panned({ from: 10, to: 30 }, -100, 100)).toEqual({ from: 0, to: 20 });
+  });
+
+  test("a window longer than the recording still starts at 0", () => {
+    expect(panned({ from: 0, to: 12_400 }, 40, 12_310).from).toBe(0);
+  });
+});
+
+describe("revealed", () => {
+  test("moves the window the least that shows the frame, either way, and not if it shows", () => {
+    expect(revealed(layout, { from: 30, to: 50 }, 3, 155)).toEqual({ from: 10, to: 30 });
+    expect(revealed(layout, { from: 0, to: 20 }, 4, 155)).toEqual({ from: 120, to: 140 });
+    const shown = { from: 15, to: 35 };
+
+    expect(revealed(layout, shown, 3, 155)).toBe(shown);
   });
 });

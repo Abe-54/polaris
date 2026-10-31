@@ -97,7 +97,11 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
             <TracesDrawer {...props} />
           </>
         ) : (
-          <SetupAt state={setup} at={slot.at} workspaceId={slot.workspaceId} />
+          <>
+            <SetupAt state={setup} at={slot.at} workspaceId={slot.workspaceId} />
+            {/* A Profile needs no trace: a whole-command recording opens under the setup. */}
+            <ProfilePanel {...props} />
+          </>
         )}
         <TracesStatusBar {...props} receiver={receiver} />
       </section>

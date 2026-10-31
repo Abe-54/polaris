@@ -13,7 +13,7 @@ import {
 } from "@polaris/protocol";
 import { CloseIcon, IconButton } from "@polaris/ui";
 import { Match } from "effect";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo } from "react";
 import { commandShortcut } from "../../../../../shared/keymap.ts";
 import { useApp, useCommands } from "../../../../shell/hooks.ts";
 import { menuShortcut } from "../../../../shell/menu/index.ts";
@@ -29,6 +29,8 @@ import {
   selectFrame,
   selectProfile,
   setFlameWindow,
+  setProfileFocused,
+  useProfileFocused,
   useProfileSelection,
 } from "../../model/profile/store.ts";
 import { useOpenTrace } from "../../model/openTrace.ts";
@@ -195,6 +197,7 @@ const Body = ({
         detail={detail}
         layout={layout}
         window={window ?? opening}
+        total={whole.to}
         frame={frame}
         mark={mark}
         checkout={checkout}
@@ -211,6 +214,20 @@ const Body = ({
   );
 };
 
+/** What a screen reader hears as the keyboard walks the chart: "fetchRate · fx.ts:23 · 670 ms · level 4". */
+const frameAnnouncement = (
+  detail: ProfileDetail,
+  layout: FlameLayout,
+  frame: number,
+  fn: ProfileFunction,
+  checkout: string | null
+) => {
+  const level = (layout.depth[layout.positionOf[frame] ?? 0] ?? 0) + 1;
+  const ms = detail.nodes[frame]?.durationMs ?? 0;
+
+  return `${fn.name} · ${placeLabel(fn, checkout)} · ${formatDuration(ms)} · level ${level}`;
+};
+
 const Quiet = ({ children }: { readonly children: ReactNode }) => (
   <div className="px-panel pb-panel flex min-h-[100px] flex-col gap-1 pt-1">{children}</div>
 );
@@ -221,12 +238,15 @@ const Shown = ({
   traceId,
   profile,
 }: Pick<TracesSlotProps, "at" | "workspaceId" | "traceId"> & { readonly profile: Profile }) => {
-  const loaded = useProfile(at, profile.id, `${profile.status}:${profile.durationMs}`);
+  const loaded = useProfile(at, profile);
   const detail = loaded.status === "ready" ? loaded.value : null;
   const trace = useOpenTrace(at, traceId);
   const checkout = useCheckout(at);
   const { frame } = useProfileSelection(at);
-  const [focused, setFocused] = useState(false);
+  const focused = useProfileFocused(at);
+  const { hostKey, sessionId } = at;
+
+  useEffect(() => () => setProfileFocused({ hostKey, sessionId }, false), [hostKey, sessionId]);
   const layout = useMemo(() => (detail === null ? null : flameLayout(detail)), [detail]);
   const openInEditor = useOpenInEditor();
   const add = useAddProfile(at, detail, frame, checkout, focused || trace === null);
@@ -255,9 +275,9 @@ const Shown = ({
       aria-label="Profile"
       data-testid="profile-panel"
       className="border-hairline bg-panel flex shrink-0 flex-col border-t"
-      onFocus={() => setFocused(true)}
+      onFocus={() => setProfileFocused(at, true)}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+        if (!event.currentTarget.contains(event.relatedTarget)) setProfileFocused(at, false);
       }}
     >
       <Header
@@ -269,7 +289,19 @@ const Shown = ({
         onAdd={detail === null ? null : add}
         onClose={() => selectProfile(at, null)}
       />
-      {loaded.status === "loading" ? (
+      <p className="sr-only" aria-live="polite" data-testid="profile-frame-announce">
+        {detail === null || layout === null || frame === null || frameFn === null
+          ? ""
+          : frameAnnouncement(detail, layout, frame, frameFn, checkout)}
+      </p>
+      {profile.status === "recording" && detail === null ? (
+        <Quiet>
+          <p className="text-caption text-text-subtle">
+            The flame chart shows once the process stops and its profile is written
+          </p>
+        </Quiet>
+      ) : null}
+      {loaded.status === "loading" && profile.status !== "recording" ? (
         <Quiet>
           <p className="text-caption text-text-subtle">Reading the profile…</p>
         </Quiet>

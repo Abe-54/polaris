@@ -6,7 +6,7 @@
  */
 import type { ProfileDetail } from "@polaris/protocol";
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
-import { useApp } from "../../../../shell/hooks.ts";
+import { useThemeType } from "../../../diffs/useThemeType.ts";
 import {
   type FlameLayout,
   type FlameWindow,
@@ -14,6 +14,7 @@ import {
   frameAt,
   frameMove,
   panned,
+  revealed,
   zoomed,
 } from "../../model/profile/flame.ts";
 import type { MsRange } from "../../model/profile/overlap.ts";
@@ -37,6 +38,8 @@ export interface FlameChartProps {
   readonly detail: ProfileDetail;
   readonly layout: FlameLayout;
   readonly window: FlameWindow;
+  /** The whole recording's length in ms: what zoom and pan stay inside. */
+  readonly total: number;
   readonly frame: number | null;
   readonly mark: MsRange | null;
   readonly checkout: string | null;
@@ -54,7 +57,8 @@ const usePaint = (
   props: FlameChartProps,
   top: number
 ) => {
-  const theme = useApp((s) => s.theme);
+  // The System theme follows macOS, so the resolved colours change without the setting.
+  const theme = useThemeType();
   const palette = useRef<Palette | null>(null);
   const latest = useRef({ props, top });
   const pending = useRef<number | null>(null);
@@ -132,8 +136,7 @@ const useWheel = (
     if (element === null) return undefined;
 
     const onWheel = (event: WheelEvent) => {
-      const { window, layout, onWindow } = latest.current;
-      const total = Math.max(layout.endMs, 0.001);
+      const { window, layout, total, onWindow } = latest.current;
 
       event.preventDefault();
 
@@ -161,8 +164,7 @@ const useWheel = (
 
 /** +, − and 0 zoom around the middle or show it all; false for other keys. */
 const zoomKey = (key: string, props: FlameChartProps): boolean => {
-  const { layout, window, onWindow } = props;
-  const total = Math.max(layout.endMs, 0.001);
+  const { total, window, onWindow } = props;
   const centre = (window.from + window.to) / 2;
 
   const factor = new Map([
@@ -177,17 +179,26 @@ const zoomKey = (key: string, props: FlameChartProps): boolean => {
   return factor !== undefined || key === "0";
 };
 
+/** Arrows walk the tree; a frame reached outside the shown range pans it into view. */
+const arrowKey = (arrow: "up" | "down" | "left" | "right", props: FlameChartProps) => {
+  const { layout, frame, window, total, onFrame, onWindow } = props;
+  const next = frame === null ? firstRootIn(layout, window) : frameMove(layout, frame, arrow);
+
+  if (next === null) return;
+  onFrame(next);
+  const shown = revealed(layout, window, next, total);
+
+  if (shown !== window) onWindow(shown);
+};
+
 /** Arrows walk the tree, Enter opens, Escape clears the frame then the zoom. */
 const onKey = (event: KeyboardEvent<HTMLDivElement>, props: FlameChartProps) => {
-  const { layout, frame, window, onFrame, onOpen, onWindow } = props;
-  const zoomedIn = window.from > 0 || window.to < Math.max(layout.endMs, 0.001);
+  const { frame, window, total, onFrame, onOpen, onWindow } = props;
+  const zoomedIn = window.from > 0 || window.to < total;
   const arrow = ARROWS.get(event.key);
 
-  if (arrow !== undefined) {
-    const next = frame === null ? firstRootIn(layout, window) : frameMove(layout, frame, arrow);
-
-    if (next !== null) onFrame(next);
-  } else if (event.key === "Enter" && frame !== null) onOpen(frame);
+  if (arrow !== undefined) arrowKey(arrow, props);
+  else if (event.key === "Enter" && frame !== null) onOpen(frame);
   else if (event.key === "Escape" && (frame !== null || zoomedIn)) {
     event.stopPropagation();
 
@@ -203,7 +214,7 @@ export const FlameChart = (props: FlameChartProps) => {
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
   const [top, setTop] = useState(0);
-  const { layout, window, frame, onFrame, onOpen, onWindow } = props;
+  const { layout, window, total, frame, onFrame, onOpen, onWindow } = props;
 
   usePaint(canvas, probe, props, top);
   useWheel(box, props, setTop);
@@ -239,7 +250,7 @@ export const FlameChart = (props: FlameChartProps) => {
     const width = Math.max(event.currentTarget.clientWidth, 1);
     const ms = ((current.x - event.clientX) / width) * (current.start.to - current.start.from);
 
-    onWindow(panned(current.start, ms, Math.max(layout.endMs, 0.001)));
+    onWindow(panned(current.start, ms, total));
   };
 
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
