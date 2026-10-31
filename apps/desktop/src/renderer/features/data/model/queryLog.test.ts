@@ -86,8 +86,20 @@ describe("table names", () => {
   });
 });
 
-test("reads re-run on open; writes wait in their tab", () => {
-  expect(runsOnOpen("  select 1")).toBe(true);
-  expect(runsOnOpen("with t as (select 1) select * from t")).toBe(true);
-  expect(runsOnOpen("update invoices set currency = 'USD'")).toBe(false);
+describe("only a lone read re-runs on open; anything else waits for Run", () => {
+  test.each([
+    ["  select 1", true],
+    ["select * from invoices;", true],
+    ["with t as (select 1) select * from t", true],
+    ["explain select * from invoices", true],
+    ["update invoices set currency = 'USD'", false],
+    ["with gone as (delete from invoices returning *) select * from gone", false],
+    ["explain analyze delete from invoices", false],
+    ["select * into invoices_copy from invoices", false],
+    ["select 1; drop table invoices", false],
+    ["select * from invoices for update", false],
+    ["select pg_sleep(1); select 1", false],
+  ])("%s", (sql, runs) => {
+    expect(runsOnOpen(sql)).toBe(runs);
+  });
 });

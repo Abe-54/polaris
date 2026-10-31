@@ -144,6 +144,15 @@ export const drawerKicker = (scope: LogScope | null, count: number) =>
     " · "
   );
 
-/** Reads re-run straight away; anything else opens in a SQL tab without running. */
-export const runsOnOpen = (sql: string) =>
-  /^\s*(select|with|show|explain|describe|table|values)\b/i.test(sql);
+const READ = /^\s*(select|with|show|explain|describe|table|values)\b/i;
+
+/** Words that change data or run code anywhere in a statement (`with … delete`, `explain analyze`). */
+const CHANGES =
+  /\b(insert|update|delete|merge|upsert|replace|drop|alter|truncate|create|grant|revoke|copy|call|do|exec|execute|into|lock|analyze|vacuum|set|load|handler|rename|comment|refresh|cluster|reindex|import|for\s+update|for\s+share)\b/i;
+
+/** Only a lone read re-runs straight away; anything else opens in a SQL tab to run with ⌘↵. */
+export const runsOnOpen = (sql: string) => {
+  const text = sql.trim().replace(/;\s*$/, "");
+
+  return READ.test(text) && !text.includes(";") && !CHANGES.test(text);
+};
