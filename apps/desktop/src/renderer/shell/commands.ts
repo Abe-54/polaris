@@ -175,6 +175,7 @@ export const shellCommands = ({
     "view.orchestrate": { run: () => actions.setMode("orchestrate") },
     "view.review": { run: () => actions.setMode("review") },
     "view.edit": { run: () => actions.setMode("edit") },
+    "view.data": { run: () => actions.setMode("data") },
     "view.wordWrap": {
       run: () => setAppearance({ wordWrap: !settingsStore.getState().appearance.wordWrap }),
     },

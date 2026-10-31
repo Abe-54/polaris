@@ -14,7 +14,9 @@ import {
   type SessionId,
   type Turn,
 } from "@polaris/protocol";
-import { Context, Effect, Inspectable, Layer, Predicate } from "effect";
+import { Context, Effect, Inspectable, Layer, Predicate, Option, Stream } from "effect";
+import { DataSources, DataQueries } from "../data/index.ts";
+import { recordOutsideCommand } from "../data/outside.ts";
 import { revertAfterAccept } from "../accept/reactor.ts";
 import { sessionRestartNote } from "../constellation/restartNote.ts";
 import type { HarnessError } from "../harness/HarnessDriver.ts";
@@ -59,6 +61,32 @@ const make = Effect.gen(function* () {
   const checkouts = yield* ReviewCheckouts;
   const secrets = yield* SecretRequests;
   const { live } = rt;
+  const sources = yield* Effect.serviceOption(DataSources);
+  const queries = yield* Effect.serviceOption(DataQueries);
+
+  if (Option.isSome(sources) && Option.isSome(queries)) {
+    const dataSources = sources.value;
+    const dataQueries = queries.value;
+
+    const completed = yield* rt.store.subscribe({
+      filter: (item) =>
+        Predicate.isTagged(item, "Event") &&
+        Predicate.isTagged(item.envelope.event, "TurnItemCompleted") &&
+        Predicate.isTagged(item.envelope.event.item, "CommandExecution"),
+    });
+
+    yield* completed.pipe(
+      Stream.runForEach((item) =>
+        Predicate.isTagged(item, "Event") &&
+        Predicate.isTagged(item.envelope.event, "TurnItemCompleted")
+          ? recordOutsideCommand(item.envelope.event, dataSources, dataQueries).pipe(
+              Effect.catch(() => Effect.logWarning("Couldn't record an outside Polaris command"))
+            )
+          : Effect.void
+      ),
+      Effect.forkScoped
+    );
+  }
 
   const runStartedTurn = (sessionId: SessionId, envelopes: ReadonlyArray<EventEnvelope>) => {
     const turn = turnFrom(envelopes);

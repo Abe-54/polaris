@@ -43,6 +43,9 @@ test("every mutating tool takes requestId; status doesn't", () => {
           "sessions",
           "search_history",
           "read_history",
+          "data_sources",
+          "describe",
+          "query",
           // Its input is exactly VisualizeInput; a retry only shows the page again.
           "visualize",
         ].includes(tool.name),

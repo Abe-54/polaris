@@ -75,8 +75,13 @@ export const sources = Effect.fnUntraced(function* (options: {
     return { discovered: discovered.filter((item) => !manualNames.has(item.name)), manual };
   });
 
+  const checkoutPath = (sessionId: SessionId) =>
+    options
+      .checkout(sessionId)
+      .pipe(Effect.catchTag("NotFound", () => Effect.fail(unknownSource())));
+
   const catalog = Effect.fnUntraced(function* (sessionId: SessionId) {
-    const checkout = yield* options.checkout(sessionId);
+    const checkout = yield* checkoutPath(sessionId);
     const { discovered, manual } = yield* candidates(checkout);
 
     const items: Candidate[] = [
@@ -185,7 +190,7 @@ export const sources = Effect.fnUntraced(function* (options: {
   const save = (input: SaveInput) =>
     lock.withPermit(
       Effect.gen(function* () {
-        const checkout = yield* options.checkout(input.sessionId);
+        const checkout = yield* checkoutPath(input.sessionId);
         const name = input.name.trim().toLowerCase();
 
         if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) return yield* unknownSource();
@@ -230,7 +235,7 @@ export const sources = Effect.fnUntraced(function* (options: {
   const remove: DataSources["Service"]["remove"] = (input) =>
     lock.withPermit(
       Effect.gen(function* () {
-        const checkout = yield* options.checkout(input.sessionId);
+        const checkout = yield* checkoutPath(input.sessionId);
         const source = yield* find(input);
 
         if (source.foundIn.kind !== "manual") return yield* unknownSource();
@@ -243,7 +248,7 @@ export const sources = Effect.fnUntraced(function* (options: {
   const label: DataSources["Service"]["label"] = (input) =>
     lock.withPermit(
       Effect.gen(function* () {
-        const checkout = yield* options.checkout(input.sessionId);
+        const checkout = yield* checkoutPath(input.sessionId);
         const source = yield* find(input);
         yield* storage.setLabel(checkout, source.id, input.label);
         yield* PubSub.publish(changes, checkout);
@@ -276,7 +281,7 @@ export const sources = Effect.fnUntraced(function* (options: {
     watch: (input) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const checkout = yield* options.checkout(input.sessionId);
+          const checkout = yield* checkoutPath(input.sessionId);
           const subscription = yield* PubSub.subscribe(changes);
 
           return Stream.concat(

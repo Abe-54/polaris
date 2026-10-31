@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { SessionId } from "@polaris/protocol";
+import { SessionId, NotFound } from "@polaris/protocol";
 import { Effect, Fiber, Option, Redacted, Stream } from "effect";
 import { SecretStorageError, fileSecrets } from "../secrets/index.ts";
 import { DataSourceAccess } from "./access.ts";
@@ -304,6 +304,32 @@ test("manual rename/edit keeps its password, then explicit clear removes it", ()
           )
         ).toBe("");
         expect(Option.isNone(yield* secrets.get(`data/${renamed.id}`))).toBe(true);
+      })
+    )
+  ));
+
+test("missing session checkouts fail with the Data contract code instead of NotFound", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { options } = yield* fixture;
+
+        const service = yield* sources({
+          ...options,
+          checkout: () => Effect.fail(new NotFound({ what: "session", id: sessionId })),
+        });
+
+        const input = { sessionId, source: "app" };
+
+        const reads = [
+          service.list({ sessionId }).pipe(Effect.asVoid),
+          service.resolve(input).pipe(Effect.asVoid),
+          service.watch(input).pipe(Stream.runDrain),
+        ];
+
+        for (const read of reads) {
+          expect(yield* Effect.flip(read)).toMatchObject({ code: "E-DATA-UNKNOWN-SOURCE" });
+        }
       })
     )
   ));
