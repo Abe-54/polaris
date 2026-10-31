@@ -57,6 +57,9 @@ import { tools as toolsScene } from "./toolsScene.ts";
 import { polarisTools, PREVIEW_NOTICE } from "./polarisScene.ts";
 import { secret } from "./secretScene.ts";
 import { setDataOutputShown } from "../../data/output/index.ts";
+import { setTracesOutputShown } from "../../traces/output/index.ts";
+import { findTrace, fixtureSnapshot } from "../../traces/preview/fixtureApi.ts";
+import { tracesOutput } from "./tracesOutputScene.ts";
 import { showOutput } from "../output/actions.ts";
 import { dataApproval } from "./dataApprovalScene.ts";
 import { dataWrite, dataWriteFeed, dataWriteSchemaDiff, dataWriteWorst } from "./dataWriteScene.ts";
@@ -170,6 +173,7 @@ const SCENES = {
   polaris: polarisTools,
   visualizations,
   "visualizations-30": visualizations30,
+  "traces-output": tracesOutput,
 } as const;
 
 const SCENE_NAMES = [
@@ -194,6 +198,7 @@ const SCENE_NAMES = [
   "polaris",
   "visualizations",
   "visualizations-30",
+  "traces-output",
   "new",
   "setup",
   "none-ready",
@@ -359,6 +364,8 @@ const feed = (scene: Scene, kind: SubscriptionKind): ReadonlyArray<unknown> => {
 
   if (kind === "data.sources.watch" || kind === "data.queryLog.watch") return dataWriteFeed(kind);
 
+  if (kind === "traces.watch") return [fixtureSnapshot("traces")];
+
   return kind === "plan-limits" ? LIMITS : [];
 };
 
@@ -469,6 +476,8 @@ const answerData = (
   method: RequestMethod,
   input: RequestInput<RequestMethod>
 ): Result<unknown> => {
+  if (method === "traces.get" && "traceId" in input) return findTrace("traces", input.traceId);
+
   if (method !== "data.schemaDiff") return answer(scene, method, input);
   const turn = "turn" in input ? input.turn : undefined;
 
@@ -534,10 +543,13 @@ const sceneOf = (hash: string): Scene => {
   return SCENE_NAMES.find((n) => n === name) ?? "session";
 };
 
-/** Output open on the Data tab, for the Turn with the pending write. */
-const showDataOutput = (sessionId: SessionId) => {
+/** Output open on the Data tab (the Turn with the pending write) or the Traces tab. */
+const showSceneOutput = (scene: Scene, sessionId: SessionId) => {
+  if (scene !== "data-output" && scene !== "traces-output") return;
   showOutput({ hostKey: HOST, workspaceId }, sessionId);
-  setDataOutputShown(uiKey(HOST, sessionId), true);
+
+  if (scene === "data-output") setDataOutputShown(uiKey(HOST, sessionId), true);
+  else setTracesOutputShown(uiKey(HOST, sessionId), true);
 };
 
 /** `windows` shows the default session, on "This PC". */
@@ -626,7 +638,7 @@ export const mountPreview = (root: HTMLElement, hash: string) => {
     patchSessionUi(uiKey(HOST, shown.session.id), () => ({ folds }));
   }
 
-  if (scene === "data-output" && shown?.session != null) showDataOutput(shown.session.id);
+  if (shown?.session != null) showSceneOutput(scene, shown.session.id);
 
   if (isUsage(scene)) navigation.actions.openSettings("usage");
 

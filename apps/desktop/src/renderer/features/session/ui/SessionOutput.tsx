@@ -19,7 +19,7 @@ import {
   IconButton,
   PixelSparkleIcon,
 } from "@polaris/ui";
-import { isKnownHarness } from "@polaris/protocol";
+import { isKnownHarness, type SessionId } from "@polaris/protocol";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { lazy, type ReactNode, Suspense, useMemo, useRef, useState } from "react";
 import { type DiffRow, diffRows, ROW_HEIGHT } from "../diffRows.ts";
@@ -55,6 +55,13 @@ import {
   useDataOutputShown,
   useTurnData,
 } from "../../data/output/index.ts";
+import {
+  setTracesOutputShown,
+  TracesOutput,
+  TracesOutputTab,
+  type TracesTab,
+  useTracesTab,
+} from "../../traces/output/index.ts";
 
 const CARD = "mx-4 border-x border-hairline bg-surface-sunken";
 
@@ -434,6 +441,18 @@ const useDataTab = (
   };
 };
 
+/** Data's or Traces' body while its tab is picked; null otherwise. */
+const pickedPane = (
+  hostKey: string,
+  sessionId: SessionId,
+  data: ReturnType<typeof useDataTab>["shown"],
+  traces: TracesTab["shown"]
+) => {
+  if (data !== null) return <DataOutput hostKey={hostKey} sessionId={sessionId} {...data} />;
+
+  return traces === null ? null : <TracesOutput {...traces} />;
+};
+
 export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) => {
   const model = useSession(hostKey, sessionId);
   const key = uiKey(hostKey, sessionId);
@@ -444,9 +463,12 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
 
   const groups = groupTurns(model.turns);
   const current = groupOf(groups, ui.diffTurnId) ?? groups.at(-1) ?? null;
-  const dataTab = useDataTab(hostKey, sessionId, model, current, subagent === null && !browser);
+  const free = subagent === null && !browser;
+  const dataTab = useDataTab(hostKey, sessionId, model, current, free);
   const data = dataTab.shown !== null;
-  const onChanges = subagent === null && !browser && !data;
+  const tracesTab = useTracesTab(hostKey, sessionId, key, current, free && !data);
+  const picked = pickedPane(hostKey, sessionId, dataTab.shown, tracesTab.shown);
+  const onChanges = free && picked === null;
 
   const session = model.session;
   const cwd = session?.cwd ?? null;
@@ -467,6 +489,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
     close();
     leaveBrowser(hostKey, sessionId);
     setDataOutputShown(key, false);
+    setTracesOutputShown(key, false);
   };
 
   const fold = (path: string) => {
@@ -498,8 +521,10 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             onPick={() => {
               close();
               leaveBrowser(hostKey, sessionId);
+              setTracesOutputShown(key, false);
             }}
           />
+          <TracesOutputTab tab={tracesTab} uiKey={key} onPick={changes} />
           <BrowserOutputTab
             hostKey={hostKey}
             sessionId={sessionId}
@@ -535,8 +560,8 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             workspaceId={session.workspaceId}
             harness={harness}
           />
-        ) : dataTab.shown !== null ? (
-          <DataOutput hostKey={hostKey} sessionId={sessionId} {...dataTab.shown} />
+        ) : picked !== null ? (
+          picked
         ) : subagent === null ? (
           <Changes current={current} state={state} folded={folded} onFold={fold} />
         ) : (
