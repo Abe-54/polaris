@@ -1,7 +1,8 @@
 /**
  * The ledger checkout's traces for "Fix overdue totals" (Paper "Traces (⌘5)", T1–T6): Turns 10–12
  * and between Turns; the 434-span overdue run across ledger-api and fx-rates with ×214 repeated
- * calls, a failing test with an exception and logs, a partial trace, and the receiver's states.
+ * calls, a failing test with an exception and logs, a partial trace, a settlement run across five
+ * services (settle.ts), and the receiver's states.
  */
 import {
   type LogRecord,
@@ -21,6 +22,7 @@ import {
   type SpanSpec,
   type TraceSpec,
 } from "./build.ts";
+import { settleTrace } from "./settle.ts";
 
 export const FIXTURE_SESSION = SessionId.make("s-overdue-totals");
 
@@ -186,6 +188,7 @@ export const ERROR_TRACE: TraceSpec = {
   turn: FIXTURE_TURNS[12],
   launchedTurn: null,
   linked: true,
+  commands: { "ledger-tests": "bun test overdue-totals" },
   spans: [
     {
       id: "3c5d7e9f1a2b4c6d",
@@ -434,6 +437,7 @@ export const FIXTURE_TRACES: ReadonlyArray<TraceSpec> = [
     { name: "SELECT 1", text: "select 1" }
   ),
   PARTIAL_TRACE,
+  settleTrace(FIXTURE_TURNS[11]),
 ];
 
 export const FIXTURE_DETAILS: ReadonlyArray<TraceDetail> = FIXTURE_TRACES.map((t) =>

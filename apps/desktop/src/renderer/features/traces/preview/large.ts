@@ -7,6 +7,7 @@ import type { TraceDetail, TraceSummary } from "@polaris/protocol";
 import type { TracesApi } from "../data/api.ts";
 import { buildTrace, type SpanSpec, type TraceSpec } from "./build.ts";
 import { FIXTURE_CHECKOUT, FIXTURE_TURNS } from "./fixtures.ts";
+import { meshTrace } from "./mesh.ts";
 
 export const LARGE_SPANS = 10_000;
 
@@ -189,12 +190,19 @@ export const largeTrace = (): TraceSpec => ({
   spans: spans(),
 });
 
-const isLarge = (hash: string) => /^#traces\/large(?:$|\?)/.test(hash);
+/** The extra trace a scene lists first: `large` for the waterfall, `mesh` for the service map. */
+const extraTrace = (hash: string): (() => TraceSpec) | null => {
+  if (/^#traces\/large(?:$|\?)/.test(hash)) return largeTrace;
 
-/** In the `large` scene, the fixture api plus the 10,000-span trace, listed first. */
+  return /^#traces\/mesh(?:$|\?)/.test(hash) ? () => meshTrace(FIXTURE_TURNS[12]) : null;
+};
+
+/** In the `large` and `mesh` scenes, the fixture api plus their big trace, listed first. */
 export const withLargeTrace = (hash: string, api: TracesApi): TracesApi => {
-  if (!isLarge(hash)) return api;
-  const detail: TraceDetail = buildTrace(largeTrace(), FIXTURE_CHECKOUT);
+  const extra = extraTrace(hash);
+
+  if (extra === null) return api;
+  const detail: TraceDetail = buildTrace(extra(), FIXTURE_CHECKOUT);
   const summary: TraceSummary = detail.summary;
 
   return {

@@ -18,14 +18,20 @@ describe("the fixture traces.watch", () => {
 
   test.each([
     [{ turn: null }, ["GET /invoices"]],
-    [{ turn: TurnId.make("t-overdue-11") }, ["POST /invoices/overdue", "test overdue-totals"]],
-    [{ status: "error" as const }, ["test overdue-totals"]],
+    [
+      { turn: TurnId.make("t-overdue-11") },
+      ["settlements.run", "POST /invoices/overdue", "test overdue-totals"],
+    ],
+    [{ status: "error" as const }, ["test overdue-totals", "settlements.run"]],
     [
       { route: "POST /invoices/*" },
       ["POST /invoices/overdue", "POST /invoices/overdue", "POST /invoices/import"],
     ],
     [{ route: "GET /invoices?status=overdue" }, ["GET /invoices?status=overdue"]],
-    [{ service: "fx-rates" }, ["POST /invoices/overdue", "POST /invoices/overdue"]],
+    [
+      { service: "fx-rates" },
+      ["POST /invoices/overdue", "settlements.run", "POST /invoices/overdue"],
+    ],
     [{ minMs: 1500 }, ["test overdue-totals", "POST /invoices/import"]],
   ])("filters by %j", (filter, expected) => {
     expect(roots(filter)).toEqual(expected);
