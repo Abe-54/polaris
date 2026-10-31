@@ -5,6 +5,7 @@ import { loopbackRequest } from "../transport/loopbackHttp.ts";
 import { IngestError, MAX_BODY_BYTES } from "./ingest.ts";
 import { TraceRuntime, TRACE_PORT } from "./runtime.ts";
 import { TraceStore } from "./store.ts";
+import { TRACE_TOKEN_PATTERN } from "./tokens.ts";
 
 const ListenError = Schema.Struct({ code: Schema.String });
 
@@ -118,7 +119,7 @@ export const traceReceiver = (options: ReceiverOptions = {}) =>
 
         if (request.method !== "POST") return refuse(request, 405);
 
-        const path = /^\/otlp\/([a-f0-9]{64})\/v1\/(traces|logs)$/.exec(
+        const path = new RegExp(`^/otlp/(${TRACE_TOKEN_PATTERN})/v1/(traces|logs)$`).exec(
           new URL(request.url).pathname
         );
 

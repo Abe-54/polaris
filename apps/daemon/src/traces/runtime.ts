@@ -4,6 +4,7 @@ import {
   TraceAvailability,
   TraceError,
   type SessionId,
+  type TurnId,
   type TracesSnapshot,
 } from "@polaris/protocol";
 import { polarisHome } from "../paths.ts";
@@ -35,7 +36,8 @@ export class TraceRuntime extends Context.Service<
   {
     readonly environment: (
       sessionId: SessionId,
-      source: TraceEnvironment
+      source: TraceEnvironment,
+      launchTurn?: TurnId
     ) => Effect.Effect<Record<string, string>, TraceError>;
     readonly terminalEnvironment: (
       cwd: string,
@@ -68,15 +70,17 @@ export class TraceRuntime extends Context.Service<
 
         const vaultCall = <A>(fn: () => A) => Effect.try({ try: fn, catch: tokenError });
 
-        const endpoint = (context: IngestContext) =>
+        const endpoint = (context: IngestContext, launchTurn?: TurnId | null) =>
           vaultCall(() => {
-            const token = vault.issue(
+            const parent = vault.issue(
               TraceBinding.make({
                 checkout: context.checkout,
                 workspaceId: context.workspaceId,
                 sessionId: context.sessionId,
               })
             );
+
+            const token = launchTurn === undefined ? parent : vault.issueLaunch(parent, launchTurn);
 
             return `http://127.0.0.1:${port}/otlp/${token}`;
           });
@@ -87,7 +91,11 @@ export class TraceRuntime extends Context.Service<
             Effect.andThen(store.notify)
           );
 
-        const environment = Effect.fnUntraced(function* (id: SessionId, source: TraceEnvironment) {
+        const environment = Effect.fnUntraced(function* (
+          id: SessionId,
+          source: TraceEnvironment,
+          launchTurn?: TurnId
+        ) {
           const exported = userExports(source);
           const changed = yield* vaultCall(() => vault.markExported(id, exported));
 
@@ -98,7 +106,7 @@ export class TraceRuntime extends Context.Service<
           if (!(yield* sessions.active(id))) return {};
           const context = yield* sessions.session(id);
 
-          return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context) };
+          return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context, launchTurn) };
         });
 
         const authenticate = Effect.fnUntraced(function* (token: string) {
@@ -115,8 +123,16 @@ export class TraceRuntime extends Context.Service<
             if (
               context.checkout === binding.checkout &&
               context.workspaceId === binding.workspaceId
-            )
-              return context;
+            ) {
+              const launchTurn = yield* vaultCall(() => vault.launchedTurn(token));
+
+              const launchedTurn =
+                context.turns.find(({ turn }) => turn.id === launchTurn)?.turn ?? null;
+
+              if (launchTurn !== null && launchedTurn === null) return null;
+
+              return { ...context, launchedTurn };
+            }
           }
 
           yield* vaultCall(() => vault.revokeToken(token));
@@ -132,7 +148,7 @@ export class TraceRuntime extends Context.Service<
             if (userExports(source) || !TraceAvailability.guards.Listening(availability)) return {};
             const context = yield* sessions.workspace(cwd);
 
-            return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context) };
+            return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context, null) };
           }),
           checkout: (id) => Effect.map(sessions.session(id), (context) => context.checkout),
           setup: Effect.fnUntraced(function* (id, includeEndpoint = true) {

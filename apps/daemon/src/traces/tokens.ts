@@ -1,8 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { Schema } from "effect";
-import { SessionId, WorkspaceId } from "@polaris/protocol";
+import { Option, Schema } from "effect";
+import { SessionId, TurnId, WorkspaceId } from "@polaris/protocol";
 
 export const TraceBinding = Schema.Struct({
   checkout: Schema.String,
@@ -24,6 +24,13 @@ const SavedBindings = Schema.Struct({
 });
 
 const decodeBindings = Schema.decodeUnknownSync(Schema.fromJsonString(SavedBindings));
+
+const Launch = Schema.Struct({ turnId: Schema.NullOr(TurnId), nonce: Schema.String });
+
+const decodeLaunch = Schema.decodeUnknownOption(Schema.fromJsonString(Launch));
+
+/** Bounded child tokens authenticate their parent epoch and an immutable launch identity. */
+export const TRACE_TOKEN_PATTERN = "[a-f0-9]{64}(?:\\.[A-Za-z0-9_-]{1,1024}\\.[a-f0-9]{64})?";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -118,6 +125,12 @@ export class TraceTokenVault {
   authenticate(token: string): TraceBinding | null {
     const saved = this.load();
 
+    if (token.includes(".")) {
+      const launch = this.launch(token);
+
+      return launch === null ? null : this.authenticate(launch.parent);
+    }
+
     if (!/^[a-f0-9]{64}$/.test(token)) return null;
     const bindingKey = this.lookup.get(hash(token));
 
@@ -131,6 +144,50 @@ export class TraceTokenVault {
       )
       ? entry.binding
       : null;
+  }
+
+  issueLaunch(parent: string, turnId: TurnId | null): string {
+    const binding = this.authenticate(parent);
+
+    if (binding === null || parent.includes(".") || (binding.sessionId === null && turnId !== null))
+      throw new Error("Invalid trace launch binding");
+
+    const payload = Buffer.from(
+      JSON.stringify({ turnId, nonce: randomBytes(16).toString("hex") })
+    ).toString("base64url");
+
+    if (payload.length > 1024) throw new Error("Trace launch identity exceeds limit");
+    const message = `${parent}.${payload}`;
+
+    return `${message}.${this.signLaunch(message)}`;
+  }
+
+  launchedTurn(token: string): TurnId | null {
+    return this.launch(token)?.turnId ?? null;
+  }
+
+  private signLaunch(message: string): string {
+    this.load();
+
+    return createHmac("sha256", this.seed!).update(`launch:${message}`).digest("hex");
+  }
+
+  private launch(token: string): { parent: string; turnId: TurnId | null } | null {
+    const match = new RegExp(`^(${TRACE_TOKEN_PATTERN})$`).exec(token);
+
+    if (match === null) return null;
+    const [parent, payload, signature] = token.split(".");
+
+    if (payload === undefined || signature === undefined) return null;
+    const expected = this.signLaunch(`${parent}.${payload}`);
+
+    if (!timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expected, "hex"))) return null;
+
+    const launch = Option.getOrNull(
+      decodeLaunch(Buffer.from(payload, "base64url").toString("utf8"))
+    );
+
+    return launch === null ? null : { parent: parent!, turnId: launch.turnId };
   }
 
   userExported(sessionId: SessionId): boolean | undefined {

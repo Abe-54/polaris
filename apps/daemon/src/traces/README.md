@@ -18,7 +18,7 @@ The event store owns authority. Archived or failed sessions and removed Workspac
 revoke their bindings and prune exporter preferences. The lifecycle subscriber
 also reconciles on startup; authentication rechecks authority before ingest.
 Dormancy, Harness scope close, graceful restart and upgrade preserve endpoints.
-Terminals share a Workspace endpoint. Sessions in subfolders resolve the same
+Terminals use child endpoints of their Workspace binding. Sessions in subfolders resolve the same
 containing Workspace/worktree checkout root as terminals. Turn intervals load
 once, then update from the read model's recent Turns; a missed history window
 causes a fresh history read.
@@ -88,14 +88,44 @@ The `traces.watch/get/span` RPCs resolve checkout from the selected Agent Sessio
 Only the first watch page includes the endpoint; later pages set it to null.
 Clients keep the initial endpoint separately in memory and never persist it.
 
-Span start time chooses the historical Turn interval. `launchedTurn` is null
-until per-command process launch attribution is implemented (ENG-673). Forwarding
-and Vercel duplicate-export detection are ENG-674 and ENG-675. No Engine command,
-event-log semantics, or model spec changes are required for ingest.
+Span start time chooses the historical Turn interval; batch arrival never chooses
+either attribution field. Managed Claude Bash commands on macOS/Linux receive a
+per-command endpoint from the SDK `PreToolUse` hook (ENG-673). Its child token
+contains the parent endpoint, a launch Turn id and a random nonce, authenticated
+with the Daemon's private seed. The receiver verifies that signature, parent
+revocation/checkout authority, and the Turn's membership in the bound Agent Session.
+The token is stateless and survives graceful restart without retaining one vault
+entry per command. A server launched in Turn 2 keeps `launchedTurn=2` while Spans
+started during Turn 5 get `turn=5`; between Turns, `turn=null` and `launchedTurn=2`.
+
+The Bash hook sources a private 0600 environment file in a 0700 temporary directory,
+so raw tokens never enter tool command text. Sourcing removes the file; Harness
+scope close removes unused files. Preparation failure leaves the session endpoint
+and unknown launch attribution. Polaris terminal opens also receive unique child
+endpoints; user terminals have Workspace authority and `launchedTurn=null` because
+no Agent Session Turn launched them. Commands typed into an interactive user shell
+inherit that terminal's endpoint.
+
+Codex agent, reviewer and TUI shell launches retain `launchedTurn=null`: the current
+app-server contract exposes only thread-level `shell_environment_policy.set`, not
+a per-command environment hook. Notifications cannot prove which environment a
+child inherited. [ENG-691](https://linear.app/luxdev/issue/ENG-691) tracks enabling
+this when Codex supplies a hook. Claude reviewer launches retain null to preserve
+their checkout sandbox. Claude Subagent hooks have no verified owner-Turn binding
+here, so they never borrow the foreground Turn. Claude In Terminal, Windows Bash,
+OpenCode and ACP launches
+also have no supported per-command injection here and remain null. Ordinary session
+endpoints and process-supplied `polaris.launch.*` attributes cannot establish launch
+authority. `environment.test.ts` pins Codex's null result, including reviewers.
+
+Forwarding and Vercel duplicate-export detection are ENG-674 and ENG-675. No Engine
+command, event-log semantics, protocol shape or model spec changes are required.
 
 Run `bun test apps/daemon/src/traces` with native loopback/PTY access. The
 `packages/bench` `traces` scenario drives 200k Spans through the real Daemon,
 measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
+ENG-673's default-timeout checks, negative control and raw paired measurements
+are in [launch-bench/README.md](./launch-bench/README.md).
 
 MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
