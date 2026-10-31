@@ -122,7 +122,7 @@ test("previous end baseline is labelled, and another session's checkout activity
       const reads = f.reads();
       yield* f.worker.begin(nextTurn);
       expect(f.reads()).toBe(reads + 1);
-      expect(f.records.records(turn.sessionId, nextTurn.id)[0]?.baseline).toBe("turn-start");
+      expect(f.records.records(turn.sessionId, nextTurn.id)[0]?.baseline).toBe("first-use");
     })
   ));
 
@@ -207,7 +207,7 @@ test("the live committed-event subscription captures outside the commit boundary
 test("Turn-end capture retains W affected counts after Query Log pruning", () =>
   run(
     Effect.gen(function* () {
-      const f = yield* fixture();
+      const f = yield* fixture({ migrationChanged: () => Promise.resolve(false) });
       yield* f.worker.begin(turn);
 
       const logged = {

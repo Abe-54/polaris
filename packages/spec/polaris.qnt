@@ -1302,3 +1302,48 @@ module data_approvals {
   run deniedRetryTest = init.then(request("server1/db1/user1")).then(deny("server1/db1/user1"))
     .expect(data.pending.size() == 0 and not(allowed("server1/db1/user1")) and safety)
 }
+
+/** Schema Diff is a sidecar projection: target attribution never changes Session receipts. */
+module data_snapshots {
+  type SnapshotState = { turn: int, working: bool, revision: int, baselineRevision: int,
+    origin: int, lastEnd: int, baseline: str, captures: int, concurrent: bool, uncertain: bool }
+  var snap: SnapshotState
+  action init = snap' = { turn: 0, working: false, revision: 0, baselineRevision: -1,
+    origin: -1, lastEnd: -1, baseline: "first-use", captures: 0, concurrent: false, uncertain: false }
+  action begin = all {
+    not(snap.working), snap.turn < 8,
+    val stale = snap.origin < 0 or snap.baselineRevision != snap.revision
+    snap' = { ...snap, turn: snap.turn + 1, working: true,
+      origin: if (stale) snap.turn + 1 else snap.origin,
+      baselineRevision: if (stale) snap.revision else snap.baselineRevision,
+      captures: snap.captures + (if (stale) 1 else 0),
+      baseline: if (stale) (if (snap.turn == 0) "turn-start" else "first-use") else if (snap.lastEnd == snap.turn) "previous-turn-end" else "first-use",
+      concurrent: false, uncertain: false }
+  }
+  action activity(sameTarget: bool, otherSession: bool): bool = snap' = { ...snap,
+    revision: snap.revision + (if (sameTarget) 1 else 0),
+    concurrent: snap.concurrent or (sameTarget and otherSession and snap.working),
+    uncertain: snap.uncertain or (sameTarget and snap.working) }
+  action finish(used: bool): bool = all {
+    snap.working,
+    snap' = { ...snap, working: false,
+      origin: if (used) snap.turn else snap.origin,
+      lastEnd: if (used) snap.turn else snap.lastEnd,
+      baselineRevision: if (used) snap.revision else snap.baselineRevision,
+      captures: snap.captures + (if (used) 1 else 0) }
+  }
+  action step = any { begin, finish(true), finish(false), activity(true,true), activity(true,false), activity(false,true) }
+  val safety = all { snap.captures >= 0, snap.origin <= snap.turn,
+    snap.concurrent implies snap.uncertain,
+    (snap.baseline == "previous-turn-end" and snap.working) implies snap.lastEnd == snap.turn - 1 }
+  run carriedProvenanceTest = init.then(begin).then(finish(false)).then(begin)
+    .expect(snap.captures == 1 and snap.origin == 1 and snap.baseline == "first-use" and safety)
+  run adjacentEndTest = init.then(begin).then(finish(true)).then(begin)
+    .expect(snap.captures == 2 and snap.origin == 1 and snap.baseline == "previous-turn-end" and safety)
+  run userActivityStalesTest = init.then(begin).then(finish(true)).then(activity(true,false)).then(begin)
+    .expect(snap.captures == 3 and snap.origin == 2 and snap.baseline == "first-use" and safety)
+  run unrelatedTargetTest = init.then(begin).then(finish(true)).then(activity(false,true)).then(begin)
+    .expect(snap.captures == 2 and snap.baseline == "previous-turn-end" and safety)
+  run concurrentWriterTest = init.then(begin).then(activity(true,true)).then(finish(true))
+    .expect(snap.concurrent and snap.uncertain and safety)
+}

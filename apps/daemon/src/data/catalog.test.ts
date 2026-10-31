@@ -75,7 +75,9 @@ const columns = [
 
 const indexes = [
   txt("name", "PRIMARY"),
-  txt("columns", '["id"]', 252),
+  txt("relation_id", "orders"),
+  txt("column_name", "id"),
+  int("position", 1),
   int("is_unique", 1),
   txt("definition", "BTREE"),
 ];
@@ -153,7 +155,7 @@ for (const [position, field, replacement, expected] of [
   [1, "name", int("name", 1), "functions.name"],
   [2, "default_value", int("default_value", 1), "columns.default_value"],
   [2, "fk", txt("fk", '{"password":"secret"}'), "columns.fk"],
-  [3, "columns", txt("columns", "[1]"), "indexes.columns"],
+  [3, "column_name", int("column_name", 1), "index.column"],
   [4, "definition", int("definition", 1), "constraints.definition"],
 ] as const)
   test(`malformed catalog ${expected} is a typed field-specific failure`, async () => {

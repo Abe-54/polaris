@@ -109,6 +109,18 @@ const run = (label: string, argv: ReadonlyArray<string>, expectFailure = false) 
 
 run("typecheck polaris.qnt", ["typecheck", "polaris.qnt"]);
 
+run("Schema Diff attribution scenarios", ["test", "polaris.qnt", "--main=data_snapshots"]);
+
+run("Schema Diff attribution safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_snapshots",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
 run("Data approval scenarios", ["test", "polaris.qnt", "--main=data_approvals"]);
 
 run("Data approval safety", [

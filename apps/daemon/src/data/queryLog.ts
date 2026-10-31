@@ -14,6 +14,7 @@ const decode = Schema.decodeUnknownSync(Schema.fromJsonString(QueryLogEntry));
 export interface DataActivity {
   readonly checkout: string;
   readonly source: QueryLogEntry["source"];
+  readonly target?: string;
   readonly author: { readonly sessionId?: SessionId; readonly turn?: TurnId };
 }
 
@@ -26,6 +27,10 @@ export class QueryLog extends Context.Service<
       import("effect").Scope.Scope
     >;
     readonly touch: (entry: QueryLogEntry) => Effect.Effect<void>;
+    readonly beforeWrite: (entry: QueryLogEntry) => Effect.Effect<void>;
+    readonly registerBeforeWrite: (
+      capture: (entry: QueryLogEntry) => Effect.Effect<void>
+    ) => Effect.Effect<void, never, import("effect").Scope.Scope>;
     readonly put: (
       entry: QueryLogEntry,
       once?: boolean
@@ -54,22 +59,58 @@ export class QueryLog extends Context.Service<
       CREATE TABLE IF NOT EXISTS data_query_activity (checkout TEXT NOT NULL,session TEXT NOT NULL,updated TEXT NOT NULL,PRIMARY KEY(checkout,session));`),
         catch: storageError,
       });
+      const beforeWrites = new Set<(entry: QueryLogEntry) => Effect.Effect<void>>();
+
+      const registerBeforeWrite = Effect.fnUntraced(function* (
+        capture: (entry: QueryLogEntry) => Effect.Effect<void>
+      ) {
+        beforeWrites.add(capture);
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            beforeWrites.delete(capture);
+          })
+        );
+      });
+
+      const beforeWrite = (entry: QueryLogEntry) =>
+        Effect.forEach(beforeWrites, (capture) => capture(entry), { discard: true });
+
       const changes = yield* PubSub.sliding<string>(64);
       const activity = yield* PubSub.unbounded<DataActivity>();
       yield* Effect.addFinalizer(() => PubSub.shutdown(activity));
       yield* Effect.addFinalizer(() => PubSub.shutdown(changes));
 
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS data_target_activity (target TEXT NOT NULL,session TEXT NOT NULL,kind TEXT NOT NULL,updated TEXT NOT NULL,turn TEXT,PRIMARY KEY(target,session,kind))"
+      );
+
       const touch = (entry: QueryLogEntry) =>
-        PubSub.publish(activity, {
-          checkout: entry.checkout,
-          source: entry.source,
-          author: {
-            ...(entry.author.sessionId === undefined
-              ? undefined
-              : { sessionId: entry.author.sessionId }),
-            ...(entry.author.turn === undefined ? undefined : { turn: entry.author.turn }),
-          },
-        }).pipe(Effect.asVoid);
+        Effect.gen(function* () {
+          if (
+            entry.target &&
+            !["failed", "cancelled", "dry-run", "waiting-approval"].includes(entry.state)
+          )
+            db.query(
+              "INSERT INTO data_target_activity VALUES (?,?,?,?,?) ON CONFLICT(target,session,kind) DO UPDATE SET updated=excluded.updated,turn=excluded.turn"
+            ).run(
+              entry.target,
+              entry.author.sessionId ?? "",
+              entry.author.kind,
+              new Date().toISOString(),
+              entry.author.turn ?? null
+            );
+          yield* PubSub.publish(activity, {
+            checkout: entry.checkout,
+            source: entry.source,
+            ...(entry.target ? { target: entry.target } : undefined),
+            author: {
+              ...(entry.author.sessionId === undefined
+                ? undefined
+                : { sessionId: entry.author.sessionId }),
+              ...(entry.author.turn === undefined ? undefined : { turn: entry.author.turn }),
+            },
+          });
+        });
 
       const page = (checkout: string, before?: string, limit = 100) =>
         Effect.try({
@@ -153,6 +194,8 @@ export class QueryLog extends Context.Service<
 
       return {
         put,
+        beforeWrite,
+        registerBeforeWrite,
         page,
         watch,
         subscribe: Effect.map(PubSub.subscribe(activity), Stream.fromSubscription),

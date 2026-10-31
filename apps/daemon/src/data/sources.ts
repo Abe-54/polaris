@@ -14,6 +14,7 @@ import {
 } from "./connection.ts";
 import { localityProbe } from "./listener.ts";
 import { discover } from "./discovery.ts";
+import { cachedDiscovery } from "./discoveryCache.ts";
 import { dataPasswords } from "./passwords.ts";
 import { dataFailure, openStorage, sourceStorage } from "./storage.ts";
 import type { DataSources } from "./index.ts";
@@ -58,6 +59,7 @@ export const sources = Effect.fnUntraced(function* (options: {
   readonly secrets: HostSecrets["Service"];
   readonly access: DataSourceAccess["Service"];
 }): Effect.fn.Return<DataSources["Service"], DataError, import("effect").Scope.Scope> {
+  const discoverSources = cachedDiscovery(options.discovery ?? discover);
   const db = yield* openStorage(options.path);
   const storage = sourceStorage(db);
   const passwords = dataPasswords(options.secrets);
@@ -68,7 +70,7 @@ export const sources = Effect.fnUntraced(function* (options: {
 
   const candidates = Effect.fnUntraced(function* (checkout: string) {
     const discovered = yield* Effect.tryPromise({
-      try: (signal) => (options.discovery ?? discover)(checkout, signal),
+      try: (signal) => discoverSources(checkout, signal),
       catch: dataFailure,
     }).pipe(Effect.timeout(2000), Effect.mapError(dataFailure));
 
@@ -192,7 +194,7 @@ export const sources = Effect.fnUntraced(function* (options: {
     const checkout = yield* checkoutPath(input.sessionId);
 
     const discovered = yield* Effect.tryPromise({
-      try: (signal) => (options.discovery ?? discover)(checkout, signal),
+      try: (signal) => discoverSources(checkout, signal),
       catch: dataFailure,
     }).pipe(Effect.timeout(2000), Effect.mapError(dataFailure));
 

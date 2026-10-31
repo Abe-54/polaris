@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SessionId, TurnId, TableDetail } from "@polaris/protocol";
@@ -117,13 +118,119 @@ test("missing affected counts use estimates and changed targets cannot form a wh
   const { db, store } = setup();
 
   try {
-    store.put(record({ after: { ...catalog(), tables: [table("bills")] } }));
+    store.put(
+      record({
+        after: {
+          ...catalog(),
+          tables: [
+            { ...Schema.encodeSync(TableDetail)(table("bills")), identity: "fixture-relation" },
+          ],
+        },
+      })
+    );
     expect(store.diff(sessionId, turn).sources[0]?.tables[0]?.rows).toEqual({
       kind: "estimate",
       value: 0,
     });
     store.put(record({ turn: TurnId.make("next"), index: 1, target: "different" }));
     expect(store.diff(sessionId).sources[0]).toMatchObject({ status: "unavailable", tables: [] });
+  } finally {
+    db.close();
+  }
+});
+
+test("200 unchanged Turns share one catalog, retain 50 Turns, and report pruned history", () => {
+  const { db, store } = setup();
+
+  try {
+    for (let index = 0; index < 200; index++)
+      store.put(
+        record({
+          turn: TurnId.make(`t${index}`),
+          index,
+          before: { ...catalog(), at: `2026-10-30T00:00:${index % 60}Z` },
+        })
+      );
+    expect(db.query("SELECT count(*) n FROM data_schema_catalogs").get()).toEqual({ n: 1 });
+    expect(db.query("SELECT count(*) n FROM data_schema_snapshots").get()).toEqual({ n: 50 });
+    expect(store.diff(sessionId, TurnId.make("t0"))).toMatchObject({ pruned: true, sources: [] });
+    expect(store.diff(sessionId, TurnId.make("t199")).sources).toHaveLength(1);
+    store.remove(sessionId);
+    expect(db.query("SELECT count(*) n FROM data_schema_catalogs").get()).toEqual({ n: 0 });
+  } finally {
+    db.close();
+  }
+});
+
+test("the Host byte cap evicts oldest references and collects unreferenced catalogs", () => {
+  const db = new Database(":memory:");
+  const store = new SchemaStore(db, 2500);
+  db.exec("CREATE TABLE data_query_log (seq INTEGER PRIMARY KEY,value TEXT)");
+
+  try {
+    for (let index = 0; index < 10; index++)
+      store.put(
+        record({
+          turn: TurnId.make(`t${index}`),
+          index,
+          before: { ...catalog(), tables: [table(`table${index}`)] },
+        })
+      );
+    expect(store.bytes()).toBeLessThanOrEqual(2500);
+    expect(store.diff(sessionId, TurnId.make("t0")).pruned).toBe(true);
+    expect(store.records(sessionId, "t9")).toHaveLength(1);
+  } finally {
+    db.close();
+  }
+});
+
+test("one-Turn reads and immediate-previous lookup never hydrate unrelated Turns", () => {
+  const { db, store } = setup();
+
+  try {
+    store.put(record());
+    store.put(record({ turn: TurnId.make("next"), index: 1 }));
+    db.query(
+      "UPDATE data_schema_snapshots SET value=json_set(value,'$.before.hash','missing') WHERE turn=?"
+    ).run(turn);
+    expect(store.records(sessionId, "next")).toHaveLength(1);
+    expect(store.previous(sessionId, "source", 2)?.turn).toBe(TurnId.make("next"));
+    expect(store.previous(sessionId, "source", 3)).toBeUndefined();
+  } finally {
+    db.close();
+  }
+});
+
+test("legacy and injected catalog text is scrubbed before content-addressed persistence", () => {
+  const { db, store } = setup();
+
+  try {
+    const detail = table();
+    store.put(
+      record({
+        before: {
+          ...catalog(),
+          tables: [
+            {
+              ...Schema.encodeSync(TableDetail)(detail),
+              columns: [{ ...detail.columns[0]!, default: "sk_live_KEEP_OUT" }],
+              constraints: [
+                {
+                  name: "secret_check",
+                  kind: "CHECK",
+                  definition: "token <> _utf8mb4\\'sk_live_KEEP_OUT\\'",
+                },
+              ],
+            },
+          ],
+        },
+      })
+    );
+    const values = db.query<{ value: string }, []>("SELECT value FROM data_schema_catalogs").all();
+    expect(values.map((x) => x.value).join()).not.toContain("sk_live_KEEP_OUT");
+    expect(store.records(sessionId, turn)[0]?.before?.tables[0]?.columns[0]?.default).toBe(
+      "[redacted]"
+    );
   } finally {
     db.close();
   }

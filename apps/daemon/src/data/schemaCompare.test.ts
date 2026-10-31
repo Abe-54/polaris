@@ -1,6 +1,7 @@
+import { Schema } from "effect";
 import { expect, test } from "bun:test";
 import { TableDetail } from "@polaris/protocol";
-import { compareCatalogs, type CatalogSnapshot } from "./schemaCompare.ts";
+import { compareCatalogs, type SnapshotTable, type CatalogSnapshot } from "./schemaCompare.ts";
 
 const table = (name: string, change: Partial<ConstructorParameters<typeof TableDetail>[0]> = {}) =>
   new TableDetail({
@@ -13,7 +14,7 @@ const table = (name: string, change: Partial<ConstructorParameters<typeof TableD
     ...change,
   });
 
-const snapshot = (...tables: TableDetail[]): CatalogSnapshot => ({
+const snapshot = (...tables: SnapshotTable[]): CatalogSnapshot => ({
   at: "2026-10-30T00:00:00Z",
   tables,
   truncated: false,
@@ -39,7 +40,11 @@ test("migration rename plus added column/index retains column/default/nullabilit
     rowEstimate: 13,
   });
 
-  const diff = compareCatalogs(snapshot(before), snapshot(after));
+  const diff = compareCatalogs(
+    snapshot(Object.assign(before, { identity: "relation-1" })),
+    snapshot(Object.assign(after, { identity: "relation-1" }))
+  );
+
   expect(diff).toHaveLength(1);
   expect(diff[0]).toMatchObject({
     kind: "renamed",
@@ -112,4 +117,40 @@ test("unchanged catalogs produce no diff, unavailable row estimates stay unknown
   expect(
     compareCatalogs(snapshot(), snapshot(table("orders", { rowEstimate: null })))[0]?.rows
   ).toEqual({ kind: "unknown", value: null });
+});
+
+test("stable identity distinguishes drop/create, even at the same name, from rename+alter", () => {
+  const a = { ...Schema.encodeSync(TableDetail)(table("old")), identity: "1" };
+  const b = { ...Schema.encodeSync(TableDetail)(table("new")), identity: "2" };
+  expect(compareCatalogs(snapshot(a), snapshot(b)).map((x) => x.kind)).toEqual([
+    "removed",
+    "added",
+  ]);
+  expect(compareCatalogs(snapshot(a), snapshot({ ...b, name: "old" })).map((x) => x.kind)).toEqual([
+    "removed",
+    "added",
+  ]);
+  expect(
+    compareCatalogs(snapshot(table("old")), snapshot(table("new"))).map((x) => x.kind)
+  ).toEqual(["removed", "added"]);
+  expect(
+    compareCatalogs(snapshot(a), snapshot({ ...b, identity: "1", columns: [] }))[0]?.kind
+  ).toBe("renamed");
+});
+
+test("one partial table never hides unrelated table additions and removals", () => {
+  const wide = { ...Schema.encodeSync(TableDetail)(table("wide")), detailsTruncated: true };
+  const diff = compareCatalogs(snapshot(wide, table("legacy")), snapshot(wide, table("payouts")));
+  expect(diff.map((x) => [x.kind, x.before?.name ?? x.after?.name])).toEqual([
+    ["removed", "legacy"],
+    ["added", "payouts"],
+  ]);
+});
+
+test("uncounted activity keeps stale zero estimates visible and counted author splits remain uncertain", () => {
+  const a = snapshot(table("orders"));
+  expect(compareCatalogs(a, a, [], true)[0]?.rows).toEqual({ kind: "estimate", value: 0 });
+  expect(
+    compareCatalogs(a, a, [{ table: "orders", rows: 5, author: "agent" }], true)[0]?.rows
+  ).toEqual({ kind: "unknown", value: null, agent: 5, user: 0 });
 });
