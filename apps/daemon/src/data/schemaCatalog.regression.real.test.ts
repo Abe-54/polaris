@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { DataPools } from "./pools.ts";
+import { readCatalog } from "./catalog.ts";
 import { snapshotCatalog } from "./schemaCatalog.ts";
 import { compareCatalogs } from "./schemaCompare.ts";
 import { disposable } from "./schemaCatalog.real.testing.ts";
@@ -26,6 +27,7 @@ for (const engine of ["postgres", "mysql"] as const) {
             `CREATE TABLE expressions (id int PRIMARY KEY,a int,b int,name varchar(80)${engine === "mysql" ? " CHARACTER SET utf8mb4 COLLATE utf8mb4_bin" : ' COLLATE "C"'},g int GENERATED ALWAYS AS (a*2) STORED,token varchar(100) DEFAULT 'sk_live_PRIVATE_DEFAULT',CHECK(token <> 'sk_live_PRIVATE_CHECK'))`
           );
           await db.unsafe("CREATE INDEX ab ON expressions(a,b)");
+          await db.unsafe("CREATE UNIQUE INDEX bi ON expressions(b,id)");
           await db.unsafe("CREATE INDEX nm ON expressions(name)");
           await db.unsafe("CREATE VIEW data_view AS SELECT id,a FROM expressions");
 
@@ -34,6 +36,22 @@ for (const engine of ["postgres", "mysql"] as const) {
               "CREATE INDEX secret_idx ON expressions(token) WHERE token = 'sk_live_PRIVATE_INDEX'"
             );
           const before = await capture();
+          const described = await Effect.runPromise(readCatalog(pools, resolved, "expressions"));
+
+          if (!("detail" in described)) throw new Error("Expected table detail");
+
+          for (const indexes of [
+            described.detail.indexes,
+            before.tables.find((t) => t.name === "expressions")!.indexes,
+          ]) {
+            expect(indexes.filter((index) => index.name === "ab")).toMatchObject([
+              { columns: ["a", "b"], unique: false },
+            ]);
+            expect(indexes.filter((index) => index.name === "bi")).toMatchObject([
+              { columns: ["b", "id"], unique: true },
+            ]);
+          }
+
           expect(JSON.stringify(before)).not.toContain("sk_live_PRIVATE");
           expect(before.truncated).toBe(false);
           expect(before.tables.find((t) => t.name === "wide")).toMatchObject({

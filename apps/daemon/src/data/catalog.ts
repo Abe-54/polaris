@@ -56,7 +56,7 @@ export const indexesSql = {
   postgres: `SELECT ci.relname AS name,i.indisunique AS is_unique,pg_get_indexdef(i.indexrelid) AS definition,
     (SELECT coalesce(json_agg(pg_get_indexdef(i.indexrelid,k,true)),'[]') FROM generate_series(1,i.indnkeyatts) k) AS columns
     FROM pg_index i JOIN pg_class ci ON ci.oid=i.indexrelid WHERE i.indrelid=to_regclass($1) ORDER BY ci.relname`,
-  mysql: `SELECT TABLE_NAME AS relation_id,INDEX_NAME AS name,NON_UNIQUE=0 AS is_unique,INDEX_TYPE AS definition,
+  mysql: `SELECT TABLE_NAME AS relation_id,INDEX_NAME AS name,CAST(NON_UNIQUE=0 AS UNSIGNED) AS is_unique,INDEX_TYPE AS definition,
     SEQ_IN_INDEX AS position,CONCAT(COALESCE(COLUMN_NAME,EXPRESSION),IF(SUB_PART IS NULL,'',CONCAT('(',SUB_PART,')')),IF(COLLATION='D',' DESC','')) AS column_name
     FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX`,
 };
