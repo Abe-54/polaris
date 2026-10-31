@@ -94,11 +94,11 @@ export const SQL_SCENES = {
   working: {
     api: inFlight("select * from invoices where status = 'overdue'", "running"),
     state: working,
-    play: (at) => openTable("app", "invoices", at),
+    play: (at) => openTable("app", { schema: "public", name: "invoices" }, at),
   },
   "working-write": {
     api: inFlight("update invoices set status = 'paid' where id = $1", "waiting-approval"),
     state: working,
-    play: (at) => openTable("app", "invoices", at),
+    play: (at) => openTable("app", { schema: "public", name: "invoices" }, at),
   },
 } satisfies Record<string, DataScene>;

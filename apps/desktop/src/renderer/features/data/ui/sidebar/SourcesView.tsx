@@ -11,7 +11,7 @@ import { useDataSources, useTableChanges } from "../../data/hooks.tsx";
 import { busyKey, busyTables, type LogLookups } from "../../model/queryLog.ts";
 import { openSourceForm, toggleTreeRow, useSidebar } from "../../model/sidebar.ts";
 import { type DataSessionKey, openTable } from "../../model/store.ts";
-import type { DataTab } from "../../model/tabs.ts";
+import { type DataTab, type TableRef, tableTabId } from "../../model/tabs.ts";
 import { openSources, treeRows } from "../../model/tree.ts";
 import { TreeRow } from "./TreeRow.tsx";
 import { useSchemaTrees } from "./useSchemaTrees.ts";
@@ -119,8 +119,7 @@ const Tree = ({
 
   const selected =
     active?.kind === "table"
-      ? (row: { source: string; table: string }) =>
-          row.source === active.sourceId && row.table === active.table
+      ? (row: { source: string; ref: TableRef }) => tableTabId(row.source, row.ref) === active.id
       : () => false;
 
   const focus = useTreeFocus({
@@ -168,7 +167,7 @@ const Tree = ({
                       : null
                   }
                   onToggle={(key, open) => toggleTreeRow(at, key, open)}
-                  onOpenTable={(source, table) => openTable(source, table, at)}
+                  onOpenTable={(source, ref, title) => openTable(source, ref, at, title)}
                 />
               )}
             </div>

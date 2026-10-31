@@ -65,7 +65,7 @@ describe("the connection bar", () => {
     const { api, posted } = posting(fixtureDataApi());
 
     mountData(api);
-    act(() => openTable("ledger", "invoices", DATA_AT));
+    act(() => openTable("ledger", { schema: "public", name: "invoices" }, DATA_AT));
 
     expect((await waitFor(() => bar())).dataset.colour).toBe("tan");
     click(bar());
@@ -173,7 +173,7 @@ describe("the connection bar", () => {
   test("a tab on a source that isn't listed says so, and never names another source", async () => {
     mountData(fixtureDataApi());
     await waitFor(() => bar());
-    act(() => openTable("warehouse-old", "page_views", DATA_AT));
+    act(() => openTable("warehouse-old", { schema: "public", name: "page_views" }, DATA_AT));
 
     await waitFor(() => expect(bar().dataset.gone).toBe(""));
     expect(bar().textContent).toBe("NOT IN THIS CHECKOUTwarehouse-oldIts data source is gone");
@@ -185,7 +185,7 @@ describe("the connection bar", () => {
 
   test("on a narrow bar the access keeps a short form, never in the label's colour", async () => {
     mountData(fixtureDataApi());
-    act(() => openTable("analytics", "events", DATA_AT));
+    act(() => openTable("analytics", { schema: "public", name: "events" }, DATA_AT));
 
     await waitFor(() => expect(bar().dataset.colour).toBe("red"));
     const short = page().getByTestId("data-connection-access-short");
@@ -202,7 +202,7 @@ describe("the connection bar", () => {
 
   test("the bar's table name reads in its own direction", async () => {
     mountData(fixtureDataApi());
-    act(() => openTable("app", "الفواتير_المتأخرة", DATA_AT));
+    act(() => openTable("app", { schema: "public", name: "الفواتير_المتأخرة" }, DATA_AT));
 
     const where = await waitFor(() => page().getByTestId("data-connection-where"));
 
@@ -230,7 +230,7 @@ describe("a source the user added", () => {
         return api.removeSource(at, name);
       },
     });
-    act(() => openTable("warehouse", "invoices", DATA_AT));
+    act(() => openTable("warehouse", { schema: "public", name: "invoices" }, DATA_AT));
 
     return removed;
   };

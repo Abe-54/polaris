@@ -5,8 +5,9 @@ import {
   type SchemaTableDiff,
   SessionId,
 } from "@polaris/protocol";
-import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
+import type { TableRef } from "../../data/model/tabs.ts";
 import type { ReactNode } from "react";
 import { DataLayer } from "../../data/index.ts";
 import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
@@ -71,6 +72,26 @@ describe("the Schema Diff body", () => {
     [{}, "Start → end of turn 7"],
   ])("%o says %s", (more, words) => {
     expect(body(source(more)).textContent).toContain(words);
+  });
+
+  test("Open in Data names the table by its schema and name, not one joined string", () => {
+    const opened: Array<TableRef> = [];
+
+    const billing = {
+      ...table("invoices", { kind: "exact", value: 1 }),
+      after: { schema: "billing", name: "invoices" },
+    };
+
+    const view = render(
+      <SchemaDiffBody
+        source={source({ tables: [billing] })}
+        scope="Start → end of turn 7"
+        onOpenTable={(ref) => opened.push(ref)}
+      />
+    );
+
+    fireEvent.click(view.getByRole("button", { name: /Open in Data/ }));
+    expect(opened).toEqual([{ schema: "billing", name: "invoices" }]);
   });
 
   test("folds past 30 tables until asked", () => {

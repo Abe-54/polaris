@@ -40,8 +40,12 @@ const update = (
 export const showDataSession = (at: DataSessionKey | null) =>
   dataTabsStore.setState({ shown: at === null ? null : dataSessionKey(at) });
 
-export const openTable = (sourceId: string, table: string, at?: DataSessionKey) =>
-  update(at, (s) => tabs.openTable(s, sourceId, table));
+export const openTable = (
+  sourceId: string,
+  ref: tabs.TableRef,
+  at?: DataSessionKey,
+  title?: string
+) => update(at, (s) => tabs.openTable(s, sourceId, ref, title));
 
 export const openSqlTab = (
   sql: string,

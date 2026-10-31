@@ -172,7 +172,7 @@ describe("Edit", () => {
     const { api, saved } = saving(fixtureDataApi({ sources: [...FIXTURE_SOURCES, manual] }));
 
     mountData(api);
-    act(() => openTable("warehouse", "invoices", DATA_AT));
+    act(() => openTable("warehouse", { schema: "public", name: "invoices" }, DATA_AT));
     click(await waitFor(() => page().getByTestId("data-connection-bar")));
     click(within(page().getByTestId("data-connection-card")).getByRole("button", { name: "Edit" }));
     click(page().getByTestId("data-source-clear-password"));

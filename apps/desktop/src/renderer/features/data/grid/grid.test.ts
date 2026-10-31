@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { layColumns, MAX_WIDTH } from "./columns.ts";
 import { toCsv } from "./csv.ts";
-import { rowsBlock } from "./rows.ts";
+import { indentJson } from "./json.ts";
+import { appendBlock, blockBudget, rowsBlock } from "./rows.ts";
 import { emptySelection, moveActive, selectAll, selectCell, selectedRows } from "./selection.ts";
 import { Option } from "effect";
 import {
@@ -11,6 +12,7 @@ import {
   decodeRows,
   DISPLAY_CHARS,
   displayOf,
+  formatSize,
 } from "./value.ts";
 
 const { BigInt, Bytes, Json, Numeric, Timestamp, Truncated } = DataValueTags.cases;
@@ -26,6 +28,10 @@ describe("cell display", () => {
     ["9f2c41aa-0000-4000-8000-00000000041a", "9f2c…41a"],
     ["two\nlines", "two⏎lines"],
     [Timestamp.make({ iso: "2026-08-02T09:30:00.000Z" }), "2026-08-02 09:30:00Z"],
+    [Timestamp.make({ iso: "2026-10-30T12:00:00.000+05:30" }), "2026-10-30 12:00:00+05:30"],
+    ["2026-10-30T09:00 standup", "2026-10-30T09:00 standup"],
+    ["a\tb\rc\r\nd\u2028e\u0085f", "a⇥b␍c⏎d⏎e⏎f"],
+    ["invoice_\u202Efdp.exe", "invoice_⟨RLO⟩fdp.exe"],
     [Bytes.make({ length: 16 }), "16 bytes"],
     [Truncated.make({ preview: '{"a":1', bytes: 1_048_576 }), '{"a":1…'],
   ])("%p shows as %p", (value, text) => {
@@ -37,6 +43,23 @@ describe("cell display", () => {
 
     expect(shown(long)).toHaveLength(DISPLAY_CHARS + 1);
     expect(cellOf(long).raw).toBe(long);
+  });
+
+  test("a long number, text that starts like a time, or a non-number in a numeric column is clipped first", () => {
+    const log = `2026-10-30T12:00 ${"x".repeat(1_000_000)}`;
+    const notANumber = `${"9".repeat(10)}\n${"x".repeat(5_000)}`;
+
+    expect(shown(log)).toHaveLength(DISPLAY_CHARS + 1);
+    expect(shown(Numeric.make({ value: "1".repeat(300) }))).toBe(`${"1".repeat(DISPLAY_CHARS)}…`);
+    expect(displayOf(cellOf(notANumber), { numeric: true })).toBe(
+      `${"9".repeat(10)}⏎${"x".repeat(DISPLAY_CHARS - 11)}…`
+    );
+  });
+
+  test("the inspector counts characters, and the database's size in bytes", () => {
+    expect(formatSize(1_000_000, "characters")).toBe("1.0M characters");
+    expect(formatSize(980, "characters")).toBe("980 characters");
+    expect(formatSize(1_048_576, "bytes")).toBe("1.0 MB");
   });
 
   test("rows parse at the boundary, and a cell that isn't a data value fails the result", () => {
@@ -58,7 +81,11 @@ describe("columns", () => {
       [
         { name: "id", type: "uuid" },
         { name: "total_cents", type: "int8" },
-        { name: "customer_id", type: "uuid", fk: { table: "customers", column: "id" } },
+        {
+          name: "customer_id",
+          type: "uuid",
+          fk: { schema: "public", table: "customers", column: "id" },
+        },
       ],
       []
     );
@@ -84,6 +111,26 @@ describe("columns", () => {
   });
 });
 
+describe("JSON in the inspector", () => {
+  test.each([
+    ['{"amount": 12345678901234567890}', '{\n  "amount": 12345678901234567890\n}'],
+    [
+      '{"p":0.1000000000000000055511,"n":1.50}',
+      '{\n  "p": 0.1000000000000000055511,\n  "n": 1.50\n}',
+    ],
+    ['{"a":1,"a":2}', '{\n  "a": 1,\n  "a": 2\n}'],
+    ['{"b":1,"2":0,"1":0}', '{\n  "b": 1,\n  "2": 0,\n  "1": 0\n}'],
+    ['{"s":"a, b: {c}","e":[],"o":{}}', '{\n  "s": "a, b: {c}",\n  "e": [],\n  "o": {}\n}'],
+    ['{"q":"say \\"hi\\""}', '{\n  "q": "say \\"hi\\""\n}'],
+  ])("%s keeps every lexeme as stored", (stored, indented) => {
+    expect(indentJson(stored)).toBe(indented);
+  });
+
+  test("text that isn't whole JSON comes back unchanged", () => {
+    expect(indentJson('{"items": [1, 2')).toBe('{"items": [1, 2');
+  });
+});
+
 describe("CSV", () => {
   test("quotes what needs it, leaves NULL empty and writes tagged values raw", () => {
     const csv = toCsv(
@@ -102,6 +149,40 @@ describe("CSV", () => {
       'note,paid_at,total\r\n"say ""hi"", then\nleave",,48200.00\r\nplain,2026-08-02T00:00:00Z,3\r\n'
     );
   });
+
+  test("NULL, the empty string and the text NULL stay three different fields", () => {
+    const columns = [{ name: "v", type: "text" }];
+    const rows = [[null], [""], ["NULL"]];
+
+    expect(toCsv(columns, rows)).toBe('v\r\n\r\n""\r\nNULL\r\n');
+    expect(toCsv(columns, rows, { nullToken: "NULL" })).toBe('v\r\nNULL\r\n\r\n"NULL"\r\n');
+  });
+
+  test("text a spreadsheet would run as a formula goes out inert; negative numbers don't", () => {
+    const csv = toCsv(
+      [
+        { name: "note", type: "text" },
+        { name: "n", type: "int4" },
+      ],
+      [
+        ['=HYPERLINK("http://x.test","click")', -5],
+        ["+cmd|' /C calc'!A0", 1],
+        ["-2+3", 2],
+        ["@SUM(1,1)", 3],
+        ["\t=1+1", 4],
+        ["\r=1+1", 5],
+      ]
+    );
+
+    expect(csv.split("\r\n").slice(1, -1)).toEqual([
+      `"'=HYPERLINK(""http://x.test"",""click"")",-5`,
+      "'+cmd|' /C calc'!A0,1",
+      "'-2+3,2",
+      `"'@SUM(1,1)",3`,
+      "'\t=1+1,4",
+      `"'\r=1+1",5`,
+    ]);
+  });
 });
 
 describe("rows for an agent session", () => {
@@ -113,8 +194,51 @@ describe("rows for an agent session", () => {
       rows: [["a ```` b"]],
     });
 
-    expect(block.split("\n")[0]).toBe("1 row from `app` · `public.invoices`:");
-    expect(block).toContain("`````csv\nnote\na ```` b\n`````\n");
+    expect(block.text.split("\n")[0]).toBe("1 row from `app` · `public.invoices`:");
+    expect(block.text).toContain("`````csv\nnote\na ```` b\n`````\n");
+  });
+
+  test("NULL is spelled out, text NULL quoted, formulas left raw, and a cut value says so", () => {
+    const { text } = rowsBlock({
+      source: "app",
+      from: "events",
+      columns: [
+        { name: "a", type: "text" },
+        { name: "b", type: "text" },
+        { name: "c", type: "text" },
+        { name: "d", type: "jsonb" },
+      ],
+      rows: [[null, "NULL", "=1+1", Truncated.make({ preview: '{"a":1', bytes: 1_048_576 })]],
+    });
+
+    expect(text).toContain('\nNULL,"NULL",=1+1,"{""a"":1…(cut short: 1.0 MB in the database)"\n');
+  });
+
+  test("the block keeps to the budget, row by row, and says how many of how many it holds", () => {
+    const rows = Array.from({ length: 10_000 }, (_, i) => [i, "x".repeat(300)]);
+
+    const source = {
+      source: "app",
+      from: "events",
+      columns: [
+        { name: "id", type: "int8" },
+        { name: "note", type: "text" },
+      ],
+      rows,
+    };
+
+    const draft = "Look at these:";
+    const budget = blockBudget(draft, 100_000);
+    const block = rowsBlock(source, budget);
+
+    expect(appendBlock(draft, block.text).length).toBeLessThanOrEqual(100_000);
+    expect(appendBlock(draft, rowsBlock(source, budget + 400).text).length).toBeGreaterThan(
+      100_000 - 400
+    );
+    expect(block.text.split("\n")[0]).toBe(
+      `The first ${block.rows} rows of 10,000 selected from \`app\` · \`events\`:`
+    );
+    expect(block.text.trimEnd().split("\n")).toHaveLength(block.rows + 4);
   });
 });
 

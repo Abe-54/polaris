@@ -15,6 +15,7 @@ import {
 import type { ReactNode } from "react";
 import { formatEstimate, isLocked, LABEL_TONES } from "../../model/source.ts";
 import type { TreeRow as Row } from "../../model/tree.ts";
+import type { TableRef } from "../table/sql.ts";
 
 const ROW =
   "h-tree-row flex w-full cursor-default items-center gap-2 rounded-[8px] pr-2.5 text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-starlight focus-visible:ring-inset";
@@ -45,7 +46,7 @@ export interface TreeRowProps {
   /** The Harness kind of an agent querying this table now. */
   readonly busy: string | null;
   readonly onToggle: (key: string, open: boolean) => void;
-  readonly onOpenTable: (source: string, table: string) => void;
+  readonly onOpenTable: (source: string, ref: TableRef, title: string) => void;
 }
 
 /** What every focusable row carries: its roving tabindex and the key the keyboard finds it by. */
@@ -130,7 +131,7 @@ const TableRow = ({
       data-testid="data-table-row"
       data-table={row.table}
       {...roving(row, tabStop)}
-      onClick={() => onOpenTable(row.source, row.table)}
+      onClick={() => onOpenTable(row.source, row.ref, row.table)}
       className={cn(ROW, "pl-10", selected ? "bg-fill-selected" : "hover:bg-fill-hover")}
       title={`${row.table}${summary.rowEstimate === null ? "" : ` · about ${summary.rowEstimate} rows`}${row.view ? " · view" : ""}`}
     >

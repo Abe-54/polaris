@@ -1,7 +1,7 @@
 /**
  * A `DataApi` over the fixtures, for `<DataLayer api={fixtureDataApi()}>` in previews and tests.
- * Queries read `select … from <table> [where <column> = '<value>']`; writes are refused. A scene
- * can add tables of its own (the bench's 10,000 rows, the worst case's 60 columns).
+ * Queries read `select … from [schema.]<table> [where (<column> = <literal>)] [limit n] [offset m]`;
+ * writes are refused. A scene can add tables of its own (the bench's 10,000 rows, the stress table).
  */
 import {
   type DataSchemaDiff,
@@ -59,9 +59,11 @@ const reach = (name: string, sources: ReadonlyArray<DataSource>): Result<null> =
   return { ok: true, value: null };
 };
 
-const FROM = /\bfrom\s+"?(\w+)"?/i;
+const FROM = /\bfrom\s+(?:[`"]?\w+[`"]?\.)?[`"]?(\w+)[`"]?/i;
 
-const WHERE = /\bwhere\s+"?(\w+)"?\s*=\s*'([^']*)'/i;
+const WHERE = /\bwhere\s+\(?\s*[`"]?(\w+)[`"]?\s*=\s*(?:'((?:[^']|'')*)'|(-?\d+(?:\.\d+)?))/i;
+
+const OFFSET = /\boffset\s+(\d+)/i;
 
 interface Selected {
   readonly table: string;
@@ -83,7 +85,7 @@ const tableOf = (table: string, extra: FixtureTables) => {
   return columns === null || rows === null ? null : { columns, rows };
 };
 
-/** Every row the SQL selects, before any limit. */
+/** Every row the SQL selects from its OFFSET on, before any limit. */
 const select = (sql: string, extra: FixtureTables): Result<Selected> => {
   if (!/^\s*(select|with)\b/i.test(sql))
     return fail("E-DATA-READ-ONLY", "Fixture data sources are read-only");
@@ -94,11 +96,13 @@ const select = (sql: string, extra: FixtureTables): Result<Selected> => {
     return fail("E-DATA-SQL", `relation "${table ?? "?"}" does not exist`);
   const where = WHERE.exec(sql);
   const at = where === null ? -1 : found.columns.findIndex((c) => c.name === where[1]);
+  const value = where?.[2]?.replaceAll("''", "'") ?? where?.[3];
+  const offset = Number(OFFSET.exec(sql)?.[1] ?? 0);
 
-  const rows =
-    at === -1 ? found.rows : found.rows.filter((row) => cellOf(row[at]).raw === where?.[2]);
+  const matched =
+    at === -1 ? found.rows : found.rows.filter((row) => cellOf(row[at]).raw === value);
 
-  return { ok: true, value: { table, columns: found.columns, rows } };
+  return { ok: true, value: { table, columns: found.columns, rows: matched.slice(offset) } };
 };
 
 /** Runs the fixture's small SQL subset; exported for the tests. */
@@ -156,6 +160,9 @@ const stream = (selected: Selected, limit: number, on: QueryStream) => {
 
   return () => clearTimeout(timer);
 };
+
+/** `"public"."invoices"` or `public.invoices` as `invoices`: the fixtures have one name each. */
+const bareName = (table: string) => (table.split(".").at(-1) ?? table).replaceAll(/["`]/g, "");
 
 const sampleOf = (table: string, sample: number | undefined) => {
   if (sample === undefined || sample === 0) return undefined;
@@ -261,7 +268,8 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
       if (!reached.ok) return reached;
 
       if (table === undefined) return { ok: true, value: data.schema?.(source) ?? FIXTURE_SCHEMA };
-      const detail = data.tables?.[table]?.detail ?? fixtureTable(table, sampleOf(table, sample));
+      const name = bareName(table);
+      const detail = data.tables?.[name]?.detail ?? fixtureTable(name, sampleOf(name, sample));
 
       return detail === null
         ? fail("NotFound", `No table named ${table}`)

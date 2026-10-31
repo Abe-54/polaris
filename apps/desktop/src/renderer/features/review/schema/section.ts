@@ -3,6 +3,7 @@
  * shows, and the migration headers' "Schema diff" link while the Review is on screen.
  */
 import type { SchemaSourceDiff } from "@polaris/protocol";
+import type { TableRef } from "../../data/model/tabs.ts";
 import { useEffect, useMemo } from "react";
 import { setTab } from "../overview/index.ts";
 import type { FileListData } from "../ui/FileList.tsx";
@@ -16,7 +17,7 @@ export interface ReviewSchema {
   /** "start → end of turn 7", "across this session". */
   readonly scope: string;
   /** Opens a table in Data (⌘4). */
-  readonly onOpenTable: (source: SchemaSourceDiff, table: string) => void;
+  readonly onOpenTable: (source: SchemaSourceDiff, table: TableRef) => void;
 }
 
 export interface SchemaSection {

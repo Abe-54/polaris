@@ -1,12 +1,16 @@
 /**
- * The filter well's completion: the table's columns (and a few SQL words) for the identifier
- * being typed at the caret. Columns that start with it come first, then ones that contain it.
+ * The filter well's completion: the table's columns (and the engine's SQL words) for the
+ * identifier being typed at the caret. Columns that start with it come first, then ones that
+ * contain it. A column goes in quoted when the engine would otherwise read another name.
  */
+import { type Engine, identFor } from "./sql.ts";
 
 export interface Completion {
   readonly label: string;
   /** The column's type, or "keyword". */
   readonly detail: string;
+  /** What accepting it types: the label, quoted where it needs to be. */
+  readonly insert: string;
 }
 
 export interface Completions {
@@ -16,7 +20,12 @@ export interface Completions {
   readonly items: ReadonlyArray<Completion>;
 }
 
-const KEYWORDS = ["and", "or", "not", "is null", "is not null", "like", "ilike", "in", "between"];
+const KEYWORDS = ["and", "or", "not", "is null", "is not null", "like", "in", "between"];
+
+const ENGINE_KEYWORDS: Readonly<Record<Engine, ReadonlyArray<string>>> = {
+  postgres: [...KEYWORDS, "ilike"],
+  mysql: [...KEYWORDS, "regexp"],
+};
 
 const MAX_ITEMS = 8;
 
@@ -28,7 +37,8 @@ const inString = (before: string) => (before.match(/'/g)?.length ?? 0) % 2 === 1
 export const complete = (
   text: string,
   caret: number,
-  columns: ReadonlyArray<{ readonly name: string; readonly type: string }>
+  columns: ReadonlyArray<{ readonly name: string; readonly type: string }>,
+  engine: Engine
 ): Completions | null => {
   const before = text.slice(0, caret);
   const token = IDENT.exec(before)?.[0];
@@ -48,8 +58,8 @@ export const complete = (
   };
 
   const scored = [
-    ...columns.map((c) => ({ label: c.name, detail: c.type })),
-    ...KEYWORDS.map((k) => ({ label: k, detail: "keyword" })),
+    ...columns.map((c) => ({ label: c.name, detail: c.type, insert: identFor(engine, c.name) })),
+    ...ENGINE_KEYWORDS[engine].map((k) => ({ label: k, detail: "keyword", insert: k })),
   ].flatMap((item) => {
     const score = rank(item.label);
 
@@ -65,8 +75,8 @@ export const complete = (
 };
 
 /** The text with a completion applied, and where the caret goes. */
-export const applyCompletion = (text: string, at: Completions, label: string) => {
-  const inserted = `${label} `;
+export const applyCompletion = (text: string, at: Completions, item: Completion) => {
+  const inserted = `${item.insert} `;
 
   return {
     text: `${text.slice(0, at.from)}${inserted}${text.slice(at.to).replace(/^ /, "")}`,

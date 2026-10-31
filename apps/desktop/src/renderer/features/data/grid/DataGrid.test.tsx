@@ -10,6 +10,7 @@ import { AppProvider } from "../../../shell/hooks.ts";
 import { type AppState, initialState } from "../../../store/store.ts";
 import type { GridColumn } from "./columns.ts";
 import { DataGrid } from "./DataGrid.tsx";
+import { GridCell } from "./GridCell.tsx";
 import { type DataValue, DataValueTags } from "./value.ts";
 import { emptySelection, type GridSelection, selectedRows } from "./selection.ts";
 
@@ -34,7 +35,7 @@ afterEach(cleanup);
 
 const COLUMNS: ReadonlyArray<GridColumn> = [
   { name: "id", type: "int8" },
-  { name: "customer_id", type: "uuid", fk: { table: "customers", column: "id" } },
+  { name: "customer_id", type: "uuid", fk: { schema: "public", table: "customers", column: "id" } },
   { name: "body", type: "jsonb" },
 ];
 
@@ -42,7 +43,9 @@ const ROWS = Array.from({ length: 10_000 }, (_, i) => [
   i + 1,
   `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
   i === 0
-    ? DataValueTags.cases.Json.make({ text: JSON.stringify({ items: ["a".repeat(500)] }) })
+    ? DataValueTags.cases.Json.make({
+        text: `{"items":["${"a".repeat(500)}"],"amount":12345678901234567890,"p":1.10}`,
+      })
     : null,
 ]);
 
@@ -115,9 +118,9 @@ test("a foreign key opens its value; a click selects the row and ⇧↓ extends 
   expect(selectedRows(selection)).toEqual([1, 2]);
 });
 
-test("↵ on a clipped cell shows it whole, indented, and esc closes it", () => {
+test("↵ on a clipped cell shows it whole, indented as stored, and esc closes it", () => {
   mount();
-  const json = document.querySelector('[data-row="0"][data-col="2"]');
+  const json = document.querySelector('[data-row="0"] [data-col="2"]');
 
   if (json === null) throw new Error("the first row didn't render");
   fireEvent.mouseDown(json, { button: 0 });
@@ -126,6 +129,48 @@ test("↵ on a clipped cell shows it whole, indented, and esc closes it", () => 
   const inspector = screen.getByTestId("data-cell-inspector");
 
   expect(inspector.textContent).toContain(`"items": [\n    "${"a".repeat(500)}"`);
+  expect(inspector.textContent).toContain('"amount": 12345678901234567890,\n  "p": 1.10');
+  expect(inspector.textContent).toContain("553 characters");
   fireEvent.keyDown(inspector, { key: "Escape" });
   expect(screen.queryByTestId("data-cell-inspector")).toBeNull();
+});
+
+const cellFor = (value: DataValue, column: Partial<GridColumn> = {}) => {
+  render(
+    <GridCell
+      column={{ name: "v", type: "text", width: 120, numeric: false, ...column }}
+      value={value}
+      col={0}
+      active={false}
+      height={32}
+    />
+  );
+
+  return screen.getByRole("gridcell");
+};
+
+test("NULL and the empty string read as placeholders, not as the text 'NULL'", () => {
+  const spoken = [null, "", "NULL"].map((value) => {
+    const cell = cellFor(value);
+    const said = [cell.getAttribute("aria-label"), cell.className.includes("italic")];
+
+    cleanup();
+
+    return said;
+  });
+
+  expect(spoken).toEqual([
+    ["null", true],
+    ["empty string", true],
+    [null, false],
+  ]);
+});
+
+test("a foreign key whose value can't be matched isn't a link, and says why", () => {
+  const cell = cellFor(DataValueTags.cases.Bytes.make({ length: 2, preview: "\\x0102" }), {
+    fk: { schema: "public", table: "files", column: "hash" },
+  });
+
+  expect(cell.dataset["fk"]).toBeUndefined();
+  expect(cell.title).toContain("binary");
 });

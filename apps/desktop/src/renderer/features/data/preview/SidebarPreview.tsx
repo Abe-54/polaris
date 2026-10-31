@@ -79,8 +79,9 @@ const prepare = (scene: Scene) => {
 
   if (sql !== undefined) return openSqlTab(...sql);
 
-  if (WITH_MANUAL.includes(scene)) openTable(MANUAL.name, "invoices", DATA_AT);
-  else openTable(REPLICA.name, WORST_LONG_TABLE, DATA_AT);
+  if (WITH_MANUAL.includes(scene))
+    openTable(MANUAL.name, { schema: "public", name: "invoices" }, DATA_AT);
+  else openTable(REPLICA.name, { schema: "public", name: WORST_LONG_TABLE }, DATA_AT);
 
   if (scene === "log") setSidebarView(DATA_AT, "log");
 

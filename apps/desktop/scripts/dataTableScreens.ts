@@ -2,12 +2,15 @@
 /**
  * The Table tab on fixtures (`#data/<scene>`, DESIGN.md Data; Paper D1/D2): screenshots in both
  * themes and every density, the worst case (60 columns, a 200-char text, a 1 MB JSON value), and
- * the grid's scroll frame rate over 10,000 rows × 20 columns against the display's interval.
- * `--profile` prints the renderer's hottest functions during the jumps run.
+ * the grid's scroll frame rate over 10,000 rows against the display's interval, and the Desktop
+ * App's footprint (RU2's measure: `footprint -p` summed over every Electron process). `--scene`
+ * picks the bench's table: `bench` (10,000 × 20) or RU2's `stress`, `stress-long`,
+ * `stress-control` (10,000 × 60). `--profile` prints the renderer's hottest functions during jumps.
  *
- *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--profile] [--json <path>]
+ *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--scene <name>]
+ *     [--profile] [--json <path>]
  */
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,7 +98,7 @@ const open = async (page: Page, scene: string, testId = "data-grid") => {
 };
 
 const cell = (page: Page, row: number, col: number) =>
-  page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
+  page.locator(`[data-row="${row}"] [data-col="${col}"]`).first();
 
 /** Runs `js` in the renderer with `grid` bound to the grid's scroller. */
 const onGrid = (page: Page, js: string) =>
@@ -213,6 +216,33 @@ const percentile = (values: ReadonlyArray<number>, p: number) => {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? 0;
 };
 
+const MAIN_THREAD = ["LayoutDuration", "RecalcStyleDuration", "ScriptDuration", "TaskDuration"];
+
+/** The renderer main thread's layout, style, script and task time (ms) per frame while `run` runs. */
+const mainThread = async (page: Page, label: string, run: () => Promise<Array<number>>) => {
+  const cdp = await page.context().newCDPSession(page);
+
+  const read = async () => {
+    const { metrics } = await cdp.send("Performance.getMetrics");
+
+    return new Map(metrics.map((m) => [m.name, m.value]));
+  };
+
+  await cdp.send("Performance.enable");
+  const before = await read();
+  const gaps = await run();
+  const after = await read();
+
+  const per = MAIN_THREAD.map(
+    (name) =>
+      `${name.replace("Duration", "").toLowerCase()} ${((((after.get(name) ?? 0) - (before.get(name) ?? 0)) * 1000) / Math.max(1, gaps.length)).toFixed(2)}`
+  );
+
+  log(`${label} main thread per frame (ms): ${per.join(", ")}`);
+
+  return gaps;
+};
+
 const maybeProfiled = <A>(page: Page, run: () => Promise<A>) =>
   args.includes("--profile") ? profiled(page, run) : run();
 
@@ -238,9 +268,118 @@ const line = (r: ReturnType<typeof summary>) =>
   `max ${r.max.toFixed(1)} ms, dropped ${(r.dropped * 100).toFixed(2)}%; ` +
   `display rate ${verdict(r.displayRate)}, 120 Hz ${verdict(r.at120Hz)}`;
 
+/** One process's `phys_footprint` in MB, as `footprint -p` reports it; 0 once it has exited. */
+const footprintMb = (pid: number) => {
+  try {
+    const text = execFileSync("footprint", ["-p", String(pid)], { encoding: "utf8" });
+    const match = /Footprint:\s+([\d.]+)\s+(KB|MB|GB)/.exec(text);
+    const scale = { KB: 1 / 1024, MB: 1, GB: 1024 } as const;
+
+    // SAFETY: the pattern only matches KB, MB or GB.
+    return match === null ? 0 : Number(match[1]) * scale[match[2] as keyof typeof scale];
+  } catch {
+    return 0;
+  }
+};
+
+/** The Desktop App's footprint: the total and each process's, by Electron's process type. */
+const footprint = async () => {
+  const metrics = await app.evaluate(({ app: electronApp }) =>
+    electronApp.getAppMetrics().map((m) => ({ pid: m.pid, type: m.type }))
+  );
+
+  const each = metrics.map((m) => ({ ...m, mb: footprintMb(m.pid) }));
+
+  return { totalMb: each.reduce((sum, m) => sum + m.mb, 0), each };
+};
+
+const memory = async (label: string, page?: Page) => {
+  const { totalMb, each } = await footprint();
+
+  const heap =
+    page === undefined
+      ? ""
+      : `; JS heap ${(await page.evaluate<Array<number>>("[performance.memory.usedJSHeapSize, performance.memory.totalJSHeapSize]")).map((b) => (b / 1_048_576).toFixed(0)).join(" of ")} MB`;
+
+  const parts = each
+    .filter((m) => m.mb >= 10)
+    .sort((a, b) => b.mb - a.mb)
+    .map((m) => `${m.type} ${m.mb.toFixed(0)}`)
+    .join(", ");
+
+  log(`footprint ${label}: ${totalMb.toFixed(0)} MB (${parts})${heap}`);
+
+  return totalMb;
+};
+
+interface DumpEvent {
+  readonly name?: string;
+  readonly pid?: number;
+  readonly args?: {
+    readonly dumps?: {
+      readonly allocators?: Record<
+        string,
+        { readonly attrs?: Record<string, { readonly value?: string }> }
+      >;
+    };
+  };
+}
+
+/**
+ * `--allocators`: Chromium's memory-infra dump of every process, top-level allocators in MB, to
+ * attribute a footprint (Blink's PartitionAlloc, V8, Skia, fonts, the GPU's tiles).
+ */
+const allocators = async (page: Page, label: string) => {
+  if (!args.includes("--allocators")) return;
+  const cdp = await page.context().newCDPSession(page);
+  const events: Array<DumpEvent> = [];
+
+  // SAFETY: trace events are objects; DumpEvent reads only optional fields of them.
+  cdp.on("Tracing.dataCollected", ({ value }) => events.push(...(value as Array<DumpEvent>)));
+  const done = new Promise((resolve) => cdp.once("Tracing.tracingComplete", resolve));
+
+  const layers = new Promise<number>((resolve) =>
+    cdp.once("LayerTree.layerTreeDidChange", ({ layers: tree }) => resolve(tree?.length ?? 0))
+  );
+
+  await cdp.send("LayerTree.enable");
+  // A frame with a change, so the layer tree is reported.
+  await onGrid(page, "grid.scrollTop += 1");
+  log(`composited layers ${label}: ${await layers}`);
+  await cdp.send("LayerTree.disable");
+  await cdp.send("Tracing.start", {
+    traceConfig: { includedCategories: ["disabled-by-default-memory-infra"] },
+  });
+  await cdp.send("Tracing.requestMemoryDump", { deterministic: true, levelOfDetail: "detailed" });
+  await cdp.send("Tracing.end");
+  await done;
+
+  for (const event of events) {
+    const dumps = event.args?.dumps?.allocators;
+
+    if (event.name !== "periodic_interval" && dumps === undefined) continue;
+
+    const top = Object.entries(dumps ?? {})
+      .filter(([name]) => !name.includes("/"))
+      .map(
+        ([name, a]) =>
+          [name, Number.parseInt(a.attrs?.["size"]?.value ?? "0", 16) / 1_048_576] as const
+      )
+      .filter(([, mb]) => mb >= 5)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, mb]) => `${name} ${mb.toFixed(0)}`);
+
+    if (top.length > 0) log(`allocators ${label}, pid ${event.pid}: ${top.join(", ")}`);
+  }
+};
+
 const bench = async (page: Page) => {
+  const scene = option("--scene") ?? "bench";
+
   await appearance(page, "dark", "calm");
-  await open(page, "bench");
+  await open(page, scene);
+  await page.waitForTimeout(1000);
+  const firstPage = await memory("at the first page", page);
 
   // Page in all 10,000 rows: each scroll to the end asks for the next 1,000.
   for (let i = 0; i < 40 && !(await footer(page)).includes("10,000 rows"); i++) {
@@ -253,6 +392,9 @@ const bench = async (page: Page) => {
   log(`loaded: ${loaded.split("\n")[0]}`);
   await onGrid(page, "grid.scrollTop = 0");
   await page.waitForTimeout(500);
+  const paged = await memory("after paging in", page);
+
+  await allocators(page, "after paging in");
 
   const interval = percentile(await frames(page, 1500, "() => {}"), 0.5);
 
@@ -261,10 +403,12 @@ const bench = async (page: Page) => {
     vertical: await frames(page, 5000, "(grid) => { grid.scrollTop += 96; }"),
     // A jump a frame: 40 rows, as a dragged scrollbar does.
     jumps: await maybeProfiled(page, () =>
-      frames(
-        page,
-        3000,
-        "(grid) => { grid.scrollTop = (grid.scrollTop + 1280) % grid.scrollHeight; }"
+      mainThread(page, "jumps", () =>
+        frames(
+          page,
+          3000,
+          "(grid) => { grid.scrollTop = (grid.scrollTop + 1280) % grid.scrollHeight; }"
+        )
       )
     ),
     horizontal: await frames(
@@ -276,17 +420,54 @@ const bench = async (page: Page) => {
 
   const columns = await page.locator('[role="columnheader"]').count();
   const heapMb = Number(await page.evaluate("performance.memory.usedJSHeapSize")) / 1_048_576;
+  const scrolled = await memory("after paging in and scrolling", page);
+
+  await allocators(page, "after scrolling");
+
+  await onGrid(page, "grid.scrollLeft = 0; grid.scrollTop = grid.scrollHeight - grid.clientHeight");
+  await page.waitForTimeout(500);
+  // The last rows' ids, so a page that repeats or skips shows here.
+
+  const lastIds = await page.evaluate(`[...document.querySelectorAll('[data-col="0"]')]
+    .map((c) => [Number(c.closest("[data-row]").dataset.row) + 1, c.textContent])
+    .sort((a, b) => a[0] - b[0]).slice(-3).map(([n, id]) => n + "→" + id)`);
+
+  log(`last rows: ${JSON.stringify(lastIds)}`);
+  await page.getByTestId("data-grid").click();
+  await page.keyboard.press("Meta+a");
+  const add = page.getByTestId("data-add-rows");
+
+  log(`⌘L offers: ${await add.innerText()}`);
+
+  if (await add.isEnabled()) await add.click();
+  await page.waitForTimeout(800);
+  const added = await memory("after ⌘A and Add rows", page);
 
   const results = Object.entries(runs).map(([name, gaps]) => summary(name, gaps, interval));
 
   log(`display interval ${interval.toFixed(2)} ms (${(1000 / interval).toFixed(0)} Hz)`);
-  log(`rendered column headers ${columns} of 20; renderer JS heap ${heapMb.toFixed(0)} MB`);
+  log(`rendered column headers ${columns}; renderer JS heap ${heapMb.toFixed(0)} MB`);
 
   for (const r of results) log(line(r));
   const json = option("--json");
 
   if (json !== null)
-    writeFileSync(json, JSON.stringify({ loaded, interval, heapMb, results }, null, 2));
+    writeFileSync(
+      json,
+      JSON.stringify(
+        {
+          scene,
+          loaded,
+          interval,
+          heapMb,
+          footprintMb: { firstPage, paged, scrolled, added },
+          lastIds,
+          results,
+        },
+        null,
+        2
+      )
+    );
 
   return results.every((r) => r.at120Hz);
 };

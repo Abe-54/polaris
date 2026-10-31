@@ -5,6 +5,7 @@
 import { cellOf, displayOf, type DataRow } from "./value.ts";
 
 export interface ForeignKey {
+  readonly schema: string;
   readonly table: string;
   readonly column: string;
 }

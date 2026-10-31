@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { SessionId, TableDetail } from "@polaris/protocol";
+import { tableSql } from "../ui/table/sql.ts";
 import { fixtureDataApi, runFixtureQuery } from "./fixtureApi.ts";
+import { TABLE_SCENES } from "./scenes/table.ts";
 
 const at = { hostKey: "local", sessionId: SessionId.make("s-overdue-totals") };
 
@@ -47,5 +49,32 @@ describe("Data fixtures", () => {
 
     expect(detail?.sample?.rows).toHaveLength(3);
     expect(detail?.columns.find((c) => c.name === "customer_id")?.fk?.table).toBe("customers");
+  });
+
+  test("a page reads from its OFFSET: the bench's page 2 starts at id 1,001", async () => {
+    const api = TABLE_SCENES.bench.api();
+
+    const page = (offset: number) =>
+      api.query(at, {
+        source: "app",
+        sql: tableSql({
+          engine: "postgres",
+          table: { schema: "public", name: "events" },
+          filter: "",
+          orderBy: ["id"],
+          limit: 200,
+          offset,
+        }),
+        limit: 200,
+      });
+
+    const [first, second] = await Promise.all([page(0), page(1000)]);
+
+    expect(
+      [first, second].map((r) => (r.ok ? [r.value.rows[0]?.[0], r.value.rows.at(-1)?.[0]] : r))
+    ).toEqual([
+      [1, 200],
+      [1001, 1200],
+    ]);
   });
 });

@@ -162,8 +162,10 @@ const api = () => fixtureDataApi({ tables: sceneTables() });
 const show =
   (table: string, view: { filter?: string; view?: "data" | "structure" } = {}, source = "app") =>
   (at: Parameters<NonNullable<DataScene["play"]>>[0]) => {
-    openTable(source, table, at);
-    setTableView(at, tableTabId(source, table), view);
+    const ref = { schema: "public", name: table };
+
+    openTable(source, ref, at);
+    setTableView(at, tableTabId(source, ref), view);
   };
 
 export const TABLE_SCENES = {

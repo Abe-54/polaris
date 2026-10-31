@@ -6,6 +6,7 @@ import {
   type ApprovalRequest,
   DataSource,
   type DataValue,
+  DataValueTags,
   QueryLogEntry,
   type QueryResult,
   RequestId,
@@ -270,7 +271,11 @@ const hex = (next: () => number, n: number) =>
 const uuid = (next: () => number) =>
   `${hex(next, 8)}-${hex(next, 4)}-4${hex(next, 3)}-a${hex(next, 3)}-${hex(next, 12)}`;
 
-const day = (offset: number) => new Date(FIXTURE_NOW + offset * 86_400_000).toISOString();
+/** A timestamptz as the Daemon sends it: tagged, not as text. */
+const day = (offset: number) =>
+  DataValueTags.cases.Timestamp.make({
+    iso: new Date(FIXTURE_NOW + offset * 86_400_000).toISOString(),
+  });
 
 const CUSTOMER_IDS = Array.from({ length: 24 }, (_, i) => uuid(seeded(1000 + i)));
 
