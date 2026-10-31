@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * The SQL tab and the Query Log drawer on fixtures (`#data/<scene>`, DESIGN.md Data; Paper D1/D2):
- * results, a database error, completion from the schema and Format, in both themes and every density.
+ * results, a database error, completion from the schema, and the Working strip over a table an
+ * agent is querying with its Query Log, in both themes and every density.
  *
  *   node scripts/dataSqlScreens.ts --out <dir> [--build] [--show]
  */
@@ -88,9 +89,9 @@ try {
       await shoot(page, `sql-${theme}-${density}`);
       await open(page, "sql-error", "data-sql-error");
       await shoot(page, `sql-error-${theme}-${density}`);
-      await open(page, "table", "data-query-log-row");
+      await open(page, "working", "data-working-strip");
       await page.getByTestId("data-query-log-row").nth(1).hover();
-      await shoot(page, `query-log-${theme}-${density}`);
+      await shoot(page, `working-${theme}-${density}`);
     }
 
     await appearance(page, theme, "calm");
