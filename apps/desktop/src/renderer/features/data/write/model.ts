@@ -10,8 +10,6 @@ import type {
   DataValue,
   QueryLogEntry,
 } from "@polaris/protocol";
-import { DataValue as DataValueSchema } from "@polaris/protocol";
-import { Option, Schema } from "effect";
 import { Decisions } from "../../../commands.ts";
 import { cellOf, displayOf } from "../grid/value.ts";
 import type { WriteOutcome } from "../../../store/sessionModel.ts";
@@ -59,26 +57,22 @@ export const verbOf = (sql: string): WriteVerb => {
 
 const rows = (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "row" : "rows"}`;
 
-/**
- * WF's additions (RW F1/F4), read here until the protocol has them: the bound params, and a write
- * the Daemon couldn't preview (a table with triggers), as WF plans them; reconciled at merge.
- */
-const WfFields = Schema.Struct({
-  params: Schema.optionalKey(Schema.Array(DataValueSchema)),
-  previewed: Schema.optionalKey(Schema.Boolean),
-});
-
-const wfFields = (write: DataWrite) =>
-  Option.getOrElse(Schema.decodeUnknownOption(WfFields)(write), (): typeof WfFields.Type => ({}));
-
 /** "$1 = 42 · $2 = 'USD'": what the statement binds; empty when it binds nothing. */
 export const paramsLine = (write: DataWrite): ReadonlyArray<string> =>
-  (wfFields(write).params ?? []).map((value, i) => `$${i + 1} = ${displayOf(cellOf(value))}`);
+  (write.params ?? []).map((value, i) => `$${i + 1} = ${displayOf(cellOf(value))}`);
 
-/** Not previewed: the Daemon ran no dry run, so there are no rows to show. */
-export const notPreviewed = (write: DataWrite): boolean => wfFields(write).previewed === false;
+/** Not previewed: the Daemon ran no dry run (DDL, triggers), so there are no rows to show. */
+export const notPreviewed = (write: DataWrite): boolean => write.previewed === false;
 
-export const NOT_PREVIEWED = "Not previewed: this table has triggers";
+const NOT_PREVIEWED = "Not previewed";
+
+/** Why there was no dry run, in the Daemon's words ("Not previewed: this table has triggers"). */
+const notPreviewedReason = (write: DataWrite) =>
+  write.note.trim().startsWith(NOT_PREVIEWED) ? write.note.trim() : NOT_PREVIEWED;
+
+/** The note under the rows: the preview's limits and sequences; an unpreviewed write's is its kicker. */
+export const noteLine = (write: DataWrite): string | null =>
+  notPreviewed(write) || write.note.trim() === "" ? null : write.note.trim();
 
 /** An insert's preview holds only the new rows. */
 const isInsert = (write: DataWrite) => verbOf(write.sql) === "insert";
@@ -91,7 +85,7 @@ export const rowsWording = (write: DataWrite) =>
 
 /** "Dry run · rolled back · 214 rows"; a schema change counts no rows; unpreviewed, no dry run. */
 export const dryRunKicker = (write: DataWrite) => {
-  if (notPreviewed(write)) return NOT_PREVIEWED;
+  if (notPreviewed(write)) return notPreviewedReason(write);
 
   return verbOf(write.sql) === "schema change"
     ? "Dry run · rolled back"
@@ -210,12 +204,8 @@ const EXPIRED = {
 const failureDetail = (entry: QueryLogEntry) =>
   entry.error?.trim() || "The database refused the write. Open the query log for what it ran.";
 
-/** WF's `unknown` state (E-DATA-OUTCOME-UNKNOWN), read as a string until the protocol has it. */
-export const outcomeUnknown = (entry: QueryLogEntry | undefined) => {
-  const state: string | undefined = entry?.state;
-
-  return state === "unknown";
-};
+/** The Daemon lost the COMMIT's confirmation (E-DATA-OUTCOME-UNKNOWN): it may or may not have run. */
+export const outcomeUnknown = (entry: QueryLogEntry | undefined) => entry?.state === "unknown";
 
 export const UNKNOWN_DETAIL =
   "The connection dropped before the database answered. Check the table before running it again.";
