@@ -43,6 +43,7 @@ export const resultFields: ConstructorParameters<typeof QueryResult>[0] = {
     [2, null],
   ],
   rowCount: 2,
+  returned: 2,
   truncated: false,
   elapsedMs: 34,
 };
@@ -81,11 +82,21 @@ export const tableFields: ConstructorParameters<typeof TableDetail>[0] = {
 export const table = new TableDetail(tableFields);
 
 export const tree = new SchemaTree({
+  loadedAt: "2026-10-30T00:00:00Z",
   schemas: [
     {
       name: "public",
-      tables: [{ name: "invoices", rowEstimate: 18402, columnCount: 4 }],
-      views: [{ name: "overdue", rowEstimate: null, columnCount: 2 }],
+      tables: [
+        { name: "invoices", rowEstimate: 18402, columnCount: 4, columns: tableFields.columns },
+      ],
+      views: [
+        {
+          name: "overdue",
+          rowEstimate: null,
+          columnCount: 2,
+          columns: tableFields.columns.slice(0, 2),
+        },
+      ],
       functions: ["invoice_total"],
     },
   ],

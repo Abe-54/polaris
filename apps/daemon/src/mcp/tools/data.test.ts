@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { DataError, QueryResult, RequestId, SchemaTree, TableDetail } from "@polaris/protocol";
+import {
+  DataError,
+  DataValueTags,
+  QueryResult,
+  RequestId,
+  SchemaTree,
+  TableDetail,
+} from "@polaris/protocol";
 import { Effect, Redacted } from "effect";
 import { DataApprovalRequired } from "../../data/approvalRequired.ts";
 import {
@@ -153,13 +160,16 @@ test("query values and samples redact URLs, passwords and tokens before clipping
       [
         "postgres://owner:top-secret@db/app",
         "top-secret",
-        { token: "nested-secret", link: "https://private.example/?token=secret" },
-        new Uint8Array(3),
-        new Date("2026-01-01T00:00:00Z"),
+        DataValueTags.cases.Json.make({
+          text: '{"token":"nested-secret","link":"https://private.example/?token=secret"}',
+        }),
+        DataValueTags.cases.Bytes.make({ length: 3 }),
+        DataValueTags.cases.Timestamp.make({ iso: "2026-01-01T00:00:00.000Z" }),
         "x".repeat(250),
       ],
     ],
     rowCount: 1,
+    returned: 1,
     elapsedMs: 1,
     truncated: false,
   });
@@ -241,6 +251,7 @@ test("describe caps tables at 500 and says how to fetch omitted tables", async (
       tables: Array.from({ length: 502 }, (_, i) => ({
         name: `t${i}`,
         columnCount: 1,
+        columns: [{ name: "id", type: "int4" }],
         rowEstimate: 0,
       })),
       views: [],
@@ -249,7 +260,10 @@ test("describe caps tables at 500 and says how to fetch omitted tables", async (
   ];
 
   const response = await toolsWithData({
-    describe: () => Effect.succeed(new SchemaTree({ schemas, truncatedTables: 3 })),
+    describe: () =>
+      Effect.succeed(
+        new SchemaTree({ schemas, truncatedTables: 3, loadedAt: "2026-10-30T00:00:00Z" })
+      ),
   })("describe").call({ source: "app" });
 
   expect(response.content[0]?.text).toContain("5 more tables; describe a table by name");

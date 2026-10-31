@@ -5,7 +5,11 @@ import {
   SaveDataSource,
   RemoveDataSource,
   LabelDataSource,
-  DecideDataApproval,
+  QueryDataStream,
+  PageDataQueryLog,
+  SetDataSourceAccess,
+  type QueryDataStreamItem,
+  type DataQueryLogPage,
   WatchDataSources,
   WatchDataQueryLog,
   type DataSource,
@@ -28,7 +32,8 @@ export const DataRequestInputs = {
   }),
   "data.source.remove": Schema.Struct({ ...OnHost, ...RemoveDataSource.payloadSchema.fields }),
   "data.source.label": Schema.Struct({ ...OnHost, ...LabelDataSource.payloadSchema.fields }),
-  "data.approval.decide": Schema.Struct({ ...OnHost, ...DecideDataApproval.payloadSchema.fields }),
+  "data.queryLog.page": Schema.Struct({ ...OnHost, ...PageDataQueryLog.payloadSchema.fields }),
+  "data.source.access": Schema.Struct({ ...OnHost, ...SetDataSourceAccess.payloadSchema.fields }),
 } as const;
 
 export interface DataRequestOutputs {
@@ -37,15 +42,18 @@ export interface DataRequestOutputs {
   readonly "data.source.save": DataSource;
   readonly "data.source.remove": null;
   readonly "data.source.label": DataSource;
-  readonly "data.approval.decide": null;
+  readonly "data.queryLog.page": typeof DataQueryLogPage.Type;
+  readonly "data.source.access": DataSource;
 }
 
 export const DataSubscriptionInputs = {
+  "data.query.stream": Schema.Struct({ ...OnHost, ...QueryDataStream.payloadSchema.fields }),
   "data.sources.watch": Schema.Struct({ ...OnHost, ...WatchDataSources.payloadSchema.fields }),
   "data.queryLog.watch": Schema.Struct({ ...OnHost, ...WatchDataQueryLog.payloadSchema.fields }),
 } as const;
 
 export interface DataSubscriptionItems {
+  readonly "data.query.stream": QueryDataStreamItem;
   readonly "data.sources.watch": ReadonlyArray<DataSource>;
   readonly "data.queryLog.watch": ReadonlyArray<QueryLogEntry>;
 }

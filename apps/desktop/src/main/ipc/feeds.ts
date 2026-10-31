@@ -1,10 +1,10 @@
-import { watchDataSources, watchDataQueryLog } from "@polaris/client";
 /**
  * The live feeds behind `window.polaris.subscribe`. Host and session feeds are
  * `@polaris/client`'s resumable feeds, so every window shares one upstream
  * subscription per stream: a new subscriber gets the cached Snapshot at once,
  * then events, and the feed survives reconnects.
  */
+import { queryDataStream, watchDataSources, watchDataQueryLog } from "@polaris/client";
 import {
   attachTerminal,
   type HostConnection,
@@ -19,6 +19,7 @@ import {
   type SubscriptionKind,
 } from "../../shared/contract.ts";
 import { type ClientServices, HostDirectory, toIpcError } from "../hosts.ts";
+import { toDataIpcError } from "./data.ts";
 import { githubOpeners } from "../github/ipc.ts";
 import { gitOpeners } from "./git.ts";
 import { constellationFeed } from "./constellation.ts";
@@ -53,6 +54,17 @@ const onLive = <A, E extends { readonly _tag: string; readonly message: string }
     Stream.unwrap(Effect.map(connection.session, (session) => use(session)))
   );
 
+const onData = <A, E extends { readonly _tag: string; readonly message: string }>(
+  hostKey: string,
+  use: (session: LiveSession) => Stream.Stream<A, E>
+) =>
+  Stream.unwrap(
+    HostDirectory.use((dir) => dir.connection(hostKey)).pipe(
+      Effect.flatMap((connection) => connection.session),
+      Effect.map(use)
+    )
+  ).pipe(Stream.mapError(toDataIpcError));
+
 type Openers = { readonly [K in SubscriptionKind]: (input: SubscriptionInput<K>) => Feed<K> };
 
 const openers: Openers = {
@@ -62,10 +74,12 @@ const openers: Openers = {
     Stream.fail({ code: "Unavailable", message: "Tab completion unavailable" }),
   "prediction.managed.watch": () =>
     Stream.fail({ code: "Unavailable", message: "Tab completion unavailable" }),
+  "data.query.stream": ({ hostKey, ...input }) =>
+    onData(hostKey, (session) => queryDataStream(session, input)),
   "data.sources.watch": ({ hostKey, ...input }) =>
-    onLive(hostKey, (session) => watchDataSources(session, input)),
+    onData(hostKey, (session) => watchDataSources(session, input)),
   "data.queryLog.watch": ({ hostKey, ...input }) =>
-    onLive(hostKey, (session) => watchDataQueryLog(session, input)),
+    onData(hostKey, (session) => watchDataQueryLog(session, input)),
   ...githubOpeners,
   ...gitOpeners,
   ...browserOpeners(undefined),
