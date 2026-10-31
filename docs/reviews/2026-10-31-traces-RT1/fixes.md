@@ -47,17 +47,17 @@ production Pi, or release-package build is claimed by this fix round.
 
 ## Validation and Area exceptions
 
-Final `bun run typecheck`: all 18 tasks passed. Final `bun run lint`: passed.
+Before the first Claim, `bun run typecheck` passed all 18 tasks and `bun run lint` passed.
 The earlier full `bun run test` passed all 19 tasks (Daemon: 3,188 pass,
 87 existing opt-in/environment skips). After the worker close-event correction,
-the final full run reported 18/19 tasks successful: Daemon 3,187 pass, 87 skip,
+the pre-Claim full run reported 18/19 tasks successful: Daemon 3,187 pass, 87 skip,
 one failure in the unchanged push end-to-end test at `push.e2e.test.ts:313`.
 It received and decrypted the fake APNs message, but the relay's `sent` log was
 not yet captured. Its immediate native isolated rerun passed all 21 assertions
 in 8.77 seconds. [ENG-683](https://linear.app/luxdev/issue/ENG-683) tracks that
 suspected synchronization race; the full-run failure is not waived by the rerun.
 
-All 65 trace tests passed, including in the final full run; the focused Desktop
+All 65 trace tests passed, including in that full run; the focused Desktop
 Traces suite passed 80 tests. The 19 migrated RT1 repros failed on the original
 implementation before these fixes. Native sockets and PTYs were enabled for
 validation. Existing skips include real database/vendor services and
@@ -65,7 +65,25 @@ platform-specific cases; they are not claimed as verified.
 
 The failed RSS comparison is tracked in
 [ENG-682](https://linear.app/luxdev/issue/ENG-682). No baseline was changed.
-Neither the full test gate nor the trace performance gate is claimed green.
+The trace performance gate remains unresolved; the latest full test result is below.
+
+### Revalidation after SX
+
+On 2026-10-31, after the operator lifted the full-check restriction, all three
+root checks ran sequentially against `2255b2e9554268e16c5d367b912eace01dcbb329`:
+
+- `bun run typecheck`: 18/18 tasks passed, 17 cached; 1m31.833s.
+- `bun run test`: 19/19 tasks passed, 18 cached; 9m41.838s. The Daemon ran fresh:
+  3,188 pass, 87 existing skips, zero failures across 566 files, including all
+  65 trace tests and the push end-to-end test that failed in the earlier run.
+- `bun run lint`: format check and lint ratchet passed.
+
+This follow-up changes only this validation report. No screenshot or Desktop
+launch was needed. The earlier intermittent push failure remains recorded in
+ENG-683; this passing run does not establish that its race is fixed. Benchmarks
+were not repeated, and ENG-682's RSS gate remains open with the baseline unchanged.
+
+### Area exceptions
 
 The Desktop boundary compatibility fix changes two paths outside TF1's Area:
 `apps/desktop/src/renderer/features/traces/data/api.ts` and its `api.test.ts`.
