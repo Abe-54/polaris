@@ -229,7 +229,7 @@ for (const engine of ["postgres", "mysql"] as const) {
         await admin.unsafe(`UPDATE ${wide} SET id='short'`);
         const bounded = await run(`UPDATE ${wide} SET v=2`, true);
         expect(Predicate.isTagged(bounded.before[0]?.[2], "Truncated")).toBe(true);
-        expect(bounded.note).toContain("omitted by the result budget");
+        expect(bounded.previewFacts?.truncated).toBe(true);
         expect((await admin.unsafe<Array<{ v: number }>>(`SELECT v FROM ${wide}`))[0]?.v).toBe(1);
 
         if (engine === "mysql") {
