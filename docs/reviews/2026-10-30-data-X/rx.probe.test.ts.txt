@@ -1,0 +1,134 @@
+/** RX probe: read-only escapes through X's executeRead on disposable databases. Not committed. */
+import { test } from "bun:test";
+import { SQL } from "bun";
+import { DataSource } from "@polaris/protocol";
+import { Redacted } from "effect";
+import { parseConnection } from "./connection.ts";
+import { executeRead } from "./execution.ts";
+import { DataPools, sqlOptions } from "./pools.ts";
+
+const URLS = {
+  postgres: process.env.RX_PG_URL!,
+  mysql: process.env.RX_MYSQL_URL!,
+} as const;
+
+export function setup(engine: "postgres" | "mysql") {
+  const { connection } = parseConnection({ name: "rx", url: Redacted.make(URLS[engine]), foundIn: { kind: "manual" } })!;
+  const source = new DataSource({ id: `rx-${engine}`, name: "rx", engine, host: connection.hostname,
+    port: connection.port, database: connection.database, user: connection.username, locality: "local",
+    foundIn: { kind: "manual" }, access: "read", writes: "ask", label: { text: "", colour: "none" }, reachable: true });
+  const admin = new SQL({ ...sqlOptions(source, connection), max: 4, allowPublicKeyRetrieval: engine === "mysql" });
+  const pools = new DataPools();
+  const run = (sql: string, opts: { limit?: number; timeoutMs?: number; signal?: AbortSignal; params?: never[] } = {}) =>
+    executeRead(pools, { source, connection, sql, params: opts.params ?? [], limit: opts.limit ?? 200,
+      timeoutMs: opts.timeoutMs ?? 30000 }, opts.signal ?? new AbortController().signal);
+  const outcome = async (sql: string) => {
+    try { const r = await run(sql); return `ok ${JSON.stringify(r.rows).slice(0, 80)}`; }
+    catch (e) { const x = e as { code?: string; message?: string }; return `${x.code} ${String(x.message).slice(0, 90)}`; }
+  };
+  return { source, connection, admin, pools, run, outcome };
+}
+
+const PG = [
+  "SELECT 1; UPDATE rx_probe SET v=1",
+  "COMMIT; UPDATE rx_probe SET v=1",
+  "ROLLBACK; UPDATE rx_probe SET v=1",
+  "SELECT 1 /* ; */",
+  "SELECT 1 /* /* */ ; UPDATE rx_probe SET v=1 */",
+  "SELECT 1 -- ;\n; UPDATE rx_probe SET v=1",
+  "SELECT E'\\'; UPDATE rx_probe SET v=1; --'",
+  "SELECT U&'\\0041'; UPDATE rx_probe SET v=1",
+  "SET TRANSACTION READ WRITE",
+  "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE",
+  "SELECT set_config('transaction_read_only','off',true)",
+  "SELECT set_config('default_transaction_read_only','off',false)",
+  "WITH x AS (UPDATE rx_probe SET v=1 RETURNING *) SELECT * FROM x",
+  "SELECT * FROM rx_probe FOR UPDATE",
+  "SELECT * FROM rx_probe FOR SHARE",
+  "SELECT nextval('rx_seq')",
+  "SELECT setval('rx_seq', 50)",
+  "SELECT lo_import('/etc/hosts')",
+  "SELECT lo_export(1, '/tmp/rx-lo-export')",
+  "SELECT pg_read_file('/etc/hostname')",
+  "SELECT count(*) FROM pg_ls_dir('/')",
+  "SELECT pg_reload_conf()",
+  "SELECT pg_rotate_logfile()",
+  "SELECT pg_advisory_lock(424242)",
+  "SELECT pg_notify('rx_channel','hello')",
+  "SELECT txid_current()",
+  "COPY (SELECT 1) TO PROGRAM 'true'",
+  "COPY rx_probe FROM STDIN",
+  "LISTEN rx_channel",
+  "NOTIFY rx_channel",
+  "DO $$ BEGIN UPDATE rx_probe SET v=1; END $$",
+  "PREPARE s AS UPDATE rx_probe SET v=1",
+  "EXECUTE s",
+  "SELECT rx_write()",
+  "SELECT count(*) FROM pg_extension WHERE extname IN ('dblink','postgres_fdw')",
+  "SELECT count(*) FROM pg_available_extensions WHERE name IN ('dblink','postgres_fdw')",
+];
+
+const MY = [
+  "SELECT 1; UPDATE rx_probe SET v=1",
+  "COMMIT; UPDATE rx_probe SET v=1",
+  "SELECT 1 /* ; */",
+  "SELECT 1 /* /* */ ; UPDATE rx_probe SET v=1 */",
+  "SELECT 1 # ;\n; UPDATE rx_probe SET v=1",
+  "SELECT 1 --\t;\nUPDATE rx_probe SET v=1",
+  "SELECT 1 --;\nUPDATE rx_probe SET v=1",
+  "SELECT '\\'; UPDATE rx_probe SET v=1; -- '",
+  "SELECT \"a\\\"; UPDATE rx_probe SET v=1; -- \"",
+  "SET autocommit=1",
+  "SET TRANSACTION READ WRITE",
+  "SELECT /*!50000 1 */",
+  "SELECT /*+ SET_VAR(sql_mode='') */ 1",
+  "SELECT * FROM rx_probe FOR UPDATE",
+  "SELECT * FROM rx_probe FOR SHARE",
+  "SELECT rx_write()",
+  "SELECT GET_LOCK('rx_lock', 0)",
+  "SELECT @rx_var := 5",
+  "SELECT BENCHMARK(1000, MD5('x'))",
+  "SELECT LOAD_FILE('/etc/hostname')",
+  "SELECT 1 INTO @rx_into",
+  "SELECT * FROM rx_probe INTO OUTFILE '/tmp/x'",
+  "TABLE rx_probe",
+  "VALUES ROW(1)",
+  "SELECT 1) AS a UNION ALL (SELECT 2",
+  "DO RELEASE_ALL_LOCKS()",
+  "HANDLER rx_probe OPEN",
+  "SELECT NEXTVAL(rx_seq)",
+];
+
+for (const engine of ["postgres", "mysql"] as const)
+  test(`${engine} escapes`, async () => {
+    const { admin, pools, outcome } = setup(engine);
+    try {
+      await admin.unsafe("DROP TABLE IF EXISTS rx_probe");
+      await admin.unsafe("CREATE TABLE rx_probe (id INT PRIMARY KEY, v INT)");
+      await admin.unsafe("INSERT INTO rx_probe VALUES (1, 0)");
+      if (engine === "postgres") {
+        await admin.unsafe("DROP SEQUENCE IF EXISTS rx_seq; ");
+        await admin.unsafe("CREATE SEQUENCE rx_seq");
+        await admin.unsafe("CREATE OR REPLACE FUNCTION rx_write() RETURNS INT LANGUAGE plpgsql AS $$ BEGIN UPDATE rx_probe SET v=99; RETURN 1; END $$");
+      } else {
+        await admin.unsafe("DROP FUNCTION IF EXISTS rx_write");
+        await admin.unsafe("CREATE FUNCTION rx_write() RETURNS INT DETERMINISTIC MODIFIES SQL DATA BEGIN UPDATE rx_probe SET v=99; RETURN 1; END");
+      }
+      for (const sql of engine === "postgres" ? PG : MY)
+        console.log(`[${engine}] ${JSON.stringify(sql)} => ${await outcome(sql)}`);
+      console.log(`[${engine}] sentinel v =`, JSON.stringify(await admin.unsafe("SELECT v FROM rx_probe")));
+      if (engine === "postgres") {
+        console.log("[postgres] seq", JSON.stringify(await admin.unsafe("SELECT last_value, is_called FROM rx_seq")));
+        console.log("[postgres] advisory locks held after query", JSON.stringify(await admin.unsafe(
+          "SELECT l.pid, a.state FROM pg_locks l JOIN pg_stat_activity a USING (pid) WHERE locktype='advisory' AND objid=424242")));
+        console.log("[postgres] session default_transaction_read_only on pool conns", await outcome("SHOW default_transaction_read_only"));
+      } else {
+        console.log("[mysql] GET_LOCK held after query", JSON.stringify(await admin.unsafe("SELECT IS_USED_LOCK('rx_lock') AS holder")));
+        console.log("[mysql] @rx_var on pool conn", await outcome("SELECT @rx_var AS v"));
+      }
+    } finally {
+      await pools.close();
+      await admin.unsafe("DROP TABLE IF EXISTS rx_probe");
+      await admin.close({ timeout: 0 });
+    }
+  }, 120000);

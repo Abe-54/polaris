@@ -23,7 +23,7 @@ test("F3: Data IPC retains the renderer's error code and fix and scrubs both tex
   ).toEqual({
     code: "E-DATA-SQL",
     message: "password=[redacted]",
-    fix: "postgres://[redacted]@db",
+    fix: "[redacted URL]",
   });
 });
 

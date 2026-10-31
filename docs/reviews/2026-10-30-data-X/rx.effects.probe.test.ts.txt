@@ -1,0 +1,61 @@
+/** RX probe: side effects that READ ONLY allows, and whether they outlive the query. Not committed. */
+import { test } from "bun:test";
+import { setup } from "./rx.probe.test.ts";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+test("postgres side effects", async () => {
+  const { admin, pools, outcome } = setup("postgres");
+  const victim = new (await import("bun")).SQL({ url: process.env.RX_PG_URL!, max: 1 });
+  try {
+    const [{ pid }] = await victim`SELECT pg_backend_pid() AS pid`;
+    console.log("PG terminate:", await outcome(`SELECT pg_terminate_backend(${pid})`));
+    console.log("PG victim after:", await victim`SELECT 1 AS ok`.then(() => "alive", (e) => `dead: ${e.message}`));
+    console.log("PG cancel_backend self-pool:", await outcome("SELECT pg_cancel_backend(0)"));
+
+    console.log("PG advisory:", await outcome("SELECT pg_advisory_lock(777)"));
+    for (const t of [0, 3000, 4000]) {
+      await sleep(t);
+      const held = await admin.unsafe("SELECT count(*)::int AS n FROM pg_locks WHERE locktype='advisory' AND objid=777");
+      const blocked = await admin.unsafe("SELECT pg_try_advisory_lock(777) AS got");
+      if (blocked[0].got) await admin.unsafe("SELECT pg_advisory_unlock(777)");
+      console.log(`PG advisory +${t}ms held=${held[0].n} other client got lock=${blocked[0].got}`);
+    }
+
+    console.log("PG set search_path session:", await outcome("SELECT set_config('search_path','pg_catalog',false)"));
+    for (let i = 0; i < 3; i++) console.log(`PG next run ${i} search_path:`, await outcome("SELECT current_setting('search_path')"));
+    console.log("PG set role session:", await outcome("SELECT set_config('statement_timeout','1',false)"));
+    for (let i = 0; i < 2; i++) console.log(`PG next run ${i} statement_timeout:`, await outcome("SELECT current_setting('statement_timeout')"));
+
+    await admin.unsafe("CREATE EXTENSION IF NOT EXISTS dblink");
+    await admin.unsafe("DROP TABLE IF EXISTS rx_probe");
+    await admin.unsafe("CREATE TABLE rx_probe (id INT PRIMARY KEY, v INT)");
+    await admin.unsafe("INSERT INTO rx_probe VALUES (1, 0)");
+    console.log("PG dblink_exec:", await outcome("SELECT dblink_exec('dbname=ledger user=postgres', 'UPDATE rx_probe SET v=5')"));
+    console.log("PG sentinel after dblink:", JSON.stringify(await admin.unsafe("SELECT v FROM rx_probe")));
+  } finally {
+    await pools.close();
+    await admin.unsafe("DROP EXTENSION IF EXISTS dblink").catch(() => {});
+    await admin.unsafe("DROP TABLE IF EXISTS rx_probe");
+    await admin.close({ timeout: 0 });
+    await victim.close({ timeout: 0 }).catch(() => {});
+  }
+}, 60000);
+
+test("mysql side effects", async () => {
+  const { admin, pools, outcome } = setup("mysql");
+  try {
+    console.log("MY GET_LOCK:", await outcome("SELECT GET_LOCK('rx_lock2', 0)"));
+    for (const t of [0, 3000, 4000]) {
+      await sleep(t);
+      const r = await admin.unsafe("SELECT IS_USED_LOCK('rx_lock2') AS holder, GET_LOCK('rx_lock2', 0) AS got");
+      if (r[0].got) await admin.unsafe("SELECT RELEASE_LOCK('rx_lock2')");
+      console.log(`MY GET_LOCK +${t}ms holder=${r[0].holder} other client got=${r[0].got}`);
+    }
+    console.log("MY uservar set:", await outcome("SELECT @rx_v := 5 AS v"));
+    for (let i = 0; i < 4; i++) console.log(`MY next ${i}:`, await outcome("SELECT @rx_v AS v, CONNECTION_ID() AS c"));
+  } finally {
+    await pools.close();
+    await admin.close({ timeout: 0 });
+  }
+}, 60000);

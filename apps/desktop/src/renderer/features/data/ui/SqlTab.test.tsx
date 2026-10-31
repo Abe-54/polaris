@@ -3,7 +3,7 @@ import "../../../test/dom.testing.ts";
 import "../../../app/slots.tsx";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "bun:test";
-import { SessionId } from "@polaris/protocol";
+import { type DataValue, SessionId } from "@polaris/protocol";
 import { TooltipProvider } from "@polaris/ui";
 import { createStore } from "zustand/vanilla";
 import { type CommandRegistry, createCommandRegistry } from "../../../routes/commands.ts";
@@ -11,6 +11,7 @@ import { createNavigation } from "../../../routes/navigation.ts";
 import { AppProvider } from "../../../shell/hooks.ts";
 import { type AppState, initialState } from "../../../store/store.ts";
 import { onDraftChange } from "../../session/state.ts";
+import type { DataApi, QueryInput } from "../data/api.ts";
 import { DataLayer } from "../data/hooks.tsx";
 import type { DataTab } from "../model/tabs.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
@@ -22,15 +23,23 @@ const at = { hostKey: "local", sessionId: SessionId.make("s-overdue-totals") };
 
 let next = 0;
 
-const sqlTab = (sql: string, sourceId = "app"): Extract<DataTab, { kind: "sql" }> => ({
+const sqlTab = (
+  sql: string,
+  sourceId = "app",
+  params: ReadonlyArray<DataValue> = []
+): Extract<DataTab, { kind: "sql" }> => ({
   kind: "sql",
   id: `sql-test-${++next}`,
   sourceId,
   sql,
+  params,
   title: `Query ${next}`,
 });
 
-const mount = (tab: Extract<DataTab, { kind: "sql" }>): CommandRegistry => {
+const mount = (
+  tab: Extract<DataTab, { kind: "sql" }>,
+  api: DataApi = fixtureDataApi()
+): CommandRegistry => {
   const store = createStore<AppState>(() => ({ ...initialState, density: "calm" }));
   const commands = createCommandRegistry({ platform: "mac" });
 
@@ -48,7 +57,7 @@ const mount = (tab: Extract<DataTab, { kind: "sql" }>): CommandRegistry => {
       }}
     >
       <TooltipProvider>
-        <DataLayer api={fixtureDataApi()}>
+        <DataLayer api={api}>
           <SqlTabBody at={at} tab={tab} />
         </DataLayer>
       </TooltipProvider>
@@ -112,4 +121,29 @@ test("with no rows to add, ⌘L is left to the composer", async () => {
   await waitFor(() => expect(screen.getByTestId("data-sql-results")).not.toBeNull());
 
   expect(commands.enabled("data.addRowsToSession")).toBe(false);
+});
+
+test("a re-run's params show in the run bar and are bound on Run, until unbound", async () => {
+  const api = fixtureDataApi();
+  const sent: Array<QueryInput> = [];
+  const sql = "select * from invoices where customer_id = $1 and status = $2";
+
+  mount(sqlTab(sql, "app", ["c-42", "overdue"]), {
+    ...api,
+    query: (at, input) => {
+      sent.push(input);
+
+      return api.query(at, input);
+    },
+  });
+
+  expect(screen.getByTestId("data-sql-params").textContent).toBe("$1 = c-42 · $2 = overdue");
+  await run();
+  await waitFor(() => expect(sent).toHaveLength(1));
+  fireEvent.click(screen.getByTestId("data-sql-unbind"));
+  await run();
+  await waitFor(() => expect(sent).toHaveLength(2));
+
+  expect(sent.map((input) => input.params)).toEqual([["c-42", "overdue"], undefined]);
+  expect(screen.queryByTestId("data-sql-params")).toBeNull();
 });

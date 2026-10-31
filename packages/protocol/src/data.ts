@@ -1,5 +1,6 @@
 /** Data Sources and Queries (ADR 0091, ENG-644). Credentials never appear in results. */
 import { Schema } from "effect";
+import { DataSchemaDiff } from "./schemaDiff.ts";
 import { Rpc, RpcGroup } from "effect/rpc";
 import { Unsupported } from "./errors.ts";
 import { RequestId, SessionId, Timestamp, TurnId } from "./ids.ts";
@@ -60,6 +61,7 @@ export class DataSource extends Schema.Class<DataSource>("DataSource")({
   writes: Schema.Literals(["ask", "off"]),
   label: DataSourceLabel,
   reachable: Schema.optionalKey(Schema.Boolean),
+  privilegeWarnings: Schema.optionalKey(Schema.Array(ScrubbedText)),
   error: Schema.optionalKey(ScrubbedText),
 }) {}
 
@@ -315,7 +317,14 @@ export const SetDataSourceAccess = Rpc.make("data.source.access", {
   error: Errors,
 });
 
+export const GetDataSchemaDiff = Rpc.make("data.schemaDiff", {
+  payload: { sessionId: SessionId, turn: Schema.optionalKey(TurnId) },
+  success: DataSchemaDiff,
+  error: Errors,
+});
+
 export class DataRpcs extends RpcGroup.make(
+  GetDataSchemaDiff,
   WatchDataSources,
   DescribeData,
   QueryData,

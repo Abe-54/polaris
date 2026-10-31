@@ -1,5 +1,5 @@
 /** Resolve checkout and Turn from the authenticated binding, never tool arguments. */
-import { NotFound, type SessionId } from "@polaris/protocol";
+import { NotFound, type RequestId, type SessionId } from "@polaris/protocol";
 import { Effect } from "effect";
 import type { DataQueries, DataSources } from "../../data/index.ts";
 import { knownFromConnection } from "../../data/knownCredentials.ts";
@@ -29,7 +29,7 @@ export const sessionDataTools = (
       return { checkout, sources: yield* sources.list({ sessionId }) };
     }),
     describe: Effect.fnUntraced(function* (
-      input: Parameters<DataQueries["Service"]["describe"]>[0]
+      input: Parameters<DataQueries["Service"]["describe"]>[0] & { approvalId?: RequestId }
     ) {
       const { turn } = yield* context(input.sessionId);
       const call = { ...input, tool: "describe" as const };
@@ -38,25 +38,24 @@ export const sessionDataTools = (
         Object.assign(call, turn === undefined ? undefined : { turn })
       );
     }),
-    query: Effect.fnUntraced(function* (input: Parameters<DataQueries["Service"]["query"]>[0]) {
+    query: Effect.fnUntraced(function* (
+      input: Parameters<DataQueries["Service"]["query"]>[0] & { approvalId?: RequestId }
+    ) {
       const { turn } = yield* context(input.sessionId);
       const call = { ...input, tool: "query" as const };
 
       return yield* queries.query(Object.assign(call, turn === undefined ? undefined : { turn }));
     }),
     credentials: Effect.fnUntraced(function* (sessionId: SessionId, name?: string) {
-      const listed = yield* sources.list({ sessionId });
-      const known = [];
+      if (name === undefined) return [];
+      const resolved = yield* sources.resolve({ sessionId, source: name });
 
-      for (const source of listed) {
-        if (name !== undefined && source.name !== name && source.id !== name) continue;
-
-        const resolved = yield* sources.resolve({ sessionId, source: source.name });
-        known.push(...knownFromConnection(resolved.connection, resolved.matchUrl));
-      }
-
-      return known;
+      return knownFromConnection(resolved.connection, resolved.matchUrl);
     }),
-    awaitApproval: queries.awaitApproval,
+    awaitApproval: (
+      id: Parameters<typeof queries.awaitApproval>[0],
+      timeoutMs: number,
+      sessionId: SessionId
+    ) => context(sessionId).pipe(Effect.flatMap(() => queries.awaitApproval(id, timeoutMs))),
   };
 };

@@ -1,6 +1,8 @@
 /** Data calls on a live Host connection; capability checks support older Daemons. */
 import {
   DATA_CAPABILITY,
+  SCHEMA_DIFF_CAPABILITY,
+  type GetDataSchemaDiff,
   Unsupported,
   type WatchDataSources,
   type WatchDataQueryLog,
@@ -26,6 +28,7 @@ export type DataSession = Pick<LiveSession, "capabilities"> & {
   readonly client: Pick<
     LiveSession["client"],
     | "data.sources.watch"
+    | "data.schemaDiff"
     | "data.describe"
     | "data.query"
     | "data.queryLog.watch"
@@ -75,3 +78,8 @@ export const setDataSourceAccess = (
   session: DataSession,
   input: Input<typeof SetDataSourceAccess>
 ) => (supportsData(session) ? session.client["data.source.access"](input) : unsupported());
+
+export const getDataSchemaDiff = (session: DataSession, input: Input<typeof GetDataSchemaDiff>) =>
+  session.capabilities.includes(SCHEMA_DIFF_CAPABILITY)
+    ? session.client["data.schemaDiff"](input)
+    : Effect.fail(new Unsupported({ capability: SCHEMA_DIFF_CAPABILITY }));

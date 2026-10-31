@@ -140,3 +140,65 @@ and JSON text arrays. Invalid metadata returns `E-DATA-SQL` naming the engine an
 without including the raw value. `catalog.test.ts` covers these driver value shapes and
 field-specific failures; the live suite also checks views, routines, defaults, indexes
 and check constraints.
+
+## Schema Diff (ENG-645)
+
+`SchemaSnapshots.get({sessionId, turn?})` is the internal Review accessor;
+`data.schemaDiff` and the Client/IPC `getDataSchemaDiff` expose the same result.
+The separate `data.schemaDiff` capability keeps older Data Daemons out of this RPC.
+Omitting `turn` compares the first captured baseline with the last end catalog for
+each source in the session. Changed targets never form a cross-database diff.
+
+The scoped worker subscribes after committed Turn events and Query Log activity.
+It does no catalog I/O in decide, acknowledgement or query execution. Describe
+publishes first-use activity too; outside commands use matching running item
+progress and the completed Query Log entry. Catalogs are metadata only, capped at
+500 tables and a 30-second snapshot deadline. A single consumer serializes catalog
+work, including sessions sharing a checkout; adjacent starts coalesce until Data
+activity. No periodic timer or idle watcher is added. Source discovery only runs on Turn
+boundaries or Data activity, and a checkout without Data never opens a SQL pool.
+
+A migration-capable checkout has discovered sources and a known migration path:
+`prisma/migrations`, `drizzle`, `db/migrate`, `*/migrations`, `supabase/migrations`.
+Only Local sources get candidate Turn-start baselines. A previous Turn's end is
+reused when its target is unchanged, no other session has since used the checkout's
+Data, and another session is not currently working there. Reused baselines carry
+`previous-turn-end`, because outside changes between Turns may be included.
+Candidates stay out of Review unless the Turn used the source or its checkpoint
+diff changed a migration. Remote sources join only on first use with an existing
+approval. The snapshot path never calls the approval-opening service.
+
+`complete`, `pending` and `unavailable` distinguish a ready comparison from a
+missing baseline/end or a failed capture. A bounded/incomplete catalog sets
+`truncated`; unmatched objects then cannot establish additions or removals.
+Renames require a unique same-schema match of the old columns in the new table.
+Column, index and constraint changes preserve both sides. Row cards use completed
+Query Log `affected` entries from this session's agent writes and user
+`data.edits.commit` writes, with separate `agent` and `user` counts. Otherwise they
+carry an explicitly labelled row-estimate delta (or unknown); reads, dry runs and
+other sessions' writes never become exact counts. Exact counts persist with each
+Turn, independently of Query Log retention. Catalogs persist in `data.sqlite`
+and are deleted on session archive and Workspace removal; late captures cannot
+resurrect removed records. Restart also removes orphaned catalogs.
+
+Native acceptance uses disposable Postgres 16 and MySQL 8.4 databases:
+
+```sh
+POLARIS_TEST_PG_URL='<disposable Postgres URL>' \
+POLARIS_TEST_MYSQL_URL='<disposable MySQL URL>' \
+bun test apps/daemon/src/data/schemaSnapshots.real.test.ts
+bun run bench idle --runs 3 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c.json
+```
+
+The native fixture writes an actual migration file between git checkpoints,
+adds a column and index, renames a table, and reads the stored per-Turn comparison.
+Unit tests establish policy/persistence/lifecycle behavior; they do not establish
+native database or idle-performance acceptance.
+
+Result column metadata currently comes from a zero-row probe before the bounded projection.
+MySQL may evaluate constant expressions while optimizing that probe, so it is not an independent
+side-effect boundary: it runs after the function/UDF guard in the same read-only transaction,
+on the same reservation, under the same total deadline. SLEEP, BENCHMARK, lock functions and
+user-variable assignments are refused before probing; session release clears any remaining user
+variables. Use SELECT-only credentials (ADR 0091's guard matrix). ENG-670 tracks a driver path
+that obtains prepared-statement column metadata without executing a probe.

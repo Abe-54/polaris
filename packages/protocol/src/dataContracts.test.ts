@@ -69,7 +69,7 @@ test("F1: credentials are scrubbed on decode and encode of source errors, SQL, p
   expect(JSON.stringify(Schema.encodeSync(QueryLogEntry)(raw))).not.toContain("hunter2");
 
   const dataSource = Schema.decodeUnknownSync(DataSource)({ ...source, error: url });
-  expect(dataSource.error).toBe("postgres://[redacted]@db.internal:5432/app");
+  expect(dataSource.error).toBe("[redacted URL]");
 
   const error = new DataError({ code: "E-DATA-SQL", message: url, fix: "PGPASSWORD=hunter2 psql" });
   expect(JSON.stringify(Schema.encodeSync(DataError)(error))).not.toContain("hunter2");
@@ -78,17 +78,17 @@ test("F1: credentials are scrubbed on decode and encode of source errors, SQL, p
 test.each([
   ["PGPASSWORD='hunter 2' psql", "PGPASSWORD=[redacted] psql"],
   ['host=db password="hunter 2" dbname=app', "host=db password=[redacted] dbname=app"],
-  ["mysql://app:hun%40ter@db/app", "mysql://[redacted]@db/app"],
+  ["mysql://app:hun%40ter@db/app", "[redacted URL]"],
   ["password=hunter2; next", "password=[redacted]; next"],
   [String.raw`password='hun\'ter2' host=db`, "password=[redacted] host=db"],
 ])("F1: scrubs credential syntax %s", (input, expected) => {
   expect(scrubCredentials(input)).toBe(expected);
 });
 
-test("F1: exact credentials in innocuous values and errors are masked longest first; short secrets are ignored", () => {
+test("F1: exact credentials in innocuous values and errors are masked longest first; short secrets match standalone tokens", () => {
   const known = [Redacted.make("hunter2"), Redacted.make(url), Redacted.make("abc")];
   expect(scrubCredentials(`SQL failed: hunter2 ${url} abc alphabet`, known)).toBe(
-    "SQL failed: [redacted] [redacted] abc alphabet"
+    "SQL failed: [redacted] [redacted] [redacted] alphabet"
   );
   expect(scrubDataValue("innocuous hunter2", known)).toBe("innocuous [redacted]");
   expect(
@@ -312,4 +312,22 @@ test("F1/F2: scrubbing JSON strings preserves numeric lexemes through wire encod
 
   expect(encoded.rows).toEqual([[expected]]);
   expect(Schema.decodeUnknownSync(QueryResult)(encoded).rows).toEqual([[expected]]);
+});
+
+test("RM F2: short known passwords redact whole cells, JSON strings and credential contexts without changing words", () => {
+  const known = [Redacted.make("pw")];
+  expect(scrubDataValue("pw", known)).toBe("[redacted]");
+  expect(scrubCredentials("app:pw@host", known)).not.toContain(":pw@");
+  expect(scrubCredentials("pw password=pw PGPASSWORD=pw -ppw", known)).not.toMatch(/\bpw\b/);
+  expect(scrubCredentials("upwards appword", known)).toBe("upwards appword");
+  expect(
+    scrubDataValue(DataValueTags.cases.Json.make({ text: '{"note":"pw","word":"appword"}' }), known)
+  ).toEqual(DataValueTags.cases.Json.make({ text: '{"note":"[redacted]","word":"appword"}' }));
+});
+
+test("RM F3: shared URL scanning remains linear on long dotted scheme candidates", () => {
+  const input = "a.".repeat(50_000);
+  const started = performance.now();
+  expect(scrubCredentials(input)).toBe(input);
+  expect(performance.now() - started).toBeLessThan(500);
 });

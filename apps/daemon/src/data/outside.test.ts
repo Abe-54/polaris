@@ -79,20 +79,32 @@ test("completed command records authenticated session, Turn, source and id witho
     recordOutsideCommand(
       event,
       {
-        list: () => Effect.succeed([source]),
-        resolve: () =>
-          Effect.succeed({
+        list: () =>
+          Effect.succeed([
+            new DataSource({ ...sourceFields, id: "broken", name: "broken" }),
             source,
-            matchUrl: url,
-            connection: {
-              hostname: "localhost",
-              port: 5432,
-              database: "db",
-              username: "user",
-              password: Redacted.make("private"),
-              tls: false,
-            },
-          }),
+          ]),
+        resolve: (input) =>
+          input.source === "broken"
+            ? Effect.fail(
+                new DataError({
+                  code: "E-DATA-UNKNOWN-SOURCE",
+                  message: "missing",
+                  fix: "data_sources",
+                })
+              )
+            : Effect.succeed({
+                source,
+                matchUrl: url,
+                connection: {
+                  hostname: "localhost",
+                  port: 5432,
+                  database: "db",
+                  username: "user",
+                  password: Redacted.make("private"),
+                  tls: false,
+                },
+              }),
       },
       {
         recordOutside: (input) =>
@@ -146,4 +158,41 @@ test("declined commands never discover or record a database call", async () => {
       }
     )
   );
+});
+
+for (const command of [
+  `bash -lc 'psql "$DATABASE_URL"'`,
+  `/bin/zsh -lc 'psql "$DATABASE_URL"'`,
+  `sh -c 'pg_dump "$DATABASE_URL"'`,
+  "docker exec -it pg psql -U owner ledger",
+  "docker compose exec db psql -U owner ledger",
+  "sudo -u postgres psql -U owner ledger",
+  "env PGPASSWORD=private psql -h 127.0.0.1 -U owner ledger",
+  "PGHOST=127.0.0.1 PGUSER=owner PGDATABASE=ledger psql",
+  "psql -h localhost -d ledger",
+  `npx prisma db execute --url "$DATABASE_URL"`,
+  "pgcli $DATABASE_URL",
+  `bun -e 'await Bun.sql\`select 1\`'`,
+])
+  test(`RM F5: unwraps and attributes ${command}`, () => {
+    expect(outsideMatches(command, source, url)).toBe(true);
+  });
+
+test("RM F5: reading DATABASE_URL in a log is not a database query", () => {
+  expect(outsideMatches(`node -e 'console.log(process.env.DATABASE_URL)'`, source, url)).toBe(
+    false
+  );
+});
+
+test("RM F5: MySQL env variables, positional dbname and loopback aliases match", () => {
+  const mysql = new DataSource({ ...sourceFields, engine: "mysql", port: 3306 });
+  const target = Redacted.make("mysql://owner:pw@localhost/ledger");
+  expect(
+    outsideMatches(
+      "MYSQL_HOST=127.0.0.1 MYSQL_USER=owner MYSQL_DATABASE=ledger mysql",
+      mysql,
+      target
+    )
+  ).toBe(true);
+  expect(outsideMatches("mysql --defaults-file=.my.cnf ledger", mysql, target)).toBe(true);
 });

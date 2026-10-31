@@ -63,7 +63,8 @@ const responseFor = async (
   message: typeof Message.Type,
   commands: ConstellationCommands,
   started: LeadStarted,
-  options: CatalogOptions
+  options: CatalogOptions,
+  signal?: AbortSignal
 ): Promise<Response> => {
   const id = message.id;
 
@@ -114,7 +115,7 @@ const responseFor = async (
 
       if (tool === undefined) return rpcError(id, -32602, "This binding has no such tool");
 
-      return result(await tool.call(params.value.arguments ?? {}));
+      return result(await tool.call(params.value.arguments ?? {}, signal));
     }
 
     default:
@@ -157,6 +158,8 @@ export const mcpHttp = (
 
     attachVisualizations(commands, tokens.visualizations);
 
+    const active = new Map<string, AbortController>();
+
     const server = yield* Effect.acquireRelease(
       Effect.sync(() =>
         Bun.serve({
@@ -191,10 +194,37 @@ export const mcpHttp = (
 
             if (Option.isNone(message)) return rpcError(null, -32600, "Invalid JSON-RPC message");
 
-            // The Visuals setting as the session opened: `attachConstellation` puts it in the URL.
-            return responseFor(binding, message.value, commands, started, {
-              visualize: url.searchParams.get("visuals") !== "off",
-            });
+            const key = (id: string | number) => `${token}:${JSON.stringify(id)}`;
+
+            if (message.value.method === "notifications/cancelled") {
+              const cancelled = Schema.decodeUnknownOption(
+                Schema.Struct({ requestId: Schema.Union([Schema.String, Schema.Number]) })
+              )(message.value.params);
+
+              if (Option.isSome(cancelled)) active.get(key(cancelled.value.requestId))?.abort();
+
+              return new Response(null, { status: 202 });
+            }
+
+            const controller = new AbortController();
+            const id = message.value.id;
+
+            if (id !== undefined) active.set(key(id), controller);
+
+            try {
+              return await responseFor(
+                binding,
+                message.value,
+                commands,
+                started,
+                {
+                  visualize: url.searchParams.get("visuals") !== "off",
+                },
+                AbortSignal.any([request.signal, controller.signal])
+              );
+            } finally {
+              if (id !== undefined && active.get(key(id)) === controller) active.delete(key(id));
+            }
           },
           error: () => new Response("MCP request failed", { status: 500 }),
         })

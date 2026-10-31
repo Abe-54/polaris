@@ -55,6 +55,7 @@ export const moonlit = {
   harnessClaudeCodeText: "#d97757",
   harnessCodexText: "#6fcba0",
   diffAdded: "#3fb950",
+  dataLabelBlue: "#6e9be8",
   diffRemoved: "#f85149",
   diffAddedCvd: "#388bfd",
   diffRemovedCvd: "#db8b2c",

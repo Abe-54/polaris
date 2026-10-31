@@ -15,6 +15,15 @@ import type { MarkSeverity } from "../model/marks.ts";
 import type { ViewedProgress } from "../model/viewed.ts";
 import { FileRow, FoldRow } from "./FileRows.tsx";
 import { GroupList } from "./GroupList.tsx";
+import { DataRow } from "../schema/DataRows.tsx";
+import { type DataListRow, isDataRow, isMigrationPath, placeData } from "../schema/model.ts";
+
+/** The Data section (DESIGN.md, Data → In Review): its rows, and the source the pane shows. */
+export interface FileListData {
+  readonly rows: ReadonlyArray<DataListRow>;
+  readonly open: string | null;
+  readonly onOpen: (sourceId: string) => void;
+}
 
 export interface FileListProps {
   readonly files: ReadonlyArray<ReviewFile>;
@@ -34,7 +43,13 @@ export interface FileListProps {
   readonly grouping: Grouping;
   readonly mode: ListGrouping;
   readonly onMode: (mode: ListGrouping) => void;
+  /** An Agent Session's Data section; null for a pull request or a Daemon without it. */
+  readonly data: FileListData | null;
 }
+
+type FlatRow = FileListRow | DataListRow;
+
+const isMigrationRow = (row: FlatRow) => row.kind === "file" && isMigrationPath(row.file.file.path);
 
 const ROW_HEIGHT = 28;
 
@@ -46,7 +61,13 @@ const MODES = [
 const FlatList = ({ props }: { readonly props: FileListProps }) => {
   const [open, setOpen] = useState<ReadonlySet<Fold>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
-  const rows = fileListRows(props.files, props.viewedOf, open, props.tests);
+
+  const rows = placeData<FlatRow>(
+    fileListRows(props.files, props.viewedOf, open, props.tests),
+    props.data?.rows ?? [],
+    isMigrationRow,
+    (row) => row.kind === "fold"
+  );
 
   const toggle = (fold: Fold) =>
     fold === "tests"
@@ -66,13 +87,22 @@ const FlatList = ({ props }: { readonly props: FileListProps }) => {
     getItemKey: (index) => {
       const row = rows[index];
 
-      return row === undefined || row.kind === "fold" ? `fold:${row?.fold}` : row.file.key;
+      if (row === undefined) return index;
+
+      if (isDataRow(row)) return row.key;
+
+      return row.kind === "fold" ? `fold:${row.fold}` : row.file.key;
     },
     overscan: 12,
   });
 
-  const render = (row: FileListRow) =>
-    row.kind === "fold" ? (
+  const render = (row: FlatRow) => {
+    if (isDataRow(row))
+      return props.data === null ? null : (
+        <DataRow row={row} open={props.data.open} onOpen={props.data.onOpen} />
+      );
+
+    return row.kind === "fold" ? (
       <FoldRow row={row} onToggle={toggle} />
     ) : (
       <FileRow
@@ -85,6 +115,7 @@ const FlatList = ({ props }: { readonly props: FileListProps }) => {
         onViewed={props.onViewed}
       />
     );
+  };
 
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pb-24">
@@ -150,6 +181,7 @@ export const FileList = (props: FileListProps) => (
         current={props.current}
         onOpen={props.onOpen}
         onViewed={props.onViewed}
+        data={props.data}
       />
     ) : (
       <FlatList props={props} />

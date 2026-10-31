@@ -872,3 +872,31 @@ acknowledgment or recovery semantics change. Runtime trace replay includes Evict
 ### Findings
 
 MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.
+
+### Schema Diff observation (ENG-645)
+
+`data/schemaSnapshots.ts` consumes committed Turn boundaries and Data activity in a
+scoped background fiber. `data.schemaDiff` reads the resulting per-Turn catalogs
+from data.sqlite; it never decides, acknowledges or commits a Session command,
+opens an approval, or changes stream/resume/recovery semantics. It therefore adds
+no Quint transition. `data/schemaSnapshots.test.ts` checks a blocked catalog does
+not block a Turn commit, remote snapshots do not open approvals, previous-end
+baseline reuse and stale-checkout invalidation, and late saves after archive are
+discarded. `data/schemaSnapshots.real.test.ts` checks migration checkpoints against
+real Postgres/MySQL catalogs; `data/schemaStore.test.ts` checks attribution and
+pruning. Existing Data approval model/trace checks remain the authority for
+approval state transitions.
+
+RX fix-round coverage (ENG-644): `data-approvals.qnt` supplies the refined model imported by
+`data_approvals`. It models two sessions, Local/Remote changes, writes-policy changes, shared
+pending cards, Turn end and one-request grant consumption. Safety checks executed-read audit
+counts, remaining grant credits and card cardinality rather than restating the admission
+predicate. `data_approvals_default_mutant`, `data_approvals_once_mutant` and
+`data_approvals_cards_mutant` must each violate safety; the spec runner checks their witnesses
+and simulator failures. The real projection model varies locality, writes, server user,
+remembering, restart and Turn end across two Session records. `data/approvals.test.ts` also
+exercises the composed EventStore service with two concurrent waiters and one-request retries.
+The Session machine's transitions are unchanged; these are refinements of its existing
+ApprovalRequested, ApprovalResolved and ApprovalWithdrawn events. Engine trace replay remains
+`POLARIS_TRACE_DIR=/tmp/xf-traces bun test apps/daemon/src/verification/engine.model.test.ts`
+then `cd packages/spec && bun scripts/replay.ts /tmp/xf-traces`.

@@ -41,17 +41,27 @@ const Lane = ({ children, className }: { children: ReactNode; className?: string
 export interface TreeRowProps {
   readonly row: Row;
   readonly selected: boolean;
+  /** The tree's one tab stop (a roving tabindex); arrow keys move it. */
+  readonly tabStop: boolean;
   /** The Harness kind of an agent querying this table now. */
   readonly busy: string | null;
   readonly onToggle: (key: string, open: boolean) => void;
   readonly onOpenTable: (source: string, ref: TableRef, title: string) => void;
 }
 
+/** What every focusable row carries: its roving tabindex and the key the keyboard finds it by. */
+const roving = (row: Row, tabStop: boolean) => ({
+  tabIndex: tabStop ? 0 : -1,
+  "data-tree-key": row.key,
+});
+
 const SourceRow = ({
   row,
+  tabStop,
   onToggle,
 }: {
   row: Extract<Row, { kind: "source" }>;
+  tabStop: boolean;
   onToggle: TreeRowProps["onToggle"];
 }) => {
   const { source } = row;
@@ -65,6 +75,7 @@ const SourceRow = ({
       aria-expanded={row.expandable ? row.open : undefined}
       data-testid="data-source-row"
       data-source={source.name}
+      {...roving(row, tabStop)}
       onClick={() => row.expandable && onToggle(row.key, row.open)}
       className={cn(ROW, "pl-2", row.expandable && "hover:bg-fill-hover")}
       title={`${source.name} · ${source.engine} · ${source.locality}`}
@@ -81,6 +92,7 @@ const SourceRow = ({
           "text-label min-w-[6ch] flex-auto truncate font-medium",
           source.reachable === false ? "text-text-subtle" : "text-text-strong"
         )}
+        dir="auto"
       >
         {source.name}
       </span>
@@ -97,11 +109,13 @@ const SourceRow = ({
 const TableRow = ({
   row,
   selected,
+  tabStop,
   busy,
   onOpenTable,
 }: {
   row: Extract<Row, { kind: "table" }>;
   selected: boolean;
+  tabStop: boolean;
   busy: string | null;
   onOpenTable: TreeRowProps["onOpenTable"];
 }) => {
@@ -116,6 +130,7 @@ const TableRow = ({
       aria-selected={selected}
       data-testid="data-table-row"
       data-table={row.table}
+      {...roving(row, tabStop)}
       onClick={() => onOpenTable(row.source, row.ref, row.table)}
       className={cn(ROW, "pl-10", selected ? "bg-fill-selected" : "hover:bg-fill-hover")}
       title={`${row.table}${summary.rowEstimate === null ? "" : ` · about ${summary.rowEstimate} rows`}${row.view ? " · view" : ""}`}
@@ -133,6 +148,7 @@ const TableRow = ({
           "text-label min-w-0 flex-1 truncate",
           selected ? "text-text-strong font-medium" : (git ?? "text-text-default")
         )}
+        dir="auto"
       >
         {summary.name}
       </span>
@@ -152,12 +168,20 @@ const TableRow = ({
   );
 };
 
-export const TreeRow = ({ row, selected, busy, onToggle, onOpenTable }: TreeRowProps) => {
+export const TreeRow = ({ row, selected, tabStop, busy, onToggle, onOpenTable }: TreeRowProps) => {
   switch (row.kind) {
     case "source":
-      return <SourceRow row={row} onToggle={onToggle} />;
+      return <SourceRow row={row} tabStop={tabStop} onToggle={onToggle} />;
     case "table":
-      return <TableRow row={row} selected={selected} busy={busy} onOpenTable={onOpenTable} />;
+      return (
+        <TableRow
+          row={row}
+          selected={selected}
+          tabStop={tabStop}
+          busy={busy}
+          onOpenTable={onOpenTable}
+        />
+      );
     case "note":
       return (
         <p className="text-caption text-text-subtle py-1 pr-2.5 pl-7" data-testid="data-tree-note">
@@ -170,8 +194,9 @@ export const TreeRow = ({ row, selected, busy, onToggle, onOpenTable }: TreeRowP
           className={cn(ROW, "text-caption text-text-subtle pl-[60px] font-mono")}
           role="treeitem"
           aria-level={4}
+          {...roving(row, tabStop)}
         >
-          <span className="min-w-0 truncate" title={row.name}>
+          <span className="min-w-0 truncate" title={row.name} dir="auto">
             {row.name}
           </span>
         </div>
@@ -183,6 +208,7 @@ export const TreeRow = ({ row, selected, busy, onToggle, onOpenTable }: TreeRowP
           role="treeitem"
           aria-level={row.kind === "schema" ? 2 : 3}
           aria-expanded={row.open}
+          {...roving(row, tabStop)}
           onClick={() => onToggle(row.key, row.open)}
           className={cn(ROW, "hover:bg-fill-hover", row.kind === "schema" ? "pl-[22px]" : "pl-10")}
         >
@@ -198,6 +224,7 @@ export const TreeRow = ({ row, selected, busy, onToggle, onOpenTable }: TreeRowP
               "text-label min-w-0 flex-1 truncate",
               row.kind === "schema" ? "text-text-default" : "text-text-subtle"
             )}
+            dir="auto"
           >
             {row.kind === "schema" ? row.name : "functions"}
           </span>

@@ -63,7 +63,8 @@ export const queries = Effect.gen(function* () {
   const query = Effect.fnUntraced(function* (
     input: Parameters<DataQueries["Service"]["query"]>[0],
     limit: number = input.limit ?? 200,
-    agentCap = true
+    agentCap = true,
+    authorized = false
   ) {
     const ctx = yield* context(input.sessionId, input);
     const started = performance.now();
@@ -95,8 +96,12 @@ export const queries = Effect.gen(function* () {
         });
       yield* log.put(entry);
 
-      if (input.tool !== undefined)
-        yield* approvals.require(input.sessionId, resolved.source, input.turn);
+      if (input.tool !== undefined && !authorized)
+        yield* approvals.require(input.sessionId, resolved.source, input.turn, input.approvalId);
+
+      if (sources.inspect) yield* sources.inspect(resolved.source, resolved.connection);
+
+      yield* log.touch(entry);
 
       const result = yield* readEffect(pools, {
         source: resolved.source,
@@ -176,17 +181,37 @@ export const queries = Effect.gen(function* () {
   });
 
   const describe: DataQueries["Service"]["describe"] = Effect.fnUntraced(function* (input) {
-    yield* context(input.sessionId, input);
+    const ctx = yield* context(input.sessionId, input);
     const resolved = yield* resolveReadSource(sources, input);
 
     if (input.tool !== undefined)
-      yield* approvals.require(input.sessionId, resolved.source, input.turn);
+      yield* approvals.require(input.sessionId, resolved.source, input.turn, input.approvalId);
+
+    if (sources.inspect) yield* sources.inspect(resolved.source, resolved.connection);
+    yield* log.touch(
+      new QueryLogEntry({
+        id: `describe:${crypto.randomUUID()}`,
+        checkout: ctx.checkout,
+        source: { id: resolved.source.id, name: resolved.source.name },
+        sql: "",
+        state: "running",
+        author: ctx.author,
+        tool: "describe",
+        at: new Date().toISOString(),
+      })
+    );
     const result = yield* readCatalog(pools, resolved, input.table);
 
     if (result instanceof SchemaTree) return result;
 
     if ((input.sample ?? 0) === 0) return result.detail;
-    const sample = yield* query({ ...input, sql: result.sampleSql, limit: input.sample ?? 0 });
+
+    const sample = yield* query(
+      { ...input, sql: result.sampleSql, limit: input.sample ?? 0 },
+      input.sample ?? 0,
+      true,
+      true
+    );
 
     return new TableDetail({
       ...Schema.decodeUnknownSync(Schema.Struct(TableDetail.fields))(result.detail),

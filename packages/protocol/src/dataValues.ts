@@ -1,7 +1,69 @@
 /** Wire values and credential scrubbing shared by Data producers (ENG-644). */
 import { Match, Option, Predicate, Redacted, Schema, SchemaTransformation } from "effect";
 
-/** Known credentials must include URL-decoded and percent-encoded forms from the resolver. */
+const urlEnd = (text: string, start: number, at: number, boundary: number) => {
+  let tail = at !== -1 && at < boundary ? at + 1 : start + 3;
+
+  while (tail < boundary && !/[\s"']/.test(text[tail]!)) tail++;
+
+  return tail;
+};
+
+/** Scan schemes once, including malformed userinfo containing quotes or spaces. */
+const scrubUrls = (text: string): string => {
+  const pieces: string[] = [];
+  let copied = 0;
+  let schemeStart = 0;
+  let nextAt = text.indexOf("@");
+  const boundaries = /[\r\n<>]/g;
+  let boundary = boundaries.exec(text)?.index ?? text.length;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!;
+
+    if (char === ":" && text.slice(i, i + 3) === "://" && schemeStart < i) {
+      while (boundary < i) boundary = boundaries.exec(text)?.index ?? text.length;
+
+      if (nextAt !== -1 && nextAt < i) nextAt = text.indexOf("@", i + 3);
+      const tail = urlEnd(text, i, nextAt, boundary);
+      pieces.push(text.slice(copied, schemeStart), "[redacted URL]");
+      copied = tail;
+      i = tail - 1;
+      schemeStart = tail;
+    } else if (!/[a-z\d+.-]/i.test(char)) schemeStart = i + 1;
+  }
+
+  pieces.push(text.slice(copied));
+
+  return pieces.join("");
+};
+
+const scrubShort = (text: string, secret: string) => {
+  const pieces: string[] = [];
+  let copied = 0;
+  let at = text.indexOf(secret);
+
+  while (at !== -1) {
+    const end = at + secret.length;
+
+    if (!/\w/.test(text[at - 1] ?? "") && !/\w/.test(text[end] ?? "")) {
+      pieces.push(text.slice(copied, at), "[redacted]");
+      copied = end;
+    }
+
+    at = text.indexOf(secret, end);
+  }
+
+  pieces.push(text.slice(copied));
+
+  return pieces.join("");
+};
+
+/**
+ * Known secrets of four or more characters are scrubbed as substrings. Shorter secrets
+ * match only whole values or tokens bounded by non-word characters; credential syntax
+ * is always scrubbed. Resolver inputs include decoded, encoded and as-written forms.
+ */
 export const scrubCredentials = (
   text: string,
   known: ReadonlyArray<Redacted.Redacted<string>> = []
@@ -11,22 +73,24 @@ export const scrubCredentials = (
   const secrets = known.flatMap((secret) => {
     const value = Redacted.value(secret);
 
-    return value.length >= 4 ? [value] : [];
+    return value.length > 0 ? [value] : [];
   });
 
-  for (const secret of secrets.sort((a, b) => b.length - a.length)) {
-    safe = safe.split(secret).join("[redacted]");
-  }
+  for (const secret of secrets.sort((a, b) => b.length - a.length))
+    safe = secret.length >= 4 ? safe.split(secret).join("[redacted]") : scrubShort(safe, secret);
 
-  return safe
+  return scrubUrls(safe)
     .replace(
-      /\b[a-z][a-z0-9+.-]*:\/\/[^\s/"'<>]*@/gi,
-      (url) => url.slice(0, url.indexOf("://") + 3) + "[redacted]@"
-    )
-    .replace(
-      /\b((?:PGPASSWORD|MYSQL_PWD|password|passwd|pwd)\s*=\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?:\\.|[^\s;&])+)/gi,
+      /(["']?\b(?:PGPASSWORD|MYSQL_PWD|password|passwd|pwd|token|secret|api_key)["']?\s*[:=]\s*)(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|(?:\\.|[^\s,;}&])+)/gi,
       "$1[redacted]"
-    );
+    )
+    .replace(/[^\s<>]+/g, (token) => {
+      const colon = token.indexOf(":");
+      const at = token.indexOf("@", colon + 1);
+
+      return colon > 0 && at > colon ? "[redacted credentials]" : token;
+    })
+    .replace(/(^|\s)-p[^\s]+/g, "$1-p[redacted]");
 };
 
 /** Scrub on both decode and encode, including instances built without a wire decode. */
@@ -99,7 +163,13 @@ export const scrubDataValue = (
 ): DataValue => {
   if (Predicate.isString(value)) return scrubCredentials(value, known);
 
-  if (value === null || !Predicate.isObject(value)) return value;
+  if (value === null) return value;
+
+  if (!Predicate.isObject(value)) {
+    const safe = scrubCredentials(String(value), known);
+
+    return safe === String(value) ? value : safe;
+  }
 
   return Match.value(value).pipe(
     Match.tag("Bytes", (v) =>
