@@ -9,6 +9,7 @@ import { files } from "./files.ts";
 import { gitScenario } from "./git.ts";
 import { history } from "./history.ts";
 import { hostAddressReload } from "./host-address-reload.ts";
+import { traces } from "./traces.ts";
 import { idle } from "./idle.ts";
 import { review } from "./review.ts";
 import { rules } from "./rules.ts";
@@ -21,6 +22,7 @@ import { usageContention } from "./usage-contention.ts";
 export const SCENARIOS: ReadonlyArray<Scenario> = [
   coldStart,
   idle,
+  traces,
   predictionContext,
   sessions,
   history,

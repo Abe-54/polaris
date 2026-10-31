@@ -49,7 +49,11 @@ const outsideTools = ({ config }: Effective) => ({
 });
 
 /** `thread/start`'s `config` for a read-only thread: the profile, chosen by default. */
-export const reviewerConfig = (confinement: ReadConfinement, effective: Effective) => ({
+export const reviewerConfig = (
+  confinement: ReadConfinement,
+  effective: Effective,
+  traceEnvironment: Readonly<Record<string, string>> = {}
+) => ({
   ...outsideTools(effective),
   default_permissions: REVIEWER_PROFILE,
   permissions: {
@@ -68,7 +72,7 @@ export const reviewerConfig = (confinement: ReadConfinement, effective: Effectiv
   },
   // Only `core` variables (PATH, HOME, USER, SHELL, TMPDIR…), so no key or token reaches a command.
   "shell_environment_policy.inherit": "core",
-  "shell_environment_policy.set": confinement.shellEnv,
+  "shell_environment_policy.set": { ...confinement.shellEnv, ...traceEnvironment },
 });
 
 /** The app-server's version from `initialize`'s `userAgent` ("polaris/0.162.1 (Mac OS …)"). */
@@ -97,6 +101,7 @@ export const threadSandboxing = (options: {
   readonly sandbox: Gen.SandboxMode;
   readonly userAgent: string;
   readonly cwd: string;
+  readonly traceEnvironment?: Readonly<Record<string, string>>;
   /** `config/read` for `cwd`: the user's and the project's layers, merged. */
   readonly readConfig: Effect.Effect<unknown, HarnessError>;
 }) =>
@@ -122,6 +127,6 @@ export const threadSandboxing = (options: {
 
     return {
       mode: {},
-      config: reviewerConfig(confinement, effective.value),
+      config: reviewerConfig(confinement, effective.value, options.traceEnvironment),
     } satisfies ThreadSandboxing;
   });

@@ -67,6 +67,7 @@ import type { ConstellationAttachment } from "../constellation/attachment.ts";
 import { type HarnessCall, harnessCallOf } from "./slash.ts";
 import { logStart } from "../startLog.ts";
 import type { BrowserMcp } from "../browser/index.ts";
+import { sessionTraceEnvironment, traceEndpointEnvironment } from "../../traces/environment.ts";
 import { codexBrowserConfig } from "./browser.ts";
 
 export interface SessionConfig {
@@ -185,11 +186,20 @@ export const openSession = (
     let permissionMode: PermissionMode = options.permissionMode;
     const policy = policyFor(permissionMode, options.readOnly);
 
+    const traceEnv = yield* sessionTraceEnvironment(options.sessionId, {
+      ...process.env,
+      ...options.environment,
+    });
+
     const sandboxing = yield* threadSandboxing({
       readOnly: options.readOnly,
       sandbox: policy.sandbox,
       userAgent: decodeInitialize(initialized)?.userAgent ?? "",
       cwd: options.cwd,
+      traceEnvironment: {
+        ...traceEndpointEnvironment({ ...process.env, ...options.environment }),
+        ...traceEnv,
+      },
       readConfig: conn.request("config/read", { cwd: options.cwd, includeLayers: false }),
     });
 
@@ -230,11 +240,13 @@ export const openSession = (
     common.developerInstructions = polarisInstructions(options);
 
     if (
-      options.environment !== undefined &&
-      Object.keys(options.environment).length > 0 &&
+      Object.keys({ ...options.environment, ...traceEnv }).length > 0 &&
       options.readOnly !== true
     )
-      common.config = { ...common.config, "shell_environment_policy.set": options.environment };
+      common.config = {
+        ...common.config,
+        "shell_environment_policy.set": { ...options.environment, ...traceEnv },
+      };
 
     const extra = { ...browser, ...sandboxing.config };
 

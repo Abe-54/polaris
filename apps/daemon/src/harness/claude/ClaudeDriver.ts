@@ -12,6 +12,8 @@
  */
 
 import { childEnv } from "../../service/childEnv.ts";
+import { defaultRunVersion } from "./version.ts";
+import { sessionTraceEnvironment } from "../../traces/environment.ts";
 import { join } from "node:path";
 import {
   type CanUseTool,
@@ -140,20 +142,6 @@ const harnessError = (message: string, cause?: unknown) =>
 
 const unknownEffort = (effort: string) =>
   harnessError(`Claude Code has no "${effort}" effort level`);
-
-const defaultRunVersion = async (path: string) => {
-  const proc = Bun.spawn([path, "--version"], {
-    env: childEnv(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-    timeout: 10_000,
-  });
-
-  const stdout = await new Response(proc.stdout).text();
-
-  return { exitCode: await proc.exited, stdout };
-};
 
 /** `2.1.283 (Claude Code)` → `2.1.283`. */
 export const parseVersion = (stdout: string): string | null =>
@@ -357,6 +345,11 @@ const openSession = Effect.fnUntraced(function* (
     }
   };
 
+  const traceEnv = yield* sessionTraceEnvironment(options.sessionId, {
+    ...process.env,
+    ...options.environment,
+  });
+
   const sdkOptions: Options = {
     cwd: options.cwd,
     ...claudeExecutable(claudePath),
@@ -379,6 +372,7 @@ const openSession = Effect.fnUntraced(function* (
     env: childEnv({
       ...process.env,
       ...options.environment,
+      ...traceEnv,
       CLAUDE_AGENT_SDK_CLIENT_APP: driver.clientApp ?? "polaris-daemon",
     }),
   };
