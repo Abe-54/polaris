@@ -219,7 +219,7 @@ for (const engine of ["postgres", "mysql"] as const) {
                   source: name,
                   table: { schema: engine === "postgres" ? "public" : connection.database, name },
                   primaryKey: ["id"],
-                  edits: [{ key: [1], column: "v", value: 2 }],
+                  edits: [{ key: [1], column: "v", before: 1, value: 2 }],
                 })
                 .pipe(Effect.forkScoped);
 
