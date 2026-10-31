@@ -225,7 +225,11 @@ if (root !== null && preview) {
   });
 } else if (root !== null && dataPreview) {
   void import("./features/data/preview/Preview.tsx").then((m) => {
-    setPreviewDensity = m.mountDataPreview(root, location.hash);
+    setPreviewDensity = m.mountDataPreview(
+      root,
+      location.hash,
+      settingsStore.getState().appearance
+    );
   });
 } else if (root !== null && tabCompletionPreview) {
   void import("./features/settings/editor/preview/Preview.tsx").then((m) => {

@@ -151,11 +151,17 @@ const bridgeFor = (api: DataApi): PolarisApi => ({
   onAppEvent: () => () => undefined,
 });
 
-export const mountDataPreview = (root: HTMLElement, hash: string) => {
+/** `shown` is the appearance at mount: later changes arrive through the returned setter. */
+export const mountDataPreview = (
+  root: HTMLElement,
+  hash: string,
+  shown: Pick<AppState, "density" | "theme">
+) => {
   const name = hash.replace(/^#data\//, "");
   const scene = sceneNamed(name) ?? sceneNamed("table");
   const api = scene?.api?.() ?? fixtureDataApi();
-  const store = createStore<AppState>(() => scene?.state?.(appState()) ?? appState());
+  const base = { ...appState(), density: shown.density, theme: shown.theme };
+  const store = createStore<AppState>(() => scene?.state?.(base) ?? base);
 
   const connection: Connection = {
     store,

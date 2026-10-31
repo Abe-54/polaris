@@ -9,6 +9,7 @@ import { AppProvider } from "../../../shell/hooks.ts";
 import { type AppState, initialState } from "../../../store/store.ts";
 import { updateDraft } from "../../session/state.ts";
 import { DataLayer } from "../data/hooks.tsx";
+import { cellOf } from "../grid/value.ts";
 import { dataTabsStore, openTable } from "../model/store.ts";
 import { tableTabId } from "../model/tabs.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
@@ -107,7 +108,7 @@ test("the table's rows load with typed headers, and the filter narrows them", as
 test("a foreign key opens its table filtered to the row it points at", async () => {
   mount();
   await waitFor(() => expect(screen.getAllByTestId("data-fk").length).toBeGreaterThan(0));
-  const customer = String(FIXTURE_INVOICES[0]?.[2]);
+  const customer = cellOf(FIXTURE_INVOICES[0]?.[2]).raw;
 
   const link = screen.getAllByTestId("data-fk")[0];
 
@@ -139,5 +140,5 @@ test("⌘L adds the selected rows to the agent session's draft as CSV", async ()
   const [id, number] = FIXTURE_INVOICES[0] ?? [];
 
   expect(draft()).toStartWith("1 row from `app` · `invoices`:\n```csv\nid,number,");
-  expect(draft()).toContain(`\n${String(id)},${String(number)},`);
+  expect(draft()).toContain(`\n${cellOf(id).raw},${cellOf(number).raw},`);
 });

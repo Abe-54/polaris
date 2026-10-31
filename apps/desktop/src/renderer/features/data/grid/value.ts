@@ -2,29 +2,12 @@
  * How the grid shows a cell's `DataValue` (ENG-644): one clipped line in the grid, the whole value
  * in the inspector, CSV and ⌘L. `decodeRows` parses a result's rows where they arrive.
  */
+import { DataValue, DataValueTags } from "@polaris/protocol";
 import { Match, Predicate, Schema } from "effect";
-
-/** CF's `DataValueTags` (protocol, ENG-644), until that lands; then import it from there. */
-export const DataValueTags = Schema.TaggedUnion({
-  Bytes: { length: Schema.Number, preview: Schema.optionalKey(Schema.String) },
-  BigInt: { value: Schema.String },
-  Numeric: { value: Schema.String },
-  Json: { text: Schema.String },
-  Timestamp: { iso: Schema.String },
-  Truncated: { preview: Schema.String, bytes: Schema.Number },
-});
 
 type TaggedValue = typeof DataValueTags.Type;
 
-export const DataValue = Schema.Union([
-  Schema.Null,
-  Schema.Boolean,
-  Schema.String,
-  Schema.Number,
-  DataValueTags,
-]);
-
-export type DataValue = typeof DataValue.Type;
+export { DataValue, DataValueTags };
 
 export type DataRow = ReadonlyArray<DataValue>;
 

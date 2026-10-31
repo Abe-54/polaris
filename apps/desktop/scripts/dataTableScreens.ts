@@ -146,7 +146,8 @@ const screens = async (page: Page) => {
     await open(page, "table");
     await cell(page, 1, 1).click();
     await cell(page, 3, 1).click({ modifiers: ["Shift"] });
-    await page.keyboard.press("Meta+L");
+    // The preview's commands aren't the window's keymap, so the button stands in for ⌘L.
+    await page.getByRole("button", { name: /Add 3 rows to agent session/ }).click();
     await page.waitForTimeout(500);
     await shoot(page, `add-rows-${theme}`);
 

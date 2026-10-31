@@ -9,6 +9,7 @@ import type {
   SchemaTree,
   TableDetail,
 } from "@polaris/protocol";
+import { Match } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
 import { polaris } from "../../bridge.ts";
 import type { DataRow } from "../grid/value.ts";
@@ -100,4 +101,25 @@ export const liveDataApi: DataApi = {
     );
   },
   query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
+  queryStream: (at, { source, sql, limit }, on) => {
+    const base = { ...session(at), source, sql };
+
+    return polaris().subscribe(
+      "data.query.stream",
+      limit === undefined ? base : { ...base, limit },
+      {
+        items: (items) => {
+          for (const item of items)
+            Match.valueTags(item, {
+              Header: (header) => on.header(header),
+              Rows: ({ rows }) => on.rows(rows),
+              End: (end) => on.end(end),
+            });
+        },
+        end: (error) => {
+          if (error !== null) on.failed(error);
+        },
+      }
+    );
+  },
 };
