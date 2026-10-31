@@ -133,7 +133,7 @@ export const dataServices = DataQueries.layer.pipe(
   Layer.provideMerge(HostSecrets.layer)
 );
 
-const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,

@@ -5,7 +5,8 @@ import { Redacted } from "effect";
 import { discover, prisma } from "./discovery.ts";
 import { read } from "./read.ts";
 import { metadata, parseConnection, connectionUrl } from "./connection.ts";
-import { knownFromConnection, scrubKnown } from "./knownCredentials.ts";
+import { scrubCredentials } from "@polaris/protocol";
+import { knownFromConnection } from "./knownCredentials.ts";
 
 const roots: string[] = [];
 
@@ -145,7 +146,7 @@ test("F5: the selected query password is scrubbed even without URL userinfo", ()
   const parsed = parseConnection(item)!;
   expect(Redacted.value(parsed.connection.password)).toBe("query-secret");
   expect(
-    scrubKnown("failure: query-secret", knownFromConnection(parsed.connection, item.url))
+    scrubCredentials("failure: query-secret", knownFromConnection(parsed.connection, item.url))
   ).toBe("failure: [redacted]");
 });
 

@@ -1,8 +1,20 @@
 import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { Schema } from "effect";
+import type { BoundTool } from "../../mcp/tools.ts";
 import { z } from "zod";
 import type { ConstellationAttachment } from "../constellation/attachment.ts";
 import { polarisInstructions } from "../../constellation/skills/preamble.ts";
+
+/** The SDK supplies cancellation in its handler context. */
+const HandlerContext = Schema.Struct({
+  signal: Schema.optionalKey(Schema.instanceOf(AbortSignal)),
+});
+
+export const callClaudeTool = (
+  bound: BoundTool,
+  input: Schema.Json,
+  extra: typeof HandlerContext.Type
+) => bound.call(input, extra.signal);
 
 export const claudeConstellationOptions = (
   attachments: ReadonlyArray<ConstellationAttachment>
@@ -40,8 +52,12 @@ export const claudeConstellationOptions = (
               bound.name,
               bound.description,
               schema.shape,
-              async (input) => ({
-                ...(await bound.call(Schema.decodeUnknownSync(Schema.Json)(input))),
+              async (input, extra) => ({
+                ...(await callClaudeTool(
+                  bound,
+                  Schema.decodeUnknownSync(Schema.Json)(input),
+                  Schema.decodeUnknownSync(HandlerContext)(extra)
+                )),
               }),
               bound.annotations === undefined ? undefined : { annotations: bound.annotations }
             );
