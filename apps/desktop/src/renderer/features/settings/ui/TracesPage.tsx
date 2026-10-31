@@ -4,12 +4,13 @@
  */
 import type { WorkspaceId } from "@polaris/protocol";
 import { SettingsCard, SettingsEmpty, SettingsPage, SettingsSelect } from "@polaris/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { workspaceKeyOf } from "../../../../shared/acceptBranch.ts";
 import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { showRefusal } from "../../session/dispatch.ts";
 import {
-  takeTracesSettingsTarget,
+  clearTracesSettingsTarget,
+  tracesSettingsTarget,
   TracesSettingsCard,
   tracesSettingsUnavailable,
   useWorkspaceTracesSettings,
@@ -30,12 +31,15 @@ const useInitialKey = (options: ReadonlyArray<WorkspaceOption>): string | null =
   const { hostKey, workspaceId } = useSelection();
 
   const [initial] = useState(() => {
-    const target = takeTracesSettingsTarget();
+    const target = tracesSettingsTarget.getState();
 
     if (target !== null) return workspaceKeyOf(target.hostKey, target.workspaceId);
 
     return hostKey === null || workspaceId === null ? null : workspaceKeyOf(hostKey, workspaceId);
   });
+
+  // Cleared after mount, not in the initializer, which StrictMode runs twice.
+  useEffect(clearTracesSettingsTarget, []);
 
   return options.some((o) => o.key === initial) ? initial : (options[0]?.key ?? null);
 };

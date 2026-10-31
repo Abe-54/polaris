@@ -11,11 +11,7 @@ export interface TracesSettingsTarget {
 
 export const tracesSettingsTarget = createStore<TracesSettingsTarget | null>(() => null);
 
-/** Read once by the page as it opens, then cleared so a later ⌘, starts on the selection. */
-export const takeTracesSettingsTarget = (): TracesSettingsTarget | null => {
-  const target = tracesSettingsTarget.getState();
-
+/** The page clears it once open, so a later ⌘, starts on the selection. */
+export const clearTracesSettingsTarget = () => {
   tracesSettingsTarget.setState(null, true);
-
-  return target;
 };

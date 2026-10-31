@@ -1,7 +1,8 @@
 /**
  * Traces on fixtures, for screenshots: `#traces/<scene>` (traces, empty, unavailable,
  * userExported) renders the whole app on Traces with "Fix overdue totals" in the ledger
- * Workspace selected, its TracesApi the scene's, no Daemon involved.
+ * Workspace selected, its TracesApi the scene's, no Daemon involved. `settings` and `page` pick
+ * the Workspace's Traces settings and open Settings → Traces (settings.ts).
  */
 import {
   AgentSession,
@@ -24,6 +25,8 @@ import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import { TracesLayer } from "../data/hooks.tsx";
 import { fixtureTracesApi } from "./fixtureApi.ts";
 import { withLargeTrace } from "./large.ts";
+import { opensSettings, previewSettingsApi } from "./settings.ts";
+import { TracesSettingsLayer } from "../settings/hooks.tsx";
 import {
   FIXTURE_CHECKOUT,
   FIXTURE_SESSION,
@@ -149,13 +152,17 @@ export const mountTracesPreview = (
   navigation.actions.setMode("traces");
   openViewSpan({ hostKey: HOST, sessionId: FIXTURE_SESSION }, view);
 
+  if (opensSettings(hash)) navigation.actions.openSettings("traces");
+
   createRoot(root).render(
     <TracesLayer api={view === "loading" || view === "reconnecting" ? silent(api) : api}>
-      <DataLayer api={fixtureDataApi()}>
-        <App
-          value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
-        />
-      </DataLayer>
+      <TracesSettingsLayer api={previewSettingsApi(hash)}>
+        <DataLayer api={fixtureDataApi()}>
+          <App
+            value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
+          />
+        </DataLayer>
+      </TracesSettingsLayer>
     </TracesLayer>
   );
 

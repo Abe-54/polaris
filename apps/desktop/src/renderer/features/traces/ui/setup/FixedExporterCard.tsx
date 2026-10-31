@@ -84,7 +84,7 @@ export const FixedExporterCard = ({
         </Button>
       </div>
       {asked === null ? null : (
-        <div className="flex items-center gap-2" role="status">
+        <div className="flex items-center gap-2" role="status" data-testid="traces-fixed-asked">
           <p className="text-caption text-text-subtle min-w-0 flex-1">{ASKED[asked.kind]}</p>
           {asked.kind === "started" ? (
             <Button

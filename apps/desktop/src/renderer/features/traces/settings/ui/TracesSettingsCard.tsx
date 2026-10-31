@@ -92,7 +92,7 @@ export const TracesSettingsCard = ({
   readonly disabled: boolean;
   readonly save: Save;
 }) => (
-  <SettingsWell>
+  <SettingsWell data-testid="settings-traces-card">
     <SettingsToggleRow
       title="Copy traces into Polaris"
       caption="Commands agents and Polaris terminals run here send to Polaris first."

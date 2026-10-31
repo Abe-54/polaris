@@ -13,7 +13,7 @@ import { useWorkspaceTracesSettings } from "../../settings/hooks.tsx";
 import { fixedExporters, tracesSettingsUnavailable } from "../../settings/model.ts";
 
 /** Workspaces whose fixed-exporter card was put off with "Not now", until Polaris restarts. */
-const dismissed = createStore<ReadonlySet<string>>(() => new Set());
+export const dismissedFixedCards = createStore<ReadonlySet<string>>(() => new Set());
 
 export interface SetupPlaceView {
   readonly hostKey: string;
@@ -38,7 +38,7 @@ export const useSetupPlace = (at: TracesSessionKey, workspaceId: string): SetupP
   const workspaceName = model?.workspaces.get(id)?.name ?? "This workspace";
   const available = tracesSettingsUnavailable(host) === null;
   const key = workspaceKeyOf(at.hostKey, workspaceId);
-  const putOff = useStore(dismissed, (s) => s.has(key));
+  const putOff = useStore(dismissedFixedCards, (s) => s.has(key));
 
   const { settings } = useWorkspaceTracesSettings(
     available ? { hostKey: at.hostKey, workspaceId: id } : null
@@ -59,6 +59,6 @@ export const useSetupPlace = (at: TracesSessionKey, workspaceId: string): SetupP
           openSettings("traces");
         }
       : null,
-    dismiss: () => dismissed.setState((s) => new Set([...s, key]), true),
+    dismiss: () => dismissedFixedCards.setState((s) => new Set([...s, key]), true),
   };
 };

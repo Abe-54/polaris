@@ -35,7 +35,7 @@ export {
   type WorkspaceTracesSettingsState,
 } from "./settings/hooks.tsx";
 
-export { takeTracesSettingsTarget, tracesSettingsTarget } from "./settings/focus.ts";
+export { clearTracesSettingsTarget, tracesSettingsTarget } from "./settings/focus.ts";
 
 export { KEEP_LINE, tracesSettingsUnavailable } from "./settings/model.ts";
 

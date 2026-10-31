@@ -83,7 +83,7 @@ export const SetUpWithAgent = ({
         )}
       </div>
       {line === null ? null : (
-        <div className="flex items-center gap-2" role="status">
+        <div className="flex items-center gap-2" role="status" data-testid="traces-setup-progress">
           <p className="text-caption text-text-subtle min-w-0 flex-1">{line}</p>
           {progress.kind === "started" ? (
             <Started hostKey={hostKey} sessionId={progress.sessionId} />
