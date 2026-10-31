@@ -17,7 +17,7 @@ export const LABEL_COLOURS: ReadonlyArray<LabelColour> = [
 ];
 
 export interface LabelTone {
-  /** The kicker and the access words on a coloured bar. */
+  /** The kicker on a coloured bar; never the access words (rule/data-source-label). */
   readonly text: string;
   /** The 6px dot by the name in the tree, and the card's swatch. */
   readonly fill: string;
@@ -119,6 +119,16 @@ const ACCESS: Record<DataSource["access"], (source: DataSource) => string> = {
 
 /** The agents' access, at the bar's end (DESIGN.md, Data → Connection bar). */
 export const accessText = (source: DataSource): string => ACCESS[source.access](source);
+
+const SHORT: Record<DataSource["access"], (source: DataSource) => string> = {
+  read: (s) => (s.writes === "off" ? "Read only" : "Read · writes ask"),
+  approved: (s) => (s.writes === "off" ? "Approved · read only" : "Approved · writes ask"),
+  "needs-approval": () => "Not approved",
+  denied: () => "Denied",
+};
+
+/** The same facts in a narrow bar, so the access is the last thing to go, never clipped. */
+export const accessShort = (source: DataSource): string => SHORT[source.access](source);
 
 /** The card's AGENTS line: the same facts, lowercase. */
 export const accessLine = (source: DataSource): string => {

@@ -34,7 +34,7 @@ import type { DataSlotProps } from "./slots.ts";
 
 /** Opens the query in a new SQL tab, running it when it's a read. */
 export const rerunInSqlTab = (at: DataSessionKey, entry: QueryLogEntry) => {
-  openSqlTab(entry.sql, entry.source.name, at);
+  openSqlTab(entry.sql, entry.source.name, at, entry.params ?? []);
   const opened = dataTabsStore.getState().sessions[dataSessionKey(at)]?.active;
 
   if (opened != null && runsOnOpen(entry.sql)) queueRun(at, opened);

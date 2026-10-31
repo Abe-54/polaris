@@ -272,6 +272,15 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
 
       return { ok: true, value: saved };
     },
+    removeSource: async (_at, name) => {
+      const source = sources.get().find((s) => s.name === name);
+
+      if (source?.foundIn.kind !== "manual")
+        return fail("E-DATA-UNKNOWN-SOURCE", "No data source by that name in this checkout.");
+      sources.set(sources.get().filter((s) => s.name !== name));
+
+      return { ok: true, value: null };
+    },
     labelSource: async (_at, name, label) => {
       const source = sources.get().find((s) => s.name === name);
 

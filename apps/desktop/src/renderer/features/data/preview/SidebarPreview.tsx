@@ -50,7 +50,7 @@ const prepare = (scene: Scene) => {
 
   if (scene === "log") setSidebarView(DATA_AT, "log");
 
-  if (scene === "form") openSourceForm({ mode: "add" });
+  if (scene === "form") openSourceForm(DATA_AT, { mode: "add" });
 };
 
 const sceneOf = (hash: string): Scene => {

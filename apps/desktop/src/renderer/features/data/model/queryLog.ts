@@ -26,6 +26,7 @@ export type LogAuthor =
       readonly kind: "outside";
       readonly title: string;
       readonly harness: string | null;
+      readonly turn: number | null;
       readonly command: string;
     };
 
@@ -103,7 +104,13 @@ const authorOf = (entry: QueryLogEntry, lookups: LogLookups): LogAuthor => {
   const harness = facts?.harness ?? null;
 
   if (author.kind === "outside")
-    return { kind: "outside", title, harness, command: author.command };
+    return {
+      kind: "outside",
+      title,
+      harness,
+      turn: lookups.turn(author.sessionId, author.turn),
+      command: author.command,
+    };
 
   return {
     kind: "agent",
