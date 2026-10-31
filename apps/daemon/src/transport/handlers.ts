@@ -474,6 +474,13 @@ export const defaultHandlers = (options: {
     "traces.watch": () => Stream.fail(new Unsupported({ capability: "traces" })),
     "traces.get": () => Effect.fail(new Unsupported({ capability: "traces" })),
     "traces.span": () => Effect.fail(new Unsupported({ capability: "traces" })),
+    "traces.settings": () => Effect.fail(new Unsupported({ capability: "traces.settings" })),
+    "traces.setSettings": () => Effect.fail(new Unsupported({ capability: "traces.settings" })),
+    "profiles.watch": () => Stream.fail(new Unsupported({ capability: "traces.profiles" })),
+    "profiles.get": () => Effect.fail(new Unsupported({ capability: "traces.profiles" })),
+    "profiles.restartWithProfiling": () =>
+      Effect.fail(new Unsupported({ capability: "traces.profiles" })),
+    "traces.compare": () => Effect.fail(new Unsupported({ capability: "traces.compare" })),
     "data.queryLog.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
     "data.schemaDiff": () => Effect.fail(new Unsupported({ capability: "data.schemaDiff" })),
     "data.describe": () => Effect.fail(new Unsupported({ capability: "data" })),
