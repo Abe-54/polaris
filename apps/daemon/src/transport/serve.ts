@@ -1,12 +1,12 @@
-import { DataRpcsLive, DataSources, DataQueries } from "../data/index.ts";
-import { PredictionCapabilityLive } from "../prediction/capability.ts";
-import { PredictionServerLive } from "../prediction/server.ts";
 /**
  * `polaris serve`: run the Daemon until SIGINT / SIGTERM.
  *
  * Handler layers from other Daemon modules are added to `daemonHandlers`
  * below as they land; `startServer` falls back to placeholders for the rest.
  */
+import { DataRpcsLive, DataSources, DataSourceAccess, DataQueries } from "../data/index.ts";
+import { PredictionCapabilityLive } from "../prediction/capability.ts";
+import { PredictionServerLive } from "../prediction/server.ts";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
@@ -141,6 +141,9 @@ const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   ),
   Layer.provideMerge(usageServices),
   Layer.provideMerge(ReviewerSessions.layer),
+  Layer.provideMerge(
+    DataSources.layer.pipe(Layer.provide(Layer.merge(HostSecrets.layer, DataSourceAccess.layer)))
+  ),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -157,7 +160,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
-  DataRpcsLive.pipe(Layer.provide(Layer.merge(DataSources.layer, DataQueries.layer))),
+  DataRpcsLive.pipe(Layer.provide(DataQueries.layer)),
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -211,7 +214,6 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "prediction.managed",
   "commit.suggest-message",
   "approval.secret",
-  "data",
   "constellation",
   "constellation.defaults",
   "extensions",

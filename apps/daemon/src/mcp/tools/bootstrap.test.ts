@@ -60,7 +60,7 @@ for (const kind of ["codex", "claude"] as const) {
             const plan = attachment.tools.find((tool) => tool.name === "plan")!;
             const status = attachment.tools.find((tool) => tool.name === "status")!;
             const early = yield* Effect.promise(() => plan.call({ operations: [] }));
-            expect(early.structuredContent?.findings[0]?.code).toBe("E-START-FIRST");
+            expect(early.structuredContent?.findings?.[0]?.code).toBe("E-START-FIRST");
             expect((yield* store.model).constellations.size).toBe(0);
             const before = readdirSync(repo(root, "G1"));
 
@@ -156,7 +156,7 @@ for (const kind of ["codex", "claude"] as const) {
             );
             expect(yield* tokens.authenticate(token)).toBeNull();
             expect(
-              (yield* Effect.promise(() => status.call({}))).structuredContent?.findings[0]?.code
+              (yield* Effect.promise(() => status.call({}))).structuredContent?.findings?.[0]?.code
             ).toBe("E-REVOKED");
 
             const rows = yield* store.readConstellationEvents({

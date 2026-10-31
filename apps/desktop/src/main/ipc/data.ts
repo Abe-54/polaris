@@ -5,12 +5,45 @@ import {
   saveDataSource,
   removeDataSource,
   labelDataSource,
-  decideDataApproval,
+  pageDataQueryLog,
+  setDataSourceAccess,
   type LiveSession,
 } from "@polaris/client";
-import { Effect, Redacted } from "effect";
+import { DataError, Unsupported, scrubCredentials } from "@polaris/protocol";
+import { Effect, Redacted, Schema } from "effect";
+import type { IpcError } from "../../shared/api.ts";
 import type { RequestInput } from "../../shared/contract.ts";
 import { HostDirectory, toIpcError } from "../hosts.ts";
+
+type DataErrorLocation = { position?: number; line?: number };
+
+export const toDataIpcError = (error: {
+  readonly _tag: string;
+  readonly message: string;
+}): IpcError => {
+  if (Schema.is(DataError)(error)) {
+    const location: DataErrorLocation = {};
+
+    if (error.position !== undefined) location.position = error.position;
+
+    if (error.sqlLine !== undefined) location.line = error.sqlLine;
+
+    return {
+      code: error.code,
+      message: scrubCredentials(error.message),
+      fix: scrubCredentials(error.fix),
+      ...location,
+    };
+  }
+
+  if (Schema.is(Unsupported)(error))
+    return {
+      code: "Unsupported",
+      message: "Data is unavailable on this Host. Upgrade the Daemon to use Data.",
+    };
+
+  return toIpcError(error);
+};
 
 const onHost = <A, E extends { readonly _tag: string; readonly message: string }>(
   hostKey: string,
@@ -19,7 +52,7 @@ const onHost = <A, E extends { readonly _tag: string; readonly message: string }
   HostDirectory.use((dir) => dir.connection(hostKey)).pipe(
     Effect.flatMap((connection) => connection.session),
     Effect.flatMap(use),
-    Effect.mapError(toIpcError)
+    Effect.mapError(toDataIpcError)
   );
 
 export const dataHandlers = {
@@ -38,6 +71,8 @@ export const dataHandlers = {
     onHost(hostKey, (session) => removeDataSource(session, input)).pipe(Effect.as(null)),
   "data.source.label": ({ hostKey, ...input }: RequestInput<"data.source.label">) =>
     onHost(hostKey, (session) => labelDataSource(session, input)),
-  "data.approval.decide": ({ hostKey, ...input }: RequestInput<"data.approval.decide">) =>
-    onHost(hostKey, (session) => decideDataApproval(session, input)).pipe(Effect.as(null)),
+  "data.queryLog.page": ({ hostKey, ...input }: RequestInput<"data.queryLog.page">) =>
+    onHost(hostKey, (session) => pageDataQueryLog(session, input)),
+  "data.source.access": ({ hostKey, ...input }: RequestInput<"data.source.access">) =>
+    onHost(hostKey, (session) => setDataSourceAccess(session, input)),
 };

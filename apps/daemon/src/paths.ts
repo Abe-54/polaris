@@ -23,6 +23,8 @@ export const paths = () => {
     database: join(root, "state.sqlite"),
     /** Extension Pairings: token hashes, Grants and revocations (ENG-398). */
     extensions: join(root, "extensions.sqlite"),
+    /** Checkout Data Sources and Query Log (ENG-644). */
+    data: join(root, "data.sqlite"),
     /** The Daemon's settings file, read at startup (`gateway/config.ts`). */
     config: join(root, "daemon.json"),
     /** Where the gateway listens, `{ port, nonce }`, present while it does (ENG-399). */

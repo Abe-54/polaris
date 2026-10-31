@@ -54,7 +54,10 @@ export interface WaitOptions {
   readonly timeoutMs: number;
 }
 
+import type { DataSessionTools } from "./data.ts";
+
 export interface SessionTools {
+  readonly data?: DataSessionTools;
   /** The session's Turns as text; null when this Daemon doesn't hold the session. */
   readonly transcript: (
     sessionId: SessionId,

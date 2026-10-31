@@ -197,7 +197,7 @@ test("ambiguous placement and Lead approval arguments fail without submitting a 
 
   expect(result.isError).toBe(true);
   expect(result.structuredContent?.revision).toBe(7);
-  expect(result.structuredContent?.findings[0]?.code).toBe("E-INPUT");
+  expect(result.structuredContent?.findings?.[0]?.code).toBe("E-INPUT");
   expect(
     (
       await invoke(tools, "review", {

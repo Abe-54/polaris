@@ -13,7 +13,9 @@ describe("Data fixtures", () => {
 
     expect(result.value.rows).toHaveLength(5);
     expect(result.value.rows.every((row) => row[status] === "overdue")).toBe(true);
-    expect(result.value.rowCount).toBeGreaterThan(5);
+    expect(result.value.rowCount).toBe(5);
+    expect(result.value.returned).toBe(5);
+    expect(result.value.total).toBeGreaterThan(5);
     expect(result.value.truncated).toBe(true);
   });
 
