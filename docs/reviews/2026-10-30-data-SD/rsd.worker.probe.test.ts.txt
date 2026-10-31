@@ -1,0 +1,291 @@
+/** RSD probe: the real SchemaSnapshotWorker and SchemaStore with fake catalogs and sources. Not committed. */
+import { expect, test } from "bun:test";
+import {
+  AgentSession,
+  DataSource,
+  DomainEvent,
+  QueryLogEntry,
+  SessionId,
+  TableDetail,
+  Turn,
+  TurnId,
+  TurnItem,
+} from "@polaris/protocol";
+import { Context, Deferred, Effect, Layer, Redacted, Schema } from "effect";
+import { DataSources } from "./index.ts";
+import { QueryLog } from "./queryLog.ts";
+import { DataDatabase } from "./database.ts";
+import { EventStore } from "../store/EventStore.ts";
+import { LiveItem } from "../store/hub.ts";
+import { seedDataSessionAt, started } from "./approvals.testing.ts";
+import { SchemaStore } from "./schemaStore.ts";
+import { SchemaSnapshotWorker, type SnapshotDependencies } from "./schemaSnapshots.ts";
+import { snapshotLayer, source, turn as turnA } from "./schemaSnapshots.testing.ts";
+import type { CatalogSnapshot } from "./schemaCompare.ts";
+
+const run = (work: Effect.Effect<void, unknown, any>) =>
+  Effect.runPromise(Effect.scoped(work).pipe(Effect.provide(snapshotLayer())) as Effect.Effect<void>);
+
+const col = (name: string, type = "integer") => ({ name, type, nullable: true, default: null, pk: false, fk: null });
+
+const table = (name: string, columns = ["id", "created_at"]) =>
+  new TableDetail({ schema: "public", name, columns: columns.map((c) => col(c)), indexes: [], constraints: [], rowEstimate: 10 });
+
+const snap = (names: string[]): CatalogSnapshot => ({ at: new Date().toISOString(), tables: names.map((n) => table(n)), truncated: false });
+
+const decodeTurn = Schema.decodeUnknownSync(Schema.Struct(Turn.fields));
+
+const turnOf = (sessionId: SessionId, id: string, index: number) =>
+  new Turn({ ...decodeTurn(turnA), sessionId, id: TurnId.make(id), index });
+
+/** A second session (B) with its own working Turn, in `cwd`. */
+const seedSession = (id: string, cwd: string) =>
+  Effect.gen(function* () {
+    const store = yield* EventStore;
+    const sessionId = SessionId.make(id);
+    const t = turnOf(sessionId, `${id}-t1`, 0);
+    yield* store.commit({
+      commandId: null,
+      decide: () =>
+        Effect.succeed([
+          DomainEvent.cases.SessionCreated.make({
+            session: new AgentSession({ ...Schema.decodeUnknownSync(Schema.Struct(AgentSession.fields))(started.session), id: sessionId, cwd }),
+          }),
+          DomainEvent.cases.TurnStarted.make({ turn: t }),
+        ]),
+    });
+    return t;
+  });
+
+const harness = Effect.fnUntraced(function* (opts: {
+  catalog: () => CatalogSnapshot;
+  capture?: SnapshotDependencies["capture"];
+  migrationChanged?: SnapshotDependencies["migrationChanged"];
+  cwdA?: string;
+}) {
+  yield* seedDataSessionAt(opts.cwdA ?? started.session.cwd);
+  const store = yield* EventStore;
+  const log = yield* QueryLog;
+  const { db } = yield* DataDatabase;
+  const calls = { list: 0, resolve: 0, capture: 0 };
+  const sources = DataSources.of({
+    list: () => Effect.sync(() => (calls.list++, [source])),
+    refresh: () => Effect.succeed([source]),
+    resolve: () =>
+      Effect.sync(() => {
+        calls.resolve++;
+        return {
+          source,
+          connection: { tls: false, hostname: "localhost", port: 5432, database: "app", username: "user", password: Redacted.make("") },
+          matchUrl: Redacted.make("postgres://user@localhost/app"),
+        };
+      }),
+    watch: () => { throw new Error("watch"); },
+    save: () => Effect.die("x"), remove: () => Effect.die("x"), label: () => Effect.die("x"), access: () => Effect.die("x"),
+  });
+  const records = new SchemaStore(db);
+  const ctx = yield* Layer.build(
+    SchemaSnapshotWorker.layerWith({
+      sources, store, log, records,
+      capture: opts.capture ?? (() => Effect.sync(() => (calls.capture++, opts.catalog()))),
+      migrationChanged: opts.migrationChanged ?? (() => Promise.resolve(true)),
+      migrationCheckout: () => Promise.resolve(true),
+    })
+  );
+  return { worker: Context.get(ctx, SchemaSnapshotWorker), records, store, log, db, calls };
+});
+
+const entryFor = (sessionId: SessionId, turn: TurnId, checkout: string, extra: Partial<Record<string, unknown>> = {}) =>
+  new QueryLogEntry({
+    id: `q-${crypto.randomUUID()}`, checkout, source: { id: source.id, name: source.name }, sql: "select 1", state: "completed",
+    author: { kind: "agent", sessionId, turn }, at: new Date().toISOString(), ...extra,
+  } as never);
+
+test("W1: the coalescing cache hands session B session A's Turn-start catalog after A changed the schema", () =>
+  run(
+    Effect.gen(function* () {
+      let names = ["invoices"];
+      const f = yield* harness({ catalog: () => snap(names) });
+      yield* f.worker.begin(turnA); // A's Turn starts: catalog has invoices
+      names = ["bills"]; // A's agent runs `bunx prisma db push` (no Query Log activity)
+      const turnB = yield* seedSession("session-b", started.session.cwd);
+      yield* f.worker.begin(turnB); // B starts later, same checkout and target
+      yield* f.worker.end(turnB); // B did nothing
+      const b = yield* f.worker.get({ sessionId: turnB.sessionId, turn: turnB.id });
+      console.log("W1 B diff:", JSON.stringify(b.sources.map((s) => ({ status: s.status, baseline: s.baseline, tables: s.tables.map((t) => [t.kind, t.before?.name, t.after?.name]) }))));
+      console.log("W1 captures:", f.calls.capture);
+      expect(b.sources[0]?.tables.map((t) => t.kind)).toEqual(["renamed"]); // attributed to B
+    })
+  ));
+
+test("W2: another session in a different worktree on the same database doesn't stale a previous-turn-end baseline", () =>
+  run(
+    Effect.gen(function* () {
+      let names = ["invoices"];
+      const f = yield* harness({ catalog: () => snap(names) });
+      yield* f.worker.begin(turnA);
+      yield* f.worker.end(turnA); // A turn 1 used the source (migration changed): after = invoices
+      // Session B in another worktree of the same repo, same compose database, drops and adds a table through Data.
+      const turnB = yield* seedSession("session-b", "/model.worktrees/b");
+      names = ["invoices", "payouts"];
+      yield* f.log.put(entryFor(turnB.sessionId, turnB.id, "/model.worktrees/b"));
+      const next = turnOf(turnA.sessionId, "a-t2", turnA.index + 1);
+      const capturesBefore = f.calls.capture;
+      yield* f.worker.begin(next);
+      yield* f.worker.end(next);
+      const a = yield* f.worker.get({ sessionId: next.sessionId, turn: next.id });
+      console.log("W2 A turn 2:", JSON.stringify(a.sources.map((s) => ({ baseline: s.baseline, tables: s.tables.map((t) => [t.kind, t.after?.name]) }))), "turn-start captures:", f.calls.capture - capturesBefore - 1);
+      expect(a.sources[0]?.baseline).toBe("previous-turn-end");
+      expect(a.sources[0]?.tables.map((t) => [t.kind, t.after?.name])).toEqual([["added", "payouts"]]);
+    })
+  ));
+
+test("W3: previous-turn-end reuses an end from several Turns back, so an unused Turn's change lands on a later Turn", () =>
+  run(
+    Effect.gen(function* () {
+      let names = ["invoices"];
+      let migration = true;
+      const f = yield* harness({ catalog: () => snap(names), migrationChanged: () => Promise.resolve(migration) });
+      yield* f.worker.begin(turnA);
+      yield* f.worker.end(turnA); // Turn 1 used: end = invoices
+      migration = false;
+      const t2 = turnOf(turnA.sessionId, "a-t2", turnA.index + 1);
+      yield* f.worker.begin(t2);
+      names = []; // Turn 2: `docker compose exec db psql -c 'drop table invoices'` (not matched, unused)
+      yield* f.worker.end(t2);
+      const t3 = turnOf(turnA.sessionId, "a-t3", turnA.index + 2);
+      migration = true;
+      yield* f.worker.begin(t3);
+      yield* f.worker.end(t3); // Turn 3 adds a migration file only
+      const d2 = yield* f.worker.get({ sessionId: turnA.sessionId, turn: t2.id });
+      const d3 = yield* f.worker.get({ sessionId: turnA.sessionId, turn: t3.id });
+      const rows = f.records.records(turnA.sessionId).map((r) => [r.turn, r.baseline, r.used, r.before?.tables.length ?? null, r.after?.tables.length ?? null]);
+      console.log("W3 rows:", JSON.stringify(rows));
+      console.log("W3 turn 2 diff:", JSON.stringify(d2.sources), "turn 3:", JSON.stringify(d3.sources.map((s) => ({ baseline: s.baseline, tables: s.tables.map((t) => [t.kind, t.before?.name]) }))));
+      expect(d3.sources[0]?.tables.map((t) => [t.kind, t.before?.name])).toEqual([["removed", "invoices"]]);
+    })
+  ));
+
+test("W4: a schema change with no Data use and no migration file (prisma db push) is hidden although both catalogs were affordable", () =>
+  run(
+    Effect.gen(function* () {
+      let names = ["invoices"];
+      const f = yield* harness({ catalog: () => snap(names), migrationChanged: () => Promise.resolve(false) });
+      yield* f.worker.begin(turnA);
+      names = ["invoices", "payouts"];
+      yield* f.worker.end(turnA);
+      const d = yield* f.worker.get({ sessionId: turnA.sessionId, turn: turnA.id });
+      const stored = f.records.records(turnA.sessionId);
+      console.log("W4 diff sources:", d.sources.length, "stored rows:", stored.length, "before tables stored:", stored[0]?.before?.tables.length, "captures:", f.calls.capture);
+      expect(d.sources).toEqual([]);
+      expect(stored[0]?.before).not.toBeNull();
+    })
+  ));
+
+test("W5: a Turn-start baseline taken while the worker is busy with another checkout includes the Turn's own early change", () =>
+  run(
+    Effect.gen(function* () {
+      let names = ["invoices"];
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      let first = true;
+      const f = yield* harness({
+        catalog: () => snap(names),
+        capture: () =>
+          Effect.gen(function* () {
+            if (first) {
+              first = false;
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release); // a slow catalog for session B (another checkout), up to 30 s
+            }
+            return snap(names);
+          }),
+      });
+      const turnB = yield* seedSession("session-b", "/model.worktrees/b");
+      const t2b = turnOf(turnB.sessionId, "b-t2", 1);
+      yield* f.store.commit({ commandId: null, decide: () => Effect.succeed([DomainEvent.cases.TurnStarted.make({ turn: t2b })]) });
+      yield* Deferred.await(entered);
+      const t2 = turnOf(turnA.sessionId, "a-t2", turnA.index + 1);
+      const startedAt = new Date().toISOString();
+      yield* f.store.commit({ commandId: null, decide: () => Effect.succeed([DomainEvent.cases.TurnStarted.make({ turn: t2 })]) });
+      names = ["bills"]; // A's agent renames invoices right away
+      yield* Effect.sleep(20);
+      yield* Deferred.succeed(release, undefined);
+      yield* Effect.sleep(50);
+      yield* f.worker.end(t2);
+      const d = yield* f.worker.get({ sessionId: t2.sessionId, turn: t2.id });
+      const row = f.records.records(t2.sessionId, t2.id)[0];
+      console.log("W5 TurnStarted at", startedAt, "turn-start baseline at", row?.before?.at, "label", row?.baseline, "tables:", JSON.stringify(d.sources[0]?.tables));
+      expect(row?.baseline).toBe("turn-start");
+      expect(d.sources[0]?.tables).toEqual([]);
+    })
+  ));
+
+test("W6: one `bun test` command's progress runs source discovery once per source plus once, with Data unused", () =>
+  run(
+    Effect.gen(function* () {
+      const f = yield* harness({ catalog: () => snap(["invoices"]) });
+      const item = TurnItem.cases.CommandExecution.make({
+        id: "c1", startedAt: new Date().toISOString(), command: "bun test apps/daemon", cwd: started.session.cwd, output: "", exitCode: null, status: "running",
+      } as never);
+      for (let i = 0; i < 3; i++)
+        yield* f.store.publishEphemeral(LiveItem.ItemProgress({ sessionId: turnA.sessionId, turnId: turnA.id, item, subagentId: null }));
+      yield* Effect.sleep(50);
+      console.log("W6 list/resolve calls after 3 progress items of `bun test`:", JSON.stringify(f.calls));
+      expect(f.calls.list).toBe(3);
+    })
+  ));
+
+test("W7: storage and decode cost of unused Turn-start candidates over a long session", () =>
+  run(
+    Effect.gen(function* () {
+      const wide = Array.from({ length: 12 }, (_, i) => `column_${i}`);
+      const big: CatalogSnapshot = {
+        at: new Date().toISOString(),
+        tables: Array.from({ length: 500 }, (_, i) =>
+          new TableDetail({
+            schema: "public", name: `table_${i}`, columns: wide.map((c) => col(c, "character varying(255)")),
+            indexes: [{ name: `table_${i}_pkey`, columns: ["column_0"], unique: true, definition: `CREATE UNIQUE INDEX table_${i}_pkey ON public.table_${i} USING btree (column_0)` }],
+            constraints: [{ name: `table_${i}_pkey`, kind: "p", definition: "PRIMARY KEY (column_0)" }], rowEstimate: 1000,
+          })
+        ),
+        truncated: false,
+      };
+      const f = yield* harness({ catalog: () => big, migrationChanged: () => Promise.resolve(false) });
+      for (let i = 0; i < 200; i++) {
+        const t = turnOf(turnA.sessionId, `t${i}`, i);
+        yield* f.worker.begin(t);
+        yield* f.worker.end(t);
+      }
+      const bytes = f.db.query<{ n: number; b: number }, []>("SELECT count(*) n, sum(length(value)) b FROM data_schema_snapshots").get()!;
+      const t0 = performance.now();
+      f.records.records(turnA.sessionId, "t199");
+      const one = performance.now() - t0;
+      const t1 = performance.now();
+      yield* f.worker.begin(turnOf(turnA.sessionId, "t200", 200));
+      const begin = performance.now() - t1;
+      const t2 = performance.now();
+      yield* f.worker.get({ sessionId: turnA.sessionId });
+      const get = performance.now() - t2;
+      console.log(`W7 rows=${bytes.n} stored=${(bytes.b / 1048576).toFixed(1)} MiB, one-Turn records()=${one.toFixed(0)} ms, begin()=${begin.toFixed(0)} ms, get(session)=${get.toFixed(0)} ms, captures=${f.calls.capture}, Review shows ${(yield* f.worker.get({ sessionId: turnA.sessionId })).sources.length} sources`);
+    })
+  ), 900_000);
+
+test("W8: the user's own Desktop Data activity between Turns doesn't stale the reused baseline", () =>
+  run(
+    Effect.gen(function* () {
+      let names = ["invoices"];
+      const f = yield* harness({ catalog: () => snap(names) });
+      yield* f.worker.begin(turnA);
+      yield* f.worker.end(turnA);
+      // Between Turns the user works in this session's Data panel (author user, same sessionId, no Turn).
+      names = ["invoices", "user_scratch"];
+      yield* f.log.put(entryFor(turnA.sessionId, turnA.id, started.session.cwd, { author: { kind: "user", sessionId: turnA.sessionId } }));
+      const next = turnOf(turnA.sessionId, "a-t2", turnA.index + 1);
+      yield* f.worker.begin(next);
+      yield* f.worker.end(next);
+      const d = yield* f.worker.get({ sessionId: next.sessionId, turn: next.id });
+      console.log("W8 Turn 2:", JSON.stringify(d.sources.map((s) => ({ baseline: s.baseline, tables: s.tables.map((t) => [t.kind, t.after?.name]) }))));
+      expect(d.sources[0]?.baseline).toBe("previous-turn-end");
+    })
+  ));
