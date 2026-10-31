@@ -312,7 +312,11 @@ export const TurnPlanUpdatedNotification = Schema.Struct({
   ),
 });
 
-const TokenUsageBreakdown = Schema.Struct({ totalTokens: Schema.Number });
+const TokenUsageBreakdown = Schema.Struct({
+  totalTokens: Schema.Number,
+  /** Reasoning included (`reasoningOutputTokens` is its share). */
+  outputTokens: Schema.Number,
+});
 
 export const ThreadTokenUsageUpdatedNotification = Schema.Struct({
   threadId: Schema.String,

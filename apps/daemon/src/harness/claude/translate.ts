@@ -19,9 +19,10 @@ import type {
   SDKPartialAssistantMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { SubagentId, type TurnId, TurnItem } from "@polaris/protocol";
+import { type ReplyStats, SubagentId, type TurnId, TurnItem } from "@polaris/protocol";
 import { Option, Predicate } from "effect";
 import { ClaudeBackgroundTasks } from "./backgroundTasks.ts";
+import { ReplyTimer } from "./replyStats.ts";
 import { toolIdentity } from "./toolIdentity.ts";
 import { type ContextBreakdown, HarnessEvent } from "../HarnessDriver.ts";
 import {
@@ -62,6 +63,19 @@ const scoped = (scope: Scope) =>
 
 /** The key of a scope's live plan: its Turn's, or its Subagent's own. */
 const planKey = (scope: Scope): string => scope.subagentId ?? scope.turnId;
+
+/** A reply block, kept to complete again with its model call's stats. */
+interface Reply {
+  readonly scope: Scope;
+  readonly id: string;
+  readonly text: string;
+}
+
+const replyCompleted = (reply: Reply, stats: ReplyStats | null): HarnessEvent =>
+  ItemCompleted({
+    ...scoped(reply.scope),
+    item: TurnItem.cases.AssistantMessage.make({ id: reply.id, text: reply.text, stats }),
+  });
 
 /** The tool that spawns a Subagent: `Agent`, called `Task` before Claude Code 2.1. */
 const SPAWNS_SUBAGENT = new Set(["Agent", "Task"]);
@@ -229,6 +243,7 @@ export class ClaudeTranslator {
   /** The Model's context window, once Claude Code has said; and the last usage reported. */
   private contextWindow: number | null = null;
   private contextUsed: number | null = null;
+  private readonly replies = new ReplyTimer<Reply>();
 
   constructor(
     private readonly cwd: string,
@@ -274,6 +289,11 @@ export class ClaudeTranslator {
 
   beginTurn(turnId: TurnId): void {
     this.turnId = turnId;
+    this.replies.requested("", this.nowMs());
+  }
+
+  private nowMs(): number {
+    return Date.parse(this.now());
   }
 
   endTurn(): void {
@@ -415,6 +435,7 @@ export class ClaudeTranslator {
       background: message.is_backgrounded === true,
       report: null,
     });
+    this.replies.requested(toolUseId, this.nowMs());
     const input = toolFields(tool.input);
 
     return [
@@ -471,6 +492,7 @@ export class ClaudeTranslator {
 
     if (event.type === "message_start") {
       this.streamMessageIds.set(key, event.message.id);
+      this.replies.started(key, event.message.id);
 
       return [];
     }
@@ -493,12 +515,19 @@ export class ClaudeTranslator {
       }
 
       case "content_block_delta": {
+        this.replies.token(key, this.nowMs());
         const text = deltaText(event.delta);
         const itemId = `${messageId}:${event.index}`;
 
         return text === null || text === ""
           ? []
           : [ItemDelta({ ...scoped(scope), itemId, field: "text", text })];
+      }
+
+      case "message_delta": {
+        const ended = this.replies.ended(key, event.usage.output_tokens, this.nowMs());
+
+        return ended === null ? [] : [replyCompleted(ended.reply, ended.stats)];
       }
 
       default:
@@ -544,7 +573,9 @@ export class ClaudeTranslator {
         const index = this.delivered.get(messageId) ?? 0;
         this.delivered.set(messageId, index + 1);
 
-        return block === null ? [] : this.onAssistantBlock(scope, `${messageId}:${index}`, block);
+        return block === null
+          ? []
+          : this.onAssistantBlock(scope, { messageId, id: `${messageId}:${index}` }, block);
       })
       .concat(usage);
   }
@@ -557,17 +588,20 @@ export class ClaudeTranslator {
     return used === 0 || used === this.contextUsed ? [] : this.onContextUsage(used, null);
   }
 
-  private onAssistantBlock(scope: Scope, id: string, block: AssistantBlock): HarnessEvent[] {
+  private onAssistantBlock(
+    scope: Scope,
+    { messageId, id }: { readonly messageId: string; readonly id: string },
+    block: AssistantBlock
+  ): HarnessEvent[] {
     switch (block.type) {
-      case "text":
-        return block.text === ""
-          ? []
-          : [
-              ItemCompleted({
-                ...scoped(scope),
-                item: TurnItem.cases.AssistantMessage.make({ id, text: block.text }),
-              }),
-            ];
+      case "text": {
+        if (block.text === "") return [];
+        const reply = { scope, id, text: block.text };
+        const stats = this.replies.reply(scope.subagentId ?? "", messageId, reply);
+
+        return [replyCompleted(reply, stats)];
+      }
+
       case "thinking":
         return this.thinkingItem(scope, id, block.thinking);
       case "tool_use":
@@ -640,6 +674,8 @@ export class ClaudeTranslator {
       : block.is_error === true
         ? "failed"
         : "completed";
+
+    this.replies.requested(tool.scope.subagentId ?? "", this.nowMs());
 
     const completed = ItemCompleted({
       ...scoped(tool.scope),

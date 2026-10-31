@@ -56,6 +56,18 @@ test("a streamed message is stamped at its first delta", () => {
   expect(startOf(done)).toBe(at(2_000));
 });
 
+test("a reply completed again with its stats keeps the stamp it completed with", () => {
+  let now = base + 1_000;
+  const clock = new ItemClock(() => now);
+  const reply = TurnItem.cases.AssistantMessage.make({ id: "m:0", text: "Done." });
+
+  clock.stamp(HarnessEvent.ItemCompleted({ turnId, item: reply }));
+  now = base + 4_000;
+  const again = clock.stamp(HarnessEvent.ItemCompleted({ turnId, item: reply }));
+
+  expect(startOf(again)).toBe(at(1_000));
+});
+
 test("items seen in the same millisecond keep their order", () => {
   const clock = new ItemClock(() => base + 4_000);
 

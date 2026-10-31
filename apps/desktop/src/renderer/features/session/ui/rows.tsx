@@ -49,6 +49,7 @@ import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
 import { SourcesPill } from "./sources.tsx";
+import { ReplyStatsLine } from "./replyStats.tsx";
 import type { SecretOutcome } from "../model/secret.ts";
 import { provideSecret } from "../secrets.ts";
 import type { SessionChrome } from "../chrome.ts";
@@ -348,6 +349,7 @@ const Agent = ({ row, ctx }: { row: Extract<Row, { kind: "item" }>; ctx: RowCont
             }}
           />
         </SessionTargetContext.Provider>
+        <ReplyStatsLine entry={row.entry} />
       </div>
       {row.sources === undefined ? null : (
         <div className="shrink-0">
