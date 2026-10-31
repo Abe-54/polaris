@@ -1,0 +1,29 @@
+# P10 fixes (UF10, ENG-657)
+
+Every P10 finding in `../../2026-10-31-traces-RPU.md` is fixed. None is declined. The repros now sit beside the code as real tests, and the copies that were here (`deps.ts`, `harness.tsx`, `keep.test.ts`, `settings.test.tsx`, `setup.test.tsx`) are deleted. Paths below are under `apps/desktop/src/renderer/features/`. The branch is based on the integration head `9a0fac480`, which includes P1 (forwarding, ENG-674).
+
+| # | Fix | Test |
+|---|---|---|
+| P10-1 | `FIXED_EXPORTER_CHANGE` is now the skill's own expression on one line: `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? (OTEL_EXPORTER_OTLP_ENDPOINT ? base + "/v1/traces" : existingVendorUrl)`. The card, the empty state's generic line and the agent prompt all use this one constant. UF7 confirmed SKILL.md keeps the same order, variables and trailing-slash strip. ADR 0094's sentence now names both variables. | `traces/model/fixedExporter.test.ts`. Under the real `TraceRuntime.environment` and receiver (`withTraceFixture`), the line's URL takes a POST with 200, both with everything this Daemon injects and with only the base, which is all Daemons before ENG-674 inject. The second case fails on the old line, and so does the plain-collector case. |
+| P10-2 | The Keep line reads `200 MB · 7 days`. Errors outlast other spans only under size pressure, never past the age limit. | `traces/settings/keep.test.ts`. The line matches the Daemon's `DEFAULT_RETENTION`, and an 8-day-old error span is pruned by `pruneCheckout`. |
+| P10-3 | `followExit` takes an `onLost` callback that fires for any end of the feed other than NotFound. Set up tracing then fails with "Lost the install’s terminal before it finished; try again" and enables Try again. | `traces/ui/setup/TracesSetup.test.tsx`: feed ends with an error, and without one. |
+| P10-4 | The install's `-a` comes from the shown session's Harness (claude → claude-code, codex, opencode, gemini → gemini-cli, copilot → github-copilot). Those are the `skills` CLI's agent ids in its own agent table (skills@1.7.4, `dist/cli.mjs`); each has its own global skills directory. An unknown Harness, or no session yet, gets the old `claude-code codex` pair. The block's copy names the Harness. | `TracesSetup.test.tsx`, parametrized over all five: the install names the agent, and the new session runs on that Harness. `model/agentSetup.test.ts` covers the fallback. |
+| P10-5 | A refused save restores only its own keys, onto the current state, so a later save that was accepted stays shown. | `traces/settings/hooks.test.tsx` |
+| P10-6 | A picked Workspace that was removed falls back the same way the initial pick does. | `settings/ui/TracesPage.test.tsx` |
+| P10-7 | Emptying the collector field with a collector saved turns Save into Remove and says so. Saving sends `forwardTo: null`, which P1's `traces.setSettings` takes as clearing the saved target (`settings.ts` patch and policy). With no collector saved, an empty field still asks for a URL. | `TracesPage.test.tsx`; `traces/settings/model.test.ts` |
+| P10-8 | With the app exporting to its own endpoint, Traces always shows "This app sends its traces elsewhere" and no fixed-exporter card. The Daemon injects nothing there, so the one-line change can't help. P10's test that locked the card in is inverted. | `TracesSetup.test.tsx` |
+| P10-9 | The URL row's caption is the field's `aria-describedby`, in a polite live region, and wraps to two lines (`SettingsRow wrap`) instead of truncating. | `TracesPage.test.tsx` |
+| P10-10 | `askRoute` gives a Starting session `wait`. "Ask an agent" then sends nothing and says "This agent session is still starting. Ask again once it’s ready." This matches the composer's "Starting…" block and the Daemon's `takesTurn`, which refuses a Turn while starting. | `TracesSetup.test.tsx`; `agentSetup.test.ts` |
+| P10-11 | `placementOf` maps a session whose cwd is a Review Checkout's path to `ReviewCheckout { checkoutId }`, the way `needs-you/model/review.ts` finds a Reviewer's checkout. Other sessions still map to InPlace or ExistingWorktree. | `agentSetup.test.ts` |
+
+## The forwarding claim (P7-2, on the card)
+
+P1 is merged at `9a0fac480`, and it serves `traces.settings` and forwarding together. The receiver forwards when `policy.forwarding` is on and a collector is set (`traces/forwarding.ts`). So the card now names the collector, "…sends agents' traces to Polaris, which forwards a copy to api.axiom.co.", but only when the settings report forwarding on with a `forwardTo`. Otherwise it says the traces go to Polaris instead and offers "Turn on forwarding". Test: `TracesSetup.test.tsx`, "the card says Polaris forwards a copy only to the collector forwarding has".
+
+## A failed install (the lead's requirement, with ENG-694)
+
+The install source stays `luxdotdev/polaris`, unpinned. Pinning it, or installing from a skill bundled with the Daemon, is ENG-694. Today the install fails with "No matching skills found", and the `skills` CLI exits 1 on that path (`cli.mjs`, its `--skill` filter). Set up tracing then shows "The install exited with code 1; its output is in the terminal" and the last six lines the command printed, with escape codes removed and a spinner line kept as its last drawing. It starts no agent session and enables Try again. A terminal merges stderr into stdout, so the lines shown are the terminal's combined tail. `followExit` (`review/checkout/exit.ts`) takes `{ onLost, onOutput }` hooks for this. Tests: `TracesSetup.test.tsx`, "an install that fails, as 'No matching skills found' does…"; `traces/model/installOutput.test.ts`.
+
+## Also found
+
+Since P1, the Daemon injects `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` beside the base (`apps/daemon/src/traces/runtime.ts`, `injectedEnvironment`). The old line therefore works against a current Daemon but not a 0.7.0 one. The fix covers both, and UF7 was told about this for the skill's diagnosis text.

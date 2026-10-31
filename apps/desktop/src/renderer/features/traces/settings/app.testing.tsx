@@ -1,6 +1,7 @@
 /**
  * The app around a Traces settings or setup test: one connected Host ("mac", "This Mac") with
- * Workspaces sightline and ledger, sightline holding agent session s1 in `state`.
+ * Workspaces sightline and ledger, sightline holding agent session s1 in `state`; `edit` changes
+ * that Host model (a Harness, a Review Checkout) before mounting.
  */
 import type { Capability, SessionState } from "@polaris/protocol";
 import { TooltipProvider } from "@polaris/ui";
@@ -11,6 +12,7 @@ import { createCommandRegistry } from "../../../routes/commands.ts";
 import { hostModel, hostView } from "../../../routes/fixtures.testing.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
 import { AppProvider } from "../../../shell/hooks.ts";
+import type { HostModel } from "../../../store/hostModel.ts";
 import { type AppState, type Connection, initialState } from "../../../store/store.ts";
 
 export const mountApp = async (
@@ -18,7 +20,12 @@ export const mountApp = async (
   {
     capabilities,
     state = "idle",
-  }: { readonly capabilities: ReadonlyArray<Capability>; readonly state?: SessionState }
+    edit = (model) => model,
+  }: {
+    readonly capabilities: ReadonlyArray<Capability>;
+    readonly state?: SessionState;
+    readonly edit?: (model: HostModel) => HostModel;
+  }
 ) => {
   const base = hostView("mac");
 
@@ -26,7 +33,9 @@ export const mountApp = async (
     ...initialState,
     hosts: [{ ...base, label: "This Mac", status: { ...base.status, capabilities } }],
     hostModels: {
-      mac: hostModel([{ id: "sightline", sessions: [{ id: "s1", state }] }, { id: "ledger" }]),
+      mac: edit(
+        hostModel([{ id: "sightline", sessions: [{ id: "s1", state }] }, { id: "ledger" }])
+      ),
     },
   }));
 
@@ -49,5 +58,5 @@ export const mountApp = async (
 
   await act(async () => undefined);
 
-  return { navigation };
+  return { navigation, store };
 };

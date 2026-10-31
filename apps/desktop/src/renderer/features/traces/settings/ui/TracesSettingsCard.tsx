@@ -17,7 +17,7 @@ import {
   SettingsToggleRow,
   SettingsWell,
 } from "@polaris/ui";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   checkForwardUrl,
   forwardCaption,
@@ -34,7 +34,10 @@ const INSTRUMENT: ReadonlyArray<SettingsOption<TraceAutoInstrument>> = [
 
 type Save = (patch: WorkspaceTracesSettingsUpdate) => void;
 
-/** The collector's URL, saved on ↵ or Save; a URL the Daemon would refuse says why and keeps the old one. */
+/**
+ * The collector's URL, saved on ↵ or Save; emptied and saved, it clears the collector. A URL the
+ * Daemon would refuse says why, read out with the field, and keeps the old one.
+ */
 const ForwardUrl = ({
   settings,
   disabled,
@@ -46,23 +49,35 @@ const ForwardUrl = ({
 }) => {
   const current = settings.forwardTo?.url ?? "";
   const [draft, setDraft] = useState(current);
-  const check = checkForwardUrl(draft);
+  const check = checkForwardUrl(draft, settings.forwardTo !== null);
   const changed = draft.trim() !== current;
   const headers = settings.forwardTo?.headerNames ?? [];
+  const captionId = useId();
+  const refused = changed && !check.ok;
 
   const commit = () => {
     if (!check.ok || !changed) return;
-    save({ forwardTo: { url: check.url, headerNames: headers } });
+    save({ forwardTo: check.url === null ? null : { url: check.url, headerNames: headers } });
+  };
+
+  const caption = () => {
+    if (!check.ok) return changed ? check.reason : headersLine(headers);
+
+    return changed && check.url === null
+      ? "Saving removes this collector; nothing is forwarded until you add one"
+      : headersLine(headers);
   };
 
   return (
     <SettingsRow
       nested
+      wrap
       dimmed={!settings.forwarding}
       title={
         <Input
           aria-label="Collector URL"
-          aria-invalid={changed && !check.ok}
+          aria-invalid={refused}
+          aria-describedby={captionId}
           className="text-code-inline h-[26px] font-mono"
           value={draft}
           placeholder="https://collector.example.com/v1/traces"
@@ -74,10 +89,14 @@ const ForwardUrl = ({
           }}
         />
       }
-      caption={changed && !check.ok ? check.reason : headersLine(headers)}
+      caption={
+        <span id={captionId} aria-live="polite">
+          {caption()}
+        </span>
+      }
     >
       <SettingsButton variant="ghost" disabled={disabled || !changed || !check.ok} onClick={commit}>
-        Save
+        {changed && check.ok && check.url === null ? "Remove" : "Save"}
       </SettingsButton>
     </SettingsRow>
   );

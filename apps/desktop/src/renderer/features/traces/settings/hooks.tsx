@@ -1,12 +1,14 @@
 /**
  * Reading and saving one Workspace's Traces settings over whichever `TracesSettingsApi` the
- * nearest `TracesSettingsLayer` provides. A save shows at once and rolls back when refused.
+ * nearest `TracesSettingsLayer` provides. A save shows at once; a refusal rolls back only its own
+ * fields, so a later save that was accepted stays shown.
  */
 import type {
   WorkspaceId,
   WorkspaceTracesSettings,
   WorkspaceTracesSettingsUpdate,
 } from "@polaris/protocol";
+import type { Types } from "effect";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import type { IpcError } from "../../../../shared/api.ts";
 import type { Loaded } from "../data/hooks.tsx";
@@ -31,6 +33,27 @@ export interface WorkspaceTracesSettingsState {
 }
 
 const LOADING = { status: "loading" } as const;
+
+/** `before`'s values for only the fields `patch` changed. */
+const undo = (
+  patch: WorkspaceTracesSettingsUpdate,
+  before: WorkspaceTracesSettings
+): WorkspaceTracesSettingsUpdate => {
+  const restored: Types.Mutable<WorkspaceTracesSettingsUpdate> = {};
+
+  if (patch.enabled !== undefined) restored.enabled = before.enabled;
+
+  if (patch.forwarding !== undefined) restored.forwarding = before.forwarding;
+
+  if (patch.forwardTo !== undefined) restored.forwardTo = before.forwardTo;
+
+  if (patch.autoInstrument !== undefined) restored.autoInstrument = before.autoInstrument;
+
+  if (patch.autoInstrumentOverride !== undefined)
+    restored.autoInstrumentOverride = before.autoInstrumentOverride;
+
+  return restored;
+};
 
 /** Nothing is read while `at` is null. */
 export const useWorkspaceTracesSettings = (
@@ -70,9 +93,19 @@ export const useWorkspaceTracesSettings = (
       setSettings({ status: "ready", value: { ...before, ...patch } });
       const result = await api.set(hostKey, workspaceId, patch);
 
-      setSettings({ status: "ready", value: result.ok ? result.value : before });
+      if (result.ok) {
+        setSettings({ status: "ready", value: result.value });
 
-      return result.ok ? null : result.error;
+        return null;
+      }
+
+      const restored = undo(patch, before);
+
+      setSettings((now) =>
+        now.status === "ready" ? { status: "ready", value: { ...now.value, ...restored } } : now
+      );
+
+      return result.error;
     },
     [api, hostKey, workspaceId, settings]
   );

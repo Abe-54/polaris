@@ -77,8 +77,9 @@ export const setupState = (
 export const endpointLine = (endpoint: string) => `OTEL_EXPORTER_OTLP_ENDPOINT=${endpoint}`;
 
 /**
- * The one-line change for an exporter whose URL is fixed in code (docs/research/traces-otlp.md):
- * read Polaris's trace endpoint from the environment, keeping today's URL as the fallback.
+ * The one-line change for an exporter whose URL is fixed in code, the polaris-tracing skill's
+ * fixed-exporter line: the traces variable, else the base Polaris injects plus `/v1/traces`, else
+ * today's URL.
  */
 export const FIXED_EXPORTER_CHANGE =
-  "url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? existingVendorUrl,";
+  'url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\\/$/, "")}/v1/traces` : existingVendorUrl),';

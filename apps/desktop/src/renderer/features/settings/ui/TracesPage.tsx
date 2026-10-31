@@ -85,7 +85,8 @@ export const TracesPage = () => {
   const options = useWorkspaceOptions();
   const initial = useInitialKey(options);
   const [picked, setPicked] = useState<string | null>(null);
-  const key = picked ?? initial;
+  // A picked Workspace that was since removed falls back like the initial one does.
+  const key = options.some((o) => o.key === picked) ? picked : initial;
   const option = options.find((o) => o.key === key);
 
   return (

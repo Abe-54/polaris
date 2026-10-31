@@ -2,11 +2,16 @@
  * The empty state's primary block (Paper T4, left): "Set up tracing with an agent" installs the
  * polaris-tracing skill on the Host and starts an agent session; Node instrumentation is a setting.
  */
-import type { AgentSession, SessionId } from "@polaris/protocol";
+import {
+  type AgentSession,
+  harnessEntry,
+  type SessionId,
+  type SessionPlacement,
+} from "@polaris/protocol";
 import { Button } from "@polaris/ui";
 import { useState } from "react";
 import { useShellActions } from "../../../../shell/hooks.ts";
-import { INSTALL_COMMAND } from "../../model/agentSetup.ts";
+import { installCommand } from "../../model/agentSetup.ts";
 import { type SetupProgress, setUpTracing } from "./actions.ts";
 import { Copyable } from "./parts.tsx";
 
@@ -39,18 +44,21 @@ export const SetUpWithAgent = ({
   hostKey,
   workspaceId,
   session,
+  placement,
   onInstrument,
 }: {
   readonly hostKey: string;
   readonly workspaceId: string;
   /** Null while the session's feed hasn't arrived; the button waits for it. */
   readonly session: AgentSession | null;
+  readonly placement: SessionPlacement | null;
   /** Opens Settings → Traces for this Workspace; null on Daemons without `traces.settings`. */
   readonly onInstrument: (() => void) | null;
 }) => {
   const [progress, setProgress] = useState<SetupProgress>({ kind: "idle" });
   const busy = progress.kind === "installing" || progress.kind === "starting";
   const line = progressLine(progress);
+  const harness = session === null ? undefined : harnessEntry(session.harness)?.name;
 
   return (
     <section
@@ -62,16 +70,18 @@ export const SetUpWithAgent = ({
         <span className="text-code-inline text-text-faint font-mono">polaris-tracing skill</span>
       </div>
       <p className="text-caption text-text-subtle">
-        Installs the skill for Claude Code and Codex on this host, then starts an agent session that
-        adds OpenTelemetry here, reading the endpoint from the environment.
+        Installs the skill for {harness ?? "Claude Code and Codex"} on this host, then starts{" "}
+        {harness === undefined ? "an agent session" : `a ${harness} session`} that adds
+        OpenTelemetry here, reading the endpoint from the environment.
       </p>
-      <Copyable text={INSTALL_COMMAND} label="Copy" />
+      <Copyable text={installCommand(session?.harness ?? null)} label="Copy" />
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="secondary"
-          disabled={busy || session === null}
+          disabled={busy || session === null || placement === null}
           onClick={() => {
-            if (session !== null) void setUpTracing({ hostKey, workspaceId, session }, setProgress);
+            if (session !== null && placement !== null)
+              void setUpTracing({ hostKey, workspaceId, session, placement }, setProgress);
           }}
         >
           {progress.kind === "failed" ? "Try again" : "Set up tracing"}
@@ -84,7 +94,17 @@ export const SetUpWithAgent = ({
       </div>
       {line === null ? null : (
         <div className="flex items-center gap-2" role="status" data-testid="traces-setup-progress">
-          <p className="text-caption text-text-subtle min-w-0 flex-1">{line}</p>
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <p className="text-caption text-text-subtle">{line}</p>
+            {progress.kind !== "failed" || progress.output.length === 0 ? null : (
+              <pre
+                className="text-code-inline text-text-default bg-surface-raised border-hairline rounded-control overflow-x-auto border px-2 py-1.5 font-mono whitespace-pre-wrap"
+                data-testid="traces-setup-output"
+              >
+                {progress.output.join("\n")}
+              </pre>
+            )}
+          </div>
           {progress.kind === "started" ? (
             <Started hostKey={hostKey} sessionId={progress.sessionId} />
           ) : null}
