@@ -183,3 +183,68 @@ export const busyTables = (
 
   return busy;
 };
+
+/** What the drawer under the grid shows: one Data Source, and one table while a table tab is open. */
+export interface LogScope {
+  readonly source: string;
+  readonly table?: string | undefined;
+}
+
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Whether the SQL names the table as a word, bare, quoted or schema-qualified. */
+export const mentionsTable = (sql: string, table: string) =>
+  new RegExp(`(^|[^\\w$])["\`]?${escape(table)}["\`]?($|[^\\w$])`, "i").test(sql);
+
+export const inScope = (entry: QueryLogEntry, scope: LogScope | null) =>
+  scope === null ||
+  (entry.source.name === scope.source &&
+    (scope.table === undefined || mentionsTable(entry.sql, scope.table)));
+
+/** The drawer's rows: `logRows` within its scope. */
+export const scopedRows = (
+  entries: ReadonlyArray<QueryLogEntry>,
+  lookups: LogLookups,
+  scope: LogScope | null
+): ReadonlyArray<LogRow> => logRows(entries, lookups).filter((row) => inScope(row.entry, scope));
+
+/** "Fix overdue totals · turn 12", "You", "Backfill currency · needs you", "… · outside Polaris". */
+export const authorText = (row: LogRow): string => {
+  const { author } = row;
+
+  if (author.kind === "user") return "You";
+
+  if (row.state === "needs-you") return `${author.title} · needs you`;
+
+  if (author.kind === "outside") return `${author.title} · outside Polaris`;
+
+  return author.turn === null ? author.title : `${author.title} · turn ${author.turn}`;
+};
+
+/** The drawer's rows column: "214 rows", "failed" (the error is the row's tooltip), or "—". */
+export const resultText = (row: LogRow): string => {
+  if (row.state === "failed") return "failed";
+
+  if (row.state === "running") return "running";
+
+  return row.result === "" ? "—" : row.result;
+};
+
+/** "Query log · invoices · 6", "Query log · app · 30". */
+export const drawerKicker = (scope: LogScope | null, count: number) =>
+  ["Query log", ...(scope === null ? [] : [scope.table ?? scope.source]), String(count)].join(
+    " · "
+  );
+
+const READ = /^\s*(select|with|show|explain|describe|table|values)\b/i;
+
+/** Words that change data or run code anywhere in a statement (`with … delete`, `explain analyze`). */
+const CHANGES =
+  /\b(insert|update|delete|merge|upsert|replace|drop|alter|truncate|create|grant|revoke|copy|call|do|exec|execute|into|lock|analyze|vacuum|set|load|handler|rename|comment|refresh|cluster|reindex|import|for\s+update|for\s+share)\b/i;
+
+/** Only a lone read re-runs straight away; anything else opens in a SQL tab to run with ⌘↵. */
+export const runsOnOpen = (sql: string) => {
+  const text = sql.trim().replace(/;\s*$/, "");
+
+  return READ.test(text) && !text.includes(";") && !CHANGES.test(text);
+};

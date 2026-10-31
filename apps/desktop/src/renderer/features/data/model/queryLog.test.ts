@@ -7,8 +7,14 @@ import {
 } from "../preview/fixtures.ts";
 import { WORST_QUERY_LOG } from "../preview/worstCase.ts";
 import {
+  authorText,
   busyTables,
   dataActivity,
+  drawerKicker,
+  mentionsTable,
+  resultText,
+  runsOnOpen,
+  scopedRows,
   type LogLookups,
   logRows,
   type SessionFacts,
@@ -142,5 +148,77 @@ describe("what each agent is doing to data", () => {
     expect(
       busyTables(WORST_QUERY_LOG, { ...lookups, session: () => facts({ working: false }) }).size
     ).toBe(0);
+  });
+});
+
+describe("the drawer under the grid (Paper D1)", () => {
+  const rows = scopedRows(FIXTURE_QUERY_LOG, lookups, null);
+  const row = (id: string) => found(rows.find((r) => r.id === id));
+
+  test("each row names who ran it: the session and its Turn, You, or the needs-you write", () => {
+    expect(authorText(row(FIXTURE_PENDING_WRITE_ID))).toBe("Backfill currency · needs you");
+    expect(authorText(row("q-branch-read"))).toBe("Fix overdue totals · turn 12");
+    expect(authorText(row("q-user-1"))).toBe("You");
+    expect(authorText(row("q-outside"))).toBe("Backfill currency · outside Polaris");
+  });
+
+  test("a Turn the feed can't number is left unnumbered", () => {
+    const old = found(
+      rows.find(
+        (r) =>
+          r.author.kind === "agent" &&
+          r.entry.author.kind === "agent" &&
+          r.entry.author.turn === "turn-4"
+      )
+    );
+
+    expect(authorText(old)).toBe("Backfill currency");
+  });
+
+  test("a failure says failed and the pending write has no rows yet", () => {
+    expect(resultText(row("q-failed"))).toBe("failed");
+    expect(resultText(row(FIXTURE_PENDING_WRITE_ID))).toBe("—");
+    expect(resultText(row("q-user-2"))).toBe("38 rows");
+  });
+
+  test("scoped to a table, only that source's queries naming it", () => {
+    const invoices = scopedRows(FIXTURE_QUERY_LOG, lookups, { source: "app", table: "invoices" });
+
+    expect(invoices.length).toBeGreaterThan(0);
+    expect(invoices.every((r) => r.source === "app")).toBe(true);
+    expect(invoices.some((r) => r.sql.includes("invoice_items"))).toBe(false);
+    expect(drawerKicker({ source: "app", table: "invoices" }, invoices.length)).toBe(
+      `Query log · invoices · ${invoices.length}`
+    );
+  });
+});
+
+describe("table names", () => {
+  test.each([
+    ["select * from invoices", true],
+    ['select * from "invoices" i', true],
+    ["select * from public.invoices", true],
+    ["select * from invoice_items", false],
+    ["select * from old_invoices", false],
+  ])("%s", (sql, named) => {
+    expect(mentionsTable(sql, "invoices")).toBe(named);
+  });
+});
+
+describe("only a lone read re-runs on open; anything else waits for Run", () => {
+  test.each([
+    ["  select 1", true],
+    ["select * from invoices;", true],
+    ["with t as (select 1) select * from t", true],
+    ["explain select * from invoices", true],
+    ["update invoices set currency = 'USD'", false],
+    ["with gone as (delete from invoices returning *) select * from gone", false],
+    ["explain analyze delete from invoices", false],
+    ["select * into invoices_copy from invoices", false],
+    ["select 1; drop table invoices", false],
+    ["select * from invoices for update", false],
+    ["select pg_sleep(1); select 1", false],
+  ])("%s", (sql, runs) => {
+    expect(runsOnOpen(sql)).toBe(runs);
   });
 });

@@ -17,6 +17,8 @@ import type { DataSlotProps } from "./slots.ts";
 import { DataStatusBar } from "./StatusBar.tsx";
 import { TabStrip } from "./TabStrip.tsx";
 import { tabBody } from "./tabKinds.tsx";
+import { useNewSqlTab } from "./useNewSqlTab.ts";
+import { WorkingStrip } from "./WorkingStrip.tsx";
 
 const NoSession = () => (
   <div className="grid flex-1 place-items-center" data-testid="data-no-session">
@@ -56,6 +58,8 @@ const Workbench = ({ slot }: { slot: Omit<DataSlotProps, "active"> }) => {
   const active = state.tabs.find((t) => t.id === state.active) ?? null;
   const props = { ...slot, active };
 
+  useNewSqlTab(at, active);
+
   return (
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="data-mode">
       <div className="relative isolate flex min-h-0 shrink-0 flex-col">
@@ -65,6 +69,7 @@ const Workbench = ({ slot }: { slot: Omit<DataSlotProps, "active"> }) => {
       <section className="border-hairline bg-panel shadow-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border">
         <ConnectionBar {...props} />
         {state.tabs.length > 0 && <TabStrip at={at} state={state} />}
+        {active?.kind === "table" && <WorkingStrip at={at} hostKey={slot.hostKey} tab={active} />}
         <div className="flex min-h-0 flex-1 flex-col" role="tabpanel">
           {active === null ? <NoTab at={at} /> : tabBody(at, active)}
         </div>

@@ -77,6 +77,8 @@ export const shellContext =
 
     if (mode === "edit") keys.push("mode.edit");
 
+    if (mode === "data") keys.push("mode.data");
+
     return { keys, values };
   };
 

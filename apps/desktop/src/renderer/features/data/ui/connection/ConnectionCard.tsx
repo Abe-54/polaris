@@ -5,6 +5,7 @@
 import type { DataSource, DataSourceLabel } from "@polaris/protocol";
 import { Button, Input, Kicker, PopoverContent } from "@polaris/ui";
 import { useEffect, useState } from "react";
+import { PendingDataApproval } from "../../approval/PendingDataApproval.tsx";
 import { useDataApi } from "../../data/hooks.tsx";
 import { openSourceForm } from "../../model/sidebar.ts";
 import { accessLine, driverText, foundText, kickerText, statusText } from "../../model/source.ts";
@@ -99,6 +100,9 @@ export const ConnectionCard = ({
         }}
       />
       <Details source={source} />
+      {source.access === "needs-approval" ? (
+        <PendingDataApproval hostKey={at.hostKey} sourceId={source.id} />
+      ) : null}
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't save the label · {error}

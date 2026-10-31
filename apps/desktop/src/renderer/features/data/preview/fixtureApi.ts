@@ -117,7 +117,7 @@ export const runFixtureQuery = (
       queryId: `fixture-${table}`,
       columns,
       rows: rows.slice(0, limit),
-      rowCount: Math.min(rows.length, limit),
+      rowCount: rows.length,
       returned: Math.min(rows.length, limit),
       total: rows.length,
       truncated: rows.length > limit,

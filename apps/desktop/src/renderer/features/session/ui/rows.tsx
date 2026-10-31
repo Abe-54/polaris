@@ -30,6 +30,7 @@ import { age } from "../../../shell/copy.ts";
 import { SentAttachments } from "../../attachments/index.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { Decisions } from "../../../commands.ts";
+import { useApp } from "../../../shell/hooks.ts";
 import { type Row, turnReceipt, turnTime } from "../model/conversation.ts";
 import { totals } from "../model/diff.ts";
 import { plural } from "../model/format.ts";
@@ -47,6 +48,8 @@ import { SessionTargetContext } from "./polarisTool/target.ts";
 import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
+import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCard.tsx";
+import { type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
 import { SourcesPill } from "./sources.tsx";
 import type { SecretOutcome } from "../model/secret.ts";
 import { provideSecret } from "../secrets.ts";
@@ -410,6 +413,30 @@ const Secret = ({
   );
 };
 
+/** A Data Source Approval: the exact target, its scope, and the Host that remembers it. */
+const DataApproval = ({
+  request,
+  target,
+  ctx,
+}: {
+  request: ApprovalRequest;
+  target: DataSourceTarget;
+  ctx: RowContext;
+}) => {
+  const hostKey = ctx.diff.hostKey;
+  const hostLabel = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.label ?? "this Host");
+
+  return (
+    <DataSourceApprovalCard
+      key={request.id}
+      target={target}
+      who={ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name}
+      hostLabel={hostLabel}
+      onDecide={(decision) => ctx.onRespond(request, decision)}
+    />
+  );
+};
+
 const Approval = ({
   request,
   settled,
@@ -422,6 +449,9 @@ const Approval = ({
   if (request.kind === "secret") return <Secret request={request} settled={settled} ctx={ctx} />;
 
   if (request.kind === "question") return <Question request={request} ctx={ctx} />;
+  const target = dataSourceTarget(request);
+
+  if (target !== null) return <DataApproval request={request} target={target} ctx={ctx} />;
   const who = ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name;
   const respond = (decision: ApprovalDecision) => ctx.onRespond(request, decision);
 

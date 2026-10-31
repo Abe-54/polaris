@@ -3,16 +3,19 @@
  * checkout's three Data Sources, a seven-table schema, 500 invoices and 30 Query Log entries.
  */
 import {
-  type DataValue,
+  type ApprovalRequest,
   DataSource,
+  type DataValue,
   QueryLogEntry,
   type QueryResult,
+  RequestId,
   SchemaTree,
   SessionId,
   TableDetail,
   TableSummary,
   TurnId,
 } from "@polaris/protocol";
+import type { WorkingLookup } from "../model/working.ts";
 
 export const FIXTURE_NOW = Date.parse("2026-10-30T18:00:00Z");
 
@@ -20,6 +23,35 @@ export const FIXTURE_SESSIONS = {
   overdue: { id: SessionId.make("s-overdue-totals"), title: "Fix overdue totals" },
   backfill: { id: SessionId.make("s-backfill-currency"), title: "Backfill currency" },
 } as const;
+
+/** The two Agent Sessions as the Host's session list has them: Fix overdue totals is Working. */
+export const fixtureSessionLookup: WorkingLookup = (id) => {
+  if (id === FIXTURE_SESSIONS.overdue.id)
+    return {
+      title: FIXTURE_SESSIONS.overdue.title,
+      harness: "claude",
+      working: true,
+      turn: {
+        id: TurnId.make("turn-12"),
+        number: 12,
+        startedAt: new Date(FIXTURE_NOW - 125 * 60_000).toISOString(),
+      },
+    };
+
+  if (id === FIXTURE_SESSIONS.backfill.id)
+    return {
+      title: FIXTURE_SESSIONS.backfill.title,
+      harness: "codex",
+      working: false,
+      turn: {
+        id: TurnId.make("turn-5"),
+        number: 5,
+        startedAt: new Date(FIXTURE_NOW - 3 * 60_000).toISOString(),
+      },
+    };
+
+  return null;
+};
 
 const CHECKOUT = "/Users/lucas/code/ledger.worktrees/overdue-totals";
 
@@ -155,8 +187,11 @@ const ROW_ESTIMATES = new Map<string, number>(
 
 export const FIXTURE_TABLES = [...TABLE_COLUMNS.keys()];
 
+export const fixtureColumns = (table: string) =>
+  TABLE_COLUMNS.get(table)?.map((c) => ({ name: c.name, type: c.type })) ?? null;
+
 export const FIXTURE_SCHEMA = new SchemaTree({
-  loadedAt: "2026-10-30T12:00:00Z",
+  loadedAt: new Date(FIXTURE_NOW - 4_000).toISOString(),
   schemas: [
     {
       name: "public",
@@ -166,7 +201,7 @@ export const FIXTURE_SCHEMA = new SchemaTree({
             name,
             rowEstimate: ROW_ESTIMATES.get(name) ?? null,
             columnCount: TABLE_COLUMNS.get(name)?.length ?? 0,
-            columns: TABLE_COLUMNS.get(name) ?? [],
+            columns: fixtureColumns(name) ?? [],
           })
       ),
       views: [],
@@ -300,9 +335,6 @@ export const fixtureRows = (table: string): ReadonlyArray<ReadonlyArray<DataValu
   return Array.from({ length: count }, (_, i) => columns.map((c) => genericCell(c, i, next)));
 };
 
-export const fixtureColumns = (table: string) =>
-  TABLE_COLUMNS.get(table)?.map((c) => ({ name: c.name, type: c.type })) ?? null;
-
 const turn = (n: number) => TurnId.make(`turn-${n}`);
 
 const at = (minutesAgo: number) => new Date(FIXTURE_NOW - minutesAgo * 60_000).toISOString();
@@ -323,6 +355,8 @@ const READS = [
 /** The pending write: an agent's update waiting for the user's approval (D3). */
 export const FIXTURE_PENDING_WRITE_ID = "q-backfill-write";
 
+export const FIXTURE_PENDING_APPROVAL_ID = RequestId.make("r-backfill-write");
+
 /** 30 entries, oldest first: agent reads, the user's queries, a failure, a `psql` outside Polaris, a pending write. */
 export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
   ...Array.from({ length: 24 }, (_, i) => {
@@ -330,7 +364,6 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     const overdue = i % 3 !== 2;
 
     return new QueryLogEntry({
-      state: "completed",
       id: `q-${i + 1}`,
       checkout: CHECKOUT,
       source: i % 8 === 7 ? branch : app,
@@ -341,13 +374,13 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
         turn: turn(overdue ? 12 : 4),
       },
       tool: "data_query",
+      state: "completed",
       rows: (i * 37) % 214,
       elapsedMs: 3 + ((i * 7) % 40),
       at: at(120 - i * 4),
     });
   }),
   new QueryLogEntry({
-    state: "completed",
     id: "q-outside",
     checkout: CHECKOUT,
     source: app,
@@ -358,62 +391,102 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
       turn: turn(4),
       command: `psql $DATABASE_URL -c "select count(*) from invoices where currency is null"`,
     },
+    state: "completed",
     at: at(14),
   }),
   new QueryLogEntry({
-    state: "completed",
     id: "q-user-1",
     checkout: CHECKOUT,
     source: app,
     sql: "select * from invoices where status = 'overdue' and due_at < now() - interval '30 days'",
     author: { kind: "user" },
+    state: "completed",
     rows: 214,
     elapsedMs: 9,
     at: at(8),
   }),
   new QueryLogEntry({
-    state: "completed",
     id: "q-user-2",
     checkout: CHECKOUT,
     source: app,
     sql: "select * from invoices where currency is null",
     author: { kind: "user" },
+    state: "completed",
     rows: 38,
     elapsedMs: 4,
     at: at(6),
   }),
   new QueryLogEntry({
-    state: "failed",
     id: "q-failed",
     checkout: CHECKOUT,
     source: app,
     sql: "select total from invoices",
     author: { kind: "agent", sessionId: FIXTURE_SESSIONS.overdue.id, turn: turn(12) },
     tool: "data_query",
+    state: "failed",
     error: 'column "total" does not exist',
     elapsedMs: 2,
     at: at(5),
   }),
   new QueryLogEntry({
-    state: "completed",
     id: "q-branch-read",
     checkout: CHECKOUT,
     source: branch,
     sql: "select count(*) from invoices where status = 'overdue'",
     author: { kind: "agent", sessionId: FIXTURE_SESSIONS.overdue.id, turn: turn(12) },
     tool: "data_query",
+    state: "completed",
     rows: 1,
     elapsedMs: 31,
     at: at(2),
   }),
   new QueryLogEntry({
-    state: "waiting-approval",
     id: FIXTURE_PENDING_WRITE_ID,
     checkout: CHECKOUT,
     source: app,
     sql: "update invoices set currency = 'USD' where currency is null",
     author: { kind: "agent", sessionId: FIXTURE_SESSIONS.backfill.id, turn: turn(5) },
     tool: "data_query",
+    state: "waiting-approval",
+    approval: { id: FIXTURE_PENDING_APPROVAL_ID, status: "pending" },
     at: at(0),
   }),
 ];
+
+/** A Data Source Approval as X's event carries it, until the protocol has `dataSource`. */
+export const fixtureDataApproval = (
+  sessionId: SessionId,
+  turnId: TurnId,
+  openedAt = new Date(FIXTURE_NOW - 40_000).toISOString()
+): ApprovalRequest => {
+  const request = {
+    id: RequestId.make("r-analytics-read"),
+    sessionId,
+    turnId,
+    kind: "tool",
+    title: "Read analytics",
+    detail: null,
+    options: [],
+    questions: [],
+    placeholder: null,
+    expiresAt: null,
+    openedAt,
+    dataSource: {
+      sourceId: "src-analytics",
+      sourceName: "analytics",
+      engine: "mysql",
+      host: "aws.connect.psdb.cloud",
+      port: 3306,
+      database: "analytics",
+      user: "u_7kq2xmz4p1",
+      branch: { provider: "planetscale", name: "backfill-currency" },
+    },
+  } as const;
+
+  return request;
+};
+
+export const FIXTURE_DATA_APPROVAL = fixtureDataApproval(
+  FIXTURE_SESSIONS.backfill.id,
+  TurnId.make("turn-5")
+);

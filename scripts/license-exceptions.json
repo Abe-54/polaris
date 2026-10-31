@@ -51,6 +51,9 @@
     },
     "argparse": {
       "reason": "Build-time only: Python-2.0 (PSF), a permissive licence. js-yaml pulls it in for @expo/xcpretty, which formats xcodebuild output while apps/mobile builds. It runs on the developer's machine and is never in the Mobile App's JavaScript bundle or binary."
+    },
+    "railroad-diagrams": {
+      "reason": "CC0-1.0 (a public-domain dedication), a dependency of nearley that only its nearley-railroad CLI loads; sql-formatter (the Desktop App's SQL tab Format) pulls nearley in, and the runtime never imports it."
     }
   }
 }
