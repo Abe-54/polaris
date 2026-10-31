@@ -11,8 +11,13 @@ import { createSocket } from "node:dgram";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import type { Schema } from "effect";
-import { _electron as electron, type Frame, type Page } from "playwright-core";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import { type Frame, type Page } from "playwright-core";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { startDaemon } from "./lib/daemon.ts";
 import { frameStats } from "./lib/sessionFlow.ts";
 

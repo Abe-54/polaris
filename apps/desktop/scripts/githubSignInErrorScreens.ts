@@ -12,9 +12,14 @@ import { createServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { MOCK_KEYCHAIN } from "./lib/githubFlow.ts";
 
 const out = process.argv[2] ?? join(tmpdir(), "polaris-github-sign-in-errors");

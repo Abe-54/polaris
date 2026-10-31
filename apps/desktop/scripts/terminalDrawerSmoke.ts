@@ -10,9 +10,9 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, stockElectronBinary } from "./lib/electron.ts";
+import { scriptedElectron as electron, APP_DIR, stockElectronBinary } from "./lib/electron.ts";
 
 const { values } = parseArgs({ options: { out: { type: "string" } } });
 

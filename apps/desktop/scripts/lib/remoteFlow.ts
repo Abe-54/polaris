@@ -7,9 +7,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { hostPlatform } from "../../src/main/machines/fakeHost.testing.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./electron.ts";
+import { scriptedElectron as electron, APP_DIR, electronBinary, sizeWindow } from "./electron.ts";
 import { FAKE_ALIAS, prepareFakeHost } from "./machineFlow.ts";
 import { approveAll, FIRST_TURN, initRepo } from "./sessionFlow.ts";
 
