@@ -79,9 +79,55 @@ Span, `logs` are the newest 20 correlated records and `logCount` is the total re
 Resolve a database target through the Data Sources service using engine, server, port and database;
 only a unique matching target gets `dataSource`. A null launched Turn has no launched-Turn text line.
 
+## `compare {a?, b}` (ENG-660)
+
+Selectors are `{_tag: "Turn", turnId}`, `{_tag: "Trace", traceId}` (full or unique
+prefix of at least eight hex characters), or `{_tag: "Baseline"}`. Omitted `a`
+means Baseline; `b` is required. Explicit pairs select two Turns in the caller's
+agent session or two traces in its checkout. The same explicit selector on both
+sides compares it with itself. Baseline is valid only as `a`, against a Turn `b`;
+other combinations return `E-INPUT` with the accepted forms.
+
+The Lead's owner decision: for a Turn, before means the same service/root route's
+traces in this checkout from earlier Turns within retention, and after means
+that Turn's traces. Baseline includes attributed traces starting before the
+target Turn starts, across agent sessions in this checkout; it excludes the
+target Turn, between-Turn traces, later traces and partial traces. Explicit pairs
+use their selected traces instead of searching history. There is no sample cap
+or implicit baseline outside Baseline mode. Reads never pin traces.
+
+Group by root service and root span name, ordered by service then route. Show
+nearest-rank p50 and p95 before → after, counts and the slowest new span per route.
+Fewer than **three complete retained samples on either side** means `no baseline`:
+preserve both counts and set both sides' percentiles to null. This also applies
+to explicit trace pairs, which have one sample each. Empty known Turns produce
+zero routes; unknown Turns or missing/expired trace selectors return
+`E-TRACE-NOT-FOUND`. Retention runs before the single worker query snapshot.
+
+```
+Route timings · retained traces only · 1 route
+POST /invoices  ledger-api  p50 120 ms → 840 ms  p95 130 ms → 900 ms  runs 5 → 5
+  slowest new span: invoices.recalculateOverdue  ledger-api  814 ms  trace 4f1c9a2e  span 2d91aa04
+```
+
+A sparse route reads `POST /invoices  ledger-api  no baseline  runs 2 → 5`.
+A new span is a service/name/parent-name combination absent from the before
+side of that same root route. Keep the longest individual after span, breaking
+ties by trace id then span id. It is descriptive evidence even with no baseline,
+never a claim that a code change caused a slowdown. No new span means no line.
+
+`structuredContent` is the RPC's `TraceComparison {a,b,routes}`. Each route has
+`{service,route,before:{count,p50Ms,p95Ms},after:{count,p50Ms,p95Ms},slowestNew?}`;
+`slowestNew` is `{name,service,durationMs,traceId,spanId}`. Optional
+`partial:{before,after}` counts partial traces excluded from statistics and span
+comparison; text reports those exclusions. All retained routes remain in JSON.
+Text is one block capped at 16,000 characters, with clipped names and a count of
+omitted routes; retrieve the full rows from compare structuredContent, and use
+`trace` or `span` with the returned ids for detail.
+
 ## Caps and retrieval
 
-All three tools emit one text block of at most 16,000 characters. `traces` states shown/total and
+All four tools emit one text block of at most 16,000 characters. `traces` states shown/total and
 suggests limit or narrower filters. `trace` counts folded Spans and gives their upper duration
 bound; use `span` for individual details. For `span`, name each omitted section with its omitted
 detail-line count and say to use `span` structuredContent for the full retained data. Older logs

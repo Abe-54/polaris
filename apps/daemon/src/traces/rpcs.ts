@@ -1,5 +1,7 @@
-import { TracesRpcs } from "@polaris/protocol";
+import { TraceCompareRpcs, TracesRpcs } from "@polaris/protocol";
 import { Effect, Stream } from "effect";
+import { compareForSession } from "./compare.ts";
+import { TraceSessions } from "./sessions.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { TraceStore } from "./store.ts";
 
@@ -46,6 +48,18 @@ export const TracesRpcsLive = TracesRpcs.toLayer(
         Effect.flatMap(runtime.checkout(sessionId), (checkout) =>
           store.span(checkout, traceId, spanId)
         ),
+    };
+  })
+);
+
+export const TraceCompareRpcsLive = TraceCompareRpcs.toLayer(
+  Effect.gen(function* () {
+    const store = yield* TraceStore;
+    const sessions = yield* TraceSessions;
+
+    return {
+      "traces.compare": ({ sessionId, a, b }) =>
+        compareForSession(store, sessions, sessionId, a, b),
     };
   })
 );

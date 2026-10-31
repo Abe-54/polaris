@@ -112,7 +112,8 @@ counts omitted Spans under the text cap. Its full contract is `docs/specs/traces
 
 `packages/protocol/src/traces.ts` owns these additive contracts. The phase 1
 shapes and `traces` capability are unchanged. New RPCs currently return
-`Unsupported`; none of the three new capabilities is advertised. Each owner
+`Unsupported` until their owner lands them. `traces.compare` is implemented and
+advertised. Each owner
 replaces its handlers and advertises its capability when the implementation lands.
 All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
 The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
@@ -154,9 +155,25 @@ identity and checkout ownership; a caller-supplied pid alone is never authority.
 
 Compare selectors are tagged `{_tag: "Turn", turnId}` or
 `{_tag: "Trace", traceId}` (full id or unique prefix). The Daemon resolves both in
-the session's checkout. `a` is before and `b` after, without an inferred baseline.
+the session's checkout. `a` is before and `b` after. Additive `{_tag: "Baseline"}`
+is valid only as `a`,
+against a Turn `b`; it explicitly selects that route's earlier attributed traces
+in the checkout, before the target Turn's start and within retention. Omitted
+MCP `a` means Baseline; equal explicit selectors compare with themselves. Turn
+selectors resolve in the caller's Agent Session; Trace selectors resolve in its
+checkout. Baseline as `b`, mixed explicit selector types and Baseline against a
+Trace return `E-INPUT` with accepted input forms. This is the Lead's owner decision
+for ENG-660; it supersedes the original contract's absence of a baseline mode.
 Routes are grouped by service and Trace root name, sorted by service then route.
-Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; no samples
-means count zero and null percentiles. A missing selector still uses `TraceError`
+Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; fewer than
+three complete retained samples on either side means "no baseline":
+both sides retain their counts with null percentiles. A missing route side has
+count zero. Partial traces are excluded and reported in optional per-route
+`partial:{before,after}` counts. Optional `slowestNew:{name,service,durationMs,traceId,spanId}`
+identifies the longest after Span whose service/name/parent-name is absent from
+the same before root route. RPC and MCP return these same facts. The separate
+`compareQuery.ts` runs only on demand inside the existing SQLite worker, after
+retention, without pins, timers or the history helper's five-sample SLOW rule.
+A missing selector still uses `TraceError`
 rather than silently comparing another Turn or checkout. P8 owns aggregation,
 expiry/partial-data handling and selector authorization.

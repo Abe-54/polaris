@@ -115,6 +115,12 @@ const selected = (
   selector: TraceCompareSelector
 ): Result<ReadonlyArray<TraceSummary>> =>
   Match.valueTags(selector, {
+    Baseline: () =>
+      fail(
+        "E-INPUT",
+        "This preview requires explicit comparison selectors.",
+        "Use two Turn selectors or two Trace selectors."
+      ),
     Turn: ({ turnId }): Result<ReadonlyArray<TraceSummary>> => {
       const traces = details(scene).filter((d) => d.summary.turn?.id === turnId);
 
