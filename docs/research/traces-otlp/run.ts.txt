@@ -149,9 +149,9 @@ try {
       const child = await start(mode);
       await Bun.sleep(settleMs);
       const before = counters(child.pid);
-      const start = performance.now();
+      const idleStart = performance.now();
       await Bun.sleep(idleMs);
-      const elapsedSec = (performance.now() - start) / 1000;
+      const elapsedSec = (performance.now() - idleStart) / 1000;
       const afterIdle = counters(child.pid);
       let peakRss = afterIdle.rssBytes;
       if (mode === "receiver") {
