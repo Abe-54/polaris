@@ -1,7 +1,7 @@
 /**
  * Traces (⌘5; DESIGN.md, Traces): Data's shell with no assistant panel. The Workspace bar, the
  * sidebar on the ground over the horizon, and one panel holding the trace bar, the waterfall or
- * Table with the span panel beside it, the drawer under them, and the status bar. Each slot is
+ * Table with the span panel beside it, the open Profile and the drawer under them, and the status bar. Each slot is
  * its own file (slots.ts) so its owner replaces it alone.
  */
 import type { SessionId } from "@polaris/protocol";
@@ -15,6 +15,7 @@ import type { TracesSessionKey } from "../model/session.ts";
 import { setupState } from "../model/setup.ts";
 import { useTracesSelection } from "../model/store.ts";
 import { TracesDrawer } from "./Drawer.tsx";
+import { ProfilePanel } from "./profile/ProfilePanel.tsx";
 import { TracesSidebar } from "./Sidebar.tsx";
 import type { TracesSlotProps } from "./slots.ts";
 import { SpanPanel } from "./SpanPanel.tsx";
@@ -80,6 +81,7 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
               </div>
               {map ? null : <SpanPanel {...props} />}
             </div>
+            <ProfilePanel {...props} />
             <TracesDrawer {...props} />
           </>
         ) : (

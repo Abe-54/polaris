@@ -29,7 +29,9 @@ import { DataLayer } from "../../data/data/hooks.tsx";
 import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import type { Snapshots, TracesApi } from "../data/api.ts";
 import { TracesLayer } from "../data/hooks.tsx";
+import { ProfilesLayer } from "../data/profiles.tsx";
 import { FIXTURE_CHECKOUT, FIXTURE_SESSION } from "../preview/fixtures.ts";
+import { fixtureProfilesApi } from "../preview/profiles.ts";
 import { TracesMode } from "./TracesMode.tsx";
 
 export const HOST = "local";
@@ -209,7 +211,9 @@ export const providers = (api: TracesApi) => {
     >
       <TooltipProvider>
         <DataLayer api={fixtureDataApi()}>
-          <TracesLayer api={api}>{children}</TracesLayer>
+          <TracesLayer api={api}>
+            <ProfilesLayer api={fixtureProfilesApi()}>{children}</ProfilesLayer>
+          </TracesLayer>
         </DataLayer>
       </TooltipProvider>
     </AppProvider>

@@ -5,7 +5,7 @@ import { decideDeviceAccess } from "./deviceGrants.ts";
 import { Pairing } from "./extensions.ts";
 import { decideAccess } from "./grants.ts";
 import { PairingId } from "./ids.ts";
-import { TraceForwardTarget, TraceForwardUrl } from "./traces.ts";
+import { Profile, TraceForwardTarget, TraceForwardUrl } from "./traces.ts";
 
 test("collector addresses exclude credentials and URL components that commonly carry tokens", () => {
   const accepts = Schema.is(TraceForwardUrl);
@@ -71,4 +71,24 @@ test.each([
   expect(decideAccess(extension, rpc, null)?.what).toBe(rpc);
   expect(decideDeviceAccess(rpc, null)?.what).toBe(rpc);
   expect(decideAccess(null, rpc, null)).toBeNull();
+});
+
+const recording = {
+  id: "prof-1",
+  command: "bun run dev",
+  runtime: "bun",
+  pid: 4242,
+  turn: null,
+  startedAt: "2026-10-31T14:02:11.000Z",
+  durationMs: 12400,
+  path: null,
+  status: "completed",
+};
+
+test("a Profile from a Daemon without origin or service still decodes; unknown origins don't", () => {
+  const decode = Schema.decodeUnknownSync(Profile);
+
+  expect(decode(recording).origin).toBeUndefined();
+  expect(decode({ ...recording, origin: "restart", service: "ledger-api" }).origin).toBe("restart");
+  expect(() => decode({ ...recording, origin: "guess" })).toThrow();
 });

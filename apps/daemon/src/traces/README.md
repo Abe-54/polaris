@@ -144,7 +144,9 @@ auto-instrumented, and an override never bypasses Workspace Trust.
 Profiles use a store-assigned `ProfileId`; a path in a summary is display data,
 never authority to read a file. `path` is null until a `.cpuprofile` exists.
 `status` is `recording`, `completed` or `failed`, and `turn` is a nullable
-`TraceTurn`. `ProfileDetail.hotFunctions` contains self and inclusive milliseconds
+`TraceTurn`. Optional `origin` (`command`, `restart`, `attach`) says how it was
+recorded and optional `service` names the process's `service.name`; older Daemons
+omit both and Clients fall back to the Turn and status. `ProfileDetail.hotFunctions` contains self and inclusive milliseconds
 and nullable file/line for unresolved frames. Its indices remain stable when a UI
 sorts a view by self time. `hotPath` indexes those functions from root to leaf;
 each flame chart node indexes a function and an earlier parent (null for roots),
