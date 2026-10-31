@@ -17,7 +17,7 @@ export interface GridColumn {
 
 export interface LaidColumn extends GridColumn {
   readonly width: number;
-  /** Right-aligned, tabular: a numeric type, or every sampled value a number. */
+  /** Right-aligned, tabular: a numeric type, or every sampled non-NULL value a number. */
   readonly numeric: boolean;
 }
 
@@ -48,14 +48,19 @@ export const layColumns = (
   const sample = rows.slice(0, SAMPLE_ROWS);
 
   return columns.map((column, at) => {
+    const typed = isNumericType(column.type);
     let chars = Math.max(column.name.length, typeLabel(column).length);
-    let numbers = sample.length > 0;
+    let numbers = 0;
+    let others = 0;
 
     for (const row of sample) {
       const cell = cellOf(row[at]);
+      const extra = column.fk == null ? 0 : 2;
 
-      chars = Math.max(chars, displayOf(cell).length + (column.fk == null ? 0 : 2));
-      numbers &&= cell.kind === "number" || cell.kind === "null";
+      chars = Math.max(chars, displayOf(cell, { numeric: typed }).length + extra);
+
+      if (cell.kind === "number") numbers++;
+      else if (cell.kind !== "null") others++;
     }
 
     const width = Math.round(chars * CHAR_PX + PAD_PX);
@@ -63,7 +68,7 @@ export const layColumns = (
     return {
       ...column,
       width: Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)),
-      numeric: isNumericType(column.type) || numbers,
+      numeric: typed || (numbers > 0 && others === 0),
     };
   });
 };

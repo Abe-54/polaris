@@ -5,7 +5,7 @@
 import { PixelCheckIcon, showToast } from "@polaris/ui";
 import { useCallback } from "react";
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
-import { updateDraft } from "../../session/index.ts";
+import { updateDraft } from "../../session/state.ts";
 import type { DataSessionKey } from "../model/store.ts";
 import { appendBlock, rowsBlock, rowsLabel, type RowsSource } from "./rows.ts";
 

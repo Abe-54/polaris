@@ -25,7 +25,7 @@ describe("cell display", () => {
     [Numeric.make({ value: "304000.50" }), "304 000.50"],
     ["9f2c41aa-0000-4000-8000-00000000041a", "9f2c…41a"],
     ["two\nlines", "two⏎lines"],
-    [Timestamp.make({ iso: "2026-08-02T00:00:00Z" }), "2026-08-02T00:00:00Z"],
+    [Timestamp.make({ iso: "2026-08-02T09:30:00.000Z" }), "2026-08-02 09:30:00Z"],
     [Bytes.make({ length: 16 }), "16 bytes"],
     [Truncated.make({ preview: '{"a":1', bytes: 1_048_576 }), '{"a":1…'],
   ])("%p shows as %p", (value, text) => {
