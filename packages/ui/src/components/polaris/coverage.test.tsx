@@ -156,21 +156,24 @@ describe("HarnessChoice", () => {
 });
 
 describe("Needs You", () => {
-  test("an approval card offers Approve, Always here and Deny", () => {
+  test.each([
+    ["with", () => undefined, ["Approve", "Always here", "Deny"]],
+    ["without", undefined, ["Approve", "Deny"]],
+  ] as const)("an approval card %s an Always allow handler offers %p", (_, always, buttons) => {
     const { getAllByRole } = render(
       <NeedsYouCard
         harness="codex"
         title="Spike GPUI review screen"
         where="Mac Studio · polaris · 42m"
-        approval={{ command: "cargo build --release" }}
+        approval={
+          always === undefined
+            ? { command: "cargo build --release" }
+            : { command: "cargo build --release", onAlwaysAllow: always }
+        }
       />
     );
 
-    expect(getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Approve",
-      "Always here",
-      "Deny",
-    ]);
+    expect(getAllByRole("button").map((button) => button.textContent)).toEqual([...buttons]);
   });
 
   test("a waiting card has exactly one action", () => {

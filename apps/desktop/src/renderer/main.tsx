@@ -145,7 +145,13 @@ connectUpdates(window.polaris);
 
 window.polaris.onAppEvent((event) => {
   if (event.kind === "command") commands.run(event.id);
-  else if (event.kind === "needs-you") onNeedsYouEvent(event, navigation.actions);
+  else if (event.kind === "needs-you")
+    onNeedsYouEvent(event, navigation.actions, (hostKey, sessionId, requestId) =>
+      connection.store
+        .getState()
+        .hostModels[hostKey]?.sessions.get(sessionId)
+        ?.pendingApprovals.find((r) => r.id === requestId)
+    );
   else if (event.kind === "open-pull") onOpenPullEvent(event.pull, navigation.actions);
   else if (event.kind === "open-review") onOpenReviewEvent(event.target, navigation.actions);
   else if (event.kind === "deep-link")

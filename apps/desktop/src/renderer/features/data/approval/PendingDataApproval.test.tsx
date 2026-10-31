@@ -4,6 +4,8 @@ import "../../../app/slots.tsx";
 import { TooltipProvider } from "@polaris/ui";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "bun:test";
+import { DataSource } from "@polaris/protocol";
+import { Schema } from "effect";
 import { createStore } from "zustand/vanilla";
 import { createCommandRegistry } from "../../../routes/commands.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
@@ -13,17 +15,20 @@ import { DataLayer } from "../data/hooks.tsx";
 import { dataTabsStore } from "../model/store.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
-import { FIXTURE_DATA_APPROVAL, FIXTURE_SESSIONS } from "../preview/fixtures.ts";
+import { installFakeBridge } from "../../../test/bridge.testing.ts";
+import { standInBridge } from "../../bridge.ts";
+import { FIXTURE_DATA_APPROVAL, FIXTURE_SESSIONS, FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import { DATA_AT, DATA_WORKSPACE_ID, dataHost, dataHostModel } from "../preview/scene.ts";
 import { ConnectionBar } from "../ui/ConnectionBar.tsx";
 
 afterEach(() => {
   cleanup();
+  standInBridge(null);
   dataTabsStore.setState({ sessions: {}, shown: null });
 });
 
 /** The connection bar on a source, with the backfill session waiting on analytics' approval. */
-const mount = (sourceId: string) => {
+const mount = (sourceId: string, sources: ReadonlyArray<DataSource> = FIXTURE_SOURCES) => {
   const model = dataHostModel();
   const backfill = model.sessions.get(FIXTURE_SESSIONS.backfill.id);
 
@@ -61,7 +66,7 @@ const mount = (sourceId: string) => {
       }}
     >
       <TooltipProvider>
-        <DataLayer api={fixtureDataApi()}>
+        <DataLayer api={fixtureDataApi({ sources })}>
           <ConnectionBar
             at={DATA_AT}
             hostKey={DATA_AT.hostKey}
@@ -100,4 +105,34 @@ test("another source's card shows no approval", async () => {
 
   expect(card.textContent).not.toContain(FIXTURE_SESSIONS.backfill.title);
   expect(card.textContent).not.toContain("Approve");
+});
+
+/** The fixture's analytics source, changed as `change` says. */
+const analytics = (change: Partial<typeof DataSource.Encoded>) =>
+  FIXTURE_SOURCES.map((s) =>
+    s.name === "analytics" ? new DataSource({ ...Schema.encodeSync(DataSource)(s), ...change }) : s
+  );
+
+test("a source renamed while its approval is pending still shows it, matched by target (F12)", async () => {
+  mount("warehouse", analytics({ id: "src-warehouse", name: "warehouse" }));
+
+  const card = await openCard();
+
+  await waitFor(() => expect(card.textContent).toContain(FIXTURE_SESSIONS.backfill.title));
+  expect(card.textContent).toContain("Approve");
+});
+
+test("a request for a source approved already shows settled and answers itself (F3)", async () => {
+  const bridge = installFakeBridge();
+
+  mount("analytics", analytics({ access: "approved" }));
+
+  const card = await openCard();
+
+  await waitFor(() => expect(card.textContent).toContain("Approved. Agents can read it now."));
+  await waitFor(() =>
+    expect(bridge.sent("dispatch").map(({ command }) => command._tag)).toEqual([
+      "RespondToApproval",
+    ])
+  );
 });

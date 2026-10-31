@@ -2,7 +2,7 @@
  * The Query Log drawer under the grid (DESIGN.md, Data → Query Log; Paper D1): one row per Query,
  * scoped to the open table or source, the needs-you row marked, and any row re-runs in a SQL tab.
  */
-import type { QueryLogEntry } from "@polaris/protocol";
+import type { DataSource, QueryLogEntry } from "@polaris/protocol";
 import {
   ChevronDownIcon,
   cn,
@@ -16,7 +16,7 @@ import {
 import { useMemo, useState } from "react";
 import { age } from "../../../shell/copy.ts";
 import { useNow } from "../../../shell/useNow.ts";
-import { useQueryLog } from "../data/hooks.tsx";
+import { useDataSources, useQueryLog } from "../data/hooks.tsx";
 import {
   authorText,
   drawerKicker,
@@ -32,9 +32,32 @@ import { queueRun, useSqlSource } from "../sql/state.ts";
 import { useLogLookups } from "./sidebar/useLogLookups.ts";
 import type { DataSlotProps } from "./slots.ts";
 
-/** Opens the query in a new SQL tab, running it when it's a read. */
-export const rerunInSqlTab = (at: DataSessionKey, entry: QueryLogEntry) => {
-  openSqlTab(entry.sql, entry.source.name, at, entry.params ?? []);
+/** "This ran on app, which is gone or renamed. Choose a data source to run it." */
+export const goneSourceNotice = (name: string) =>
+  `This ran on ${name}, which is gone or renamed. Choose a data source to run it.`;
+
+/**
+ * Opens the query in a new SQL tab on the source it ran on, found by id, with its params, running
+ * it when it's a plain read. A gone or renamed source opens with no source, not running, and says why.
+ */
+export const rerunInSqlTab = (
+  at: DataSessionKey,
+  entry: QueryLogEntry,
+  sources: ReadonlyArray<DataSource> | null
+) => {
+  const source = sources?.find((s) => s.id === entry.source.id);
+  const params = entry.params ?? [];
+
+  // Before the sources are listed, it opens with none chosen and says nothing yet.
+  if (source === undefined) {
+    const notice = sources === null ? undefined : goneSourceNotice(entry.source.name);
+
+    openSqlTab(entry.sql, "", at, params, notice);
+
+    return;
+  }
+
+  openSqlTab(entry.sql, source.name, at, params);
   const opened = dataTabsStore.getState().sessions[dataSessionKey(at)]?.active;
 
   if (opened != null && runsOnOpen(entry.sql)) queueRun(at, opened);
@@ -170,11 +193,16 @@ const scopeOf = (active: DataTab | null, sqlSource: string | null): LogScope | n
 
   if (active.kind === "table") return { source: active.sourceId, table: active.table };
 
-  return { source: sqlSource ?? active.sourceId };
+  const source = sqlSource ?? active.sourceId;
+
+  // A SQL tab with no source chosen shows every Query.
+  return source === "" ? null : { source };
 };
 
 export const QueryLogDrawer = ({ at, hostKey, active }: DataSlotProps) => {
   const log = useQueryLog(at);
+  const sources = useDataSources(at);
+  const listed = sources.status === "ready" ? sources.value : null;
   const lookups = useLogLookups(hostKey);
   const sqlSource = useSqlSource(at, active);
   const scope = useMemo(() => scopeOf(active, sqlSource), [active, sqlSource]);
@@ -215,7 +243,7 @@ export const QueryLogDrawer = ({ at, hostKey, active }: DataSlotProps) => {
               key={row.entry.id}
               row={row}
               now={now}
-              onRun={() => rerunInSqlTab(at, row.entry)}
+              onRun={() => rerunInSqlTab(at, row.entry, listed)}
             />
           ))}
         </ul>

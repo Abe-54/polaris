@@ -45,6 +45,8 @@ export interface QueryInput {
 export interface QueryStreamInput {
   readonly source: string;
   readonly sql: string;
+  /** Bound to `$1`, `$2`…; omitted when there are none. */
+  readonly params?: ReadonlyArray<DataValue>;
   /** Rows returned, 1–10,000. */
   readonly limit?: number;
 }
@@ -153,12 +155,13 @@ export const liveDataApi: DataApi = {
     );
   },
   query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
-  queryStream: (at, { source, sql, limit }, on) => {
+  queryStream: (at, { source, sql, params, limit }, on) => {
     const base = { ...session(at), source, sql };
+    const bound = params === undefined ? base : { ...base, params };
 
     return polaris().subscribe(
       "data.query.stream",
-      limit === undefined ? base : { ...base, limit },
+      limit === undefined ? bound : { ...bound, limit },
       {
         items: (items) => {
           for (const item of items)

@@ -2,12 +2,12 @@
  * A Data Source's pending approval as Data's connection card shows it: the same card the
  * conversation shows, answered through RespondToApproval, so either place settles both.
  */
-import type { ApprovalRequest, SessionId } from "@polaris/protocol";
+import type { ApprovalRequest, DataSource, SessionId } from "@polaris/protocol";
 import { useMemo } from "react";
 import { useApp } from "../../../shell/hooks.ts";
-import { respond } from "../../needs-you/respond.ts";
 import { DataSourceApprovalCard } from "./DataSourceApprovalCard.tsx";
-import { type DataSourceTarget, dataSourceTarget } from "./model.ts";
+import { sameTarget } from "./decide.ts";
+import { askedBy, type DataSourceTarget, dataSourceTarget } from "./model.ts";
 
 export interface PendingDataApprovalEntry {
   readonly request: ApprovalRequest;
@@ -16,10 +16,13 @@ export interface PendingDataApprovalEntry {
   readonly sessionTitle: string;
 }
 
-/** The oldest open approval for this Data Source across the Host's Agent Sessions. */
+/**
+ * The oldest open approval for this Data Source's target across the Host's Agent Sessions,
+ * matched by server, database and user as the Daemon keys it, so a rename keeps it (F12).
+ */
 export const usePendingDataApproval = (
   hostKey: string,
-  sourceId: string
+  source: DataSource
 ): PendingDataApprovalEntry | null => {
   const sessions = useApp((s) => s.hostModels[hostKey]?.sessions);
 
@@ -30,7 +33,7 @@ export const usePendingDataApproval = (
       for (const request of pendingApprovals) {
         const target = dataSourceTarget(request);
 
-        if (target?.sourceId !== sourceId) continue;
+        if (target === null || !sameTarget(target, source)) continue;
 
         if (oldest !== null && oldest.request.openedAt <= request.openedAt) continue;
         oldest = { request, target, sessionId: session.id, sessionTitle: session.title };
@@ -38,30 +41,32 @@ export const usePendingDataApproval = (
     }
 
     return oldest;
-  }, [sessions, sourceId]);
+  }, [sessions, source]);
 };
 
 /** For the connection card: the source's pending approval, or nothing. */
 export const PendingDataApproval = ({
   hostKey,
-  sourceId,
+  source,
 }: {
   readonly hostKey: string;
-  readonly sourceId: string;
+  readonly source: DataSource;
 }) => {
-  const pending = usePendingDataApproval(hostKey, sourceId);
+  const pending = usePendingDataApproval(hostKey, source);
   const hostLabel = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.label ?? "this Host");
 
   if (pending === null) return null;
-  const { request, target, sessionId, sessionTitle } = pending;
+  const { request, target, sessionTitle } = pending;
 
   return (
     <DataSourceApprovalCard
       key={request.id}
+      hostKey={hostKey}
+      request={request}
       target={target}
-      who={sessionTitle === "" ? "An agent session" : sessionTitle}
+      who={askedBy(sessionTitle)}
       hostLabel={hostLabel}
-      onDecide={(decision) => void respond({ hostKey, sessionId, requestId: request.id, decision })}
+      alreadyApproved={source.access === "approved"}
     />
   );
 };

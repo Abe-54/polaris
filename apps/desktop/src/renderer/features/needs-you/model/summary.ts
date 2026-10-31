@@ -13,6 +13,7 @@ import { digestStarted, type Digest } from "../../constellation/model/index.ts";
 import { isWorker, workerSessionsOf } from "../../constellation/model/workers.ts";
 import { waitingOn } from "../../session/model/background.ts";
 import type { ConstellationView } from "../../sessions/source.ts";
+import { dataWantsLine } from "../../data/approval/model.ts";
 import type { Inbox } from "./inbox.ts";
 import { type HeldSummary, type PullRow, reviewOf } from "./review.ts";
 
@@ -171,7 +172,8 @@ export const toSummary = ({
     requests: w.requests.map((r) => ({
       requestId: r.id,
       kind: r.kind,
-      title: r.title,
+      // A Data Source Approval reads as its card does: "Backfill currency wants to read analytics".
+      title: dataWantsLine(w.entry.session.title, r) ?? r.title,
       // A secret's reason may say where the value comes from; only its label leaves the renderer.
       detail: r.kind === "secret" ? null : r.detail,
       options: r.options,

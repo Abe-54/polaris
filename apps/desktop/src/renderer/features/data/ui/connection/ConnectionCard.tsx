@@ -213,18 +213,13 @@ const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
         }}
       />
       <Details source={source} />
-      {source.access === "needs-approval" ? (
-        <PendingDataApproval hostKey={at.hostKey} sourceId={source.id} />
-      ) : null}
       {source.privilegeWarnings?.length ? (
         <p role="status" className="text-caption text-text-default">
           This connection has {source.privilegeWarnings.join(", ")}. Use a SELECT-only database
           user.
         </p>
       ) : null}
-      {source.access === "needs-approval" ? (
-        <PendingDataApproval hostKey={at.hostKey} sourceId={source.id} />
-      ) : null}
+      <PendingDataApproval hostKey={at.hostKey} source={source} />
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't save the label · {error}

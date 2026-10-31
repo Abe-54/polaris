@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * The SQL tab and the Query Log drawer on fixtures (`#data/<scene>`, DESIGN.md Data; Paper D1/D2):
- * results, a database error, completion from the schema, and the Working strip over a table an
- * agent is querying with its Query Log, in both themes and every density.
+ * results, a database error, a running query and its Cancel, a re-run whose source is gone,
+ * completion from the schema, and the Working strip over a table an agent is querying.
  *
  *   node scripts/dataSqlScreens.ts --out <dir> [--build] [--show]
  */
@@ -92,7 +92,20 @@ try {
       await open(page, "working", "data-working-strip");
       await page.getByTestId("data-query-log-row").nth(1).hover();
       await shoot(page, `working-${theme}-${density}`);
+      await open(page, "sql-running", "data-sql-cancel");
+      await shoot(page, `sql-running-${theme}-${density}`);
     }
+
+    await appearance(page, theme, "calm");
+    await open(page, "sql-running", "data-sql-cancel");
+    await page.locator(".cm-line").first().click();
+    await page.keyboard.press("Escape");
+    await page.getByText("Cancelled").waitFor();
+    await shoot(page, `sql-cancelled-${theme}`);
+    await open(page, "sql-gone", "data-sql-notice");
+    await shoot(page, `sql-gone-${theme}`);
+    await open(page, "working-write", "data-working-strip");
+    await shoot(page, `working-write-${theme}`);
 
     await appearance(page, theme, "calm");
     await open(page, "sql", "data-grid");

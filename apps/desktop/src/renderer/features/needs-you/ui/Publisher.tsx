@@ -5,6 +5,7 @@ import { type ReviewSubject, useReviewSubject } from "../../../routes/review.ts"
 import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { usePulls } from "../../pulls/store.ts";
 import { riskStore } from "../../risk/data/riskStore.ts";
+import { useSettleCoveredApprovals } from "../../data/approval/settle.ts";
 import { publishSummary } from "../bridge.ts";
 import { pruneDismissed } from "../dismissed.ts";
 import { useInboxUntimedView } from "../hooks.ts";
@@ -32,6 +33,8 @@ export const NeedsYouPublisher = () => {
   const pulls = useMemo(() => pullRows(list), [list]);
   const risks = useStore(riskStore);
   const subject = useReviewSubject();
+
+  useSettleCoveredApprovals();
 
   // Whole records, not views: a Lead's digests tell its digest-started Turns apart.
   const views = useMemo(

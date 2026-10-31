@@ -12,7 +12,7 @@ import type { Loaded } from "../../data/hooks.tsx";
 import { type LogLookups, type LogRow, logRows } from "../../model/queryLog.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { rerunInSqlTab } from "../QueryLogDrawer.tsx";
-import type { QueryLogEntry } from "@polaris/protocol";
+import type { DataSource, QueryLogEntry } from "@polaris/protocol";
 
 /** The sidebar's list before it is measured: its width and a window's height. */
 const INITIAL_RECT = { width: 246, height: 800 };
@@ -131,9 +131,11 @@ export interface QueryLogViewProps {
   readonly at: DataSessionKey;
   readonly log: Loaded<ReadonlyArray<QueryLogEntry>>;
   readonly lookups: LogLookups;
+  /** The listed Data Sources a re-run looks its source up in; null until listed. */
+  readonly sources: ReadonlyArray<DataSource> | null;
 }
 
-export const QueryLogView = ({ at, log, lookups }: QueryLogViewProps) => {
+export const QueryLogView = ({ at, log, lookups, sources }: QueryLogViewProps) => {
   const now = useNow();
   const entries = log.status === "ready" ? log.value : null;
 
@@ -171,7 +173,7 @@ export const QueryLogView = ({ at, log, lookups }: QueryLogViewProps) => {
       </p>
     );
 
-  const open = (row: LogRow) => rerunInSqlTab(at, row.entry);
+  const open = (row: LogRow) => rerunInSqlTab(at, row.entry, sources);
 
   return (
     <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-2.5" aria-label="Query log">

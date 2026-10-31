@@ -37,6 +37,7 @@ import type {
   Place,
   WaitingSession,
 } from "../model/inbox.ts";
+import { offersAlwaysAllow } from "../../data/approval/decide.ts";
 import { approve, continueTurn, deny, retryTurn, takeBack } from "../respond.ts";
 import { clientCopy } from "../../../../shared/clientCopy.ts";
 import { secretLine } from "../../session/model/secret.ts";
@@ -100,6 +101,14 @@ const Dismissable = ({
 const inboxAsk = (request: ApprovalRequest) =>
   request.kind === "secret" ? secretLine(request.title) : request.title;
 
+/** The card's answers; Always allow only where the request offers it. */
+interface Answering {
+  readonly command: string;
+  readonly onApprove: () => void;
+  readonly onDeny: () => void;
+  onAlwaysAllow?: () => void;
+}
+
 const Waiting = ({
   item,
   now,
@@ -113,11 +122,21 @@ const Waiting = ({
   const selection = useSelection();
   const { session } = item.entry;
   const request = item.requests[0];
-  const target = { hostKey: item.hostKey, sessionId: session.id, requestId: request?.id ?? "" };
   const open = () => selectSession({ hostKey: item.hostKey, sessionId: session.id });
   const more = item.requests.length > 1 ? ` · ${item.requests.length} waiting` : "";
 
   if (request === undefined) return null;
+  const target = { hostKey: item.hostKey, sessionId: session.id, request };
+
+  const answering: Answering = {
+    command: request.detail ?? request.title,
+    onApprove: () => void approve(target),
+    onDeny: () => void deny(target),
+  };
+
+  const always = offersAlwaysAllow(request);
+
+  if (always) answering.onAlwaysAllow = () => void approve(target, true);
 
   // A question is answered, and a secret typed, only in the session's own card.
   const inCard = request.kind === "question" || request.kind === "secret";
@@ -126,7 +145,7 @@ const Waiting = ({
     ? []
     : [
         { label: "Approve", run: () => void approve(target), command: "approval.approve" },
-        { label: "Always allow", run: () => void approve(target, true) },
+        ...(always ? [{ label: "Always allow", run: () => void approve(target, true) }] : []),
         { label: "Deny", run: () => void deny(target), command: "approval.deny" },
       ];
 
@@ -140,16 +159,7 @@ const Waiting = ({
         selected={selection.pane === "session" && selection.sessionId === session.id}
         title={<Title onOpen={open}>{session.title}</Title>}
         where={`${where(item, item.since, now)}${more}`}
-        {...(inCard
-          ? { question: inboxAsk(request) }
-          : {
-              approval: {
-                command: request.detail ?? request.title,
-                onApprove: () => void approve(target),
-                onAlwaysAllow: () => void approve(target, true),
-                onDeny: () => void deny(target),
-              },
-            })}
+        {...(inCard ? { question: inboxAsk(request) } : { approval: answering })}
       />
     </CardMenu>
   );

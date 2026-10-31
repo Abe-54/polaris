@@ -47,8 +47,9 @@ export const openSqlTab = (
   sql: string,
   sourceId: string,
   at?: DataSessionKey,
-  params: ReadonlyArray<DataValue> = []
-) => update(at, (s) => tabs.openSqlTab(s, sql, sourceId, params));
+  params: ReadonlyArray<DataValue> = [],
+  notice?: string
+) => update(at, (s) => tabs.openSqlTab(s, sql, sourceId, params, notice));
 
 export const focusDataTab = (id: string, at?: DataSessionKey) =>
   update(at, (s) => tabs.focusTab(s, id));

@@ -17,18 +17,34 @@ describe("where a database error points", () => {
     });
   });
 
-  test("MySQL's near … at line N, on the right line", () => {
+  test("MySQL's near '…' text alone marks nothing: the Daemon's wrapper shifts it (F7)", () => {
     const sql = "select status\nfrom invoices\nwher status = 'x'";
 
     expect(
       marked(sql, "You have an error in your SQL syntax; ... near 'wher status = 'x'' at line 3")
-    ).toEqual({ text: "wher", at: [3, 1] });
+    ).toBeNull();
+  });
+
+  test("the Host's line wins over a name the message quotes", () => {
+    expect(
+      marked("select id,\n  totl\nfrom t", 'column "totl" does not exist', { line: 2 })
+    ).toEqual({ text: "totl", at: [2, 3] });
   });
 
   test("Postgres' quoted name, as a whole word and not inside another", () => {
     expect(
       marked("select total_cents, total from invoices", 'column "total" does not exist')
     ).toEqual({ text: "total", at: [1, 21] });
+  });
+
+  test("a quoted name inside a string literal or comment is skipped (F11)", () => {
+    const sql = "select id from invoices where currency = 'totl' or totl > 1 -- totl";
+
+    expect(marked(sql, 'column "totl" does not exist')).toEqual({ text: "totl", at: [1, 52] });
+  });
+
+  test("a name the query uses twice is not guessed at", () => {
+    expect(marked("select totl, totl from t", 'column "totl" does not exist')).toBeNull();
   });
 
   test("an error that names nothing in the query has no position", () => {
