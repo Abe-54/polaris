@@ -239,7 +239,7 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
     ),
     make(
       "compare",
-      "Compare route p50/p95 timings, counts and slowest new spans. Select two turns or two trace ids; omit a for earlier retained turns against turn b. Fewer than three samples on either side means no baseline.",
+      "Compare route p50/p95 timings, counts and slowest new spans. Select two turns (a Turn, or a Turns range from firstTurnId through lastTurnId) or two trace ids; omit a for earlier retained turns against turn b. Fewer than three samples on either side means no baseline.",
       Schema.Struct({ a: Schema.optionalKey(TraceCompareSelector), b: TraceCompareSelector }),
       (input, traces) =>
         Effect.gen(function* () {

@@ -73,6 +73,56 @@ test("explicit Turns stay explicit, and equal selectors compare with themselves"
     expect(same.routes[0]!.before).toEqual(same.routes[0]!.after);
   }));
 
+const turns = (first: number, last: number) =>
+  TraceCompareSelector.cases.Turns.make({
+    firstTurnId: turnSelector(first).turnId,
+    lastTurnId: turnSelector(last).turnId,
+  });
+
+test("a Turn range counts the traces of every Turn in it, as b against Baseline and as either explicit side", () =>
+  withComparisons(async ({ store, ingest }) => {
+    await ingest(0, [100, 110, 120]);
+    await ingest(1, [800, 800]);
+    await ingest(2, [840]);
+    await ingest(3, [9999, 9999, 9999]);
+
+    const counts = async (a: TraceCompareSelector, b: TraceCompareSelector) =>
+      (await read(store, a, b)).routes.map((r) => [r.before.count, r.after.p50Ms, r.after.count]);
+
+    expect(await counts(baseline, turns(1, 2))).toEqual([[3, 800, 3]]);
+    expect(await counts(turnSelector(0), turns(1, 2))).toEqual([[3, 800, 3]]);
+    expect(await counts(turns(0, 1), turnSelector(2))).toEqual([[5, null, 1]]);
+    expect(await counts(baseline, turns(2, 2))).toEqual([[5, null, 1]]);
+  }));
+
+test.each([
+  ["a range that ends before it starts", turnSelector(0), turns(2, 1), "E-INPUT"],
+  [
+    "a range with a Turn outside the session",
+    turnSelector(0),
+    TraceCompareSelector.cases.Turns.make({
+      firstTurnId: turnSelector(1).turnId,
+      lastTurnId: TurnId.make("elsewhere"),
+    }),
+    "E-TRACE-NOT-FOUND",
+  ],
+  [
+    "a range against a trace",
+    TraceCompareSelector.cases.Trace.make({ traceId: "ffffffff" }),
+    turns(1, 2),
+    "E-INPUT",
+  ],
+  ["a range as a, Baseline as b", turns(1, 2), baseline, "E-INPUT"],
+] as const)("%s is refused with %p's code", (_name, a, b, code) =>
+  withComparisons(async ({ store }) => {
+    const failure = await Effect.runPromise(
+      Effect.flip(compareForSession(store, sessions, TEST_SESSION, a, b))
+    );
+
+    expect(failure.code).toBe(code);
+  })
+);
+
 test.each([
   [2, 3],
   [3, 2],

@@ -84,6 +84,26 @@ test("MCP omitted a and real traces.compare RPC expose identical route facts fro
     expect(rpcResult.routes[0]!.slowestNew).toMatchObject({ durationMs: 900, name: "handler" });
   }));
 
+test("MCP compare takes a Turn range for b, alongside its existing Turn and omitted-a inputs", () =>
+  withComparisons(async ({ store, ingest }) => {
+    await ingest(0, [100, 120, 130]);
+    await ingest(1, [800, 840]);
+    await ingest(2, [900]);
+    const tool = traceTools(TEST_SESSION, toolsFor(store)).find((t) => t.name === "compare")!;
+
+    const result = await tool.call({
+      b: TraceCompareSelector.cases.Turns.make({
+        firstTurnId: turnSelector(1).turnId,
+        lastTurnId: turnSelector(2).turnId,
+      }),
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]!.text).toContain(
+      "p50 120 ms → 840 ms  p95 130 ms → 900 ms  runs 3 → 3"
+    );
+  }));
+
 test("compare is read-only and callable on every Plain/Lead/Worker binding", () =>
   withComparisons(async ({ store, ingest }) => {
     await ingest(2, [840]);

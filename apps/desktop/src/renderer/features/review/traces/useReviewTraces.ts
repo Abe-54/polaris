@@ -3,7 +3,7 @@
  * Turn picked changes and when a Turn ends; never on a timer, and never on a Daemon without the
  * capability. A row opens its Turn's newest trace of that route in Traces (⌘5).
  */
-import { type SessionId, TRACES_COMPARE_CAPABILITY } from "@polaris/protocol";
+import { type SessionId, TRACES_COMPARE_CAPABILITY, type TurnId } from "@polaris/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HostView } from "../../../../shared/api.ts";
 import { useShellActions } from "../../../shell/hooks.ts";
@@ -34,6 +34,7 @@ export interface ReviewTracesInput {
 
 export interface ReviewTraces {
   readonly answer: TracesAnswer;
+  /** The plan `answer` answers: while another pick loads, the last one's. */
   readonly plan: ComparePlan;
   /** Opens the row's Turn's newest trace of its route in Traces (⌘5). */
   readonly onOpenRoute: (row: RouteRow) => void;
@@ -41,54 +42,77 @@ export interface ReviewTraces {
 
 type At = { readonly hostKey: string; readonly sessionId: SessionId };
 
-/** The newest trace of `row`'s route in its Turn, once; Traces opens at once and selects it. */
-const openRoute = (api: TracesApi, at: At, row: RouteRow, plan: ComparePlan) => {
-  const filter = { turn: openTurn(row, plan).turnId, route: row.route, service: row.service };
-  let done = false;
-  let stop: (() => void) | null = null;
+/** One Turn's newest trace whose root is exactly `row`'s: the route filter is a glob. */
+const newestInTurn = (api: TracesApi, at: At, row: RouteRow, turn: TurnId) =>
+  new Promise<string | null>((resolve) => {
+    let done = false;
+    let stop: (() => void) | null = null;
 
-  stop = api.watch(
-    at,
-    { ...filter, limit: 1 },
-    {
-      next: (snapshot) => {
-        if (done) return;
-        done = true;
-        const newest = snapshot.traces[0];
+    const finish = (id: string | null) => {
+      if (done) return;
+      done = true;
+      resolve(id);
+      stop?.();
+    };
 
-        if (newest !== undefined) selectTrace(at, newest.id);
-        stop?.();
-      },
-      end: () => {
-        done = true;
-      },
-    }
-  );
+    stop = api.watch(
+      at,
+      { turn, route: row.route, service: row.service },
+      {
+        next: (snapshot) =>
+          finish(
+            snapshot.traces.find((t) => t.root === row.route && t.service === row.service)?.id ??
+              null
+          ),
+        end: () => finish(null),
+      }
+    );
 
-  // A watch may answer before it returns its stop.
-  if (done) stop();
+    // A watch may answer before it returns its stop.
+    if (done) stop();
+  });
+
+/** The newest trace of `row`'s route in its side's Turns, latest Turn first; Traces selects it. */
+const openRoute = async (api: TracesApi, at: At, row: RouteRow, plan: ComparePlan) => {
+  for (const turn of openTurn(row, plan).turnIds.toReversed()) {
+    const id = await newestInTurn(api, at, row, turn);
+
+    if (id !== null) return selectTrace(at, id);
+  }
 };
+
+interface Seen {
+  readonly scope: string;
+  readonly key: string;
+  readonly answer: TracesAnswer;
+  readonly plan: ComparePlan;
+}
+
+/** Everything of the plan the request reads: its Turns, and the Host's connection. */
+const requestKey = (scope: string, plan: ComparePlan, epoch: number) =>
+  [
+    scope,
+    epoch,
+    plan.before?.number ?? "",
+    ...(plan.before?.turnIds ?? []),
+    "",
+    ...plan.after.turnIds,
+  ].join("\u0000");
 
 const useComparison = (
   api: TracesApi,
   at: At,
   plan: ComparePlan | null,
   supported: boolean,
-  ended: number
-): TracesAnswer | null => {
-  const [seen, setSeen] = useState<{ readonly key: string; readonly answer: TracesAnswer } | null>(
-    null
-  );
-
+  { ended, epoch }: { readonly ended: number; readonly epoch: number }
+): { readonly answer: TracesAnswer; readonly plan: ComparePlan } | null => {
+  const [seen, setSeen] = useState<Seen | null>(null);
   const { hostKey, sessionId } = at;
   const latest = useRef(plan);
 
   latest.current = plan;
-
-  const key =
-    plan === null
-      ? null
-      : `${hostKey}\u0000${sessionId}\u0000${plan.before?.turnId ?? ""}\u0000${plan.after.turnId}`;
+  const scope = `${hostKey}\u0000${sessionId}`;
+  const key = plan === null ? null : requestKey(scope, plan, epoch);
 
   useEffect(() => {
     // `key` names everything of the plan the request reads.
@@ -102,7 +126,9 @@ const useComparison = (
       if (!live) return;
 
       setSeen({
+        scope,
         key,
+        plan: asked,
         answer: result.ok
           ? {
               status: "ready",
@@ -116,9 +142,15 @@ const useComparison = (
     return () => {
       live = false;
     };
-  }, [api, hostKey, sessionId, key, supported, ended]);
+  }, [api, hostKey, sessionId, scope, key, supported, ended]);
 
-  return supported && seen !== null && seen.key === key ? seen.answer : null;
+  return useMemo(() => {
+    if (!supported || seen === null || seen.scope !== scope) return null;
+
+    return seen.key === key
+      ? { answer: seen.answer, plan: seen.plan }
+      : { answer: { ...seen.answer, loading: true }, plan: seen.plan };
+  }, [supported, seen, scope, key]);
 };
 
 export const useReviewTraces = ({
@@ -135,20 +167,22 @@ export const useReviewTraces = ({
   const supported = hasCapability(host, TRACES_COMPARE_CAPABILITY);
   const ended = views.filter((v) => v.turn.status !== "working").length;
   const plan = useMemo(() => comparePlan(turns, pending, pick), [turns, pending, pick]);
-  const answer = useComparison(api, { hostKey, sessionId }, plan, supported, ended);
+  const epoch = host?.status.epoch ?? 0;
+  const shown = useComparison(api, { hostKey, sessionId }, plan, supported, { ended, epoch });
+  const shownPlan = shown?.plan ?? null;
 
   const onOpenRoute = useCallback(
     (row: RouteRow) => {
-      if (plan === null) return;
+      if (shownPlan === null) return;
       actions.selectSession({ hostKey, sessionId });
       actions.setMode("traces");
-      openRoute(api, { hostKey, sessionId }, row, plan);
+      void openRoute(api, { hostKey, sessionId }, row, shownPlan);
     },
-    [actions, api, hostKey, sessionId, plan]
+    [actions, api, hostKey, sessionId, shownPlan]
   );
 
   return useMemo(
-    () => (answer === null || plan === null ? null : { answer, plan, onOpenRoute }),
-    [answer, plan, onOpenRoute]
+    () => (shown === null ? null : { answer: shown.answer, plan: shown.plan, onOpenRoute }),
+    [shown, onOpenRoute]
   );
 };

@@ -1,5 +1,5 @@
 import "../../../test/dom.testing.ts";
-import { Capability, HostId, TurnId } from "@polaris/protocol";
+import { Capability, HostId, TraceCompareSelector, TurnId } from "@polaris/protocol";
 import { act, cleanup, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ReactNode } from "react";
@@ -15,6 +15,7 @@ import { FIXTURE_DETAILS, FIXTURE_SESSION } from "../../traces/preview/fixtures.
 import type { ReviewTurn, TurnPick } from "../data/source.ts";
 import { openSchemaDiff, schemaPaneStore } from "../schema/store.ts";
 import { closeTracesCompare, openTracesCompare, tracesPaneStore } from "./store.ts";
+import { listFigure, runsLine } from "./model.ts";
 import { TracesCompareBody } from "./TracesCompareBody.tsx";
 import { useReviewTraces } from "./useReviewTraces.ts";
 
@@ -124,22 +125,31 @@ describe("Review's route timings", () => {
     expect(result.current).toBeNull();
   });
 
-  test("a picked Turn compares with the Turn before it, biggest slowdown first", async () => {
-    const { result } = mount(Capability.literals);
+  test("a picked Turn is asked against every earlier Turn, and one run a side has no baseline", async () => {
+    const { result, compares } = mount(Capability.literals);
 
     await waitFor(() => expect(result.current?.answer.status).toBe("ready"));
     const answer = result.current?.answer;
 
-    expect(answer?.status === "ready" ? answer.caption : null).toBe("Turn 12 against turn 11");
-    expect(answer?.status === "ready" ? answer.rows.map((r) => [r.route, r.change]) : null).toEqual(
+    expect(compares).toEqual([
       [
-        ["POST /invoices/overdue", "compared"],
-        ["test overdue-totals", "compared"],
-        ["GET /customers/:id", "no-baseline"],
-        ["GET /invoices?status=overdue", "no-baseline"],
-        ["settlements.run", "not-run"],
-      ]
+        TraceCompareSelector.cases.Baseline.make({}),
+        TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("t-overdue-12") }),
+      ],
+    ]);
+    expect(answer?.status === "ready" ? answer.caption : null).toBe(
+      "Turn 12 against earlier turns"
     );
+    expect(
+      answer?.status === "ready"
+        ? answer.rows.map((r) => [r.route, listFigure(r), runsLine(r)])
+        : null
+    ).toEqual([
+      ["GET /customers/:id", "no baseline", "1 run"],
+      ["GET /invoices?status=overdue", "no baseline", "1 run"],
+      ["POST /invoices/overdue", "no baseline", "1 → 1 run"],
+      ["test overdue-totals", "no baseline", "1 → 1 run"],
+    ]);
   });
 
   test("a route opens Traces at its Turn's newest trace of that route", async () => {
@@ -147,7 +157,11 @@ describe("Review's route timings", () => {
 
     await waitFor(() => expect(result.current?.answer.status).toBe("ready"));
     const answer = result.current?.answer;
-    const row = answer?.status === "ready" ? answer.rows[0] : undefined;
+
+    const row =
+      answer?.status === "ready"
+        ? answer.rows.find((r) => r.route === "POST /invoices/overdue")
+        : undefined;
 
     if (row === undefined) throw new Error("no route");
     act(() => result.current?.onOpenRoute(row));
@@ -157,17 +171,19 @@ describe("Review's route timings", () => {
     )?.summary.id;
 
     expect(navigation.store.getState().mode).toBe("traces");
-    expect(tracesSelection({ hostKey: "local", sessionId: FIXTURE_SESSION }).traceId).toBe(
-      expected ?? "missing"
+    await waitFor(() =>
+      expect(tracesSelection({ hostKey: "local", sessionId: FIXTURE_SESSION }).traceId).toBe(
+        expected ?? "missing"
+      )
     );
   });
 });
 
 describe("the Route timings body", () => {
   const plan = {
-    before: { turnId: TurnId.make("t-overdue-11"), number: 11 },
-    after: { turnId: TurnId.make("t-overdue-12"), number: 12 },
-  };
+    before: { turnIds: [TurnId.make("t-overdue-11")], number: 11 },
+    after: { turnIds: [TurnId.make("t-overdue-12")], number: 12 },
+  } as const;
 
   test("a row opens its route; no baseline says so", () => {
     const opened: Array<string> = [];
@@ -186,7 +202,8 @@ describe("the Route timings body", () => {
               route: "GET /customers/:id",
               change: "no-baseline",
               before: null,
-              after: { p50Ms: 38, p95Ms: 38, count: 1 },
+              after: { p50Ms: null, p95Ms: null, count: 1 },
+              partial: 0,
               ratio: null,
             },
           ],
@@ -197,6 +214,7 @@ describe("the Route timings body", () => {
     const route = view.getByTestId("traces-route");
 
     expect(route.textContent).toContain("no baseline");
+    expect(view.getByTestId("traces-routes-footnote").textContent).toContain("at least 3 runs");
     fireEvent.click(route);
     expect(opened).toEqual(["GET /customers/:id"]);
   });

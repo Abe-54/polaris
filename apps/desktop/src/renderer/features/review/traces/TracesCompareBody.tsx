@@ -23,7 +23,7 @@ export interface TracesCompareBodyProps {
 }
 
 export const ROUTES_FOOTNOTE =
-  "p50 is the median duration of a route’s traces in each turn. Only traces Polaris still keeps are counted.";
+  "p50 is the median duration of a route’s traces in each turn, given once both sides have at least 3 runs. Only traces Polaris still keeps are counted.";
 
 /** Each row is its own grid on fixed lanes, so figures line up and nothing meets the card edge. */
 const COLUMNS =
@@ -42,6 +42,7 @@ const RouteLine = ({
 }) => {
   const shortcut = commandShortcut("view.traces");
   const turn = openTurn(row, plan).number;
+  const opens = turn === null ? "Open the latest earlier trace" : `Open turn ${turn}’s traces`;
   const change = changeWord(row);
 
   return (
@@ -50,7 +51,7 @@ const RouteLine = ({
       data-testid="traces-route"
       data-change={row.change}
       onClick={() => onOpen(row)}
-      title={`${routeTitle(row)}\nOpen turn ${turn}’s traces${shortcut === "" ? "" : ` ${shortcut}`}`}
+      title={`${routeTitle(row)}\n${opens}${shortcut === "" ? "" : ` ${shortcut}`}`}
       className={cn(
         COLUMNS,
         "rounded-row hover:bg-fill-hover h-row focus-visible:ring-starlight w-full cursor-default text-left outline-none focus-visible:ring-2"
@@ -64,11 +65,13 @@ const RouteLine = ({
           {row.service}
         </span>
       </span>
-      <span className="gap-row-x text-caption tabular flex items-baseline justify-end font-mono">
-        <span className="text-text-default whitespace-nowrap">{p50Line(row)}</span>
-        {row.change === "no-baseline" && (
-          <span className="text-text-subtle font-sans whitespace-nowrap">no baseline</span>
+      <span
+        className={cn(
+          "text-caption tabular text-right whitespace-nowrap",
+          row.change === "compared" ? "text-text-default font-mono" : "text-text-subtle"
         )}
+      >
+        {p50Line(row)}
       </span>
       <span className="text-caption text-text-subtle tabular text-right whitespace-nowrap">
         {runsLine(row)}

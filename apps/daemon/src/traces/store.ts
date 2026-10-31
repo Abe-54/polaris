@@ -21,6 +21,7 @@ import {
   TraceToolSpan,
 } from "./workerProtocol.ts";
 import { IngestError, type IngestContext } from "./ingest.ts";
+import type { CompareTurns } from "./compareQuery.ts";
 
 const TracePage = Schema.Struct({ traces: Schema.Array(TraceSummary), total: Schema.Number });
 
@@ -39,7 +40,7 @@ export class TraceStore extends Context.Service<
       checkout: string,
       a: TraceCompareSelector,
       b: TraceCompareSelector,
-      baselineStart?: string
+      turns?: CompareTurns
     ) => Effect.Effect<TraceComparison, TraceError>;
     readonly list: (checkout: string, filter?: TraceFilter) => Effect.Effect<TracePage, TraceError>;
     readonly view: (
@@ -169,13 +170,13 @@ export class TraceStore extends Context.Service<
                   "Trace ingest refused"
                 ),
             }),
-          compare: (checkout, a, b, baselineStart) =>
+          compare: (checkout, a, b, turns) =>
             read(
               TraceWorkerRequest.cases.Compare.make({
                 checkout,
                 a,
                 b,
-                ...(baselineStart === undefined ? undefined : { baselineStart }),
+                ...(turns === undefined ? undefined : { turns }),
               }),
               TraceComparison
             ),
