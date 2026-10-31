@@ -80,8 +80,7 @@ const GROUPS: ReadonlyArray<GroupSource> = [
       {
         id: "traces",
         title: "Traces",
-        blurb:
-          "What each workspace's traces do: copy into Polaris, forward to your collector, and instrument automatically. Saved on its host.",
+        blurb: "Where each workspace's traces go, and how commands run there are instrumented.",
         keywords: [
           "opentelemetry",
           "otel",

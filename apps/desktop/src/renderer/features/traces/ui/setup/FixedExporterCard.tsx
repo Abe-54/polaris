@@ -79,10 +79,10 @@ export const FixedExporterCard = ({
         <Button variant="ghost" onClick={onDismiss}>
           Not now
         </Button>
-        <Button variant="ghost" className="ml-auto" onClick={onSettings}>
-          {forwarding ? "Forwarding settings" : "Turn on forwarding"}
-        </Button>
       </div>
+      <Button variant="ghost" size="xs" className="-mt-2 self-start" onClick={onSettings}>
+        {forwarding ? "Forwarding settings" : "Turn on forwarding"}
+      </Button>
       {asked === null ? null : (
         <div className="flex items-center gap-2" role="status" data-testid="traces-fixed-asked">
           <p className="text-caption text-text-subtle min-w-0 flex-1">{ASKED[asked.kind]}</p>

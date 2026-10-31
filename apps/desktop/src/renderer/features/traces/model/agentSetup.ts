@@ -5,6 +5,7 @@
 import type { AgentSession, DetectedTraceExporter, SessionPlacement } from "@polaris/protocol";
 import { Placement } from "../../../commands.ts";
 import { exporterLocation } from "../settings/model.ts";
+import { FIXED_EXPORTER_CHANGE } from "./setup.ts";
 
 /** The P7 install, global so the user's repository gains no files (skills/polaris-tracing). */
 export const INSTALL_COMMAND =
@@ -26,7 +27,7 @@ export const fixedExporterPrompt = (exporters: ReadonlyArray<DetectedTraceExport
     ...exporters.map((e) => `- ${exporterLocation(e)}${runtimeOf(e)}`),
     "",
     "In each, change only the URL to read the endpoint from the environment and keep today's URL as the fallback, as the polaris-tracing skill's fixed-exporter line does:",
-    "url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? existingUrl,",
+    FIXED_EXPORTER_CHANGE,
     "Keep the headers and keys as they are. Then run the app and check with the traces tool that a trace arrived.",
   ].join("\n");
 

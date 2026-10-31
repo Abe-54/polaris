@@ -93,8 +93,8 @@ const UserExported = ({ place }: { readonly place: SetupPlaceView }) => (
     ) : (
       <Lead title="This app sends its traces elsewhere">
         <p>
-          Its exporter already has an endpoint, so Polaris didn’t add its own to this agent
-          session’s commands, and its traces don’t reach Polaris.
+          Its exporter is set up with an endpoint of its own, so its traces go there and don’t reach
+          Polaris.
         </p>
         {place.openSettings === null ? (
           <p className="text-text-faint">

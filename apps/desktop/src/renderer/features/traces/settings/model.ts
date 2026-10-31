@@ -111,23 +111,18 @@ export const headersLine = (headers: ReadonlyArray<string>) =>
     ? "No headers from the app"
     : `Headers ${headers.join(" · ")} · values stay on this host`;
 
-/** "Found in apps/web/src/instrumentation-node.ts. The app's own headers pass through…" */
+/** One line: where the collector came from; the URL row below names the headers. */
 export const forwardCaption = (settings: WorkspaceTracesSettings): string => {
   const found = settings.detectedExporters[0];
-  const where = found === undefined ? null : `Found in ${found.file}.`;
-  const headers = settings.forwardTo?.headerNames ?? [];
-
-  const pass =
-    headers.length === 0
-      ? "The app's own headers pass through; Polaris never stores them."
-      : `The app's own headers (${headers.join(", ")}) pass through; Polaris never shows or stores their values.`;
 
   if (settings.forwardTo === null)
-    return where === null
-      ? "No exporter found in this workspace. Add the collector your app sends to."
-      : `${where} Add the collector it sends to.`;
+    return found === undefined
+      ? "No exporter found here. Add the collector your app sends to."
+      : `Found an exporter in ${found.file}. Add the collector it sends to.`;
 
-  return where === null ? pass : `${where} ${pass}`;
+  return found === undefined
+    ? "A copy of each trace goes on to this collector."
+    : `A copy of each trace goes on to the collector found in ${found.file}.`;
 };
 
 /** Requested mode beside what actually happens; a skip reason wins. */
