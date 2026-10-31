@@ -103,9 +103,9 @@ const Card = ({ item }: { readonly item: WaitingSession }) => {
           ? where(item, null, now)
           : `${where(item, null, now)} · ⎇ ${item.branch}`
       }
-      onApprove={() => void approve(target)}
+      onApprove={() => void approve(target, false, open)}
       {...(offersAlwaysAllow(request) ? { onAlwaysAllow: () => void approve(target, true) } : {})}
-      onDeny={() => void deny(target)}
+      onDeny={() => void deny(target, open)}
     />
   );
 };

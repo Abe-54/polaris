@@ -26,6 +26,12 @@ export const useShownApproval = (requestId: string) =>
     [requestId]
   );
 
+/** Whether a card of the approval is on screen now, so what it asks is in front of the user. */
+export const isApprovalOnScreen = (
+  requestId: string,
+  visible: (e: HTMLElement) => boolean = onScreen
+) => [...(shown.get(requestId) ?? [])].some((element) => visible(element));
+
 export const onScreen = (element: HTMLElement) => {
   const rect = element.getBoundingClientRect();
 

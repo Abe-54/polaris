@@ -54,6 +54,10 @@ import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCa
 import { sourceForTarget } from "../../data/approval/decide.ts";
 import { askedBy, type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
 import { useDataSources } from "../../data/data/hooks.tsx";
+import { useWriteEntry } from "../../data/write/hooks.ts";
+import type { DataWrite } from "../../data/write/model.ts";
+import { WriteApprovalCard } from "../../data/write/WriteApprovalCard.tsx";
+import type { WriteOutcome } from "../../../store/sessionModel.ts";
 import { SourcesPill } from "./sources.tsx";
 import type { SecretOutcome } from "../model/secret.ts";
 import { provideSecret } from "../secrets.ts";
@@ -446,6 +450,37 @@ const DataApproval = ({
   );
 };
 
+/** An agent's write: the dry run, before and after, and Run or Deny with a reason. */
+const DataWriteApproval = ({
+  request,
+  write,
+  wrote,
+  ctx,
+}: {
+  request: ApprovalRequest;
+  write: DataWrite;
+  wrote: WriteOutcome | null;
+  ctx: RowContext;
+}) => {
+  const { hostKey, sessionId } = ctx.diff;
+  const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? "");
+  const sources = useDataSources({ hostKey, sessionId });
+  const listed = sources.status === "ready" ? sources.value : [];
+  const entry = useWriteEntry({ hostKey, sessionId }, write, wrote?.kind === "allowed");
+
+  return (
+    <WriteApprovalCard
+      hostKey={hostKey}
+      request={request}
+      write={write}
+      who={askedBy(title)}
+      source={sourceForTarget(listed, write.target)}
+      outcome={wrote}
+      entry={entry}
+    />
+  );
+};
+
 /** The card's box, which ⌘⇧A looks at to answer the approval in view. */
 const ShownApproval = ({ requestId, children }: { requestId: string; children: ReactNode }) => (
   <div ref={useShownApproval(requestId)} data-approval-id={requestId}>
@@ -456,13 +491,20 @@ const ShownApproval = ({ requestId, children }: { requestId: string; children: R
 const Approval = ({
   request,
   settled,
+  wrote,
   ctx,
 }: {
   request: ApprovalRequest;
   settled: SecretOutcome | null;
+  wrote: WriteOutcome | null;
   ctx: RowContext;
 }) => {
   if (request.kind === "secret") return <Secret request={request} settled={settled} ctx={ctx} />;
+
+  if (request.dataWrite !== undefined)
+    return (
+      <DataWriteApproval request={request} write={request.dataWrite} wrote={wrote} ctx={ctx} />
+    );
 
   if (request.kind === "question") return <Question request={request} ctx={ctx} />;
   const target = dataSourceTarget(request);
@@ -626,7 +668,7 @@ export const ConversationRow = ({ row, ctx }: { row: Row; ctx: RowContext }) => 
     case "approval":
       return (
         <ShownApproval requestId={row.request.id}>
-          <Approval request={row.request} settled={row.settled} ctx={ctx} />
+          <Approval request={row.request} settled={row.settled} wrote={row.wrote} ctx={ctx} />
         </ShownApproval>
       );
     case "ending":
