@@ -10,6 +10,7 @@ import { TopBar } from "../../../shell/TopBar.tsx";
 import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
 import { useTracesUnavailable } from "../model/availability.ts";
+import { useMainView } from "../model/mainView.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { setupState } from "../model/setup.ts";
 import { useTracesSelection } from "../model/store.ts";
@@ -60,6 +61,8 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
   const selection = useTracesSelection(slot.at);
   const props = { ...slot, ...selection };
   const { setup, receiver } = useSetup(slot.at);
+  // The service map brings its own panel; the span panel waits for Waterfall or Table.
+  const map = useMainView(slot.at) === "map";
 
   return (
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="traces-mode">
@@ -75,7 +78,7 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
               <div className="flex min-w-0 flex-1 flex-col">
                 <TraceMain {...props} />
               </div>
-              <SpanPanel {...props} />
+              {map ? null : <SpanPanel {...props} />}
             </div>
             <TracesDrawer {...props} />
           </>
