@@ -30,7 +30,7 @@ const source = (seed: Seed) =>
   });
 
 /** The long-named replica holding the 400 tables. */
-const REPLICA = source({
+export const REPLICA = source({
   name: "warehouse-reporting-replica-eu-central-1-read-only",
   engine: "postgres",
   locality: "remote",
@@ -204,3 +204,6 @@ export const worstCaseDataApi = (): DataApi =>
     tableChanges: WORST_CHANGES,
     schema: (name) => (name === REPLICA.name ? WORST_SCHEMA : FIXTURE_SCHEMA),
   });
+
+/** The first of the replica's 60-character table names, which agents added this Turn. */
+export const WORST_LONG_TABLE = longName(0);

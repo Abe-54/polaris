@@ -77,13 +77,13 @@ const SourceRow = ({
       )}
       <span
         className={cn(
-          "text-label min-w-0 flex-1 truncate font-medium",
+          "text-label min-w-[6ch] flex-auto truncate font-medium",
           source.reachable ? "text-text-strong" : "text-text-subtle"
         )}
       >
         {source.name}
       </span>
-      <span className="text-micro text-text-subtle shrink-0 font-mono">
+      <span className="text-micro text-text-subtle min-w-0 shrink-[20] truncate font-mono">
         {source.engine} · {source.locality}
       </span>
       {!isLocked(source) ? null : (

@@ -37,7 +37,7 @@ export const dataHost = (state: ConnectionState = "connected"): HostView => ({
     state,
     failure: null,
     attempt: state === "connected" ? 0 : 3,
-    since: 0,
+    since: Date.now() - 60_000,
     nextAttemptAt: null,
     host: {
       hostId: HostId.make("h-local"),
@@ -50,7 +50,7 @@ export const dataHost = (state: ConnectionState = "connected"): HostView => ({
     capabilities: Capability.literals,
     epoch: 1,
     latencyMs: null,
-    lastSeenAt: state === "connected" ? null : FIXTURE_NOW - 60_000,
+    lastSeenAt: state === "connected" ? null : Date.now() - 60_000,
   },
 });
 
