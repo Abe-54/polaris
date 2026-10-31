@@ -71,21 +71,14 @@ export const spanView = (
 
   const polaris = launchedTurn === null ? attribution : span.polaris;
 
-  lines.push(
-    "attributes",
-    ...attributeText(span.attributes),
-    "polaris",
-    ...attributeText({ ...polaris }),
-    "resource",
-    ...attributeText(span.resource),
-    "scope",
-    `  name: ${inline(span.scope.name)}`,
-    `  version: ${inline(span.scope.version)}`,
-    ...attributeText(span.scope.attributes),
-    "events"
-  );
+  lines.push("events");
 
-  for (const event of span.events) {
+  const events = [
+    ...span.events.filter((event) => event.name === "exception"),
+    ...span.events.filter((event) => event.name !== "exception"),
+  ];
+
+  for (const event of events) {
     lines.push(
       `  ${inline(event.name)} · ${event.timeUnixNano} · ${event.droppedAttributes} dropped attributes`
     );
@@ -101,6 +94,11 @@ export const spanView = (
 
   lines.push(`logs · ${detail.logs.length} of ${detail.logCount}`);
 
+  if (detail.logCount > detail.logs.length)
+    lines.push(
+      `… ${detail.logCount - detail.logs.length} older logs omitted; newest 20 retained in this response.`
+    );
+
   for (const log of detail.logs) {
     lines.push(
       `  ${log.timeUnixNano} ${inline(log.severityText)} ${Schema.is(Schema.String)(log.body) ? inline(log.body) : JSON.stringify(log.body)}`,
@@ -108,10 +106,19 @@ export const spanView = (
     );
   }
 
-  if (detail.logCount > detail.logs.length)
-    lines.push(
-      `… ${detail.logCount - detail.logs.length} older logs omitted; newest 20 retained in this response.`
-    );
+  lines.push(
+    "attributes",
+    ...attributeText(span.attributes),
+    "polaris",
+    ...attributeText({ ...polaris }),
+    "resource",
+    ...attributeText(span.resource),
+    "scope",
+    `  name: ${inline(span.scope.name)}`,
+    `  version: ${inline(span.scope.version)}`,
+    ...attributeText(span.scope.attributes)
+  );
+
   lines.push("links");
 
   for (const link of span.links)

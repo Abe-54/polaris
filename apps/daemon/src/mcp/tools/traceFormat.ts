@@ -5,8 +5,12 @@ import type { Span, TraceDetail } from "@polaris/protocol";
 export const TRACE_CAP = 16_000;
 
 export const inline = (value: string) =>
-  Array.from(value, (char) =>
-    char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char
+  Array.from(value.toWellFormed(), (char) =>
+    char.charCodeAt(0) < 32 ||
+    char.charCodeAt(0) === 127 ||
+    /[\u202a-\u202e\u2066-\u2069]/u.test(char)
+      ? " "
+      : char
   ).join("");
 
 export const duration = (ms: number) =>
@@ -15,10 +19,10 @@ export const duration = (ms: number) =>
 export const offset = (span: Span, start: string) =>
   duration(Number(BigInt(span.startTimeUnixNano) - BigInt(start)) / 1e6);
 
-const clipped = (value: string, cap: number, section: string, tool: string) =>
+export const clipped = (value: string, cap: number, section: string, tool: string) =>
   value.length <= cap
     ? value
-    : `${value.slice(0, cap)}… (${value.length - cap} ${section} chars folded; use ${tool} structuredContent)`;
+    : `${value.slice(0, cap).toWellFormed()}… (${value.length - cap} ${section} chars folded; use ${tool} structuredContent)`;
 
 const inProject = (frame: string, checkout: string) => {
   const normalized = frame.replaceAll("\\", "/");
@@ -85,24 +89,47 @@ export const exceptionLines = (span: Span) => {
   return events;
 };
 
-/** A line is atomic; the footer states omitted content and how to retrieve it. */
+/** Bound each section and line so attributes cannot crowd out exceptions and logs. */
 export const capSections = (lines: ReadonlyArray<string>, tool: string) => {
   const kept: string[] = [];
   const omissions = new Map<string, number>();
+  const sectionSizes = new Map<string, number>();
+
+  const budgets = new Map([
+    ["header", 4000],
+    ["events", 4500],
+    ["logs", 2500],
+    ["attributes", 2500],
+    ["polaris", 800],
+    ["resource", 800],
+    ["scope", 800],
+    ["links", 1000],
+  ]);
+
   let section = "header";
   let size = 0;
 
-  for (const line of lines) {
+  for (const raw of lines) {
+    const line = clipped(raw, 2000, "line", tool);
+
     if (["attributes", "polaris", "resource", "scope", "events", "links"].includes(line))
       section = line;
 
     if (line.startsWith("logs ·")) section = "logs";
 
-    if (size + line.length + 1 > TRACE_CAP - 1200) {
+    const sectionSize = sectionSizes.get(section) ?? 0;
+
+    if (
+      size + line.length + 1 > TRACE_CAP - 1200 ||
+      sectionSize + line.length + 1 > (budgets.get(section) ?? 1000)
+    ) {
       omissions.set(section, (omissions.get(section) ?? 0) + 1);
       continue;
     }
 
+    if (line !== raw) omissions.set(section, (omissions.get(section) ?? 0) + 1);
+
+    sectionSizes.set(section, sectionSize + line.length + 1);
     kept.push(line);
     size += line.length + 1;
   }
@@ -126,6 +153,15 @@ const total = (group: Group) => group.spans.reduce((sum, span) => sum + span.dur
 
 const first = (group: Group) => group.spans[0]!;
 
+const errorIdentity = (span: Span) => {
+  const event = span.events.find((event) => event.name === "exception");
+
+  return [
+    event?.attributes["exception.type"],
+    event?.attributes["exception.message"] ?? span.statusMessage,
+  ];
+};
+
 const addSiblings = (
   siblings: Span[],
   parent: Group | null,
@@ -141,8 +177,9 @@ const addSiblings = (
     visited.add(span.id);
 
     const key = JSON.stringify([
-      span.status === "error" ? span.id : span.name,
-      span.status === "error",
+      span.name,
+      span.status,
+      span.status === "error" ? errorIdentity(span) : null,
     ]);
 
     const existing = names.get(key);
@@ -211,7 +248,13 @@ const makeGroups = (spans: ReadonlyArray<Span>) => {
   return { roots, groups };
 };
 
-const groupLine = (group: Group, detail: TraceDetail, history: TraceHistory) => {
+const groupLine = (
+  group: Group,
+  detail: TraceDetail,
+  history: TraceHistory,
+  prefixes: Map<string, string>,
+  depth: number
+) => {
   const span = first(group);
 
   const names = [...new Set(group.spans.map((member) => member.service))];
@@ -219,30 +262,34 @@ const groupLine = (group: Group, detail: TraceDetail, history: TraceHistory) => 
 
   const service =
     names.length > 1 || parentNames.some((name) => name !== span.service) || group.parent === null
-      ? `  ${names.map(inline).join(", ")}`
+      ? `  ${clipped(names.map(inline).join(", "), 400, "services", "span")}`
       : "";
 
-  const indent = "  ".repeat(group.depth);
+  const indent = "  ".repeat(Math.min(depth, 20));
+
+  const realDepth =
+    group.depth === depth && depth <= 20
+      ? ""
+      : `  [depth ${group.depth}; parent ${span.parentId ?? "none"}]`;
+
+  const sorted = group.spans.map((s) => s.durationMs).sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const p50 = sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
   const usual = history.spans[span.id];
 
   const slow =
-    usual !== undefined && span.durationMs > 20 && span.durationMs > 3 * usual
-      ? `  SLOW (usually ${duration(usual)})`
-      : "";
+    usual !== undefined && p50 > 20 && p50 > 3 * usual ? `  SLOW (usually ${duration(usual)})` : "";
 
   const lead = `+${offset(span, detail.summary.startTimeUnixNano)}  ${duration(total(group))}  ${indent}`;
 
   if (group.spans.length === 1)
-    return `${lead}${clipped(inline(span.name), 1000, "name", "span")}${service}${span.status === "error" ? "  ERROR" : ""}${slow}  span ${span.id.slice(0, 8)}`;
-  const sorted = group.spans.map((s) => s.durationMs).sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  const p50 = sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+    return `${lead}${clipped(inline(span.name), 1000, "name", "span")}${service}${span.status === "error" ? "  ERROR" : ""}${slow}  span ${prefixes.get(span.id)}${realDepth}`;
   const nplus = new Map<string | null, number>();
 
   for (const s of group.spans) nplus.set(s.parentId, (nplus.get(s.parentId) ?? 0) + 1);
   const hint = [...nplus.values()].some((n) => n > 20) ? "  (N+1?)" : "";
 
-  return `${lead}×${group.spans.length} ${clipped(inline(span.name), 1000, "name", "span")}${service}  p50 ${duration(p50)}  total ${duration(total(group))}${slow}${hint}`;
+  return `${lead}×${group.spans.length} ${clipped(inline(span.name), 1000, "name", "span")}${service}${span.status === "error" ? "  ERROR" : ""}  p50 ${duration(p50)}  total ${duration(total(group))}${slow}${hint}${realDepth}`;
 };
 
 const header = (detail: TraceDetail) => {
@@ -267,7 +314,7 @@ const orderedGroups = (roots: Group[], groups: Group[], focus: "slow" | "errors"
   const priority: Group[] = [];
   const queued = new Set<Group>();
 
-  const path = (group: Group) => {
+  const path = (group: Group, error = false) => {
     const ancestors: Group[] = [];
     let current: Group | null = group;
 
@@ -276,13 +323,17 @@ const orderedGroups = (roots: Group[], groups: Group[], focus: "slow" | "errors"
       current = current.parent;
     }
 
-    for (const ancestor of ancestors.reverse()) {
+    const path = ancestors.reverse();
+    const visible = path.length > 12 ? [path[0]!, ...path.slice(-5)] : path;
+
+    for (const ancestor of error ? [group, ...visible.filter((item) => item !== group)] : visible) {
       queued.add(ancestor);
       priority.push(ancestor);
     }
   };
 
-  for (const group of groups.filter((g) => g.spans.some((s) => s.status === "error"))) path(group);
+  for (const group of groups.filter((g) => g.spans.some((s) => s.status === "error")))
+    path(group, true);
 
   if (focus !== "errors") {
     let critical = [...roots].sort(
@@ -303,22 +354,93 @@ const orderedGroups = (roots: Group[], groups: Group[], focus: "slow" | "errors"
     for (const group of [...groups].sort((a, b) => total(b) - total(a))) path(group);
   }
 
-  if (focus === "all") {
-    priority.length = 0;
-    const pending = [...roots].reverse();
+  return priority;
+};
 
-    while (pending.length > 0) {
-      const group = pending.pop()!;
-      priority.push(group);
-      pending.push(
-        ...[...group.children].sort((a, b) =>
-          Number(BigInt(first(b).startTimeUnixNano) - BigInt(first(a).startTimeUnixNano))
-        )
-      );
-    }
+/** Prefixes are resolved against every id, including folded spans. */
+export const uniquePrefixes = (ids: ReadonlyArray<string>) => {
+  const sorted = [...new Set(ids)].sort();
+  const prefixes = new Map<string, string>();
+
+  for (let i = 0; i < sorted.length; i++) {
+    const id = sorted[i]!;
+    let size = 8;
+
+    while (
+      size < id.length &&
+      [sorted[i - 1], sorted[i + 1]].some((other) => other?.startsWith(id.slice(0, size)))
+    )
+      size++;
+    prefixes.set(id, id.slice(0, size));
   }
 
-  return priority;
+  return prefixes;
+};
+
+const treeOrder = (roots: Group[]) => {
+  const result: Group[] = [];
+  const pending = [...roots].reverse();
+
+  while (pending.length > 0) {
+    const group = pending.pop()!;
+    result.push(group);
+    pending.push(...[...group.children].reverse());
+  }
+
+  return result;
+};
+
+const groupBlock = (
+  group: Group,
+  detail: TraceDetail,
+  history: TraceHistory,
+  prefixes: Map<string, string>,
+  depth: number
+) => [
+  groupLine(group, detail, history, prefixes, depth),
+  ...(first(group).status === "error" ? exceptionLines(first(group)).map((s) => `  ${s}`) : []),
+];
+
+const selectGroups = (
+  priority: Group[],
+  detail: TraceDetail,
+  history: TraceHistory,
+  prefixes: Map<string, string>,
+  size: number
+) => {
+  const selected = new Set<Group>();
+
+  for (const group of priority) {
+    // Reserve maximum indentation; rendering the retained tree can only use less space.
+    const length = groupBlock(group, detail, history, prefixes, 0).join("\n").length + 41;
+
+    if (size + length > TRACE_CAP - 200) continue;
+    size += length;
+    selected.add(group);
+  }
+
+  return selected;
+};
+
+const visibleDepth = (group: Group, selected: Set<Group>, depths: Map<Group, number>) => {
+  let parent = group.parent;
+
+  while (parent !== null && !selected.has(parent)) parent = parent.parent;
+
+  return parent === null ? 0 : (depths.get(parent) ?? 0) + 1;
+};
+
+const foldedSpans = (spans: ReadonlyArray<Span>, displayed: Set<string>) => {
+  let count = 0;
+  let max = 0;
+
+  for (const span of spans) {
+    if (displayed.has(span.id)) continue;
+    count++;
+    max = Math.max(max, span.durationMs);
+  }
+
+  return { count, underMs: count === 0 ? 0 : Math.floor(max) + 1 };
 };
 
 export const traceView = (
@@ -328,56 +450,35 @@ export const traceView = (
 ) => {
   const { roots, groups } = makeGroups(detail.spans);
   const priority = orderedGroups(roots, groups, focus);
-  const title = header(detail);
-  const lines = [clipped(title, 4000, "header", "trace")];
-  let size = lines[0]!.length;
+  const prefixes = uniquePrefixes(detail.spans.map((span) => span.id));
+  const lines = [clipped(header(detail), 4000, "header", "trace")];
+  const selected = selectGroups(priority, detail, history, prefixes, lines[0]!.length);
+  const depths = new Map<Group, number>();
   const displayed: Span[] = [];
   const displayedIds = new Set<string>();
-  const selected = new Set<Group>();
+  const members: Array<{ spanIds: string[] }> = [];
 
-  for (const group of priority) {
-    if (group.parent !== null && !selected.has(group.parent)) continue;
-
-    const block = [
-      groupLine(group, detail, history),
-      ...group.spans
-        .filter((span) => span.status === "error")
-        .flatMap(exceptionLines)
-        .map((s) => `  ${s}`),
-    ];
-
-    const length = block.join("\n").length + 1;
-
-    if (size + length > TRACE_CAP - 160) continue;
-    lines.push(...block);
-    size += length;
-    selected.add(group);
-    displayed.push(...group.spans);
+  for (const group of treeOrder(roots)) {
+    if (!selected.has(group)) continue;
+    const depth = visibleDepth(group, selected, depths);
+    depths.set(group, depth);
+    lines.push(...groupBlock(group, detail, history, prefixes, depth));
+    // One representative carries details; all member ids remain individually retrievable.
+    displayed.push(first(group));
+    members.push({ spanIds: group.spans.map((span) => span.id) });
 
     for (const span of group.spans) displayedIds.add(span.id);
   }
 
-  const omitted = detail.spans.filter((span) => !displayedIds.has(span.id));
+  const folded = foldedSpans(detail.spans, displayedIds);
 
-  if (omitted.length > 0) {
-    const max = Math.max(...omitted.map((span) => span.durationMs));
-    lines.push(
-      `… ${omitted.length} spans under ${Math.floor(max) + 1} ms folded; use span for details.`
-    );
-  }
+  if (focus === "errors" && detail.summary.errors === 0)
+    lines.push("No error spans; use focus slow.");
+  else if (folded.count > 0)
+    lines.push(`… ${folded.count} spans under ${folded.underMs} ms folded; use span for details.`);
 
   return {
     text: lines.join("\n"),
-    data: {
-      summary: detail.summary,
-      spans: displayed,
-      folded: {
-        count: omitted.length,
-        underMs:
-          omitted.length === 0
-            ? 0
-            : Math.floor(Math.max(...omitted.map((span) => span.durationMs))) + 1,
-      },
-    },
+    data: { summary: detail.summary, spans: displayed, groups: members, folded },
   };
 };

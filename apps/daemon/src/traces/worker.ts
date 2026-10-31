@@ -11,9 +11,19 @@ import {
   type Retention,
 } from "./database.ts";
 import { IngestError, MAX_QUEUED_BYTES, type DecodedBatch } from "./ingest.ts";
-import { getSpan, getTrace, linkTrace, listTraces, traceHistory } from "./queries.ts";
+import {
+  getSpan,
+  getTrace,
+  linkTrace,
+  listTraces,
+  traceHistory,
+  summaryFor,
+  listToolTraces,
+} from "./queries.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
+
+import { traceView } from "../mcp/tools/traceFormat.ts";
 
 declare const self: Worker;
 
@@ -154,6 +164,24 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
   Match.tag("List", (request) =>
     listTraces(prune(request.checkout), request.checkout, request.filter)
   ),
+  Match.tag("ToolList", (request) =>
+    listToolTraces(prune(request.checkout), request.checkout, request.filter)
+  ),
+  Match.tag("View", (request) => {
+    const db = prune(request.checkout);
+    const detail = getTrace(db, request.checkout, request.traceId);
+
+    return traceView(detail, request.focus, traceHistory(db, request.checkout, detail.summary.id));
+  }),
+  Match.tag("ToolSpan", (request) => {
+    const db = prune(request.checkout);
+    const detail = getSpan(db, request.checkout, request.traceId, request.spanId);
+
+    return {
+      detail,
+      start: summaryFor(db, request.checkout, detail.span.traceId).startTimeUnixNano,
+    };
+  }),
   Match.tag("Get", (request) =>
     getTrace(prune(request.checkout), request.checkout, request.traceId)
   ),

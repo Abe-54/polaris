@@ -1,8 +1,8 @@
-// RT2 repros (ENG-656) for `span`, id prefixes and input errors. Expected to FAIL on d0c65821e.
+// RT2 repros (ENG-656) for `span`, id prefixes and input errors. Regressions from d0c65821e.
 import { expect, test } from "bun:test";
-import { TRACE_ID } from "../../../apps/daemon/src/traces/testing.ts";
-import { makeSpan, withStoredTools } from "../../../apps/daemon/src/mcp/tools/traces.testing.ts";
-import type { BoundTool } from "../../../apps/daemon/src/mcp/tools/index.ts";
+import { TRACE_ID } from "../../traces/testing.ts";
+import { makeSpan, withStoredTools } from "./traces.testing.ts";
+import type { BoundTool } from "./index.ts";
 
 type Result = Awaited<ReturnType<BoundTool["call"]>>;
 
@@ -60,5 +60,18 @@ test("F13: an uppercase trace id gets a generic E-INPUT that doesn't say ids are
     const result = await f.tool("trace").call({ id: TRACE_ID.toUpperCase() });
 
     expect(result.structuredContent?.code).toBe("E-INPUT");
-    expect(String(result.structuredContent?.fix)).toMatch(/lowercase|hex/i);
+    expect(result.structuredContent?.fix).toMatch(/lowercase|hex/i);
+  }));
+
+test("F12: trace ids remain retrievable when a colliding trace is outside the list page", () =>
+  withStoredTools(async (f) => {
+    const older = "abcdef01000000000000000000000001";
+    const newer = "abcdef01000000000000000000000002";
+    await f.ingest([makeSpan(1, undefined, "older", 1, -100, older)]);
+    await f.ingest([makeSpan(1, undefined, "newer", 1, 0, newer)]);
+    const output = text(await f.tool("traces").call({ turn: "all", limit: 1 }));
+    const shown = output.split("\n")[1]!.split(" ")[0]!;
+    const result = await f.tool("trace").call({ id: shown });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent?.summary).toMatchObject({ id: newer });
   }));

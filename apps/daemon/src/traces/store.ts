@@ -5,7 +5,13 @@ import { TraceDetail, TraceError, TraceFilter, TraceSummary, SpanDetail } from "
 import { releaseMemory } from "../memory/release.ts";
 import { polarisHome } from "../paths.ts";
 import { TraceWorkerClient, WorkerFailure, type TraceWorkerOptions } from "./workerClient.ts";
-import { TraceHistory, TraceWorkerRequest } from "./workerProtocol.ts";
+import {
+  TraceHistory,
+  TraceWorkerRequest,
+  TraceView,
+  TraceToolPage,
+  TraceToolSpan,
+} from "./workerProtocol.ts";
 import { IngestError, type IngestContext } from "./ingest.ts";
 
 const TracePage = Schema.Struct({ traces: Schema.Array(TraceSummary), total: Schema.Number });
@@ -22,6 +28,20 @@ export class TraceStore extends Context.Service<
       readonly context: IngestContext;
     }) => Effect.Effect<number, IngestError>;
     readonly list: (checkout: string, filter?: TraceFilter) => Effect.Effect<TracePage, TraceError>;
+    readonly view: (
+      checkout: string,
+      traceId: string,
+      focus: "slow" | "errors" | "all"
+    ) => Effect.Effect<TraceView, TraceError>;
+    readonly toolList: (
+      checkout: string,
+      filter: TraceFilter
+    ) => Effect.Effect<TraceToolPage, TraceError>;
+    readonly toolSpan: (
+      checkout: string,
+      traceId: string,
+      spanId: string
+    ) => Effect.Effect<TraceToolSpan, TraceError>;
     readonly get: (checkout: string, traceId: string) => Effect.Effect<TraceDetail, TraceError>;
     readonly span: (
       checkout: string,
@@ -131,6 +151,15 @@ export class TraceStore extends Context.Service<
                 ),
             }),
           list,
+          view: (checkout, traceId, focus) =>
+            read(TraceWorkerRequest.cases.View.make({ checkout, traceId, focus }), TraceView),
+          toolList: (checkout, filter) =>
+            read(TraceWorkerRequest.cases.ToolList.make({ checkout, filter }), TraceToolPage),
+          toolSpan: (checkout, traceId, spanId) =>
+            read(
+              TraceWorkerRequest.cases.ToolSpan.make({ checkout, traceId, spanId }),
+              TraceToolSpan
+            ),
           get: (checkout, traceId) =>
             read(TraceWorkerRequest.cases.Get.make({ checkout, traceId }), TraceDetail),
           span: (checkout, traceId, spanId) =>

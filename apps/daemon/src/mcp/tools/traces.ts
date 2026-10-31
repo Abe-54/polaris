@@ -9,7 +9,7 @@ import {
 import { Effect, Match, Option, Schema } from "effect";
 import type { SessionTools } from "../sessions/index.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
-import { duration, inline, TRACE_CAP, traceView } from "./traceFormat.ts";
+import { duration, inline, clipped, TRACE_CAP } from "./traceFormat.ts";
 import { spanView } from "./spanFormat.ts";
 
 export const TracesInput = Schema.Struct({
@@ -49,37 +49,58 @@ export interface TraceSessionTools {
     },
     TraceError
   >;
-  readonly get: (
+  readonly view: (
     checkout: string,
-    id: string
-  ) => Effect.Effect<import("@polaris/protocol").TraceDetail, TraceError>;
-  readonly history: (
-    checkout: string,
-    id: string
-  ) => Effect.Effect<import("../../traces/workerProtocol.ts").TraceHistory, TraceError>;
+    id: string,
+    focus: "slow" | "errors" | "all"
+  ) => Effect.Effect<import("../../traces/workerProtocol.ts").TraceView, TraceError>;
   readonly span: (
     sessionId: SessionId,
     checkout: string,
     trace: string,
     span: string
   ) => Effect.Effect<
-    { detail: import("@polaris/protocol").SpanDetail; dataSource?: { id: string; name: string } },
+    {
+      detail: import("@polaris/protocol").SpanDetail;
+      start: string;
+      dataSource?: { id: string; name: string };
+    },
     TraceError
   >;
 }
 
 const failure = (code: string, message: string, fix: string): McpToolResult => ({
   isError: true,
-  content: [{ type: "text", text: `${code}: ${message}\nFix: ${fix}`.slice(0, TRACE_CAP) }],
-  structuredContent: { code, message, fix },
+  content: [
+    {
+      type: "text",
+      text: `${code}: ${inline(message)}\nFix: ${inline(fix)}`.slice(0, TRACE_CAP).toWellFormed(),
+    },
+  ],
+  structuredContent: { code, message: safeString(message), fix: safeString(fix) },
 });
 
-const viewResult = (view: {
-  text: string;
-  data: NonNullable<McpToolResult["structuredContent"]>;
-}): McpToolResult => ({
+const safeString = (value: string) =>
+  value.toWellFormed().replace(/[\u202a-\u202e\u2066-\u2069]/gu, " ");
+
+const safeJson = (value: Schema.Json): Schema.Json => {
+  if (Schema.is(Schema.String)(value)) return safeString(value);
+
+  if (value === null || Schema.is(Schema.Number)(value) || Schema.is(Schema.Boolean)(value))
+    return value;
+
+  if (Array.isArray(value)) return value.map(safeJson);
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [safeString(key), safeJson(item)])
+  );
+};
+
+const viewResult = (view: { text: string; data: Schema.JsonObject }): McpToolResult => ({
   content: [{ type: "text", text: view.text }],
-  structuredContent: view.data,
+  structuredContent: Object.fromEntries(
+    Object.entries(view.data).map(([key, value]) => [safeString(key), safeJson(value)])
+  ),
 });
 
 const listView = (
@@ -91,9 +112,11 @@ const listView = (
   },
   turn: TraceToolContext["turn"]
 ) => {
+  const cell = (value: string) => clipped(inline(value), 200, "value", "traces");
+
   const rows = page.traces.map(
     (trace) =>
-      `${trace.id.slice(0, 8)}  ${inline(trace.root)}  ${inline(trace.service)}  ${duration(trace.durationMs)}  ${trace.spans} spans  ${trace.services.length} services${page.history[trace.id] === undefined ? "" : `  SLOW (usually ${duration(page.history[trace.id]!)})`}${trace.errors ? `  ${trace.errors} ERROR${page.errors[trace.id] ? `: ${inline(page.errors[trace.id]!)}` : ""}` : ""}`
+      `${trace.id}  ${cell(trace.root)}  ${cell(trace.service)}  ${duration(trace.durationMs)}  ${trace.spans} spans  ${trace.services.length} services${page.history[trace.id] === undefined ? "" : `  SLOW (usually ${duration(page.history[trace.id]!)})`}${trace.errors ? `  ${trace.errors} ERROR${page.errors[trace.id] ? `: ${cell(page.errors[trace.id]!)}` : ""}` : ""}`
   );
 
   const label = Match.value(turn).pipe(
@@ -117,6 +140,7 @@ const listView = (
     spans: trace.spans,
     services: trace.services,
     errors: trace.errors,
+    ...(page.errors[trace.id] === undefined ? undefined : { errorMessage: page.errors[trace.id]! }),
     turn: trace.turn,
     startedAt: trace.startedAt,
     ...(page.history[trace.id] === undefined
@@ -147,7 +171,7 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
             return failure(
               "E-INPUT",
               `Invalid input for ${name}`,
-              "Use the fields in this tool's input schema."
+              "Use the fields in this tool's input schema. Trace ids are 8–32 lowercase hex characters; span ids are 8–16 lowercase hex characters."
             );
 
           if (sessions.traces === undefined)
@@ -189,15 +213,8 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
       (input, traces) =>
         Effect.gen(function* () {
           const context = yield* traces.context(sessionId, { turn: "all" });
-          const detail = yield* traces.get(context.checkout, input.id);
 
-          return viewResult(
-            traceView(
-              detail,
-              input.focus ?? "slow",
-              yield* traces.history(context.checkout, detail.summary.id)
-            )
-          );
+          return viewResult(yield* traces.view(context.checkout, input.id, input.focus ?? "slow"));
         })
     ),
     make(
@@ -208,11 +225,8 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
         Effect.gen(function* () {
           const context = yield* traces.context(sessionId, { turn: "all" });
           const result = yield* traces.span(sessionId, context.checkout, input.trace, input.span);
-          const trace = yield* traces.get(context.checkout, input.trace);
 
-          return viewResult(
-            spanView(result.detail, trace.summary.startTimeUnixNano, result.dataSource)
-          );
+          return viewResult(spanView(result.detail, result.start, result.dataSource));
         })
     ),
   ];
