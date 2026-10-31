@@ -19,6 +19,8 @@ import { createCommandRegistry } from "../../../routes/commands.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
 import { modelFromSnapshot } from "../../../store/hostModel.ts";
 import { type AppState, type Connection, initialState } from "../../../store/store.ts";
+import { DataLayer } from "../../data/data/hooks.tsx";
+import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import { TracesLayer } from "../data/hooks.tsx";
 import { fixtureTracesApi } from "./fixtureApi.ts";
 import {
@@ -27,6 +29,7 @@ import {
   FIXTURE_SNAPSHOTS,
   type TracesScene,
 } from "./fixtures.ts";
+import { openViewSpan, previewOf, type PreviewView, silent } from "./views.ts";
 
 const HOST = "local";
 
@@ -60,9 +63,13 @@ const host: HostView = {
   },
 };
 
-const appState = (): AppState => ({
+const appState = (view: PreviewView): AppState => ({
   ...initialState,
-  hosts: [host],
+  hosts: [
+    view === "reconnecting"
+      ? { ...host, status: { ...host.status, state: "reconnecting", attempt: 2 } }
+      : host,
+  ],
   hostsListed: true,
   hostModels: {
     [HOST]: modelFromSnapshot({
@@ -113,7 +120,7 @@ const appState = (): AppState => ({
 const isScene = (name: string): name is TracesScene => Object.hasOwn(FIXTURE_SNAPSHOTS, name);
 
 const sceneOf = (hash: string): TracesScene => {
-  const name = hash.replace(/^#traces\//, "");
+  const { name } = previewOf(hash);
 
   return isScene(name) ? name : "traces";
 };
@@ -124,7 +131,9 @@ export const mountTracesPreview = (
   hash: string,
   shown: Pick<AppState, "density" | "theme">
 ) => {
-  const store = createStore<AppState>(() => ({ ...appState(), ...shown }));
+  const { view } = previewOf(hash);
+  const store = createStore<AppState>(() => ({ ...appState(view), ...shown }));
+  const api = fixtureTracesApi(sceneOf(hash));
 
   const connection: Connection = {
     store,
@@ -137,12 +146,15 @@ export const mountTracesPreview = (
 
   navigation.actions.selectSession({ hostKey: HOST, sessionId: FIXTURE_SESSION });
   navigation.actions.setMode("traces");
+  openViewSpan({ hostKey: HOST, sessionId: FIXTURE_SESSION }, view);
 
   createRoot(root).render(
-    <TracesLayer api={fixtureTracesApi(sceneOf(hash))}>
-      <App
-        value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
-      />
+    <TracesLayer api={view === "loading" || view === "reconnecting" ? silent(api) : api}>
+      <DataLayer api={fixtureDataApi()}>
+        <App
+          value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
+        />
+      </DataLayer>
     </TracesLayer>
   );
 

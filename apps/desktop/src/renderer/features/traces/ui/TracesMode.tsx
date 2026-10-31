@@ -7,8 +7,11 @@
 import type { SessionId } from "@polaris/protocol";
 import { EmptyState, Horizon, PixelAlertIcon, PixelHourglassIcon } from "@polaris/ui";
 import { TopBar } from "../../../shell/TopBar.tsx";
-import { useSelection } from "../../../shell/hooks.ts";
+import { useApp, useSelection } from "../../../shell/hooks.ts";
+import { useTraces } from "../data/hooks.tsx";
 import { useTracesUnavailable } from "../model/availability.ts";
+import type { TracesSessionKey } from "../model/session.ts";
+import { setupState } from "../model/setup.ts";
 import { useTracesSelection } from "../model/store.ts";
 import { TracesDrawer } from "./Drawer.tsx";
 import { TracesSidebar } from "./Sidebar.tsx";
@@ -17,6 +20,22 @@ import { SpanPanel } from "./SpanPanel.tsx";
 import { TracesStatusBar } from "./StatusBar.tsx";
 import { TraceBar } from "./TraceBar.tsx";
 import { TraceMain } from "./TraceMain.tsx";
+import { TracesSetup } from "./setup/TracesSetup.tsx";
+
+/** One trace is enough to know the checkout has some; the sidebar reads the list. */
+const PROBE = { limit: 1 } as const;
+
+/** What Traces shows in place of a trace: none once the checkout has traces. */
+const useSetup = (at: TracesSessionKey) => {
+  const snapshot = useTraces(at, PROBE);
+  const label = useApp((s) => s.hosts.find((h) => h.key === at.hostKey)?.label);
+  const state = useApp((s) => s.hosts.find((h) => h.key === at.hostKey)?.status.state);
+
+  return setupState(
+    snapshot,
+    label === undefined || state === undefined ? undefined : { label, state }
+  );
+};
 
 const Centered = ({
   testId,
@@ -37,6 +56,7 @@ const Centered = ({
 const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId"> }) => {
   const selection = useTracesSelection(slot.at);
   const props = { ...slot, ...selection };
+  const setup = useSetup(slot.at);
 
   return (
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="traces-mode">
@@ -45,14 +65,20 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
         <Horizon />
       </div>
       <section className="border-hairline bg-panel shadow-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border">
-        <TraceBar {...props} />
-        <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TraceMain {...props} />
-          </div>
-          <SpanPanel {...props} />
-        </div>
-        <TracesDrawer {...props} />
+        {setup === null ? (
+          <>
+            <TraceBar {...props} />
+            <div className="flex min-h-0 flex-1">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <TraceMain {...props} />
+              </div>
+              <SpanPanel {...props} />
+            </div>
+            <TracesDrawer {...props} />
+          </>
+        ) : (
+          <TracesSetup state={setup} />
+        )}
         <TracesStatusBar {...props} />
       </section>
     </div>
