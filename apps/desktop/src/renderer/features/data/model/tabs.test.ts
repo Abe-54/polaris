@@ -3,23 +3,26 @@ import { closeTab, type DataTabs, emptyTabs, focusTab, openSqlTab, openTable } f
 
 const ids = (state: DataTabs) => state.tabs.map((t) => t.id);
 
+const t = (name: string, schema = "public") => ({ schema, name });
+
 describe("Data tabs", () => {
   test("opening a table that is already open focuses its tab instead of adding one", () => {
-    let state = openTable(emptyTabs, "app", "invoices");
+    let state = openTable(emptyTabs, "app", t("invoices"));
 
-    state = openTable(state, "app", "customers");
-    state = openTable(state, "app", "invoices");
+    state = openTable(state, "app", t("customers"));
+    state = openTable(state, "app", t("invoices"));
 
     expect(state.tabs).toHaveLength(2);
     expect(state.active).toBe(state.tabs[0]?.id ?? "");
-    // The same table on another Data Source is its own tab.
-    expect(openTable(state, "ledger", "invoices").tabs).toHaveLength(3);
+    // The same table on another Data Source, or in another schema, is its own tab.
+    expect(openTable(state, "ledger", t("invoices")).tabs).toHaveLength(3);
+    expect(openTable(state, "app", t("invoices", "billing")).tabs).toHaveLength(3);
   });
 
   test("a new tab opens right after the active one", () => {
-    let state = openTable(emptyTabs, "app", "invoices");
+    let state = openTable(emptyTabs, "app", t("invoices"));
 
-    state = openTable(state, "app", "customers");
+    state = openTable(state, "app", t("customers"));
     state = focusTab(state, state.tabs[0]?.id ?? "");
     state = openSqlTab(state, "select 1", "app");
 
@@ -44,10 +47,10 @@ describe("Data tabs", () => {
   });
 
   test("closing the active tab focuses its right neighbour, else its left, else none", () => {
-    let state = openTable(emptyTabs, "app", "a");
+    let state = openTable(emptyTabs, "app", t("a"));
 
-    state = openTable(state, "app", "b");
-    state = openTable(state, "app", "c");
+    state = openTable(state, "app", t("b"));
+    state = openTable(state, "app", t("c"));
     const [a, b, c] = ids(state);
 
     state = closeTab(focusTab(state, b ?? ""), b ?? "");
@@ -59,9 +62,9 @@ describe("Data tabs", () => {
   });
 
   test("closing a background tab keeps the focus where it is", () => {
-    let state = openTable(emptyTabs, "app", "a");
+    let state = openTable(emptyTabs, "app", t("a"));
 
-    state = openTable(state, "app", "b");
+    state = openTable(state, "app", t("b"));
     const [a, b] = ids(state);
 
     expect(closeTab(state, a ?? "").active).toBe(b ?? "");

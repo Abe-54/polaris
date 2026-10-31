@@ -2,6 +2,9 @@
  * Data's open tabs per Agent Session (DESIGN.md, Data): a Table tab per table and any number of
  * SQL tabs. Pure transitions, so the store and the tests share them.
  */
+import type { TableRef } from "../ui/table/sql.ts";
+
+export type { TableRef };
 
 export type DataTab =
   | {
@@ -9,7 +12,10 @@ export type DataTab =
       readonly id: string;
       /** The Data Source's `name`, as the Data RPCs take it. */
       readonly sourceId: string;
+      /** Its title: the name, schema-qualified where the tree qualifies it. */
       readonly table: string;
+      /** What its Queries read: schema and name, quoted apart. */
+      readonly ref: TableRef;
     }
   | {
       readonly kind: "sql";
@@ -31,16 +37,22 @@ export interface DataTabs {
 
 export const emptyTabs: DataTabs = { tabs: [], active: null, nextQuery: 1 };
 
-export const tableTabId = (sourceId: string, table: string) =>
-  `table\u0000${sourceId}\u0000${table}`;
+/** One tab per table, however it was reached: the sidebar, a foreign key or Structure. */
+export const tableTabId = (sourceId: string, ref: TableRef) =>
+  `table\u0000${sourceId}\u0000${ref.schema}\u0000${ref.name}`;
 
 /** Focuses the table's tab, opening it after the active one when it isn't open yet. */
-export const openTable = (state: DataTabs, sourceId: string, table: string): DataTabs => {
-  const id = tableTabId(sourceId, table);
+export const openTable = (
+  state: DataTabs,
+  sourceId: string,
+  ref: TableRef,
+  title = ref.name
+): DataTabs => {
+  const id = tableTabId(sourceId, ref);
 
   if (state.tabs.some((t) => t.id === id)) return { ...state, active: id };
 
-  return insertAfterActive(state, { kind: "table", id, sourceId, table });
+  return insertAfterActive(state, { kind: "table", id, sourceId, table: title, ref });
 };
 
 /** Always a new SQL tab, focused: a re-run from the Query Log never overwrites one being edited. */

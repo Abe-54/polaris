@@ -6,7 +6,8 @@
 import { cn } from "@polaris/ui";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { type GridColumn, isNumericType } from "../../grid/columns.ts";
-import { applyCompletion, complete, type Completions } from "./completion.ts";
+import { applyCompletion, type Completion, complete, type Completions } from "./completion.ts";
+import { type Engine, identFor } from "./sql.ts";
 
 const STRING = /('(?:[^']|'')*'?)/;
 
@@ -24,13 +25,13 @@ const parts = (text: string) => {
 };
 
 /** The empty well's example, on this table's own columns: a text one where there is one. */
-const example = (columns: ReadonlyArray<GridColumn>) => {
+const example = (engine: Engine, columns: ReadonlyArray<GridColumn>) => {
   const column =
     columns.find((c) => /char|text/i.test(c.type) && c.fk == null) ??
     columns.find((c) => !isNumericType(c.type)) ??
     columns[0];
 
-  return column === undefined ? "" : `${column.name} = '…'`;
+  return column === undefined ? "" : `${identFor(engine, column.name)} = '…'`;
 };
 
 const Mirror = ({ text }: { readonly text: string }) => (
@@ -49,13 +50,14 @@ interface Open {
 }
 
 export interface FilterWellProps {
+  readonly engine: Engine;
   readonly columns: ReadonlyArray<GridColumn>;
   /** The applied filter. */
   readonly value: string;
   readonly onApply: (filter: string) => void;
 }
 
-export const FilterWell = ({ columns, value, onApply }: FilterWellProps) => {
+export const FilterWell = ({ engine, columns, value, onApply }: FilterWellProps) => {
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState<Open | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -64,14 +66,14 @@ export const FilterWell = ({ columns, value, onApply }: FilterWellProps) => {
   useEffect(() => setDraft(value), [value]);
 
   const suggest = (text: string, caret: number) => {
-    const at = complete(text, caret, columns);
+    const at = complete(text, caret, columns, engine);
 
     setOpen(at === null ? null : { at, index: 0 });
   };
 
-  const accept = (label: string) => {
-    if (open === null) return;
-    const next = applyCompletion(draft, open.at, label);
+  const accept = (item: Completion | undefined) => {
+    if (open === null || item === undefined) return;
+    const next = applyCompletion(draft, open.at, item);
 
     setDraft(next.text);
     setOpen(null);
@@ -88,7 +90,7 @@ export const FilterWell = ({ columns, value, onApply }: FilterWellProps) => {
       setOpen({ ...open, index: (open.index + step + items.length) % items.length });
     } else if (open !== null && (event.key === "Tab" || event.key === "Enter")) {
       event.preventDefault();
-      accept(items[open.index]?.label ?? "");
+      accept(items[open.index]);
     } else if (event.key === "Enter") {
       event.preventDefault();
       onApply(draft);
@@ -118,7 +120,7 @@ export const FilterWell = ({ columns, value, onApply }: FilterWellProps) => {
             className="text-text-default pointer-events-none absolute inset-0 overflow-hidden whitespace-pre"
           >
             {draft === "" ? (
-              <span className="text-text-faint">{example(columns)}</span>
+              <span className="text-text-faint">{example(engine, columns)}</span>
             ) : (
               <Mirror text={draft} />
             )}
@@ -167,7 +169,7 @@ export const FilterWell = ({ columns, value, onApply }: FilterWellProps) => {
               data-testid="data-filter-completion"
               onMouseDown={(event) => {
                 event.preventDefault();
-                accept(item.label);
+                accept(item);
               }}
               className={cn(
                 "flex h-7 cursor-default items-center gap-3 rounded-[6px] px-2",

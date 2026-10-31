@@ -56,5 +56,9 @@ const api = () => fixtureDataApi();
 export const SQL_SCENES = {
   sql: { api, play: run(OVERDUE) },
   "sql-error": { api, play: run("select *\nfrom nowhere") },
-  working: { api, state: working, play: (at) => openTable("app", "invoices", at) },
+  working: {
+    api,
+    state: working,
+    play: (at) => openTable("app", { schema: "public", name: "invoices" }, at),
+  },
 } satisfies Record<string, DataScene>;

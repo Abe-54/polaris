@@ -65,6 +65,7 @@ test("⌘T opens an empty SQL tab on the open table's Data Source", () => {
     id: "t",
     sourceId: "ledger",
     table: "invoices",
+    ref: { schema: "public", name: "invoices" },
   });
 
   expect(commands.run("data.newSqlTab")).toBe(true);
@@ -80,7 +81,13 @@ test("with no tab open, it uses the first Data Source once they arrive", async (
 
 test("outside Data, ⌘T is left to the editor", () => {
   const { commands, opened } = mount(
-    { kind: "table", id: "t", sourceId: "ledger", table: "invoices" },
+    {
+      kind: "table",
+      id: "t",
+      sourceId: "ledger",
+      table: "invoices",
+      ref: { schema: "public", name: "invoices" },
+    },
     "edit"
   );
 

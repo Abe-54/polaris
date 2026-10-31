@@ -5,6 +5,7 @@
 import type { TableDetail } from "@polaris/protocol";
 import { Kicker } from "@polaris/ui";
 import type { ReactNode } from "react";
+import type { TableRef } from "./sql.ts";
 
 const Section = ({
   title,
@@ -51,7 +52,7 @@ export const Structure = ({
   onOpenTable,
 }: {
   readonly detail: TableDetail;
-  readonly onOpenTable: (table: string) => void;
+  readonly onOpenTable: (ref: TableRef) => void;
 }) => (
   <div data-testid="data-structure" className="min-h-0 flex-1 overflow-auto pb-4">
     <Section title="Columns" count={detail.columns.length}>
@@ -73,7 +74,9 @@ export const Structure = ({
             {c.fk === null ? null : (
               <button
                 type="button"
-                onClick={() => onOpenTable(c.fk?.table ?? "")}
+                onClick={() => {
+                  if (c.fk !== null) onOpenTable({ schema: c.fk.schema, name: c.fk.table });
+                }}
                 className="text-starlight-text cursor-default hover:underline"
               >
                 {c.fk.table}.{c.fk.column} →

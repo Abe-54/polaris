@@ -46,7 +46,12 @@ const prepare = (scene: Scene) => {
     return;
   }
 
-  openTable(REPLICA.name, WORST_LONG_TABLE, DATA_AT);
+  openTable(
+    REPLICA.name,
+    { schema: "public", name: WORST_LONG_TABLE },
+    DATA_AT,
+    `public.${WORST_LONG_TABLE}`
+  );
 
   if (scene === "log") setSidebarView(DATA_AT, "log");
 

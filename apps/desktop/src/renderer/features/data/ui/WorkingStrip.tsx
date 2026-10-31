@@ -91,8 +91,8 @@ export const WorkingStrip = ({
     () =>
       entries === null
         ? null
-        : tableReader(entries, lookup, { source: tab.sourceId, table: tab.table }),
-    [entries, lookup, tab.sourceId, tab.table]
+        : tableReader(entries, lookup, { source: tab.sourceId, table: tab.ref.name }),
+    [entries, lookup, tab.sourceId, tab.ref.name]
   );
 
   return reader === null ? null : <Strip hostKey={hostKey} reader={reader} />;

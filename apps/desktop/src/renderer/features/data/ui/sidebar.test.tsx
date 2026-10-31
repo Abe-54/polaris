@@ -135,13 +135,14 @@ describe("Sources", () => {
   test("the table agents added this Turn shows its git letter in place of the estimate", async () => {
     mount(fixtureDataApi());
 
-    const row = await waitFor(() =>
-      page()
-        .getAllByTestId("data-table-row")
-        .find((r) => r.dataset.table === "currencies")
+    // The letter comes with the working set, which can land after the row.
+    await waitFor(() =>
+      expect(
+        page()
+          .getAllByTestId("data-table-row")
+          .find((r) => r.dataset.table === "currencies")?.textContent
+      ).toBe("currenciesA")
     );
-
-    expect(row?.textContent).toBe("currenciesA");
   });
 
   test("with no data sources it says what was searched and offers Add data source", async () => {
@@ -275,7 +276,7 @@ describe("the connection bar", () => {
         return api.labelSource(at, source, label);
       },
     });
-    act(() => openTable("ledger", "invoices", DATA_AT));
+    act(() => openTable("ledger", { schema: "public", name: "invoices" }, DATA_AT));
     const bar = await waitFor(() => page().getByTestId("data-connection-bar"));
 
     expect(bar.dataset.colour).toBe("tan");

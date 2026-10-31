@@ -24,7 +24,14 @@ let sessions = 0;
 const mount = () => {
   const at = { hostKey: "local", sessionId: SessionId.make(`s-drawer-${++sessions}`) };
   const store = createStore<AppState>(() => ({ ...initialState, density: "calm" }));
-  const invoices: DataTab = { kind: "table", id: "t-invoices", sourceId: "app", table: "invoices" };
+
+  const invoices: DataTab = {
+    kind: "table",
+    id: "t-invoices",
+    sourceId: "app",
+    table: "invoices",
+    ref: { schema: "public", name: "invoices" },
+  };
 
   render(
     <AppProvider
