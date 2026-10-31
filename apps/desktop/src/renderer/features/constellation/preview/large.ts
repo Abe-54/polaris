@@ -125,6 +125,13 @@ const titleOf = (letter: string, n: number) =>
     ? `${TITLES[n % TITLES.length]} merged`
     : (TITLES[(n + letter.charCodeAt(0)) % TITLES.length] ?? `${letter}${n}`);
 
+/** Waiting Tasks wait across groups; the rest run in chains of three, each after the one before. */
+const depsOf = (letter: string, state: string, n: number) => {
+  if (state === "waiting") return [`A${(n % 14) + 1}`, "C1"];
+
+  return letter !== "G" && n % 3 !== 1 ? [`${letter}${n - 1}`] : [];
+};
+
 export const largeRecord = (): ConstellationRecord => {
   const cells = GROUPS.flatMap(([letter, group, mix]) =>
     statesOf(mix).map((state, index) => ({ letter, group, state, n: index + 1 }))
@@ -136,7 +143,7 @@ export const largeRecord = (): ConstellationRecord => {
       title: titleOf(letter, n),
       group,
       kind: letter === "G" ? "gate" : "task",
-      deps: state === "waiting" ? [`A${(n % 14) + 1}`, "C1"] : [],
+      deps: depsOf(letter, state, n),
       ui: letter === "E" || n % 5 === 0,
     })
   );

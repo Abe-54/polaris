@@ -53,7 +53,7 @@ const enter = (row: RailRow | undefined): KeyAction | null => {
 const depthOf = (row: RailRow | undefined) =>
   row?.kind === "task" || row?.kind === "parent" ? row.tree.depth : 0;
 
-/** ← folds an open group or parent, or from a nested row selects the one it sits in. */
+/** ← folds an open group or parent, or from a nested row selects the row it hangs under. */
 const left = (rows: ReadonlyArray<RailRow>, at: number): KeyAction | null => {
   const row = rows[at];
 
@@ -68,7 +68,10 @@ const left = (rows: ReadonlyArray<RailRow>, at: number): KeyAction | null => {
   for (let i = at - 1; i >= 0; i--) {
     const above = rows[i];
 
-    if (above?.kind === "group" || (above?.kind === "parent" && above.tree.depth < depth))
+    if (
+      above?.kind === "group" ||
+      ((above?.kind === "parent" || above?.kind === "task") && above.tree.depth < depth)
+    )
       return { kind: "select", key: above.key };
   }
 

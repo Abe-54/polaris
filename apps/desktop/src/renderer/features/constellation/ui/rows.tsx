@@ -23,7 +23,7 @@ import {
 } from "../model/index.ts";
 import { InputDot, TaskGlyph } from "./glyphs.tsx";
 import { IdLane, LaneSpacer } from "./lane.tsx";
-import { overflowIndent, Rail } from "./rail.tsx";
+import { depthIndent, Rail } from "./rail.tsx";
 import { Checks, StripBar } from "./strip.tsx";
 
 export const TONE: Readonly<Record<Tone, string>> = {
@@ -195,8 +195,26 @@ const TaskTitle = ({ row }: { readonly row: TaskRow }) => (
       </span>
     )}
     <span className="truncate">{row.task.title}</span>
+    <Also deps={row.also} />
   </span>
 );
+
+/** "← M, X": its deps other than the row it hangs under, each id in its state's tone. */
+const Also = ({ deps }: { readonly deps: TaskRow["also"] }) =>
+  deps.length === 0 ? null : (
+    <span
+      className="text-caption text-text-faint shrink-0 whitespace-nowrap"
+      aria-label={`also after ${deps.map((d) => d.id).join(", ")}`}
+    >
+      {"← "}
+      {deps.map((dep, n) => (
+        <Fragment key={dep.id}>
+          {n === 0 ? null : ", "}
+          <span className={cn("text-code-inline font-mono", ID_TONE[dep.tone])}>{dep.id}</span>
+        </Fragment>
+      ))}
+    </span>
+  );
 
 /** "blocks F2": a row whose Task a blocked Attempt waits on. */
 const Blocks = ({ ids }: { readonly ids: ReadonlyArray<string> }) =>
@@ -263,7 +281,7 @@ const TaskView = ({
     </Rail>
     <div
       className="flex min-w-0 flex-1 flex-col gap-0.5 py-[5px]"
-      style={overflowIndent(row.tree.depth, step)}
+      style={depthIndent(row.tree.depth)}
     >
       <div className="flex min-w-0 items-center gap-3">
         <IdLane id={row.task.id} max={LANE_MAX.tab} className={ID_TONE[row.look.idTone]} />
@@ -277,7 +295,9 @@ const TaskView = ({
             <span className="text-body text-text-subtle">{row.look.evidence}</span>
           )}
         </span>
-        <span className="w-6 shrink-0">{row.attempt === null ? null : on.menu(row)}</span>
+        <span className="flex h-[var(--text-body--line-height)] w-6 shrink-0 items-center justify-center">
+          {row.attempt === null ? null : on.menu(row)}
+        </span>
       </div>
       {row.line === null && !row.promoted && row.blocks.length === 0 ? null : (
         <div className="flex min-w-0 items-center gap-3">
@@ -415,7 +435,7 @@ const ParentView = ({
     >
       <TaskGlyph glyph={row.glyph} harness={null} />
     </Rail>
-    <span className="flex min-w-0 flex-1 py-[5px]" style={overflowIndent(row.tree.depth, step)}>
+    <span className="flex min-w-0 flex-1 py-[5px]" style={depthIndent(row.tree.depth)}>
       <span className="flex min-h-(--text-body--line-height) min-w-0 flex-1 items-center gap-3">
         <IdLane
           id={row.task.id}
@@ -451,10 +471,7 @@ const SubagentView = ({
     <Rail tree={row.tree} step={step} small>
       <TaskGlyph glyph="working" harness={row.parent.harness} size={12} />
     </Rail>
-    <span
-      className="flex min-w-0 flex-1 items-center gap-3"
-      style={overflowIndent(row.tree.depth, step)}
-    >
+    <span className="flex min-w-0 flex-1 items-center gap-3" style={depthIndent(row.tree.depth)}>
       <LaneSpacer />
       <span className="text-body text-text-subtle min-w-0 flex-1 truncate">
         {row.subagent.title}

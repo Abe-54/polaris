@@ -61,12 +61,12 @@ describe("parent projections", () => {
 describe("the tree on the rail", () => {
   const rail = buildRail(slugRecord(), facts);
 
-  test("group, then parents to any depth, children in declaration order", () => {
+  test("group, then parents to any depth, a dependent under the sibling it waits on", () => {
     expect(treeRows(rail.rows)).toEqual([
       ["parent", "F", 1, true, []],
       ["parent", "F1", 2, false, []],
-      ["task", "F1a", 3, false, [true]],
-      ["task", "F1b", 3, true, [true]],
+      ["task", "F1a", 3, true, [true]],
+      ["task", "F1b", 4, true, [true, false]],
       ["task", "F2", 2, false, []],
       ["task", "F3", 2, true, []],
     ]);

@@ -108,6 +108,8 @@ export interface TaskRow {
   readonly tree: TreeLane;
   /** Tasks whose blocked Attempt waits on this one: "blocks F2". */
   readonly blocks: ReadonlyArray<string>;
+  /** Its own deps other than the one it hangs under on the rail: "← M, X". */
+  readonly also: ReadonlyArray<{ readonly id: string; readonly tone: Tone }>;
 }
 
 /** A row's place in the rail (`git log --graph`): 0 is the trunk. */
@@ -422,5 +424,6 @@ export const taskRow = (
     nested,
     tree,
     blocks: ctx.oneLine ? [] : (ctx.blocks.get(task.id) ?? []),
+    also: [],
   };
 };

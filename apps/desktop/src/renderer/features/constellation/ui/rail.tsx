@@ -104,7 +104,7 @@ export const Rail = ({
       <Lines tree={tree} step={step} accepted={accepted} />
       <span className="absolute grid place-items-center" style={slot}>
         <span className="bg-panel absolute size-3 rounded-full" />
-        <span className="relative">{children}</span>
+        <span className="relative grid place-items-center">{children}</span>
       </span>
       {trail === undefined ? null : (
         <span className="absolute top-[6px] right-1 grid size-4 place-items-center">{trail}</span>
@@ -113,9 +113,6 @@ export const Rail = ({
   );
 };
 
-/** Rows deeper than the rail draws indent their content, a step per level past the cap. */
-export const overflowIndent = (depth: number, step: number): CSSProperties | undefined => {
-  const past = depth - railCap(step);
-
-  return past > 0 ? { paddingLeft: `${past * 0.75}rem` } : undefined;
-};
+/** Nested rows indent their content 1.25rem per level below a group's, so the tree reads. */
+export const depthIndent = (depth: number): CSSProperties | undefined =>
+  depth > 1 ? { paddingLeft: `${(depth - 1) * 1.25}rem` } : undefined;
