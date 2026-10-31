@@ -3,6 +3,7 @@
  * checkout's three Data Sources, a seven-table schema, 500 invoices and 30 Query Log entries.
  */
 import {
+  type ApprovalRequest,
   DataSource,
   type DataValue,
   QueryLogEntry,
@@ -451,3 +452,30 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     at: at(0),
   }),
 ];
+
+const approvalRequest = {
+  id: RequestId.make("r-analytics-read"),
+  sessionId: FIXTURE_SESSIONS.backfill.id,
+  turnId: TurnId.make("turn-5"),
+  kind: "tool",
+  title: "Read analytics",
+  detail: null,
+  options: [],
+  questions: [],
+  placeholder: null,
+  expiresAt: null,
+  openedAt: new Date(FIXTURE_NOW - 40_000).toISOString(),
+  dataSource: {
+    sourceId: "src-analytics",
+    sourceName: "analytics",
+    engine: "mysql",
+    host: "aws.connect.psdb.cloud",
+    port: 3306,
+    database: "analytics",
+    user: "u_7kq2xmz4p1",
+    branch: { provider: "planetscale", name: "backfill-currency" },
+  },
+} as const;
+
+/** A Data Source Approval as X's event carries it, until the protocol has `dataSource`. */
+export const FIXTURE_DATA_APPROVAL: ApprovalRequest = approvalRequest;
