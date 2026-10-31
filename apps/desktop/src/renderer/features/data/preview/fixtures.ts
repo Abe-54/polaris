@@ -249,6 +249,7 @@ export const fixtureTable = (name: string, sample?: QueryResult): TableDetail | 
         definition: `FOREIGN KEY (${c.name}) REFERENCES ${c.fk?.table}(${c.fk?.column})`,
       })),
     rowEstimate: ROW_ESTIMATES.get(name) ?? null,
+    primaryKey: columns.filter((c) => c.pk).map((c) => c.name),
   };
 
   return new TableDetail(sample === undefined ? detail : { ...detail, sample });

@@ -1,18 +1,19 @@
 /**
- * The Table tab's edits over its rows: which cells edit (keyed by the primary key), the rows with
- * staged and written values laid over, and why the table is read-only when it is.
+ * The Table tab's edits over its rows: which cells edit (keyed by the primary key in its declared
+ * order), the rows with staged and written values laid over, what a commit would send, and why
+ * the table is read-only when it is.
  */
 import type { DataSource, TableDetail } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { useCallback, useMemo } from "react";
 import type { GridEditing } from "../../../grid/DataGrid.tsx";
-import { type ColumnFacts, editorFor, NO_KEY } from "../../../grid/editors.ts";
+import { type ColumnFacts, editorFor, NO_KEY, sameTyped } from "../../../grid/editors.ts";
 import type { CellAt } from "../../../grid/selection.ts";
 import type { DataRow, DataValue } from "../../../grid/value.ts";
 import type { DataSessionKey } from "../../../model/store.ts";
 import type { TableRef } from "../../../model/tabs.ts";
-import { type CommitTarget, writesBlocked } from "./commit.ts";
-import { keyIndex, overlay } from "./staged.ts";
+import { type CommitTarget, sendable, writesBlocked } from "./commit.ts";
+import { cellId, keyIndex, overlay } from "./staged.ts";
 import { stageEdit, undoEdit, useTabEdits } from "./store.ts";
 
 export interface TableEditsInput {
@@ -23,17 +24,47 @@ export interface TableEditsInput {
   readonly source: DataSource | null;
   readonly columns: ReadonlyArray<string>;
   readonly rows: ReadonlyArray<DataRow>;
+  /** The rows have been read, so a staged row missing from them isn't shown. */
+  readonly ready?: boolean;
 }
 
 const LOADING = "The table is still loading";
 
 const UNMATCHABLE = "This row's key was cut short or is binary, so the row can't be matched";
 
+export const FLOAT_KEY =
+  "This table's key is a floating-point value, so its rows can't be matched exactly";
+
+export const NO_KEY_ORDER =
+  "This Host's Daemon doesn't say the key's order; upgrade it to edit this table";
+
+const FLOAT = /^(?:real|float[48]?|double(?: precision)?)\b/i;
+
+/** The key's columns as declared, from the Daemon's catalog; null when its order is unknown. */
+const declaredKey = (detail: TableDetail | null): ReadonlyArray<string> | null => {
+  const marked = detail?.columns.filter((c) => c.pk).map((c) => c.name) ?? [];
+
+  if (detail?.primaryKey !== undefined) return detail.primaryKey;
+
+  return marked.length > 1 ? null : marked;
+};
+
 /** Why nothing in the table edits, or null when its cells can. */
-const readOnlyReason = (source: DataSource, keyCols: ReadonlyArray<number>): string | null => {
+const readOnlyReason = (
+  source: DataSource,
+  detail: TableDetail,
+  keyNames: ReadonlyArray<string> | null,
+  keyCols: ReadonlyArray<number>
+): string | null => {
+  if (keyNames === null) return NO_KEY_ORDER;
+
   if (keyCols.length === 0) return NO_KEY;
 
   if (keyCols.includes(-1)) return "The primary key isn't among the columns shown";
+
+  const types = keyNames.map((n) => detail.columns.find((c) => c.name === n)?.type ?? "");
+
+  if (types.some((t) => FLOAT.test(t.trim()))) return FLOAT_KEY;
 
   return writesBlocked(source);
 };
@@ -44,17 +75,17 @@ const exact = (value: DataValue | undefined) =>
   !(Predicate.isTagged(value, "Bytes") || Predicate.isTagged(value, "Truncated"));
 
 export const useTableEdits = (input: TableEditsInput) => {
-  const { at, tabId, detail, source, columns, rows } = input;
+  const { at, tabId, detail, source, columns, rows, ready = true } = input;
   const edits = useTabEdits(at, tabId);
+  const keyNames = useMemo(() => declaredKey(detail), [detail]);
 
-  const keyNames = useMemo(
-    () => detail?.columns.filter((c) => c.pk).map((c) => c.name) ?? [],
-    [detail]
+  const keyCols = useMemo(
+    () => (keyNames ?? []).map((n) => columns.indexOf(n)),
+    [keyNames, columns]
   );
 
-  const keyCols = useMemo(() => keyNames.map((n) => columns.indexOf(n)), [keyNames, columns]);
   const loading = detail === null || source === null;
-  const readOnly = loading ? null : readOnlyReason(source, keyCols);
+  const readOnly = loading ? null : readOnlyReason(source, detail, keyNames, keyCols);
   const index = useMemo(() => keyIndex(rows, keyCols), [rows, keyCols]);
 
   const shown = useMemo(
@@ -67,7 +98,10 @@ export const useTableEdits = (input: TableEditsInput) => {
   );
 
   const isStaged = useCallback(
-    (row: number, col: number) => shown.staged.get(row)?.has(col) ?? false,
+    (row: number, col: number): boolean | "conflict" =>
+      shown.conflicts.get(row)?.has(col) === true
+        ? "conflict"
+        : (shown.staged.get(row)?.has(col) ?? false),
     [shown]
   );
 
@@ -78,8 +112,11 @@ export const useTableEdits = (input: TableEditsInput) => {
 
     const factsOf = (col: number): ColumnFacts | null => {
       const name = columns[col];
+      const facts = detail?.columns.find((c) => c.name === name);
 
-      return detail?.columns.find((c) => c.name === name) ?? null;
+      if (facts === undefined) return null;
+
+      return source === null ? facts : { ...facts, engine: source.engine };
     };
 
     return {
@@ -98,25 +135,69 @@ export const useTableEdits = (input: TableEditsInput) => {
 
         return editorFor(facts, shown.rows[row]?.[col] ?? null);
       },
-      onStage: ({ row, col }, value) => {
+      onStage: ({ row, col }, typed) => {
         const column = columns[col];
+        const facts = factsOf(col);
 
-        if (column === undefined) return;
-        stageEdit(at, tabId, {
-          key: keyOf(row),
-          column,
-          before: shown.rows[row]?.[col] ?? null,
-          value,
-        });
+        if (column === undefined || facts === null) return;
+        const key = keyOf(row);
+        const now = shown.rows[row]?.[col] ?? null;
+        const before = edits.staged.cells.get(cellId(key, column))?.before ?? now;
+        const how = editorFor(facts, now);
+
+        if (Predicate.isString(how)) return;
+
+        // A typed no-op ("42" over 42, the same instant reformatted) changes nothing.
+        if (sameTyped(how, now, typed)) return;
+        const value = sameTyped(how, before, typed) ? before : typed;
+
+        stageEdit(at, tabId, { key, column, before: now, value });
       },
       onUndo: () => undoEdit(at, tabId),
     };
-  }, [at, tabId, columns, detail, keyCols, loading, readOnly, committing, rows, shown]);
+  }, [
+    at,
+    tabId,
+    columns,
+    detail,
+    source,
+    keyCols,
+    loading,
+    readOnly,
+    committing,
+    rows,
+    shown,
+    edits.staged,
+  ]);
 
+  // Until the rows are read every staged row counts as shown, but nothing commits.
   const target: CommitTarget | null =
-    source === null || loading || readOnly !== null
+    source === null || loading || readOnly !== null || keyNames === null || !ready
       ? null
-      : { at, tabId, source, table: input.table, primaryKey: keyNames };
+      : {
+          at,
+          tabId,
+          source,
+          table: input.table,
+          primaryKey: keyNames,
+          shown: (row) => index.has(row),
+        };
 
-  return { tabId, source, edits, rows: shown.rows, isStaged, editing, readOnly, target };
+  const sorted = useMemo(
+    () => sendable({ shown: (row) => !ready || index.has(row) }, edits.staged),
+    [edits.staged, index, ready]
+  );
+
+  return {
+    tabId,
+    source,
+    edits,
+    rows: shown.rows,
+    isStaged,
+    editing,
+    readOnly,
+    target,
+    sorted,
+    keyNames: keyNames ?? [],
+  };
 };

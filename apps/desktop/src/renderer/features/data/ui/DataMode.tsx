@@ -98,6 +98,8 @@ const Shown = ({
   return <Workbench slot={{ at: { hostKey, sessionId }, hostKey, workspaceId }} />;
 };
 
+export { openEditsShelf } from "./table/edits/store.ts";
+
 export const DataMode = () => {
   const { hostKey, workspaceId, sessionId } = useSelection();
 

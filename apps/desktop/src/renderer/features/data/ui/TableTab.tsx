@@ -154,6 +154,7 @@ export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
     source,
     columns: names,
     rows: pages.rows,
+    ready: pages.status === "ready",
   });
 
   /** Another schema's table keeps its schema in the title; so does every table where this one does. */

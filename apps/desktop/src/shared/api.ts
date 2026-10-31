@@ -153,6 +153,9 @@ export interface IpcError {
   /** One-based position in the submitted SQL, or a database-reported line. */
   readonly position?: number;
   readonly line?: number;
+  /** A grid commit's refused cells, and the key of the row whose update failed. */
+  readonly conflicts?: ReadonlyArray<import("@polaris/protocol").DataEditConflict>;
+  readonly row?: ReadonlyArray<import("@polaris/protocol").DataValue>;
   /** A Constellation refusal's findings, so the renderer can word each by its code. */
   readonly findings?: ReadonlyArray<IpcFinding>;
 }

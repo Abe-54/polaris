@@ -3,8 +3,17 @@
  * edits with Discard and Commit ⌘S, "Add n rows to agent session ⌘L" for the selected rows, and
  * Copy as CSV (the selection, else every row).
  */
-import { Button, CopyButton, EmptyState, Kbd, PixelServerIcon, useCopyWrite } from "@polaris/ui";
+import {
+  Button,
+  CopyButton,
+  EmptyState,
+  Kbd,
+  PixelServerIcon,
+  showToast,
+  useCopyWrite,
+} from "@polaris/ui";
 import { useEffect, useMemo, useRef } from "react";
+import type { GridEditing } from "../../grid/DataGrid.tsx";
 import { commandShortcut } from "../../../../../shared/keymap.ts";
 import { useCommands } from "../../../../shell/hooks.ts";
 import { useDataApi } from "../../data/hooks.tsx";
@@ -18,8 +27,10 @@ import type { DataSessionKey } from "../../model/store.ts";
 import { openConnectionCard } from "../connection/cardStore.ts";
 import { cancelCommit, requestCommit, runCommit, writesBlocked } from "./edits/commit.ts";
 import { ConfirmCommit } from "./edits/ConfirmCommit.tsx";
+import { Conflicts } from "./edits/Conflicts.tsx";
+import { changesLabel, countStaged } from "./edits/staged.ts";
 import { CommitError, StagedBar } from "./edits/StagedBar.tsx";
-import { discardEdits } from "./edits/store.ts";
+import { discardEdits, dropEdit, overwriteEdit, restoreEdits } from "./edits/store.ts";
 import type { useTableEdits } from "./edits/useTableEdits.ts";
 import { type Pages, ROW_CAP } from "./usePages.ts";
 
@@ -72,7 +83,7 @@ export const TableData = (props: TableDataProps) => {
   const addChosen = () => add({ source, from, columns, rows });
   const target = edit.target;
   const commit = () => (target === null ? undefined : requestCommit(api, target));
-  const staged = edit.edits.staged.cells.size;
+  const staged = edit.sorted.changed.length > 0 ? 0 : edit.sorted.send.size;
   const latest = useRef({ addChosen, count: plan.rows, commit, staged });
 
   latest.current = { addChosen, count: plan.rows, commit, staged };
@@ -92,10 +103,30 @@ export const TableData = (props: TableDataProps) => {
     [commands]
   );
 
+  // ⌘S in an open editor stages its draft first, then commits what the store holds by then.
+  const editing = useMemo(
+    (): GridEditing => ({ ...edit.editing, onCommit: () => latest.current.commit() }),
+    [edit.editing]
+  );
+
   const csv = () => toCsv(columns, picked.length > 0 ? chosen() : shown);
 
   const blockedByWrites =
     edit.target === null && edit.source !== null && writesBlocked(edit.source) !== null;
+
+  /** Discard drops every staged edit; more than one can come back from the toast's Undo. */
+  const discard = () => {
+    const discarded = discardEdits(at, edit.tabId);
+
+    if (discarded.cells.size < 2) return;
+    showToast({
+      source: "starlight",
+      icon: <PixelServerIcon size={16} />,
+      title: `Discarded ${changesLabel(countStaged(discarded))}`,
+      message: "Nothing was written to the database.",
+      action: { label: "Undo", onAction: () => restoreEdits(at, edit.tabId, discarded) },
+    });
+  };
 
   return (
     <>
@@ -104,7 +135,7 @@ export const TableData = (props: TableDataProps) => {
         columns={columns}
         rows={shown}
         isStaged={edit.isStaged}
-        editing={edit.editing}
+        editing={editing}
         selection={selection}
         onSelectionChange={props.onSelectionChange}
         onForeignKey={props.onForeignKey}
@@ -120,7 +151,14 @@ export const TableData = (props: TableDataProps) => {
           ) : undefined
         }
       />
-      <CommitError edits={edit.edits} />
+      <Conflicts
+        sorted={edit.sorted}
+        keyNames={edit.keyNames}
+        disabled={edit.edits.commit.status === "committing"}
+        onOverwrite={(cells) => overwriteEdit(at, edit.tabId, cells)}
+        onDrop={(ids) => dropEdit(at, edit.tabId, ids)}
+      />
+      <CommitError edits={edit.edits} keyNames={edit.keyNames} />
       <footer
         data-testid="data-table-footer"
         className="border-hairline text-caption text-text-subtle flex h-11 shrink-0 items-center gap-3 border-t px-3.5"
@@ -130,9 +168,10 @@ export const TableData = (props: TableDataProps) => {
         </span>
         <StagedBar
           edits={edit.edits}
+          sorted={edit.sorted}
           readOnly={edit.readOnly}
           onConnection={blockedByWrites ? openConnectionCard : null}
-          onDiscard={() => discardEdits(at, edit.tabId)}
+          onDiscard={discard}
           onCommit={commit}
         />
         <Button
@@ -161,7 +200,7 @@ export const TableData = (props: TableDataProps) => {
           source={target.source}
           table={target.table.name}
           primaryKey={target.primaryKey}
-          staged={edit.edits.staged}
+          staged={{ cells: edit.sorted.send }}
           onCancel={() => cancelCommit(at, edit.tabId)}
           onConfirm={() => void runCommit(api, target)}
         />

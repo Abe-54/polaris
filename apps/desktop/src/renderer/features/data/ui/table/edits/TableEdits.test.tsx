@@ -1,144 +1,29 @@
-import "../../../../../test/dom.testing.ts";
-import { DataSource, DataWriteResult, TableDetail } from "@polaris/protocol";
-import { TooltipProvider } from "@polaris/ui";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
+import { DataSource, TableDetail } from "@polaris/protocol";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { expect, test } from "bun:test";
 import { Schema } from "effect";
-import { createStore } from "zustand/vanilla";
-import { createCommandRegistry } from "../../../../../routes/commands.ts";
-import { createNavigation } from "../../../../../routes/navigation.ts";
-import { AppProvider } from "../../../../../shell/hooks.ts";
-import { type AppState, initialState } from "../../../../../store/store.ts";
-import type { CommitEditsInput, DataApi } from "../../../data/api.ts";
-import { DataLayer } from "../../../data/hooks.tsx";
 import { NO_KEY } from "../../../grid/editors.ts";
-import { cellOf } from "../../../grid/value.ts";
-import { dataTabsStore, openTable, useDataTabs } from "../../../model/store.ts";
-import { type DataTab, tableTabId } from "../../../model/tabs.ts";
+import { cellOf, displayOf } from "../../../grid/value.ts";
+import { openTable } from "../../../model/store.ts";
 import { fixtureDataApi } from "../../../preview/fixtureApi.ts";
-import { FIXTURE_INVOICES, FIXTURE_SESSIONS, FIXTURE_SOURCES } from "../../../preview/fixtures.ts";
-import { dataHost } from "../../../preview/scene.ts";
-import { ConnectionBar } from "../../ConnectionBar.tsx";
-import { TableTabBody } from "../../TableTab.tsx";
-import { TabStrip } from "../../TabStrip.tsx";
-import { tableViews } from "../state.ts";
+import { FIXTURE_INVOICES, FIXTURE_SOURCES } from "../../../preview/fixtures.ts";
+import {
+  cell,
+  editCell,
+  footer,
+  grid,
+  installGridHarness,
+  at,
+  INVOICES,
+  ledger,
+  loaded,
+  mount,
+  recording,
+  tabOn,
+} from "./edits.testing.tsx";
 import { editsStore } from "./store.ts";
 
-const SIZES = { offsetWidth: 1400, offsetHeight: 800 } as const;
-
-const originals = Object.keys(SIZES).map(
-  (key) => [key, Object.getOwnPropertyDescriptor(HTMLElement.prototype, key)] as const
-);
-
-// happy-dom has no layout: give every element the viewport the virtualizer measures.
-beforeAll(() => {
-  for (const [key, size] of Object.entries(SIZES))
-    Object.defineProperty(HTMLElement.prototype, key, { configurable: true, get: () => size });
-});
-
-afterAll(() => {
-  for (const [key, descriptor] of originals)
-    if (descriptor !== undefined) Object.defineProperty(HTMLElement.prototype, key, descriptor);
-});
-
-afterEach(() => {
-  cleanup();
-  tableViews.setState({}, true);
-  dataTabsStore.setState({ sessions: {}, shown: null });
-  editsStore.setState({ tabs: {}, closing: null });
-});
-
-const host = dataHost();
-
-const at = { hostKey: host.key, sessionId: FIXTURE_SESSIONS.overdue.id };
-
-const INVOICES = { schema: "public", name: "invoices" };
-
-const tabOn = (sourceId: string, name = "invoices"): Extract<DataTab, { kind: "table" }> => {
-  const ref = { schema: "public", name };
-
-  return { kind: "table", id: tableTabId(sourceId, ref), sourceId, table: name, ref };
-};
-
-/** A fixture Host that records each `data.edits.commit`. */
-const recording = (base: DataApi = fixtureDataApi()) => {
-  const sent: Array<CommitEditsInput> = [];
-
-  const api: DataApi = {
-    ...base,
-    commitEdits: async (_at, input) => {
-      sent.push(input);
-
-      return {
-        ok: true,
-        value: new DataWriteResult({ queryId: "q", affected: input.edits.length, elapsedMs: 3 }),
-      };
-    },
-  };
-
-  return { api, sent };
-};
-
-const Tabs = () => <TabStrip at={at} state={useDataTabs(at)} />;
-
-const mount = (api: DataApi, tab = tabOn("app"), extra: "strip" | "bar" | null = null) => {
-  const store = createStore<AppState>(() => ({ ...initialState, density: "calm", hosts: [host] }));
-  const commands = createCommandRegistry({ platform: "mac" });
-
-  // Data mode is showing, as the shell says when ⌘4 is up.
-  commands.provide(() => ({ keys: ["mode.data"] }));
-
-  render(
-    <AppProvider
-      value={{
-        connection: {
-          store,
-          openSession: () => () => undefined,
-          setDensity: () => undefined,
-          setAppearance: () => undefined,
-        },
-        navigation: createNavigation({ app: store, storage: null }),
-        commands,
-      }}
-    >
-      <TooltipProvider>
-        <DataLayer api={api}>
-          {extra === "strip" ? <Tabs /> : null}
-          {extra === "bar" ? (
-            <ConnectionBar at={at} hostKey={host.key} workspaceId="w" active={tab} />
-          ) : null}
-          <TableTabBody at={at} tab={tab} />
-        </DataLayer>
-      </TooltipProvider>
-    </AppProvider>
-  );
-
-  return commands;
-};
-
-const footer = () => screen.getByTestId("data-table-footer").textContent ?? "";
-
-const cell = (row: number, col: number) => {
-  const found = document.querySelector<HTMLElement>(`[data-row="${row}"] [data-col="${col}"]`);
-
-  if (found === null) throw new Error(`no cell at ${row}, ${col}`);
-
-  return found;
-};
-
-const grid = () => screen.getByTestId("data-grid");
-
-const loaded = () => waitFor(() => expect(footer()).toContain(`${FIXTURE_INVOICES.length} rows`));
-
-/** Selects the cell, presses ↵ (or another key) and types `value` into its editor. */
-const editCell = (row: number, col: number, value: string, key = "Enter") => {
-  fireEvent.mouseDown(cell(row, col), { button: 0 });
-  fireEvent.keyDown(grid(), { key });
-  const field = screen.getByTestId("data-cell-editor-field");
-
-  fireEvent.change(field, { target: { value } });
-  fireEvent.keyDown(field, { key: "Enter" });
-};
+installGridHarness();
 
 test("↵ edits a cell; ↵ again stages it in tan and the footer counts it; ⌘Z takes it back", async () => {
   mount(recording().api);
@@ -210,8 +95,18 @@ test("⌘S commits every staged cell through data.edits.commit, keyed by the pri
       table: INVOICES,
       primaryKey: ["id"],
       edits: [
-        { key: [FIXTURE_INVOICES[0]?.[0] ?? null], column: "number", value: "INV-9999" },
-        { key: [FIXTURE_INVOICES[2]?.[0] ?? null], column: "status", value: "written-off" },
+        {
+          key: [FIXTURE_INVOICES[0]?.[0] ?? null],
+          column: "number",
+          before: FIXTURE_INVOICES[0]?.[1] ?? null,
+          value: "INV-9999",
+        },
+        {
+          key: [FIXTURE_INVOICES[2]?.[0] ?? null],
+          column: "status",
+          before: FIXTURE_INVOICES[2]?.[3] ?? null,
+          value: "written-off",
+        },
       ],
     },
   ]);
@@ -220,10 +115,17 @@ test("⌘S commits every staged cell through data.edits.commit, keyed by the pri
   expect(cell(0, 1).dataset["staged"]).toBeUndefined();
 });
 
-test("a failed commit shows its E-DATA code and fix and keeps the edits staged", async () => {
+test("a failed commit names the row in the user's words, never the agent's fix, and keeps the edits", async () => {
+  const id = FIXTURE_INVOICES[0]?.[0] ?? null;
+
   mount(
     fixtureDataApi({
-      commitError: { code: "E-DATA-SQL", message: "value too long", fix: "Shorten the value." },
+      commitError: {
+        code: "E-DATA-SQL",
+        message: "value too long for type character varying(8)",
+        fix: "Check the statement and parameter types.",
+        row: [id],
+      },
     })
   );
   await loaded();
@@ -232,12 +134,12 @@ test("a failed commit shows its E-DATA code and fix and keeps the edits staged",
 
   const error = await screen.findByTestId("data-commit-error");
 
-  expect(error.textContent).toContain("E-DATA-SQL");
-  expect(error.textContent).toContain("Shorten the value.");
+  expect(error.textContent).toBe(
+    `E-DATA-SQL · Commit failed · The database refused the change on id = ${displayOf(cellOf(id))}: value too long for type character varying(8)` +
+      "Correct the value or drop the edit, then commit again. Your edits are still staged."
+  );
   expect(footer()).toContain("1 change staged · 1 row");
 });
-
-const ledger = FIXTURE_SOURCES.find((s) => s.name === "ledger");
 
 test("a bulk commit to a remote source confirms on a card in its label's colour; one row doesn't", async () => {
   const { api, sent } = recording();

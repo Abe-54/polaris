@@ -19,8 +19,8 @@ export interface GridCellProps {
   readonly value: DataValue | undefined;
   readonly col: number;
   readonly active: boolean;
-  /** A staged edit: the modified ground and inset ring (rule/git-is-a-letter). */
-  readonly staged?: boolean;
+  /** A staged edit: the modified ground and inset ring (rule/git-is-a-letter); a conflict fails. */
+  readonly staged?: boolean | "conflict";
   /** The row height, so one line centres without a wrapper. */
   readonly height: number;
 }
@@ -29,20 +29,29 @@ const BASE =
   "h-full shrink-0 overflow-hidden px-2.5 text-ellipsis whitespace-pre [contain:size_layout_style] [unicode-bidi:isolate]";
 
 /** Class names joined by hand: a cell renders thousands of times a second while scrolling. */
-const classes = (column: LaidColumn, flags: CellFlags, active: boolean, staged: boolean) => {
+const classes = (
+  column: LaidColumn,
+  flags: CellFlags,
+  active: boolean,
+  staged: boolean | "conflict"
+) => {
   let name = BASE;
+  const conflict = staged === "conflict";
 
   // The grid is mono, so its figures are already tabular: no OpenType feature to shape.
   if (column.numeric) name += " text-right";
 
-  if (staged) name += " bg-git-modified/12";
+  if (conflict) name += " bg-failed-fill";
+  else if (staged) name += " bg-git-modified/12";
 
   if (flags.placeholder) name += " text-text-faint italic";
+  else if (conflict) name += " text-failed-text";
   else if (staged) name += " text-git-modified-text";
   else if (flags.link) name += " text-starlight-text cursor-pointer hover:underline";
   else name += " text-text-default";
 
-  if (staged) name += " ring-1 ring-inset ring-git-modified/40";
+  if (conflict) name += " ring-1 ring-inset ring-failed/60";
+  else if (staged) name += " ring-1 ring-inset ring-git-modified/40";
   else if (active) name += " ring-1 ring-inset ring-starlight";
 
   return name;
@@ -82,7 +91,7 @@ export const GridCell = memo(function GridCell({
       aria-selected={active}
       data-col={col}
       data-kind={cell.kind}
-      data-staged={staged || undefined}
+      data-staged={staged === false ? undefined : String(staged)}
       data-fk={link || undefined}
       data-testid={link ? "data-fk" : undefined}
       aria-label={placeholder === null ? undefined : SPOKEN[placeholder]}
