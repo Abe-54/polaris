@@ -34,6 +34,7 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
     baselineStart: Schema.optionalKey(Schema.String),
   },
   List: { ...OnCheckout, filter: TraceFilter },
+  Overlap: { ...OnCheckout, start: Schema.String, end: Schema.String },
   Get: { ...OnCheckout, traceId: TraceIdPrefix },
   History: { ...OnCheckout, traceId: TraceIdPrefix, includeSpans: Schema.Boolean },
   Span: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },

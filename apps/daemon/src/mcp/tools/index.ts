@@ -11,6 +11,7 @@ import { memoryVisualizations, visualizeTool } from "./visualize.ts";
 import type { VisualizationLog } from "../tokens.ts";
 import { unavailableSessions, type SessionTools } from "../sessions/index.ts";
 import { dataTools } from "./data.ts";
+import { profileTool } from "./profile.ts";
 import { traceTools } from "./traces.ts";
 import { requestSecretTool } from "./secret.ts";
 import {
@@ -160,6 +161,7 @@ export const constellationTools = (
     ...historyTools(binding.sessionId, sessions),
     ...dataTools(binding.sessionId, sessions),
     ...traceTools(binding.sessionId, sessions),
+    profileTool(binding.sessionId, sessions),
     ...(options.visualize === false
       ? []
       : [visualizeTool(binding.sessionId, visualizationsFor(commands))]),

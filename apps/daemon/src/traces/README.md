@@ -141,10 +141,10 @@ counts omitted Spans under the text cap. Its full contract is `docs/specs/traces
 ## Phase 2 contracts (ENG-657)
 
 `packages/protocol/src/traces.ts` owns these additive contracts. The phase 1
-shapes and `traces` capability are unchanged. New RPCs currently return
-`Unsupported` until their owner lands them. `traces.compare` is implemented and
-advertised. Each owner
-replaces its handlers and advertises its capability when the implementation lands.
+shapes and `traces` capability are unchanged. Each owner replaces its default
+`Unsupported` handlers and advertises its capability when the implementation lands.
+`traces.compare` is implemented and advertised. Profiles supplies all three of its
+handlers and `traces.profiles`; see `profiles/README.md`.
 All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
 The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
 merged into `DaemonRpcs` alongside the unchanged phase 1 `TracesRpcs` group.

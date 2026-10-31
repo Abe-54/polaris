@@ -147,3 +147,50 @@ A filtered empty page returns zero traces; `E-TRACE-NONE` is reserved for an emp
 its fix names the session endpoint and Set up tracing. Current means the active Turn in the calling
 Agent Session; between Turns it selects unattributed traces. Explicit Turn numbers resolve only
 within the caller's Agent Session; `all` spans all sessions in the checkout.
+
+## `profile {command?, process?, id?, waitSeconds?}`
+
+Exactly one selector is required. `command` is an argv array beginning with Node or Bun
+(e.g. `["bun", "test", "invoice.test.ts"]`); it executes directly in the authenticated
+session's verified cwd (including package subfolders), without shell expansion. Storage and
+retention remain bound to the containing checkout root. `process` is the PID of a command this
+Daemon's Profiles service launched; it restarts that command with CPU profiling.
+`id` reads a retained recording. `waitSeconds` (1–120, default 30) bounds the wait for
+a command, not its lifetime: a long-running command returns `recording` and stays owned
+by the Daemon until it exits. Profiles are written on normal process exit; use `id` to
+read the completed recording. A restart returns the new `recording` immediately.
+
+Node receives `--cpu-prof` through `NODE_OPTIONS`, Bun through `BUN_OPTIONS`;
+`--cpu-prof-dir` is passed as a single argv element so directories with spaces work.
+The output directory is Daemon-owned and unique per recording under the checkout's
+profile directory. Existing runtime options and the original upstream tracing settings
+are preserved; each launch gets a fresh tracing overlay for the invoking Turn. No inspector attaches. A PID is never authority: only a live retained
+subprocess handle and the same canonical checkout authorize restart. Restart revalidates
+that the original cwd still resolves inside this checkout and the workspace is still trusted. Unknown PIDs,
+user shells and processes from a previous Daemon return `E-PROFILE-PROCESS-NOT-OWNED`:
+"Polaris didn't start this process"; the fix tells the agent to ask the user before
+restarting it. No command or restart is retried automatically.
+
+The single text block (at most 16,000 characters) starts with status, runtime, duration,
+profile id and the verified execution directory (`Profile.cwd`). A completed recording shows hot functions ranked by self time and by
+total time, in-project files first in each view, with `file:line`; the hottest stack;
+the absolute `.cpuprofile` path; and retained traces whose spans overlap the recording's
+wall-clock window. Lists state omitted counts and point to structuredContent or `id`.
+No overlap is a valid empty list, and never implies the command exported traces.
+
+`structuredContent`: `{profile, hotFunctions, hotPath, nodes, traces, traceCount}` for completed
+recordings (the first four fields are `ProfileDetail`); `{profile}` while recording or
+failed. Function indices and parent indices retain the protocol's original table order.
+`origin` is `command` or `restart`; `service` is the launch environment's `OTEL_SERVICE_NAME`
+when present, falling back to the instrumentation overlay's `POLARIS_OTEL_SERVICE_NAME`.
+Parsing and aggregation run in a worker, including 50 MB inputs.
+Overlapping traces are capped at 200, with their full retained match count in `traceCount`.
+Retained recordings follow the trace store's seven-day retention and a separate 200 MiB
+per-checkout budget covering raw artifacts and parsed details. Prune on access and
+completion; no idle polling. A single artifact over 64 MiB is refused. Reads never pin.
+
+Errors use the same `{code,message,fix}` envelope. `E-PROFILE-INVALID` means an unsupported
+command or malformed/oversized artifact; `E-PROFILE-NOT-FOUND` means an expired or foreign
+id; `E-PROFILE-UNAVAILABLE` means capture/storage unavailable; `E-PROFILE-RESTART-REFUSED`
+means execution policy refused the command, its directory changed, or the owned process
+could not stop within the restart deadline. Its fix names the required action.

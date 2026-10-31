@@ -43,6 +43,7 @@ export const WORKER_TOOL_NAMES = [
   "trace",
   "span",
   "compare",
+  "profile",
   "visualize",
 ];
 
@@ -69,6 +70,7 @@ export const LEAD_TOOL_NAMES = [
   "trace",
   "span",
   "compare",
+  "profile",
   "visualize",
 ];
 

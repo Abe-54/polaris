@@ -264,6 +264,7 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
     // The fff worker (apps/daemon/src/files/search/fff.ts) is its own entrypoint.
     join(daemonDir, "src", "files", "search", "fffWorker.ts"),
     join(daemonDir, "src", "traces", "worker.ts"),
+    join(daemonDir, "src", "traces", "profiles", "worker.ts"),
     "--compile",
     `--target=${target}`,
     "--minify",

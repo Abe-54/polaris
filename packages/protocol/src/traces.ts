@@ -361,6 +361,8 @@ export type ProfileId = typeof ProfileId.Type;
 
 /** One CPU recording of a process Polaris launched. Times are milliseconds, startedAt is UTC. */
 export const Profile = Schema.Struct({
+  /** Verified execution directory; may be a package subfolder. Never a restart authority. */
+  cwd: Schema.optionalKey(Schema.String),
   id: ProfileId,
   command: Schema.String,
   runtime: Schema.Literals(["node", "bun"]),
