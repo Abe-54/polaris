@@ -5,6 +5,7 @@ import {
   TraceSessions,
   TraceStore,
   TracesRpcsLive,
+  TraceCompareRpcsLive,
 } from "../traces/index.ts";
 import { DataApprovals } from "../data/approvals.ts";
 import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
@@ -188,6 +189,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 export const daemonHandlers = Layer.mergeAll(
   DataRpcsLive,
   TracesRpcsLive,
+  TraceCompareRpcsLive,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -245,6 +247,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data.writes",
   "data.schemaDiff",
   "traces",
+  "traces.compare",
   "constellation",
   "constellation.defaults",
   "extensions",

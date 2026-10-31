@@ -7,4 +7,6 @@ export { TraceSessions } from "./sessions.ts";
 
 export { TraceReceiverLive, traceReceiver } from "./receiver.ts";
 
+export { TraceCompareRpcsLive } from "./rpcs.ts";
+
 export { TracesRpcsLive } from "./rpcs.ts";

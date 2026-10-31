@@ -1,5 +1,7 @@
 import {
   SpanIdPrefix,
+  TraceCompareSelector,
+  type TraceComparison,
   TraceIdPrefix,
   type SessionId,
   type TraceError,
@@ -10,6 +12,7 @@ import { Effect, Match, Option, Schema } from "effect";
 import type { SessionTools } from "../sessions/index.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 import { duration, inline, TRACE_CAP, traceView } from "./traceFormat.ts";
+import { compareView } from "./compareFormat.ts";
 import { spanView } from "./spanFormat.ts";
 
 export const TracesInput = Schema.Struct({
@@ -36,6 +39,11 @@ export interface TraceToolContext {
 }
 
 export interface TraceSessionTools {
+  readonly compare: (
+    sessionId: SessionId,
+    a: TraceCompareSelector,
+    b: TraceCompareSelector
+  ) => Effect.Effect<TraceComparison, TraceError>;
   readonly context: (
     sessionId: SessionId,
     input: TracesInput
@@ -212,6 +220,25 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
 
           return viewResult(
             spanView(result.detail, trace.summary.startTimeUnixNano, result.dataSource)
+          );
+        })
+    ),
+    make(
+      "compare",
+      "Compare route p50/p95 timings, counts and slowest new spans. Select two turns or two trace ids; omit a for earlier retained turns against turn b. Fewer than three samples on either side means no baseline.",
+      Schema.Struct({ a: Schema.optionalKey(TraceCompareSelector), b: TraceCompareSelector }),
+      (input, traces) =>
+        Effect.gen(function* () {
+          yield* traces.context(sessionId, { turn: "all" });
+
+          return viewResult(
+            compareView(
+              yield* traces.compare(
+                sessionId,
+                input.a ?? TraceCompareSelector.cases.Baseline.make({}),
+                input.b
+              )
+            )
           );
         })
     ),

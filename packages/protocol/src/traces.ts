@@ -221,6 +221,7 @@ export type TraceFilter = typeof TraceFilter.Type;
 
 export class TraceError extends Schema.TaggedError<TraceError>()("TraceError", {
   code: Schema.Literals([
+    "E-INPUT",
     "E-TRACE-NOT-FOUND",
     "E-TRACE-AMBIGUOUS",
     "E-TRACE-NONE",
@@ -460,15 +461,16 @@ export const RestartWithProfiling = Rpc.make("profiles.restartWithProfiling", {
   error: ProfileErrors,
 });
 
-/** Tagged selectors avoid confusing a Turn id with a hex Trace id. Both stay in the session's checkout. */
+/** Tagged selectors distinguish Turn ids and hex Trace ids; Baseline is only valid before a Turn. */
 export const TraceCompareSelector = Schema.TaggedUnion({
+  Baseline: {},
   Turn: { turnId: TurnId },
   Trace: { traceId: TraceIdPrefix },
 });
 
 export type TraceCompareSelector = typeof TraceCompareSelector.Type;
 
-/** Retained Trace root durations, nearest-rank percentiles. No samples means count 0 and null times. */
+/** Retained root durations, nearest-rank percentiles; fewer than three on either side gives null times. */
 export const TraceRouteStats = Schema.Struct({
   p50Ms: Schema.NullOr(Milliseconds),
   p95Ms: Schema.NullOr(Milliseconds),
@@ -481,13 +483,25 @@ export type TraceRouteStats = typeof TraceRouteStats.Type;
 export const TraceComparison = Schema.Struct({
   a: TraceCompareSelector,
   b: TraceCompareSelector,
-  /** Alphabetical service then route order. a is before, b is after; no implicit historical search. */
+  /** Alphabetical service then route order. Baseline is valid only as a, against a Turn b. */
   routes: Schema.Array(
     Schema.Struct({
       service: Schema.String,
       route: Schema.String,
       before: TraceRouteStats,
       after: TraceRouteStats,
+      /** Longest after Span with a new service/name/parent-name signature within this route. */
+      slowestNew: Schema.optionalKey(
+        Schema.Struct({
+          name: Schema.String,
+          service: Schema.String,
+          durationMs: Milliseconds,
+          traceId: TraceId,
+          spanId: SpanId,
+        })
+      ),
+      /** Partial traces are excluded from counts, percentiles and new-span detection. */
+      partial: Schema.optionalKey(Schema.Struct({ before: Count, after: Count })),
     })
   ),
 });

@@ -49,6 +49,7 @@ test("every mutating tool takes requestId; status doesn't", () => {
           "traces",
           "trace",
           "span",
+          "compare",
           // Its input is exactly VisualizeInput; a retry only shows the page again.
           "visualize",
         ].includes(tool.name),

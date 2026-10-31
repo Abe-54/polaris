@@ -1,6 +1,8 @@
 import { Schema } from "effect";
 import {
   TraceError,
+  TraceComparison,
+  TraceCompareSelector,
   TraceFilter,
   TraceIdPrefix,
   SpanIdPrefix,
@@ -24,6 +26,12 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
     signal: Schema.Literals(["traces", "logs"]),
     contentType: Schema.Literals(["application/json", "application/x-protobuf"]),
     context: IngestContext,
+  },
+  Compare: {
+    ...OnCheckout,
+    a: TraceCompareSelector,
+    b: TraceCompareSelector,
+    baselineStart: Schema.optionalKey(Schema.String),
   },
   List: { ...OnCheckout, filter: TraceFilter },
   Get: { ...OnCheckout, traceId: TraceIdPrefix },
@@ -58,6 +66,7 @@ export const TraceWorkerValue = Schema.Union([
   TraceDetail,
   SpanDetail,
   TraceHistory,
+  TraceComparison,
 ]);
 
 export type TraceWorkerValue = typeof TraceWorkerValue.Type;

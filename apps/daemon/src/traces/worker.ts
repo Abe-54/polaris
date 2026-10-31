@@ -12,6 +12,7 @@ import {
 } from "./database.ts";
 import { IngestError, MAX_QUEUED_BYTES, type DecodedBatch } from "./ingest.ts";
 import { getSpan, getTrace, linkTrace, listTraces, traceHistory } from "./queries.ts";
+import { compareTraces } from "./compareQuery.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
 
@@ -151,6 +152,15 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
 
     return records;
   }),
+  Match.tag("Compare", (request) =>
+    compareTraces(
+      prune(request.checkout),
+      request.checkout,
+      request.a,
+      request.b,
+      request.baselineStart
+    )
+  ),
   Match.tag("List", (request) =>
     listTraces(prune(request.checkout), request.checkout, request.filter)
   ),

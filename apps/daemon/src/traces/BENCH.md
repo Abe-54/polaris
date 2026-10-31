@@ -147,3 +147,44 @@ Raw results are under `docs/reviews/2026-10-31-traces-RT1/`: `before-idle.json`,
 `after-traces-before-close.json` and `retirement-diagnostic.json`.
 Initial sandbox runs could not bind sockets/sample processes; all numbers here
 come from native runs. No production Pi or full release build was run.
+
+## Turn comparison (ENG-660)
+
+2026-10-31, same Mac14,13 / M2 Max / Bun 1.4.4, one full run per side,
+sequentially under the Host's `bench` lease. Before is an isolated `git archive`
+of assigned base `c4a1ce26f2a8820181b874b28166ee809b8fba6f`; workspace dependency
+links resolve into that archive. After contains P8's compare implementation.
+Both run the existing 200k-Span receiver/SQLite/concurrent-RPC scenario and its
+32-second quiet window. This checks the shared ingest path, not compare-query
+latency. Compare adds only an on-demand worker request and no idle timer.
+
+Command on each source tree:
+
+```sh
+bun packages/bench/src/cli.ts traces --runs 1 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+```
+
+| Metric | Committed baseline | Assigned base | P8 |
+| --- | ---: | ---: | ---: |
+| Spans/s | 13,323 | 17,543 | 17,249 |
+| Ingest, ms | 15,012 | 11,400 | 11,595 |
+| CPU, % one core | 91.53 | 106.2 | 107.2 |
+| Peak RSS over initial, MiB | 153.1 | 202.7 | 184.5 |
+| RSS after quiet, MiB | 184.8 | 309.8 | 292.9 |
+| Concurrent RPC p99, ms | 16.34 | 3.78 | 3.00 |
+
+Both comparisons exit 1: the assigned base fails peak and post-quiet RSS gates;
+P8 fails the post-quiet gate. This reproduces the existing ENG-682 limitation on
+the unchanged base; the committed baseline is unchanged. These single runs do
+not establish a statistically reliable improvement or regression from P8.
+Background load was 2.8/2.4 busy cores; the committed baseline had 11.1, so its
+CPU and throughput comparison carries the runner's warning. The recorded
+one-minute load averages at benchmark start were 6.18 and 4.03.
+
+Logs and raw results from this run are `/private/tmp/p8-leased-bench-base.log`,
+`/private/tmp/p8-leased-bench-after.log`, `/private/tmp/p8-leased-base-bench.json`
+and `/private/tmp/p8-leased-after-bench.json`. An earlier quick run had different
+sizes and 11.9 busy cores and cannot serve as a before/after comparison. An
+initial full archived-base attempt failed because port 4319 was occupied and
+produced no metrics. No production Pi or compare-query latency measurement is
+claimed.

@@ -5,7 +5,14 @@ import { decideDeviceAccess } from "./deviceGrants.ts";
 import { Pairing } from "./extensions.ts";
 import { decideAccess } from "./grants.ts";
 import { PairingId } from "./ids.ts";
-import { Profile, TraceForwardTarget, TraceForwardUrl } from "./traces.ts";
+import {
+  Profile,
+  TraceComparison,
+  TraceCompareSelector,
+  TraceForwardTarget,
+  TraceForwardUrl,
+} from "./traces.ts";
+import { TurnId } from "./ids.ts";
 
 test("collector addresses exclude credentials and URL components that commonly carry tokens", () => {
   const accepts = Schema.is(TraceForwardUrl);
@@ -91,4 +98,55 @@ test("a Profile from a Daemon without origin or service still decodes; unknown o
   expect(decode(recording).origin).toBeUndefined();
   expect(decode({ ...recording, origin: "restart", service: "ledger-api" }).origin).toBe("restart");
   expect(() => decode({ ...recording, origin: "guess" })).toThrow();
+});
+
+test("compare wire round-trips legacy Turn pairs and additive Baseline/new-span evidence", () => {
+  const before = TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("before") });
+  const after = TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("after") });
+  const codec = Schema.fromJsonString(TraceComparison);
+  const json = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
+  const legacy = JSON.stringify({
+    a: before,
+    b: after,
+    routes: [
+      {
+        service: "api",
+        route: "POST /invoices",
+        before: { count: 5, p50Ms: 120, p95Ms: 130 },
+        after: { count: 5, p50Ms: 840, p95Ms: 900 },
+      },
+    ],
+  });
+
+  expect(json(Schema.encodeSync(codec)(Schema.decodeUnknownSync(codec)(legacy)))).toEqual(
+    json(legacy)
+  );
+
+  const evidence = {
+    name: "query",
+    service: "api",
+    durationMs: 700,
+    traceId: "1234567890abcdef1234567890abcdef",
+    spanId: "1234567890abcdef",
+  };
+
+  const additive = JSON.stringify({
+    a: TraceCompareSelector.cases.Baseline.make({}),
+    b: after,
+    routes: [
+      {
+        service: "api",
+        route: "POST /invoices",
+        before: { count: 2, p50Ms: null, p95Ms: null },
+        after: { count: 5, p50Ms: null, p95Ms: null },
+        slowestNew: evidence,
+        partial: { before: 1, after: 0 },
+      },
+    ],
+  });
+
+  expect(json(Schema.encodeSync(codec)(Schema.decodeUnknownSync(codec)(additive)))).toEqual(
+    json(additive)
+  );
 });
