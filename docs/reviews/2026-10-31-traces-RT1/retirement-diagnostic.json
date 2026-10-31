@@ -1,0 +1,102 @@
+{
+  "description": "Temporary instrumentation of actual Worker close and releaseMemory, plus native sampler two seconds later. Diagnostic code removed before final checks. Not a substitute for the failed RSS gate.",
+  "retirement": [
+    {
+      "label": "stop",
+      "at": 1793438445537,
+      "memory": {
+        "rss": 119030792,
+        "heapTotal": 21240832,
+        "heapUsed": 21166573,
+        "external": 5859997,
+        "arrayBuffers": 759223
+      },
+      "heapSize": 21166573
+    },
+    {
+      "label": "closed-before-release",
+      "at": 1793438445577,
+      "memory": {
+        "rss": 115557384,
+        "heapTotal": 21240832,
+        "heapUsed": 21166573,
+        "external": 5859997,
+        "arrayBuffers": 759223
+      },
+      "heapSize": 21166573
+    },
+    {
+      "label": "closed-after-release",
+      "at": 1793438445597,
+      "memory": {
+        "rss": 91112456,
+        "heapTotal": 21210112,
+        "heapUsed": 20812432,
+        "external": 5612208,
+        "arrayBuffers": 759223
+      },
+      "heapSize": 20812432
+    },
+    {
+      "label": "stop",
+      "at": 1793438525853,
+      "memory": {
+        "rss": 118998024,
+        "heapTotal": 21324800,
+        "heapUsed": 21159284,
+        "external": 5852788,
+        "arrayBuffers": 759223
+      },
+      "heapSize": 21159284
+    },
+    {
+      "label": "closed-before-release",
+      "at": 1793438525892,
+      "memory": {
+        "rss": 115508232,
+        "heapTotal": 21324800,
+        "heapUsed": 21159284,
+        "external": 5852788,
+        "arrayBuffers": 759223
+      },
+      "heapSize": 21159284
+    },
+    {
+      "label": "closed-after-release",
+      "at": 1793438525915,
+      "memory": {
+        "rss": 90670088,
+        "heapTotal": 21292032,
+        "heapUsed": 20809442,
+        "external": 5608994,
+        "arrayBuffers": 759223
+      },
+      "heapSize": 20809442
+    }
+  ],
+  "native": [
+    {
+      "at": 1793438527870,
+      "settled": {
+        "t": 42619.075625,
+        "rssBytes": 303988736,
+        "footprintBytes": 78513160,
+        "cpuNs": 0,
+        "cpuPct": 0,
+        "wakeups": 0,
+        "processes": 1
+      },
+      "procs": [
+        {
+          "pid": 89488,
+          "name": "bun",
+          "cpuNs": 11890634458.333332,
+          "wakeups": 1326,
+          "rssBytes": 303988736,
+          "footprintBytes": 78513160,
+          "childCpuNs": 332505666.6666666
+        }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import { TraceRuntime } from "./runtime.ts";
 import { postTraces, TEST_SESSION, withTraceFixture } from "./testing.ts";
 
 for (const readOnly of [false, true]) {
-  test(`Claude ${readOnly ? "reviewer" : "agent"} receives a live endpoint, revoked at scope close`, () =>
+  test(`Claude ${readOnly ? "reviewer" : "agent"} keeps its live endpoint after Harness retirement`, () =>
     withTraceFixture(async (f) => {
       const fake = new FakeClaude();
 
@@ -47,6 +47,8 @@ for (const readOnly of [false, true]) {
           }).pipe(Effect.provideService(TraceRuntime, f.runtime))
         )
       );
+      expect((await postTraces(endpoint)).status).toBe(200);
+      f.state.active = false;
       expect((await postTraces(endpoint)).status).toBe(401);
     }));
 
@@ -79,6 +81,8 @@ for (const readOnly of [false, true]) {
             "shell_environment_policy.set": { OTEL_EXPORTER_OTLP_ENDPOINT: f.endpoint },
           },
         });
+        expect((await postTraces(f.endpoint!)).status).toBe(200);
+        f.state.active = false;
         expect((await postTraces(f.endpoint!)).status).toBe(401);
       } finally {
         for (const fn of cleanup.splice(0)) fn();

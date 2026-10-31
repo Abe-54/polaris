@@ -13,10 +13,11 @@ import { ExportLogs, ExportTraces, type OtlpLog, type OtlpScope, type OtlpSpan }
 import { attributes, attributeValue, redactText } from "./redact.ts";
 import {
   IngestError,
+  serializeRecord,
   MAX_BATCH_RECORDS,
   MAX_QUEUED_BYTES,
   type IngestContext,
-  type TraceBatch,
+  type DecodedBatch,
 } from "./ingest.ts";
 
 interface GeneratedCodec {
@@ -244,7 +245,7 @@ export const decodeBatch = (
   signal: "traces" | "logs",
   contentType: string,
   context: IngestContext
-): TraceBatch => {
+): DecodedBatch => {
   const protobuf = contentType === "application/x-protobuf";
   const codec = codecs[signal];
 
@@ -259,7 +260,7 @@ export const decodeBatch = (
 
   // Bound the expanded records as they are built: resource attributes repeat in every record.
   const append = <A extends Span | LogRecord>(output: A[], record: A) => {
-    size += Buffer.byteLength(JSON.stringify(record));
+    size += serializeRecord(record).bytes;
     count++;
 
     if (size > MAX_QUEUED_BYTES || count > MAX_BATCH_RECORDS)
@@ -268,6 +269,6 @@ export const decodeBatch = (
   };
 
   return signal === "traces"
-    ? { spans: collectSpans(raw, context, protobuf, append), logs: [] }
-    : { spans: [], logs: collectLogs(raw, context, protobuf, append) };
+    ? { spans: collectSpans(raw, context, protobuf, append), logs: [], bytes: size }
+    : { spans: [], logs: collectLogs(raw, context, protobuf, append), bytes: size };
 };

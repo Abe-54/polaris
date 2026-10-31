@@ -10,7 +10,7 @@ import {
   writeBatch,
   type Retention,
 } from "./database.ts";
-import { IngestError, MAX_QUEUED_BYTES, type TraceBatch } from "./ingest.ts";
+import { IngestError, MAX_QUEUED_BYTES, type DecodedBatch } from "./ingest.ts";
 import { getSpan, getTrace, linkTrace, listTraces } from "./queries.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
@@ -23,7 +23,7 @@ let retention: Retention = DEFAULT_RETENTION;
 
 let flushMs = 25;
 
-let pending: TraceBatch[] = [];
+let pending: DecodedBatch[] = [];
 
 let pendingBytes = 0;
 
@@ -41,7 +41,7 @@ const storageError = () =>
   });
 
 const database = (): Database => {
-  if (db === null || failed) throw storageError();
+  if (db === null) throw storageError();
 
   return db;
 };
@@ -65,6 +65,7 @@ const flush = (): void => {
         pruneCheckout(store, checkout, retention, Date.now());
       }
     })();
+    failed = false;
     pending = [];
     pendingBytes = 0;
     pendingRecords = 0;
@@ -72,9 +73,6 @@ const flush = (): void => {
     changed();
   } catch {
     failed = true;
-    pending = [];
-    pendingBytes = 0;
-    pendingRecords = 0;
     throw storageError();
   }
 };
@@ -117,21 +115,39 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
   }),
   Match.tag("Ingest", (request) => {
     database();
-    const batch = decodeBatch(request.bytes, request.signal, request.contentType, request.context);
-    let bytes = 0;
 
-    for (const record of [...batch.spans, ...batch.logs]) {
-      bytes += Buffer.byteLength(JSON.stringify(record));
+    if (failed) flush();
+    let batch: DecodedBatch;
 
-      if (pendingBytes + bytes > MAX_QUEUED_BYTES)
-        throw new IngestError(429, "Trace ingest queue is full");
+    try {
+      batch = decodeBatch(request.bytes, request.signal, request.contentType, request.context);
+    } catch (cause) {
+      if (cause instanceof IngestError) throw cause;
+      throw new IngestError(400, "The OTLP batch could not be decoded.");
     }
+
+    const bytes = batch.bytes;
+
+    const checkoutBytes = pending.reduce(
+      (total, queued) =>
+        total +
+        ((queued.spans[0]?.polaris.checkout ?? queued.logs[0]?.polaris.checkout) ===
+        request.context.checkout
+          ? queued.bytes
+          : 0),
+      0
+    );
+
+    if (pendingBytes + bytes > MAX_QUEUED_BYTES || checkoutBytes + bytes > MAX_QUEUED_BYTES / 2)
+      throw new IngestError(429, "Trace ingest queue is full");
 
     pending.push(batch);
     pendingBytes += bytes;
     const records = batch.spans.length + batch.logs.length;
     pendingRecords += records;
-    scheduleFlush();
+
+    if (pendingRecords >= 1000) flush();
+    else scheduleFlush();
 
     return records;
   }),
@@ -157,12 +173,9 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
     return null;
   }),
   Match.tag("Close", () => {
-    try {
-      flush();
-    } finally {
-      db?.close();
-      db = null;
-    }
+    flush();
+    db?.close();
+    db = null;
 
     return null;
   }),
@@ -178,7 +191,7 @@ self.onmessage = (event: MessageEvent<unknown>) => {
     const value = handle(request);
     self.postMessage(TraceWorkerReply.cases.Success.make({ id, value }));
   } catch (cause) {
-    const status = cause instanceof IngestError ? cause.status : 400;
+    const status = cause instanceof IngestError ? cause.status : 503;
 
     const error =
       cause instanceof TraceError

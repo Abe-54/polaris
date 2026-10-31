@@ -7,6 +7,7 @@ import {
   type TracesSnapshot,
 } from "@polaris/protocol";
 import { polarisHome } from "../paths.ts";
+import { followTokenLifecycle } from "./tokenLifecycle.ts";
 import { TraceSessions } from "./sessions.ts";
 import { TraceStore } from "./store.ts";
 import { TraceTokenVault, TraceBinding } from "./tokens.ts";
@@ -41,7 +42,10 @@ export class TraceRuntime extends Context.Service<
       source: TraceEnvironment
     ) => Effect.Effect<Record<string, string>, TraceError>;
     readonly authenticate: (token: string) => Effect.Effect<IngestContext | null, TraceError>;
-    readonly setup: (sessionId: SessionId) => Effect.Effect<TraceSetup, TraceError>;
+    readonly setup: (
+      sessionId: SessionId,
+      includeEndpoint?: boolean
+    ) => Effect.Effect<TraceSetup, TraceError>;
     readonly checkout: (sessionId: SessionId) => Effect.Effect<string, TraceError>;
     readonly revokeSession: (sessionId: SessionId) => Effect.Effect<void>;
     readonly setAvailability: (value: TraceAvailability) => Effect.Effect<void>;
@@ -54,6 +58,7 @@ export class TraceRuntime extends Context.Service<
         const sessions = yield* TraceSessions;
         const store = yield* TraceStore;
         const vault = new TraceTokenVault(filename);
+        yield* followTokenLifecycle(vault);
 
         let availability: TraceAvailability = TraceAvailability.cases.Unavailable.make({
           code: "starting",
@@ -130,7 +135,7 @@ export class TraceRuntime extends Context.Service<
             return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context) };
           }),
           checkout: (id) => Effect.map(sessions.session(id), (context) => context.checkout),
-          setup: Effect.fnUntraced(function* (id) {
+          setup: Effect.fnUntraced(function* (id, includeEndpoint = true) {
             const userExported =
               (yield* vaultCall(() => vault.userExported(id))) ?? userExports(process.env);
 
@@ -142,7 +147,8 @@ export class TraceRuntime extends Context.Service<
             return {
               availability,
               userExported,
-              endpoint: enabled ? yield* endpoint(yield* sessions.session(id)) : null,
+              endpoint:
+                enabled && includeEndpoint ? yield* endpoint(yield* sessions.session(id)) : null,
             };
           }),
           setAvailability: (value) =>
