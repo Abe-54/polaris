@@ -78,6 +78,17 @@ describe("navigation", () => {
     expect(loadNav(null).workspaceId).toBeNull();
   });
 
+  test("Data stays open across a Workspace switch and a relaunch", async () => {
+    const storage = memoryStorage();
+    const nav = createNavigation({ app: withData({ local: 3 }), storage });
+
+    nav.actions.setMode("data");
+    nav.actions.selectShortcut(2);
+    expect(nav.current().mode).toBe("data");
+    await Bun.sleep(350);
+    expect(loadNav(storage).mode).toBe("data");
+  });
+
   test("the resolved selection is the same object until it changes", () => {
     const nav = createNavigation({ app: withData({ local: 2 }), storage: null });
     const first = nav.current();

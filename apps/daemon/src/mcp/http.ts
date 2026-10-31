@@ -10,6 +10,8 @@ import {
   attachVisualizations,
   constellationTools,
 } from "./tools.ts";
+import { DataSources, DataQueries } from "../data/index.ts";
+import { sessionDataTools } from "./sessions/data.ts";
 import { McpTokens } from "./tokens.ts";
 
 const Message = Schema.Struct({
@@ -136,8 +138,23 @@ export const mcpHttp = (
     const notifications: Notifier | null = Option.isSome(store) ? notifier(store.value) : null;
 
     // The same commands reach Claude's in-process tools, so they serve the session tools too.
-    if (Option.isSome(store) && notifications !== null)
-      attachSessionTools(commands, sessionTools(store.value, notifications, requestSecret));
+    const sources = yield* Effect.serviceOption(DataSources);
+    const queries = yield* Effect.serviceOption(DataQueries);
+
+    if (Option.isSome(store) && notifications !== null) {
+      const sessions = sessionTools(store.value, notifications, requestSecret);
+
+      const data =
+        Option.isSome(sources) && Option.isSome(queries)
+          ? sessionDataTools(store.value, sources.value, queries.value)
+          : undefined;
+
+      attachSessionTools(
+        commands,
+        Object.assign(sessions, data === undefined ? undefined : { data })
+      );
+    }
+
     attachVisualizations(commands, tokens.visualizations);
 
     const server = yield* Effect.acquireRelease(

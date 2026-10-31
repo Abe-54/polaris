@@ -613,7 +613,7 @@ export interface SubscriptionListener<A> {
 
 // ── App events ──────────────────────────────────────────────────────────────
 
-export type Route = "orchestrate" | "review" | "edit";
+export type Route = "orchestrate" | "review" | "edit" | "data";
 
 export type AppEvent =
   | {

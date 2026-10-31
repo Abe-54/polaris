@@ -59,6 +59,7 @@ export const TitleBar = () => {
         ) : undefined,
     },
     { value: "edit", label: "Edit" },
+    { value: "data", label: "Data" },
   ];
 
   return (
