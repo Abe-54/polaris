@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { BackgroundTask, CommandId, DomainEvent, SessionId, TurnItem } from "@polaris/protocol";
 import { Effect, Fiber, Predicate } from "effect";
 import { finish, send, session, signal, WORKER } from "../../constellation/delivery/testing.ts";
-import { EventStore } from "../../store/EventStore.ts";
+import { EventStore, LiveItem } from "../../store/EventStore.ts";
 import { NotifyOutcome, WaitOutcome, sessionTools, TRANSCRIPT_LIMIT } from "./index.ts";
 import { notifier, NOTIFY_INTERVAL_MS } from "./notify.ts";
 
@@ -163,6 +163,48 @@ test("waiting returns when the watched background command finishes, with its out
   expect(finished.map((f) => f.task.id)).toEqual(["c1"]);
   expect(finished[0]?.command?.output).toBe("12 pass");
 });
+
+test("waiting for a command skips Deltas and unrelated Session events", () =>
+  run(
+    Effect.gen(function* () {
+      const store = yield* created;
+      yield* send(WORKER);
+      yield* signal(WORKER, { type: "harness.opened" });
+      yield* tasks("c1");
+      const turnId = (yield* store.model).sessions.get(WORKER)!.turns.at(-1)!.id;
+      let reads = 0;
+
+      const waiting = yield* Effect.forkChild(
+        sessionTools({
+          ...store,
+          model: Effect.tap(store.model, () => Effect.sync(() => reads++)),
+        }).waitForCommand(WORKER, { task: "c1", timeoutMs: 1000 })
+      );
+
+      yield* Effect.sleep(10);
+
+      for (let n = 0; n < 64; n++)
+        yield* store.publishEphemeral(
+          LiveItem.Delta({
+            sessionId: WORKER,
+            turnId,
+            itemId: "streaming-message",
+            field: "text",
+            text: "delta",
+            subagentId: null,
+          })
+        );
+
+      yield* item(WORKER, command("c1", "12 pass"));
+      yield* Effect.sleep(10);
+      expect(reads).toBe(1);
+      yield* tasks();
+      const result = yield* Fiber.join(waiting);
+      expect(
+        WaitOutcome.$is("Finished")(result) ? result.finished.map((entry) => entry.task.id) : []
+      ).toEqual(["c1"]);
+    })
+  ));
 
 test("waiting times out with what still runs, and is idle when nothing runs", async () => {
   const [running, idle, missing] = await run(

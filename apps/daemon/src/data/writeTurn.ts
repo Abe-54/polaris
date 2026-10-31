@@ -1,6 +1,6 @@
 /** Turn end cancels the statement; settlement still records a COMMIT already in flight. */
 import { DataError, type SessionId, type TurnId } from "@polaris/protocol";
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Fiber, Predicate, Stream } from "effect";
 import { EventStore } from "../store/EventStore.ts";
 import { workingTurn } from "../store/model.ts";
 
@@ -36,7 +36,14 @@ export const duringWriteTurn = <A, E>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const commits = yield* store.subscribe();
+      const commits = yield* store.subscribe({
+        sessionId,
+        filter: (item) =>
+          Predicate.isTagged(item, "Event") &&
+          (Predicate.isTagged(item.envelope.event, "SessionStateChanged") ||
+            (Predicate.isTagged(item.envelope.event, "TurnEnded") &&
+              item.envelope.event.turn.id === turnId)),
+      });
 
       const active = Effect.map(store.model, (model) => {
         const record = model.sessions.get(sessionId);
