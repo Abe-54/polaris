@@ -56,7 +56,10 @@ export interface WaitOptions {
 
 import type { DataSessionTools } from "./data.ts";
 
+import type { TraceSessionTools } from "../tools/traces.ts";
+
 export interface SessionTools {
+  readonly traces?: TraceSessionTools;
   readonly data?: DataSessionTools;
   /** The session's Turns as text; null when this Daemon doesn't hold the session. */
   readonly transcript: (

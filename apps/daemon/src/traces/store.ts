@@ -4,7 +4,7 @@ import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect";
 import { TraceDetail, TraceError, TraceFilter, TraceSummary, SpanDetail } from "@polaris/protocol";
 import { polarisHome } from "../paths.ts";
 import { TraceWorkerClient, WorkerFailure, type TraceWorkerOptions } from "./workerClient.ts";
-import { TraceWorkerRequest } from "./workerProtocol.ts";
+import { TraceHistory, TraceWorkerRequest } from "./workerProtocol.ts";
 import { IngestError, type IngestContext } from "./ingest.ts";
 
 const TracePage = Schema.Struct({ traces: Schema.Array(TraceSummary), total: Schema.Number });
@@ -27,6 +27,11 @@ export class TraceStore extends Context.Service<
       traceId: string,
       spanId: string
     ) => Effect.Effect<SpanDetail, TraceError>;
+    readonly history: (
+      checkout: string,
+      traceId: string,
+      includeSpans?: boolean
+    ) => Effect.Effect<TraceHistory, TraceError>;
     readonly link: (checkout: string, traceId: string) => Effect.Effect<void, TraceError>;
     readonly watch: (
       checkout: string,
@@ -124,6 +129,11 @@ export class TraceStore extends Context.Service<
             read(TraceWorkerRequest.cases.Get.make({ checkout, traceId }), TraceDetail),
           span: (checkout, traceId, spanId) =>
             read(TraceWorkerRequest.cases.Span.make({ checkout, traceId, spanId }), SpanDetail),
+          history: (checkout, traceId, includeSpans = true) =>
+            read(
+              TraceWorkerRequest.cases.History.make({ checkout, traceId, includeSpans }),
+              TraceHistory
+            ),
           link: (checkout, traceId) =>
             Effect.asVoid(request(TraceWorkerRequest.cases.Link.make({ checkout, traceId }))),
           watch,

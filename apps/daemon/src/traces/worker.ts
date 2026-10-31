@@ -11,7 +11,7 @@ import {
   type Retention,
 } from "./database.ts";
 import { IngestError, MAX_QUEUED_BYTES, type TraceBatch } from "./ingest.ts";
-import { getSpan, getTrace, linkTrace, listTraces } from "./queries.ts";
+import { getSpan, getTrace, linkTrace, listTraces, traceHistory } from "./queries.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
 
@@ -143,6 +143,9 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
   ),
   Match.tag("Span", (request) =>
     getSpan(prune(request.checkout), request.checkout, request.traceId, request.spanId)
+  ),
+  Match.tag("History", (request) =>
+    traceHistory(prune(request.checkout), request.checkout, request.traceId, request.includeSpans)
   ),
   Match.tag("Link", (request) => {
     flush();

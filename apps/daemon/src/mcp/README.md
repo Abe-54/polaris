@@ -11,3 +11,10 @@ Create one scoped `mcpHttp(commands, port)` listener per Host, with `McpTokens.l
 Lead tools: plan, dispatch, review, answer, message, status, set_state, read_worker. Worker tools: block, progress, ask, claim, propose, message, status. Every catalog also has wait_for_command, notify and the history tools sessions, search_history and read_history (see `tools/README.md`). Review names a Task's latest Attempt and requires a revision; plan edit/cancel use Task revisions. Domain findings remain MCP `isError` results with their graph slice and current revision. The adapter never grants a worker approval, merges git branches or validates a Claim's git state: those are E/W/L's command-side responsibilities.
 
 The transport supports the installed MCP clients' 2025 Streamable HTTP revisions with JSON responses and no session ids. Tests connect the actual MCP SDK client through HTTP and in-memory Claude transports, exercise referenced Claim schemas, restart/revocation, role spoofing, malformed requests and loopback restrictions.
+
+The shared Data-tool tail also exposes read-only `traces`, `trace` and `span` on Plain, Lead and
+Worker bindings, including HTTP and Claude in-process transports. `sessions/traces.ts` resolves the
+caller through the Host's existing TraceSessions/TraceRuntime services and reads its TraceStore; it
+creates no second store or receiver. See `docs/specs/traces-tools-v1.md` for inputs, summary ordering,
+16,000-character text caps, structured results and actionable errors. Database Spans use DataSources
+only to name a unique matching target; inspecting a Span never connects to a database or pins a Trace.
