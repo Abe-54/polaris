@@ -4,13 +4,16 @@ import {
   DataWriteResult,
   QueryLogEntry,
   scrubCredentials,
+  scrubDataValue,
   type SessionId,
   type ExecuteDataInput,
   type CommitDataEdits,
 } from "@polaris/protocol";
-import { Effect, Predicate, Schema, Semaphore } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import type { EventStore } from "../store/EventStore.ts";
-import { duringWriteTurn } from "./writeTurn.ts";
+import { targetLocks } from "./writeLocks.ts";
+import { outcomeUnknown } from "./writeCommit.ts";
+import { duringWriteTurn, settleWrite } from "./writeTurn.ts";
 import { writeRequestKey, writeRequestHash } from "./writeIdentity.ts";
 import type { DataSources } from "./index.ts";
 import type { DataApprovals } from "./approvals.ts";
@@ -45,11 +48,18 @@ export const writeQueries = Effect.fnUntraced(function* (
   context: Context,
   store: EventStore["Service"]
 ) {
-  const lock = yield* Semaphore.make(1);
+  const withTarget = yield* Effect.sync(targetLocks);
 
   const resolve = Effect.fnUntraced(function* (input: { sessionId: SessionId; source: string }) {
     const resolved = yield* sources.resolve(input);
     const access = yield* approvals.read(resolved.source);
+
+    if (access.writes === "off")
+      return yield* new DataError({
+        code: "E-DATA-READ-ONLY",
+        message: "Writes are off for this data source.",
+        fix: "The user can allow writes for this target in Data.",
+      });
 
     if (
       resolved.source.locality === "remote" &&
@@ -97,17 +107,19 @@ export const writeQueries = Effect.fnUntraced(function* (
         Predicate.isTagged(error, "DataApprovalRequired")
           ? Effect.void
           : update({
-              state: "failed",
+              state:
+                Predicate.hasProperty(error, "code") && error.code === "E-DATA-OUTCOME-UNKNOWN"
+                  ? "unknown"
+                  : "failed",
               error: Predicate.hasProperty(error, "message")
                 ? scrubCredentials(String(error.message))
                 : "The write failed.",
             })
-      ),
-      Effect.onInterrupt(() => update({ state: "cancelled" }).pipe(Effect.ignore))
+      )
     );
   };
 
-  const execute = Effect.fnUntraced(function* (input: ExecuteInput) {
+  const execute = Effect.fnUntraced(function* (input: ExecuteInput, signal: AbortSignal) {
     const ctx = yield* context(input.sessionId, input);
 
     if (ctx.author.kind !== "agent")
@@ -154,11 +166,11 @@ export const writeQueries = Effect.fnUntraced(function* (
     if (previous?.status === "denied")
       return yield* denied(previous.reason || "The user denied this write.");
 
-    if (previous?.status === "started")
-      return yield* denied(
-        "This write already started. Its outcome may be unknown.",
-        "Inspect the Query Log and database before requesting another write."
-      );
+    if (previous?.status === "started" || previous?.status === "unknown")
+      return yield* outcomeUnknown();
+
+    if (previous?.status === "failed")
+      return yield* denied(previous.reason || "This write failed. Request a new preview.");
 
     if (previous?.status === "pending")
       return yield* new DataApprovalRequired({
@@ -188,20 +200,22 @@ export const writeQueries = Effect.fnUntraced(function* (
             sql: input.sql,
             params: input.params ?? [],
             dryRun: true,
+            signal,
           });
 
-          yield* log.put(
-            new QueryLogEntry({
-              ...fields(initial),
-              id: `${initial.id}:dry-run`,
-              source: { id: resolved.source.id, name: resolved.source.name },
-              target: targetKey(targetOf(resolved.source)),
-              sql: scrubCredentials(input.sql, known).slice(0, 32000),
-              state: "dry-run",
-              rows: preview.affected,
-              elapsedMs: performance.now() - started,
-            })
-          );
+          if (preview.previewed !== false)
+            yield* log.put(
+              new QueryLogEntry({
+                ...fields(initial),
+                id: `${initial.id}:dry-run`,
+                source: { id: resolved.source.id, name: resolved.source.name },
+                target: targetKey(targetOf(resolved.source)),
+                sql: scrubCredentials(input.sql, known).slice(0, 32000),
+                state: "dry-run",
+                rows: preview.affected,
+                elapsedMs: performance.now() - started,
+              })
+            );
 
           const approvalId = yield* approvals.writes.open(input.sessionId, turn, {
             target: targetOf(resolved.source),
@@ -212,6 +226,9 @@ export const writeQueries = Effect.fnUntraced(function* (
             queryId: initial.id,
             sql: scrubCredentials(input.sql, known).slice(0, 32000),
             reason: scrubCredentials(input.reason, known).slice(0, 4000),
+            params: (input.params ?? []).map((value) => scrubDataValue(value, known)),
+            previewed: preview.previewed !== false,
+            ...(preview.identity === undefined ? undefined : { identity: preview.identity }),
             affected: preview.affected,
             columns: preview.columns,
             before: preview.before,
@@ -268,8 +285,13 @@ export const writeQueries = Effect.fnUntraced(function* (
           sql: input.sql,
           params: input.params ?? [],
           dryRun: false,
-          expected: previous.request.dataWrite!.affected,
-        });
+          signal,
+          previewed: previous.request.dataWrite!.previewed,
+          ...(previous.request.dataWrite!.previewed === false
+            ? undefined
+            : { expected: previous.request.dataWrite!.affected }),
+          expectedIdentity: previous.request.dataWrite!.identity,
+        }).pipe(Effect.tapError((error) => approvals.writes.fail(approvalId, error)));
 
         const answer = new DataWriteResult({
           queryId: previous.request.dataWrite!.queryId,
@@ -294,7 +316,7 @@ export const writeQueries = Effect.fnUntraced(function* (
     );
   });
 
-  const commitEdits = Effect.fnUntraced(function* (input: EditsInput) {
+  const commitEdits = Effect.fnUntraced(function* (input: EditsInput, signal: AbortSignal) {
     const ctx = yield* context(input.sessionId);
     const resolved = yield* resolve(input);
 
@@ -322,7 +344,7 @@ export const writeQueries = Effect.fnUntraced(function* (
             target: targetKey(targetOf(resolved.source)),
           })
         );
-        const result = yield* editsEffect(pools, { ...resolved, edits: input });
+        const result = yield* editsEffect(pools, { ...resolved, edits: input, signal });
 
         const answer = new DataWriteResult({
           queryId: initial.id,
@@ -344,27 +366,46 @@ export const writeQueries = Effect.fnUntraced(function* (
 
   return {
     execute: (input: ExecuteInput) =>
-      lock.withPermits(1)(
-        Effect.gen(function* () {
-          yield* context(input.sessionId);
-          const key = writeRequestKey(input);
-          const prior = key === undefined ? undefined : yield* approvals.writes.lookup(key);
+      Effect.gen(function* () {
+        yield* context(input.sessionId);
+        const key = writeRequestKey(input);
+        const prior = key === undefined ? undefined : yield* approvals.writes.lookup(key);
 
-          if (prior && prior.request.dataWrite?.requestHash !== writeRequestHash(input))
-            return yield* denied(
-              "This requestId was already used with different write arguments.",
-              "Retry the original arguments, or use a new requestId for a new write."
+        if (prior && prior.request.dataWrite?.requestHash !== writeRequestHash(input))
+          return yield* denied(
+            "This requestId was already used with different write arguments.",
+            "Retry the original arguments, or use a new requestId for a new write."
+          );
+
+        if (prior?.result) return prior.result;
+        yield* context(input.sessionId, input);
+        const resolved = yield* sources.resolve(input);
+
+        return yield* withTarget(
+          targetKey(targetOf(resolved.source)),
+          Effect.gen(function* () {
+            yield* context(input.sessionId);
+            const key = writeRequestKey(input);
+            const prior = key === undefined ? undefined : yield* approvals.writes.lookup(key);
+
+            if (prior && prior.request.dataWrite?.requestHash !== writeRequestHash(input))
+              return yield* denied(
+                "This requestId was already used with different write arguments.",
+                "Retry the original arguments, or use a new requestId for a new write."
+              );
+
+            if (prior?.result) return prior.result;
+            const ctx = yield* context(input.sessionId, input);
+
+            if (ctx.author.kind !== "agent")
+              return yield* denied("An execute call needs an active agent turn.");
+
+            return yield* duringWriteTurn(store, input.sessionId, ctx.author.turn, (signal) =>
+              execute(input, signal)
             );
-
-          if (prior?.result) return prior.result;
-          const ctx = yield* context(input.sessionId, input);
-
-          if (ctx.author.kind !== "agent")
-            return yield* denied("An execute call needs an active agent turn.");
-
-          return yield* duringWriteTurn(store, input.sessionId, ctx.author.turn, execute(input));
-        })
-      ),
-    commitEdits,
+          })
+        );
+      }),
+    commitEdits: (input: EditsInput) => settleWrite((signal) => commitEdits(input, signal)),
   };
 });

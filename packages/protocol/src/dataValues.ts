@@ -128,7 +128,11 @@ export const dataJsonBytes = (value: Schema.Json): number =>
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 export const DataValueTags = Schema.TaggedUnion({
-  Bytes: { length: Count, preview: Schema.optionalKey(Schema.String) },
+  Bytes: {
+    length: Count,
+    preview: Schema.optionalKey(Schema.String),
+    base64: Schema.optionalKey(Schema.String),
+  },
   BigInt: { value: Schema.String },
   Numeric: { value: Schema.String },
   Json: { text: Schema.String },
@@ -172,14 +176,20 @@ export const scrubDataValue = (
   }
 
   return Match.value(value).pipe(
-    Match.tag("Bytes", (v) =>
-      v.preview === undefined
-        ? v
-        : DataValueTags.cases.Bytes.make({
-            length: v.length,
-            preview: scrubCredentials(v.preview, known),
-          })
-    ),
+    Match.tag("Bytes", (v) => {
+      const decoded =
+        v.base64 === undefined
+          ? undefined
+          : new TextDecoder().decode(Uint8Array.fromBase64(v.base64));
+
+      const safe = decoded === undefined || scrubCredentials(decoded, known) === decoded;
+
+      return DataValueTags.cases.Bytes.make({
+        length: v.length,
+        ...(safe && v.base64 !== undefined ? { base64: v.base64 } : undefined),
+        ...(v.preview === undefined ? undefined : { preview: scrubCredentials(v.preview, known) }),
+      });
+    }),
     Match.tag("BigInt", "Numeric", (v) => ({ ...v, value: scrubCredentials(v.value, known) })),
     Match.tag("Json", (v) => DataValueTags.cases.Json.make({ text: scrubJsonText(v.text, known) })),
     Match.tag("Timestamp", (v) =>

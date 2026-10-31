@@ -5,10 +5,13 @@
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@polaris/ui";
+import { Predicate } from "effect";
 import { memo, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
+import { CellEditor } from "./CellEditor.tsx";
 import { CellInspector } from "./CellInspector.tsx";
 import { type GridColumn, type LaidColumn, typeLabel } from "./columns.ts";
+import type { Editable } from "./editors.ts";
 import { GridCell } from "./GridCell.tsx";
 import { useLaidColumns } from "./layout.ts";
 import {
@@ -37,8 +40,10 @@ export interface DataGridProps {
   readonly selection: GridSelection;
   readonly onSelectionChange: (selection: GridSelection) => void;
   readonly onForeignKey?: (column: GridColumn, value: DataValue | undefined) => void;
-  /** Phase 2: whether a cell holds a staged edit. */
+  /** Whether a cell holds a staged edit. */
   readonly isStaged?: (row: number, col: number) => boolean;
+  /** Cells edit in place (↵, F2, double-click or typing); without it ↵ inspects. */
+  readonly editing?: GridEditing;
   /** ⌘C with rows selected. */
   readonly onCopy?: () => void;
   readonly label: string;
@@ -47,6 +52,26 @@ export interface DataGridProps {
   /** Scrolled within a hundred rows of the end: time for the next page. */
   readonly onNearEnd?: () => void;
 }
+
+export interface GridEditing {
+  /** How the cell edits, or why it can't (shown in the inspector ↵ opens instead). */
+  readonly editorAt: (at: CellAt) => Editable | string;
+  readonly onStage: (at: CellAt, value: DataValue) => void;
+  /** ⌘Z: takes back the last staged edit. */
+  readonly onUndo: () => void;
+}
+
+interface Editing {
+  readonly at: CellAt;
+  readonly editable: Editable;
+  readonly typed: string | null;
+}
+
+/** A printable key typed on a cell starts its edit over with that character. */
+const typedKey = (event: KeyboardEvent<HTMLDivElement>) =>
+  event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey && event.key !== " "
+    ? event.key
+    : null;
 
 const NEAR_END = 100;
 
@@ -174,6 +199,7 @@ export const DataGrid = ({
   onSelectionChange,
   onForeignKey,
   isStaged,
+  editing,
   onCopy,
   label,
   empty,
@@ -184,7 +210,8 @@ export const DataGrid = ({
   const height = GRID_ROW[density];
   const laid = useLaidColumns(columns, rows);
   const gutter = gutterWidth(rows.length);
-  const [inspect, setInspect] = useState<CellAt | null>(null);
+  const [inspect, setInspect] = useState<{ at: CellAt; note: string | null } | null>(null);
+  const [edit, setEdit] = useState<Editing | null>(null);
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -263,23 +290,51 @@ export const DataGrid = ({
     if (key === "a") onSelectionChange(selectAll(selection, rows.length));
     else if (key === "c" && onCopy !== undefined) onCopy();
     else if (key === "Enter" && selection.active !== null) follow(selection.active);
+    else if (key === "z" && editing !== undefined) editing.onUndo();
     else return false;
 
     return true;
   };
 
+  /** ↵, F2, a double-click or a typed key: the cell's editor, else the inspector with why not. */
+  const open = (at: CellAt, typed: string | null = null) => {
+    const how = editing?.editorAt(at);
+
+    if (how === undefined || Predicate.isString(how)) {
+      if (typed === null) setInspect({ at, note: how ?? null });
+
+      return;
+    }
+
+    if (typed !== null && how.kind === "bool") return;
+    setInspect(null);
+    setEdit({ at, editable: how, typed });
+  };
+
+  const closeEdit = () => {
+    setEdit(null);
+    scroller.current?.focus();
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const move = MOVES.get(event.key);
     const active = selection.active;
+    const typed = editing === undefined ? null : typedKey(event);
 
     if (move !== undefined) {
       event.preventDefault();
       arrow(move, event);
     } else if ((event.metaKey || event.ctrlKey) && chord(event.key)) {
       event.preventDefault();
-    } else if ((event.key === "Enter" || event.key === " ") && active !== null) {
+    } else if ((event.key === "Enter" || event.key === "F2") && active !== null) {
       event.preventDefault();
-      setInspect(active);
+      open(active);
+    } else if (event.key === " " && active !== null) {
+      event.preventDefault();
+      setInspect({ at: active, note: null });
+    } else if (typed !== null && active !== null) {
+      event.preventDefault();
+      open(active, typed);
     } else if (event.key === "Escape") {
       setInspect(null);
     }
@@ -295,7 +350,8 @@ export const DataGrid = ({
       : { row: Number(row.dataset["row"]), col: Number(cell.dataset["col"]) };
   };
 
-  const inspected = inspect === null ? undefined : laid[inspect.col];
+  const inspected = inspect === null ? undefined : laid[inspect.at.col];
+  const edited = edit === null ? undefined : laid[edit.at.col];
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -326,7 +382,11 @@ export const DataGrid = ({
           if (at !== null && event.target instanceof HTMLElement && event.target.dataset["fk"])
             follow(at);
         }}
-        onDoubleClick={(event) => setInspect(cellAt(event.target))}
+        onDoubleClick={(event) => {
+          const at = cellAt(event.target);
+
+          if (at !== null) open(at);
+        }}
         className="focus-visible:outline-starlight relative min-h-0 flex-1 overflow-auto overscroll-contain [contain:strict] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
       >
         <div
@@ -375,6 +435,23 @@ export const DataGrid = ({
             );
           })}
         </div>
+        {edit !== null && edited !== undefined && editing !== undefined ? (
+          <CellEditor
+            key={`${edit.at.row}:${edit.at.col}`}
+            column={edited}
+            editable={edit.editable}
+            value={rows[edit.at.row]?.[edit.at.col] ?? null}
+            typed={edit.typed}
+            top={rowVirtualizer.measurementsCache[edit.at.row]?.start ?? HEADER}
+            left={gutter + (colVirtualizer.measurementsCache[edit.at.col]?.start ?? 0)}
+            height={height}
+            onStage={(value) => {
+              editing.onStage(edit.at, value);
+              closeEdit();
+            }}
+            onCancel={closeEdit}
+          />
+        ) : null}
         {rows.length === 0 && empty !== undefined ? (
           <div className="absolute inset-x-0 top-[44px] bottom-0 grid place-items-center">
             {empty}
@@ -384,8 +461,9 @@ export const DataGrid = ({
       {inspect !== null && inspected !== undefined ? (
         <CellInspector
           column={inspected}
-          value={rows[inspect.row]?.[inspect.col]}
-          row={inspect.row}
+          value={rows[inspect.at.row]?.[inspect.at.col]}
+          row={inspect.at.row}
+          note={inspect.note}
           onClose={() => {
             setInspect(null);
             scroller.current?.focus();

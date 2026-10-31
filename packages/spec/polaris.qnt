@@ -1284,15 +1284,28 @@ module data_approvals_cards_mutant {
   run exposesDuplicateCardsTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1")).expect(not(safety))
 }
 
-/** Transactional writes: rollback before request, one-shot authority and count-drift rollback. */
+/** Writes bind safe previews to identity; COMMIT confirmation can be unknown. */
 module data_writes {
   type WriteState = { turn: bool, phase: str, dryRuns: int, approval: str,
-    claims: int, runs: int, affected: int, expected: int, value: int }
+    claims: int, runs: int, affected: int, expected: int, value: int,
+    safe: bool, triggers: bool, ddl: bool, previewed: bool, identity: str, expectedIdentity: str,
+    external: int, writes: bool, local: bool, readApproved: bool, sent: bool }
   var write: WriteState
   action init = write' = { turn: true, phase: "new", dryRuns: 0, approval: "none",
-    claims: 0, runs: 0, affected: 0, expected: 0, value: 0 }
-  action dryRun(n: int): bool = all { write.turn, write.phase == "new",
-    write' = { ...write, phase: "previewed", dryRuns: 1, expected: n } }
+    claims: 0, runs: 0, affected: 0, expected: 0, value: 0,
+    safe: true, triggers: false, ddl: false, previewed: false, identity: "same", expectedIdentity: "same",
+    external: 0, writes: true, local: true, readApproved: false, sent: false }
+  val admitted = write.writes and (write.local or write.readApproved)
+  action inspect(safe: bool, triggers: bool): bool = all { write.phase == "new",
+    write' = { ...write, safe: safe, triggers: triggers } }
+  action schemaChange = all { write.phase == "new", write' = { ...write, ddl: true } }
+  action policy(local: bool, writes: bool, approved: bool): bool = all { write.phase == "new",
+    write' = { ...write, local: local, writes: writes, readApproved: approved } }
+  action rows(identity: str): bool = write' = { ...write, identity: identity }
+  action dryRun(n: int): bool = all { write.turn, write.phase == "new", admitted, write.safe, not(write.triggers), not(write.ddl),
+    write' = { ...write, phase: "previewed", previewed: true, dryRuns: 1, expected: n, expectedIdentity: write.identity, external: if (write.safe and not(write.triggers)) 0 else 1 } }
+  action notPreviewed = all { write.turn, write.phase == "new", admitted, write.safe, (write.triggers or write.ddl),
+    write' = { ...write, phase: "previewed", previewed: false } }
   action request = all { write.turn, write.phase == "previewed",
     write' = { ...write, phase: "pending", approval: "pending" } }
   action waitExpired = write' = write
@@ -1300,26 +1313,38 @@ module data_writes {
     write' = { ...write, phase: "approved", approval: "approved" } }
   action deny = all { write.turn, write.phase == "pending",
     write' = { ...write, phase: "denied", approval: "denied" } }
-  action claim = all { write.turn, write.phase == "approved", write.claims == 0,
+  action claim = all { write.turn, write.phase == "approved", write.claims == 0, admitted,
     write' = { ...write, phase: "started", claims: 1 } }
+  def matches(n: int): bool = not(write.previewed) or (n == write.expected and write.identity == write.expectedIdentity)
   action execute(n: int): bool = all { write.turn, write.phase == "started", write.runs == 0,
-    write' = { ...write, phase: if (n == write.expected) "completed" else "failed",
-      runs: 1, affected: n, value: if (n == write.expected) n else 0 } }
+    write' = { ...write, phase: if (matches(n)) "completed" else "failed",
+      runs: 1, affected: n, value: if (matches(n)) n else 0 } }
+  action sendCommit = all { write.phase == "started", write.turn, write' = { ...write, sent: true } }
+  action confirm(n: int): bool = all { write.phase == "started", write.sent, matches(n),
+    write' = { ...write, phase: "completed", runs: 1, affected: n, value: n } }
+  action unknown(n: int): bool = all { write.phase == "started", write.sent,
+    write' = { ...write, phase: "unknown", runs: 1, affected: n, value: n } }
   action endTurn = write' = { ...write, turn: false,
-    phase: if (write.phase == "pending" or write.phase == "approved" or write.phase == "started") "denied" else write.phase,
+    phase: if (write.phase == "pending") "denied" else write.phase,
     approval: if (write.approval == "pending") "denied" else write.approval }
-  action restart = endTurn
+  action restart = write' = { ...write, turn: false,
+    phase: if (write.phase == "started") "unknown" else if (write.phase == "pending") "denied" else write.phase,
+    approval: if (write.approval == "pending") "denied" else write.approval }
   action retry = write' = write
   action step = {
     nondet n = Set(0,1,2).oneOf()
-    any { dryRun(n),request,waitExpired,allow,deny,claim,execute(n),endTurn,restart,retry }
+    nondet b = Set(true,false).oneOf()
+    any { schemaChange,inspect(b,b),policy(b,b,b),rows(if (b) "same" else "different"),dryRun(n),notPreviewed,
+      request,waitExpired,allow,deny,claim,execute(n),sendCommit,confirm(n),unknown(n),endTurn,restart,retry }
   }
   val safety = all {
     write.claims <= 1, write.runs <= write.claims,
     write.claims > 0 implies write.approval == "approved",
     write.approval == "denied" implies write.runs == 0,
-    write.approval != "none" implies write.dryRuns == 1,
-    write.value != 0 implies write.phase == "completed" and write.affected == write.expected,
+    write.approval != "none" implies (write.previewed or write.triggers or write.ddl),
+    write.dryRuns > 0 implies write.safe and not(write.triggers) and not(write.ddl) and write.external == 0,
+    write.value != 0 implies Set("completed","unknown").contains(write.phase),
+    write.phase == "completed" implies (not(write.previewed) or write.affected == write.expected),
     not(write.turn) implies write.phase != "pending"
   }
   run rollbackPreviewTest = init.then(dryRun(2)).expect(write.value == 0 and safety)
@@ -1329,14 +1354,26 @@ module data_writes {
     .then(endTurn).then(restart).then(retry).expect(write.phase == "completed" and write.runs == 1 and write.value == 1 and safety)
   run deniedNeverRunsTest = init.then(dryRun(2)).then(request).then(deny).then(retry)
     .expect(write.value == 0 and write.claims == 0 and write.runs == 0 and safety)
-  run turnEndDeniesTest = init.then(dryRun(2)).then(request).then(endTurn)
-    .expect(write.approval == "denied" and write.claims == 0 and safety)
-  run restartDeniesTest = init.then(dryRun(2)).then(request).then(restart)
-    .expect(write.approval == "denied" and write.claims == 0 and safety)
+  run turnEndDeniesTest = init.then(dryRun(2)).then(request).then(endTurn).expect(write.approval == "denied" and safety)
+  run restartDeniesTest = init.then(dryRun(2)).then(request).then(restart).expect(write.approval == "denied" and safety)
   run countDriftRollsBackTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(execute(2))
     .expect(write.phase == "failed" and write.value == 0 and safety)
-  run timeoutDoesNotRunTest = init.then(dryRun(1)).then(request).then(waitExpired)
-    .expect(write.phase == "pending" and write.runs == 0 and safety)
+  run identityDriftRollsBackTest = init.then(dryRun(2)).then(request).then(allow).then(rows("different")).then(claim).then(execute(2))
+    .expect(write.phase == "failed" and write.value == 0 and safety)
+  run triggerNotPreviewedTest = init.then(inspect(true,true)).then(notPreviewed).then(request).then(allow).then(claim).then(execute(2))
+    .expect(write.dryRuns == 0 and write.value == 2 and safety)
+  run ddlNotPreviewedTest = init.then(schemaChange).then(notPreviewed).then(request).then(allow).then(claim).then(execute(0))
+    .expect(write.dryRuns == 0 and write.phase == "completed" and safety)
+  run commitUnknownTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(sendCommit).then(unknown(1))
+    .then(retry).expect(write.phase == "unknown" and write.value == 1 and safety)
+  run endDuringCommitTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(sendCommit).then(endTurn).then(confirm(1))
+    .expect(write.phase == "completed" and write.value == 1 and safety)
+  run restartStartedTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(restart)
+    .expect(write.phase == "unknown" and safety)
+  run unsafePreviewRefusedTest = init.then(inspect(false,false)).then(retry).expect(write.dryRuns == 0 and write.external == 0 and safety)
+  run localWritesOffTest = init.then(policy(true,false,false)).then(retry).expect(not(admitted) and write.dryRuns == 0 and safety)
+  run remoteDefaultsOffTest = init.then(policy(false,false,true)).then(retry).expect(not(admitted) and safety)
+  run timeoutDoesNotRunTest = init.then(dryRun(1)).then(request).then(waitExpired).expect(write.phase == "pending" and write.runs == 0 and safety)
 }
 
 /** Schema Diff is a sidecar projection: target attribution never changes Session receipts. */

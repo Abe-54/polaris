@@ -131,7 +131,10 @@ const WaitingRow = ({ item, now, close }: ItemProps & { readonly item: WaitingSe
 
   return (
     <Row copy={copy} hint={here ? menuShortcut("approval.approve") : undefined}>
-      <ApproveDeny onApprove={() => void approve(target)} onDeny={() => void deny(target)} />
+      <ApproveDeny
+        onApprove={() => void approve(target, false, open)}
+        onDeny={() => void deny(target, open)}
+      />
     </Row>
   );
 };
@@ -184,7 +187,21 @@ const ConstellationRow = ({ group, item, now, close }: ConstellationRowProps) =>
 
     return (
       <Row copy={constellationCopy(group, item, now)}>
-        <ApproveDeny onApprove={() => void approve(target)} onDeny={() => void deny(target)} />
+        <ApproveDeny
+          onApprove={() =>
+            void approve(
+              target,
+              false,
+              opening(() => actions.selectSession(target))
+            )
+          }
+          onDeny={() =>
+            void deny(
+              target,
+              opening(() => actions.selectSession(target))
+            )
+          }
+        />
       </Row>
     );
   }

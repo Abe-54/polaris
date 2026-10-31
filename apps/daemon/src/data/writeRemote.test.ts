@@ -34,24 +34,26 @@ const remote = source("remote");
 
 const unexpected = () => Effect.die("Unexpected source mutation");
 
-const sources = Layer.succeed(
-  DataSources,
-  DataSources.of({
-    list: () => Effect.succeed([remote]),
-    refresh: () => Effect.succeed([remote]),
-    watch: () => Stream.empty,
-    resolve: () => Effect.succeed({ source: remote, connection, matchUrl: url }),
-    save: unexpected,
-    remove: unexpected,
-    label: unexpected,
-    access: unexpected,
-  })
-);
+const sources = (locality: "local" | "remote" = "remote") =>
+  Layer.succeed(
+    DataSources,
+    DataSources.of({
+      list: () => Effect.succeed([remote]),
+      refresh: () => Effect.succeed([remote]),
+      watch: () => Stream.empty,
+      resolve: () => Effect.succeed({ source: source(locality), connection, matchUrl: url }),
+      save: unexpected,
+      remove: unexpected,
+      label: unexpected,
+      access: unexpected,
+    })
+  );
 
-const services = DataQueries.layer.pipe(
-  Layer.provideMerge(Layer.merge(sources, QueryLog.layer)),
-  Layer.provideMerge(approvalLayer())
-);
+const services = (locality: "local" | "remote" = "remote") =>
+  DataQueries.layer.pipe(
+    Layer.provideMerge(Layer.merge(sources(locality), QueryLog.layer)),
+    Layer.provideMerge(approvalLayer())
+  );
 
 test("Local defaults and a one-request read grant cannot authorize a Remote write", () =>
   Effect.runPromise(
@@ -72,8 +74,8 @@ test("Local defaults and a one-request read grant cannot authorize a Remote writ
 
         yield* approvals.change(source("local"), "ask");
         expect(yield* Effect.flip(queries.execute(input))).toMatchObject({
-          code: "E-DATA-DENIED",
-          message: "Writes aren't allowed on this remote data source.",
+          code: "E-DATA-READ-ONLY",
+          message: "Writes are off for this data source.",
         });
         const required = yield* Effect.flip(approvals.require(input.sessionId, remote));
 
@@ -94,8 +96,8 @@ test("Local defaults and a one-request read grant cannot authorize a Remote writ
         expect(
           yield* Effect.flip(queries.execute({ ...input, approvalId: required.approvalId }))
         ).toMatchObject({
-          code: "E-DATA-DENIED",
-          message: "Writes aren't allowed on this remote data source.",
+          code: "E-DATA-READ-ONLY",
+          message: "Writes are off for this data source.",
         });
         yield* approvals.require(
           input.sessionId,
@@ -106,5 +108,43 @@ test("Local defaults and a one-request read grant cannot authorize a Remote writ
         expect((yield* queries.pageLog({ sessionId: input.sessionId })).entries).toEqual([]);
         expect((yield* events.model).sessions.get(input.sessionId)!.pending.size).toBe(0);
       })
-    ).pipe(Effect.provide(services))
+    ).pipe(Effect.provide(services()))
+  ));
+
+test("F2: Local writes off refuses execute and grid commits before dry-run or approval", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* seedDataSession;
+        const approvals = yield* DataApprovals;
+        const queries = yield* DataQueries;
+        const events = yield* EventStore;
+        yield* approvals.change(source("local"), "off");
+
+        const input = {
+          sessionId: started.session.id,
+          source: "app",
+          sql: "INSERT INTO t VALUES(1)",
+          reason: "test",
+          tool: "execute" as const,
+        };
+
+        expect(yield* Effect.flip(queries.execute(input))).toMatchObject({
+          code: "E-DATA-READ-ONLY",
+        });
+        expect(
+          yield* Effect.flip(
+            queries.commitEdits({
+              sessionId: input.sessionId,
+              source: "app",
+              table: { schema: "public", name: "t" },
+              primaryKey: ["id"],
+              edits: [{ key: [1], column: "v", value: 2 }],
+            })
+          )
+        ).toMatchObject({ code: "E-DATA-READ-ONLY" });
+        expect((yield* queries.pageLog({ sessionId: input.sessionId })).entries).toEqual([]);
+        expect((yield* events.model).sessions.get(input.sessionId)!.pending.size).toBe(0);
+      })
+    ).pipe(Effect.provide(services("local")))
   ));

@@ -53,6 +53,8 @@ export interface SessionModel {
   readonly pendingApprovals: ReadonlyArray<ApprovalRequest>;
   /** Secret Requests that ended while this feed was open, so their cards say how (ADR 0089). */
   readonly settledSecrets?: ReadonlyArray<SettledSecret>;
+  /** Write approvals answered or withdrawn while this feed was open: their cards collapse to a line. */
+  readonly settledWrites?: ReadonlyArray<SettledWrite>;
 }
 
 /** How a Secret Request ended: its value saved, declined, or withdrawn (a timeout too). */
@@ -61,6 +63,17 @@ export type SecretOutcome = "provided" | "declined" | "ended";
 export interface SettledSecret {
   readonly request: ApprovalRequest;
   readonly outcome: SecretOutcome;
+}
+
+/** How a write approval ended: allowed, denied with the user's reason, or withdrawn unanswered. */
+export type WriteOutcome =
+  | { readonly kind: "allowed" }
+  | { readonly kind: "denied"; readonly reason: string | null }
+  | { readonly kind: "expired"; readonly by: "harness" | "daemon" };
+
+export interface SettledWrite {
+  readonly request: ApprovalRequest;
+  readonly outcome: WriteOutcome;
 }
 
 export const emptySessionModel: SessionModel = {
@@ -126,14 +139,47 @@ const secretOutcomeOf = (decision: ApprovalDecision): SecretOutcome =>
     Match.orElse(() => "ended" as const)
   );
 
-/** Drops the request from pending; a Secret Request is kept, settled, so its card stays. */
-const settle = (model: SessionModel, requestId: string, outcome: SecretOutcome): SessionModel => {
+/** Older logs record a withdrawal as a Deny answered by "Harness" or "Daemon" (events.ts). */
+const legacyWithdrawn = (resolvedBy: string): "harness" | "daemon" | undefined => {
+  if (resolvedBy === "Harness") return "harness";
+
+  return resolvedBy === "Daemon" ? "daemon" : undefined;
+};
+
+const writeOutcomeOf = (decision: ApprovalDecision, resolvedBy: string): WriteOutcome => {
+  const legacy = legacyWithdrawn(resolvedBy);
+
+  return Match.value(decision).pipe(
+    Match.tag("Allow", (): WriteOutcome => ({ kind: "allowed" })),
+    Match.tag("Deny", ({ reason }): WriteOutcome =>
+      legacy === undefined ? { kind: "denied", reason } : { kind: "expired", by: legacy }
+    ),
+    Match.orElse((): WriteOutcome => ({ kind: "expired", by: "daemon" }))
+  );
+};
+
+interface Ending {
+  readonly secret: SecretOutcome;
+  readonly write: WriteOutcome;
+}
+
+/** Drops the request from pending; a Secret Request or a write is kept, settled, so its card stays. */
+const settle = (model: SessionModel, requestId: string, ending: Ending): SessionModel => {
   const request = model.pendingApprovals.find((r) => r.id === requestId);
   const next = withoutRequest(model, requestId);
 
+  if (request?.dataWrite !== undefined)
+    return {
+      ...next,
+      settledWrites: [...(model.settledWrites ?? []), { request, outcome: ending.write }],
+    };
+
   if (request?.kind !== "secret") return next;
 
-  return { ...next, settledSecrets: [...(model.settledSecrets ?? []), { request, outcome }] };
+  return {
+    ...next,
+    settledSecrets: [...(model.settledSecrets ?? []), { request, outcome: ending.secret }],
+  };
 };
 
 /** Turn or Subagent: what holds items and their live progress. */
@@ -380,13 +426,16 @@ const fold = (event: DomainEvent): Fold =>
           pendingApprovals: [...withoutRequest(m, request.id).pendingApprovals, request],
         }),
       ApprovalResolved:
-        ({ requestId, decision }): Fold =>
+        ({ requestId, decision, resolvedBy }): Fold =>
         (m) =>
-          settle(m, requestId, secretOutcomeOf(decision)),
+          settle(m, requestId, {
+            secret: secretOutcomeOf(decision),
+            write: writeOutcomeOf(decision, resolvedBy),
+          }),
       ApprovalWithdrawn:
-        ({ requestId }): Fold =>
+        ({ requestId, withdrawnBy }): Fold =>
         (m) =>
-          settle(m, requestId, "ended"),
+          settle(m, requestId, { secret: "ended", write: { kind: "expired", by: withdrawnBy } }),
     })
   );
 
@@ -426,8 +475,9 @@ export const applySessionItem = (model: SessionModel, item: SessionStreamItem): 
         session: snapshot.session,
         turns: snapshot.turns.map(turnViewOf),
         pendingApprovals: snapshot.pendingApprovals,
-        // A resync keeps the cards of secrets settled since this feed opened.
+        // A resync keeps the cards of secrets and writes settled since this feed opened.
         settledSecrets: model.settledSecrets ?? [],
+        settledWrites: model.settledWrites ?? [],
       }),
       Event: ({ envelope }) => applyEnvelope(model, envelope),
       Delta: ({ turnId, itemId, field, text, subagentId }) =>

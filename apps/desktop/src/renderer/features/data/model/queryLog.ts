@@ -31,7 +31,7 @@ export type LogAuthor =
       readonly command: string;
     };
 
-export type LogState = "done" | "failed" | "running" | "needs-you";
+export type LogState = "done" | "failed" | "running" | "needs-you" | "unknown";
 
 export interface LogRow {
   readonly id: string;
@@ -79,6 +79,7 @@ const STATES: Record<QueryLogEntry["state"], LogState> = {
   "waiting-approval": "needs-you",
   completed: "done",
   failed: "failed",
+  unknown: "unknown",
   "dry-run": "done",
   cancelled: "done",
 };
@@ -88,6 +89,8 @@ const stateOf = (entry: QueryLogEntry): LogState =>
 
 const resultOf = (entry: QueryLogEntry, state: LogState) => {
   if (state === "failed") return entry.error ?? "";
+
+  if (state === "unknown") return "Outcome unknown · check the rows before retrying";
 
   if (entry.state === "cancelled") return "cancelled";
 
@@ -239,6 +242,8 @@ export const authorText = (row: LogRow): string => {
 /** The drawer's rows column: "214 rows", "failed" (the error is the row's tooltip), or "—". */
 export const resultText = (row: LogRow): string => {
   if (row.state === "failed") return "failed";
+
+  if (row.state === "unknown") return "outcome unknown";
 
   if (row.state === "running") return "running";
 

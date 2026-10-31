@@ -24,7 +24,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { lazy, type ReactNode, Suspense, useMemo, useRef, useState } from "react";
 import { type DiffRow, diffRows, ROW_HEIGHT } from "../diffRows.ts";
 import { type DiffSyntax, lineSyntax } from "../diffSyntax.ts";
-import { useSession } from "../hooks.ts";
+import { useHost, useSession } from "../hooks.ts";
 import { useDiffSyntax } from "../useDiffSyntax.ts";
 import { LineCode } from "./LineCode.tsx";
 import { turnOpening } from "../model/conversation.ts";
@@ -48,6 +48,13 @@ import { EditorPlaceProvider, OpenInEditorButton } from "../../editor-links/inde
 import { leaveBrowser } from "../output/browser.ts";
 import { BrowserOutputTab, SessionBrowser, useBrowserShown } from "./BrowserOutput.tsx";
 import { useSettings } from "../../settings/index.ts";
+import {
+  DataOutput,
+  hasData,
+  setDataOutputShown,
+  useDataOutputShown,
+  useTurnData,
+} from "../../data/output/index.ts";
 
 const CARD = "mx-4 border-x border-hairline bg-surface-sunken";
 
@@ -341,6 +348,31 @@ export interface SessionOutputProps extends SessionViewProps {
   readonly tabs?: ReactNode;
 }
 
+/** Output's Data tab, after Changes: only while the Turn shown touched data. */
+export const DataOutputTab = ({
+  uiKey: key,
+  on,
+  visible,
+  onPick,
+}: {
+  readonly uiKey: string;
+  readonly on: boolean;
+  readonly visible: boolean;
+  readonly onPick: () => void;
+}) =>
+  visible ? (
+    <OutputTab
+      id="data"
+      on={on}
+      onClick={() => {
+        onPick();
+        setDataOutputShown(key, true);
+      }}
+    >
+      Data
+    </OutputTab>
+  ) : null;
+
 /** The header's diff controls: which Turn, and its file and line counts. */
 const DiffSummary = ({
   groups,
@@ -370,6 +402,38 @@ const DiffSummary = ({
   );
 };
 
+type ShownSession = ReturnType<typeof useSession>["session"];
+
+const harnessOf = (session: ShownSession) =>
+  session !== null && isKnownHarness(session.harness) ? session.harness : null;
+
+/** Where Open in Editor opens the session's files. */
+const placeOf = (hostKey: string, session: ShownSession) =>
+  session === null ? null : { hostKey, root: session.cwd, workspaceId: session.workspaceId };
+
+/** The Data tab for the Turn shown: visible when it touched data, shown when picked and nothing else is. */
+const useDataTab = (
+  hostKey: string,
+  sessionId: SessionOutputProps["sessionId"],
+  model: ReturnType<typeof useSession>,
+  current: TurnGroup | null,
+  free: boolean
+) => {
+  const turnIds = current?.views.map((v) => v.turn.id) ?? [];
+  const host = useHost(hostKey);
+  const turnData = useTurnData({ hostKey, sessionId, host, model, turnIds });
+  const visible = turnData !== null && hasData(turnData);
+  const picked = useDataOutputShown(uiKey(hostKey, sessionId)) && visible && free;
+
+  return {
+    visible,
+    shown:
+      picked && turnData !== null && current !== null
+        ? { data: turnData, turn: { number: current.number, ids: turnIds } }
+        : null,
+  };
+};
+
 export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) => {
   const model = useSession(hostKey, sessionId);
   const key = uiKey(hostKey, sessionId);
@@ -380,17 +444,20 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
 
   const groups = groupTurns(model.turns);
   const current = groupOf(groups, ui.diffTurnId) ?? groups.at(-1) ?? null;
+  const dataTab = useDataTab(hostKey, sessionId, model, current, subagent === null && !browser);
+  const data = dataTab.shown !== null;
+  const onChanges = subagent === null && !browser && !data;
 
   const session = model.session;
   const cwd = session?.cwd ?? null;
   const files = useFilesTick(hostKey, cwd);
-  const harness = session !== null && isKnownHarness(session.harness) ? session.harness : null;
+  const harness = harnessOf(session);
 
   const state = useTurnDiff(
     hostKey,
     cwd ?? "",
     sessionId,
-    current === null || subagent !== null || browser ? null : groupSpan(current),
+    current === null || !onChanges ? null : groupSpan(current),
     current === null ? "" : spanRevision(current.views, files)
   );
 
@@ -399,6 +466,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
   const changes = () => {
     close();
     leaveBrowser(hostKey, sessionId);
+    setDataOutputShown(key, false);
   };
 
   const fold = (path: string) => {
@@ -408,8 +476,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
     setFolded(next);
   };
 
-  const place =
-    session === null ? null : { hostKey, root: session.cwd, workspaceId: session.workspaceId };
+  const place = placeOf(hostKey, session);
 
   return (
     <EditorPlaceProvider value={place}>
@@ -420,10 +487,19 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
       >
         <div className="border-hairline flex h-11 shrink-0 items-center gap-1 border-b px-3">
           {tabs ?? (
-            <OutputTab id="changes" on={subagent === null && !browser} onClick={changes}>
+            <OutputTab id="changes" on={onChanges} onClick={changes}>
               Changes
             </OutputTab>
           )}
+          <DataOutputTab
+            uiKey={key}
+            on={data}
+            visible={dataTab.visible}
+            onPick={() => {
+              close();
+              leaveBrowser(hostKey, sessionId);
+            }}
+          />
           <BrowserOutputTab
             hostKey={hostKey}
             sessionId={sessionId}
@@ -434,7 +510,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             <SubagentTab shown={subagent} harness={harness} onClose={close} />
           )}
           <span className="flex-1" />
-          {subagent === null && !browser ? (
+          {onChanges ? (
             <DiffSummary
               groups={groups}
               current={current}
@@ -459,6 +535,8 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             workspaceId={session.workspaceId}
             harness={harness}
           />
+        ) : dataTab.shown !== null ? (
+          <DataOutput hostKey={hostKey} sessionId={sessionId} {...dataTab.shown} />
         ) : subagent === null ? (
           <Changes current={current} state={state} folded={folded} onFold={fold} />
         ) : (

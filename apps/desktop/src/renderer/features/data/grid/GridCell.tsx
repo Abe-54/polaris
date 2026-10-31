@@ -1,7 +1,7 @@
 /**
  * One grid cell (DESIGN.md, Data: Table tab): mono, one clipped line, NULL and the empty string
- * faint and italic, numbers right-aligned tabular, a foreign key in the link colour with →.
- * `staged` is phase 2's edit.
+ * faint and italic, numbers right-aligned tabular, a foreign key in the link colour with →, and a
+ * staged edit on the modified ground.
  */
 import { memo } from "react";
 import type { LaidColumn } from "./columns.ts";
@@ -19,7 +19,7 @@ export interface GridCellProps {
   readonly value: DataValue | undefined;
   readonly col: number;
   readonly active: boolean;
-  /** A staged edit (phase 2): the modified ground and inset ring (rule/git-is-a-letter). */
+  /** A staged edit: the modified ground and inset ring (rule/git-is-a-letter). */
   readonly staged?: boolean;
   /** The row height, so one line centres without a wrapper. */
   readonly height: number;
@@ -35,8 +35,10 @@ const classes = (column: LaidColumn, flags: CellFlags, active: boolean, staged: 
   // The grid is mono, so its figures are already tabular: no OpenType feature to shape.
   if (column.numeric) name += " text-right";
 
+  if (staged) name += " bg-git-modified/12";
+
   if (flags.placeholder) name += " text-text-faint italic";
-  else if (staged) name += " bg-git-modified/12 text-git-modified-text";
+  else if (staged) name += " text-git-modified-text";
   else if (flags.link) name += " text-starlight-text cursor-pointer hover:underline";
   else name += " text-text-default";
 

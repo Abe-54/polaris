@@ -1,0 +1,55 @@
+/** RW probe G: data.edits.commit through W's executeEdits on disposable databases. */
+import { expect, test } from "bun:test";
+import { CommitDataEdits } from "@polaris/protocol";
+import { Schema } from "effect";
+import { prefix, setup } from "./rw.probe.setup.ts";
+
+const log = (...a: unknown[]) => console.log("[RW-G]", ...a);
+
+for (const engine of ["postgres", "mysql"] as const)
+  test(`${engine}: grid commits`, async () => {
+    const { admin, edits, outcome, read, connection } = setup(engine);
+    const schema = engine === "postgres" ? "public" : connection.database;
+    const t = prefix();
+    const table = { schema, name: t };
+    try {
+      await admin.unsafe(`CREATE TABLE ${t} (a INT, b VARCHAR(10), v INT NOT NULL CHECK (v < 100), PRIMARY KEY (a, b))`);
+      await admin.unsafe(`INSERT INTO ${t} VALUES (1,'x',0),(1,'y',0),(2,'x',0)`);
+      log(engine, "G1 composite key:", await outcome(edits(table, ["a", "b"], [{ key: [1, "y"], column: "v", value: 7 }])));
+      log(engine, "G1 key order swapped:", await outcome(edits(table, ["b", "a"], [{ key: ["y", 1], column: "v", value: 8 }])));
+      log(engine, "G2 NULL key:", await outcome(edits(table, ["a", "b"], [{ key: [1, null], column: "v", value: 9 }])));
+      log(engine, "G3 duplicate cell:", await outcome(edits(table, ["a", "b"], [{ key: [1, "x"], column: "v", value: 1 }, { key: [1, "x"], column: "v", value: 2 }])));
+      log(engine, "G3b same row via number vs string key:", await outcome(edits(table, ["a", "b"], [{ key: [1, "x"], column: "v", value: 1 }, { key: ["1", "x"], column: "v", value: 2 }])));
+      log(engine, "G3b rows:", JSON.stringify(await admin.unsafe(`SELECT a, b, v FROM ${t} ORDER BY a, b`)));
+      log(engine, "G4 mid-batch failure:", await outcome(edits(table, ["a", "b"], [{ key: [2, "x"], column: "v", value: 50 }, { key: [1, "x"], column: "v", value: 500 }])));
+      log(engine, "G4 rows after:", JSON.stringify(await admin.unsafe(`SELECT a, b, v FROM ${t} ORDER BY a, b`)));
+      log(engine, "G5 key column edit:", await outcome(edits(table, ["a", "b"], [{ key: [2, "x"], column: "a", value: 9 }])));
+      const tooMany = Array.from({ length: 10001 }, (_, i) => ({ key: [i, "x"], column: "v", value: 1 }));
+      const decoded = Schema.decodeUnknownExit(Schema.Struct(CommitDataEdits.payloadSchema.fields))({ sessionId: "s", source: "rw", table, primaryKey: ["a", "b"], edits: tooMany });
+      log(engine, "G6 10,001 edits decode:", decoded._tag);
+
+      // Type coercion: a string key column matched with a numeric key value.
+      await admin.unsafe(`CREATE TABLE ${t}_s (code VARCHAR(10) PRIMARY KEY, v INT NOT NULL)`);
+      await admin.unsafe(`INSERT INTO ${t}_s VALUES ('abc', 0), ('1', 0)`);
+      log(engine, "G7 varchar key matched by number 0:", await outcome(edits({ schema, name: `${t}_s` }, ["code"], [{ key: [0], column: "v", value: 5 }])));
+      log(engine, "G7 rows:", JSON.stringify(await admin.unsafe(`SELECT code, v FROM ${t}_s ORDER BY code`)));
+
+      // Keys read through the Data read path, sent back as the grid would.
+      const ts = engine === "postgres" ? "timestamp(3)" : "DATETIME(3)";
+      await admin.unsafe(`CREATE TABLE ${t}_t (at ${ts} PRIMARY KEY, v INT NOT NULL)`);
+      await admin.unsafe(`INSERT INTO ${t}_t VALUES ('2026-10-30 12:34:56.789', 0)`);
+      const tsRow = await read(`SELECT at FROM ${t}_t`);
+      log(engine, "G8 timestamp key as read:", JSON.stringify(tsRow.rows[0]));
+      log(engine, "G8 edit by that key:", await outcome(edits({ schema, name: `${t}_t` }, ["at"], [{ key: [tsRow.rows[0]![0]!], column: "v", value: 5 }])));
+      const bin = engine === "postgres" ? "bytea" : "BINARY(16)";
+      await admin.unsafe(`CREATE TABLE ${t}_b (id ${bin} PRIMARY KEY, v INT NOT NULL)`);
+      await admin.unsafe(engine === "postgres" ? `INSERT INTO ${t}_b VALUES ('\\x00112233445566778899aabbccddeeff', 0)` : `INSERT INTO ${t}_b VALUES (UNHEX('00112233445566778899AABBCCDDEEFF'), 0)`);
+      const binRow = await read(`SELECT id FROM ${t}_b`);
+      log(engine, "G9 binary key as read:", JSON.stringify(binRow.rows[0]));
+      log(engine, "G9 edit by that key:", await outcome(edits({ schema, name: `${t}_b` }, ["id"], [{ key: [binRow.rows[0]![0]!], column: "v", value: 5 }])));
+      expect(true).toBe(true);
+    } finally {
+      await admin.unsafe(`DROP TABLE IF EXISTS ${t}, ${t}_s, ${t}_t, ${t}_b`);
+      await admin.close();
+    }
+  }, 60000);

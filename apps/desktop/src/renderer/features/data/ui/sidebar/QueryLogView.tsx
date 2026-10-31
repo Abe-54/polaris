@@ -10,6 +10,7 @@ import { age } from "../../../../shell/copy.ts";
 import { useNow } from "../../../../shell/useNow.ts";
 import type { Loaded } from "../../data/hooks.tsx";
 import { type LogLookups, type LogRow, logRows } from "../../model/queryLog.ts";
+import { type LogTurn, showLogTurn, useSidebar } from "../../model/sidebar.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { rerunInSqlTab } from "../QueryLogDrawer.tsx";
 import type { DataSource, QueryLogEntry } from "@polaris/protocol";
@@ -135,13 +136,37 @@ export interface QueryLogViewProps {
   readonly sources: ReadonlyArray<DataSource> | null;
 }
 
+/** The Turn chip: what the list is narrowed to, and Clear to show every query. */
+const TurnChip = ({ at, turn }: { readonly at: DataSessionKey; readonly turn: LogTurn }) => (
+  <div className="flex items-center gap-2 px-[18px] pb-1.5" data-testid="data-log-turn">
+    <span className="text-caption text-text-default">{turn.label}</span>
+    <button
+      type="button"
+      className="text-caption text-text-subtle hover:text-text-default focus-visible:ring-starlight cursor-default rounded-[4px] outline-none focus-visible:ring-2"
+      onClick={() => showLogTurn(at, null)}
+    >
+      Show every query
+    </button>
+  </div>
+);
+
+const inTurn = (entry: QueryLogEntry, turn: LogTurn | null) =>
+  turn === null || (entry.author.turn !== undefined && turn.turnIds.includes(entry.author.turn));
+
 export const QueryLogView = ({ at, log, lookups, sources }: QueryLogViewProps) => {
   const now = useNow();
   const entries = log.status === "ready" ? log.value : null;
+  const turn = useSidebar(at).logTurn ?? null;
 
   const rows = useMemo(
-    () => (entries === null ? [] : logRows(entries, lookups)),
-    [entries, lookups]
+    () =>
+      entries === null
+        ? []
+        : logRows(
+            entries.filter((e) => inTurn(e, turn)),
+            lookups
+          ),
+    [entries, lookups, turn]
   );
 
   const scroller = useRef<HTMLDivElement>(null);
@@ -168,32 +193,40 @@ export const QueryLogView = ({ at, log, lookups, sources }: QueryLogViewProps) =
 
   if (rows.length === 0)
     return (
-      <p className="text-caption text-text-subtle px-panel py-2" data-testid="data-log-empty">
-        No queries yet. Queries agents and you run against this checkout's data sources appear here.
-      </p>
+      <>
+        {turn === null ? null : <TurnChip at={at} turn={turn} />}
+        <p className="text-caption text-text-subtle px-panel py-2" data-testid="data-log-empty">
+          {turn === null
+            ? "No queries yet. Queries agents and you run against this checkout's data sources appear here."
+            : "No queries in this turn."}
+        </p>
+      </>
     );
 
   const open = (row: LogRow) => rerunInSqlTab(at, row.entry, sources);
 
   return (
-    <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-2.5" aria-label="Query log">
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((item) => {
-          const row = rows[item.index];
+    <>
+      {turn === null ? null : <TurnChip at={at} turn={turn} />}
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-2.5" aria-label="Query log">
+        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const row = rows[item.index];
 
-          return row === undefined ? null : (
-            <div
-              key={row.id}
-              data-index={item.index}
-              ref={virtualizer.measureElement}
-              className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${item.start}px)` }}
-            >
-              <Row row={row} now={now} onOpen={open} />
-            </div>
-          );
-        })}
+            return row === undefined ? null : (
+              <div
+                key={row.id}
+                data-index={item.index}
+                ref={virtualizer.measureElement}
+                className="absolute top-0 left-0 w-full"
+                style={{ transform: `translateY(${item.start}px)` }}
+              >
+                <Row row={row} now={now} onOpen={open} />
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   );
 };

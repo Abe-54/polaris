@@ -54,6 +54,7 @@ export const onNeedsYouEvent = (
 
   if (request === undefined) return;
 
-  if (event.action === "approve") void approve({ ...target, request });
-  else void deny({ ...target, request });
+  if (event.action === "approve")
+    void approve({ ...target, request }, false, () => actions.selectSession(target));
+  else void deny({ ...target, request }, () => actions.selectSession(target));
 };

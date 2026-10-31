@@ -59,6 +59,9 @@ export class QueryLog extends Context.Service<
       CREATE INDEX IF NOT EXISTS data_query_author ON data_query_log(json_extract(value,'$.author.sessionId'));
       CREATE TABLE IF NOT EXISTS data_query_activity (checkout TEXT NOT NULL,session TEXT NOT NULL,updated TEXT NOT NULL,PRIMARY KEY(checkout,session));`);
           initializeLogRetention(db);
+          db.exec(`UPDATE data_query_log SET value=json_set(value,'$.state','unknown','$.error','The write may have committed. Check the rows before retrying.')
+            WHERE json_extract(value,'$.state')='running' AND json_extract(value,'$.tool') IN ('execute','data.edits.commit');
+            UPDATE data_query_log SET bytes=length(CAST(value AS BLOB)) WHERE json_extract(value,'$.state')='unknown'`);
         },
         catch: storageError,
       });

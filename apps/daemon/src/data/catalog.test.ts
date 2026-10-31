@@ -144,7 +144,7 @@ test("MySQL binary-collated catalog fields build tree and detail from Buffer/Uin
   });
   expect(result.sampleSql).toBe("SELECT * FROM `ledger`.`orders`");
   expect(decodeResult(raw([txt("payload", "secret bytes", 252)]), "mysql", []).rows).toEqual([
-    [DataValueTags.cases.Bytes.make({ length: 12 })],
+    [DataValueTags.cases.Bytes.make({ length: 12, base64: "c2VjcmV0IGJ5dGVz" })],
   ]);
 });
 

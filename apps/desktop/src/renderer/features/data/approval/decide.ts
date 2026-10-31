@@ -43,14 +43,21 @@ export const setApprovalScope = (requestId: string, scope: DataScope) =>
 export const useDecidedHere = (requestId: string) =>
   useStore(decisionStore, (s) => s.decided[requestId] ?? null);
 
-/** Approve from any path: a Data Source Approval's is the card's, remembered; others as asked. */
-export const allowFor = (request: ApprovalRequest, remember: boolean): ApprovalDecision =>
-  dataSourceTarget(request) === null
+/**
+ * Approve from any path: a Data Source Approval's is the card's, remembered; a write runs once;
+ * others as asked.
+ */
+export const allowFor = (request: ApprovalRequest, remember: boolean): ApprovalDecision => {
+  if (request.dataWrite !== undefined) return Decisions.Allow({ remember: false });
+
+  return dataSourceTarget(request) === null
     ? Decisions.Allow({ remember })
     : approveDecision(approvalScope(request.id));
+};
 
-/** "Always allow" is the card's own choice for a Data Source Approval, so no path offers it. */
-export const offersAlwaysAllow = (request: ApprovalRequest) => dataSourceTarget(request) === null;
+/** No path offers "Always allow" for a Data Source Approval (its card chooses) or a write. */
+export const offersAlwaysAllow = (request: ApprovalRequest) =>
+  dataSourceTarget(request) === null && request.dataWrite === undefined;
 
 /** The same server, database and user, as the Daemon keys an approval. */
 export const sameTarget = (
