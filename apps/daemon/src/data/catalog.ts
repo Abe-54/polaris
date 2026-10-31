@@ -6,9 +6,10 @@ import {
   TableSummary,
   type DataValue,
 } from "@polaris/protocol";
-import { Effect, Predicate, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { readEffect, type ReadInput } from "./execution.ts";
 import { DataPools } from "./pools.ts";
+import { catalogValues, catalogError } from "./catalogValues.ts";
 
 const pgVisible =
   "n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'";
@@ -69,142 +70,142 @@ const Columns = Schema.Array(Schema.Struct({ name: Schema.String, type: Schema.S
 
 const Strings = Schema.Array(Schema.String);
 
-function plain(value: DataValue | undefined): Schema.Json | undefined {
-  if (value === undefined || value === null || !Predicate.isObject(value)) return value;
-
-  if (Predicate.isTagged(value, "Json"))
-    return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(value.text);
-
-  if (Predicate.isTagged(value, "Numeric") || Predicate.isTagged(value, "BigInt"))
-    return Number(value.value);
-
-  return value;
-}
-
-const text = (value: Schema.Json | undefined) => Schema.decodeUnknownSync(Schema.String)(value);
-
-const number = (value: Schema.Json | undefined) => Schema.decodeUnknownSync(Schema.Number)(value);
-
-const bool = (value: Schema.Json | undefined) => value === true || value === 1;
-
 const quote = (name: string, engine: "postgres" | "mysql") =>
   engine === "postgres" ? `"${name.replaceAll('"', '""')}"` : `\`${name.replaceAll("`", "``")}\``;
 
-export const readCatalog = Effect.fnUntraced(function* (
-  pools: DataPools,
-  input: Omit<ReadInput, "sql" | "limit">,
-  table?: string
-) {
-  const engine = input.source.engine;
+export const makeCatalogReader = (read: typeof readEffect) =>
+  Effect.fnUntraced(
+    function* (pools: DataPools, input: Omit<ReadInput, "sql" | "limit">, table?: string) {
+      const engine = input.source.engine;
+      const { plain, text, number, bool, json, decode } = catalogValues(engine);
 
-  const rows = Effect.fnUntraced(function* (
-    sql: string,
-    params: ReadonlyArray<DataValue> = [],
-    limit: number = 501
-  ) {
-    const result = yield* readEffect(pools, { ...input, sql, params, limit });
+      const rows = Effect.fnUntraced(function* (
+        sql: string,
+        params: ReadonlyArray<DataValue> = [],
+        limit: number = 501
+      ) {
+        const result = yield* read(pools, { ...input, sql, params, limit, catalogText: true });
 
-    return result.rows.map((row) =>
-      Object.fromEntries<Schema.Json | undefined>(
-        result.columns.map((column, i): [string, Schema.Json | undefined] => [
-          column.name,
-          plain(row[i]),
-        ])
+        return result.rows.map((row) =>
+          Object.fromEntries<Schema.Json | undefined>(
+            result.columns.map((column, i): [string, Schema.Json | undefined] => [
+              column.name,
+              plain(column.name, row[i]),
+            ])
+          )
+        );
+      });
+
+      const tree = yield* rows(treeSql[engine]);
+      const functions = yield* rows(functionsSql[engine]);
+
+      const groups = new Map<
+        string,
+        { name: string; tables: TableSummary[]; views: TableSummary[]; functions: string[] }
+      >();
+
+      for (const row of tree.slice(0, 500)) {
+        const name = text("tables.schema_name", row.schema_name);
+        const group = groups.get(name) ?? { name, tables: [], views: [], functions: [] };
+
+        const summary = decode("tables.summary", TableSummary, {
+          name: text("tables.name", row.name),
+          rowEstimate: row.estimate === null ? null : number("tables.estimate", row.estimate),
+          columnCount: number("tables.column_count", row.column_count),
+          columns: json("tables.columns", Columns, row.columns ?? []),
+        });
+
+        (bool("tables.view", row.view) ? group.views : group.tables).push(summary);
+        groups.set(name, group);
+      }
+
+      for (const row of functions) {
+        const name = text("functions.schema_name", row.schema_name);
+        const group = groups.get(name) ?? { name, tables: [], views: [], functions: [] };
+        group.functions.push(text("functions.name", row.name));
+        groups.set(name, group);
+      }
+
+      if (table === undefined)
+        return decode("schemas", SchemaTree, {
+          loadedAt: new Date().toISOString(),
+          schemas: [...groups.values()],
+          truncatedTables: Math.max(0, number("tables.total", tree[0]?.total ?? 0) - 500),
+        });
+      // PostgreSQL resolves an unqualified name through its search_path; MySQL stays in DATABASE().
+      const relation = engine === "mysql" ? table.split(".").at(-1)! : table;
+
+      const identity =
+        engine === "postgres"
+          ? yield* rows(
+              "SELECT n.nspname AS schema_name,c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass($1)",
+              [relation],
+              1
+            )
+          : [{ schema_name: input.source.database, name: relation }];
+
+      if (identity.length === 0) return yield* missingTable();
+
+      const schema = text("identity.schema_name", identity[0]?.schema_name);
+      const name = text("identity.name", identity[0]?.name);
+      const columns = yield* rows(columnsSql[engine], [relation], 256);
+
+      if (columns.length === 0) return yield* missingTable();
+
+      const indexes = yield* rows(indexesSql[engine], [relation], 256);
+      const constraints = yield* rows(constraintsSql[engine], [relation], 256);
+      const match = tree.find((row) => row.schema_name === schema && row.name === name);
+
+      const detail = decode("table.detail", TableDetail, {
+        schema,
+        name,
+        columns: columns.map((row) => ({
+          name: text("columns.name", row.name),
+          type: text("columns.type", row.type),
+          nullable: bool("columns.nullable", row.nullable),
+          default:
+            row.default_value === null ? null : text("columns.default_value", row.default_value),
+          pk: bool("columns.pk", row.pk),
+          fk: json(
+            "columns.fk",
+            Schema.NullOr(
+              Schema.Struct({ schema: Schema.String, table: Schema.String, column: Schema.String })
+            ),
+            row.fk
+          ),
+        })),
+        indexes: indexes.map((row) => ({
+          name: text("indexes.name", row.name),
+          columns: json("indexes.columns", Strings, row.columns),
+          unique: bool("indexes.is_unique", row.is_unique),
+          definition: text("indexes.definition", row.definition),
+        })),
+        constraints: constraints.map((row) => ({
+          name: text("constraints.name", row.name),
+          kind: text("constraints.kind", row.kind),
+          definition: text("constraints.definition", row.definition),
+        })),
+        rowEstimate:
+          match?.estimate === null || match === undefined
+            ? null
+            : number("tables.estimate", match.estimate),
+      });
+
+      return { detail, sampleSql: `SELECT * FROM ${quote(schema, engine)}.${quote(name, engine)}` };
+    },
+    (effect, _pools, input, _table?: string) =>
+      effect.pipe(
+        Effect.catchDefect((cause) => {
+          const error = Schema.decodeUnknownOption(DataError)(cause);
+
+          return Effect.fail(
+            Option.isSome(error) ? error.value : catalogError(input.source.engine, "result")
+          );
+        })
       )
-    );
-  });
+  );
 
-  const tree = yield* rows(treeSql[engine]);
-  const functions = yield* rows(functionsSql[engine]);
-
-  const groups = new Map<
-    string,
-    { name: string; tables: TableSummary[]; views: TableSummary[]; functions: string[] }
-  >();
-
-  for (const row of tree.slice(0, 500)) {
-    const name = text(row.schema_name);
-    const group = groups.get(name) ?? { name, tables: [], views: [], functions: [] };
-
-    const summary = new TableSummary({
-      name: text(row.name),
-      rowEstimate: row.estimate === null ? null : number(row.estimate),
-      columnCount: number(row.column_count),
-      columns: Schema.decodeUnknownSync(Columns)(row.columns ?? []),
-    });
-
-    (bool(row.view) ? group.views : group.tables).push(summary);
-    groups.set(name, group);
-  }
-
-  for (const row of functions) {
-    const name = text(row.schema_name);
-    const group = groups.get(name) ?? { name, tables: [], views: [], functions: [] };
-    group.functions.push(text(row.name));
-    groups.set(name, group);
-  }
-
-  if (table === undefined)
-    return new SchemaTree({
-      loadedAt: new Date().toISOString(),
-      schemas: [...groups.values()],
-      truncatedTables: Math.max(0, number(tree[0]?.total ?? 0) - 500),
-    });
-  // PostgreSQL resolves an unqualified name through its search_path; MySQL stays in DATABASE().
-  const relation = engine === "mysql" ? table.split(".").at(-1)! : table;
-
-  const identity =
-    engine === "postgres"
-      ? yield* rows(
-          "SELECT n.nspname AS schema_name,c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass($1)",
-          [relation],
-          1
-        )
-      : [{ schema_name: input.source.database, name: relation }];
-
-  if (identity.length === 0) return yield* missingTable();
-
-  const schema = text(identity[0]?.schema_name);
-  const name = text(identity[0]?.name);
-  const columns = yield* rows(columnsSql[engine], [relation], 256);
-
-  if (columns.length === 0) return yield* missingTable();
-
-  const indexes = yield* rows(indexesSql[engine], [relation], 256);
-  const constraints = yield* rows(constraintsSql[engine], [relation], 256);
-  const match = tree.find((row) => row.schema_name === schema && row.name === name);
-
-  const detail = new TableDetail({
-    schema,
-    name,
-    columns: columns.map((row) => ({
-      name: text(row.name),
-      type: text(row.type),
-      nullable: bool(row.nullable),
-      default: row.default_value === null ? null : text(row.default_value),
-      pk: bool(row.pk),
-      fk: Schema.decodeUnknownSync(
-        Schema.NullOr(
-          Schema.Struct({ schema: Schema.String, table: Schema.String, column: Schema.String })
-        )
-      )(row.fk),
-    })),
-    indexes: indexes.map((row) => ({
-      name: text(row.name),
-      columns: Schema.decodeUnknownSync(Strings)(row.columns),
-      unique: bool(row.is_unique),
-      definition: text(row.definition),
-    })),
-    constraints: constraints.map((row) => ({
-      name: text(row.name),
-      kind: text(row.kind),
-      definition: text(row.definition),
-    })),
-    rowEstimate: match?.estimate === null || match === undefined ? null : number(match.estimate),
-  });
-
-  return { detail, sampleSql: `SELECT * FROM ${quote(schema, engine)}.${quote(name, engine)}` };
-});
+export const readCatalog = makeCatalogReader(readEffect);
 
 const missingTable = () =>
   new DataError({

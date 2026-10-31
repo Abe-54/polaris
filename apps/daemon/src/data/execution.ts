@@ -81,6 +81,8 @@ export interface ReadInput {
   params?: ReadonlyArray<DataValue>;
   limit: number;
   timeoutMs?: number;
+  /** Only Daemon-authored catalog SQL can interpret binary-collated metadata as text. */
+  catalogText?: boolean;
 }
 
 export const knownCredentials = (connection: DataConnection) => [
@@ -218,7 +220,13 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
         message: expired ? "The query exceeded its time limit." : "The query was cancelled.",
         fix: "Narrow the query before trying again.",
       });
-    const decoded = decodeResult(raw, input.source.engine, knownCredentials(input.connection));
+
+    const decoded = decodeResult(
+      raw,
+      input.source.engine,
+      knownCredentials(input.connection),
+      input.catalogText
+    );
 
     const columns = decoded.columns.slice(0, 256).map((column) => ({
       name: scrubCredentials(column.name, knownCredentials(input.connection)).slice(0, 256),

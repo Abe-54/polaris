@@ -27,6 +27,7 @@ for (const engine of ["postgres", "mysql"] as const) {
       const table = `${prefix}_probe`;
       const million = `${prefix}_million`;
       const func = `${prefix}_write`;
+      const view = `${prefix}_view`;
 
       const source = new DataSource({
         id: prefix,
@@ -61,8 +62,11 @@ for (const engine of ["postgres", "mysql"] as const) {
       ) => executeRead(pools, { source, connection, sql, params, limit, timeoutMs }, signal);
 
       try {
-        await admin.unsafe(`CREATE TABLE ${table} (id INT PRIMARY KEY,v INT)`);
+        await admin.unsafe(
+          `CREATE TABLE ${table} (id INT PRIMARY KEY,v INT DEFAULT 7 CHECK (v>=0))`
+        );
         await admin.unsafe(`INSERT INTO ${table} VALUES (1,0)`);
+        await admin.unsafe(`CREATE VIEW ${view} AS SELECT id,v FROM ${table}`);
 
         const functionSql =
           engine === "postgres"
@@ -135,10 +139,30 @@ for (const engine of ["postgres", "mysql"] as const) {
         if (!("detail" in schema)) throw new Error("Expected a table detail");
         expect(schema.detail.columns.map((column) => column.name)).toEqual(["id", "v"]);
         expect(schema.detail.columns[0]!.pk).toBe(true);
+        expect(schema.detail.columns[1]!.default).toBe("7");
+        expect(
+          schema.detail.indexes.some((index) => index.unique && index.columns.includes("id"))
+        ).toBe(true);
+        expect(
+          schema.detail.constraints.some(
+            (constraint) =>
+              constraint.definition.includes("v") && constraint.definition.includes("0")
+          )
+        ).toBe(true);
+        const tree = await Effect.runPromise(readCatalog(pools, { source, connection }));
+
+        if (!("schemas" in tree)) throw new Error("Expected schema tree");
+        expect(
+          tree.schemas.flatMap((group) => group.views).some((item) => item.name === view)
+        ).toBe(true);
+        expect(
+          tree.schemas.flatMap((group) => group.functions).some((item) => item.startsWith(func))
+        ).toBe(true);
       } finally {
         await pools.close();
         await admin.unsafe(`DROP FUNCTION IF EXISTS ${func}${engine === "postgres" ? "()" : ""}`);
         await admin.unsafe(`DROP TABLE IF EXISTS ${million}`);
+        await admin.unsafe(`DROP VIEW IF EXISTS ${view}`);
         await admin.unsafe(`DROP TABLE IF EXISTS ${table}`);
         await admin.close({ timeout: 0 });
       }

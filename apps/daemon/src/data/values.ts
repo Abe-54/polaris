@@ -7,6 +7,7 @@ import {
   type DataValue,
 } from "@polaris/protocol";
 import { Schema, Predicate, type Redacted } from "effect";
+import { catalogError, catalogValues } from "./catalogValues.ts";
 
 export const Column = Schema.Struct({
   name: Schema.String,
@@ -78,7 +79,7 @@ function mysqlTime(buffer: Buffer): string {
   return `${buffer[0] ? "-" : ""}${pad(hours)}:${pad(buffer[6]!)}:${pad(buffer[7]!)}${buffer.length >= 12 ? `.${pad(buffer.readUInt32LE(8), 6)}` : ""}`;
 }
 
-function mysqlValue(buffer: Buffer, column: Column): DataValue {
+function mysqlValue(buffer: Buffer, column: Column, catalogText: boolean): DataValue {
   const unsigned = ((column.flags ?? 0) & 32) !== 0;
 
   switch (column.type) {
@@ -110,7 +111,9 @@ function mysqlValue(buffer: Buffer, column: Column): DataValue {
     case 16:
       return bytes(buffer.length);
     default:
-      return ((column.flags ?? 0) & 128) !== 0 ? bytes(buffer.length) : buffer.toString();
+      return !catalogText && ((column.flags ?? 0) & 128) !== 0
+        ? bytes(buffer.length)
+        : buffer.toString();
   }
 }
 
@@ -160,26 +163,43 @@ function bounded(value: DataValue): DataValue {
 export function decodeResult(
   result: RawResult,
   engine: "postgres" | "mysql",
-  known: ReadonlyArray<Redacted.Redacted<string>>
+  known: ReadonlyArray<Redacted.Redacted<string>>,
+  catalogText = false
 ) {
-  const columns = decodeColumns(result.columns);
-  const rows = decodeRows(result);
+  const catalog = catalogText ? catalogValues(engine) : undefined;
+
+  const columns = catalog
+    ? catalog.decode("result.columns", Schema.Array(Column), result.columns)
+    : decodeColumns(result.columns);
+
+  const rows = catalog
+    ? catalog.decode(
+        "result.rows",
+        Schema.Array(Schema.Array(Schema.NullOr(Schema.Uint8Array))),
+        result
+      )
+    : decodeRows(result);
 
   return {
     columns,
     rows: rows.map((row) =>
-      row.map((value, i) =>
-        value === null
-          ? null
-          : bounded(
-              scrubDataValue(
-                engine === "postgres"
-                  ? postgresValue(Buffer.from(value), columns[i]!)
-                  : mysqlValue(Buffer.from(value), columns[i]!),
-                known
-              )
-            )
-      )
+      row.map((value, i) => {
+        try {
+          return value === null
+            ? null
+            : bounded(
+                scrubDataValue(
+                  engine === "postgres"
+                    ? postgresValue(Buffer.from(value), columns[i]!)
+                    : mysqlValue(Buffer.from(value), columns[i]!, catalogText),
+                  known
+                )
+              );
+        } catch (error) {
+          if (catalogText) throw catalogError(engine, columns[i]?.name ?? "result.columns");
+          throw error;
+        }
+      })
     ),
   };
 }

@@ -59,7 +59,7 @@ export class DataSource extends Schema.Class<DataSource>("DataSource")({
   access: Schema.Literals(["read", "needs-approval", "approved", "denied"]),
   writes: Schema.Literals(["ask", "off"]),
   label: DataSourceLabel,
-  reachable: Schema.Boolean,
+  reachable: Schema.optionalKey(Schema.Boolean),
   error: Schema.optionalKey(ScrubbedText),
 }) {}
 

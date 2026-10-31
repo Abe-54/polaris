@@ -4,11 +4,7 @@ import { Effect } from "effect";
 import type { DataSources } from "./index.ts";
 import type { DataAgentContext } from "./approvalRequired.ts";
 
-type Sources = Pick<DataSources["Service"], "list" | "resolve" | "refresh">;
-
-// DF makes refresh required when its source-watch publication lands.
-const refreshApprovalSources = (sources: Sources, sessionId: SessionId) =>
-  (sources.refresh ?? sources.list)({ sessionId });
+type Sources = Pick<DataSources["Service"], "resolve" | "refresh">;
 
 export const resolveReadSource = Effect.fnUntraced(function* (
   sources: Sources,
@@ -17,7 +13,7 @@ export const resolveReadSource = Effect.fnUntraced(function* (
   const resolved = yield* sources.resolve(input);
 
   if (input.tool === undefined || resolved.source.access !== "needs-approval") return resolved;
-  yield* refreshApprovalSources(sources, input.sessionId);
+  yield* sources.refresh({ sessionId: input.sessionId });
 
   return yield* sources.resolve(input);
 });

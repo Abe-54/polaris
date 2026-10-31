@@ -8,7 +8,9 @@ import { EventStore } from "../store/EventStore.ts";
 import { decideSession } from "../engine/session.ts";
 import { dataServices } from "../transport/serve.ts";
 import { DataQueries, DataRpcsLive } from "./index.ts";
-import { seedDataSession, started } from "./approvals.testing.ts";
+import { seedDataSessionAt, started } from "./approvals.testing.ts";
+
+import { paths } from "../paths.ts";
 
 useFileSecretsForTests();
 
@@ -20,7 +22,7 @@ const services = DataRpcsLive.pipe(
 await Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
-      yield* seedDataSession;
+      yield* seedDataSessionAt(paths().root);
       const client = yield* RpcTest.makeClient(DataRpcs);
       const queries = yield* DataQueries;
       const store = yield* EventStore;

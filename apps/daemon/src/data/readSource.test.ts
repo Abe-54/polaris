@@ -27,31 +27,29 @@ const resolved = (host: string) => ({
     password: Redacted.make(""),
     tls: false as const,
   },
-  url: Redacted.make(`postgres://reader@${host}/app`),
+  matchUrl: Redacted.make(`postgres://reader@${host}/app`),
 });
 
-for (const available of [true, false])
-  test(`approval preparation uses the refreshed target and connection; refresh available=${available}`, async () => {
-    let current = resolved("old.example");
+test("approval preparation uses the refreshed target and connection", async () => {
+  let current = resolved("old.example");
 
-    const refresh = () =>
-      Effect.sync(() => {
-        current = resolved("new.example");
+  const refresh = () =>
+    Effect.sync(() => {
+      current = resolved("new.example");
 
-        return [current.source];
-      });
+      return [current.source];
+    });
 
-    const result = await Effect.runPromise(
-      resolveReadSource(
-        {
-          list: refresh,
-          ...(available ? { refresh } : undefined),
-          resolve: () => Effect.sync(() => current),
-        },
-        { sessionId: SessionId.make("s"), source: "app", tool: "query" }
-      )
-    );
+  const result = await Effect.runPromise(
+    resolveReadSource(
+      {
+        refresh,
+        resolve: () => Effect.sync(() => current),
+      },
+      { sessionId: SessionId.make("s"), source: "app", tool: "query" }
+    )
+  );
 
-    expect(result.source.host).toBe("new.example");
-    expect(result.connection.hostname).toBe("new.example");
-  });
+  expect(result.source.host).toBe("new.example");
+  expect(result.connection.hostname).toBe("new.example");
+});

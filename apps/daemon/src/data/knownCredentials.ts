@@ -1,4 +1,4 @@
-/** Exact credential scrubbing until the shared protocol helper lands (CF). */
+/** Exact credential scrubbing at Data output boundaries. */
 import { Redacted, Schema, Predicate } from "effect";
 
 export const knownFromUrl = (url: Redacted.Redacted<string>) => {
@@ -53,4 +53,14 @@ export const scrubKnownJson = (
     );
 
   return value;
+};
+
+/** Use the password actually selected for the driver, including PostgreSQL query overrides. */
+export const knownFromConnection = (
+  connection: import("./connection.ts").DataConnection,
+  matchUrl: Redacted.Redacted<string>
+) => {
+  const value = Redacted.value(connection.password);
+
+  return [matchUrl, connection.password, Redacted.make(encodeURIComponent(value))];
 };

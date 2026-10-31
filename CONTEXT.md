@@ -332,7 +332,7 @@ A database a checkout (a Worktree or the Workspace's own directory) can reach, f
 _Avoid_: Connection (that is Connection State), database URL, datasource, DB
 
 **Local Data Source**:
-A Data Source on the Host itself (loopback, a Unix socket, or a compose service there); agents may read it without asking.
+A Data Source on the Host itself: a loopback or Unix-socket listener owned by a known database server, or a verified proxy for a compose database published from this checkout. Agents may read it without asking. Tunnels and unknown listener owners are Remote.
 
 **Remote Data Source**:
 Any Data Source that is not Local; no agent reaches it until it has a Data Source Approval, and no agent writes to it unless the user has also allowed writes there.

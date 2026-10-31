@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { AgentSession, DomainEvent } from "@polaris/protocol";
+import { AgentSession, ApprovalDecision, DomainEvent } from "@polaris/protocol";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { DataQueries, DataSourceAccess, DataSources } from "../../data/index.ts";
 import { DataDatabase } from "../../data/database.ts";
@@ -15,6 +15,7 @@ import { QueryLog } from "../../data/queryLog.ts";
 import { sources as makeSources } from "../../data/sources.ts";
 import { session, send } from "../../constellation/delivery/testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
+import { decideSession } from "../../engine/session.ts";
 import { HostSecrets } from "../../secrets/index.ts";
 import { shortTemp } from "../../platform/testing.ts";
 import { McpTokens } from "../tokens.ts";
@@ -38,6 +39,36 @@ const Sources = Schema.Struct({
 const Result = Schema.Struct({
   queryId: Schema.String,
   rows: Schema.Array(Schema.Array(Schema.Json)),
+});
+
+// Docker's listener need not be owned by the random checkout; record a test user decision.
+const approveFixture = Effect.gen(function* () {
+  const sources = yield* DataSources;
+  const fixture = yield* sources.resolve({ sessionId: plainBinding.sessionId, source: "app" });
+  const approvals = yield* DataApprovals;
+  const store = yield* EventStore;
+  yield* approvals.require(plainBinding.sessionId, fixture.source).pipe(
+    Effect.catchTag("DataApprovalRequired", (request) =>
+      Effect.gen(function* () {
+        yield* store.commit({
+          commandId: null,
+          decide: (model) =>
+            Effect.succeed(
+              decideSession(model.sessions.get(plainBinding.sessionId), {
+                type: "approval.respond",
+                requestId: request.approvalId,
+                decision: ApprovalDecision.cases.Allow.make({
+                  remember: true,
+                  dataScope: "target",
+                }),
+                resolvedBy: "test",
+              }).events
+            ),
+        });
+        expect((yield* approvals.read(fixture.source)).access).toBe("approved");
+      })
+    )
+  );
 });
 
 test.skipIf(postgresUrl === undefined)(
@@ -107,6 +138,7 @@ test.skipIf(postgresUrl === undefined)(
             });
             yield* send(plainBinding.sessionId, "Read invoices");
             const turn = (yield* store.model).sessions.get(plainBinding.sessionId)!.turns[0]!.id;
+            yield* approveFixture;
             const { origin } = yield* mcpHttp(fakeCommands().commands);
             const tokens = yield* McpTokens;
             const token = yield* tokens.issue(plainBinding);
