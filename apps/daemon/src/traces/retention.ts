@@ -53,6 +53,27 @@ interface PruneState {
   readonly changed: Set<string>;
 }
 
+const candidates = (
+  db: Database,
+  checkout: string,
+  cutoff: number,
+  policy: { span: string; log: string },
+  pressure: boolean
+) => {
+  const age = pressure ? "" : " AND s.age<?";
+  const bindings = pressure ? [checkout, checkout] : [checkout, cutoff, checkout, cutoff];
+
+  return decodeCandidates(
+    db
+      .query(`SELECT id,trace_id,bytes,kind FROM (
+    SELECT s.id,s.trace_id,s.bytes,s.age,'span' AS kind FROM spans s WHERE s.checkout=? AND ${policy.span}${age}
+    UNION ALL
+    SELECT s.id,s.trace_id,s.bytes,s.age,'log' AS kind FROM logs s WHERE s.checkout=? AND ${policy.log}${age}
+  ) ORDER BY age,id LIMIT 512`)
+      .all(...bindings)
+  );
+};
+
 const pruneRecords = (
   db: Database,
   checkout: string,
@@ -62,16 +83,7 @@ const pruneRecords = (
 ) => {
   while (true) {
     const pressure = state.bytes > policy.budget;
-
-    const rows = decodeCandidates(
-      db
-        .query(`SELECT id,trace_id,bytes,kind FROM (
-      SELECT s.id,s.trace_id,s.bytes,s.age,'span' AS kind FROM spans s WHERE s.checkout=? AND ${policy.span} AND (? OR s.age<?)
-      UNION ALL
-      SELECT s.id,s.trace_id,s.bytes,s.age,'log' AS kind FROM logs s WHERE s.checkout=? AND ${policy.log} AND (? OR s.age<?)
-    ) ORDER BY age,id LIMIT 512`)
-        .all(checkout, Number(pressure), cutoff, checkout, Number(pressure), cutoff)
-    );
+    const rows = candidates(db, checkout, cutoff, policy, pressure);
 
     if (rows.length === 0) return;
 

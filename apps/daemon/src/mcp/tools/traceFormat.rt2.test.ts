@@ -1,8 +1,8 @@
-// RT2 repros (ENG-656) for the `trace` and `traces` summaries. Expected to FAIL on d0c65821e.
+// RT2 repros (ENG-656) for the `trace` and `traces` summaries. Regressions from d0c65821e.
 import { expect, test } from "bun:test";
-import { TRACE_ID } from "../../../apps/daemon/src/traces/testing.ts";
-import { makeSpan, withStoredTools } from "../../../apps/daemon/src/mcp/tools/traces.testing.ts";
-import type { BoundTool } from "../../../apps/daemon/src/mcp/tools/index.ts";
+import { TRACE_ID } from "../../traces/testing.ts";
+import { makeSpan, withStoredTools } from "./traces.testing.ts";
+import type { BoundTool } from "./index.ts";
 
 type Result = Awaited<ReturnType<BoundTool["call"]>>;
 
@@ -69,6 +69,7 @@ test("F2: an error deeper than the cap's indentation budget is never shown, only
     const spans = Array.from({ length: 150 }, (_, i) =>
       makeSpan(i + 1, i === 0 ? undefined : i, `frame ${i}`, 300 - i, i)
     );
+
     failing(spans[149]!, "deep failure");
     await f.ingest(spans);
     const result = await f.tool("trace").call({ id: TRACE_ID, focus: "errors" });
@@ -85,6 +86,10 @@ test("F3: one huge exception message or root name on the newest trace hides ever
 
     expect(text(result)).toContain(TRACE_ID.slice(0, 8));
     expect(text(result)).toContain("bbbbbbbb");
+    expect(result.structuredContent?.traces).toMatchObject([
+      { id: TRACE_ID, errorMessage: "x".repeat(20_000) },
+      { id: "b".repeat(32) },
+    ]);
   }));
 
 test("F5: 300 identical failing siblings push the critical path out of the summary", () =>
@@ -95,8 +100,15 @@ test("F5: 300 identical failing siblings push the critical path out of the summa
       spans.push(failing(makeSpan(i + 2, 1, "GET /rates", 1, 1 + i), "connect ECONNREFUSED"));
     spans.push(makeSpan(400, 1, "UPDATE invoices", 600, 300));
     await f.ingest(spans);
-    const output = text(await f.tool("trace").call({ id: TRACE_ID }));
+    const result = await f.tool("trace").call({ id: TRACE_ID });
+    const output = text(result);
 
+    expect(result.structuredContent?.spans).toHaveLength(3);
+    expect(result.structuredContent?.groups).toEqual([
+      { spanIds: ["0000000000000001"] },
+      { spanIds: Array.from({ length: 300 }, (_, i) => (i + 2).toString(16).padStart(16, "0")) },
+      { spanIds: [(400).toString(16).padStart(16, "0")] },
+    ]);
     expect(output).toContain("UPDATE invoices");
     expect(output.split("ECONNREFUSED").length - 1).toBeLessThan(10);
   }));
@@ -121,6 +133,7 @@ test("F10: the repeated-sibling group is marked SLOW by its first member, not by
         ),
       ]);
     }
+
     // First member is slow (60 ms vs usual 2 ms); the other 29 are normal. p50 is 2 ms.
     await f.ingest([
       makeSpan(1, undefined, "R", 200, 0),
@@ -133,4 +146,30 @@ test("F10: the repeated-sibling group is marked SLOW by its first member, not by
     expect(group).toContain("p50 2 ms");
     // The group line says SLOW (usually 2 ms) though its p50 is the usual 2 ms.
     expect(group).not.toContain("SLOW");
+  }));
+
+test("F14: text and structured output contain well-formed Unicode without bidi overrides", () =>
+  withStoredTools(async (f) => {
+    const span = makeSpan(1, undefined, "bad\u202ename\ud800");
+    span.attributes.push({ key: "value", value: { stringValue: "bad\ud800\u2066" } });
+    await f.ingest([span]);
+
+    for (const [name, input] of [
+      ["traces", { turn: "all" }],
+      ["trace", { id: TRACE_ID }],
+      ["span", { trace: TRACE_ID, span: "0000000000000001" }],
+    ] as const) {
+      const result = await f.tool(name).call(input);
+      expect(result.isError).not.toBe(true);
+      expect(text(result).isWellFormed()).toBe(true);
+      expect(JSON.stringify(result)).not.toMatch(/\\ud800|[\u202a-\u202e\u2066-\u2069]/u);
+    }
+  }));
+
+test("F15: errors focus explains a trace without errors", () =>
+  withStoredTools(async (f) => {
+    await f.ingest([makeSpan(1)]);
+    const output = text(await f.tool("trace").call({ id: TRACE_ID, focus: "errors" }));
+    expect(output).toContain("No error spans; use focus slow.");
+    expect(output).not.toContain("spans under");
   }));

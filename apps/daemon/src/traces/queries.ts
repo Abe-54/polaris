@@ -95,7 +95,7 @@ export const listTraces = (db: Database, checkout: string, filter: TraceFilter =
   return { traces, total };
 };
 
-const summaryFor = (db: Database, checkout: string, prefix: string) =>
+export const summaryFor = (db: Database, checkout: string, prefix: string) =>
   decodeSummary(
     one(
       decodeValueRows(
@@ -179,7 +179,7 @@ export const traceHistory = (
       .query(`
     WITH samples AS (
       SELECT duration,row_number() OVER (ORDER BY duration) AS position,count(*) OVER () AS count
-      FROM summaries WHERE checkout=? AND root=? AND start<? AND trace_id<>?
+      FROM (SELECT duration FROM summaries WHERE checkout=? AND root=? AND start<? AND trace_id<>? ORDER BY start DESC LIMIT 50)
     ) SELECT avg(duration) AS usual FROM samples WHERE count>=5 AND position IN ((count+1)/2,(count+2)/2)
   `)
       .all(checkout, summary.root, before, summary.id)
@@ -190,47 +190,70 @@ export const traceHistory = (
   const root = rootRows[0]?.usual ?? null;
 
   if (!includeSpans) return { root, spans, samples };
-  const trace = getTrace(db, checkout, summary.id);
 
-  const medians = Schema.decodeUnknownSync(
+  const current = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        name: Schema.String,
+        parent: Schema.NullOr(Schema.String),
+      })
+    )
+  )(
+    db
+      .query("SELECT id,name,parent_name AS parent FROM spans WHERE checkout=? AND trace_id=?")
+      .all(checkout, summary.id)
+  );
+
+  const pairs = [
+    ...new Map(
+      current.map((span) => [JSON.stringify([span.name, span.parent]), [span.name, span.parent]])
+    ).values(),
+  ];
+
+  const observations = Schema.decodeUnknownSync(
     Schema.Array(
       Schema.Struct({
         name: Schema.String,
         parent: Schema.NullOr(Schema.String),
-        usual: Schema.Number,
-        samples: Schema.Number,
+        durations: Schema.String,
       })
     )
   )(
     db
       .query(`
-    WITH wanted AS (
-      SELECT DISTINCT json_extract(c.value,'$.name') AS name,
-        json_extract(p.value,'$.name') AS parent
-      FROM spans c LEFT JOIN spans p
-        ON p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent
-      WHERE c.checkout=? AND c.trace_id=?
-    ), samples AS (
-      SELECT w.name,w.parent,json_extract(c.value,'$.durationMs') AS ms
-      FROM wanted w JOIN spans c ON c.checkout=? AND json_extract(c.value,'$.name')=w.name
-      JOIN summaries s ON s.checkout=c.checkout AND s.trace_id=c.trace_id
-      LEFT JOIN spans p ON p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent
-      WHERE s.start<? AND s.trace_id<>? AND json_extract(p.value,'$.name') IS w.parent
-    ), ranked AS (
-      SELECT *,row_number() OVER (PARTITION BY name,parent ORDER BY ms) AS position,
-        count(*) OVER (PARTITION BY name,parent) AS count FROM samples
-    ) SELECT name,parent,avg(ms) AS usual,max(count) AS samples FROM ranked
-      WHERE count>=5 AND position IN ((count+1)/2,(count+2)/2) GROUP BY name,parent
+    WITH wanted AS MATERIALIZED (
+      SELECT json_extract(value,'$[0]') AS name,json_extract(value,'$[1]') AS parent FROM json_each(?)
+    ), bounded AS MATERIALIZED (
+      SELECT w.name,w.parent,(
+        SELECT json_group_array(duration) FROM (
+          SELECT duration FROM spans c INDEXED BY spans_history_covering
+          WHERE c.checkout=? AND c.name=w.name AND c.parent_name IS w.parent AND c.trace_start<?
+          ORDER BY c.trace_start DESC,c.start DESC LIMIT 50
+        )
+      ) AS durations FROM wanted w
+    ) SELECT name,parent,durations FROM bounded
   `)
-      .all(checkout, trace.summary.id, checkout, before, trace.summary.id)
+      .all(JSON.stringify(pairs), checkout, before)
   );
 
-  const byId = new Map(trace.spans.map((span) => [span.id, span]));
-  const lookup = new Map(medians.map((row) => [JSON.stringify([row.name, row.parent]), row]));
+  const decodeDurations = Schema.decodeUnknownSync(
+    Schema.fromJsonString(Schema.Array(Schema.Number))
+  );
 
-  for (const span of trace.spans) {
-    const parent = span.parentId === null ? null : (byId.get(span.parentId)?.name ?? null);
-    const usual = lookup.get(JSON.stringify([span.name, parent]));
+  const lookup = new Map<string, { usual: number; samples: number }>();
+
+  for (const row of observations) {
+    const values = [...decodeDurations(row.durations)].sort((a, b) => a - b);
+
+    if (values.length < 5) continue;
+    const middle = Math.floor(values.length / 2);
+    const usual = values.length % 2 ? values[middle]! : (values[middle - 1]! + values[middle]!) / 2;
+    lookup.set(JSON.stringify([row.name, row.parent]), { usual, samples: values.length });
+  }
+
+  for (const span of current) {
+    const usual = lookup.get(JSON.stringify([span.name, span.parent]));
 
     if (usual !== undefined) {
       spans[span.id] = usual.usual;
@@ -239,6 +262,54 @@ export const traceHistory = (
   }
 
   return { root, spans, samples };
+};
+
+/** Only one indexed error record per listed trace crosses the SQLite boundary. */
+export const listToolTraces = (db: Database, checkout: string, filter: TraceFilter) => {
+  const page = listTraces(db, checkout, filter);
+  const errors: Record<string, string> = {};
+  const history: Record<string, number> = {};
+
+  const rows = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        value: Schema.NullOr(Schema.String),
+      })
+    )
+  )(
+    db
+      .query(`SELECT s.trace_id AS id,(
+    SELECT value FROM spans c WHERE c.checkout=s.checkout AND c.trace_id=s.trace_id AND c.status='error'
+    ORDER BY c.start,c.id LIMIT 1
+  ) AS value FROM summaries s WHERE s.checkout=? AND s.errors>0 AND s.trace_id IN (SELECT value FROM json_each(?))`)
+      .all(checkout, JSON.stringify(page.traces.map((trace) => trace.id)))
+  );
+
+  for (const row of rows) {
+    if (row.value === null) continue;
+    const span = decodeSpan(row.value);
+
+    const message = span.events.find((event) => event.name === "exception")?.attributes[
+      "exception.message"
+    ];
+
+    errors[row.id] =
+      message === undefined
+        ? span.statusMessage
+        : Schema.is(Schema.String)(message)
+          ? message
+          : JSON.stringify(message);
+  }
+
+  for (const trace of page.traces) {
+    const { root } = traceHistory(db, checkout, trace.id, false);
+
+    if (root !== null && trace.durationMs > 20 && trace.durationMs > root * 3)
+      history[trace.id] = root;
+  }
+
+  return { ...page, history, errors };
 };
 
 /** Span-level overlap, including traces older than the newest listing page. */

@@ -16,15 +16,19 @@ Traces from the caller's checkout, newest first. `turn`: a Turn number, `"curren
 
 ```
 Turn 12 · 14 traces (2 shown of 14; add limit)
-4f1c9a2e  POST /invoices/overdue   ledger-api   840 ms   434 spans   2 services   SLOW (usually 122 ms)
-b07d11c3  test overdue-totals      bun          3.1 s     61 spans              1 ERROR: expected 1200, got 0
+4f1c9a2e000000000000000000000000  POST /invoices/overdue   ledger-api   840 ms   434 spans   2 services   SLOW (usually 122 ms)
+b07d11c3000000000000000000000000  test overdue-totals      bun          3.1 s     61 spans              1 ERROR: expected 1200, got 0
 ```
 
-SLOW uses the median duration of the same root name over earlier retained traces in this checkout.
+SLOW uses the median duration of the same root name over the most recent 50 earlier retained traces in this checkout.
 At least five samples are required. Mark `SLOW (usually …)` only when duration is over 20 ms
 and more than three times the median; otherwise omit both SLOW and `slow`. Never infer a baseline.
 
-`structuredContent`: `{ traces: [{ id, root, service, durationMs, spans, services, errors, turn, startedAt, slow?: {usualMs} }] }`.
+`structuredContent`: `{ traces: [{ id, root, service, durationMs, spans, services, errors, errorMessage?, turn, startedAt, slow?: {usualMs} }] }`.
+
+Text prints full trace ids so a prefix collision outside this page cannot make a listed id ambiguous.
+Root, service and error-message cells are clipped to 200 characters with a folded-character count.
+Structured values retain their full length.
 
 JSON reuses protocol types: `services` is an array of service names and `turn` is a nullable
 `TraceTurn {sessionId, id, number}`. Text renders the service count and Turn number.
@@ -37,16 +41,25 @@ One trace as a summarised tree. `id` is a full or unique-prefix trace id (≥ 8 
 - Header: root, duration, span count, services with span counts and summed Span time, Turn, error count.
   Service times overlap and are not wall-clock duration.
 - Tree: indented two spaces per level; each line `offset  duration  name  [service where it
-  changes]  [SLOW|ERROR]  span <8-hex>`.
+  changes]  [SLOW|ERROR]  span <unique-prefix>`. Span prefixes are at least eight hex
+  characters and unique against all Spans in the trace, including folded ones.
 - Repeated siblings (same name and parent) collapse to one line: `×214 GET /rates  p50 2.1 ms
   total 636 ms  (N+1?)`; the hint shows when one parent has more than 20 identical children.
+  Error siblings collapse only when name, status, exception type and message match; their
+  line keeps ERROR and one exception sample. Different failures remain separate.
 - SLOW for a Span uses the median of the same Span name under the same parent name in earlier
   retained traces in this checkout, with the same five-sample, over-20-ms and over-3× rule.
-  Fetch history once per Trace for all Span names.
+  Use at most the 50 most recent observations per name/parent-name pair, ordered by trace start
+  then Span start, strictly before this trace. A collapsed group compares its p50 with the usual
+  duration, never its first member. Fetch indexed, bounded history once per Trace for all pairs.
 - Order of keeping under the cap: error paths (root to each error span, with the exception type,
   message and top in-project frame), then the critical path (the chain of longest children), then
-  the rest by duration. What's cut is said: `… 37 spans under 2 ms folded`.
-- `focus: "errors"` keeps only error paths; `"all"` keeps the tree in start order, still capped.
+  the rest by duration. Reserve each error and its exception before its ancestors. Long paths
+  retain the root and five nearest ancestors; intermediate levels may be folded. Render the
+  retained set in depth-first start order for every focus. Visual indentation stops at 20 levels;
+  compressed paths show the real depth and parent id. What's cut is said: `… 37 spans under 2 ms folded`.
+- `focus: "errors"` keeps only error paths, or says `No error spans; use focus slow.`.
+  `"all"` keeps the tree in start order, still protecting errors and the critical path under the cap.
 
 ```
 POST /invoices/overdue · 840 ms · 434 spans · ledger-api 220, fx-rates 214 · turn 12 · 0 errors
@@ -58,12 +71,13 @@ POST /invoices/overdue · 840 ms · 434 spans · ledger-api 220, fx-rates 214 ·
 … 9 spans under 20 ms folded
 ```
 
-`structuredContent`: `{summary, spans, folded: {count, underMs}}`. `summary` is the retained
-Trace summary; `spans` contains the retained displayed Spans (including each member of a collapsed
-group). `folded.count` counts only undisplayed Spans; `underMs` is a strict upper duration bound,
-or zero when none are folded. Error paths remain individual when their error Spans share a name.
-For `focus: "slow"`, keep error paths first, then the longest-child critical chain, then the rest
-by duration. `focus: "all"` uses start order. Indentation is two spaces per parent level.
+`structuredContent`: `{summary, spans, groups: [{spanIds}], folded: {count, underMs}}`. `summary`
+is the retained Trace summary. `spans` contains one representative Span with full details per
+displayed group, in display order; `groups` has the same order and every member id. Retrieve any
+member with `span`. This bounds transferred Span details even when tens of thousands collapse
+into a few groups. `folded.count` counts only Spans in undisplayed groups; `underMs` is a strict upper duration bound,
+or zero when none are folded. Selection priority and display order are separate: the tree always
+uses start order, with two spaces per visible parent level up to the visual limit.
 
 ## `span {trace, span}`
 
@@ -131,7 +145,14 @@ All four tools emit one text block of at most 16,000 characters. `traces` states
 suggests limit or narrower filters. `trace` counts folded Spans and gives their upper duration
 bound; use `span` for individual details. For `span`, name each omitted section with its omitted
 detail-line count and say to use `span` structuredContent for the full retained data. Older logs
-beyond the newest 20 are counted explicitly. Structured Span details retain redacted values verbatim.
+beyond the newest 20 are counted explicitly. Clip detail lines at 2,000 characters and budget
+sections separately. Header/code, exceptions with in-project frames, and logs precede attributes,
+resource and scope so a long SQL value cannot hide the failure. Structured Span details retain
+redacted values at full length.
+
+Every text and structured string is well-formed Unicode: lone surrogates become U+FFFD and bidi
+overrides/isolates become spaces. Text additionally replaces C0 and DEL controls with spaces.
+These presentation transformations do not change the retained records.
 
 ## Errors
 
@@ -142,7 +163,8 @@ beyond the newest 20 are counted explicitly. Structured Span details retain reda
 | `E-TRACE-NONE` | nothing has reached the receiver for this checkout; fix names the endpoint and "Set up tracing" |
 
 Unavailable services or receiver return `E-TRACE-UNAVAILABLE` with the reason and a fix pointing
-to Traces (⌘5) and Set up tracing. Invalid input returns `E-INPUT` with input-schema guidance.
+to Traces (⌘5) and Set up tracing. Invalid input returns `E-INPUT` with input-schema guidance, including 8–32 lowercase hex for
+trace ids and 8–16 lowercase hex for Span ids.
 A filtered empty page returns zero traces; `E-TRACE-NONE` is reserved for an empty checkout and
 its fix names the session endpoint and Set up tracing. Current means the active Turn in the calling
 Agent Session; between Turns it selects unattributed traces. Explicit Turn numbers resolve only

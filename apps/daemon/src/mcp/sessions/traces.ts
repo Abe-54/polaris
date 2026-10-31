@@ -4,7 +4,6 @@ import type { DataSources } from "../../data/index.ts";
 import type { TraceRuntime, TraceSessions, TraceStore } from "../../traces/index.ts";
 import type { TraceSessionTools } from "../tools/traces.ts";
 import { compareForSession } from "../../traces/compare.ts";
-import { attributeValue } from "../tools/traceFormat.ts";
 import { matchingSource } from "../tools/spanFormat.ts";
 
 /** Reuse the Host's services and token-resolved checkout; no caller supplies an authority field. */
@@ -52,7 +51,7 @@ export const sessionTraceTools = (
     };
   }),
   list: Effect.fnUntraced(function* (context) {
-    const page = yield* store.list(context.checkout, context.filter);
+    const page = yield* store.toolList(context.checkout, context.filter);
 
     if (page.total === 0 && (yield* store.list(context.checkout, { limit: 1 })).total === 0)
       return yield* new TraceError({
@@ -60,38 +59,18 @@ export const sessionTraceTools = (
         message: "No traces have reached this checkout.",
         fix: `Set up tracing in Traces (⌘5). Export to ${context.endpoint ?? "the session endpoint shown in Traces (http://127.0.0.1:4319/otlp/<token>)"}.`,
       });
-    const history: Record<string, number> = {};
-    const errors: Record<string, string> = {};
 
-    for (const trace of page.traces) {
-      const baseline = yield* store.history(context.checkout, trace.id, false);
-
-      if (baseline.root !== null && trace.durationMs > 20 && trace.durationMs > baseline.root * 3)
-        history[trace.id] = baseline.root;
-
-      if (trace.errors > 0) {
-        const detail = yield* store.get(context.checkout, trace.id);
-        const error = detail.spans.find((span) => span.status === "error");
-        errors[trace.id] = attributeValue(
-          error?.events.find((event) => event.name === "exception")?.attributes[
-            "exception.message"
-          ],
-          error?.statusMessage ?? ""
-        );
-      }
-    }
-
-    return { ...page, history, errors };
+    return page;
   }),
-  get: (checkout, id) => store.get(checkout, id),
-  history: (checkout, id) => store.history(checkout, id),
+  view: (checkout, id, focus) => store.view(checkout, id, focus),
   span: Effect.fnUntraced(function* (sessionId, checkout, trace, span) {
-    const detail = yield* store.span(checkout, trace, span);
+    const result = yield* store.toolSpan(checkout, trace, span);
+    const { detail } = result;
 
-    if (sources === undefined) return { detail };
+    if (sources === undefined) return result;
     const available = yield* sources.list({ sessionId }).pipe(Effect.orElseSucceed(() => []));
     const dataSource = matchingSource(detail.span, available);
 
-    return { detail, ...(dataSource === undefined ? undefined : { dataSource }) };
+    return { ...result, ...(dataSource === undefined ? undefined : { dataSource }) };
   }),
 });
