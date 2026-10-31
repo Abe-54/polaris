@@ -90,6 +90,9 @@ export class DataWriteResult extends Schema.Class<DataWriteResult>("DataWriteRes
 
 export const ExecuteDataInput = Schema.Struct({
   sessionId: SessionId,
+  requestId: Schema.optionalKey(
+    Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200))
+  ),
   source: Name,
   sql: Name.check(Schema.isMaxLength(32000)),
   params: Schema.optionalKey(Schema.Array(DataValue).check(Schema.isMaxLength(10000))),

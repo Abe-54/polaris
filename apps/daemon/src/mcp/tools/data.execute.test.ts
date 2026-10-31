@@ -12,7 +12,12 @@ const required = new DataApprovalRequired({
 
 const result = new DataWriteResult({ queryId: "write-query", affected: 1, elapsedMs: 2 });
 
-const input = { source: "app", sql: "UPDATE items SET v=1", reason: "Repair item" };
+const input = {
+  source: "app",
+  sql: "UPDATE items SET v=1",
+  reason: "Repair item",
+  requestId: "repair-once",
+};
 
 for (const binding of bindings) {
   test(`${binding._tag} execute binds identity, waits for approval and returns the committed result`, async () => {
@@ -60,4 +65,11 @@ test("execute denial returns the user's reason without a second execution", asyn
 
   expect(answer.structuredContent).toMatchObject({ code: "E-DATA-DENIED", message: "Use staging" });
   expect(attempts).toBe(1);
+});
+
+test("execute rejects malformed retry keys before invoking the service", async () => {
+  for (const requestId of ["", 7, "x".repeat(201)]) {
+    const result = await toolsWithData()("execute").call({ ...input, requestId });
+    expect(result.structuredContent?.code).toBe("E-INPUT");
+  }
 });

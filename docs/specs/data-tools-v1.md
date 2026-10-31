@@ -81,7 +81,7 @@ scanned. Output: a header line (`12 rows · 34 ms · query q_7f3a`), then the ro
 text table with column names and types in the header; past 16k characters rows are dropped from
 the end with the count said. `structuredContent`: `{ queryId, columns: [{name, type}], rows: DataValue[][], rowCount, returned, total?, truncated, elapsedMs }`.
 
-## `execute {source, sql, params?, reason}` (phase 2)
+## `execute {source, sql, params?, reason, requestId?}` (phase 2)
 
 A write. The Daemon first runs it in a transaction and rolls back (the dry run, logged), then opens
 a needs-you approval in the conversation showing the SQL, `reason`, the affected count and up to
@@ -100,10 +100,10 @@ it commits implicitly; use the project's migration tool. MySQL row writes requir
 Remote execute needs remembered source read access (exact target, or server as this user), writes
 allowed, and its own one-shot write approval. A `remember:false` source read grant authorizes only
 the query or describe that requested it. `remember` never makes a write approval reusable.
-Repeating the same source, SQL, params and reason in the same Turn reuses its card or completed
+Without a requestId, repeating the same source, SQL, params and reason in the same Turn reuses its card or completed
 result. Actual affected-count drift rolls back the real transaction. Interrupted consumption or
 an unknown external commit outcome is never retried automatically; inspect the Query Log and
-request a new preview with a new reason if needed.
+request a new preview with a new requestId (or a new reason for an unkeyed call) if needed.
 
 The active call's deadline includes its preview and approval wait. A late approval returns
 “Approved; call execute again” without starting a write past that deadline. Cancellation waits
@@ -116,6 +116,13 @@ auto-increment), external calls, and independent transactions in user functions/
 survive. Direct dblink, signal and lock calls are refused by the shared function guard; wrappers
 still need database-role restrictions. Non-InnoDB targets are refused because their rows survive
 rollback. PostgreSQL NOTIFY itself is transactional and is not delivered after rollback.
+
+`execute.requestId` is an optional 1–200 character idempotency key scoped to the Agent Session.
+Reuse it with identical arguments after a timeout: pending calls reuse their approval, and a
+completed call returns the saved receipt even after its Turn ends. A new key names a new write.
+Changing arguments under an existing key is refused. Without a key, existing exact-argument
+retry deduplication is scoped to the active Turn. An uncompleted approval from a prior Turn
+cannot authorize a write in the next one.
 
 ## Outside Polaris
 

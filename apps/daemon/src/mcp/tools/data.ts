@@ -11,6 +11,7 @@ import type { DataSessionTools } from "../sessions/data.ts";
 import type { SessionTools } from "../sessions/index.ts";
 import { cappedLines, describeView, queryView, safeDataText, sourcesView } from "./dataFormat.ts";
 import { text } from "./session.ts";
+import { RequestId as RetryKey } from "./idempotency.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 
 const DescribeInput = Schema.Struct({
@@ -27,6 +28,7 @@ const QueryInput = Schema.Struct({
 });
 
 const ExecuteInput = Schema.Struct({
+  requestId: Schema.optionalKey(RetryKey),
   source: ExecuteDataInput.fields.source,
   sql: ExecuteDataInput.fields.sql,
   params: ExecuteDataInput.fields.params,
@@ -260,7 +262,7 @@ export const dataTools = (sessionId: SessionId, sessions: SessionTools): BoundTo
     ),
     make(
       "execute",
-      "Preview one SQL write in a rolled-back transaction, then ask the user before committing it. Remote sources need remembered read approval and writes allowed. Returns queryId, affected rows and elapsedMs. Retry identical arguments to reuse the approval or completed result.",
+      "Preview one SQL write in a rolled-back transaction, then ask the user before committing it. Remote sources need remembered read approval and writes allowed. Returns queryId, affected rows and elapsedMs. Reuse requestId with identical arguments to retrieve the same approval or completed receipt, including after a Turn ends.",
       ExecuteInput,
       (input, data, started) =>
         read(

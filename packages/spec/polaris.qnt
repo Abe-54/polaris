@@ -1344,6 +1344,8 @@ module data_writes {
   run rollbackPreviewTest = init.then(dryRun(2)).expect(write.value == 0 and safety)
   run approvedOnceTest = init.then(dryRun(2)).then(request).then(allow).then(claim).then(execute(2))
     .then(retry).expect(write.value == 2 and write.runs == 1 and safety)
+  run completedRetryAfterEndTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(execute(1))
+    .then(endTurn).then(restart).then(retry).expect(write.phase == "completed" and write.runs == 1 and write.value == 1 and safety)
   run deniedNeverRunsTest = init.then(dryRun(2)).then(request).then(deny).then(retry)
     .expect(write.value == 0 and write.claims == 0 and write.runs == 0 and safety)
   run turnEndDeniesTest = init.then(dryRun(2)).then(request).then(endTurn)

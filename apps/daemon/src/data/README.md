@@ -151,7 +151,13 @@ requires remembered read access for the exact target or server **as this user**,
 to `ask`; a one-request read approval cannot authorize a preview. Each write still needs its
 own approval, regardless of the Session's permission mode or `remember` choice.
 
-A fingerprint binds the Agent Session, Turn, source id, target, SQL, parameters and reason.
+An explicit `execute.requestId` binds a retry to its Agent Session and durable argument hash.
+Completed receipts are returned before checking for an active Turn or opening the source.
+A different payload under the same key is refused; a different key requests a separate write.
+Uncompleted approvals remain bound to their original Turn. Calls without a key retain the
+exact-argument, per-Turn fingerprint.
+
+Without a requestId, a fingerprint binds the Agent Session, Turn, source id, target, SQL, parameters and reason.
 Retries share one card. A durable compare-and-set consumes approved authority before the
 transaction starts, and a completed retry returns the original result. Concurrent retries
 cannot execute twice. If a process or connection fails after consumption, automatic replay is

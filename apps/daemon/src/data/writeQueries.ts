@@ -11,6 +11,7 @@ import {
 import { Effect, Predicate, Schema, Semaphore } from "effect";
 import type { EventStore } from "../store/EventStore.ts";
 import { duringWriteTurn } from "./writeTurn.ts";
+import { writeRequestKey, writeRequestHash } from "./writeIdentity.ts";
 import type { DataSources } from "./index.ts";
 import type { DataApprovals } from "./approvals.ts";
 import type { QueryLog } from "./queryLog.ts";
@@ -115,21 +116,38 @@ export const writeQueries = Effect.fnUntraced(function* (
     const resolved = yield* resolve(input);
     const known = knownCredentials(resolved.connection);
 
-    const fingerprint = Bun.CryptoHasher.hash(
-      "sha256",
-      JSON.stringify([
-        input.sessionId,
-        turn,
-        resolved.source.id,
-        targetKey(targetOf(resolved.source)),
-        input.sql,
-        input.params ?? [],
-        input.reason,
-      ]),
-      "hex"
-    );
+    const fingerprint =
+      writeRequestKey(input) ??
+      Bun.CryptoHasher.hash(
+        "sha256",
+        JSON.stringify([
+          input.sessionId,
+          turn,
+          resolved.source.id,
+          targetKey(targetOf(resolved.source)),
+          input.sql,
+          input.params ?? [],
+          input.reason,
+        ]),
+        "hex"
+      );
 
     const previous = yield* approvals.writes.lookup(fingerprint);
+
+    if (
+      previous?.request.dataWrite &&
+      targetKey(previous.request.dataWrite.target) !== targetKey(targetOf(resolved.source))
+    )
+      return yield* denied(
+        "The data source target changed after approval.",
+        "Preview the new target with a new requestId."
+      );
+
+    if (previous && previous.request.turnId !== turn)
+      return yield* denied(
+        "This write belongs to an earlier turn.",
+        "Use a new requestId to preview a new write."
+      );
 
     if (previous?.result) return previous.result;
 
@@ -186,6 +204,9 @@ export const writeQueries = Effect.fnUntraced(function* (
           const approvalId = yield* approvals.writes.open(input.sessionId, turn, {
             target: targetOf(resolved.source),
             fingerprint,
+            ...(input.requestId === undefined
+              ? undefined
+              : { requestHash: writeRequestHash(input) }),
             queryId: initial.id,
             sql: scrubCredentials(input.sql, known).slice(0, 32000),
             reason: scrubCredentials(input.reason, known).slice(0, 4000),
@@ -305,6 +326,17 @@ export const writeQueries = Effect.fnUntraced(function* (
     execute: (input: ExecuteInput) =>
       lock.withPermits(1)(
         Effect.gen(function* () {
+          yield* context(input.sessionId);
+          const key = writeRequestKey(input);
+          const prior = key === undefined ? undefined : yield* approvals.writes.lookup(key);
+
+          if (prior && prior.request.dataWrite?.requestHash !== writeRequestHash(input))
+            return yield* denied(
+              "This requestId was already used with different write arguments.",
+              "Retry the original arguments, or use a new requestId for a new write."
+            );
+
+          if (prior?.result) return prior.result;
           const ctx = yield* context(input.sessionId, input);
 
           if (ctx.author.kind !== "agent")

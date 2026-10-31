@@ -38,6 +38,7 @@ export const WORKER_TOOL_NAMES = [
   "data_sources",
   "describe",
   "query",
+  "execute",
   "visualize",
 ];
 
@@ -59,6 +60,7 @@ export const LEAD_TOOL_NAMES = [
   "data_sources",
   "describe",
   "query",
+  "execute",
   "visualize",
 ];
 

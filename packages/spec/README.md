@@ -879,7 +879,7 @@ MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but 
 `data_writes` in `polaris.qnt` models the rolled-back preview, pending/approved/denied authority,
 one durable consumption, count-checked execution and retries. Turn end/recovery deny pending
 cards and prevent starting a write. The safety checks constrain observed write effects and
-consumption, including count-drift rollback; seven scenarios and 3,000 safety traces run in
+consumption, including count-drift rollback; eight scenarios and 3,000 safety traces run in
 `bun run spec`.
 
 | Model | Runtime mapping |
@@ -896,6 +896,11 @@ test rejects an unapproved execution and a retry that changes the database again
 injected at the connection boundary; these are not live Harness/UI tests. The driver suite also
 covers before/after rows, denied storage engines, DDL, affected-count drift, key validation and
 whole-grid rollback. Run/replay commands are in `apps/daemon/src/data/README.md`.
+
+Explicit `execute.requestId` keys are scoped to the Agent Session, with a durable argument hash.
+Completed receipts can be retrieved after Turn end or restart without opening a data source;
+changed arguments under the same key are refused. `writeRequests.test.ts` checks the real
+service and SQLite projection; `completedRetryAfterEndTest` models the effect-free receipt retry.
 
 The finite model does not claim distributed exactly-once commit across SQLite and an external
 SQL server. A consumed operation with an unknown outcome cannot be automatically replayed.

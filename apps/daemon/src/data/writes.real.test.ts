@@ -104,6 +104,7 @@ for (const engine of ["postgres", "mysql"] as const) {
                 source: name,
                 sql: `UPDATE ${name} SET v=v+1 WHERE id=1`,
                 reason: "Increment once",
+                requestId: "increment-once",
               };
 
               const required = yield* Effect.flip(queries.execute(input));
@@ -168,9 +169,15 @@ for (const engine of ["postgres", "mysql"] as const) {
                 phase: "completed",
               });
               expect(first).toEqual(retry);
+              expect(
+                yield* Effect.flip(queries.execute({ ...input, reason: "Changed intent" }))
+              ).toMatchObject({
+                code: "E-DATA-DENIED",
+                message: "This requestId was already used with different write arguments.",
+              });
               expect(first.affected).toBe(1);
               expect(yield* value()).toBe(1);
-              const deniedInput = { ...input, reason: "Must be denied" };
+              const deniedInput = { ...input, requestId: "denied-write" };
               const denied = yield* Effect.flip(queries.execute(deniedInput));
 
               if (!Predicate.isTagged(denied, "DataApprovalRequired"))
@@ -193,6 +200,22 @@ for (const engine of ["postgres", "mysql"] as const) {
                 affected: [{ table: name, rows: 1 }],
               });
               expect(page.entries.filter((entry) => entry.state === "dry-run")).toHaveLength(2);
+              yield* store.commit({
+                commandId: null,
+                decide: (model) =>
+                  Effect.succeed(
+                    decideSession(model.sessions.get(started.session.id), {
+                      type: "harness.turnEnded",
+                      turnId: input.turn,
+                      status: "completed",
+                      error: null,
+                      checkpoint: null,
+                      at: started.session.createdAt,
+                    }).events
+                  ),
+              });
+              expect(yield* queries.execute(input)).toEqual(first);
+              expect(yield* value()).toBe(1);
             })
           ).pipe(Effect.provide(layer))
         );

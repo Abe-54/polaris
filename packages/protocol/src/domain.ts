@@ -610,6 +610,7 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
     Schema.Struct({
       target: DataSourceApproval,
       fingerprint: Schema.String,
+      requestHash: Schema.optionalKey(Schema.String),
       queryId: Schema.String,
       sql: ScrubbedText,
       reason: ScrubbedText,
