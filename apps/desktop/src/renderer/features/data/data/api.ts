@@ -1,9 +1,10 @@
 /**
- * Data's boundary: the four calls Data mode makes (sources and Query Log watches, describe,
- * query). `liveDataApi` goes over IPC (shared/dataContract.ts); fixtures swap in for previews.
+ * Data's boundary: the calls Data mode makes (sources and Query Log watches, describe, query,
+ * and saving, labelling and removing a source). `liveDataApi` goes over IPC (shared/dataContract.ts); fixtures swap in for previews.
  */
 import type {
   DataSource,
+  DataValue,
   DataSourceLabel,
   QueryLogEntry,
   QueryResult,
@@ -33,6 +34,8 @@ export interface DescribeInput {
 export interface QueryInput {
   readonly source: string;
   readonly sql: string;
+  /** Bound to `$1`, `$2`…; omitted when there are none. */
+  readonly params?: ReadonlyArray<DataValue>;
   /** Rows returned, 1–200. */
   readonly limit?: number;
 }
@@ -70,6 +73,8 @@ export interface SaveSourceInput {
   readonly database: string;
   readonly user: string;
   readonly password?: string;
+  /** Removes the saved password; sent without one. */
+  readonly passwordAction?: "clear";
   readonly label: DataSourceLabel;
 }
 
@@ -97,6 +102,8 @@ export interface DataApi {
     on: QueryStream
   ) => () => void;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
+  /** Removes a source the user added (`data.source.remove`); discovered ones can't be. */
+  readonly removeSource: (at: DataSessionKey, source: string) => Promise<Result<null>>;
   readonly labelSource: (
     at: DataSessionKey,
     source: string,
@@ -153,6 +160,7 @@ export const liveDataApi: DataApi = {
     );
   },
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
+  removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
     polaris().request("data.source.label", { ...session(at), source, label }),
   watchTableChanges: (_at, on) => {

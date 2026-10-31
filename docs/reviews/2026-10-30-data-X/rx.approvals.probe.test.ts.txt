@@ -1,0 +1,66 @@
+/** RX probe: approval bypasses through the real DataApprovals layer. Not committed. */
+import { test } from "bun:test";
+import { ApprovalDecision, DataSource } from "@polaris/protocol";
+import { Effect, Predicate, Schema } from "effect";
+import { DataApprovals } from "./approvals.ts";
+import { approvalLayer, seedDataSession, started } from "./approvals.testing.ts";
+import { EventStore } from "../store/EventStore.ts";
+import { decideSession } from "../engine/session.ts";
+import { remote } from "./approvals.test.ts";
+
+const fields = (s: DataSource) => Schema.decodeUnknownSync(Schema.Struct(DataSource.fields))(s);
+const run = <A, E>(p: Effect.Effect<A, E, any>) =>
+  Effect.runPromise(Effect.scoped(p).pipe(Effect.provide(approvalLayer())) as Effect.Effect<A, E, never>);
+const attempt = (s: DataSource) => Effect.gen(function* () {
+  const r = yield* Effect.exit(Effect.flatMap(Effect.service(DataApprovals), (a) => a.require(started.session.id, s)));
+  if (r._tag === "Success") return "RUNS (no approval asked)";
+  const e = (r.cause as any).reasons?.[0]?.error ?? (r.cause as any).error;
+  return Predicate.isTagged(e, "DataApprovalRequired") ? "approval requested" : `${e?.code}`;
+});
+const respond = (id: string, decision: ApprovalDecision) => Effect.gen(function* () {
+  yield* (yield* EventStore).commit({ commandId: null, decide: (m) => Effect.succeed(
+    decideSession(m.sessions.get(started.session.id), { type: "approval.respond", requestId: id as never, decision, resolvedBy: "probe" }).events) });
+});
+const requestId = (s: DataSource) => Effect.gen(function* () {
+  const e = yield* Effect.flip((yield* DataApprovals).require(started.session.id, s));
+  return (e as { approvalId: string }).approvalId;
+});
+
+test("A1 local write-policy pin survives becoming remote", () => run(Effect.gen(function* () {
+  yield* seedDataSession;
+  const local = new DataSource({ ...fields(remote), host: "localhost", locality: "local", access: "read", writes: "ask" });
+  const a = yield* DataApprovals;
+  console.log("A1 local before:", yield* attempt(local));
+  yield* a.change(local, "off");
+  const nowRemote = new DataSource({ ...fields(local), locality: "remote", access: "needs-approval" });
+  console.log("A1 same target, now remote, after writes=off change:", yield* attempt(nowRemote));
+  const untouched = new DataSource({ ...fields(nowRemote), database: "never-changed" });
+  console.log("A1 control (no write-policy change):", yield* attempt(untouched));
+})));
+
+test("A2 Allow remember:false is remembered", () => run(Effect.gen(function* () {
+  yield* seedDataSession;
+  const id = yield* requestId(remote);
+  yield* respond(id, ApprovalDecision.cases.Allow.make({ remember: false }));
+  console.log("A2 after Allow{remember:false}, read again:", yield* attempt(remote));
+})));
+
+test("A3 server scope covers other users; target revoke leaves server grant", () => run(Effect.gen(function* () {
+  yield* seedDataSession;
+  const id = yield* requestId(remote);
+  yield* respond(id, ApprovalDecision.cases.Allow.make({ remember: true, dataScope: "server" }));
+  const admin = new DataSource({ ...fields(remote), id: "admin", name: "admin", user: "postgres", database: "postgres" });
+  console.log("A3 server grant, different user+db:", yield* attempt(admin));
+  yield* (yield* DataApprovals).change(remote, undefined, true);
+  console.log("A3 after revoking the approved target, same target:", yield* attempt(remote));
+  console.log("A3 after revoking the approved target, other db on server:", yield* attempt(admin));
+})));
+
+test("A4 a remembered deny is per target, for every session, until revoke", () => run(Effect.gen(function* () {
+  yield* seedDataSession;
+  const id = yield* requestId(remote);
+  yield* respond(id, ApprovalDecision.cases.Deny.make({ reason: null }));
+  console.log("A4 after deny:", yield* attempt(remote));
+  yield* (yield* DataApprovals).change(remote, undefined, true);
+  console.log("A4 after revoke:", yield* attempt(remote));
+})));

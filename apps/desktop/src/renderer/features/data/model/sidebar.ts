@@ -13,7 +13,7 @@ export interface SidebarState {
 
 const EMPTY: SidebarState = { view: "sources", toggled: new Map() };
 
-const sidebarStore = createStore<Readonly<Record<string, SidebarState>>>(() => ({}));
+export const sidebarStore = createStore<Readonly<Record<string, SidebarState>>>(() => ({}));
 
 const patch = (at: DataSessionKey, change: (state: SidebarState) => SidebarState) => {
   const key = dataSessionKey(at);
@@ -36,10 +36,17 @@ export type SourceForm =
   | { readonly mode: "add" }
   | { readonly mode: "edit"; readonly source: DataSource };
 
-const formStore = createStore<{ readonly form: SourceForm | null }>(() => ({ form: null }));
+/** Per Agent Session, so a form left open never saves into another session's checkout. */
+const formStore = createStore<Readonly<Record<string, SourceForm>>>(() => ({}));
 
-export const openSourceForm = (form: SourceForm) => formStore.setState({ form });
+export const openSourceForm = (at: DataSessionKey, form: SourceForm) =>
+  formStore.setState({ [dataSessionKey(at)]: form });
 
-export const closeSourceForm = () => formStore.setState({ form: null });
+export const closeSourceForm = (at: DataSessionKey) => {
+  const { [dataSessionKey(at)]: _closed, ...rest } = formStore.getState();
 
-export const useSourceForm = () => useStore(formStore, (s) => s.form);
+  formStore.setState(rest, true);
+};
+
+export const useSourceForm = (at: DataSessionKey): SourceForm | null =>
+  useStore(formStore, (s) => s[dataSessionKey(at)] ?? null);

@@ -1,10 +1,11 @@
 /**
  * The connection bar's instrument card (Paper D3): label colour and text, then server, driver,
- * database, where it was found and agent access. Label edits post `data.source.label`.
+ * database, where it was found and agent access. Label edits post `data.source.label`; a source
+ * the user added can be edited or removed.
  */
 import type { DataSource, DataSourceLabel } from "@polaris/protocol";
 import { Button, Input, Kicker, PopoverContent } from "@polaris/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PendingDataApproval } from "../../approval/PendingDataApproval.tsx";
 import { useDataApi } from "../../data/hooks.tsx";
 import { openSourceForm } from "../../model/sidebar.ts";
@@ -39,64 +40,161 @@ const Details = ({ source }: { readonly source: DataSource }) => (
   </div>
 );
 
-/** The label as the user is editing it; posted on a swatch, Enter or leaving the field. */
+const sameLabel = (a: DataSourceLabel, b: DataSourceLabel) =>
+  a.text === b.text && a.colour === b.colour;
+
+/**
+ * The label as the user is editing it; posted on a swatch, Enter, blur or the card closing
+ * (Escape included). A fresh snapshot replaces the draft only when the saved label's value moved.
+ */
 const useLabel = (at: DataSessionKey, source: DataSource) => {
   const api = useDataApi();
-  const [label, setLabel] = useState<DataSourceLabel>(source.label);
+  const [draft, setDraft] = useState<DataSourceLabel>(source.label);
   const [error, setError] = useState<string | null>(null);
+  const dirty = useRef(false);
+  const { text, colour } = source.label;
 
-  useEffect(() => setLabel(source.label), [source.label]);
+  useEffect(() => {
+    dirty.current = false;
+    setDraft({ text, colour });
+  }, [text, colour]);
 
   const post = async (next: DataSourceLabel) => {
-    setLabel(next);
+    const label = { ...next, text: next.text.toUpperCase() };
 
-    if (next.text === source.label.text && next.colour === source.label.colour) return;
-    const result = await api.labelSource(at, source.name, next);
+    dirty.current = false;
+    setDraft(next);
+
+    if (sameLabel(label, { text, colour })) return;
+    const result = await api.labelSource(at, source.name, label);
 
     setError(result.ok ? null : result.error.message);
   };
 
-  return { label, setLabel, post, error };
+  const edit = (next: DataSourceLabel) => {
+    dirty.current = true;
+    setDraft(next);
+  };
+
+  const flush = useRef<() => void>(() => undefined);
+
+  useEffect(() => {
+    flush.current = () => {
+      if (dirty.current) void post(draft);
+    };
+  });
+  useEffect(() => () => flush.current(), []);
+
+  return { draft, edit, post, error };
 };
 
-export const ConnectionCard = ({
+/** A source the user added: Edit, and Remove confirmed in place (rule/destructive-names-object). */
+const ManualActions = ({
   at,
   source,
   canEdit,
+  onRemoved,
 }: {
+  readonly at: DataSessionKey;
+  readonly source: DataSource;
+  readonly canEdit: boolean;
+  readonly onRemoved: () => void;
+}) => {
+  const api = useDataApi();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const remove = async () => {
+    const result = await api.removeSource(at, source.name);
+
+    if (result.ok) onRemoved();
+    else setError(result.error.message);
+  };
+
+  if (!confirming)
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="ghost"
+          disabled={!canEdit}
+          data-testid="data-source-remove"
+          onClick={() => setConfirming(true)}
+        >
+          Remove…
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!canEdit}
+          onClick={() => openSourceForm(at, { mode: "edit", source })}
+        >
+          Edit
+        </Button>
+      </div>
+    );
+
+  return (
+    <div className="border-hairline bg-well flex flex-col gap-2 rounded-[12px] border px-3 py-2.5">
+      <p className="text-caption text-text-default">
+        Agents in this checkout can't query <span dir="auto">{source.name}</span> after this, and
+        its saved password is deleted. You can add it again.
+      </p>
+      {error === null ? null : (
+        <p role="alert" className="text-caption text-failed-text">
+          Couldn't remove it · {error}
+        </p>
+      )}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" autoFocus onClick={() => setConfirming(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          disabled={!canEdit}
+          data-testid="data-source-remove-confirm"
+          onClick={() => void remove()}
+        >
+          Remove data source
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export interface ConnectionCardProps {
   readonly at: DataSessionKey;
   readonly source: DataSource;
   /** False while the Host is Reconnecting or Offline. */
   readonly canEdit: boolean;
-}) => {
-  const { label, setLabel, post, error } = useLabel(at, source);
-  const manual = source.foundIn.kind === "manual";
+  /** The user removed the source: the card closes. */
+  readonly onRemoved: () => void;
+}
+
+/** Inside the popover's content, so closing the card unmounts it and flushes the label draft. */
+const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
+  const { draft, edit, post, error } = useLabel(at, source);
 
   return (
-    <PopoverContent
-      align="start"
-      data-testid="data-connection-card"
-      className="bg-raised rounded-card border-hairline flex w-[440px] flex-col gap-3 border p-3.5"
-    >
+    <>
       <div className="flex items-center gap-2">
         <Kicker className="flex-1">Label</Kicker>
         <LabelSwatches
-          value={label.colour}
+          value={draft.colour}
           disabled={!canEdit}
-          onChange={(colour) => void post({ ...label, colour })}
+          onChange={(colour) => void post({ ...draft, colour })}
         />
       </div>
+      {/* Uppercase on screen only: rewriting the value would move the caret. */}
       <Input
         aria-label="Label"
         data-testid="data-label-field"
         disabled={!canEdit}
         className="bg-well h-[30px] font-mono uppercase"
-        value={label.text}
+        value={draft.text}
         placeholder={kickerText(source, "")}
-        onChange={(e) => setLabel({ ...label, text: e.target.value.toUpperCase() })}
-        onBlur={() => void post(label)}
+        onChange={(e) => edit({ ...draft, text: e.target.value })}
+        onBlur={() => void post(draft)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") void post(label);
+          if (e.key === "Enter") void post(draft);
         }}
       />
       <Details source={source} />
@@ -108,17 +206,19 @@ export const ConnectionCard = ({
           Couldn't save the label · {error}
         </p>
       )}
-      {manual ? (
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="secondary"
-            disabled={!canEdit}
-            onClick={() => openSourceForm({ mode: "edit", source })}
-          >
-            Edit
-          </Button>
-        </div>
+      {source.foundIn.kind === "manual" ? (
+        <ManualActions at={at} source={source} canEdit={canEdit} onRemoved={onRemoved} />
       ) : null}
-    </PopoverContent>
+    </>
   );
 };
+
+export const ConnectionCard = (props: ConnectionCardProps) => (
+  <PopoverContent
+    align="start"
+    data-testid="data-connection-card"
+    className="bg-raised rounded-card border-hairline flex w-[440px] flex-col gap-3 border p-3.5"
+  >
+    <CardBody {...props} />
+  </PopoverContent>
+);

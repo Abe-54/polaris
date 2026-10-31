@@ -13,6 +13,7 @@ import { Effect, Layer, Redacted, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
+import { SchemaSnapshots } from "./schemaSnapshots.ts";
 import { DataSourceAccess } from "./access.ts";
 import { sources } from "./sources.ts";
 import { memorySecrets } from "../secrets/index.ts";
@@ -49,7 +50,14 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
           lockPath: join(root, "d.lock"),
           handlers: DataRpcsLive.pipe(
             Layer.provide(
-              Layer.merge(
+              Layer.mergeAll(
+                Layer.succeed(
+                  SchemaSnapshots,
+                  SchemaSnapshots.of({
+                    get: (input) => Effect.succeed({ ...input, sources: [] }),
+                    remove: () => Effect.void,
+                  })
+                ),
                 sourceLayer,
                 Layer.succeed(
                   DataQueries,
@@ -68,7 +76,7 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
               )
             )
           ),
-          capabilities: ["data"],
+          capabilities: ["data", "data.schemaDiff"],
           secrets: HostSecrets.memory(),
         });
 
@@ -85,6 +93,7 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
         });
 
         expect(capabilities).toContain("data");
+        expect(yield* client["data.schemaDiff"]({ sessionId })).toEqual({ sessionId, sources: [] });
         expect(
           yield* Stream.runCollect(
             watchDataSources({ client, capabilities }, { sessionId }).pipe(Stream.take(1))

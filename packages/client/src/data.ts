@@ -2,6 +2,8 @@
 import {
   DATA_CAPABILITY,
   DATA_WRITE_CAPABILITY,
+  SCHEMA_DIFF_CAPABILITY,
+  type GetDataSchemaDiff,
   Unsupported,
   type WatchDataSources,
   type WatchDataQueryLog,
@@ -28,6 +30,7 @@ export type DataSession = Pick<LiveSession, "capabilities"> & {
   readonly client: Pick<
     LiveSession["client"],
     | "data.sources.watch"
+    | "data.schemaDiff"
     | "data.describe"
     | "data.edits.commit"
     | "data.query"
@@ -86,3 +89,8 @@ export const commitDataEdits = (session: DataSession, input: Input<typeof Commit
   supportsDataWrites(session)
     ? session.client["data.edits.commit"](input)
     : Effect.fail(new Unsupported({ capability: DATA_WRITE_CAPABILITY }));
+
+export const getDataSchemaDiff = (session: DataSession, input: Input<typeof GetDataSchemaDiff>) =>
+  session.capabilities.includes(SCHEMA_DIFF_CAPABILITY)
+    ? session.client["data.schemaDiff"](input)
+    : Effect.fail(new Unsupported({ capability: SCHEMA_DIFF_CAPABILITY }));

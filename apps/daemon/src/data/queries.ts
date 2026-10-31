@@ -101,6 +101,8 @@ export const queries = Effect.gen(function* () {
       if (input.tool !== undefined)
         yield* approvals.require(input.sessionId, resolved.source, input.turn);
 
+      yield* log.touch(entry);
+
       const result = yield* readEffect(pools, {
         source: resolved.source,
         connection: resolved.connection,
@@ -179,11 +181,23 @@ export const queries = Effect.gen(function* () {
   });
 
   const describe: DataQueries["Service"]["describe"] = Effect.fnUntraced(function* (input) {
-    yield* context(input.sessionId, input);
+    const ctx = yield* context(input.sessionId, input);
     const resolved = yield* resolveReadSource(sources, input);
 
     if (input.tool !== undefined)
       yield* approvals.require(input.sessionId, resolved.source, input.turn);
+    yield* log.touch(
+      new QueryLogEntry({
+        id: `describe:${crypto.randomUUID()}`,
+        checkout: ctx.checkout,
+        source: { id: resolved.source.id, name: resolved.source.name },
+        sql: "",
+        state: "running",
+        author: ctx.author,
+        tool: "describe",
+        at: new Date().toISOString(),
+      })
+    );
     const result = yield* readCatalog(pools, resolved, input.table);
 
     if (result instanceof SchemaTree) return result;

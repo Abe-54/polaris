@@ -22,6 +22,7 @@ export const Capability = Schema.Literals([
   "data",
   /** Agent execute and user grid commits (ENG-645). */
   "data.writes",
+  "data.schemaDiff",
   /** `host.restartPreview` and `host.prepareRestart`: Restart daemon's confirm and clean stop (ADR 0087). */
   "host.restart",
   /** `remoteAccess.status`, `remoteAccess.enable` and `remoteAccess.disable` (Tailscale, ADR 0076). */

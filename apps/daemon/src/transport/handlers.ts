@@ -472,6 +472,7 @@ export const defaultHandlers = (options: {
     "usage.watch": () => Stream.fail(new Unsupported({ capability: "usage" })),
     "data.sources.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
     "data.queryLog.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
+    "data.schemaDiff": () => Effect.fail(new Unsupported({ capability: "data.schemaDiff" })),
     "data.describe": () => Effect.fail(new Unsupported({ capability: "data" })),
     "data.query": () => Effect.fail(new Unsupported({ capability: "data" })),
     "data.query.stream": () => Stream.fail(new Unsupported({ capability: "data" })),

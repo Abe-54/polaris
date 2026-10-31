@@ -3,7 +3,7 @@
  * Screenshots of Data's sidebar, connection bar and status bar on worst-case fixtures
  * (`#data-sidebar/<scene>`) at 1440×900 against Paper D1/D3: Midnight and light × three densities.
  *
- *   node scripts/dataSidebarScreens.ts --out <dir> [--build] [--scenes worst,card]
+ *   node scripts/dataSidebarScreens.ts --out <dir> [--build] [--scenes worst,card] [--densities balanced]
  */
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,6 +29,11 @@ if (out === null) throw new Error("--out <dir> is required");
 const ALL = ["worst", "card", "log", "form", "empty", "unreachable", "reconnecting", "offline"];
 
 const scenes = flag("--scenes")?.split(",") ?? ALL;
+
+const densities = flag("--densities")?.split(",") ?? ["calm", "balanced", "compact"];
+
+/** The scenes shot at the 760×600 minimum window instead of 1440×900. */
+const NARROW = new Set(["narrow"]);
 
 if (args.includes("--build"))
   spawnSync("bun", [join(APP_DIR, "scripts/build.ts"), "--no-app"], { stdio: "inherit" });
@@ -68,32 +73,72 @@ const appearance = async (page: Page, patch: ThemePatch, density: string) => {
   await page.waitForTimeout(500);
 };
 
-/** The scene's last step, after the appearance settles: the card is a popover a click opens. */
-const finish = async (page: Page, scene: string) => {
-  if (scene !== "card") return;
-
+const openCard = async (page: Page) => {
   const open = page.locator('[data-testid="data-connection-bar"][data-state="open"]');
 
   if ((await open.count()) === 0) await page.getByTestId("data-connection-bar").click();
   await page.getByTestId("data-label-field").waitFor();
-  await page.mouse.move(1300, 860);
+};
+
+const keys = async (page: Page) => {
+  if ((await page.locator("[data-tree-key]:focus").count()) > 0) return;
+  await page.locator('[data-tree-key][tabindex="0"]').focus();
+
+  for (const key of ["Home", "ArrowDown", "ArrowDown", "ArrowDown"]) await page.keyboard.press(key);
+};
+
+const removing = async (page: Page) => {
+  await openCard(page);
+
+  if ((await page.getByTestId("data-source-remove-confirm").count()) === 0)
+    await page.getByTestId("data-source-remove").click();
+};
+
+const clearing = async (page: Page) => {
+  const clear = page.getByTestId("data-source-clear-password");
+
+  if ((await clear.getAttribute("aria-pressed")) !== "true") await clear.click();
+};
+
+const naming = async (page: Page) => {
+  const form = page.getByTestId("data-source-form");
+
+  if ((await form.getByRole("alert").count()) > 0) return;
+  await form.locator("input").first().fill("Billing DB");
+  await form.getByRole("button", { name: "Add data source" }).click();
+};
+
+/** Each scene's last steps, after the appearance settles; each one is safe to run again. */
+const STEPS = new Map([
+  ["card", openCard],
+  ["manual", removing],
+  ["edit", clearing],
+  ["name", naming],
+  ["keys", keys],
+]);
+
+const finish = async (page: Page, scene: string) => {
+  await STEPS.get(scene)?.(page);
+  await page.mouse.move(NARROW.has(scene) ? 740 : 1300, NARROW.has(scene) ? 580 : 860);
   await page.waitForTimeout(300);
 };
 
 try {
   const page = await app.firstWindow();
 
-  await page.setViewportSize({ width: 1440, height: 900 });
   mkdirSync(out, { recursive: true });
   page.on("pageerror", (error) => console.log(`screens: page error: ${error.message}`));
 
   for (const scene of scenes) {
+    await page.setViewportSize(
+      NARROW.has(scene) ? { width: 760, height: 600 } : { width: 1440, height: 900 }
+    );
     await page.evaluate(`location.hash = "#data-sidebar/${scene}"`);
     await page.reload({ waitUntil: "domcontentloaded" });
     await page.getByTestId("data-mode").waitFor({ timeout: 20_000 });
     await page.waitForTimeout(800);
 
-    for (const density of ["calm", "balanced", "compact"]) {
+    for (const density of densities) {
       for (const [name, patch] of THEMES) {
         await appearance(page, patch, density);
         await finish(page, scene);
