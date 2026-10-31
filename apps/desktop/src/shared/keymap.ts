@@ -89,6 +89,8 @@ export const CONTEXT_KEYS = [
   "mode.edit",
   /** The Data view is showing. */
   "mode.data",
+  /** The Traces view is showing. */
+  "mode.traces",
   /** A file is open and focused in Edit. */
   "editor.file",
   "prediction.ghost",
@@ -726,6 +728,7 @@ export const PC_KEYS: Partial<Record<CommandId, ReadonlyArray<string>>> = {
   "view.review": ["Alt+2"],
   "view.edit": ["Alt+3"],
   "view.data": ["Alt+4"],
+  "view.traces": ["Alt+5"],
   "view.output": ["CmdOrCtrl+Shift+B"],
   "session.next": ["CmdOrCtrl+PageDown", "Ctrl+Tab"],
   "session.previous": ["CmdOrCtrl+PageUp", "Ctrl+Shift+Tab"],
