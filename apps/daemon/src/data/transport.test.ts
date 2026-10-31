@@ -47,7 +47,25 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
           root,
           socketPath: join(root, "d.sock"),
           lockPath: join(root, "d.lock"),
-          handlers: DataRpcsLive.pipe(Layer.provide(Layer.merge(sourceLayer, DataQueries.layer))),
+          handlers: DataRpcsLive.pipe(
+            Layer.provide(
+              Layer.merge(
+                sourceLayer,
+                Layer.succeed(
+                  DataQueries,
+                  DataQueries.of({
+                    query: () => Effect.fail(new Unsupported({ capability: "data" })),
+                    describe: () => Effect.fail(new Unsupported({ capability: "data" })),
+                    queryStream: () => Stream.empty,
+                    watchLog: () => Stream.succeed([]),
+                    pageLog: () => Effect.succeed({ entries: [], next: null }),
+                    awaitApproval: () => Effect.succeed({ status: "pending" }),
+                    recordOutside: () => Effect.void,
+                  })
+                )
+              )
+            )
+          ),
           capabilities: ["data"],
           secrets: HostSecrets.memory(),
         });
@@ -80,10 +98,6 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
           client["data.query"]({ ...source, sql: "select 1", params: [], limit: 1 }).pipe(
             Effect.asVoid
           ),
-          client["data.source.access"]({ ...source, writes: "off", revoke: true }).pipe(
-            Effect.asVoid
-          ),
-          client["data.queryLog.page"]({ sessionId }).pipe(Effect.asVoid),
         ];
 
         for (const request of requests) {

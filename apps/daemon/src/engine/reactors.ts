@@ -309,7 +309,10 @@ const make = Effect.gen(function* () {
       StopBackgroundTasks: (command) => stopBackground(command.sessionId, command.taskIds),
       BackgroundCommand: (command) => backgroundCommand(command.sessionId, command.itemId),
       RespondToApproval: (command) =>
-        respond(command.sessionId, command.requestId, command.decision),
+        committed.before.sessions.get(command.sessionId)?.pending.get(command.requestId)
+          ?.dataSource !== undefined
+          ? Effect.void
+          : respond(command.sessionId, command.requestId, command.decision),
       SetPermissionMode: (command) =>
         Effect.suspend(
           () =>

@@ -9,11 +9,18 @@ export const decisionRefusal = (
   requestId: RequestId,
   decision: ApprovalDecision
 ): string | null => {
-  const secret = record.pending.get(requestId)?.kind === "secret";
+  const request = record.pending.get(requestId);
+  const secret = request?.kind === "secret";
+  const data = request?.dataSource !== undefined;
 
   return ApprovalDecision.match(decision, {
     Allow: () => (secret ? "a Secret Request takes a secret or a decline" : null),
-    Answer: () => (secret ? "a Secret Request takes a secret or a decline" : null),
+    Answer: () =>
+      data
+        ? "a Data Source Approval takes an allow or a deny"
+        : secret
+          ? "a Secret Request takes a secret or a decline"
+          : null,
     Deny: () => null,
     Provided: () => (secret ? null : `request ${requestId} is not a Secret Request`),
   });
@@ -39,3 +46,29 @@ export const withdrawn = (record: SessionRecord, withdrawal: Withdrawal) =>
     withdrawnBy: withdrawal.withdrawnBy,
     reason: withdrawal.reason,
   });
+
+/** Only the Daemon may request Data access; the same pending target shares one card. */
+export const canRequestDataApproval = (
+  record: SessionRecord,
+  event: { type: string; request: import("@polaris/protocol").ApprovalRequest }
+) => {
+  const target = event.request.dataSource;
+
+  if (event.type === "harness.approvalRequested") return target === undefined;
+
+  if (target === undefined) return false;
+
+  const key = (value: typeof target) =>
+    JSON.stringify([
+      value.sourceId,
+      value.engine,
+      value.host,
+      value.port,
+      value.database,
+      value.user,
+    ]);
+
+  return ![...record.pending.values()].some(
+    (request) => request.dataSource !== undefined && key(request.dataSource) === key(target)
+  );
+};

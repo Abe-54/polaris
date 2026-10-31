@@ -3,8 +3,7 @@
 `DataSources.layer` uses EventStore only to read `record.session.cwd`, HostSecrets to keep
 manual-source passwords, and `DataSourceAccess` to attach approval state. Sessions in the same
 checkout share stable ids (SHA-256 of the real checkout path + NUL + name), manual sources and labels.
-The default access policy reads local sources and leaves remote sources needing approval; X
-replaces it. It is independent of the Engine so the Engine, MCP and RPCs share one instance.
+The access policy reads local sources and applies remembered approvals to remote sources. It is independent of the Engine so the Engine, MCP and RPCs share one instance.
 
 `list` and `resolve` read configuration afresh; no polling, cross-request cache or extra file watcher is installed.
 `watch` subscribes before reading its snapshot, then updates on manual-source and label mutations.
@@ -26,7 +25,7 @@ published database port and maps a matching container hostname to the Host's pub
 
 Discovered URLs exist only in memory. `resolve({sessionId, source})` accepts a name or stable id
 and returns `{source, connection, matchUrl}` internally. The matching URL and connection password are Redacted.
-`matchUrl` is for outside-command matching only, never for connecting. X must pass the explicit connection fields (with `adapter: source.engine`), never the URL, to
+`matchUrl` is for outside-command matching only, never for connecting. Execution passes the explicit connection fields (with `adapter: source.engine`), never the URL, to
 Bun.SQL: Bun 1.4.4's URL constructor lets PGDATABASE change an explicit URL's database.
 Postgres query parameters host/port/user/dbname/password override authority fields; socket/path
 and TLS modes are resolved explicitly. Ambiguous repeated target parameters are skipped.
@@ -67,3 +66,77 @@ clear any old orphan; failed metadata saves restore the previous secret or remov
   then resolves again so approval and connection use the refreshed target.
 - The Desktop App re-subscribes `data.sources.watch` on Data focus and before showing source approval
   details; subscription always re-lists and probes. No new refresh RPC is needed.
+
+## Execution
+
+`DataQueries` is shared by the agent tools and Client RPCs. `transport/serve.ts`
+provides discovery, access policy, approvals and the Query Log once below the Engine.
+`services.test.ts` exercises that production composition through agent calls and RPCs
+in a child with its own `POLARIS_HOME`.
+
+Connections use the explicit fields returned by `DataSources.resolve`, including a
+Redacted password. Bun never receives the URL, so inherited `PG*` or `MYSQL_*`
+variables cannot redirect the target. Pools are lazy, bounded to 16 targets, with two
+query connections and one cancellation connection per target. Bun closes idle
+connections after five seconds; there is no Data polling interval.
+
+Every read runs in a read-only transaction. The lexer enforces one statement and
+MySQL's verified restrictions before the statement reaches the prepared path.
+Postgres reads use a cursor and one capped FETCH; MySQL reads use a derived-table
+LIMIT. Both fetch one extra row to establish truncation. MySQL SHOW, DESCRIBE/DESC
+and EXPLAIN are refused because their output cannot be bounded through this path;
+use the metadata-only `describe` tool. The active-query deadline is 30 seconds.
+MySQL cancellation uses a separate connection to issue KILL QUERY and holds the
+query reservation until cancellation and rollback settle.
+
+Raw values preserve numeric, JSON and timestamp precision before credential
+scrubbing and per-cell clipping. The agent Query is capped at 200 rows and 16,000
+characters; Client streams allow 10,000 rows, with chunks bounded by encoded bytes
+and row count. This bounds returned rows, not the amount of database work needed
+to produce them. A large individual value is received from the driver before it is
+clipped. The stream sends bounded chunks after the capped database read completes.
+
+Remote agent reads use the Agent Session machine's Data Source Approval. The
+request records only target metadata, and `RespondToApproval` records the decision.
+`ApprovalStore` replays those durable events into `data.sqlite`, with an atomic replay
+cursor. Exact target decisions include engine, host, port, database and user;
+whole-server decisions include engine, host and port. Revocation overrides a broader
+server grant for the exact target. Ending a Turn withdraws pending cards through the
+existing machine lifecycle, and waiters receive a denial. A timed-out wait leaves
+the card pending.
+
+The Query Log retains the latest 10,000 entries per checkout. Remote entries contain
+SQL and attribution, but never bound parameters or result rows. Approval outcomes
+are joined from the durable approval projection. Outside-Polaris entries are
+idempotent by Agent Session and tool item id.
+
+### Execution checks
+
+```sh
+bun test apps/daemon/src/data apps/daemon/src/verification/dataApprovals.model.test.ts
+bun run spec
+```
+
+The database regression tests skip unless their engine's variable is set. Use only
+throwaway Postgres 16 and MySQL 8.4 databases: the fixture creates tables, functions
+and one million rows, then removes its objects. The MySQL fixture needs CREATE
+ROUTINE permission and a configuration allowing its test stored function.
+
+```sh
+POLARIS_TEST_PG_URL='<disposable Postgres URL>' \
+POLARIS_TEST_MYSQL_URL='<disposable MySQL URL>' \
+bun test apps/daemon/src/data/execution.real.test.ts
+```
+
+The checks cover the guard matrix, database rejection of a write inside a function,
+bound parameters, 200/10,000-row caps, timeout, cancellation, subsequent connection
+use, explicit connection options overriding PGHOST/PGDATABASE, and catalog reads.
+Real database results and idle benchmark results belong in the delivery receipts;
+unit tests alone do not establish them.
+
+Catalog reads decode MySQL binary-collated catalog fields as UTF-8 text; ordinary Query
+results still summarize binary values as bytes. Catalog JSON columns accept tagged JSON
+and JSON text arrays. Invalid metadata returns `E-DATA-SQL` naming the engine and field,
+without including the raw value. `catalog.test.ts` covers these driver value shapes and
+field-specific failures; the live suite also checks views, routines, defaults, indexes
+and check constraints.
