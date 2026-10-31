@@ -1075,7 +1075,7 @@ The fourth mode, ⌘4, beside Orchestrate, Review and Edit: the Data Sources of 
 
 ### Traces (proposed (owner, 2026-10-30), ENG-655; not built)
 
-The fifth mode, ⌘5: the Traces and Profiles that code run in the selected Agent Session's checkout sent to Polaris, attributed to the session and Turn (Paper "Traces (⌘5)", T1–T6; glossary in CONTEXT.md → Traces; ADR 0092). It is a viewer of what agents ran, not Jaeger or Proxyman: no metrics, no network proxy, and a service map only of one trace. It shares Data's shell and has no assistant panel.
+The fifth mode, ⌘5: the Traces and Profiles that code run in the selected Agent Session's checkout sent to Polaris, attributed to the session and Turn (Paper "Traces (⌘5)", T1–T6; glossary in CONTEXT.md → Traces; ADR 0094). It is a viewer of what agents ran, not Jaeger or Proxyman: no metrics, no network proxy, and a service map only of one trace. It shares Data's shell and has no assistant panel.
 
 - **Sidebar.** A `Traces | Profiles` switch. Traces lists traces under Turn kickers ("TURN 12 · NOW", "BETWEEN TURNS · YOU"), newest Turn first, one 28px row each: a 12px status slot (faint dot, or a critical square for an error trace with its name in `critical-text`), the root span in `code-inline`, the duration in a fixed 40px tabular lane. A filter well (route, service, status, duration) sits above. Profiles lists recordings with their process and how they were made, under "Restart ‹service› with profiling". "Agents in this worktree" stays at the foot.
 - **Trace bar.** A 34px bar like Data's connection bar: `TRACE`, root span, service, duration, span count and trace id, with "Add to agent session ⌘L" at the end.

@@ -1,6 +1,6 @@
 # Traces tools v1: the agent's contract
 
-Polaris MCP tools for Traces (ENG-655, phase 1 ENG-656; ADR 0092; glossary in CONTEXT.md →
+Polaris MCP tools for Traces (ENG-655, phase 1 ENG-656; ADR 0094; glossary in CONTEXT.md →
 Traces). On every binding beside the Data tools (`docs/specs/data-tools-v1.md`), with the same
 shared rules: the Daemon resolves the caller's Agent Session, checkout and Turn; output is one text
 block capped at 16,000 characters plus `structuredContent`; errors are `{code, message, fix}`.
