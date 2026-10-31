@@ -38,7 +38,14 @@ const mount = (sourceId: string) => {
     hostModels: { [DATA_AT.hostKey]: { ...model, sessions } },
   }));
 
-  const active: DataTab = { kind: "sql", id: "q-1", sourceId, sql: "", title: "Query 1" };
+  const active: DataTab = {
+    kind: "sql",
+    id: "q-1",
+    sourceId,
+    sql: "",
+    params: [],
+    title: "Query 1",
+  };
 
   render(
     <AppProvider

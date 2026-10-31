@@ -10,7 +10,8 @@ import { age } from "../../../../shell/copy.ts";
 import { useNow } from "../../../../shell/useNow.ts";
 import type { Loaded } from "../../data/hooks.tsx";
 import { type LogLookups, type LogRow, logRows } from "../../model/queryLog.ts";
-import { type DataSessionKey, openSqlTab } from "../../model/store.ts";
+import type { DataSessionKey } from "../../model/store.ts";
+import { rerunInSqlTab } from "../QueryLogDrawer.tsx";
 import type { QueryLogEntry } from "@polaris/protocol";
 
 /** The sidebar's list before it is measured: its width and a window's height. */
@@ -40,17 +41,35 @@ const Marker = ({ row }: { readonly row: LogRow }) => {
   );
 };
 
-/** "Fix overdue totals · turn 12 · app": who ran it, in which Turn, against which source. */
-const byline = (row: LogRow): string => {
+/** "turn 12 · app", plus "· outside Polaris" for a command an agent ran outside: after the title. */
+const bylineFacts = (row: LogRow): string => {
   const { author } = row;
 
-  if (author.kind === "user") return `You · ${row.source}`;
+  if (author.kind === "user") return row.source;
+  const turn = author.turn === null ? null : `turn ${author.turn}`;
+  const outside = author.kind === "outside" ? "outside Polaris" : null;
 
-  if (author.kind === "outside") return `${author.title} · outside Polaris`;
+  return [turn, row.source, outside].filter((part) => part !== null).join(" · ");
+};
 
-  return [author.title, author.turn === null ? null : `turn ${author.turn}`, row.source]
-    .filter((part) => part !== null)
-    .join(" · ");
+/** "Fix overdue totals · turn 12 · app": who ran it, in which Turn, against which source. */
+const Byline = ({ row }: { readonly row: LogRow }) => {
+  const who = row.author.kind === "user" ? "You" : row.author.title;
+  const facts = bylineFacts(row);
+
+  // The title truncates first, so the Turn and the source stay readable.
+  return (
+    <span
+      className="flex min-w-0 items-center"
+      title={`${who} · ${facts}`}
+      data-testid="data-log-byline"
+    >
+      <span className="min-w-0 truncate" dir="auto">
+        {who}
+      </span>
+      <span className="shrink-0 whitespace-pre">{` · ${facts}`}</span>
+    </span>
+  );
 };
 
 const Outcome = ({ row }: { readonly row: LogRow }) => {
@@ -96,7 +115,7 @@ const Row = ({ row, now, onOpen }: { row: LogRow; now: number; onOpen: (row: Log
         </span>
       </span>
       <span className="text-caption text-text-subtle flex w-full items-center gap-1.5 pl-[18px]">
-        <span className="min-w-0 truncate">{byline(row)}</span>
+        <Byline row={row} />
         {outside ? null : (
           <>
             <span className="flex-1" />
@@ -152,7 +171,7 @@ export const QueryLogView = ({ at, log, lookups }: QueryLogViewProps) => {
       </p>
     );
 
-  const open = (row: LogRow) => openSqlTab(row.entry.sql, row.source, at);
+  const open = (row: LogRow) => rerunInSqlTab(at, row.entry);
 
   return (
     <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-2.5" aria-label="Query log">

@@ -1,6 +1,7 @@
 /** Desktop Data requests use the Client's capability-gated, read-only Query path. */
 import {
   describeData,
+  getDataSchemaDiff,
   queryData,
   saveDataSource,
   removeDataSource,
@@ -56,6 +57,8 @@ const onHost = <A, E extends { readonly _tag: string; readonly message: string }
   );
 
 export const dataHandlers = {
+  "data.schemaDiff": ({ hostKey, ...input }: RequestInput<"data.schemaDiff">) =>
+    onHost(hostKey, (session) => getDataSchemaDiff(session, input)),
   "data.describe": ({ hostKey, ...input }: RequestInput<"data.describe">) =>
     onHost(hostKey, (session) => describeData(session, input)),
   "data.query": ({ hostKey, ...input }: RequestInput<"data.query">) =>

@@ -15,6 +15,7 @@ import type { DataTab } from "../../model/tabs.ts";
 import { openSources, treeRows } from "../../model/tree.ts";
 import { TreeRow } from "./TreeRow.tsx";
 import { useSchemaTrees } from "./useSchemaTrees.ts";
+import { useTreeFocus } from "./useTreeFocus.ts";
 
 /** Tree-row heights per density step (DESIGN.md, Density), the virtualizer's first guess. */
 /** The sidebar's list before it is measured: its width and a window's height. */
@@ -33,12 +34,17 @@ export interface SourcesViewProps {
   readonly canAdd: boolean;
 }
 
-const AddSource = ({ canAdd }: { readonly canAdd: boolean }) => (
+interface AddProps {
+  readonly at: DataSessionKey;
+  readonly canAdd: boolean;
+}
+
+const AddSource = ({ at, canAdd }: AddProps) => (
   <button
     type="button"
     disabled={!canAdd}
     data-testid="data-add-source"
-    onClick={() => openSourceForm({ mode: "add" })}
+    onClick={() => openSourceForm(at, { mode: "add" })}
     className="h-tree-row text-label text-text-subtle hover:text-text-default mt-1.5 flex w-full cursor-default items-center gap-2 rounded-[8px] pr-2.5 pl-2 text-left disabled:opacity-(--opacity-dimmed)"
   >
     <span className="flex w-3 shrink-0 justify-center">
@@ -49,7 +55,7 @@ const AddSource = ({ canAdd }: { readonly canAdd: boolean }) => (
 );
 
 /** Where discovery looked, named in the empty state ("what was searched"). */
-const NoSources = ({ canAdd }: { readonly canAdd: boolean }) => (
+const NoSources = ({ at, canAdd }: AddProps) => (
   <EmptyState
     data-testid="data-no-sources"
     className="px-panel py-8"
@@ -60,7 +66,7 @@ const NoSources = ({ canAdd }: { readonly canAdd: boolean }) => (
       <Button
         variant="secondary"
         disabled={!canAdd}
-        onClick={() => openSourceForm({ mode: "add" })}
+        onClick={() => openSourceForm(at, { mode: "add" })}
       >
         Add data source
       </Button>
@@ -88,7 +94,11 @@ const Tree = ({
   const changesLoad = useTableChanges(at);
   const changes = changesLoad.status === "ready" ? changesLoad.value : NO_CHANGES;
   const names = openSources({ sources, changes, toggled });
-  const trees = useSchemaTrees(at, names);
+
+  const trees = useSchemaTrees(
+    at,
+    sources.filter((s) => names.includes(s.name))
+  );
 
   const rows = useMemo(
     () => treeRows({ sources, trees, changes, toggled }),
@@ -113,12 +123,22 @@ const Tree = ({
           row.source === active.sourceId && row.table === active.table
       : () => false;
 
+  const focus = useTreeFocus({
+    rows,
+    selected: rows.find((r) => r.kind === "table" && selected(r))?.key ?? null,
+    scroller,
+    virtualizer,
+    onToggle: (row) => "open" in row && toggleTreeRow(at, row.key, row.open),
+  });
+
   return (
     <div
       ref={scroller}
       className="min-h-0 flex-1 overflow-y-auto px-2.5"
       role="tree"
       aria-label="Data sources"
+      onKeyDown={focus.onKeyDown}
+      onFocus={focus.onFocus}
     >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
@@ -136,11 +156,12 @@ const Tree = ({
               style={{ transform: `translateY(${item.start}px)` }}
             >
               {row === undefined ? (
-                <AddSource canAdd={canAdd} />
+                <AddSource at={at} canAdd={canAdd} />
               ) : (
                 <TreeRow
                   row={row}
                   selected={row.kind === "table" && selected(row)}
+                  tabStop={row.key === focus.tabStop}
                   busy={
                     row.kind === "table"
                       ? (busy.get(busyKey(row.source, row.summary.name)) ?? null)
@@ -176,7 +197,7 @@ export const SourcesView = (props: SourcesViewProps) => {
       </div>
     );
 
-  if (sources.value.length === 0) return <NoSources canAdd={props.canAdd} />;
+  if (sources.value.length === 0) return <NoSources at={props.at} canAdd={props.canAdd} />;
   const file = sharedFile(sources.value);
 
   return (

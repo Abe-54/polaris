@@ -15,6 +15,7 @@ const extension = new Pairing({
 
 test.each([
   "data.sources.watch",
+  "data.schemaDiff",
   "data.describe",
   "data.query",
   "data.queryLog.watch",

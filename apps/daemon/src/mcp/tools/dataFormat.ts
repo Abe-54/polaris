@@ -1,7 +1,12 @@
 /** Text-first Data output; the JSON view uses the same sanitized, clipped values. */
-import { Array as Arrays, Match, Schema, Predicate, type Redacted } from "effect";
+import { homedir } from "node:os";
+import { sep } from "node:path";
+import { stripVTControlCharacters } from "node:util";
+import { Array as Arrays, Match, Schema, Predicate, Redacted } from "effect";
 import {
   DataValueTags,
+  scrubCredentials,
+  scrubDataValue,
   SchemaTree,
   TableSummary,
   type DataSource,
@@ -9,23 +14,34 @@ import {
   type TableDetail,
 } from "@polaris/protocol";
 
-import { scrubKnown } from "../../data/knownCredentials.ts";
-
 export const DATA_TEXT_LIMIT = 16_000;
 
-const sensitive = /password|passwd|secret|token|credential|connection.?string|database.?url/i;
+const sensitive = /^(password|passwd|secret|token|api_key)$/i;
 
-/** Scrub credentials before clipping: a clipped URL must never expose its prefix. */
 type Known = ReadonlyArray<Redacted.Redacted<string>>;
 
+const boundedText = (value: string, known: Known) => {
+  let end = 32_000;
+
+  for (const credential of known) {
+    const secret = Redacted.value(credential);
+
+    if (secret.length < 4) continue;
+    const start = value.indexOf(secret, Math.max(0, end - secret.length + 1));
+
+    if (start >= 0 && start < end && start + secret.length > end) end = start;
+  }
+
+  return value.slice(0, end) + (end < Math.min(value.length, 32_000) ? "[redacted]" : "");
+};
+
+/** Bound work before generic scanning; the rendering window is smaller than this guard. */
 export const safeDataText = (value: string, known: Known = []): string =>
-  scrubKnown(value, known)
-    .replace(/\b[a-z][a-z\d+.-]*:\/\/[^\s<>"']+/gi, "[redacted URL]")
-    .replace(
-      /\b(password|passwd|pwd|token|secret)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
-      "$1=[redacted]"
-    )
-    .replace(/[\r\n\t]/g, " ");
+  stripVTControlCharacters(scrubCredentials(boundedText(value, known), known))
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t")
+    .replace(/\p{Cc}/gu, "");
 
 const clip = (value: string) =>
   value.length > 200 ? `${value.slice(0, 200)}…(+${value.length - 200} chars)` : value;
@@ -42,10 +58,10 @@ export const dataValue = (
   if (value === null || value === undefined) return null;
 
   if (Schema.is(DataValueTags)(value))
-    return Match.value(value).pipe(
+    return Match.value(Schema.decodeUnknownSync(DataValueTags)(scrubDataValue(value, known))).pipe(
       Match.tag("Bytes", (v) => `<bytes ${v.length}>`),
-      Match.tag("BigInt", "Numeric", (v) => safeDataText(v.value, known)),
-      Match.tag("Timestamp", (v) => safeDataText(v.iso, known)),
+      Match.tag("BigInt", "Numeric", (v) => clip(safeDataText(v.value, known))),
+      Match.tag("Timestamp", (v) => clip(safeDataText(v.iso, known))),
       Match.tag("Truncated", (v) => clip(safeDataText(v.preview, known))),
       Match.tag("Json", (v) =>
         clip(
@@ -65,10 +81,14 @@ export const dataValue = (
 
   if (Arrays.isArray<Schema.Json>(value)) return value.map((item) => dataValue(item, "", known));
 
-  if (Predicate.isNumber(value) || Predicate.isBoolean(value)) return value;
+  if (Predicate.isNumber(value) || Predicate.isBoolean(value)) {
+    const safe = safeDataText(String(value), known);
+
+    return safe === String(value) ? value : safe;
+  }
 
   return Object.fromEntries(
-    Object.entries(value).map(([k, v]) => [safeDataText(k, known), dataValue(v, k, known)])
+    Object.entries(value).map(([k, v]) => [clip(safeDataText(k, known)), dataValue(v, k, known)])
   );
 };
 
@@ -94,53 +114,74 @@ export const aligned = (rows: ReadonlyArray<ReadonlyArray<string>>) => {
   );
 };
 
+const countRows = (count: number) =>
+  `${count.toLocaleString("en-US")} ${count === 1 ? "row" : "rows"}`;
+
 export const queryView = (result: QueryResult, known: Known = []) => {
   const columns = result.columns.map(({ name, type }) => ({
-    name: safeDataText(name, known),
-    type: safeDataText(type, known),
+    name: clip(safeDataText(name, known)),
+    type: clip(safeDataText(type, known)),
   }));
 
   const rows = result.rows.map((row) =>
     row.map((value, i) => dataValue(value, result.columns[i]?.name, known))
   );
 
-  const queryId = safeDataText(result.queryId, known);
-  const header = `${result.rowCount.toLocaleString("en-US")} rows · ${result.elapsedMs} ms · query ${queryId}`;
-
-  const rendered = aligned([
-    columns.map((column) => `${column.name} (${column.type})`),
-    ...rows.map((row) => row.map(cell)),
-  ]);
-
+  const queryId = clip(safeDataText(result.queryId, known));
+  const header = `${countRows(result.returned)} · ${result.elapsedMs} ms · query ${queryId}`;
   let kept = rows.length;
+  let keptColumns = columns.length;
 
-  const tail = () =>
-    `${kept} of ${result.rowCount.toLocaleString("en-US")} rows; add a WHERE or an aggregate`;
+  const view = () => {
+    const widthDrop = kept < rows.length || keptColumns < columns.length;
+    const hint = widthDrop ? "select fewer columns" : "increase the limit or use an aggregate";
 
-  const text = () =>
-    [
-      header,
-      ...rendered.slice(0, kept + 1),
-      ...(kept < rows.length || result.truncated ? [tail()] : []),
-    ].join("\n");
+    const shown =
+      result.total === undefined
+        ? `${countRows(kept)} shown`
+        : `${kept} of ${countRows(result.total)}`;
 
-  while (kept > 0 && text().length > DATA_TEXT_LIMIT) kept--;
-  let output = text();
+    const summary = [header, ...(widthDrop || result.truncated ? [`${shown}; ${hint}`] : [])].join(
+      "\n"
+    );
 
-  if (output.length > DATA_TEXT_LIMIT)
-    output = `${header}\nColumn headers omitted; select fewer columns.\n${tail()}`;
+    const keptRows = rows.slice(0, kept).map((row) => row.slice(0, keptColumns));
+    const keptHeaders = columns.slice(0, keptColumns);
 
-  return {
-    text: output,
-    data: {
-      queryId,
-      columns,
-      rows: rows.slice(0, kept),
-      rowCount: result.rowCount,
-      truncated: result.truncated || kept < rows.length,
-      elapsedMs: result.elapsedMs,
-    },
+    const rendered = aligned([
+      keptHeaders.map((column) => `${column.name} (${column.type})`),
+      ...keptRows.map((row) => row.map(cell)),
+    ]);
+
+    return {
+      text: [header, ...rendered, ...summary.split("\n").slice(1)].join("\n"),
+      data: {
+        summary,
+        queryId,
+        columns: keptHeaders,
+        rows: keptRows,
+        rowCount: kept,
+        returned: kept,
+        ...(result.total === undefined ? undefined : { total: result.total }),
+        truncated: result.truncated || widthDrop,
+        elapsedMs: result.elapsedMs,
+      },
+    };
   };
+
+  let output = view();
+
+  while (
+    output.text.length > DATA_TEXT_LIMIT ||
+    JSON.stringify(output.data).length > DATA_TEXT_LIMIT
+  ) {
+    if (kept > 0) kept--;
+    else if (keptColumns > 0) keptColumns--;
+    else break;
+    output = view();
+  }
+
+  return output;
 };
 
 const foundIn = (source: DataSource) =>
@@ -154,6 +195,14 @@ const access = (source: DataSource) => {
   if (source.access === "denied") return "denied";
 
   return `${source.access === "approved" ? "approved" : "read"} · ${source.writes === "ask" ? "writes ask you" : "read only"}`;
+};
+
+const checkoutLabel = (checkout: string) => {
+  const home = homedir();
+
+  return checkout === home || checkout.startsWith(`${home}${sep}`)
+    ? `~${checkout.slice(home.length)}`
+    : checkout;
 };
 
 export const sourcesView = (
@@ -199,7 +248,7 @@ export const sourcesView = (
 
   return {
     lines: [
-      `${sources.length} data sources in ${safeDataText(checkout, known)}`,
+      `${sources.length} data ${sources.length === 1 ? "source" : "sources"} in ${safeDataText(checkoutLabel(checkout), known)}`,
       ...lines.map((line) => safeDataText(line, known)),
     ],
     data: { sources: dataValue(Schema.decodeUnknownSync(Schema.Json)(data), "", known) },
@@ -207,7 +256,7 @@ export const sourcesView = (
 };
 
 const estimate = (count: number | null) =>
-  count === null ? "unknown rows" : `~${count.toLocaleString("en-US")} rows`;
+  count === null ? "unknown rows" : `~${countRows(count)}`;
 
 const tableLines = (table: TableDetail, known: Known) => {
   const columns = aligned(
@@ -283,15 +332,18 @@ export const describeView = (value: SchemaTree | TableDetail, known: Known = [])
   const lines = schemas.flatMap((schema) => [
     schema.name,
     ...schema.tables.map(
-      (table) => `  ${table.name}  ${estimate(table.rowEstimate)}  ${table.columnCount} columns`
+      (table) =>
+        `  ${table.name}  ${estimate(table.rowEstimate)}  ${table.columnCount} ${table.columnCount === 1 ? "column" : "columns"}`
     ),
     ...schema.views.map(
-      (view) => `  view ${view.name}  ${estimate(view.rowEstimate)}  ${view.columnCount} columns`
+      (view) =>
+        `  view ${view.name}  ${estimate(view.rowEstimate)}  ${view.columnCount} ${view.columnCount === 1 ? "column" : "columns"}`
     ),
     ...schema.functions.map((name) => `  function ${name}`),
   ]);
 
-  if (dropped > 0) lines.push(`${dropped} more tables; describe a table by name`);
+  if (dropped > 0)
+    lines.push(`${dropped} more ${dropped === 1 ? "table" : "tables"}; describe a table by name`);
 
   return {
     lines: lines.map((line) => safeDataText(line, known)),
@@ -309,7 +361,7 @@ export const cappedLines = (lines: ReadonlyArray<string>) => {
   let kept = lines.length;
 
   const suffix = () =>
-    `${lines.length - kept} lines omitted; describe a table by name or narrow the query`;
+    `${lines.length - kept} ${lines.length - kept === 1 ? "line" : "lines"} omitted; describe a table by name or narrow the query`;
 
   while (kept > 0 && `${lines.slice(0, kept).join("\n")}\n${suffix()}`.length > DATA_TEXT_LIMIT)
     kept--;
