@@ -3,15 +3,14 @@
  * to agent session ⌘L" for the selected rows, and Copy as CSV (the selection, else every row).
  */
 import { Button, CopyButton, EmptyState, Kbd, PixelServerIcon, useCopyWrite } from "@polaris/ui";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { commandShortcut } from "../../../../../shared/keymap.ts";
 import { useCommands } from "../../../../shell/hooks.ts";
 import { DataGrid } from "../../grid/DataGrid.tsx";
 import type { GridColumn } from "../../grid/columns.ts";
 import { toCsv } from "../../grid/csv.ts";
-import { rowsLabel } from "../../grid/rows.ts";
 import { type GridSelection, selectedRows } from "../../grid/selection.ts";
-import { useAddRows } from "../../grid/useAddRows.tsx";
+import { addLabel, useAddPlan, useAddRows } from "../../grid/useAddRows.tsx";
 import type { DataRow, DataValue } from "../../grid/value.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { type Pages, ROW_CAP } from "./usePages.ts";
@@ -56,11 +55,12 @@ export const TableData = (props: TableDataProps) => {
   const chosen = (): ReadonlyArray<DataRow> =>
     picked.flatMap((i) => (pages.rows[i] === undefined ? [] : [pages.rows[i]]));
 
-  const addChosen = () => add({ source, from, columns, rows: chosen() });
+  const rows = useMemo(chosen, [selection, pages.rows]);
+  const plan = useAddPlan(at, rows.length === 0 ? null : { source, from, columns, rows });
+  const addChosen = () => add({ source, from, columns, rows });
+  const latest = useRef({ addChosen, count: plan.rows });
 
-  const latest = useRef({ addChosen, count: picked.length });
-
-  latest.current = { addChosen, count: picked.length };
+  latest.current = { addChosen, count: plan.rows };
 
   useEffect(
     () =>
@@ -106,15 +106,13 @@ export const TableData = (props: TableDataProps) => {
         <Button
           size="default"
           variant="ghost"
-          disabled={picked.length === 0}
+          disabled={plan.rows === 0}
           onClick={addChosen}
           data-testid="data-add-rows"
           className="text-text-default rounded-full shadow-[inset_0_0_0_1px_var(--color-hairline)]"
           title={picked.length === 0 ? "Select rows to add them" : undefined}
         >
-          {picked.length === 0
-            ? "Add rows to agent session"
-            : `Add ${rowsLabel(picked.length)} to agent session`}
+          {addLabel(plan)}
           <Kbd variant="plain">{commandShortcut("data.addRowsToSession")}</Kbd>
         </Button>
         <CopyButton

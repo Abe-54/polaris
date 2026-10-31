@@ -3,6 +3,7 @@
  * ("Querying invoices", "Wants to write") for "Agents in this worktree".
  */
 import type { QueryLogEntry, SessionId } from "@polaris/protocol";
+import { maskLiterals } from "../sql/literals.ts";
 
 /** The facts a row needs about an entry's Agent Session, from the Host's read model. */
 export interface SessionFacts {
@@ -49,7 +50,14 @@ const WRITE = /^\s*(insert|update|delete|merge|upsert|replace|alter|create|drop|
 const TABLE =
   /\b(?:from|update|into|join|table)\s+((?:"[^"]+"|`[^`]+`|[\w$]+)(?:\.(?:"[^"]+"|`[^`]+`|[\w$]+))?)/i;
 
-export const isWrite = (sql: string) => WRITE.test(sql);
+const CTE_WRITE = /^\s*with\b[\s\S]*\b(insert|update|delete|merge)\b/i;
+
+/** Whether the statement changes rows or schema, by its keywords outside literals and comments. */
+export const isWrite = (sql: string) => {
+  const masked = maskLiterals(sql);
+
+  return WRITE.test(masked) || CTE_WRITE.test(masked);
+};
 
 /** The first table a statement names, unquoted and without its schema; null for none. */
 export const tableOf = (sql: string): string | null => {
@@ -201,7 +209,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Whether the SQL names the table as a word, bare, quoted or schema-qualified. */
 export const mentionsTable = (sql: string, table: string) =>
-  new RegExp(`(^|[^\\w$])["\`]?${escape(table)}["\`]?($|[^\\w$])`, "i").test(sql);
+  new RegExp(`(^|[^\\w$])["\`]?${escape(table)}["\`]?($|[^\\w$])`, "i").test(maskLiterals(sql));
 
 export const inScope = (entry: QueryLogEntry, scope: LogScope | null) =>
   scope === null ||
@@ -243,15 +251,55 @@ export const drawerKicker = (scope: LogScope | null, count: number) =>
     " · "
   );
 
-const READ = /^\s*(select|with|show|explain|describe|table|values)\b/i;
+/** What makes a SELECT write or lock: `select … into`, `for update`, `for share`. */
+const CHANGES = /\b(into|for\s+(update|share|no\s+key\s+update|key\s+share))\b/i;
 
-/** Words that change data or run code anywhere in a statement (`with … delete`, `explain analyze`). */
-const CHANGES =
-  /\b(insert|update|delete|merge|upsert|replace|drop|alter|truncate|create|grant|revoke|copy|call|do|exec|execute|into|lock|analyze|vacuum|set|load|handler|rename|comment|refresh|cluster|reindex|import|for\s+update|for\s+share)\b/i;
+/** Words that may stand before `(` without calling anything: `in (…)`, `from (select …)`. */
+const NOT_CALLS = new Set(
+  "in exists any all some not and or on using from join where select as values lateral by having when then else case".split(
+    " "
+  )
+);
 
-/** Only a lone read re-runs straight away; anything else opens in a SQL tab to run with ⌘↵. */
+/** Whether the statement calls a function: `pg_sleep(…)`, `count(*)`, `"f"(…)`. */
+const callsFunction = (masked: string) =>
+  [...masked.matchAll(/([\w$]+|"[^"]+"|`[^`]+`)\s*\(/g)].some(
+    ([, name]) => name !== undefined && !NOT_CALLS.has(name.toLowerCase())
+  );
+
+const plainSelect = (text: string) =>
+  /^select\b/i.test(text) && !text.includes(";") && !CHANGES.test(text) && !callsFunction(text);
+
+/** Text an engine may read differently from `maskLiterals`: `\'`, `/*! … *\/`, `#` comments. */
+const AMBIGUOUS = /\\|\/\*|#/;
+
+/**
+ * Only a lone plain SELECT that calls no function re-runs straight away, judged on the raw text
+ * and the masked one alike; anything else opens in a SQL tab to run with ⌘↵.
+ */
 export const runsOnOpen = (sql: string) => {
-  const text = sql.trim().replace(/;\s*$/, "");
+  const raw = sql.trim().replace(/;\s*$/, "");
 
-  return READ.test(text) && !text.includes(";") && !CHANGES.test(text);
+  return !AMBIGUOUS.test(raw) && plainSelect(raw) && plainSelect(maskLiterals(raw).trim());
+};
+
+const DDL = /^\s*(create|alter|drop|truncate|rename|comment)\b/i;
+
+/** The newest finished schema change on the source, by id: the SQL tab re-reads its schema. */
+export const schemaChange = (
+  entries: ReadonlyArray<QueryLogEntry>,
+  source: string
+): string | null => {
+  let newest: QueryLogEntry | null = null;
+
+  for (const entry of entries)
+    if (
+      entry.source.name === source &&
+      entry.state === "completed" &&
+      DDL.test(maskLiterals(entry.sql)) &&
+      (newest === null || entry.at >= newest.at)
+    )
+      newest = entry;
+
+  return newest?.id ?? null;
 };

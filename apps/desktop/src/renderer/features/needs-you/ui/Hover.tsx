@@ -22,7 +22,9 @@ import { age } from "../../../shell/copy.ts";
 import { useInboxUntimed } from "../hooks.ts";
 import { modalOpen } from "../modal.ts";
 import type { WaitingSession } from "../model/inbox.ts";
-import { KIND_WANTS } from "../model/popover.ts";
+import { wantsOf } from "../model/popover.ts";
+import { offersAlwaysAllow } from "../../data/approval/decide.ts";
+import { dataWantsLine } from "../../data/approval/model.ts";
 import { answerDecision, questionSteps, questionViews } from "../../session/model/question.ts";
 import { askingForSecret } from "../../session/model/secret.ts";
 import { approve, deny, respond } from "../respond.ts";
@@ -44,7 +46,7 @@ const Card = ({ item }: { readonly item: WaitingSession }) => {
   const request = item.requests[0];
 
   if (request === undefined) return null;
-  const target = { hostKey: item.hostKey, sessionId: session.id, requestId: request.id };
+  const target = { hostKey: item.hostKey, sessionId: session.id, requestId: request.id, request };
   const name = harnessHue(session.harness).name;
   const open = () => selectSession({ hostKey: item.hostKey, sessionId: session.id });
 
@@ -94,7 +96,7 @@ const Card = ({ item }: { readonly item: WaitingSession }) => {
     <ApprovalCard
       harness={session.harness}
       title={session.title || "Untitled session"}
-      summary={`${name} ${KIND_WANTS[request.kind]} · ${age(request.openedAt, now)}`}
+      summary={`${dataWantsLine(session.title, request) ?? `${name} ${wantsOf(request)}`} · ${age(request.openedAt, now)}`}
       command={request.detail ?? request.title}
       where={
         item.branch === null
@@ -102,7 +104,7 @@ const Card = ({ item }: { readonly item: WaitingSession }) => {
           : `${where(item, null, now)} · ⎇ ${item.branch}`
       }
       onApprove={() => void approve(target)}
-      onAlwaysAllow={() => void approve(target, true)}
+      {...(offersAlwaysAllow(request) ? { onAlwaysAllow: () => void approve(target, true) } : {})}
       onDeny={() => void deny(target)}
     />
   );

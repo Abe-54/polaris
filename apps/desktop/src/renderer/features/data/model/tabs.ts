@@ -3,6 +3,9 @@
  * SQL tabs. Pure transitions, so the store and the tests share them.
  */
 import type { DataValue } from "@polaris/protocol";
+import type { TableRef } from "../ui/table/sql.ts";
+
+export type { TableRef };
 
 export type DataTab =
   | {
@@ -10,7 +13,10 @@ export type DataTab =
       readonly id: string;
       /** The Data Source's `name`, as the Data RPCs take it. */
       readonly sourceId: string;
+      /** Its title: the name, schema-qualified where the tree qualifies it. */
       readonly table: string;
+      /** What its Queries read: schema and name, quoted apart. */
+      readonly ref: TableRef;
     }
   | {
       readonly kind: "sql";
@@ -21,6 +27,8 @@ export type DataTab =
       readonly params: ReadonlyArray<DataValue>;
       /** "Query 1", "Query 2"…, numbered per session and never reused. */
       readonly title: string;
+      /** Shown over the editor until the next run, e.g. why a re-run didn't run. */
+      readonly notice?: string;
     };
 
 export type DataTabKind = DataTab["kind"];
@@ -34,16 +42,22 @@ export interface DataTabs {
 
 export const emptyTabs: DataTabs = { tabs: [], active: null, nextQuery: 1 };
 
-export const tableTabId = (sourceId: string, table: string) =>
-  `table\u0000${sourceId}\u0000${table}`;
+/** One tab per table, however it was reached: the sidebar, a foreign key or Structure. */
+export const tableTabId = (sourceId: string, ref: TableRef) =>
+  `table\u0000${sourceId}\u0000${ref.schema}\u0000${ref.name}`;
 
 /** Focuses the table's tab, opening it after the active one when it isn't open yet. */
-export const openTable = (state: DataTabs, sourceId: string, table: string): DataTabs => {
-  const id = tableTabId(sourceId, table);
+export const openTable = (
+  state: DataTabs,
+  sourceId: string,
+  ref: TableRef,
+  title = ref.name
+): DataTabs => {
+  const id = tableTabId(sourceId, ref);
 
   if (state.tabs.some((t) => t.id === id)) return { ...state, active: id };
 
-  return insertAfterActive(state, { kind: "table", id, sourceId, table });
+  return insertAfterActive(state, { kind: "table", id, sourceId, table: title, ref });
 };
 
 /** Always a new SQL tab, focused: a re-run from the Query Log never overwrites one being edited. */
@@ -51,11 +65,13 @@ export const openSqlTab = (
   state: DataTabs,
   sql: string,
   sourceId: string,
-  params: ReadonlyArray<DataValue> = []
+  params: ReadonlyArray<DataValue> = [],
+  notice?: string
 ): DataTabs => {
   const n = state.nextQuery;
   const id = `sql\u0000${n}`;
-  const tab: DataTab = { kind: "sql", id, sourceId, sql, params, title: `Query ${n}` };
+  const opened = { kind: "sql", id, sourceId, sql, params, title: `Query ${n}` } as const;
+  const tab: DataTab = notice === undefined ? opened : { ...opened, notice };
 
   return { ...insertAfterActive(state, tab), nextQuery: n + 1 };
 };

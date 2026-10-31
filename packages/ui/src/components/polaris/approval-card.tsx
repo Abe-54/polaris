@@ -59,9 +59,11 @@ export function ApprovalCard({
           Approve
           <Kbd variant="plain">↵</Kbd>
         </Button>
-        <Button variant="secondary" className="px-2.5" onClick={onAlwaysAllow}>
-          Always here
-        </Button>
+        {onAlwaysAllow === undefined ? null : (
+          <Button variant="secondary" className="px-2.5" onClick={onAlwaysAllow}>
+            Always here
+          </Button>
+        )}
         <span className="flex-1" />
         <Button variant="ghost" className="px-2.5" onClick={onDeny}>
           Deny

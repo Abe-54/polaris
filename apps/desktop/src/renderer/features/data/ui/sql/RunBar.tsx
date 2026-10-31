@@ -13,6 +13,7 @@ import {
   Kbd,
   LockIcon,
 } from "@polaris/ui";
+import { shortcutLabel } from "../../../../../shared/chord.ts";
 import { useNow } from "../../../../shell/useNow.ts";
 import { cellOf, displayOf } from "../../grid/value.ts";
 import { cmShortcut } from "../../../editor/cm/keys.ts";
@@ -32,6 +33,10 @@ export interface RunBarProps {
   readonly onSource: (name: string) => void;
   readonly onFormat: () => void;
   readonly onRun: () => void;
+  /** Cancels the running query; shown in Run's place while it runs. */
+  readonly onCancel: () => void;
+  /** Re-reads the schema the editor completes from. */
+  readonly onReloadSchema: () => void;
 }
 
 const where = (source: DataSource) => `${source.engine} · ${source.locality}`;
@@ -94,6 +99,8 @@ export const RunBar = ({
   onSource,
   onFormat,
   onRun,
+  onCancel,
+  onReloadSchema,
 }: RunBarProps) => (
   <div
     className="border-hairline flex h-12 shrink-0 items-center gap-3 border-b pr-2 pl-2.5"
@@ -135,19 +142,36 @@ export const RunBar = ({
         `Couldn't format: ${formatProblem}`
       )}
     </span>
+    {catalog.status === "ready" || catalog.status === "failed" ? (
+      <Button variant="ghost" onClick={onReloadSchema} data-testid="data-sql-reload-schema">
+        Reload schema
+      </Button>
+    ) : null}
     <Button variant="ghost" onClick={onFormat} data-testid="data-sql-format">
       Format
     </Button>
-    <Button
-      variant="secondary"
-      className="rounded-full"
-      disabled={source === undefined || running}
-      onClick={onRun}
-      data-testid="data-sql-run"
-    >
-      <PlayGlyph />
-      {running ? "Running…" : "Run"}
-      <Kbd variant="plain">{cmShortcut("Mod-Enter")}</Kbd>
-    </Button>
+    {running ? (
+      <Button
+        variant="secondary"
+        className="rounded-full"
+        onClick={onCancel}
+        data-testid="data-sql-cancel"
+      >
+        Cancel
+        <Kbd variant="plain">{shortcutLabel("Esc")}</Kbd>
+      </Button>
+    ) : (
+      <Button
+        variant="secondary"
+        className="rounded-full"
+        disabled={source === undefined}
+        onClick={onRun}
+        data-testid="data-sql-run"
+      >
+        <PlayGlyph />
+        Run
+        <Kbd variant="plain">{cmShortcut("Mod-Enter")}</Kbd>
+      </Button>
+    )}
   </div>
 );

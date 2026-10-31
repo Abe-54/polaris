@@ -17,6 +17,7 @@ export function sqlOptions(
     maxLifetime: 0,
     connectionTimeout: 5,
     prepare: true,
+    ...(source.engine === "mysql" ? { foundRows: true } : undefined),
   };
 }
 

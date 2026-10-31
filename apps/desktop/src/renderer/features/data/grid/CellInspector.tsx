@@ -1,41 +1,32 @@
 /**
  * The cell inspector: a clipped value whole, in an instrument card over the grid's right edge
- * (↵ or a double-click opens it, esc closes). JSON is indented; past 64 KB only the start shows.
+ * (↵ or a double-click opens it, esc closes). JSON is indented, never re-written; bidi controls
+ * are named so they can't reorder the value; past 64K characters only the start shows.
  */
 import { CopyButton, IconButton, CloseIcon } from "@polaris/ui";
 import { useMemo } from "react";
 import type { LaidColumn } from "./columns.ts";
-import { type Cell, cellOf, type DataValue } from "./value.ts";
+import { indentJson } from "./json.ts";
+import { type Cell, cellOf, type DataValue, formatSize, showBidi } from "./value.ts";
 
 /** The most the inspector draws; Copy value still takes it all. */
 export const INSPECT_CHARS = 64 * 1024;
-
-const size = (chars: number) =>
-  chars < 1024
-    ? `${chars} B`
-    : chars < 1024 * 1024
-      ? `${(chars / 1024).toFixed(1)} KB`
-      : `${(chars / 1024 / 1024).toFixed(1)} MB`;
 
 const pretty = (cell: Cell): string => {
   if (cell.raw === null) return "NULL";
 
   if (cell.kind !== "json" || cell.raw.length > 4 * INSPECT_CHARS) return cell.raw;
 
-  try {
-    return JSON.stringify(JSON.parse(cell.raw), null, 2);
-  } catch {
-    return cell.raw;
-  }
+  return indentJson(cell.raw);
 };
 
 const status = (cell: Cell, shown: number) => {
   const length = cell.raw?.length ?? 0;
-  const parts = [cell.raw === null ? "null" : size(length)];
+  const parts = [cell.raw === null ? "null" : formatSize(length, "characters")];
 
-  if (cell.bytes !== undefined) parts.push(`${size(cell.bytes)} in the database`);
+  if (cell.bytes !== undefined) parts.push(`${formatSize(cell.bytes, "bytes")} in the database`);
 
-  if (shown < length) parts.push(`first ${size(shown)} shown`);
+  if (shown < length) parts.push(`first ${formatSize(shown, "characters")} shown`);
 
   return parts.join(" · ");
 };
@@ -90,7 +81,7 @@ export const CellInspector = ({
           className="border-hairline bg-well text-code-inline min-h-0 flex-1 overflow-auto rounded-[12px] border p-3 font-mono break-all whitespace-pre-wrap"
         >
           <span className={cell.raw === null ? "text-text-faint" : "text-text-default"}>
-            {shown}
+            {showBidi(shown)}
           </span>
         </pre>
       </div>

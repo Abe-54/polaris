@@ -26,7 +26,7 @@ export const GRID_ROW = { calm: 32, balanced: 28, compact: 24 } as const;
 
 const HEADER = 44;
 
-const COLUMN_BLOCK = 8;
+const COLUMN_BLOCK = 4;
 
 /** Until the grid is measured: enough rows and columns for a first paint without a blank frame. */
 const FIRST_RECT = { width: 1200, height: 800 };
@@ -68,7 +68,7 @@ interface RowProps {
 }
 
 const ROW_CLASS =
-  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono select-none [contain:layout_style] [font-kerning:none] [text-rendering:optimizeSpeed]";
+  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono select-none [contain:strict] [font-kerning:none] [text-rendering:optimizeSpeed]";
 
 const GridRow = memo(function GridRow(props: RowProps) {
   const { index, row, columns, first, last, offset, start, height, gutter, selected } = props;
@@ -83,7 +83,6 @@ const GridRow = memo(function GridRow(props: RowProps) {
         key={col}
         column={column}
         value={row[col]}
-        row={index}
         col={col}
         active={props.activeCol === col}
         staged={props.isStaged?.(index, col) ?? false}
@@ -97,21 +96,48 @@ const GridRow = memo(function GridRow(props: RowProps) {
       role="row"
       aria-rowindex={index + 2}
       aria-selected={selected}
+      data-row={index}
       data-testid="data-grid-row"
       className={selected ? `${ROW_CLASS} bg-starlight/8` : `${ROW_CLASS} hover:bg-fill-hover`}
       style={{ height, transform: `translateY(${start}px)` }}
     >
-      <div
-        className="text-text-faint tabular sticky left-0 z-[1] flex h-full shrink-0 items-center justify-end bg-inherit px-2.5"
-        style={{ width: gutter }}
-      >
-        {index + 1}
-      </div>
-      <div className="shrink-0" style={{ width: offset }} />
+      <div className="shrink-0" style={{ width: gutter + offset }} />
       {cells}
     </div>
   );
 });
+
+/**
+ * The row numbers: one sticky column over every row, not a sticky cell per row, which made each
+ * row a composited layer with tiles of its own (UF2: 55 layers, 70 MB of GPU memory).
+ */
+const Gutter = (props: {
+  readonly rows: ReadonlyArray<{ readonly index: number; readonly start: number }>;
+  readonly height: number;
+  readonly total: number;
+  readonly width: number;
+  readonly selected: ReadonlySet<number>;
+  readonly slots: number;
+}) => (
+  <div
+    aria-hidden
+    className="border-hairline bg-panel text-code-inline text-text-faint tabular sticky left-0 z-[1] border-r font-mono select-none"
+    style={{ width: props.width, height: props.total - HEADER }}
+  >
+    {props.rows.map((r) => (
+      <div
+        key={r.index % props.slots}
+        className={cn(
+          "absolute top-0 left-0 flex w-full items-center justify-end px-2.5",
+          props.selected.has(r.index) && "bg-starlight/8"
+        )}
+        style={{ height: props.height, transform: `translateY(${r.start - HEADER}px)` }}
+      >
+        {r.index + 1}
+      </div>
+    ))}
+  </div>
+);
 
 const HeaderCell = ({ column }: { readonly column: LaidColumn }) => (
   <div
@@ -164,7 +190,7 @@ export const DataGrid = ({
     count: rows.length,
     getScrollElement: () => scroller.current,
     estimateSize: () => height,
-    overscan: 2,
+    overscan: 1,
     // Render on the next frame, not inside the scroll event: one layout a frame, never forced.
     useFlushSync: false,
     paddingStart: HEADER,
@@ -192,6 +218,16 @@ export const DataGrid = ({
   const offset = colVirtualizer.measurementsCache[first]?.start ?? 0;
   const width = gutter + colVirtualizer.getTotalSize();
   const virtualRows = rowVirtualizer.getVirtualItems();
+  // Rows render in slot order (index modulo a count that only grows), so a scroll changes their
+  // props but never their DOM order: a moved row is re-attached, restyled and laid out whole.
+  const slots = useRef(0);
+
+  slots.current = Math.max(slots.current, virtualRows.length);
+
+  const bySlot = virtualRows.toSorted(
+    (a, b) => (a.index % slots.current) - (b.index % slots.current)
+  );
+
   const lastRow = virtualRows.at(-1)?.index ?? -1;
   const nearEnd = rows.length > 0 && lastRow >= rows.length - NEAR_END;
 
@@ -251,11 +287,12 @@ export const DataGrid = ({
 
   const cellAt = (target: EventTarget): CellAt | null => {
     // SAFETY: grid events come from elements inside the grid's DOM.
-    const cell = (target as Element).closest<HTMLElement>("[data-row][data-col]");
+    const cell = (target as Element).closest<HTMLElement>("[data-col]");
+    const row = cell?.closest<HTMLElement>("[data-row]");
 
-    return cell === null
+    return cell == null || row == null
       ? null
-      : { row: Number(cell.dataset["row"]), col: Number(cell.dataset["col"]) };
+      : { row: Number(row.dataset["row"]), col: Number(cell.dataset["col"]) };
   };
 
   const inspected = inspect === null ? undefined : laid[inspect.col];
@@ -307,13 +344,21 @@ export const DataGrid = ({
               <HeaderCell key={first + i} column={column} />
             ))}
           </div>
-          {virtualRows.map((r) => {
+          <Gutter
+            rows={bySlot}
+            height={height}
+            total={rowVirtualizer.getTotalSize()}
+            width={gutter}
+            selected={selection.rows}
+            slots={slots.current}
+          />
+          {bySlot.map((r) => {
             const row = rows[r.index];
 
             return row === undefined ? null : (
               <GridRow
                 // A slot, not the row: a jump reuses each row's elements rather than remounting.
-                key={r.index % virtualRows.length}
+                key={r.index % slots.current}
                 index={r.index}
                 row={row}
                 columns={laid}

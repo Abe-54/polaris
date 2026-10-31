@@ -10,6 +10,8 @@ import type {
   SessionId,
   SessionState,
 } from "@polaris/protocol";
+import type { ReactNode } from "react";
+import { useShownApproval } from "../../../shell/approvalInView.ts";
 import {
   ApprovalCard,
   BranchIcon,
@@ -49,7 +51,9 @@ import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
 import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCard.tsx";
-import { type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
+import { sourceForTarget } from "../../data/approval/decide.ts";
+import { askedBy, type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
+import { useDataSources } from "../../data/data/hooks.tsx";
 import { SourcesPill } from "./sources.tsx";
 import type { SecretOutcome } from "../model/secret.ts";
 import { provideSecret } from "../secrets.ts";
@@ -423,19 +427,31 @@ const DataApproval = ({
   target: DataSourceTarget;
   ctx: RowContext;
 }) => {
-  const hostKey = ctx.diff.hostKey;
+  const { hostKey, sessionId } = ctx.diff;
   const hostLabel = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.label ?? "this Host");
+  const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? "");
+  const sources = useDataSources({ hostKey, sessionId });
+  const listed = sources.status === "ready" ? sources.value : [];
 
   return (
     <DataSourceApprovalCard
       key={request.id}
+      hostKey={hostKey}
+      request={request}
       target={target}
-      who={ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name}
+      who={askedBy(title)}
       hostLabel={hostLabel}
-      onDecide={(decision) => ctx.onRespond(request, decision)}
+      alreadyApproved={sourceForTarget(listed, target)?.access === "approved"}
     />
   );
 };
+
+/** The card's box, which ⌘⇧A looks at to answer the approval in view. */
+const ShownApproval = ({ requestId, children }: { requestId: string; children: ReactNode }) => (
+  <div ref={useShownApproval(requestId)} data-approval-id={requestId}>
+    {children}
+  </div>
+);
 
 const Approval = ({
   request,
@@ -608,7 +624,11 @@ export const ConversationRow = ({ row, ctx }: { row: Row; ctx: RowContext }) => 
         />
       );
     case "approval":
-      return <Approval request={row.request} settled={row.settled} ctx={ctx} />;
+      return (
+        <ShownApproval requestId={row.request.id}>
+          <Approval request={row.request} settled={row.settled} ctx={ctx} />
+        </ShownApproval>
+      );
     case "ending":
       return <Ending row={row} ctx={ctx} />;
   }

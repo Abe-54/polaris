@@ -1,8 +1,9 @@
 /**
- * Where a database error points in the query: the Host's position when it sends one, else what
- * the message names (MySQL's "near '…' at line N", a quoted identifier). Null when unknown.
+ * Where a database error points in the query: the Host's `position`, else its `line`, else a
+ * quoted name the message gives when it occurs exactly once outside literals. Null when unknown.
  */
 import type { IpcError } from "../../../../shared/api.ts";
+import { maskLiterals } from "./literals.ts";
 
 export interface ErrorSpan {
   /** Offsets into the query text, `to` exclusive. */
@@ -48,27 +49,14 @@ const lineStart = (sql: string, line: number) => {
   return at;
 };
 
-/** MySQL: "… near 'totl from invoices' at line 1". */
-const mysqlNear = (sql: string, message: string): ErrorSpan | null => {
-  const near = /near '([\s\S]*?)' at line (\d+)/.exec(message);
-
-  if (near === null) return null;
-  const start = lineStart(sql, Number(near[2]));
-  const snippet = near[1] ?? "";
-
-  if (start === null) return null;
-  const at = snippet === "" ? -1 : sql.indexOf(snippet, start);
-
-  return at === -1 ? null : spanAt(sql, at, wordLength(sql, at));
-};
-
-/** Only a line: its first token. */
+/** Only a line: its first token outside a comment. */
 const lineOnly = (sql: string, line: number | undefined): ErrorSpan | null => {
   if (line === undefined || !Number.isInteger(line) || line < 1) return null;
   const start = lineStart(sql, line);
 
   if (start === null) return null;
-  const token = /\S/.exec(sql.slice(start));
+  const end = sql.indexOf("\n", start);
+  const token = /\S/.exec(maskLiterals(sql).slice(start, end === -1 ? undefined : end));
 
   return token === null
     ? null
@@ -77,30 +65,29 @@ const lineOnly = (sql: string, line: number | undefined): ErrorSpan | null => {
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Postgres: `column "total" does not exist`, `relation "invoice" does not exist`. */
+/** Postgres' `column "total" does not exist`: marked only when the query names it once. */
 const quotedName = (sql: string, message: string): ErrorSpan | null => {
   const name = /"([^"]+)"/.exec(message)?.[1];
 
   if (name === undefined) return null;
-  const found = new RegExp(`(^|[^\\w$"])("?${escape(name)}"?)(?![\\w$])`, "i").exec(sql);
+  const pattern = new RegExp(`(^|[^\\w$"])("?${escape(name)}"?)(?![\\w$])`, "gi");
+  const found = [...maskLiterals(sql).matchAll(pattern)];
+  const only = found.length === 1 ? found[0] : undefined;
 
-  if (found === null) return null;
-  const at = found.index + (found[1]?.length ?? 0);
+  if (only === undefined) return null;
+  const at = only.index + (only[1]?.length ?? 0);
 
-  return spanAt(sql, at, found[2]?.length ?? name.length);
+  return spanAt(sql, at, only[2]?.length ?? name.length);
 };
+
+const inQuery = (sql: string, position: number | undefined): position is number =>
+  position !== undefined && Number.isInteger(position) && position >= 1 && position <= sql.length;
 
 export const errorSpan = (sql: string, error: IpcError): ErrorSpan | null => {
   // SAFETY: optional fields Data's IPC mapper adds; each is used only as an in-range integer.
   const { position, line } = error as DataIpcError;
 
-  if (
-    Number.isInteger(position) &&
-    position !== undefined &&
-    position >= 1 &&
-    position <= sql.length
-  )
-    return spanAt(sql, position - 1, wordLength(sql, position - 1));
+  if (inQuery(sql, position)) return spanAt(sql, position - 1, wordLength(sql, position - 1));
 
-  return mysqlNear(sql, error.message) ?? quotedName(sql, error.message) ?? lineOnly(sql, line);
+  return lineOnly(sql, line) ?? quotedName(sql, error.message);
 };

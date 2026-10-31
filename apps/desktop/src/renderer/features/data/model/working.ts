@@ -1,9 +1,9 @@
 /**
  * The Working strip over a table an agent is querying (DESIGN.md, Data → Working strip): the
- * Working Agent Session whose current Turn last queried this table on this Data Source. Pure.
+ * Working Agent Session whose current Turn is querying this table on this Data Source now. Pure.
  */
 import type { HarnessKind, QueryLogEntry, SessionId, TurnId } from "@polaris/protocol";
-import { inScope, type LogScope, runsOnOpen } from "./queryLog.ts";
+import { inScope, isWrite, type LogScope } from "./queryLog.ts";
 
 /** What the strip needs of an Agent Session: is it Working, and on which Turn since when. */
 export interface WorkingFacts {
@@ -28,9 +28,18 @@ export interface TableReader {
   readonly turn: number;
   /** ISO; the strip's elapsed time counts from it. */
   readonly turnStartedAt: string;
-  /** Its newest query here changes rows rather than reading them. */
-  readonly writing: boolean;
+  /** What its query does: reads, changes rows, or waits on the user to change them. */
+  readonly verb: "reading" | "changing" | "wants-to-change";
 }
+
+/** Only a query in flight shows: running, or a write held for the user. */
+const verbOf = (entry: QueryLogEntry): TableReader["verb"] | null => {
+  if (entry.state === "waiting-approval") return "wants-to-change";
+
+  if (entry.state !== "running") return null;
+
+  return isWrite(entry.sql) ? "changing" : "reading";
+};
 
 export const tableReader = (
   entries: ReadonlyArray<QueryLogEntry>,
@@ -42,7 +51,9 @@ export const tableReader = (
   for (const entry of entries) {
     const { author } = entry;
 
-    if (author.kind === "user" || !inScope(entry, scope)) continue;
+    const verb = verbOf(entry);
+
+    if (author.kind === "user" || verb === null || !inScope(entry, scope)) continue;
 
     if (newest !== null && newest.entry.at >= entry.at) continue;
     const facts = lookup(author.sessionId);
@@ -56,7 +67,7 @@ export const tableReader = (
         harness: facts.harness,
         turn: facts.turn.number,
         turnStartedAt: facts.turn.startedAt,
-        writing: !runsOnOpen(entry.sql),
+        verb,
       },
     };
   }
@@ -64,6 +75,12 @@ export const tableReader = (
   return newest?.reader ?? null;
 };
 
-/** "Fix overdue totals is reading this table", or "… is changing this table". */
+const PHRASE: Readonly<Record<TableReader["verb"], string>> = {
+  reading: "is reading",
+  changing: "is changing",
+  "wants-to-change": "wants to change",
+};
+
+/** "Fix overdue totals is reading this table", "… is changing …", "… wants to change …". */
 export const readerTitle = (reader: TableReader) =>
-  `${reader.title} is ${reader.writing ? "changing" : "reading"} this table`;
+  `${reader.title} ${PHRASE[reader.verb]} this table`;

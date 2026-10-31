@@ -1,10 +1,17 @@
 /** Data tools bind checkout, Turn and credentials to the authenticated Agent Session. */
-import { DescribeData, QueryData, type RequestId, type SessionId } from "@polaris/protocol";
+import {
+  DescribeData,
+  QueryData,
+  ExecuteDataInput,
+  type RequestId,
+  type SessionId,
+} from "@polaris/protocol";
 import { Clock, Effect, Match, Option, Schema, type Redacted } from "effect";
 import type { DataSessionTools } from "../sessions/data.ts";
 import type { SessionTools } from "../sessions/index.ts";
 import { cappedLines, describeView, queryView, safeDataText, sourcesView } from "./dataFormat.ts";
 import { text } from "./session.ts";
+import { RequestId as RetryKey } from "./idempotency.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 
 const DescribeInput = Schema.Struct({
@@ -18,6 +25,14 @@ const QueryInput = Schema.Struct({
   sql: QueryData.payloadSchema.fields.sql,
   params: QueryData.payloadSchema.fields.params,
   limit: QueryData.payloadSchema.fields.limit,
+});
+
+const ExecuteInput = Schema.Struct({
+  requestId: Schema.optionalKey(RetryKey),
+  source: ExecuteDataInput.fields.source,
+  sql: ExecuteDataInput.fields.sql,
+  params: ExecuteDataInput.fields.params,
+  reason: ExecuteDataInput.fields.reason,
 });
 
 const failure = (code: string, message: string, fix: string): McpToolResult => ({
@@ -46,7 +61,8 @@ export const withDataApproval = <A>(
   render: (value: A) => McpToolResult,
   sessionId: SessionId,
   started: number,
-  known: Parameters<typeof safeDataText>[1] = []
+  known: Parameters<typeof safeDataText>[1] = [],
+  operation: "query" | "execute" = "query"
 ) => {
   const attempt = Effect.isEffect(run) ? () => run : run;
 
@@ -75,7 +91,7 @@ export const withDataApproval = <A>(
             Effect.gen(function* () {
               if (60_000 - ((yield* Clock.currentTimeMillis) - started) < 35_000)
                 return {
-                  ...text(["Approved; call query again to run with a fresh timeout."]),
+                  ...text([`Approved; call ${operation} again to run with a fresh timeout.`]),
                   structuredContent: { approved: true },
                 };
 
@@ -134,7 +150,10 @@ export const dataTools = (sessionId: SessionId, sessions: SessionTools): BoundTo
     description,
     inputSchema:
       name === "data_sources" ? { ...jsonSchema(schema), properties: {} } : jsonSchema(schema),
-    annotations: { readOnlyHint: true },
+    annotations: {
+      readOnlyHint: name !== "execute",
+      ...(name === "execute" ? { destructiveHint: true } : undefined),
+    },
     call: (input, signal) =>
       Effect.runPromise(
         Effect.gen(function* () {
@@ -166,7 +185,8 @@ export const dataTools = (sessionId: SessionId, sessions: SessionTools): BoundTo
     source: string,
     run: (approvalId?: RequestId) => Effect.Effect<A, Failure>,
     render: (value: A, known: ReadonlyArray<Redacted.Redacted<string>>) => McpToolResult,
-    started: number
+    started: number,
+    operation: "query" | "execute" = "query"
   ) =>
     Effect.gen(function* () {
       const known = yield* data.credentials(sessionId, source);
@@ -177,7 +197,8 @@ export const dataTools = (sessionId: SessionId, sessions: SessionTools): BoundTo
         (value) => render(value, known),
         sessionId,
         started,
-        known
+        known,
+        operation
       ).pipe(Effect.catch((error) => Effect.succeed(handle(error, known))));
     });
 
@@ -237,6 +258,27 @@ export const dataTools = (sessionId: SessionId, sessions: SessionTools): BoundTo
             return { ...text([view.text]), structuredContent: view.data };
           },
           started
+        )
+    ),
+    make(
+      "execute",
+      "Preview one SQL write in a rolled-back transaction, then ask the user before committing it. Remote sources need remembered read approval and writes allowed. Returns queryId, affected rows and elapsedMs. Reuse requestId with identical arguments to retrieve the same approval or completed receipt, including after a Turn ends.",
+      ExecuteInput,
+      (input, data, started) =>
+        read(
+          data,
+          input.source,
+          () => data.execute({ sessionId, ...input }),
+          (value) => ({
+            ...text([`Wrote ${value.affected} rows · ${value.queryId}`]),
+            structuredContent: {
+              queryId: value.queryId,
+              affected: value.affected,
+              elapsedMs: value.elapsedMs,
+            },
+          }),
+          started,
+          "execute"
         )
     ),
   ];

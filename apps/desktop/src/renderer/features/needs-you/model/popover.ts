@@ -6,6 +6,7 @@ import type { ApprovalRequest, CelestialBody, HarnessKind } from "@polaris/proto
 import { harnessHue, sessionCelestial } from "@polaris/ui";
 import { Match } from "effect";
 import { age } from "../../../shell/copy.ts";
+import { dataWants } from "../../data/approval/model.ts";
 import type { ConstellationGroup, ConstellationItem, ItemKind } from "./constellation.ts";
 import type { AlsoKind, AlsoWaiting, WaitingSession } from "./inbox.ts";
 
@@ -29,6 +30,9 @@ export const KIND_WANTS: Record<ApprovalRequest["kind"], string> = {
 
 const titleOf = (title: string) => title || "Untitled session";
 
+/** What the request wants: "wants to read analytics" for a Data Source Approval. */
+export const wantsOf = (request: ApprovalRequest) => dataWants(request) ?? KIND_WANTS[request.kind];
+
 /** The kicker's word and the sentence for a waiting session's first request. */
 const requestCopy = (title: string, request: ApprovalRequest) =>
   Match.value(request.kind).pipe(
@@ -39,7 +43,7 @@ const requestCopy = (title: string, request: ApprovalRequest) =>
       text: `${title} is asking for a secret: ${request.title}`,
     })),
     Match.when("command", () => ({ word: "approval", text: `${title} wants to run` })),
-    Match.orElse((kind) => ({ word: "approval", text: `${title} ${KIND_WANTS[kind]}` }))
+    Match.orElse(() => ({ word: "approval", text: `${title} ${wantsOf(request)}` }))
   );
 
 export const waitingCopy = (item: WaitingSession, now: number): RowCopy | null => {

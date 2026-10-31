@@ -20,6 +20,7 @@ import { ConstellationMark } from "../../sessions/glyphs.tsx";
 import { sendConstellation } from "../../sessions/constellationApi.ts";
 import { retrySetup, setupExit, useConstellationActions } from "../../sessions/source.ts";
 import type { ConstellationGroup, ConstellationItem } from "../model/constellation.ts";
+import { offersAlwaysAllow } from "../../data/approval/decide.ts";
 import { approve, deny } from "../respond.ts";
 
 interface CardProps {
@@ -123,7 +124,7 @@ const Approval = ({ item, now }: ItemProps) => {
   const sessionId = item.entry?.session.id;
 
   if (request === undefined || sessionId === undefined || item.hostKey === null) return null;
-  const target = { hostKey: item.hostKey, sessionId, requestId: request.id };
+  const target = { hostKey: item.hostKey, sessionId, request };
 
   return (
     <Card
@@ -140,9 +141,11 @@ const Approval = ({ item, now }: ItemProps) => {
         <Button variant="primary" size="xs" onClick={() => void approve(target)}>
           Approve
         </Button>
-        <Button size="xs" className="px-2" onClick={() => void approve(target, true)}>
-          Always here
-        </Button>
+        {offersAlwaysAllow(request) ? (
+          <Button size="xs" className="px-2" onClick={() => void approve(target, true)}>
+            Always here
+          </Button>
+        ) : null}
         <span className="flex-1" />
         <Button variant="ghost" size="xs" className="px-1.5" onClick={() => void deny(target)}>
           Deny

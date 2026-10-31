@@ -226,6 +226,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "commit.suggest-message",
   "approval.secret",
   "data",
+  "data.writes",
   "data.schemaDiff",
   "constellation",
   "constellation.defaults",

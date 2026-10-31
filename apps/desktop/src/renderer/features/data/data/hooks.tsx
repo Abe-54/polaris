@@ -84,10 +84,14 @@ const tableChanges = (api: DataApi) => api.watchTableChanges;
 export const useTableChanges = (at: DataSessionKey): Loaded<ReadonlyArray<TableChange>> =>
   useWatch(at, tableChanges);
 
-/** A Data Source's schema tree, or one table's detail when `table` is given. */
+/**
+ * A Data Source's schema tree, or one table's detail when `table` is given. A new `generation`
+ * reads it again and keeps the last answer until the fresh one arrives.
+ */
 export const useDescribe = (
   at: DataSessionKey,
-  input: DescribeInput | null
+  input: DescribeInput | null,
+  generation: string | number = 0
 ): Loaded<SchemaTree | TableDetail> => {
   const api = useDataApi();
   const [state, setState] = useState<Loaded<SchemaTree | TableDetail>>(LOADING);
@@ -95,12 +99,15 @@ export const useDescribe = (
   const source = input?.source;
   const table = input?.table;
   const sample = input?.sample;
+  const shown = useRef<string | null>(null);
 
   useEffect(() => {
     if (source === undefined) return;
     let live = true;
+    const key = [hostKey, sessionId, source, table, sample].join("\u0000");
 
-    setState(LOADING);
+    if (shown.current !== key) setState(LOADING);
+    shown.current = key;
     void api.describe({ hostKey, sessionId }, { source, table, sample }).then((result) => {
       if (!live) return;
       setState(
@@ -113,7 +120,7 @@ export const useDescribe = (
     return () => {
       live = false;
     };
-  }, [api, hostKey, sessionId, source, table, sample]);
+  }, [api, hostKey, sessionId, source, table, sample, generation]);
 
   return state;
 };

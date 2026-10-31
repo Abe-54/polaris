@@ -257,38 +257,42 @@ test("RM F7: abort interrupts the approval wait and never reruns the Query", asy
   expect(calls).toBe(1);
 });
 
-test("RM F8: a late approval returns success without executing again", async () => {
-  let calls = 0;
+for (const operation of ["query", "execute"] as const)
+  test(`RM F8: a late ${operation} approval returns success without executing again`, async () => {
+    let calls = 0;
 
-  const run = Effect.suspend(() => {
-    calls++;
+    const run = Effect.suspend(() => {
+      calls++;
 
-    return Effect.fail(required);
+      return Effect.fail(required);
+    });
+
+    const data = {
+      sources: () => Effect.succeed({ checkout: "/tmp", sources: [] }),
+      credentials: () => Effect.succeed([]),
+      describe: () => Effect.succeed(result),
+      query: () => Effect.succeed(result),
+      execute: () => Effect.fail(required),
+      awaitApproval: () => Effect.succeed({ status: "approved" as const }),
+    };
+
+    const response = await Effect.runPromise(
+      withDataApproval(
+        run,
+        { ...data, describe: () => Effect.fail(required) },
+        () => ({ content: [] }),
+        sourceSession(),
+        Date.now() - 26000,
+        [],
+        operation
+      )
+    );
+
+    expect(response.isError).not.toBe(true);
+    expect(response.structuredContent?.approved).toBe(true);
+    expect(response.content[0]!.text).toContain(`call ${operation} again`);
+    expect(calls).toBe(1);
   });
-
-  const data = {
-    sources: () => Effect.succeed({ checkout: "/tmp", sources: [] }),
-    credentials: () => Effect.succeed([]),
-    describe: () => Effect.succeed(result),
-    query: () => Effect.succeed(result),
-    awaitApproval: () => Effect.succeed({ status: "approved" as const }),
-  };
-
-  const response = await Effect.runPromise(
-    withDataApproval(
-      run,
-      { ...data, describe: () => Effect.fail(required) },
-      () => ({ content: [] }),
-      sourceSession(),
-      Date.now() - 26000
-    )
-  );
-
-  expect(response.isError).not.toBe(true);
-  expect(response.structuredContent?.approved).toBe(true);
-  expect(response.content[0]!.text).toContain("call query again");
-  expect(calls).toBe(1);
-});
 
 import { plainBinding } from "./data.testing.ts";
 

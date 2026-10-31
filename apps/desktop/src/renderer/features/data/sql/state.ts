@@ -5,8 +5,8 @@
 import type { DataValue } from "@polaris/protocol";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { DataApi } from "../data/api.ts";
-import { type DataSessionKey, dataSessionKey } from "../model/store.ts";
+import type { DataApi, QueryInput } from "../data/api.ts";
+import { type DataSessionKey, dataSessionKey, dataTabsStore } from "../model/store.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { type DataIpcError, type ErrorSpan, errorSpan } from "./sqlError.ts";
 
@@ -31,6 +31,7 @@ export type SqlRun =
       readonly sql: string;
       readonly result: ResultSet;
     }
+  | { readonly status: "cancelled"; readonly id: number; readonly sql: string }
   | {
       readonly status: "failed";
       readonly id: number;
@@ -46,6 +47,8 @@ export interface SqlTabState {
   /** Bound on Run; a re-run's params until the user unbinds them. */
   readonly params: ReadonlyArray<DataValue>;
   readonly run: SqlRun;
+  /** Why the tab opened without running, e.g. a Query Log re-run whose source is gone. */
+  readonly notice: string | null;
 }
 
 const IDLE: SqlRun = { status: "idle" };
@@ -59,6 +62,7 @@ const initial = (tab: SqlTab): SqlTabState => ({
   source: tab.sourceId,
   params: tab.params,
   run: IDLE,
+  notice: tab.notice ?? null,
 });
 
 const patch = (at: DataSessionKey, tab: SqlTab, change: Partial<SqlTabState>) => {
@@ -67,8 +71,10 @@ const patch = (at: DataSessionKey, tab: SqlTab, change: Partial<SqlTabState>) =>
   sqlTabs.setState((all) => ({ ...all, [key]: { ...(all[key] ?? initial(tab)), ...change } }));
 };
 
-const read = (at: DataSessionKey, tab: SqlTab) =>
+export const readSqlTab = (at: DataSessionKey, tab: SqlTab) =>
   sqlTabs.getState()[keyOf(at, tab.id)] ?? initial(tab);
+
+const read = readSqlTab;
 
 export const useSqlTab = (at: DataSessionKey, tab: SqlTab): SqlTabState =>
   useStore(sqlTabs, (all) => all[keyOf(at, tab.id)]) ?? initial(tab);
@@ -76,8 +82,40 @@ export const useSqlTab = (at: DataSessionKey, tab: SqlTab): SqlTabState =>
 export const setSqlText = (at: DataSessionKey, tab: SqlTab, text: string) =>
   patch(at, tab, { text });
 
-export const setSqlSource = (at: DataSessionKey, tab: SqlTab, source: string) =>
-  patch(at, tab, { source, run: IDLE });
+/** The running query's cancel, by tab; it unsubscribes the stream, so the Host stops it too. */
+const inFlight = new Map<
+  string,
+  { readonly session: string; readonly tabId: string; readonly cancel: () => void }
+>();
+
+const stop = (key: string) => {
+  inFlight.get(key)?.cancel();
+  inFlight.delete(key);
+};
+
+/** Cancels the tab's running query and says so; nothing while none runs. */
+export const cancelSqlRun = (at: DataSessionKey, tab: SqlTab) => {
+  const { run } = read(at, tab);
+
+  if (run.status !== "running") return;
+  stop(keyOf(at, tab.id));
+  patch(at, tab, { run: { status: "cancelled", id: run.id, sql: run.sql } });
+};
+
+/** Choosing another Data Source cancels a query still running on the last one. */
+export const setSqlSource = (at: DataSessionKey, tab: SqlTab, source: string) => {
+  stop(keyOf(at, tab.id));
+  patch(at, tab, { source, run: IDLE, notice: null });
+};
+
+// A closed tab's running query is cancelled and its state dropped.
+dataTabsStore.subscribe(({ sessions }) => {
+  for (const [key, { session, tabId }] of inFlight) {
+    if (sessions[session]?.tabs.some((t) => t.id === tabId) === true) continue;
+    stop(key);
+    sqlTabs.setState(({ [key]: _closed, ...open }) => open, true);
+  }
+});
 
 export const unbindSqlParams = (at: DataSessionKey, tab: SqlTab) => patch(at, tab, { params: [] });
 
@@ -93,40 +131,76 @@ export const takeQueuedRun = (at: DataSessionKey, tabId: string) => queued.delet
 /** Results are capped at 200 rows; the grid says when there were more. */
 export const RESULT_LIMIT = 200;
 
-/** Runs the tab's text on its Data Source; a run started later replaces this one's outcome. */
-export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) => {
-  const { text, source, params } = read(at, tab);
+interface Outcome {
+  readonly done: (result: ResultSet) => void;
+  readonly failed: (error: DataIpcError) => void;
+}
+
+/** The query through data.query.stream, which a cancel stops on the Host; else data.query. */
+const start = (api: DataApi, at: DataSessionKey, query: QueryInput, on: Outcome) => {
+  const input = { ...query, limit: RESULT_LIMIT };
+
+  if (api.queryStream !== undefined) {
+    let columns: ResultSet["columns"] = [];
+    const rows: Array<ResultSet["rows"][number]> = [];
+
+    return api.queryStream(at, input, {
+      header: (header) => {
+        columns = header.columns;
+      },
+      rows: (chunk) => {
+        rows.push(...chunk);
+      },
+      end: ({ returned, total, truncated, elapsedMs }) =>
+        on.done({ columns, rows, returned, total, truncated, elapsedMs }),
+      failed: on.failed,
+    });
+  }
+
+  let live = true;
+
+  void api.query(at, input).then((result) => {
+    if (!live) return;
+
+    if (!result.ok) return on.failed(result.error);
+    const { columns, rows, returned, total, truncated, elapsedMs } = result.value;
+
+    on.done({ columns, rows, returned, total, truncated, elapsedMs });
+  });
+
+  return () => {
+    live = false;
+  };
+};
+
+/** Runs the tab's text on its Data Source; nothing while a run is already going (⌘↵ held). */
+export const runSqlTab = (api: DataApi, at: DataSessionKey, tab: SqlTab) => {
+  const { text, source, params, run } = read(at, tab);
   // Sent as written, so the Host's error positions line up with the editor's text.
   const sql = text;
 
-  if (sql.trim() === "" || source === "") return;
+  if (run.status === "running" || sql.trim() === "" || source === "") return;
   const id = ++runs;
+  const key = keyOf(at, tab.id);
   const running: SqlRun = { status: "running", id, sql };
 
-  patch(at, tab, { run: running });
-  const input = { source, sql, limit: RESULT_LIMIT };
-  const result = await api.query(at, params.length === 0 ? input : { ...input, params });
+  patch(at, tab, { run: running, notice: null });
 
-  if (read(at, tab).run !== running) return;
+  const settle = (next: SqlRun) => {
+    if (read(at, tab).run !== running) return;
+    inFlight.delete(key);
+    patch(at, tab, { run: next });
+  };
 
-  if (!result.ok) {
-    patch(at, tab, {
-      run: { status: "failed", id, sql, error: result.error, span: errorSpan(sql, result.error) },
-    });
+  const query = params.length === 0 ? { source, sql } : { source, sql, params };
 
-    return;
-  }
-
-  const { columns, rows, returned, total, truncated, elapsedMs } = result.value;
-
-  patch(at, tab, {
-    run: {
-      status: "done",
-      id,
-      sql,
-      result: { columns, rows, returned, total, truncated, elapsedMs },
-    },
+  const cancel = start(api, at, query, {
+    done: (result) => settle({ status: "done", id, sql, result }),
+    failed: (error) => settle({ status: "failed", id, sql, error, span: errorSpan(sql, error) }),
   });
+
+  if (read(at, tab).run === running)
+    inFlight.set(key, { session: dataSessionKey(at), tabId: tab.id, cancel });
 };
 
 /** The Data Source the focused SQL tab runs on; null when the focused tab isn't a SQL tab. */

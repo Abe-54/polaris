@@ -138,6 +138,8 @@ export const Results = ({ at, source, run }: ResultsProps) => {
 
   if (run.status === "running") return <Quiet>Running…</Quiet>;
 
+  if (run.status === "cancelled") return <Quiet>Cancelled</Quiet>;
+
   if (run.status === "failed") return <Failure run={run} />;
 
   // Remounts per run, so a new result starts with no rows selected.

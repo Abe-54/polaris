@@ -21,11 +21,11 @@ const entry = (id: number, checkout = "/repo") =>
     sql: `SELECT ${id}`,
     state: "completed",
     author: { kind: "user" },
-    at: "2026-10-30T00:00:00.000Z",
+    at: new Date().toISOString(),
   });
 
 test(
-  "Query Log retains the newest10000 per checkout and pages exclusively by id",
+  "Query Log retains the newest 10000 per Host and pages exclusively by id",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -39,7 +39,7 @@ test(
         const next = yield* log.page("/repo", page.next!, 100);
         expect(next.entries[0]!.id).toBe("q9902");
         const tail = yield* log.page("/repo", "q5");
-        expect(tail.entries.map((row) => row.id)).toEqual(["q4", "q3"]);
+        expect(tail.entries.map((row) => row.id)).toEqual(["q4"]);
         expect((yield* log.page("/other")).entries.map((row) => row.id)).toEqual(["q11000"]);
       }).pipe(Effect.provide(layer()))
     ),

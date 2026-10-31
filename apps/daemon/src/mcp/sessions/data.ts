@@ -38,6 +38,12 @@ export const sessionDataTools = (
         Object.assign(call, turn === undefined ? undefined : { turn })
       );
     }),
+    execute: Effect.fnUntraced(function* (input: Parameters<DataQueries["Service"]["execute"]>[0]) {
+      const { turn } = yield* context(input.sessionId);
+      const call = { ...input, tool: "execute" as const };
+
+      return yield* queries.execute(Object.assign(call, turn === undefined ? undefined : { turn }));
+    }),
     query: Effect.fnUntraced(function* (
       input: Parameters<DataQueries["Service"]["query"]>[0] & { approvalId?: RequestId }
     ) {

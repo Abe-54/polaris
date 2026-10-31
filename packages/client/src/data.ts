@@ -1,6 +1,7 @@
 /** Data calls on a live Host connection; capability checks support older Daemons. */
 import {
   DATA_CAPABILITY,
+  DATA_WRITE_CAPABILITY,
   SCHEMA_DIFF_CAPABILITY,
   type GetDataSchemaDiff,
   Unsupported,
@@ -8,6 +9,7 @@ import {
   type WatchDataQueryLog,
   type DescribeData,
   type QueryData,
+  type CommitDataEdits,
   type SaveDataSource,
   type RemoveDataSource,
   type LabelDataSource,
@@ -30,6 +32,7 @@ export type DataSession = Pick<LiveSession, "capabilities"> & {
     | "data.sources.watch"
     | "data.schemaDiff"
     | "data.describe"
+    | "data.edits.commit"
     | "data.query"
     | "data.queryLog.watch"
     | "data.source.save"
@@ -78,6 +81,14 @@ export const setDataSourceAccess = (
   session: DataSession,
   input: Input<typeof SetDataSourceAccess>
 ) => (supportsData(session) ? session.client["data.source.access"](input) : unsupported());
+
+export const supportsDataWrites = (session: Pick<LiveSession, "capabilities">): boolean =>
+  session.capabilities.includes(DATA_WRITE_CAPABILITY);
+
+export const commitDataEdits = (session: DataSession, input: Input<typeof CommitDataEdits>) =>
+  supportsDataWrites(session)
+    ? session.client["data.edits.commit"](input)
+    : Effect.fail(new Unsupported({ capability: DATA_WRITE_CAPABILITY }));
 
 export const getDataSchemaDiff = (session: DataSession, input: Input<typeof GetDataSchemaDiff>) =>
   session.capabilities.includes(SCHEMA_DIFF_CAPABILITY)

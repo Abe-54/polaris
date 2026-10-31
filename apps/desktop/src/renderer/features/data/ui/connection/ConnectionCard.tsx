@@ -138,6 +138,12 @@ const ManualActions = ({
         Agents in this checkout can't query <span dir="auto">{source.name}</span> after this, and
         its saved password is deleted. You can add it again.
       </p>
+      {source.privilegeWarnings?.length ? (
+        <p role="status" className="text-caption text-text-default">
+          This connection has {source.privilegeWarnings.join(", ")}. Use a SELECT-only database
+          user.
+        </p>
+      ) : null}
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't remove it · {error}
@@ -172,6 +178,15 @@ export interface ConnectionCardProps {
 /** Inside the popover's content, so closing the card unmounts it and flushes the label draft. */
 const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
   const { draft, edit, post, error } = useLabel(at, source);
+  const api = useDataApi();
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+  const revoke = async () => {
+    const result = await api.accessSource?.(at, source.name, true);
+    setAccessError(
+      result?.ok ? null : (result?.error.message ?? "Reconnect to manage agent access.")
+    );
+  };
 
   return (
     <>
@@ -198,14 +213,36 @@ const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
         }}
       />
       <Details source={source} />
-      {source.access === "needs-approval" ? (
-        <PendingDataApproval hostKey={at.hostKey} sourceId={source.id} />
+      {source.privilegeWarnings?.length ? (
+        <p role="status" className="text-caption text-text-default">
+          This connection has {source.privilegeWarnings.join(", ")}. Use a SELECT-only database
+          user.
+        </p>
       ) : null}
+      <PendingDataApproval hostKey={at.hostKey} source={source} />
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't save the label · {error}
         </p>
       )}
+      {api.accessSource ? (
+        <div className="border-hairline flex flex-col gap-2 border-t pt-2">
+          <p className="text-caption text-text-subtle">
+            Revoke removes this target's approval and any server-wide approval for this user.
+            {source.locality === "local"
+              ? " Local access returns to its default: agents may read it."
+              : " Agents will need approval to read it again."}
+          </p>
+          <Button variant="secondary" disabled={!canEdit} onClick={() => void revoke()}>
+            Revoke agent approval
+          </Button>
+          {accessError ? (
+            <p role="alert" className="text-caption text-failed-text">
+              {accessError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {source.foundIn.kind === "manual" ? (
         <ManualActions at={at} source={source} canEdit={canEdit} onRemoved={onRemoved} />
       ) : null}

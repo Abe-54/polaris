@@ -12,6 +12,8 @@ import {
   sourceId,
   type Candidate,
 } from "./connection.ts";
+import { DataPools, sqlOptions } from "./pools.ts";
+import { inspectPrivileges } from "./privileges.ts";
 import { localityProbe } from "./listener.ts";
 import { discover } from "./discovery.ts";
 import { cachedDiscovery } from "./discoveryCache.ts";
@@ -66,6 +68,13 @@ export const sources = Effect.fnUntraced(function* (options: {
   const changes = yield* PubSub.sliding<string>(64);
   yield* Effect.addFinalizer(() => PubSub.shutdown(changes));
   const lock = yield* Semaphore.make(1);
+  const pools = new DataPools();
+  yield* Effect.addFinalizer(() => Effect.promise(() => pools.close()));
+  const privilegeWarnings = new Map<string, ReadonlyArray<string>>();
+
+  const privilegeKey = (source: DataSource, connection: import("./connection.ts").DataConnection) =>
+    Bun.CryptoHasher.hash("sha256", JSON.stringify(sqlOptions(source, connection)), "hex");
+
   const secret = <A, E>(effect: Effect.Effect<A, E>) => Effect.mapError(effect, dataFailure);
 
   const candidates = Effect.fnUntraced(function* (checkout: string) {
@@ -125,11 +134,13 @@ export const sources = Effect.fnUntraced(function* (options: {
       if (!source) continue;
       const label = yield* lock.withPermit(storage.label(checkout, source));
       const policy = yield* options.access.read({ sessionId, source });
+      const warnings = privilegeWarnings.get(privilegeKey(source, parsed.connection));
       result.push({
         source: new DataSource({
           ...Schema.encodeSync(DataSource)(source),
           ...policy,
           label: label ?? source.label,
+          ...(warnings === undefined ? undefined : { privilegeWarnings: warnings }),
         }),
         candidate,
       });
@@ -325,6 +336,21 @@ export const sources = Effect.fnUntraced(function* (options: {
   });
 
   return {
+    inspect: Effect.fnUntraced(function* (source, connection) {
+      const warnings = yield* Effect.tryPromise({
+        try: (signal) => inspectPrivileges(pools, source, connection, signal),
+        catch: dataFailure,
+      }).pipe(Effect.catch(() => Effect.succeed(["Privileges could not be checked"])));
+
+      const key = privilegeKey(source, connection);
+
+      if (JSON.stringify(privilegeWarnings.get(key)) === JSON.stringify(warnings)) return;
+
+      if (privilegeWarnings.size >= 64)
+        privilegeWarnings.delete(privilegeWarnings.keys().next().value!);
+      privilegeWarnings.set(key, warnings);
+      yield* PubSub.publish(changes, "*");
+    }),
     access: Effect.fnUntraced(function* (input) {
       const checkout = yield* checkoutPath(input.sessionId);
       const source = yield* find(input);
@@ -356,7 +382,7 @@ export const sources = Effect.fnUntraced(function* (options: {
             Stream.fromEffect(list(input)),
             Stream.merge(
               Stream.fromSubscription(subscription).pipe(
-                Stream.filter((path) => path === checkout)
+                Stream.filter((path) => path === "*" || path === checkout)
               ),
               (options.access.changes ?? Stream.empty).pipe(Stream.map(() => checkout))
             ).pipe(Stream.mapEffect(() => list(input)))

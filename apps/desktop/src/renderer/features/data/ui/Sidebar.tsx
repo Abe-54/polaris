@@ -6,7 +6,7 @@
 import type { QueryLogEntry } from "@polaris/protocol";
 import { BranchIcon, cn, SegmentedControl } from "@polaris/ui";
 import { useApp } from "../../../shell/hooks.ts";
-import { useQueryLog } from "../data/hooks.tsx";
+import { useDataSources, useQueryLog } from "../data/hooks.tsx";
 import { type SidebarView, setSidebarView, useSidebar } from "../model/sidebar.ts";
 import { AgentsHere } from "./sidebar/AgentsHere.tsx";
 import { QueryLogView } from "./sidebar/QueryLogView.tsx";
@@ -63,6 +63,8 @@ export const DataSidebar = (props: DataSlotProps) => {
   useRefreshSources(at);
   const { view } = useSidebar(at);
   const log = useQueryLog(at);
+  // Kept here so the Query log view's re-run finds its source as soon as it shows.
+  const sources = useDataSources(at);
   const lookups = useLogLookups(hostKey);
   const entries = log.status === "ready" ? log.value : NO_ENTRIES;
 
@@ -101,7 +103,12 @@ export const DataSidebar = (props: DataSlotProps) => {
         {view === "sources" ? (
           <SourcesView at={at} active={active} log={entries} lookups={lookups} canAdd={connected} />
         ) : (
-          <QueryLogView at={at} log={log} lookups={lookups} />
+          <QueryLogView
+            at={at}
+            log={log}
+            lookups={lookups}
+            sources={sources.status === "ready" ? sources.value : null}
+          />
         )}
       </div>
       <AgentsHere at={at} log={entries} lookups={lookups} />

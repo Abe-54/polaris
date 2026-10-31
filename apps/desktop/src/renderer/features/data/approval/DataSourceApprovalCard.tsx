@@ -1,10 +1,14 @@
 /**
  * The Data Source Approval card (DESIGN.md, Data; Paper "Let agents read analytics?"): the exact
  * target in a well, the scope, Deny and Approve, and the Host that remembers it. A Needs You.
+ * Every view of one request shares its scope and shows a decision made in any of them.
  */
-import type { ApprovalDecision } from "@polaris/protocol";
+import type { ApprovalDecision, ApprovalRequest } from "@polaris/protocol";
 import { Button, cn, LockIcon } from "@polaris/ui";
-import { useId, useState } from "react";
+import { useEffect, useId } from "react";
+import { useShownApproval } from "../../../shell/approvalInView.ts";
+import { decide as send } from "../../needs-you/respond.ts";
+import { setApprovalScope, settleOnce, useApprovalScope, useDecidedHere } from "./decide.ts";
 import {
   approvalBody,
   approvalTitle,
@@ -20,12 +24,20 @@ import {
 } from "./model.ts";
 
 export interface DataSourceApprovalCardProps {
+  readonly hostKey: string;
+  readonly request: ApprovalRequest;
   readonly target: DataSourceTarget;
-  /** "Backfill currency", or "Claude Code" in its own conversation. */
+  /** The asking Agent Session's title, "Backfill currency", in every view. */
   readonly who: string;
   readonly hostLabel: string;
-  readonly onDecide: (decision: ApprovalDecision) => void;
+  /** The target is approved already (another session's request, another device): it settles. */
+  readonly alreadyApproved: boolean;
 }
+
+const SETTLED = {
+  approved: "Approved. Agents can read it now.",
+  denied: "Denied. No agent can reach it.",
+} as const;
 
 const Well = ({ target }: { readonly target: DataSourceTarget }) => (
   <dl
@@ -48,16 +60,18 @@ const Well = ({ target }: { readonly target: DataSourceTarget }) => (
 const Scope = ({
   target,
   value,
+  disabled,
   onChange,
 }: {
   target: DataSourceTarget;
   value: DataScope;
+  disabled: boolean;
   onChange: (scope: DataScope) => void;
 }) => {
   const name = useId();
 
   return (
-    <fieldset className="px-row-x flex flex-col gap-0.5 pt-3 pb-1">
+    <fieldset disabled={disabled} className="px-row-x flex flex-col gap-0.5 pt-3 pb-1">
       <legend className="sr-only">Who it covers</legend>
       {SCOPES.map(({ scope, label }) => {
         const note = scopeNote(target, scope);
@@ -99,15 +113,29 @@ const Scope = ({
 };
 
 export const DataSourceApprovalCard = ({
+  hostKey,
+  request,
   target,
   who,
   hostLabel,
-  onDecide,
+  alreadyApproved,
 }: DataSourceApprovalCardProps) => {
-  const [scope, setScope] = useState<DataScope>("target");
+  const scope = useApprovalScope(request.id);
+  const decided = useDecidedHere(request.id);
+  const shownRef = useShownApproval(request.id);
+
+  const decide = (decision: ApprovalDecision) =>
+    void send({ hostKey, sessionId: request.sessionId, request }, decision);
+
+  // Approved already, the request only holds the agent up: answering it lets it go on.
+  useEffect(() => {
+    if (alreadyApproved && decided === null && settleOnce(request.id))
+      void send({ hostKey, sessionId: request.sessionId, request }, approveDecision("target"));
+  }, [alreadyApproved, decided, hostKey, request]);
 
   return (
     <section
+      ref={shownRef}
       data-testid="data-approval"
       data-surface="raised"
       aria-label={approvalTitle(target)}
@@ -120,10 +148,15 @@ export const DataSourceApprovalCard = ({
             {approvalTitle(target)}
           </h3>
         </div>
-        <p className="text-body text-text-subtle">{approvalBody(who)}</p>
+        <p className="text-body text-text-subtle">{approvalBody(who, target)}</p>
       </div>
       <Well target={target} />
-      <Scope target={target} value={scope} onChange={setScope} />
+      <Scope
+        target={target}
+        value={scope}
+        disabled={decided !== null}
+        onChange={(s) => setApprovalScope(request.id, s)}
+      />
       <p className="text-caption text-text-subtle px-[18px] pt-1 pb-3.5">
         {DATA_APPROVAL_FOOTNOTE}
       </p>
@@ -131,17 +164,29 @@ export const DataSourceApprovalCard = ({
         <span className="text-text-subtle min-w-0 flex-1 truncate font-mono text-[11px] leading-[14px] tracking-[0.06em] uppercase">
           {rememberedOn(hostLabel)}
         </span>
-        <Button variant="ghost" className="rounded-full" onClick={() => onDecide(denyDecision())}>
-          Deny
-        </Button>
-        <Button
-          variant="secondary"
-          className="rounded-full"
-          onClick={() => onDecide(approveDecision(scope))}
-          data-testid="data-approval-approve"
-        >
-          Approve
-        </Button>
+        {decided === null ? (
+          <>
+            <Button variant="ghost" className="rounded-full" onClick={() => decide(denyDecision())}>
+              Deny
+            </Button>
+            <Button
+              variant="secondary"
+              className="rounded-full"
+              onClick={() => decide(approveDecision(scope))}
+              data-testid="data-approval-approve"
+            >
+              Approve
+            </Button>
+          </>
+        ) : (
+          <p
+            role="status"
+            data-testid="data-approval-settled"
+            className="text-caption text-text-subtle"
+          >
+            {SETTLED[decided]}
+          </p>
+        )}
       </div>
     </section>
   );

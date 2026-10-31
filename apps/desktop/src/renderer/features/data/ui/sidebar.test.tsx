@@ -75,7 +75,7 @@ describe("Sources", () => {
 
   test("names read in their own direction, so an Arabic name truncates from its end", async () => {
     mountData(fixtureDataApi());
-    act(() => openTable("app", "invoices", DATA_AT));
+    act(() => openTable("app", { schema: "public", name: "invoices" }, DATA_AT));
     const table = await waitFor(() => found(tableRow("invoices"), "invoices row"));
 
     expect(within(table).getByText("invoices").getAttribute("dir")).toBe("auto");

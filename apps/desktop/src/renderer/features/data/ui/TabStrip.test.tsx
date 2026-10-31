@@ -27,8 +27,8 @@ const press = (key: string) =>
 
 test("← and → move to the next tab and select it, wrapping; Home and End jump", () => {
   act(() => {
-    openTable("app", "invoices", DATA_AT);
-    openTable("app", "customers", DATA_AT);
+    openTable("app", { schema: "public", name: "invoices" }, DATA_AT);
+    openTable("app", { schema: "public", name: "customers" }, DATA_AT);
     openSqlTab("select 1", "app", DATA_AT);
   });
   render(<Strip />);
@@ -49,7 +49,7 @@ test("← and → move to the next tab and select it, wrapping; Home and End jum
 });
 
 test("a tab title reads in its own direction", () => {
-  act(() => openTable("app", "الفواتير", DATA_AT));
+  act(() => openTable("app", { schema: "public", name: "الفواتير" }, DATA_AT));
   render(<Strip />);
 
   expect(screen.getByText("الفواتير").getAttribute("dir")).toBe("auto");

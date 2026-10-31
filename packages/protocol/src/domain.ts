@@ -2,6 +2,7 @@
  * Domain model shared by the Daemon and every Client. Names follow CONTEXT.md.
  */
 import { Effect, Schema } from "effect";
+import { ScrubbedDataValue, ScrubbedText } from "./dataValues.ts";
 import { CelestialBody } from "./celestial.ts";
 import { HarnessKind } from "./harnesses.ts";
 import {
@@ -605,6 +606,25 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   turnId: TurnId,
   kind: ApprovalKind,
   dataSource: Schema.optionalKey(DataSourceApproval),
+  dataWrite: Schema.optionalKey(
+    Schema.Struct({
+      target: DataSourceApproval,
+      fingerprint: Schema.String,
+      requestHash: Schema.optionalKey(Schema.String),
+      queryId: Schema.String,
+      sql: ScrubbedText,
+      reason: ScrubbedText,
+      affected: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      columns: Schema.Array(Schema.String).check(Schema.isMaxLength(256)),
+      before: Schema.Array(Schema.Array(ScrubbedDataValue).check(Schema.isMaxLength(256))).check(
+        Schema.isMaxLength(20)
+      ),
+      after: Schema.Array(Schema.Array(ScrubbedDataValue).check(Schema.isMaxLength(256))).check(
+        Schema.isMaxLength(20)
+      ),
+      note: Schema.String,
+    })
+  ),
   /** One-line summary for hover cards and notifications. */
   title: Schema.String,
   detail: Schema.NullOr(Schema.String),

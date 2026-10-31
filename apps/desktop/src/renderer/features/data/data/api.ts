@@ -45,6 +45,8 @@ export interface QueryInput {
 export interface QueryStreamInput {
   readonly source: string;
   readonly sql: string;
+  /** Bound to `$1`, `$2`…; omitted when there are none. */
+  readonly params?: ReadonlyArray<DataValue>;
   /** Rows returned, 1–10,000. */
   readonly limit?: number;
 }
@@ -103,6 +105,11 @@ export interface DataApi {
     input: QueryStreamInput,
     on: QueryStream
   ) => () => void;
+  readonly accessSource?: (
+    at: DataSessionKey,
+    source: string,
+    revoke: boolean
+  ) => Promise<Result<DataSource>>;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
   /** Removes a source the user added (`data.source.remove`); discovered ones can't be. */
   readonly removeSource: (at: DataSessionKey, source: string) => Promise<Result<null>>;
@@ -148,12 +155,13 @@ export const liveDataApi: DataApi = {
     );
   },
   query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
-  queryStream: (at, { source, sql, limit }, on) => {
+  queryStream: (at, { source, sql, params, limit }, on) => {
     const base = { ...session(at), source, sql };
+    const bound = params === undefined ? base : { ...base, params };
 
     return polaris().subscribe(
       "data.query.stream",
-      limit === undefined ? base : { ...base, limit },
+      limit === undefined ? bound : { ...bound, limit },
       {
         items: (items) => {
           for (const item of items)
@@ -169,6 +177,8 @@ export const liveDataApi: DataApi = {
       }
     );
   },
+  accessSource: (at, source, revoke) =>
+    polaris().request("data.source.access", { ...session(at), source, revoke }),
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
   removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>

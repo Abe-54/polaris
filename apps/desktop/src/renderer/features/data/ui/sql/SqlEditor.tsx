@@ -32,6 +32,8 @@ export interface SqlEditorProps {
   readonly error: { readonly span: ErrorSpan; readonly message: string } | null;
   readonly onChange: (text: string) => void;
   readonly onRun: () => void;
+  /** Esc: cancels a running query; false when none runs, so Esc keeps its other uses. */
+  readonly onCancel: () => boolean;
   /** The editor's accessible name. */
   readonly label: string;
 }
@@ -51,16 +53,17 @@ export const SqlEditor = ({
   error,
   onChange,
   onRun,
+  onCancel,
   label,
 }: SqlEditorProps) => {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const language = useRef(new Compartment());
-  const handlers = useRef({ onChange, onRun });
+  const handlers = useRef({ onChange, onRun, onCancel });
   // What the view starts with; later changes arrive through the effects below.
   const start = useRef({ text, label });
 
-  handlers.current = { onChange, onRun };
+  handlers.current = { onChange, onRun, onCancel };
 
   useEffect(() => {
     const parent = host.current;
@@ -82,6 +85,7 @@ export const SqlEditor = ({
                   return true;
                 },
               },
+              { key: "Escape", run: () => handlers.current.onCancel() },
             ])
           ),
           lineNumbers(),

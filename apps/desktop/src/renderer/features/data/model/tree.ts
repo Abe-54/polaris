@@ -4,6 +4,7 @@
  */
 import type { DataSource, SchemaTree, TableSummary } from "@polaris/protocol";
 import type { TableChange } from "../data/api.ts";
+import type { TableRef } from "../ui/table/sql.ts";
 import { isLocked } from "./source.ts";
 
 type Schema = SchemaTree["schemas"][number];
@@ -35,8 +36,9 @@ export type TreeRow =
       readonly kind: "table";
       readonly key: string;
       readonly source: string;
-      /** The name a Table tab and `data.describe` take: schema-qualified past one schema. */
+      /** The Table tab's title: schema-qualified past one schema. */
       readonly table: string;
+      readonly ref: TableRef;
       readonly summary: TableSummary;
       readonly view: boolean;
       readonly change: TableChange["change"] | null;
@@ -104,6 +106,7 @@ const tableRows = (
       key: join("table", source, schema.name, summary.name),
       source,
       table: qualify ? `${schema.name}.${summary.name}` : summary.name,
+      ref: { schema: schema.name, name: summary.name },
       summary,
       view,
       change: change?.change ?? null,

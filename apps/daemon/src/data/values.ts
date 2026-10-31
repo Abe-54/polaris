@@ -3,6 +3,7 @@ import {
   DataValueTags,
   DATA_CELL_BYTES,
   dataJsonBytes,
+  scrubCredentials,
   scrubDataValue,
   type DataValue,
 } from "@polaris/protocol";
@@ -19,6 +20,8 @@ export type Column = typeof Column.Type;
 
 export interface RawResult extends Array<Array<Uint8Array | null>> {
   columns: ReadonlyArray<Column>;
+  truncated?: boolean;
+  clipped?: Map<string, { preview: string; bytes: number }>;
 }
 
 const decodeColumns = Schema.decodeUnknownSync(Schema.Array(Column));
@@ -79,7 +82,7 @@ function mysqlTime(buffer: Buffer): string {
   return `${buffer[0] ? "-" : ""}${pad(hours)}:${pad(buffer[6]!)}:${pad(buffer[7]!)}${buffer.length >= 12 ? `.${pad(buffer.readUInt32LE(8), 6)}` : ""}`;
 }
 
-function mysqlValue(buffer: Buffer, column: Column, catalogText: boolean): DataValue {
+export function mysqlValue(buffer: Buffer, column: Column, catalogText: boolean): DataValue {
   const unsigned = ((column.flags ?? 0) & 32) !== 0;
 
   switch (column.type) {
@@ -182,9 +185,17 @@ export function decodeResult(
 
   return {
     columns,
-    rows: rows.map((row) =>
+    rows: rows.map((row, rowIndex) =>
       row.map((value, i) => {
         try {
+          const clipped = result.clipped?.get(`${rowIndex}:${i}`);
+
+          if (clipped)
+            return DataValueTags.cases.Truncated.make({
+              ...clipped,
+              preview: scrubCredentials(clipped.preview, known),
+            });
+
           return value === null
             ? null
             : bounded(

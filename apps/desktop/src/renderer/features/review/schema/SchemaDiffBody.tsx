@@ -7,6 +7,7 @@ import type { SchemaSourceDiff, SchemaTableDiff } from "@polaris/protocol";
 import { Button, cn, EmptyState, Kbd, PixelForkIcon } from "@polaris/ui";
 import { useState } from "react";
 import { commandShortcut } from "../../../../shared/keymap.ts";
+import type { TableRef } from "../../data/model/tabs.ts";
 import { type LineChange, type SchemaLine, tableLines } from "./lines.ts";
 import {
   baselineNote,
@@ -24,7 +25,7 @@ export interface SchemaDiffBodyProps {
   /** "start → end of turn 7", "across this session". */
   readonly scope: string;
   /** Opens a table in Data mode; absent where Data can't be opened. */
-  readonly onOpenTable?: ((table: string) => void) | undefined;
+  readonly onOpenTable?: ((table: TableRef) => void) | undefined;
 }
 
 type Tone = LineChange | SchemaTableDiff["kind"];
@@ -91,6 +92,7 @@ const TableCard = ({
 }) => {
   const lines = tableLines(table);
   const title = tableTitle(table);
+  const current = table.after ?? table.before;
   const shortcut = commandShortcut("view.data");
 
   return (
@@ -108,12 +110,12 @@ const TableCard = ({
           <span className="sr-only">{table.kind} </span>
           table {title}
         </span>
-        {onOpenTable !== undefined && table.kind !== "removed" && (
+        {onOpenTable !== undefined && table.kind !== "removed" && current !== null && (
           <Button
             variant="ghost"
             size="sm"
             className="shrink-0"
-            onClick={() => onOpenTable(currentName(table))}
+            onClick={() => onOpenTable(current)}
           >
             Open in Data
             {shortcut !== "" && <Kbd variant="plain">{shortcut}</Kbd>}

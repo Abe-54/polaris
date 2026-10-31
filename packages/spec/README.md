@@ -873,6 +873,40 @@ acknowledgment or recovery semantics change. Runtime trace replay includes Evict
 
 MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.
 
+
+## Data write approvals (ENG-645)
+
+`data_writes` in `polaris.qnt` models the rolled-back preview, pending/approved/denied authority,
+one durable consumption, count-checked execution and retries. Turn end/recovery deny pending
+cards and prevent starting a write. The safety checks constrain observed write effects and
+consumption, including count-drift rollback; eight scenarios and 3,000 safety traces run in
+`bun run spec`.
+
+| Model | Runtime mapping |
+| --- | --- |
+| `dryRun`, `request` | `data/writeExecution.ts` rolls back before `writeApprovals.open` invokes `decideSession(data.approvalRequested)`; the card contains the affected count and bounded rows. |
+| `allow`, `deny`, `endTurn`, `restart` | Existing `RespondToApproval`, Session machine withdrawal events, and `ApprovalStore` projection into `WriteApprovalStore`; `data/writeApprovals.test.ts` exercises decisions and all ending paths. |
+| `claim`, `retry` | `WriteApprovalStore.claim` uses a durable SQLite compare-and-set; `verification/dataWrites.model.test.ts` compares random real machine/projection sequences and repository reopen with an independent reference. |
+| `execute` | Shared `executeTransaction` runs the statement with exact affected-count equality, or rolls back. `duringWriteTurn` interrupts the scoped operation when its Turn ends. |
+
+The native `data/writes.real.test.ts` drives DataQueries, the real Session machine/SQLite stores
+and Postgres 16 or MySQL 8.4. It records the preview, approval, execution and retry with actual
+database values, and replays them through `scripts/data-write-replay`. The adapter's regression
+test rejects an unapproved execution and a retry that changes the database again. Discovery is
+injected at the connection boundary; these are not live Harness/UI tests. The driver suite also
+covers before/after rows, denied storage engines, DDL, affected-count drift, key validation and
+whole-grid rollback. Run/replay commands are in `apps/daemon/src/data/README.md`.
+
+Explicit `execute.requestId` keys are scoped to the Agent Session, with a durable argument hash.
+Completed receipts can be retrieved after Turn end or restart without opening a data source;
+changed arguments under the same key are refused. `writeRequests.test.ts` checks the real
+service and SQLite projection; `completedRetryAfterEndTest` models the effect-free receipt retry.
+
+The finite model does not claim distributed exactly-once commit across SQLite and an external
+SQL server. A consumed operation with an unknown outcome cannot be automatically replayed.
+Sequence allocation, external user-function effects, and driver receive-before-clip memory are
+outside its transactional-row model and are documented in ADR 0091.
+
 ### Schema Diff observation (ENG-645)
 
 `data/schemaSnapshots.ts` consumes committed Turn boundaries, completed commands
@@ -904,3 +938,17 @@ measure RSD C1/W7. Native tests are opt-in via `POLARIS_TEST_PG_URL` and
 Existing Data approval model/trace checks remain the authority for approval
 transitions. Unknown writers outside Polaris and catalog changes during a
 multi-query capture remain observational limits, not receipt guarantees.
+
+RX fix-round coverage (ENG-644): `data-approvals.qnt` supplies the refined model imported by
+`data_approvals`. It models two sessions, Local/Remote changes, writes-policy changes, shared
+pending cards, Turn end and one-request grant consumption. Safety checks executed-read audit
+counts, remaining grant credits and card cardinality rather than restating the admission
+predicate. `data_approvals_default_mutant`, `data_approvals_once_mutant` and
+`data_approvals_cards_mutant` must each violate safety; the spec runner checks their witnesses
+and simulator failures. The real projection model varies locality, writes, server user,
+remembering, restart and Turn end across two Session records. `data/approvals.test.ts` also
+exercises the composed EventStore service with two concurrent waiters and one-request retries.
+The Session machine's transitions are unchanged; these are refinements of its existing
+ApprovalRequested, ApprovalResolved and ApprovalWithdrawn events. Engine trace replay remains
+`POLARIS_TRACE_DIR=/tmp/xf-traces bun test apps/daemon/src/verification/engine.model.test.ts`
+then `cd packages/spec && bun scripts/replay.ts /tmp/xf-traces`.
