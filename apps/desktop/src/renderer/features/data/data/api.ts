@@ -10,8 +10,10 @@ import type {
   SchemaTree,
   TableDetail,
 } from "@polaris/protocol";
+import { Match } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
 import { polaris } from "../../bridge.ts";
+import type { DataRow } from "../grid/value.ts";
 import type { DataSessionKey } from "../model/store.ts";
 
 export interface Snapshots<A> {
@@ -33,6 +35,30 @@ export interface QueryInput {
   readonly sql: string;
   /** Rows returned, 1–200. */
   readonly limit?: number;
+}
+
+export interface QueryStreamInput {
+  readonly source: string;
+  readonly sql: string;
+  /** Rows returned, 1–10,000. */
+  readonly limit?: number;
+}
+
+/** data.query.stream's items (CF, ENG-644) as callbacks: a header, rows in chunks, then the end. */
+export interface QueryStream {
+  readonly header: (header: {
+    readonly queryId: string;
+    readonly columns: ReadonlyArray<{ readonly name: string; readonly type: string }>;
+  }) => void;
+  readonly rows: (rows: ReadonlyArray<DataRow>) => void;
+  readonly end: (end: {
+    readonly returned: number;
+    /** The full count, when the database said. */
+    readonly total?: number | undefined;
+    readonly truncated: boolean;
+    readonly elapsedMs: number;
+  }) => void;
+  readonly failed: (error: IpcError) => void;
 }
 
 /** A manual Data Source (`data.source.save`); the password is write-only and never read back. */
@@ -64,6 +90,12 @@ export interface DataApi {
     input: DescribeInput
   ) => Promise<Result<SchemaTree | TableDetail>>;
   readonly query: (at: DataSessionKey, input: QueryInput) => Promise<Result<QueryResult>>;
+  /** Streams a read to the 10,000-row cap; the returned function cancels it. Absent until served. */
+  readonly queryStream?: (
+    at: DataSessionKey,
+    input: QueryStreamInput,
+    on: QueryStream
+  ) => () => void;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
   readonly labelSource: (
     at: DataSessionKey,
@@ -99,6 +131,27 @@ export const liveDataApi: DataApi = {
     );
   },
   query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
+  queryStream: (at, { source, sql, limit }, on) => {
+    const base = { ...session(at), source, sql };
+
+    return polaris().subscribe(
+      "data.query.stream",
+      limit === undefined ? base : { ...base, limit },
+      {
+        items: (items) => {
+          for (const item of items)
+            Match.valueTags(item, {
+              Header: (header) => on.header(header),
+              Rows: ({ rows }) => on.rows(rows),
+              End: (end) => on.end(end),
+            });
+        },
+        end: (error) => {
+          if (error !== null) on.failed(error);
+        },
+      }
+    );
+  },
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
   labelSource: (at, source, label) =>
     polaris().request("data.source.label", { ...session(at), source, label }),

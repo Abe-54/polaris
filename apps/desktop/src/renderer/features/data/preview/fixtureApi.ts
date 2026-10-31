@@ -1,11 +1,19 @@
 /**
  * A `DataApi` over the fixtures, for `<DataLayer api={fixtureDataApi()}>` in previews and tests.
- * Queries read `select … from <table> [where <column> = '<value>']`; writes are refused.
+ * Queries read `select … from <table> [where <column> = '<value>']`; writes are refused. A scene
+ * can add tables of its own (the bench's 10,000 rows, the worst case's 60 columns).
  */
-import { DataSource, type QueryLogEntry, QueryResult, type SchemaTree } from "@polaris/protocol";
+import {
+  DataSource,
+  type QueryLogEntry,
+  QueryResult,
+  type SchemaTree,
+  type TableDetail,
+} from "@polaris/protocol";
 import { Schema } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
-import type { DataApi, SaveSourceInput, Snapshots, TableChange } from "../data/api.ts";
+import type { DataApi, QueryStream, SaveSourceInput, Snapshots, TableChange } from "../data/api.ts";
+import { cellOf, type DataRow } from "../grid/value.ts";
 import {
   FIXTURE_QUERY_LOG,
   FIXTURE_SCHEMA,
@@ -22,11 +30,24 @@ const fail = (code: string, message: string): Result<never> => ({
 
 const DEFAULT_LIMIT = 200;
 
+const STREAM_CAP = 10_000;
+
+/** data.query.stream's chunk: CF's Rows items hold at most 500. */
+const CHUNK = 500;
+
+/** A scene's own table: its detail (columns, keys) and every row. */
+export interface FixtureTable {
+  readonly detail: TableDetail;
+  readonly rows: ReadonlyArray<DataRow>;
+}
+
+export type FixtureTables = Readonly<Record<string, FixtureTable>>;
+
 /** The source by name, or why an agent-facing call can't reach it. */
 const reach = (name: string, sources: ReadonlyArray<DataSource>): Result<null> => {
   const source = sources.find((s) => s.name === name);
 
-  if (source !== undefined && !source.reachable)
+  if (source?.reachable === false)
     return fail("E-DATA-UNREACHABLE", source.error ?? `Can't reach ${source.host}:${source.port}`);
 
   if (source === undefined) return fail("E-DATA-UNKNOWN-SOURCE", `No data source named ${name}`);
@@ -41,19 +62,54 @@ const FROM = /\bfrom\s+"?(\w+)"?/i;
 
 const WHERE = /\bwhere\s+"?(\w+)"?\s*=\s*'([^']*)'/i;
 
-/** Runs the fixture's small SQL subset; exported for the tests. */
-export const runFixtureQuery = (sql: string, limit = DEFAULT_LIMIT): Result<QueryResult> => {
+interface Selected {
+  readonly table: string;
+  readonly columns: ReadonlyArray<{ readonly name: string; readonly type: string }>;
+  readonly rows: ReadonlyArray<DataRow>;
+}
+
+const tableOf = (table: string, extra: FixtureTables) => {
+  const own = extra[table];
+
+  if (own !== undefined)
+    return {
+      columns: own.detail.columns.map(({ name, type }) => ({ name, type })),
+      rows: own.rows,
+    };
+  const columns = fixtureColumns(table);
+  const rows = fixtureRows(table);
+
+  return columns === null || rows === null ? null : { columns, rows };
+};
+
+/** Every row the SQL selects, before any limit. */
+const select = (sql: string, extra: FixtureTables): Result<Selected> => {
   if (!/^\s*(select|with)\b/i.test(sql))
     return fail("E-DATA-READ-ONLY", "Fixture data sources are read-only");
   const table = FROM.exec(sql)?.[1];
-  const columns = table === undefined ? null : fixtureColumns(table);
-  const all = table === undefined ? null : fixtureRows(table);
+  const found = table === undefined ? null : tableOf(table, extra);
 
-  if (table === undefined || columns === null || all === null)
+  if (table === undefined || found === null)
     return fail("E-DATA-SQL", `relation "${table ?? "?"}" does not exist`);
   const where = WHERE.exec(sql);
-  const at = where === null ? -1 : columns.findIndex((c) => c.name === where[1]);
-  const rows = at === -1 ? all : all.filter((row) => row[at] === where?.[2]);
+  const at = where === null ? -1 : found.columns.findIndex((c) => c.name === where[1]);
+
+  const rows =
+    at === -1 ? found.rows : found.rows.filter((row) => cellOf(row[at]).raw === where?.[2]);
+
+  return { ok: true, value: { table, columns: found.columns, rows } };
+};
+
+/** Runs the fixture's small SQL subset; exported for the tests. */
+export const runFixtureQuery = (
+  sql: string,
+  limit = DEFAULT_LIMIT,
+  extra: FixtureTables = {}
+): Result<QueryResult> => {
+  const selected = select(sql, extra);
+
+  if (!selected.ok) return selected;
+  const { table, columns, rows } = selected.value;
 
   return {
     ok: true,
@@ -70,6 +126,36 @@ export const runFixtureQuery = (sql: string, limit = DEFAULT_LIMIT): Result<Quer
   };
 };
 
+/** Header, rows in chunks a tick apart, then the end; cancelling stops the chunks. */
+const stream = (selected: Selected, limit: number, on: QueryStream) => {
+  const rows = selected.rows.slice(0, Math.min(limit, STREAM_CAP));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let sent = 0;
+
+  const step = () => {
+    if (sent === 0) on.header({ queryId: `fixture-${selected.table}`, columns: selected.columns });
+
+    if (sent < rows.length) {
+      on.rows(rows.slice(sent, sent + CHUNK));
+      sent += CHUNK;
+      timer = setTimeout(step, 0);
+
+      return;
+    }
+
+    on.end({
+      returned: rows.length,
+      total: selected.rows.length,
+      truncated: selected.rows.length > rows.length,
+      elapsedMs: 9,
+    });
+  };
+
+  timer = setTimeout(step, 0);
+
+  return () => clearTimeout(timer);
+};
+
 const sampleOf = (table: string, sample: number | undefined) => {
   if (sample === undefined || sample === 0) return undefined;
   const result = runFixtureQuery(`select * from ${table}`, sample);
@@ -84,6 +170,8 @@ export interface FixtureData {
   /** A source's schema tree by name; the ledger schema for every source when omitted. */
   readonly schema?: (source: string) => SchemaTree;
   readonly tableChanges?: ReadonlyArray<TableChange>;
+  /** A scene's own tables, read before the ledger's. */
+  readonly tables?: FixtureTables;
   /** What each subscribe re-lists, as the Daemon re-discovers then; current sources when omitted. */
   readonly relist?: () => ReadonlyArray<DataSource>;
 }
@@ -157,7 +245,7 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
       if (!reached.ok) return reached;
 
       if (table === undefined) return { ok: true, value: data.schema?.(source) ?? FIXTURE_SCHEMA };
-      const detail = fixtureTable(table, sampleOf(table, sample));
+      const detail = data.tables?.[table]?.detail ?? fixtureTable(table, sampleOf(table, sample));
 
       return detail === null
         ? fail("NotFound", `No table named ${table}`)
@@ -166,7 +254,16 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
     query: async (_at, { source, sql, limit }) => {
       const reached = reach(source, sources.get());
 
-      return reached.ok ? runFixtureQuery(sql, limit) : reached;
+      return reached.ok ? runFixtureQuery(sql, limit, data.tables) : reached;
+    },
+    queryStream: (_at, { source, sql, limit = STREAM_CAP }, on) => {
+      const reached = reach(source, sources.get());
+      const selected = reached.ok ? select(sql, data.tables ?? {}) : reached;
+
+      if (selected.ok) return stream(selected.value, limit, on);
+      const timer = setTimeout(() => on.failed(selected.error), 0);
+
+      return () => clearTimeout(timer);
     },
     saveSource: async (_at, input) => {
       const saved = savedSource(input);
