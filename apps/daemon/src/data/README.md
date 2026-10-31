@@ -186,8 +186,9 @@ before sending this RPC. The Desktop App owns the remote bulk confirmation.
   `nextval` and auto-increment allocation) can advance. External or independently committed
   effects in user functions/triggers can survive; a restricted database role remains necessary.
   Non-InnoDB writes survive rollback, which is why those targets are refused. PostgreSQL NOTIFY
-  is transactional and is not delivered on rollback. Direct dangerous function calls use the
-  shared function guard; user-defined wrappers remain a database-role boundary.
+  is transactional and is not delivered on rollback. Direct function-call restrictions depend
+  on XF integration; `writeSql.test.ts` retains the named regression todo until then. User-defined
+  wrappers remain a database-role boundary.
 - As with reads, a large individual cell reaches the driver before clipping. The bounded card
   is not a claim that driver memory is bounded for arbitrarily wide rows.
 
