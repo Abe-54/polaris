@@ -105,7 +105,7 @@ const Card = ({ item }: { readonly item: WaitingSession }) => {
       }
       onApprove={() => void approve(target)}
       {...(offersAlwaysAllow(request) ? { onAlwaysAllow: () => void approve(target, true) } : {})}
-      onDeny={() => void deny(target)}
+      onDeny={() => void deny(target, open)}
     />
   );
 };

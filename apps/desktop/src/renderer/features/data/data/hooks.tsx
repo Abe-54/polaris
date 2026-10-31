@@ -31,12 +31,16 @@ export type Loaded<A> =
 
 const LOADING = { status: "loading" } as const;
 
-/** A new `generation` re-subscribes and keeps the last snapshot until the fresh one arrives. */
+/**
+ * A new `generation` re-subscribes and keeps the last snapshot until the fresh one arrives;
+ * `enabled` false subscribes to nothing.
+ */
 const useWatch = <A,>(
   at: DataSessionKey,
   watch: (api: DataApi) => (at: DataSessionKey, on: Snapshots<A>) => () => void,
   generation = 0,
-  onListed?: (at: DataSessionKey, generation: number) => void
+  onListed?: (at: DataSessionKey, generation: number) => void,
+  enabled = true
 ): Loaded<ReadonlyArray<A>> => {
   const api = useDataApi();
   const [state, setState] = useState<Loaded<ReadonlyArray<A>>>(LOADING);
@@ -44,6 +48,7 @@ const useWatch = <A,>(
   const shown = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const key = dataSessionKey({ hostKey, sessionId });
 
     if (shown.current !== key) setState(LOADING);
@@ -61,7 +66,7 @@ const useWatch = <A,>(
         },
       }
     );
-  }, [api, watch, hostKey, sessionId, generation, onListed]);
+  }, [api, watch, hostKey, sessionId, generation, onListed, enabled]);
 
   return state;
 };
@@ -74,9 +79,11 @@ const queryLog = (api: DataApi) => api.watchQueryLog;
 export const useDataSources = (at: DataSessionKey): Loaded<ReadonlyArray<DataSource>> =>
   useWatch(at, sources, useSourcesGeneration(at), markListed);
 
-/** The checkout's Query Log, newest last, live. */
-export const useQueryLog = (at: DataSessionKey): Loaded<ReadonlyArray<QueryLogEntry>> =>
-  useWatch(at, queryLog);
+/** The checkout's Query Log, newest last, live; nothing is watched while `enabled` is false. */
+export const useQueryLog = (
+  at: DataSessionKey,
+  enabled = true
+): Loaded<ReadonlyArray<QueryLogEntry>> => useWatch(at, queryLog, 0, undefined, enabled);
 
 const tableChanges = (api: DataApi) => api.watchTableChanges;
 

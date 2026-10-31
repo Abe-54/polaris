@@ -5,6 +5,7 @@
 import { type ApprovalDecision, type ApprovalRequest, DataEngine } from "@polaris/protocol";
 import { Option, Schema } from "effect";
 import { Decisions } from "../../../commands.ts";
+import { writeWants } from "../write/model.ts";
 
 /** X's `ApprovalRequest.dataSource`, read here until it lands in the protocol (ENG-644). */
 export const DataSourceTarget = Schema.Struct({
@@ -47,8 +48,9 @@ export const approvalTitle = (target: DataSourceTarget) => `Let agents read ${ta
 /** "wants to read analytics": a Data Source Approval's ask, after the session's title (F13). */
 export const wantsToRead = (target: DataSourceTarget) => `wants to read ${target.sourceName}`;
 
-/** The ask for a request that is a Data Source Approval; null for any other. */
+/** The ask for a request that is a Data Source Approval or a write; null for any other. */
 export const dataWants = (request: ApprovalRequest): string | null => {
+  if (request.dataWrite !== undefined) return writeWants(request.dataWrite);
   const target = dataSourceTarget(request);
 
   return target === null ? null : wantsToRead(target);

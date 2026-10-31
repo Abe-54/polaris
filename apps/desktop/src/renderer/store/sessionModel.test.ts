@@ -10,7 +10,12 @@ import {
   TurnDetail,
   TurnItem,
 } from "@polaris/protocol";
-import { applySessionItems, emptySessionModel, type SecretOutcome } from "./sessionModel.ts";
+import {
+  applySessionItems,
+  emptySessionModel,
+  type SecretOutcome,
+  type WriteOutcome,
+} from "./sessionModel.ts";
 import {
   approval,
   envelope,
@@ -211,6 +216,73 @@ describe("session model", () => {
 
     expect(model.pendingApprovals).toEqual([]);
     expect(model.settledSecrets).toEqual([{ request: secret, outcome }]);
+  });
+
+  const write = new ApprovalRequest({
+    id: approval.id,
+    sessionId,
+    turnId,
+    kind: "tool",
+    title: "Run 214-row write",
+    detail: null,
+    options: [],
+    openedAt: approval.openedAt,
+    dataWrite: {
+      target: {
+        sourceId: "src-app",
+        sourceName: "app",
+        engine: "postgres",
+        host: "localhost",
+        port: 5432,
+        database: "ledger",
+        user: "ledger",
+      },
+      fingerprint: "fp",
+      queryId: "q1",
+      sql: "update invoices set currency = 'USD'",
+      reason: "backfill",
+      affected: 214,
+      columns: [],
+      before: [],
+      after: [],
+      note: "",
+    },
+  });
+
+  const answeredBy = (decision: ApprovalDecision, resolvedBy: string) =>
+    E.ApprovalResolved.make({ sessionId, requestId: write.id, decision, resolvedBy });
+
+  test.each<readonly [string, DomainEvent, WriteOutcome]>([
+    ["allowed", answeredBy(D.Allow.make({ remember: false }), "Mac Studio"), { kind: "allowed" }],
+    [
+      "denied with a reason",
+      answeredBy(D.Deny.make({ reason: "use EUR" }), "Mac Studio"),
+      { kind: "denied", reason: "use EUR" },
+    ],
+    [
+      "withdrawn when the Turn ended",
+      E.ApprovalWithdrawn.make({
+        sessionId,
+        requestId: write.id,
+        withdrawnBy: "harness",
+        reason: "turn ended",
+      }),
+      { kind: "expired", by: "harness" },
+    ],
+    [
+      "withdrawn, as an older log records it",
+      answeredBy(D.Deny.make({ reason: null }), "Daemon"),
+      { kind: "expired", by: "daemon" },
+    ],
+  ])("a write %s leaves pending but keeps its card, settled", (_name, ended, outcome) => {
+    const asked = applySessionItems(started, [
+      event(4, E.ApprovalRequested.make({ request: write })),
+    ]);
+
+    const model = applySessionItems(asked, [event(5, ended)]);
+
+    expect(model.pendingApprovals).toEqual([]);
+    expect(model.settledWrites).toEqual([{ request: write, outcome }]);
   });
 
   test("an ordinary approval settles into nothing", () => {

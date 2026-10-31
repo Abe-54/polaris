@@ -5,6 +5,7 @@
 import type { ApprovalDecision, ApprovalRequest, RequestId, SessionId } from "@polaris/protocol";
 import { Commands, Decisions } from "../../commands.ts";
 import { allowFor, forgetDecision, noteDecision, noteGrant } from "../data/approval/decide.ts";
+import { askDenyReason } from "../data/write/deny.ts";
 import { send } from "../session/dispatch.ts";
 import { markAnswered } from "./answered.ts";
 
@@ -55,7 +56,18 @@ export const decide = async (
 export const approve = (target: ApprovalTarget, remember = false) =>
   decide(target, allowFor(target.request, remember));
 
-export const deny = (target: ApprovalTarget) => decide(target, Decisions.Deny({ reason: null }));
+/**
+ * A write is never denied blind: `open` shows its session, where the card's reason field opens,
+ * as the agent needs the why.
+ */
+export const deny = async (target: ApprovalTarget, open?: () => void) => {
+  if (target.request.dataWrite === undefined)
+    return decide(target, Decisions.Deny({ reason: null }));
+  open?.();
+  askDenyReason(target.request.id);
+
+  return false;
+};
 
 export const answer = (input: Omit<RespondInput, "decision">, text: string) =>
   respond({ ...input, decision: Decisions.Answer({ text }) });

@@ -170,6 +170,7 @@ export const SessionIntent = ({ hostKey, sessionId }: SessionViewProps) => {
     turns: model.turns,
     approvals: model.pendingApprovals,
     settledSecrets: model.settledSecrets ?? [],
+    settledWrites: model.settledWrites ?? [],
     folds: ui.folds,
     outbox: ui.outbox,
     waiting: waitingFor(

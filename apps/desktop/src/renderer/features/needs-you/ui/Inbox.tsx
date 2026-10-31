@@ -38,7 +38,15 @@ import type {
   WaitingSession,
 } from "../model/inbox.ts";
 import { offersAlwaysAllow } from "../../data/approval/decide.ts";
-import { approve, continueTurn, deny, retryTurn, takeBack } from "../respond.ts";
+import { DENY_PROMPT, dryRunKicker, runLabel, writeWants } from "../../data/write/model.ts";
+import {
+  type ApprovalTarget,
+  approve,
+  continueTurn,
+  deny,
+  retryTurn,
+  takeBack,
+} from "../respond.ts";
 import { clientCopy } from "../../../../shared/clientCopy.ts";
 import { secretLine } from "../../session/model/secret.ts";
 
@@ -97,9 +105,31 @@ const Dismissable = ({
   </div>
 );
 
-/** A question's ask; a secret's label only, its reason staying in the session's card. */
-const inboxAsk = (request: ApprovalRequest) =>
-  request.kind === "secret" ? secretLine(request.title) : request.title;
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A question's ask; a secret's label only, its reason staying in the session's card; a write's. */
+const inboxAsk = (request: ApprovalRequest) => {
+  if (request.dataWrite !== undefined)
+    return `${capitalize(writeWants(request.dataWrite))} · ${dryRunKicker(request.dataWrite).toLowerCase()}`;
+
+  return request.kind === "secret" ? secretLine(request.title) : request.title;
+};
+
+/** A write is answered in its card: Run here, Deny there, where the reason is typed. */
+const writeAnswers = (target: ApprovalTarget, open: () => void): ReadonlyArray<CardAction> => {
+  const write = target.request.dataWrite;
+
+  return write === undefined
+    ? []
+    : [
+        { label: runLabel(write), run: () => void approve(target), command: "approval.approve" },
+        {
+          label: `${DENY_PROMPT}…`,
+          run: () => void deny(target, open),
+          command: "approval.deny",
+        },
+      ];
+};
 
 /** The card's answers; Always allow only where the request offers it. */
 interface Answering {
@@ -138,11 +168,12 @@ const Waiting = ({
 
   if (always) answering.onAlwaysAllow = () => void approve(target, true);
 
-  // A question is answered, and a secret typed, only in the session's own card.
-  const inCard = request.kind === "question" || request.kind === "secret";
+  // A question is answered, a secret typed and a write's reason given only in the session's card.
+  const write = request.dataWrite !== undefined;
+  const inCard = request.kind === "question" || request.kind === "secret" || write;
 
   const answers: ReadonlyArray<CardAction> = inCard
-    ? []
+    ? writeAnswers(target, open)
     : [
         { label: "Approve", run: () => void approve(target), command: "approval.approve" },
         ...(always ? [{ label: "Always allow", run: () => void approve(target, true) }] : []),

@@ -120,6 +120,7 @@ const restartFresh = (group: ConstellationGroup, item: ConstellationItem, reason
 };
 
 const Approval = ({ item, now }: ItemProps) => {
+  const { selectSession } = useShellActions();
   const request = item.request;
   const sessionId = item.entry?.session.id;
 
@@ -147,7 +148,12 @@ const Approval = ({ item, now }: ItemProps) => {
           </Button>
         ) : null}
         <span className="flex-1" />
-        <Button variant="ghost" size="xs" className="px-1.5" onClick={() => void deny(target)}>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="px-1.5"
+          onClick={() => void deny(target, () => selectSession(target))}
+        >
           Deny
         </Button>
       </Actions>
