@@ -194,6 +194,16 @@ to reject coercion duplicates, and requires one matched row per update (includin
 The whole batch rolls back on a mismatch. Bytes keys carry a complete base64 payload and bind as
 bytes on both engines; display-only, clipped or unsupported keys are refused with a reason.
 The Query Log attributes the batch to the user and completed writes name their affected tables.
+Each cell carries the value it was staged from. Before any update, every row's changed columns are
+read under `FOR UPDATE` and compared in the Daemon's decoded value terms (json has no equality
+operator and float parameters mis-compare in SQL); any change or missing row fails the batch with
+`E-DATA-CONFLICT` and every `Changed`/`Missing` cell. A failing update carries its row's key in
+`row`. After the updates, the same transaction reads each edited cell back and returns it as
+`written` (key and column as sent), so the grid shows, and next stages from, the stored value.
+Keys must arrive in declared order (`TableDetail.primaryKey`); floating-point keys are
+refused. On Postgres `Json` values bind as the parsed document (numbers kept as their source
+text), never as a JSON string. Grid commits are user writes outside `data_writes`' agent approval
+lifecycle, so the conflict check adds no Quint transition.
 Clients negotiate `data.writes`; the Desktop App owns the Remote bulk confirmation.
 
 ### Write limits (ENG-669)

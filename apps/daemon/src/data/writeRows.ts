@@ -27,8 +27,20 @@ export async function identityRows(
 
   const raw =
     input.source.engine === "postgres"
-      ? await cursorRead(tx, active, sql, bindValues(where.params), MAX_IDENTITIES + 1)
-      : await mysqlRead(tx, active, sql, bindValues(where.params), MAX_IDENTITIES + 1);
+      ? await cursorRead(
+          tx,
+          active,
+          sql,
+          bindValues(where.params, input.source.engine),
+          MAX_IDENTITIES + 1
+        )
+      : await mysqlRead(
+          tx,
+          active,
+          sql,
+          bindValues(where.params, input.source.engine),
+          MAX_IDENTITIES + 1
+        );
 
   if (raw.truncated || raw.length > MAX_IDENTITIES)
     throw writeError(

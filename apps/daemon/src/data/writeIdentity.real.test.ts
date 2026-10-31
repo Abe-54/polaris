@@ -125,7 +125,8 @@ for (const engine of ["postgres", "mysql"] as const)
           );
 
         expect(
-          (await edits(`${t}_binary`, [{ key: result.rows[0]!, column: "v", value: 8 }])).affected
+          (await edits(`${t}_binary`, [{ key: result.rows[0]!, column: "v", before: 0, value: 8 }]))
+            .affected
         ).toBe(1);
         expect((await admin.unsafe<Array<{ v: number }>>(`SELECT v FROM ${t}_binary`))[0]?.v).toBe(
           8
@@ -133,8 +134,13 @@ for (const engine of ["postgres", "mysql"] as const)
         await Promise.resolve(
           expect(
             edits(t, [
-              { key: [1], column: "v", value: 4 },
-              { key: [DataValueTags.cases.Numeric.make({ value: "1" })], column: "v", value: 5 },
+              { key: [1], column: "v", before: 0, value: 4 },
+              {
+                key: [DataValueTags.cases.Numeric.make({ value: "1" })],
+                column: "v",
+                before: 0,
+                value: 5,
+              },
             ])
           ).rejects.toMatchObject({ code: "E-DATA-SQL" })
         );

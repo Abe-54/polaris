@@ -98,13 +98,54 @@ export function queryError(
   });
 }
 
-export function bindValues(params: ReadonlyArray<DataValue>) {
+declare global {
+  /** JSON.parse source text access and JSON.rawJSON: Bun implements both, TypeScript's lib lacks them. */
+  interface JSON {
+    rawJSON(text: string): { readonly rawJSON: string };
+    parse<T>(
+      text: string,
+      reviver: (key: string, value: T, context: { readonly source?: string }) => T
+    ): T;
+  }
+}
+
+/** A parsed document whose numbers, booleans and nulls are JSON.rawJSON source text. */
+type JsonDocument =
+  | ReturnType<typeof JSON.rawJSON>
+  | string
+  | number
+  | boolean
+  | null
+  | ReadonlyArray<JsonDocument>
+  | { readonly [key: string]: JsonDocument };
+
+/**
+ * Bun serialises a Postgres json/jsonb parameter with JSON.stringify, so a string becomes a JSON
+ * string. An object whose toJSON is the parsed document, numbers kept as their source, binds whole.
+ */
+function postgresJson(text: string) {
+  let parsed: JsonDocument;
+
+  try {
+    parsed = JSON.parse<JsonDocument>(text, (_key, value, context) =>
+      value === null || Predicate.isNumber(value) || Predicate.isBoolean(value)
+        ? JSON.rawJSON(context.source ?? JSON.stringify(value))
+        : value
+    );
+  } catch {
+    throw invalid("This JSON parameter is not valid JSON.", "Supply complete JSON text.");
+  }
+
+  return { toJSON: () => parsed };
+}
+
+export function bindValues(params: ReadonlyArray<DataValue>, engine: DataSource["engine"]) {
   return params.map((value) => {
     if (value === null || !Predicate.isObject(value)) return value;
 
     return Match.value(value).pipe(
       Match.tag("BigInt", "Numeric", (v) => v.value),
-      Match.tag("Json", (v) => v.text),
+      Match.tag("Json", (v) => (engine === "postgres" ? postgresJson(v.text) : v.text)),
       Match.tag("Timestamp", (v) => v.iso),
       Match.tag("Bytes", (v) => {
         if (v.base64 === undefined)
@@ -205,7 +246,7 @@ async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active)
   await guardFunctions(tx, checked.sql, mode);
 
   if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
-  const params = bindValues(input.params ?? []);
+  const params = bindValues(input.params ?? [], input.source.engine);
 
   if (input.source.engine === "mysql") {
     if (["SHOW", "DESCRIBE", "DESC", "EXPLAIN"].includes(checked.keyword))

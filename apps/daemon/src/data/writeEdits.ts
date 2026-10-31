@@ -8,7 +8,10 @@ export type EditInput = typeof CommitDataEdits.payloadSchema.Type;
 export function editStatements(input: EditInput, engine: DataSource["engine"]) {
   const groups = new Map<
     string,
-    { key: ReadonlyArray<DataValue>; changes: Map<string, DataValue> }
+    {
+      key: ReadonlyArray<DataValue>;
+      changes: Map<string, { sent: string; before: DataValue; value: DataValue }>;
+    }
   >();
 
   for (const edit of input.edits) {
@@ -34,7 +37,7 @@ export function editStatements(input: EditInput, engine: DataSource["engine"]) {
         "The same cell appears more than once in these edits.",
         "Reload the table and stage each cell once."
       );
-    group.changes.set(column, edit.value);
+    group.changes.set(column, { sent: edit.column, before: edit.before, value: edit.value });
   }
 
   const table = `${identifier(input.table.schema, engine)}.${identifier(input.table.name, engine)}`;
@@ -47,13 +50,23 @@ export function editStatements(input: EditInput, engine: DataSource["engine"]) {
       .map(([column], i) => `${identifier(column, engine)}=${bind(i + 1)}`)
       .join(", ");
 
-    const where = input.primaryKey
-      .map((column, i) => `${identifier(column, engine)}=${bind(changes.length + i + 1)}`)
-      .join(" AND ");
+    const where = (offset: number) =>
+      input.primaryKey
+        .map((column, i) => `${identifier(column, engine)}=${bind(offset + i + 1)}`)
+        .join(" AND ");
 
     return {
-      sql: `UPDATE ${table} SET ${set} WHERE ${where}`,
-      params: [...changes.map(([, value]) => value), ...group.key],
+      sql: `UPDATE ${table} SET ${set} WHERE ${where(changes.length)}`,
+      params: [...changes.map(([, change]) => change.value), ...group.key],
+      key: group.key,
+      /** The changed columns and the values the user staged them from. */
+      before: changes.map(([column, change]) => ({
+        column,
+        sent: change.sent,
+        value: change.before,
+      })),
+      /** The key predicate alone, its parameters numbered from one. */
+      where: where(0),
     };
   });
 }

@@ -1,7 +1,7 @@
 /** Disposable native databases exercise rollback, drift, cancellation and atomic grid edits. */
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
-import { DataSource, SessionId } from "@polaris/protocol";
+import { DataEditConflict, DataSource, SessionId } from "@polaris/protocol";
 import { Predicate, Redacted } from "effect";
 import { parseConnection } from "./connection.ts";
 import { DataPools, sqlOptions } from "./pools.ts";
@@ -77,7 +77,7 @@ for (const engine of ["postgres", "mysql"] as const) {
       const schema = engine === "postgres" ? "public" : source.database;
 
       const edits = (
-        changes: Array<{ key: number[]; column: string; value: number }>,
+        changes: Array<{ key: number[]; column: string; before: number | null; value: number }>,
         name = table,
         primaryKey = ["id"]
       ) =>
@@ -145,10 +145,13 @@ for (const engine of ["postgres", "mysql"] as const) {
         await Promise.resolve(
           expect(
             edits([
-              { key: [1], column: "v", value: 40 },
-              { key: [99], column: "v", value: 50 },
+              { key: [1], column: "v", before: 30, value: 40 },
+              { key: [99], column: "v", before: null, value: 50 },
             ])
-          ).rejects.toMatchObject({ code: "E-DATA-SQL" })
+          ).rejects.toMatchObject({
+            code: "E-DATA-CONFLICT",
+            conflicts: [DataEditConflict.cases.Missing.make({ key: [99] })],
+          })
         );
         expect(await read()).toEqual([
           { id: 1, v: 30 },
@@ -158,8 +161,8 @@ for (const engine of ["postgres", "mysql"] as const) {
         expect(
           (
             await edits([
-              { key: [1], column: "v", value: 40 },
-              { key: [2], column: "v", value: 50 },
+              { key: [1], column: "v", before: 30, value: 40 },
+              { key: [2], column: "v", before: 20, value: 50 },
             ])
           ).affected
         ).toBe(2);
@@ -169,7 +172,9 @@ for (const engine of ["postgres", "mysql"] as const) {
           { id: 3, v: 30 },
         ]);
         await Promise.resolve(
-          expect(edits([{ key: [1], column: "v", value: 40 }], noKey)).rejects.toMatchObject({
+          expect(
+            edits([{ key: [1], column: "v", before: 30, value: 40 }], noKey)
+          ).rejects.toMatchObject({
             code: "E-DATA-SQL",
           })
         );
@@ -192,8 +197,8 @@ for (const engine of ["postgres", "mysql"] as const) {
         expect(
           (
             await edits([
-              { key: [1], column: "v", value: 41 },
-              { key: [1], column: "other", value: 9 },
+              { key: [1], column: "v", before: 40, value: 41 },
+              { key: [1], column: "other", before: 0, value: 9 },
             ])
           ).affected
         ).toBe(1);
@@ -204,7 +209,7 @@ for (const engine of ["postgres", "mysql"] as const) {
             )
           )
         ).toEqual([{ v: 41, other: 9 }]);
-        expect((await edits([{ key: [1], column: "v", value: 41 }])).affected).toBe(1);
+        expect((await edits([{ key: [1], column: "v", before: 41, value: 41 }])).affected).toBe(1);
 
         const extraColumns = Array.from({ length: 253 }, (_, i) => `extra_${i} INT`).join(",");
         await admin.unsafe(

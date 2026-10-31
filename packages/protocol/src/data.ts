@@ -87,6 +87,16 @@ export class DataWriteResult extends Schema.Class<DataWriteResult>("DataWriteRes
   queryId: Name,
   affected: Count,
   elapsedMs: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
+  /** A grid commit's cells as the database stored them, read back in the same transaction. */
+  written: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        key: Schema.Array(ScrubbedDataValue),
+        column: Name,
+        value: ScrubbedDataValue,
+      })
+    ).check(Schema.isMaxLength(10000))
+  ),
 }) {}
 
 export const ExecuteDataInput = Schema.Struct({
@@ -137,6 +147,8 @@ export class TableDetail extends Schema.Class<TableDetail>("TableDetail")({
   ),
   rowEstimate: Schema.NullOr(Count),
   sample: Schema.optionalKey(QueryResult),
+  /** The primary key's columns in their declared order, which grid edits send keys in. */
+  primaryKey: Schema.optionalKey(Schema.Array(Name)),
 }) {}
 
 export class SchemaTree extends Schema.Class<SchemaTree>("SchemaTree")({
@@ -204,7 +216,20 @@ export const DataErrorCode = Schema.Literals([
   "E-DATA-SQL",
   "E-DATA-CANCELLED",
   "E-DATA-OUTCOME-UNKNOWN",
+  "E-DATA-CONFLICT",
 ]);
+
+/** A grid edit the commit refused: the cell changed since it was staged, or its row is gone. */
+export const DataEditConflict = Schema.TaggedUnion({
+  Changed: {
+    key: Schema.Array(ScrubbedDataValue),
+    column: Name,
+    value: ScrubbedDataValue,
+  },
+  Missing: { key: Schema.Array(ScrubbedDataValue) },
+});
+
+export type DataEditConflict = typeof DataEditConflict.Type;
 
 export class DataError extends Schema.TaggedError<DataError>()("DataError", {
   code: DataErrorCode,
@@ -212,6 +237,10 @@ export class DataError extends Schema.TaggedError<DataError>()("DataError", {
   fix: ScrubbedText,
   position: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   sqlLine: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  /** A grid commit's refused cells (`E-DATA-CONFLICT`). */
+  conflicts: Schema.optionalKey(Schema.Array(DataEditConflict).check(Schema.isMaxLength(10000))),
+  /** The key of the grid row whose update failed. */
+  row: Schema.optionalKey(Schema.Array(ScrubbedDataValue)),
 }) {}
 
 const Errors = Schema.Union([DataError, Unsupported]);
@@ -350,6 +379,8 @@ export const CommitDataEdits = Rpc.make("data.edits.commit", {
       Schema.Struct({
         key: Schema.Array(DataValue),
         column: Name,
+        /** The value the user staged from: the commit refuses the cell if it has changed. */
+        before: DataValue,
         value: DataValue,
       })
     ).check(Schema.isMinLength(1), Schema.isMaxLength(10000)),

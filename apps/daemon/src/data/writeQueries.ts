@@ -330,6 +330,7 @@ export const writeQueries = Effect.fnUntraced(function* (
           queryId: initial.id,
           affected: result.affected,
           elapsedMs: performance.now() - started,
+          written: result.written,
         });
 
         yield* update({

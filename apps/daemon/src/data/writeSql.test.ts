@@ -31,8 +31,8 @@ test("preview parameters retain values and rebind WHERE positions without litera
 
   const selected = whereParams(plan, mode, [30, 1]);
   expect(selected).toEqual({ sql: "WHERE id=$1 AND note='$3' AND other=$2", params: [1, 1] });
-  expect(bindValues(selected.params)).toEqual([1, 1]);
-  expect(bindValues([30, 1])).toEqual([30, 1]);
+  expect(bindValues(selected.params, "postgres")).toEqual([1, 1]);
+  expect(bindValues([30, 1], "postgres")).toEqual([30, 1]);
 });
 
 test("MySQL preview bindings skip SET placeholders and keep quoted question marks", () => {
@@ -89,17 +89,32 @@ test("grid cells for one primary key form one statement and keep identifiers out
       table: { schema: "public", name: 'a"b' },
       primaryKey: ["id"],
       edits: [
-        { key: [1], column: "v", value: 2 },
-        { key: [1], column: "other", value: "x" },
-        { key: [2], column: "v", value: 3 },
+        { key: [1], column: "v", before: 1, value: 2 },
+        { key: [1], column: "other", before: null, value: "x" },
+        { key: [2], column: "v", before: 1, value: 3 },
       ],
     },
     "postgres"
   );
 
   expect(statements).toEqual([
-    { sql: 'UPDATE "public"."a""b" SET "v"=$1, "other"=$2 WHERE "id"=$3', params: [2, "x", 1] },
-    { sql: 'UPDATE "public"."a""b" SET "v"=$1 WHERE "id"=$2', params: [3, 2] },
+    {
+      sql: 'UPDATE "public"."a""b" SET "v"=$1, "other"=$2 WHERE "id"=$3',
+      params: [2, "x", 1],
+      key: [1],
+      before: [
+        { column: "v", sent: "v", value: 1 },
+        { column: "other", sent: "other", value: null },
+      ],
+      where: '"id"=$1',
+    },
+    {
+      sql: 'UPDATE "public"."a""b" SET "v"=$1 WHERE "id"=$2',
+      params: [3, 2],
+      key: [2],
+      before: [{ column: "v", sent: "v", value: 1 }],
+      where: '"id"=$1',
+    },
   ]);
 });
 
