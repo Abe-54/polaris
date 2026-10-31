@@ -30,7 +30,7 @@ export interface DataSourceApprovalCardProps {
 const Well = ({ target }: { readonly target: DataSourceTarget }) => (
   <dl
     data-testid="data-approval-target"
-    className="border-hairline bg-bg gap-gap mx-3.5 flex flex-col rounded-[12px] border px-3.5 py-3"
+    className="border-hairline bg-well gap-gap mx-3.5 flex flex-col rounded-[12px] border px-3.5 py-3"
   >
     {targetRows(target).map(([label, value]) => (
       <div key={label} className="flex min-w-0 gap-3">
@@ -109,6 +109,7 @@ export const DataSourceApprovalCard = ({
   return (
     <section
       data-testid="data-approval"
+      data-surface="raised"
       aria-label={approvalTitle(target)}
       className="rounded-card border-hairline bg-surface-raised flex w-full max-w-[400px] flex-col overflow-clip border"
     >

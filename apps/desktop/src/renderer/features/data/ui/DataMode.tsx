@@ -17,6 +17,7 @@ import type { DataSlotProps } from "./slots.ts";
 import { DataStatusBar } from "./StatusBar.tsx";
 import { TabStrip } from "./TabStrip.tsx";
 import { tabBody } from "./tabKinds.tsx";
+import { useNewSqlTab } from "./useNewSqlTab.ts";
 import { WorkingStrip } from "./WorkingStrip.tsx";
 
 const NoSession = () => (
@@ -56,6 +57,8 @@ const Workbench = ({ slot }: { slot: Omit<DataSlotProps, "active"> }) => {
   const state = useDataTabs(at);
   const active = state.tabs.find((t) => t.id === state.active) ?? null;
   const props = { ...slot, active };
+
+  useNewSqlTab(at, active);
 
   return (
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="data-mode">

@@ -7,6 +7,7 @@
  */
 import { Predicate } from "effect";
 import { acceleratorLabel, currentKeyPlatform, type KeyPlatform } from "./chord.ts";
+import { DATA_BINDINGS, type DataCommandId } from "./keymapData.ts";
 import { DIFF_BINDINGS, type DiffCommandId } from "./keymapDiff.ts";
 import { VIEW_BINDINGS, type ViewCommandId } from "./keymapView.ts";
 
@@ -50,7 +51,7 @@ export type CommandId =
   | "editor.findInWorkspace"
   | "editor.inlineChat"
   | "editor.addToSession"
-  | "data.addRowsToSession"
+  | DataCommandId
   | "editor.markdownPreview"
   | "git.writeMessage"
   | "editor.save"
@@ -86,6 +87,8 @@ export type CommandGroup = "file" | "workspace" | "app";
 export const CONTEXT_KEYS = [
   /** The Edit view is showing. */
   "mode.edit",
+  /** The Data view is showing. */
+  "mode.data",
   /** A file is open and focused in Edit. */
   "editor.file",
   "prediction.ghost",
@@ -418,14 +421,7 @@ export const KEYMAP: ReadonlyArray<KeyBinding> = [
     menu: "Session",
     palette: WORKSPACE({ keywords: ["prompt", "message"] }),
   },
-  // Only in Data, on a grid's rows: the selected rows, or all shown, to the shown session.
-  {
-    id: "data.addRowsToSession",
-    title: "Add rows to agent session",
-    keys: ["CmdOrCtrl+L"],
-    shares: "session.focusComposer",
-    palette: WORKSPACE({ keywords: ["data", "table", "rows", "attach"] }),
-  },
+  ...DATA_BINDINGS,
   {
     id: "session.interrupt",
     title: "Stop the turn",
