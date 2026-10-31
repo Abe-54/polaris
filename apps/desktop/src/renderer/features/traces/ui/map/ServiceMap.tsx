@@ -19,7 +19,7 @@ import { usePanZoom } from "./usePanZoom.ts";
 const HINT = "text-text-subtle font-mono text-[11px] leading-[14px]";
 
 const Legend = ({ startedByAgent }: { readonly startedByAgent: boolean }) => (
-  <div className="text-caption text-text-subtle pointer-events-none absolute bottom-3.5 left-4 flex items-center gap-4">
+  <div className="text-caption text-text-subtle flex items-center gap-4">
     <span className="flex items-center gap-1.5">
       <svg width="18" height="6" aria-hidden>
         <path d="M0 3H18" style={{ stroke: LINK }} strokeDasharray="2 2" />
@@ -51,7 +51,7 @@ const Legend = ({ startedByAgent }: { readonly startedByAgent: boolean }) => (
 );
 
 const Hints = () => (
-  <div className="pointer-events-none absolute right-4 bottom-4 flex items-center gap-3.5 max-[1180px]:hidden">
+  <div className="flex items-center gap-3.5 max-[1180px]:hidden">
     <span className={HINT}>Drag to pan</span>
     <span className={HINT}>Scroll to zoom</span>
     <span className={HINT}>Double-click to fit</span>
@@ -123,8 +123,11 @@ export const ServiceMap = ({
             }}
           />
         </div>
-        <Legend startedByAgent={map.caller.turn !== null} />
-        <Hints />
+        {/* The foot sits on the well, so the map passes under it. */}
+        <div className="bg-well rounded-b-row pointer-events-none absolute inset-x-px bottom-px flex h-11 items-center justify-between px-4">
+          <Legend startedByAgent={map.caller.turn !== null} />
+          <Hints />
+        </div>
       </div>
       {panel === null ? null : (
         <ServicePanel
