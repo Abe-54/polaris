@@ -28,6 +28,16 @@ export const redactUrls = (text: string): string =>
       })
   );
 
+const stackLocation = (text: string, offset: number, match: string): boolean => {
+  if (!/^[\w.-]+\.[cm]?[jt]sx?:\d+:\d+\)?$/.test(match)) return false;
+
+  const start = text.lastIndexOf("\n", offset) + 1;
+  const end = text.indexOf("\n", offset);
+  const line = text.slice(start, end === -1 ? undefined : end);
+
+  return /^\s*at\s+(?:.*\s+\()?[^()\r\n]+\.[cm]?[jt]sx?:\d+:\d+\)?\s*$/.test(line);
+};
+
 const redactSecrets = (text: string): string =>
   text
     .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9+/_=.-]+/gi, "[redacted]")
@@ -45,7 +55,8 @@ const redactSecrets = (text: string): string =>
     )
     .replace(
       /(?<![\w.-])([\w.-]*(?:auth|cookie|token|api[-_.]?key|password|passwd|secret|credential|signature|jwt|session|passphrase|pwd)[\w.-]*["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;&\s]+)/gi,
-      "$1[redacted]"
+      (match, key: string, offset: number, input: string) =>
+        stackLocation(input, offset, match) ? match : `${key}[redacted]`
     );
 
 const redactOutsideUrls = (text: string): string => {

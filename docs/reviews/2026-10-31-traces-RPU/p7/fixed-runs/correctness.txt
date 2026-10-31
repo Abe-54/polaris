@@ -1,0 +1,21 @@
+Root typecheck: exit 0
+
+ Tasks:    18 successful, 18 total
+Cached:    17 cached, 18 total
+  Time:    14.124s
+
+
+Full Daemon test: exit 0
+
+ 3293 pass
+ 87 skip
+ 0 fail
+ 102564 expect() calls
+Ran 3380 tests across 580 files. [529.59s]
+
+Root lint: exit 0
+$ oxfmt --check && bun tooling/lint/ratchet.ts
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 632ms on 5674 files using 12 threads.
