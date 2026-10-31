@@ -1,151 +1,59 @@
-import "../../../test/dom.testing.ts";
-import { type ConnectionState, DataSource } from "@polaris/protocol";
-import { TooltipProvider } from "@polaris/ui";
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
+import { QueryLogEntry } from "@polaris/protocol";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
+import { describe, expect, test } from "bun:test";
 import { Schema } from "effect";
-import { createStore } from "zustand/vanilla";
-import { createCommandRegistry } from "../../../routes/commands.ts";
-import { createNavigation } from "../../../routes/navigation.ts";
-import { AppProvider } from "../../../shell/hooks.ts";
-import { type AppState, type Connection, initialState } from "../../../store/store.ts";
-import type { DataApi } from "../data/api.ts";
-import { DataLayer } from "../data/hooks.tsx";
-import { dataTabsStore, openTable, useDataTabs } from "../model/store.ts";
+import { openTable } from "../model/store.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
-import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
-import { DATA_AT, DATA_WORKSPACE_ID, dataHost, dataHostModel } from "../preview/scene.ts";
-import { ConnectionBar } from "./ConnectionBar.tsx";
-import { DataSidebar } from "./Sidebar.tsx";
+import { FIXTURE_QUERY_LOG } from "../preview/fixtures.ts";
+import { DATA_AT } from "../preview/scene.ts";
+import {
+  click,
+  delivered,
+  focusedData,
+  found,
+  mountData,
+  page,
+  shownTabs,
+  useDataLayout,
+} from "./data.testing.tsx";
 
-const KEYS = ["offsetWidth", "offsetHeight"] as const;
+useDataLayout();
 
-const saved = KEYS.map(
-  (key) => [key, Object.getOwnPropertyDescriptor(HTMLElement.prototype, key)] as const
-);
-
-/** happy-dom has no layout: lists get a tall viewport, and each virtualized row a tree row's height. */
-function size(this: HTMLElement, key: (typeof KEYS)[number]) {
-  if (key === "offsetWidth") return 270;
-
-  return this.hasAttribute("data-index") ? 28 : 2000;
-}
-
-beforeAll(() => {
-  for (const key of KEYS)
-    Object.defineProperty(HTMLElement.prototype, key, {
-      configurable: true,
-      get(this: HTMLElement) {
-        return size.call(this, key);
-      },
-    });
-});
-
-afterAll(() => {
-  for (const [key, descriptor] of saved)
-    if (descriptor !== undefined) Object.defineProperty(HTMLElement.prototype, key, descriptor);
-});
-
-afterEach(() => {
-  cleanup();
-  dataTabsStore.setState({ sessions: {}, shown: null });
-});
-
-const page = () => within(document.body);
-
-/** The tabs of the shown session, as plain lines, read through the real store. */
-let tabs: ReturnType<typeof useDataTabs> | null = null;
-
-const TabsProbe = () => {
-  tabs = useDataTabs(DATA_AT);
-
-  return null;
-};
-
-/** The sidebar and connection bar on the fixtures, as Data mode lays them out. */
-const mount = (api: DataApi, state: ConnectionState = "connected") => {
-  const store = createStore<AppState>(() => ({
-    ...initialState,
-    hosts: [dataHost(state)],
-    hostModels: { [DATA_AT.hostKey]: dataHostModel() },
-  }));
-
-  const connection: Connection = {
-    store,
-    openSession: () => () => undefined,
-    setDensity: () => undefined,
-    setAppearance: () => undefined,
-  };
-
-  const navigation = createNavigation({ app: store, storage: null });
-  const commands = createCommandRegistry({ platform: "mac" });
-
-  const Layout = () => {
-    const shown = useDataTabs(DATA_AT);
-    const active = shown.tabs.find((t) => t.id === shown.active) ?? null;
-    const props = { at: DATA_AT, hostKey: DATA_AT.hostKey, workspaceId: DATA_WORKSPACE_ID, active };
-
-    return (
-      <>
-        <DataSidebar {...props} />
-        <ConnectionBar {...props} />
-        <TabsProbe />
-      </>
-    );
-  };
-
-  render(
-    <AppProvider value={{ connection, navigation, commands }}>
-      <TooltipProvider>
-        <DataLayer api={api}>
-          <Layout />
-        </DataLayer>
-      </TooltipProvider>
-    </AppProvider>
-  );
-};
-
-/** The element a query found, or a failure naming what was missing. */
-const found = <E extends Element>(el: E | null | undefined, what: string): E => {
-  if (el === null || el === undefined) throw new Error(`No ${what}`);
-
-  return el;
-};
-
-const click = (el: Element) =>
-  act(() => {
-    fireEvent.click(el);
-  });
+const tableRow = (table: string) =>
+  page()
+    .queryAllByTestId("data-table-row")
+    .find((r) => r.dataset.table === table);
 
 describe("Sources", () => {
   test("a table opens its Table tab, and the connection bar names it", async () => {
-    mount(fixtureDataApi());
+    mountData(fixtureDataApi());
     const row = await waitFor(() => page().getByText("invoices", { selector: "span" }));
 
     click(row);
 
     expect(
-      tabs?.tabs.map((t) => (t.kind === "table" ? `${t.sourceId}.${t.table}` : t.title))
+      shownTabs.current?.tabs.map((t) =>
+        t.kind === "table" ? `${t.sourceId}.${t.table}` : t.title
+      )
     ).toEqual(["app.invoices"]);
-    expect(page().getByTestId("data-connection-bar").textContent).toBe(
-      "LOCALPostgreSQL 16.4 : localhost:5432 : ledger_overdue : invoicesAgents read · writes ask you"
+    expect(page().getByTestId("data-connection-where").textContent).toBe(
+      "PostgreSQL 16.4 : localhost:5432 : ledger_overdue : invoices"
     );
   });
 
   test("the table agents added this Turn shows its git letter in place of the estimate", async () => {
-    mount(fixtureDataApi());
+    const api = fixtureDataApi();
+    const changes = delivered(api.watchTableChanges);
 
-    const row = await waitFor(() =>
-      page()
-        .getAllByTestId("data-table-row")
-        .find((r) => r.dataset.table === "currencies")
-    );
+    mountData({ ...api, watchTableChanges: changes.watch });
+    // waitFor leaves act while it waits, so the snapshots that mount the tree can land.
+    await waitFor(() => changes.first);
 
-    expect(row?.textContent).toBe("currenciesA");
+    await waitFor(() => expect(tableRow("currencies")?.textContent).toBe("currenciesA"));
   });
 
   test("with no data sources it says what was searched and offers Add data source", async () => {
-    mount(fixtureDataApi({ sources: [] }));
+    mountData(fixtureDataApi({ sources: [] }));
 
     const empty = await waitFor(() => page().getByTestId("data-no-sources"));
 
@@ -154,64 +62,8 @@ describe("Sources", () => {
     expect(page().queryByTestId("data-connection-bar")).toBeNull();
   });
 
-  test("Add data source posts the form, password included, and the new source joins the tree", async () => {
-    const api = fixtureDataApi();
-    const saved: Array<unknown> = [];
-
-    mount({
-      ...api,
-      saveSource: (at, input) => {
-        saved.push(input);
-
-        return api.saveSource(at, input);
-      },
-    });
-    click(await waitFor(() => page().getByTestId("data-add-source")));
-    const form = page().getByTestId("data-source-form");
-
-    const field = (name: string) =>
-      within(form).getByText(name).parentElement?.querySelector("input");
-
-    for (const [name, value] of [
-      ["Name", "warehouse"],
-      ["Host", "warehouse.internal"],
-      ["Database", "dw"],
-      ["User", "reader"],
-      ["Password", "s3cret"],
-    ] as const) {
-      act(() => {
-        fireEvent.change(found(field(name), name), { target: { value } });
-      });
-    }
-
-    await act(async () => {
-      fireEvent.submit(form);
-    });
-
-    expect(saved).toEqual([
-      {
-        name: "warehouse",
-        engine: "postgres",
-        host: "warehouse.internal",
-        port: 5432,
-        database: "dw",
-        user: "reader",
-        password: "s3cret",
-        label: { text: "", colour: "red" },
-      },
-    ]);
-    await waitFor(() =>
-      expect(
-        page()
-          .getAllByTestId("data-source-row")
-          .map((r) => r.dataset.source)
-      ).toContain("warehouse")
-    );
-    expect(page().queryByTestId("data-source-form")).toBeNull();
-  });
-
   test("while the Host is Offline the tree stays, dimmed, and adding a source waits", async () => {
-    mount(fixtureDataApi(), "offline");
+    mountData(fixtureDataApi(), { state: "offline" });
     const add = await waitFor(() => page().getByTestId("data-add-source"));
 
     expect(add.hasAttribute("disabled")).toBe(true);
@@ -220,13 +72,77 @@ describe("Sources", () => {
     );
     expect(page().getByTestId("data-where").textContent).toContain("Offline");
   });
+
+  test("names read in their own direction, so an Arabic name truncates from its end", async () => {
+    mountData(fixtureDataApi());
+    act(() => openTable("app", "invoices", DATA_AT));
+    const table = await waitFor(() => found(tableRow("invoices"), "invoices row"));
+
+    expect(within(table).getByText("invoices").getAttribute("dir")).toBe("auto");
+    expect(
+      page()
+        .getByText("app", { selector: "[data-testid='data-source-row'] span" })
+        .getAttribute("dir")
+    ).toBe("auto");
+  });
+});
+
+describe("the Sources tree's keyboard", () => {
+  const focused = () => focusedData().treeKey ?? null;
+
+  const key = (key: string) =>
+    act(() => {
+      fireEvent.keyDown(found(document.activeElement, "focused row"), { key });
+    });
+
+  test("the tree is one tab stop, and ↓ moves into the source's schema", async () => {
+    mountData(fixtureDataApi());
+    await waitFor(() => expect(tableRow("invoices")).toBeDefined());
+    const tree = page().getByRole("tree");
+
+    const stops = [...tree.querySelectorAll<HTMLElement>("[data-tree-key]")].filter(
+      (el) => el.tabIndex === 0
+    );
+
+    expect(stops.map((el) => el.dataset.source)).toEqual(["app"]);
+    act(() => stops[0]?.focus());
+    key("ArrowDown");
+
+    expect(focused()).toBe("schema\u0000app\u0000public");
+    expect(document.activeElement?.getAttribute("tabindex")).toBe("0");
+    key("ArrowDown");
+    expect(focusedData().table).toBe("customers");
+  });
+
+  test("← goes to the parent, then closes it; → opens it again", async () => {
+    mountData(fixtureDataApi());
+    const row = await waitFor(() => found(tableRow("invoices"), "invoices row"));
+    const source = () => found(page().getAllByTestId("data-source-row")[0], "app row");
+
+    act(() => row.focus());
+    key("ArrowLeft");
+    expect(focused()).toBe("schema\u0000app\u0000public");
+    key("ArrowLeft");
+    expect(tableRow("invoices")).toBeUndefined();
+    key("ArrowLeft");
+    expect(focused()).toBe("source\u0000app");
+    key("ArrowLeft");
+    expect(source().getAttribute("aria-expanded")).toBe("false");
+    key("ArrowRight");
+    expect(source().getAttribute("aria-expanded")).toBe("true");
+  });
 });
 
 describe("Query log", () => {
-  test("a row re-runs into a new SQL tab on its source", async () => {
-    mount(fixtureDataApi());
+  const openLog = async () => {
     click(await waitFor(() => page().getByRole("radio", { name: /Query log/ })));
-    const rows = await waitFor(() => page().getAllByTestId("data-log-row"));
+
+    return waitFor(() => page().getAllByTestId("data-log-row"));
+  };
+
+  test("a row re-runs into a new SQL tab on its source", async () => {
+    mountData(fixtureDataApi());
+    const rows = await openLog();
 
     expect(rows[0]?.dataset.state).toBe("needs-you");
     expect(rows[0]?.textContent).toContain("Backfill currency · appneeds you");
@@ -237,15 +153,50 @@ describe("Query log", () => {
       )
     );
 
-    expect(tabs?.tabs.map((t) => (t.kind === "sql" ? [t.title, t.sourceId, t.sql] : null))).toEqual(
-      [["Query 1", "app", "select * from invoices where currency is null"]]
+    expect(
+      shownTabs.current?.tabs.map((t) => (t.kind === "sql" ? [t.title, t.sourceId, t.sql] : null))
+    ).toEqual([["Query 1", "app", "select * from invoices where currency is null"]]);
+  });
+
+  test("a re-run keeps the params the query ran with", async () => {
+    const yours = found(
+      FIXTURE_QUERY_LOG.find((e) => e.id === "q-user-2"),
+      "q-user-2"
+    );
+
+    const parametrised = Schema.decodeSync(QueryLogEntry)({
+      ...Schema.encodeSync(QueryLogEntry)(yours),
+      id: "q-params",
+      sql: "select * from invoices where customer_id = $1 and status = $2",
+      params: ["c-42", "overdue"],
+    });
+
+    mountData(fixtureDataApi({ queryLog: [parametrised] }));
+    click(found((await openLog())[0], "the parametrised row"));
+
+    expect(shownTabs.current?.tabs.map((t) => (t.kind === "sql" ? t.params : null))).toEqual([
+      ["c-42", "overdue"],
+    ]);
+  });
+
+  test("a query run outside Polaris keeps its data source in the byline", async () => {
+    mountData(fixtureDataApi());
+    const rows = await openLog();
+
+    const outside = found(
+      rows.find((r) => r.textContent?.includes("outside Polaris")),
+      "outside row"
+    );
+
+    expect(within(outside).getByTestId("data-log-byline").textContent).toBe(
+      "Backfill currency · app · outside Polaris"
     );
   });
 });
 
 describe("Agents in this worktree", () => {
   test("each agent says what it is doing to data", async () => {
-    mount(fixtureDataApi());
+    mountData(fixtureDataApi());
 
     // Each row is title, description, then its age ("6h"), which moves with the clock.
     const described = () =>
@@ -258,93 +209,6 @@ describe("Agents in this worktree", () => {
         "Backfill currencyWants to write",
         "Fix overdue totalsQuerying invoices",
       ])
-    );
-  });
-});
-
-describe("the connection bar", () => {
-  test("a label colour from its card posts data.source.label and re-tints the bar", async () => {
-    const api = fixtureDataApi();
-    const posted: Array<unknown> = [];
-
-    mount({
-      ...api,
-      labelSource: (at, source, label) => {
-        posted.push([source, label]);
-
-        return api.labelSource(at, source, label);
-      },
-    });
-    act(() => openTable("ledger", "invoices", DATA_AT));
-    const bar = await waitFor(() => page().getByTestId("data-connection-bar"));
-
-    expect(bar.dataset.colour).toBe("tan");
-    click(bar);
-    await act(async () => {
-      fireEvent.click(page().getByRole("radio", { name: "Blue" }));
-    });
-
-    expect(posted).toEqual([["ledger", { text: "PLANETSCALE · OVERDUE-TOTALS", colour: "blue" }]]);
-    await waitFor(() =>
-      expect(page().getByTestId("data-connection-bar").dataset.colour).toBe("blue")
-    );
-  });
-
-  let hours = 0;
-
-  test.each([
-    ["the window regains focus", () => window.dispatchEvent(new Event("focus"))],
-    ["its card opens", () => click(page().getByTestId("data-connection-bar"))],
-  ])(
-    "when %s the sources are re-listed, and the bar shows them as they are now",
-    async (_, act) => {
-      const fields = Schema.encodeSync(DataSource);
-
-      const down = FIXTURE_SOURCES.map((s) =>
-        s.name === "app" ? new DataSource({ ...fields(s), reachable: false, error: "gone" }) : s
-      );
-
-      let lists = 0;
-
-      mount(fixtureDataApi({ relist: () => (++lists > 1 ? down : FIXTURE_SOURCES) }));
-      const access = () => page().getByTestId("data-connection-access").textContent;
-
-      await waitFor(() => expect(access()).toBe("Agents read · writes ask you"));
-      // Each case runs an hour after the last, past the once-a-second throttle.
-      hours += 1;
-      setSystemTime(new Date(Date.now() + hours * 3_600_000));
-      act();
-
-      await waitFor(() => expect(access()).toBe("Can't reach it"));
-      setSystemTime();
-    }
-  );
-
-  test("the label text posts on Enter, uppercased", async () => {
-    const api = fixtureDataApi();
-    const posted: Array<unknown> = [];
-
-    mount({
-      ...api,
-      labelSource: (at, source, label) => {
-        posted.push(label);
-
-        return api.labelSource(at, source, label);
-      },
-    });
-    click(await waitFor(() => page().getByTestId("data-connection-bar")));
-    const field = page().getByTestId("data-label-field");
-
-    act(() => {
-      fireEvent.change(field, { target: { value: "dev box" } });
-    });
-    await act(async () => {
-      fireEvent.keyDown(field, { key: "Enter" });
-    });
-
-    expect(posted).toEqual([{ text: "DEV BOX", colour: "none" }]);
-    await waitFor(() =>
-      expect(page().getByTestId("data-connection-kicker").textContent).toBe("DEV BOX")
     );
   });
 });

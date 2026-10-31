@@ -43,6 +43,8 @@ export interface SqlTabState {
   readonly text: string;
   /** The Data Source's name. */
   readonly source: string;
+  /** Bound on Run; a re-run's params until the user unbinds them. */
+  readonly params: ReadonlyArray<DataValue>;
   readonly run: SqlRun;
 }
 
@@ -52,7 +54,12 @@ const sqlTabs = createStore<Readonly<Record<string, SqlTabState>>>(() => ({}));
 
 const keyOf = (at: DataSessionKey, tabId: string) => `${dataSessionKey(at)}\u0000${tabId}`;
 
-const initial = (tab: SqlTab): SqlTabState => ({ text: tab.sql, source: tab.sourceId, run: IDLE });
+const initial = (tab: SqlTab): SqlTabState => ({
+  text: tab.sql,
+  source: tab.sourceId,
+  params: tab.params,
+  run: IDLE,
+});
 
 const patch = (at: DataSessionKey, tab: SqlTab, change: Partial<SqlTabState>) => {
   const key = keyOf(at, tab.id);
@@ -72,6 +79,8 @@ export const setSqlText = (at: DataSessionKey, tab: SqlTab, text: string) =>
 export const setSqlSource = (at: DataSessionKey, tab: SqlTab, source: string) =>
   patch(at, tab, { source, run: IDLE });
 
+export const unbindSqlParams = (at: DataSessionKey, tab: SqlTab) => patch(at, tab, { params: [] });
+
 let runs = 0;
 
 /** Tabs to run once they mount: a Query Log re-run opens a tab with its query running. */
@@ -86,7 +95,7 @@ export const RESULT_LIMIT = 200;
 
 /** Runs the tab's text on its Data Source; a run started later replaces this one's outcome. */
 export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) => {
-  const { text, source } = read(at, tab);
+  const { text, source, params } = read(at, tab);
   // Sent as written, so the Host's error positions line up with the editor's text.
   const sql = text;
 
@@ -95,7 +104,8 @@ export const runSqlTab = async (api: DataApi, at: DataSessionKey, tab: SqlTab) =
   const running: SqlRun = { status: "running", id, sql };
 
   patch(at, tab, { run: running });
-  const result = await api.query(at, { source, sql, limit: RESULT_LIMIT });
+  const input = { source, sql, limit: RESULT_LIMIT };
+  const result = await api.query(at, params.length === 0 ? input : { ...input, params });
 
   if (read(at, tab).run !== running) return;
 
