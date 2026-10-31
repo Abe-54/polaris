@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect";
 import { TraceDetail, TraceError, TraceFilter, TraceSummary, SpanDetail } from "@polaris/protocol";
+import { releaseMemory } from "../memory/release.ts";
 import { polarisHome } from "../paths.ts";
 import { TraceWorkerClient, WorkerFailure, type TraceWorkerOptions } from "./workerClient.ts";
 import { TraceHistory, TraceWorkerRequest } from "./workerProtocol.ts";
@@ -51,9 +52,14 @@ export class TraceStore extends Context.Service<
         yield* Effect.addFinalizer(() => PubSub.shutdown(changes));
         const notify = Effect.asVoid(PubSub.publish(changes, undefined));
 
-        const worker = new TraceWorkerClient(filename, options, () => {
-          Effect.runSync(notify);
-        });
+        const worker = new TraceWorkerClient(
+          filename,
+          options,
+          () => {
+            Effect.runSync(notify);
+          },
+          () => Effect.runSync(releaseMemory)
+        );
 
         yield* Effect.addFinalizer(() => Effect.promise(() => worker.close().catch(() => {})));
 

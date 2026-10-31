@@ -1,4 +1,5 @@
 /** The sidebar's header, as Data's: the Workspace, then its Host and the checkout's branch. */
+import type { ConnectionState } from "@polaris/protocol";
 import { BranchIcon } from "@polaris/ui";
 import { useApp } from "../../../../shell/hooks.ts";
 import type { TracesSlotProps } from "../slots.ts";
@@ -13,12 +14,20 @@ const useBranch = ({ at }: TracesSlotProps): string | null =>
     return model?.worktrees.get(worktree)?.branch ?? null;
   });
 
+const AWAY: Partial<Record<ConnectionState, string>> = {
+  reconnecting: "Reconnecting",
+  offline: "Offline",
+  "needs-attention": "Needs attention",
+};
+
+const awayLabel = (state: ConnectionState | undefined) =>
+  state === undefined ? null : (AWAY[state] ?? null);
+
 export const Header = (props: TracesSlotProps) => {
   const name = useApp((s) => s.hostModels[props.hostKey]?.workspaces.get(props.workspaceId)?.name);
   const host = useApp((s) => s.hosts.find((h) => h.key === props.hostKey));
   const branch = useBranch(props);
-  const state = host?.status.state;
-  const away = state === "reconnecting" || state === "offline";
+  const away = awayLabel(host?.status.state);
 
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
@@ -27,9 +36,7 @@ export const Header = (props: TracesSlotProps) => {
       </h1>
       <p className="text-caption text-text-subtle flex min-w-0 items-center gap-1">
         <span className="shrink-0">{host?.label}</span>
-        {away ? (
-          <span className="shrink-0">· {state === "offline" ? "Offline" : "Reconnecting"}</span>
-        ) : null}
+        {away === null ? null : <span className="shrink-0">· {away}</span>}
         {branch === null ? null : (
           <>
             <span className="shrink-0">·</span>

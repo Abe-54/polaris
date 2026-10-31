@@ -1,7 +1,6 @@
-/** @jsxImportSource ../../../apps/desktop/node_modules/react */
-/** RT3 repro harness: the real ⌘5 Traces mode (TracesMode) on a scriptable TracesApi and store. */
-import "../../../apps/desktop/src/renderer/test/dom.testing.ts";
-import "../../../apps/desktop/src/renderer/app/slots.tsx";
+/** The real ⌘5 Traces mode (TracesMode) on a scriptable TracesApi and app store, for tests. */
+import "../../../test/dom.testing.ts";
+import "../../../app/slots.tsx";
 import {
   AgentSession,
   Capability,
@@ -13,33 +12,27 @@ import {
   type TraceFilter,
   type TracesSnapshot,
   Workspace,
-} from "../../../packages/protocol/src/index.ts";
-import { TooltipProvider } from "../../../packages/ui/src/index.ts";
-import { act, createStore, render } from "./deps.ts";
+  TraceAvailability,
+} from "@polaris/protocol";
+import { TooltipProvider } from "@polaris/ui";
+import { act, render } from "@testing-library/react";
+import { createStore } from "zustand/vanilla";
 import { afterAll, beforeAll } from "bun:test";
 import type { ReactNode } from "react";
-import type { HostView, IpcError } from "../../../apps/desktop/src/shared/api.ts";
-import { createCommandRegistry } from "../../../apps/desktop/src/renderer/routes/commands.ts";
-import { createNavigation } from "../../../apps/desktop/src/renderer/routes/navigation.ts";
-import { AppProvider } from "../../../apps/desktop/src/renderer/shell/hooks.ts";
-import { modelFromSnapshot } from "../../../apps/desktop/src/renderer/store/hostModel.ts";
-import {
-  type AppState,
-  type Connection,
-  initialState,
-} from "../../../apps/desktop/src/renderer/store/store.ts";
-import { DataLayer } from "../../../apps/desktop/src/renderer/features/data/data/hooks.tsx";
-import { fixtureDataApi } from "../../../apps/desktop/src/renderer/features/data/preview/fixtureApi.ts";
-import type {
-  Snapshots,
-  TracesApi,
-} from "../../../apps/desktop/src/renderer/features/traces/data/api.ts";
-import { TracesLayer } from "../../../apps/desktop/src/renderer/features/traces/data/hooks.tsx";
-import {
-  FIXTURE_CHECKOUT,
-  FIXTURE_SESSION,
-} from "../../../apps/desktop/src/renderer/features/traces/preview/fixtures.ts";
-import { TracesMode } from "../../../apps/desktop/src/renderer/features/traces/ui/TracesMode.tsx";
+import type { HostView, IpcError } from "../../../../shared/api.ts";
+import { createCommandRegistry } from "../../../routes/commands.ts";
+import { createNavigation } from "../../../routes/navigation.ts";
+import { AppProvider } from "../../../shell/hooks.ts";
+import { modelFromSnapshot } from "../../../store/hostModel.ts";
+import { type AppState, type Connection, initialState } from "../../../store/store.ts";
+import { DataLayer } from "../../data/data/hooks.tsx";
+import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
+import type { Snapshots, TracesApi } from "../data/api.ts";
+import { TracesLayer } from "../data/hooks.tsx";
+import { ProfilesLayer } from "../data/profiles.tsx";
+import { FIXTURE_CHECKOUT, FIXTURE_SESSION } from "../preview/fixtures.ts";
+import { fixtureProfilesApi } from "../preview/profiles.ts";
+import { TracesMode } from "./TracesMode.tsx";
 
 export const HOST = "local";
 
@@ -137,8 +130,9 @@ export interface OpenWatch {
 export const scripted = (details: () => ReadonlyArray<TraceDetail>) => {
   const watches: Array<OpenWatch> = [];
   const gets: Array<string> = [];
+
   let snapshot: (filter: TraceFilter | undefined) => TracesSnapshot = () => ({
-    availability: { _tag: "Listening" },
+    availability: TraceAvailability.cases.Listening.make({}),
     userExported: false,
     endpoint: null,
     traces: [],
@@ -168,6 +162,8 @@ export const scripted = (details: () => ReadonlyArray<TraceDetail>) => {
     },
     span: () =>
       Promise.resolve({ ok: false, error: { code: "E-TRACE-NOT-FOUND", message: "No span" } }),
+    compare: () =>
+      Promise.resolve({ ok: false, error: { code: "E-TRACE-NONE", message: "No comparison" } }),
   };
 
   return {
@@ -215,7 +211,9 @@ export const providers = (api: TracesApi) => {
     >
       <TooltipProvider>
         <DataLayer api={fixtureDataApi()}>
-          <TracesLayer api={api}>{children}</TracesLayer>
+          <TracesLayer api={api}>
+            <ProfilesLayer api={fixtureProfilesApi()}>{children}</ProfilesLayer>
+          </TracesLayer>
         </DataLayer>
       </TooltipProvider>
     </AppProvider>

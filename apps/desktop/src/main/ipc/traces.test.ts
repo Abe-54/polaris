@@ -23,6 +23,10 @@ test("an older Daemon names the upgrade; other Host failures keep their code", (
     code: "Unsupported",
     message: "Traces need a newer daemon on this host",
   });
+  expect(toTracesIpcError(new Unsupported({ capability: "traces.compare" }))).toEqual({
+    code: "Unsupported",
+    message: "Comparing traces needs a newer daemon on this host",
+  });
   expect(toTracesIpcError(new NotFound({ what: "Host", id: "offline" })).code).toBe("NotFound");
 });
 

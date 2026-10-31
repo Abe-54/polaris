@@ -1,6 +1,7 @@
 /**
  * What a Traces preview shows beyond its scene, from `#traces/<scene>?view=<view>`: a span open in
- * the panel (a database span, the failing test), or the receiver still being read or reconnecting.
+ * the panel (a database span, the failing test), the receiver still being read, or the Host away
+ * (reconnecting, offline, needing attention).
  */
 import type { TracesApi } from "../data/api.ts";
 import { selectProfile } from "../model/profile/store.ts";
@@ -27,12 +28,19 @@ const PROFILES = {
   "restart-refused": { trace: BIG_TRACE.id, span: null, profile: null },
 } as const;
 
-export type PreviewView =
-  | keyof typeof SPANS
-  | keyof typeof PROFILES
-  | "loading"
-  | "reconnecting"
-  | null;
+/** Views whose watch never answers: the first read, or a Host away. */
+const STATES = {
+  loading: true,
+  reconnecting: true,
+  offline: true,
+  "needs-attention": true,
+} as const;
+
+type StateView = keyof typeof STATES;
+
+export const isStateView = (name: string): name is StateView => Object.hasOwn(STATES, name);
+
+export type PreviewView = keyof typeof SPANS | keyof typeof PROFILES | StateView | null;
 
 const isSpanView = (name: string): name is keyof typeof SPANS => Object.hasOwn(SPANS, name);
 
@@ -45,9 +53,7 @@ export const previewOf = (hash: string) => {
   const view = new URLSearchParams(query).get("view") ?? "";
 
   const shown: PreviewView =
-    isSpanView(view) || isProfileView(view) || view === "loading" || view === "reconnecting"
-      ? view
-      : null;
+    isSpanView(view) || isProfileView(view) || isStateView(view) ? view : null;
 
   return { name, view: shown };
 };

@@ -1,6 +1,7 @@
 /** Traces over IPC (ADR 0094): the protocol's payloads plus the Host, and its answers unchanged. */
 import {
   GetProfile,
+  CompareTraces,
   GetSpan,
   GetTrace,
   type Profile,
@@ -8,6 +9,7 @@ import {
   type ProfilesSnapshot,
   RestartWithProfiling,
   type SpanDetail,
+  type TraceComparison,
   type TraceDetail,
   type TracesSnapshot,
   WatchProfiles,
@@ -25,6 +27,7 @@ export const TracesRequestInputs = {
     ...OnHost,
     ...RestartWithProfiling.payloadSchema.fields,
   }),
+  "traces.compare": Schema.Struct({ ...OnHost, ...CompareTraces.payloadSchema.fields }),
 } as const;
 
 export interface TracesRequestOutputs {
@@ -33,6 +36,8 @@ export interface TracesRequestOutputs {
   readonly "profiles.get": ProfileDetail;
   /** The new recording. */
   readonly "profiles.restartWithProfiling": Profile;
+  /** Gated on `traces.compare`, apart from the rest of Traces. */
+  readonly "traces.compare": TraceComparison;
 }
 
 export const TracesSubscriptionInputs = {

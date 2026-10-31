@@ -7,6 +7,7 @@ import {
   type Capability,
   ProfileError,
   TRACES_CAPABILITY,
+  TRACES_COMPARE_CAPABILITY,
   TRACES_PROFILES_CAPABILITY,
   TraceError,
   Unsupported,
@@ -18,10 +19,12 @@ import { HostDirectory, toIpcError } from "../hosts.ts";
 
 type Tagged = { readonly _tag: string; readonly message: string };
 
-const UPGRADE = {
-  [TRACES_CAPABILITY]: "Traces need a newer daemon on this host",
-  [TRACES_PROFILES_CAPABILITY]: "Profiles need a newer daemon on this host",
-} satisfies Partial<Record<Capability, string>>;
+const TRACES_UPGRADE = "Traces need a newer daemon on this host";
+
+const UPGRADE = new Map<string, string>([
+  [TRACES_COMPARE_CAPABILITY, "Comparing traces needs a newer daemon on this host"],
+  [TRACES_PROFILES_CAPABILITY, "Profiles need a newer daemon on this host"],
+]);
 
 /** A TraceError or ProfileError keeps its code and fix; an older Daemon names the upgrade. */
 export const toTracesIpcError = (error: Tagged): IpcError => {
@@ -31,10 +34,7 @@ export const toTracesIpcError = (error: Tagged): IpcError => {
   if (Schema.is(Unsupported)(error))
     return {
       code: "Unsupported",
-      message:
-        error.capability === TRACES_PROFILES_CAPABILITY
-          ? UPGRADE[TRACES_PROFILES_CAPABILITY]
-          : UPGRADE[TRACES_CAPABILITY],
+      message: UPGRADE.get(error.capability) ?? TRACES_UPGRADE,
     };
 
   return toIpcError(error);
@@ -78,6 +78,10 @@ export const tracesHandlers = {
     onHost(hostKey, TRACES_CAPABILITY, (session) => session.client["traces.get"](input)),
   "traces.span": ({ hostKey, ...input }: RequestInput<"traces.span">) =>
     onHost(hostKey, TRACES_CAPABILITY, (session) => session.client["traces.span"](input)),
+  "traces.compare": ({ hostKey, ...input }: RequestInput<"traces.compare">) =>
+    onHost(hostKey, TRACES_COMPARE_CAPABILITY, (session) =>
+      session.client["traces.compare"](input)
+    ),
   "profiles.get": ({ hostKey, ...input }: RequestInput<"profiles.get">) =>
     onHost(hostKey, TRACES_PROFILES_CAPABILITY, (session) => session.client["profiles.get"](input)),
   "profiles.restartWithProfiling": ({

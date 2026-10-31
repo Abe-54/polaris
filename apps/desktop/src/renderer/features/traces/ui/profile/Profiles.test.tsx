@@ -120,7 +120,7 @@ test("Profiles lists recordings under their Turn, with process and how each was 
   expect(turns[0]).toEqual({
     kicker: "TURN 12 · NOW2 profiles",
     rows: [
-      "ledger-api · bun12.4 sRestarted with profiling by the agent",
+      "ledger-api · bun12 sRestarted with profiling by the agent",
       "bun test overdue-totals3.1 sWhole command",
     ],
   });
@@ -166,7 +166,7 @@ test("an open Profile names and marks the stretch of the trace it recorded", asy
   // The recording ends 700 ms into the 840 ms overdue run.
   expect((await screen.findByTestId("profile-range")).textContent).toContain("0–700 ms");
   expect(screen.getByTestId("profile-header").textContent).toContain(
-    "of this trace · 12.4 s recorded"
+    "of this trace · 12 s recorded"
   );
   expect(screen.getByTestId("waterfall-profile-mark").style.width).toBe(`${(700 / 840) * 100}%`);
 
@@ -233,7 +233,7 @@ test("⌘L in the profile panel adds the Profile to the session's draft", async 
   stop();
 
   expect(drafts.at(-1)).toStartWith(
-    "Profile `prof-ledger-api-12` in this checkout: `ledger-api · bun` (bun, pid 47118, 12.4 s recorded, turn 12)\nHottest: `recalculateOverdue` (src/invoices/overdue.ts:30)"
+    "Profile `prof-ledger-api-12` in this checkout: `ledger-api · bun` (bun, pid 47118, 12 s recorded, turn 12)\nHottest: `recalculateOverdue` (src/invoices/overdue.ts:30)"
   );
 });
 

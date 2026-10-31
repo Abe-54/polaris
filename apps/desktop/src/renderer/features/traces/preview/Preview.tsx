@@ -17,12 +17,19 @@ import { fixtureAppState, HOST, host } from "./appState.ts";
 import { fixtureTracesApi } from "./fixtureApi.ts";
 import { withLargeTrace } from "./large.ts";
 import { FIXTURE_SESSION, FIXTURE_SNAPSHOTS, type TracesScene } from "./fixtures.ts";
-import { openViewSpan, previewOf, type PreviewView, silent, viewProfilesApi } from "./views.ts";
+import {
+  isStateView,
+  openViewSpan,
+  previewOf,
+  type PreviewView,
+  silent,
+  viewProfilesApi,
+} from "./views.ts";
 
 const appState = (view: PreviewView): AppState =>
   fixtureAppState(
-    view === "reconnecting"
-      ? { ...host, status: { ...host.status, state: "reconnecting", attempt: 2 } }
+    view === "reconnecting" || view === "offline" || view === "needs-attention"
+      ? { ...host, status: { ...host.status, state: view, attempt: 2 } }
       : host
   );
 
@@ -58,7 +65,7 @@ export const mountTracesPreview = (
   openViewSpan({ hostKey: HOST, sessionId: FIXTURE_SESSION }, view);
 
   createRoot(root).render(
-    <TracesLayer api={view === "loading" || view === "reconnecting" ? silent(api) : api}>
+    <TracesLayer api={view !== null && isStateView(view) ? silent(api) : api}>
       <ProfilesLayer api={viewProfilesApi(view)}>
         <DataLayer api={fixtureDataApi()}>
           <App

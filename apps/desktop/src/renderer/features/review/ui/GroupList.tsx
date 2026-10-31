@@ -12,9 +12,10 @@ import type { ReviewFile } from "../model/layout.ts";
 import type { MarkSeverity } from "../model/marks.ts";
 import { FileRow } from "./FileRows.tsx";
 import { IntentGlyph } from "./IntentGlyph.tsx";
-import { DataRow } from "../schema/DataRows.tsx";
-import { type DataListRow, isDataRow, isMigrationPath, placeData } from "../schema/model.ts";
+import { isMigrationPath, placeData } from "../schema/model.ts";
+import type { FileListTraces } from "../traces/section.ts";
 import type { FileListData } from "./FileList.tsx";
+import { isSectionRow, SectionRow, type SectionListRow, sectionRows } from "./SectionRow.tsx";
 
 export interface GroupListProps {
   readonly groups: ReadonlyArray<FileGroup>;
@@ -25,9 +26,10 @@ export interface GroupListProps {
   readonly onOpen: (key: string) => void;
   readonly onViewed: (key: string, viewed: boolean) => void;
   readonly data: FileListData | null;
+  readonly traces: FileListTraces | null;
 }
 
-type Row = GroupListRow | DataListRow;
+type Row = GroupListRow | SectionListRow;
 
 /** A migration's row, or a folded group holding one: the Data section follows it. */
 const isMigrationRow = (row: Row) => {
@@ -77,7 +79,7 @@ const GroupRow = ({
 const keyOf = (row: Row | undefined) => {
   if (row === undefined) return "none";
 
-  if (isDataRow(row)) return row.key;
+  if (isSectionRow(row)) return row.key;
 
   if (row.kind === "group") return `group:${row.head.group.key}`;
 
@@ -93,7 +95,7 @@ export const GroupList = (props: GroupListProps) => {
 
   const rows = placeData<Row>(
     groupListRows(props.groups, props.viewedOf, props.severities, open),
-    props.data?.rows ?? [],
+    sectionRows(props.data, props.traces),
     isMigrationRow
   );
 
@@ -115,10 +117,7 @@ export const GroupList = (props: GroupListProps) => {
   });
 
   const render = (row: Row) => {
-    if (isDataRow(row))
-      return props.data === null ? null : (
-        <DataRow row={row} open={props.data.open} onOpen={props.data.onOpen} />
-      );
+    if (isSectionRow(row)) return <SectionRow row={row} data={props.data} traces={props.traces} />;
 
     if (row.kind === "group") return <GroupRow head={row.head} onToggle={toggle} />;
 

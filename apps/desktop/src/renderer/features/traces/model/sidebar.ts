@@ -115,12 +115,24 @@ export interface TraceGroup {
 export const groupByTurn = (traces: ReadonlyArray<TraceSummary>): ReadonlyArray<TraceGroup> =>
   groupItemsByTurn(traces).map(({ key, turn, items }) => ({ key, turn, traces: items }));
 
-/** "TURN 12 · NOW" for the session's latest Turn, "BETWEEN TURNS" for none. */
-export const turnKicker = (turn: TraceTurn | null, latest: number | null): string => {
+/**
+ * "TURN 12 · NOW" for the session's latest Turn, "BETWEEN TURNS" for none. A Turn of another
+ * session in the checkout names that session instead (`other`, its title), and is never NOW.
+ */
+export const turnKicker = (
+  turn: TraceTurn | null,
+  latest: number | null,
+  other: string | null = null
+): string => {
   if (turn === null) return "BETWEEN TURNS";
+
+  if (other !== null) return `TURN ${turn.number} · ${other}`;
 
   return turn.number === latest ? `TURN ${turn.number} · NOW` : `TURN ${turn.number}`;
 };
+
+/** What names another session's Turn when it has no title. */
+export const OTHER_SESSION = "another agent session";
 
 export const tracesLabel = (n: number) => (n === 1 ? "1 trace" : `${n} traces`);
 

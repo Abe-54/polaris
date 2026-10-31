@@ -6,6 +6,7 @@ import type { TraceDetail } from "@polaris/protocol";
 import { EmptyState, PixelAlertIcon, PixelHourglassIcon } from "@polaris/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTrace, useTraces } from "../data/hooks.tsx";
+import { useListedVersion } from "../model/listed.ts";
 import { publishOpenTrace } from "../model/openTrace.ts";
 import { openTraceNs } from "../model/profile/openTrace.ts";
 import { overlap } from "../model/profile/overlap.ts";
@@ -78,7 +79,7 @@ const Open = ({
   readonly view: MainView;
   readonly onView: (view: MainView) => void;
 }) => {
-  const loaded = useTrace(at, traceId);
+  const loaded = useTrace(at, traceId, useListedVersion(at, traceId));
   const detail = loaded.status === "ready" ? loaded.value : null;
 
   const { hostKey, sessionId } = at;

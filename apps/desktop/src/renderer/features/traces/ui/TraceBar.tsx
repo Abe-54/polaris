@@ -7,9 +7,11 @@ import type { TraceDetail } from "@polaris/protocol";
 import { Kbd } from "@polaris/ui";
 import { useCallback, useEffect } from "react";
 import { commandShortcut } from "../../../../shared/keymap.ts";
-import { useCommands } from "../../../shell/hooks.ts";
+import { useApp, useCommands } from "../../../shell/hooks.ts";
+import { showBidi } from "../../data/grid/value.ts";
 import { useOpenTrace } from "../model/openTrace.ts";
 import { traceReference } from "../model/reference.ts";
+import { OTHER_SESSION } from "../model/sidebar.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { durationLabel, shortHex } from "../model/waterfall/time.ts";
 import type { TracesSlotProps } from "./slots.ts";
@@ -20,13 +22,19 @@ const count = (n: number, one: string) =>
 
 const useAddTrace = (at: TracesSessionKey, detail: TraceDetail | null, spanId: string | null) => {
   const add = useAddToSession(at);
+  const { hostKey, sessionId } = at;
+  const owner = detail?.summary.turn?.sessionId ?? sessionId;
+  const ownerTitle = useApp((s) => s.hostModels[hostKey]?.sessions.get(owner)?.session.title);
+  // A trace from another session's Turn names that session, so the agent reads the right Turn.
+  const named = ownerTitle === undefined || ownerTitle === "" ? OTHER_SESSION : ownerTitle;
+  const other = owner === sessionId ? null : named;
 
   return useCallback(() => {
     if (detail === null) return;
     const span = spanId === null ? null : (detail.spans.find((s) => s.id === spanId) ?? null);
 
-    add(traceReference(detail.summary, span), span === null ? "trace" : "span");
-  }, [add, detail, spanId]);
+    add(traceReference(detail.summary, span, other), span === null ? "trace" : "span");
+  }, [add, detail, spanId, other]);
 };
 
 export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
@@ -61,7 +69,7 @@ export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
       <span className="bg-hairline h-3.5 w-px shrink-0" />
       <span className="text-code-inline text-text-default min-w-0 flex-1 truncate font-mono">
         <span className="text-text-strong font-medium" title={summary.root}>
-          {summary.root}
+          {showBidi(summary.root)}
         </span>
         {` · ${facts.join(" · ")} · `}
         <span title={summary.id}>{shortHex(summary.id)}</span>

@@ -5,7 +5,8 @@
  */
 import type { SpanDetail, TraceDetail } from "@polaris/protocol";
 import { CloseIcon, CopyButton, cn, IconButton } from "@polaris/ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { EditorPlaceProvider } from "../../editor-links/index.ts";
 import { useApp } from "../../../shell/hooks.ts";
 import { useSpan } from "../data/hooks.tsx";
 import { useOpenTrace } from "../model/openTrace.ts";
@@ -173,6 +174,16 @@ export const SpanPanel = ({ at, hostKey, traceId, spanId }: TracesSlotProps) => 
       : (s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? null)
   );
 
+  const polaris = loaded.status === "ready" ? loaded.value.span.polaris : null;
+  const checkout = polaris?.checkout ?? null;
+  const workspaceId = polaris?.workspaceId ?? null;
+
+  // Exception frames and code locations open in the Editor, relative to the span's checkout.
+  const place = useMemo(
+    () => ({ hostKey, root: checkout, workspaceId }),
+    [hostKey, checkout, workspaceId]
+  );
+
   if (spanId === null) return null;
 
   return (
@@ -198,13 +209,15 @@ export const SpanPanel = ({ at, hostKey, traceId, spanId }: TracesSlotProps) => 
       ) : null}
       {loaded.status === "ready" ? (
         // Each span starts on Fields with its own filter.
-        <Body
-          key={loaded.value.span.id}
-          at={at}
-          detail={loaded.value}
-          sessionTitle={sessionTitle}
-          usual={trace?.usual}
-        />
+        <EditorPlaceProvider value={place}>
+          <Body
+            key={loaded.value.span.id}
+            at={at}
+            detail={loaded.value}
+            sessionTitle={sessionTitle}
+            usual={trace?.usual}
+          />
+        </EditorPlaceProvider>
       ) : null}
     </aside>
   );

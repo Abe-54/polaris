@@ -11,6 +11,7 @@ import { useApp } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
 import { useProfiles } from "../data/profiles.tsx";
 import { useProfilesUnavailable } from "../model/availability.ts";
+import { publishListed } from "../model/listed.ts";
 import { refreshProfile } from "../model/profile/store.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { selectTrace } from "../model/store.ts";
@@ -61,6 +62,15 @@ const Body = ({
   if (answer.status !== "loading") last.current = answer;
   const snapshot = last.current;
 
+  const listed = snapshot.status === "ready" ? snapshot.value.traces : null;
+  const { hostKey, sessionId } = at;
+
+  useEffect(() => {
+    publishListed({ hostKey, sessionId }, listed);
+
+    return () => publishListed({ hostKey, sessionId }, null);
+  }, [hostKey, sessionId, listed]);
+
   const latestTurn = useLatestTurn(at);
 
   if (snapshot.status === "loading") return null;
@@ -74,6 +84,7 @@ const Body = ({
   return (
     <>
       <TraceList
+        at={at}
         traces={traces}
         openId={traceId}
         latestTurn={latestTurn}
