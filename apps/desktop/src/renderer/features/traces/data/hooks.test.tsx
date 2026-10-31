@@ -36,6 +36,7 @@ const recording = () => {
 
       return base.span(key, traceId, spanId);
     },
+    compare: base.compare,
   };
 
   const wrapper = ({ children }: { children: ReactNode }) => (
