@@ -36,7 +36,7 @@ const ProfileRow = ({
     title={`${profile.command} · pid ${profile.pid}`}
     onClick={() => selectProfile(at, open ? null : profile)}
     className={cn(
-      "h-session-row hover:bg-fill-hover focus-visible:ring-starlight rounded-card flex w-full shrink-0 cursor-default flex-col justify-center gap-0.5 px-3 text-left outline-none focus-visible:ring-2",
+      "min-h-session-row hover:bg-fill-hover focus-visible:ring-starlight rounded-card flex w-full shrink-0 cursor-default flex-col justify-center gap-0.5 px-3 py-1 text-left outline-none focus-visible:ring-2",
       open && "bg-raised ring-hairline hover:bg-raised ring-1 ring-inset"
     )}
   >
