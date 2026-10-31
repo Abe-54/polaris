@@ -81,6 +81,7 @@ test("F4/F6: 10k rows cross the real stream; cancellation closes the executor sc
                   DataSources,
                   DataSources.of({
                     list: () => Effect.succeed([]),
+                    refresh: () => Effect.succeed([]),
                     resolve: unavailable,
                     watch: () => Stream.succeed([]),
                     save: unavailable,

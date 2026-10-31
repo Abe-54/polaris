@@ -20,6 +20,7 @@ import { DataPools } from "./pools.ts";
 import { readEffect, knownCredentials } from "./execution.ts";
 import { readCatalog } from "./catalog.ts";
 import { resultChunks } from "./chunks.ts";
+import { resolveReadSource } from "./readSource.ts";
 import { type DataAgentContext } from "./approvalRequired.ts";
 
 const noSession = () =>
@@ -79,7 +80,7 @@ export const queries = Effect.gen(function* () {
     });
 
     const work = Effect.gen(function* () {
-      const resolved = yield* sources.resolve(input);
+      const resolved = yield* resolveReadSource(sources, input);
       const known = knownCredentials(resolved.connection);
       entry = new QueryLogEntry({
         ...Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields))(entry),
@@ -176,7 +177,7 @@ export const queries = Effect.gen(function* () {
 
   const describe: DataQueries["Service"]["describe"] = Effect.fnUntraced(function* (input) {
     yield* context(input.sessionId, input);
-    const resolved = yield* sources.resolve(input);
+    const resolved = yield* resolveReadSource(sources, input);
 
     if (input.tool !== undefined)
       yield* approvals.require(input.sessionId, resolved.source, input.turn);

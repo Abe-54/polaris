@@ -99,6 +99,7 @@ for (const binding of bindings)
                 DataSources,
                 DataSources.of({
                   list: () => Effect.succeed([source]),
+                  refresh: () => Effect.succeed([source]),
                   resolve: () =>
                     Effect.succeed({
                       source,

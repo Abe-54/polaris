@@ -51,6 +51,10 @@ export class DataSources extends Context.Service<
     readonly list: (input: {
       readonly sessionId: SessionId;
     }) => Effect.Effect<ReadonlyArray<DataSource>, Failure>;
+    /** Internal source refresh; becomes required with DF's watch publication. */
+    readonly refresh?: (input: {
+      readonly sessionId: SessionId;
+    }) => Effect.Effect<ReadonlyArray<DataSource>, Failure>;
     /** Daemon internal only; always re-read credentials before connecting. */
     readonly resolve: (input: {
       readonly sessionId: SessionId;
