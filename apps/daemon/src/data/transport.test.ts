@@ -13,13 +13,16 @@ import { Effect, Layer, Redacted, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
+import { DataSourceAccess } from "./access.ts";
+import { sources } from "./sources.ts";
+import { memorySecrets } from "../secrets/index.ts";
 import { DataSources, DataQueries, DataRpcsLive } from "./index.ts";
 
 const sessionId = SessionId.make("data-session");
 
 const label = { text: "Local", colour: "none" } as const;
 
-test("Data capability serves empty watches and typed Unsupported for every request", () =>
+test("Data RPC serves discovered/manual metadata and never returns write-only credentials", () =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -28,13 +31,23 @@ test("Data capability serves empty watches and typed Unsupported for every reque
           Effect.sync(() => rmSync(root, { recursive: true, force: true }))
         );
 
+        const access = yield* DataSourceAccess.pipe(Effect.provide(DataSourceAccess.layer));
+
+        const sourceLayer = Layer.effect(
+          DataSources,
+          sources({
+            path: join(root, "data.sqlite"),
+            checkout: () => Effect.succeed(root),
+            secrets: memorySecrets(),
+            access,
+          })
+        );
+
         const server = yield* startServer({
           root,
           socketPath: join(root, "d.sock"),
           lockPath: join(root, "d.lock"),
-          handlers: DataRpcsLive.pipe(
-            Layer.provide(Layer.merge(DataSources.layer, DataQueries.layer))
-          ),
+          handlers: DataRpcsLive.pipe(Layer.provide(Layer.merge(sourceLayer, DataQueries.layer))),
           capabilities: ["data"],
           secrets: HostSecrets.memory(),
         });
@@ -53,7 +66,9 @@ test("Data capability serves empty watches and typed Unsupported for every reque
 
         expect(capabilities).toContain("data");
         expect(
-          yield* Stream.runCollect(watchDataSources({ client, capabilities }, { sessionId }))
+          yield* Stream.runCollect(
+            watchDataSources({ client, capabilities }, { sessionId }).pipe(Stream.take(1))
+          )
         ).toEqual([[]]);
         expect(
           yield* Stream.runCollect(watchDataQueryLog({ client, capabilities }, { sessionId }))
@@ -63,19 +78,6 @@ test("Data capability serves empty watches and typed Unsupported for every reque
         const requests = [
           client["data.describe"](source),
           client["data.query"]({ ...source, sql: "select 1", params: [], limit: 1 }),
-          client["data.source.save"]({
-            sessionId,
-            name: "manual",
-            engine: "postgres",
-            host: "localhost",
-            port: 5432,
-            database: "app",
-            user: "user",
-            password: Redacted.make("private"),
-            label,
-          }),
-          client["data.source.remove"](source),
-          client["data.source.label"]({ ...source, label }),
           client["data.approval.decide"]({
             approvalId: RequestId.make("approval"),
             decision: "deny",
@@ -86,6 +88,44 @@ test("Data capability serves empty watches and typed Unsupported for every reque
         for (const request of requests) {
           expect(yield* Effect.flip(request)).toEqual(new Unsupported({ capability: "data" }));
         }
+
+        const saved = yield* client["data.source.save"]({
+          sessionId,
+          name: "manual",
+          engine: "postgres",
+          host: "localhost",
+          port: 5432,
+          database: "ledger",
+          user: "u",
+          password: Redacted.make("p a'ss@word"),
+          label,
+        });
+
+        const labelled = yield* client["data.source.label"]({
+          ...source,
+          source: "manual",
+          label: { text: "LOCAL", colour: "none" },
+        });
+
+        const snapshots = yield* Stream.runCollect(
+          watchDataSources({ client, capabilities }, { sessionId }).pipe(Stream.take(1))
+        );
+
+        expect(snapshots[0]?.[0]).toMatchObject({
+          name: "manual",
+          database: "ledger",
+          locality: "local",
+          label: { text: "LOCAL", colour: "none" },
+        });
+        expect(JSON.stringify({ saved, labelled, snapshots })).not.toMatch(
+          /postgres:\/\/|password|p a'ss/
+        );
+        yield* client["data.source.remove"]({ ...source, source: "manual" });
+        expect(
+          yield* Stream.runCollect(
+            watchDataSources({ client, capabilities }, { sessionId }).pipe(Stream.take(1))
+          )
+        ).toEqual([[]]);
       })
     )
   ));

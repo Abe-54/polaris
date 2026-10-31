@@ -47,9 +47,14 @@ export interface McpToolResult {
   readonly content: Array<{ type: "text"; text: string }>;
   readonly isError?: boolean;
   readonly structuredContent?: {
-    readonly findings: ReadonlyArray<ConstellationFinding>;
-    readonly graph: ConstellationRejected["graph"];
-    readonly revision: number;
+    readonly findings?: ReadonlyArray<ConstellationFinding>;
+    readonly graph?: ConstellationRejected["graph"];
+    readonly revision?: number;
+    readonly [key: string]:
+      | typeof Schema.Json.Type
+      | ReadonlyArray<ConstellationFinding>
+      | ConstellationRejected["graph"]
+      | undefined;
   };
 }
 

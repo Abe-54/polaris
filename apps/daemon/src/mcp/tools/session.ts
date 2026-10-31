@@ -13,6 +13,7 @@ import {
   rejection,
   withRequestId,
   type BoundTool,
+  type McpToolResult,
   type ConstellationCommands,
 } from "./shared.ts";
 
@@ -29,7 +30,7 @@ export const sessionTool = <S extends Schema.Decoder<unknown>>(
   name: string,
   description: string,
   schema: S,
-  run: (input: S["Type"]) => Effect.Effect<ReturnType<typeof text>, ConstellationRejected>
+  run: (input: S["Type"]) => Effect.Effect<McpToolResult, ConstellationRejected>
 ): BoundTool => ({
   name,
   description,
