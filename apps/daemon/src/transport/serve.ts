@@ -1,5 +1,6 @@
 import { DataDatabase } from "../data/database.ts";
 import { DataApprovals } from "../data/approvals.ts";
+import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
 import { QueryLog } from "../data/queryLog.ts";
 import { DataRpcsLive, DataSources, DataSourceAccess, DataQueries } from "../data/index.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
@@ -124,7 +125,7 @@ const harnesses = HarnessRegistryLive.pipe(
  * a Review Checkout), the Rules and the Reviewer (whose sessions' approvals the
  * engine asks its policy about), and giving memory back once work settles.
  */
-export const dataServices = DataQueries.layer.pipe(
+export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer).pipe(
   Layer.provideMerge(DataSources.layer),
   Layer.provideMerge(DataSourceAccess.live),
   Layer.provideMerge(QueryLog.layer),
@@ -225,6 +226,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "commit.suggest-message",
   "approval.secret",
   "data",
+  "data.schemaDiff",
   "constellation",
   "constellation.defaults",
   "extensions",
