@@ -25,7 +25,7 @@ const Properties = Schema.decodeUnknownSync(
   Schema.Struct({ properties: Schema.Record(Schema.String, Schema.Unknown) })
 );
 
-test("every mutating tool takes requestId; status doesn't", () => {
+test("Constellation command tools take requestId; direct and read tools don't", () => {
   const { commands } = fakeCommands();
 
   for (const binding of [leadBinding, workerBinding])
@@ -49,6 +49,8 @@ test("every mutating tool takes requestId; status doesn't", () => {
           "traces",
           "trace",
           "span",
+          // Each call requests a recording; Profiles submits no Constellation command.
+          "profile",
           // Its input is exactly VisualizeInput; a retry only shows the page again.
           "visualize",
         ].includes(tool.name),

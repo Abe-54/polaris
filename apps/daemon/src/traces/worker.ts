@@ -11,7 +11,14 @@ import {
   type Retention,
 } from "./database.ts";
 import { IngestError, MAX_QUEUED_BYTES, type DecodedBatch } from "./ingest.ts";
-import { getSpan, getTrace, linkTrace, listTraces, traceHistory } from "./queries.ts";
+import {
+  getSpan,
+  getTrace,
+  linkTrace,
+  listTraces,
+  traceHistory,
+  overlappingTraces,
+} from "./queries.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
 
@@ -153,6 +160,9 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
   }),
   Match.tag("List", (request) =>
     listTraces(prune(request.checkout), request.checkout, request.filter)
+  ),
+  Match.tag("Overlap", (request) =>
+    overlappingTraces(prune(request.checkout), request.checkout, request.start, request.end)
   ),
   Match.tag("Get", (request) =>
     getTrace(prune(request.checkout), request.checkout, request.traceId)

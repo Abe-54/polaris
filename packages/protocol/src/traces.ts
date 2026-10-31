@@ -360,6 +360,12 @@ export type ProfileId = typeof ProfileId.Type;
 
 /** One CPU recording of a process Polaris launched. Times are milliseconds, startedAt is UTC. */
 export const Profile = Schema.Struct({
+  /** Verified execution directory; may be a package subfolder. Never a restart authority. */
+  cwd: Schema.optionalKey(Schema.String),
+  /** How the recording was made. Attach is reserved for inspector captures. */
+  origin: Schema.optionalKey(Schema.Literals(["command", "restart", "attach"])),
+  /** The profiled process's service.name, when known. */
+  service: Schema.optionalKey(Schema.String),
   id: ProfileId,
   command: Schema.String,
   runtime: Schema.Literals(["node", "bun"]),

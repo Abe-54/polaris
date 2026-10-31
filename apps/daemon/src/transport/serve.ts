@@ -1,3 +1,5 @@
+import { Profiles } from "../traces/profiles/index.ts";
+import { ProfilesRpcsLive } from "../traces/profiles/rpcs.ts";
 import { DataDatabase } from "../data/database.ts";
 import {
   TraceReceiverLive,
@@ -148,7 +150,7 @@ export const traceServices = TraceReceiverLive.pipe(
   Layer.provideMerge(TraceStore.layer)
 );
 
-export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(Engine.layer, Profiles.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,
@@ -188,6 +190,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 export const daemonHandlers = Layer.mergeAll(
   DataRpcsLive,
   TracesRpcsLive,
+  ProfilesRpcsLive,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -245,6 +248,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data.writes",
   "data.schemaDiff",
   "traces",
+  "traces.profiles",
   "constellation",
   "constellation.defaults",
   "extensions",
