@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 import {
   TraceAvailability,
   TraceError,
@@ -9,6 +9,7 @@ import {
 import { polarisHome } from "../paths.ts";
 import { followTokenLifecycle } from "./tokenLifecycle.ts";
 import { TraceSessions } from "./sessions.ts";
+import { TraceSettings } from "./settings.ts";
 import { TraceStore } from "./store.ts";
 import { TraceTokenVault, TraceBinding } from "./tokens.ts";
 import type { IngestContext } from "./ingest.ts";
@@ -16,10 +17,6 @@ import type { IngestContext } from "./ingest.ts";
 export const TRACE_PORT = 4319;
 
 export type TraceEnvironment = Readonly<Record<string, string | undefined>>;
-
-export const userExports = (env: TraceEnvironment): boolean =>
-  env.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
-  env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined;
 
 const tokenError = () =>
   new TraceError({
@@ -57,6 +54,7 @@ export class TraceRuntime extends Context.Service<
       Effect.gen(function* () {
         const sessions = yield* TraceSessions;
         const store = yield* TraceStore;
+        const settings = yield* Effect.serviceOption(TraceSettings);
         const vault = new TraceTokenVault(filename);
         yield* followTokenLifecycle(vault);
 
@@ -88,17 +86,19 @@ export class TraceRuntime extends Context.Service<
           );
 
         const environment = Effect.fnUntraced(function* (id: SessionId, source: TraceEnvironment) {
-          const exported = userExports(source);
-          const changed = yield* vaultCall(() => vault.markExported(id, exported));
+          const changed = yield* vaultCall(() => vault.markExported(id, false));
 
           if (changed) yield* store.notify;
 
-          if (exported || !TraceAvailability.guards.Listening(availability)) return {};
+          if (!TraceAvailability.guards.Listening(availability)) return {};
 
           if (!(yield* sessions.active(id))) return {};
           const context = yield* sessions.session(id);
 
-          return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context) };
+          if (Option.isSome(settings))
+            yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
+
+          return injectedEnvironment(yield* endpoint(context));
         });
 
         const authenticate = Effect.fnUntraced(function* (token: string) {
@@ -129,24 +129,22 @@ export class TraceRuntime extends Context.Service<
           authenticate,
           revokeSession,
           terminalEnvironment: Effect.fnUntraced(function* (cwd, source) {
-            if (userExports(source) || !TraceAvailability.guards.Listening(availability)) return {};
+            if (!TraceAvailability.guards.Listening(availability)) return {};
             const context = yield* sessions.workspace(cwd);
 
-            return { OTEL_EXPORTER_OTLP_ENDPOINT: yield* endpoint(context) };
+            if (Option.isSome(settings))
+              yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
+
+            return injectedEnvironment(yield* endpoint(context));
           }),
           checkout: (id) => Effect.map(sessions.session(id), (context) => context.checkout),
           setup: Effect.fnUntraced(function* (id, includeEndpoint = true) {
-            const userExported =
-              (yield* vaultCall(() => vault.userExported(id))) ?? userExports(process.env);
-
             const enabled =
-              TraceAvailability.guards.Listening(availability) &&
-              !userExported &&
-              (yield* sessions.active(id));
+              TraceAvailability.guards.Listening(availability) && (yield* sessions.active(id));
 
             return {
               availability,
-              userExported,
+              userExported: false,
               endpoint:
                 enabled && includeEndpoint ? yield* endpoint(yield* sessions.session(id)) : null,
             };
@@ -163,3 +161,9 @@ export class TraceRuntime extends Context.Service<
     TraceRuntime.layerAt(join(polarisHome(), "trace-tokens.json"))
   );
 }
+
+const injectedEnvironment = (endpoint: string) => ({
+  OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/v1/traces`,
+  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: `${endpoint}/v1/logs`,
+});

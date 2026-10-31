@@ -1,6 +1,7 @@
-import { TracesRpcs } from "@polaris/protocol";
+import { TracesRpcs, TracesSettingsRpcs } from "@polaris/protocol";
 import { Effect, Stream } from "effect";
 import { TraceRuntime } from "./runtime.ts";
+import { TraceSettings } from "./settings.ts";
 import { TraceStore } from "./store.ts";
 
 export const TracesRpcsLive = TracesRpcs.toLayer(
@@ -46,6 +47,18 @@ export const TracesRpcsLive = TracesRpcs.toLayer(
         Effect.flatMap(runtime.checkout(sessionId), (checkout) =>
           store.span(checkout, traceId, spanId)
         ),
+    };
+  })
+);
+
+export const TracesSettingsRpcsLive = TracesSettingsRpcs.toLayer(
+  Effect.gen(function* () {
+    const settings = yield* TraceSettings;
+
+    return {
+      "traces.settings": ({ workspaceId }) => settings.get(workspaceId),
+      "traces.setSettings": ({ workspaceId, settings: patch }) =>
+        settings.patch(workspaceId, patch),
     };
   })
 );

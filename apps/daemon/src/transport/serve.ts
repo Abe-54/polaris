@@ -5,6 +5,8 @@ import {
   TraceSessions,
   TraceStore,
   TracesRpcsLive,
+  TracesSettingsRpcsLive,
+  TraceSettings,
 } from "../traces/index.ts";
 import { DataApprovals } from "../data/approvals.ts";
 import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
@@ -144,6 +146,7 @@ export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer
 /** One receiver, one token authority and one lazy trace worker per Host. */
 export const traceServices = TraceReceiverLive.pipe(
   Layer.provideMerge(TraceRuntime.layer),
+  Layer.provideMerge(TraceSettings.layer),
   Layer.provideMerge(TraceSessions.layer),
   Layer.provideMerge(TraceStore.layer)
 );
@@ -188,6 +191,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 export const daemonHandlers = Layer.mergeAll(
   DataRpcsLive,
   TracesRpcsLive,
+  TracesSettingsRpcsLive,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -245,6 +249,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data.writes",
   "data.schemaDiff",
   "traces",
+  "traces.settings",
   "constellation",
   "constellation.defaults",
   "extensions",
