@@ -1,13 +1,13 @@
 /**
- * The waterfall's toolbar (DESIGN.md, Traces → Waterfall; Paper T1/T6): the `Waterfall | Table`
- * switch, Find spans, the Services chip, "Collapse all" (Waterfall only) and "Errors only".
+ * The waterfall's toolbar (DESIGN.md, Traces → Waterfall; Paper T1/T5/T6): the
+ * `Waterfall | Table | Service map` switch, Find spans, the Services chip, "Collapse all"
+ * (Waterfall only) and "Errors only".
  */
 import { cn, SearchIcon, SegmentedControl } from "@polaris/ui";
 import type { ReactNode } from "react";
+import type { MainView } from "../../model/mainView.ts";
 import { ServicesChip } from "./ServicesChip.tsx";
 import type { TraceView } from "./useTraceView.ts";
-
-export type MainView = "waterfall" | "table";
 
 const Toggle = ({
   pressed,
@@ -51,13 +51,14 @@ export const Toolbar = ({
       data-testid="waterfall-toolbar"
     >
       <SegmentedControl<MainView>
-        aria-label="Waterfall or table"
+        aria-label="Waterfall, table or service map"
         variant="well"
         value={view}
         onValueChange={onView}
         options={[
           { value: "waterfall", label: "Waterfall" },
           { value: "table", label: "Table" },
+          { value: "map", label: "Service map" },
         ]}
       />
       <label className="bg-well ring-hairline focus-within:ring-starlight flex h-7 w-[170px] min-w-0 shrink items-center gap-2 rounded-full px-2.5 ring-1 ring-inset focus-within:ring-2">

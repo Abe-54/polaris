@@ -1,14 +1,20 @@
 /** Traces over IPC (ADR 0094): the protocol's payloads plus the Host, and its answers unchanged. */
 import {
+  GetProfile,
   CompareTraces,
   GetSpan,
   GetTrace,
   GetWorkspaceTracesSettings,
   SetWorkspaceTracesSettings,
+  type Profile,
+  type ProfileDetail,
+  type ProfilesSnapshot,
+  RestartWithProfiling,
   type SpanDetail,
   type TraceComparison,
   type TraceDetail,
   type TracesSnapshot,
+  WatchProfiles,
   WatchTraces,
   type WorkspaceTracesSettings,
 } from "@polaris/protocol";
@@ -27,6 +33,11 @@ export const TracesRequestInputs = {
     ...OnHost,
     ...SetWorkspaceTracesSettings.payloadSchema.fields,
   }),
+  "profiles.get": Schema.Struct({ ...OnHost, ...GetProfile.payloadSchema.fields }),
+  "profiles.restartWithProfiling": Schema.Struct({
+    ...OnHost,
+    ...RestartWithProfiling.payloadSchema.fields,
+  }),
   "traces.compare": Schema.Struct({ ...OnHost, ...CompareTraces.payloadSchema.fields }),
 } as const;
 
@@ -36,15 +47,21 @@ export interface TracesRequestOutputs {
   /** Workspace policy and detected exporters; header values never cross IPC. */
   readonly "traces.settings": WorkspaceTracesSettings;
   readonly "traces.setSettings": WorkspaceTracesSettings;
+  readonly "profiles.get": ProfileDetail;
+  /** The new recording. */
+  readonly "profiles.restartWithProfiling": Profile;
   /** Gated on `traces.compare`, apart from the rest of Traces. */
   readonly "traces.compare": TraceComparison;
 }
 
 export const TracesSubscriptionInputs = {
   "traces.watch": Schema.Struct({ ...OnHost, ...WatchTraces.payloadSchema.fields }),
+  "profiles.watch": Schema.Struct({ ...OnHost, ...WatchProfiles.payloadSchema.fields }),
 } as const;
 
 export interface TracesSubscriptionItems {
   /** Each snapshot replaces the last. */
   readonly "traces.watch": TracesSnapshot;
+  /** Each snapshot replaces the last; newest recording first. */
+  readonly "profiles.watch": ProfilesSnapshot;
 }

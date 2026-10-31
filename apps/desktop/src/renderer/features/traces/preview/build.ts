@@ -44,6 +44,8 @@ export interface TraceSpec {
   readonly spans: ReadonlyArray<SpanSpec>;
   readonly partial?: boolean;
   readonly linked?: boolean;
+  /** Each service's process command line, as its OTel resource names it. */
+  readonly commands?: Readonly<Record<string, string>>;
 }
 
 export interface Checkout {
@@ -65,14 +67,26 @@ const SCOPES: Record<Span["kind"], string> = {
   consumer: "@opentelemetry/api",
 };
 
-const resource = (service: string): TraceAttributes => ({
-  "service.name": service,
-  "telemetry.sdk.language": "nodejs",
-  "telemetry.sdk.name": "opentelemetry",
-  "telemetry.sdk.version": "2.2.0",
-  "process.runtime.name": "nodejs",
-  "process.runtime.version": "24.11.0",
-});
+/** A stable process id per service, as an int64 decimal string (TraceAttributes). */
+export const fixturePid = (service: string) =>
+  String(
+    40_000 +
+      Array.from(service, (c) => c.charCodeAt(0)).reduce((sum, c) => (sum * 31 + c) % 9_000, 0)
+  );
+
+const resource = (service: string, command?: string): TraceAttributes => {
+  const attributes = {
+    "service.name": service,
+    "process.pid": fixturePid(service),
+    "telemetry.sdk.language": "nodejs",
+    "telemetry.sdk.name": "opentelemetry",
+    "telemetry.sdk.version": "2.2.0",
+    "process.runtime.name": "nodejs",
+    "process.runtime.version": "24.11.0",
+  };
+
+  return command === undefined ? attributes : { ...attributes, "process.command_line": command };
+};
 
 const span = (trace: TraceSpec, at: Checkout, s: SpanSpec): Span => {
   const kind = s.kind ?? "internal";
@@ -92,7 +106,7 @@ const span = (trace: TraceSpec, at: Checkout, s: SpanSpec): Span => {
     endTimeUnixNano: nanos(trace.startedAt, s.at + s.ms),
     durationMs: s.ms,
     attributes: s.attributes ?? {},
-    resource: resource(s.service),
+    resource: resource(s.service, trace.commands?.[s.service]),
     scope: { name: SCOPES[kind], version: "0.57.0", attributes: {} },
     polaris: { ...at, turn: trace.turn, launchedTurn: trace.launchedTurn },
     events: (s.events ?? []).map((e) => ({
