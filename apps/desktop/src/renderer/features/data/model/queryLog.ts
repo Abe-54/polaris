@@ -1,51 +1,194 @@
 /**
- * The Query Log drawer's rows (DESIGN.md, Data → Query Log; Paper D1): newest first, scoped to
- * the open table or source, each with its author, Turn, one-line SQL, rows and age. Pure.
+ * The Query Log as rows (DESIGN.md, Data → Query Log) and what each agent is doing to data
+ * ("Querying invoices", "Wants to write") for "Agents in this worktree".
  */
-import type { HarnessKind, QueryLogEntry, SessionId, TurnId } from "@polaris/protocol";
+import type { QueryLogEntry, SessionId } from "@polaris/protocol";
 
-/** What the drawer needs of an Agent Session; null when it isn't on this Host's list. */
+/** The facts a row needs about an entry's Agent Session, from the Host's read model. */
 export interface SessionFacts {
   readonly title: string;
-  readonly harness: HarnessKind;
+  readonly harness: string;
+  readonly needsYou: boolean;
   readonly working: boolean;
-  /** The user Turn in flight or last run: its id, 1-based number and start (ISO). */
-  readonly turn: {
-    readonly id: TurnId;
-    readonly number: number;
-    readonly startedAt: string;
-  } | null;
 }
 
-export type SessionLookup = (id: SessionId) => SessionFacts | null;
-
-export type Who =
-  | { readonly kind: "you" }
+export type LogAuthor =
   | {
-      readonly kind: "agent" | "outside";
+      readonly kind: "agent";
       readonly sessionId: SessionId;
       readonly title: string;
-      readonly harness: HarnessKind | null;
+      /** null when the session isn't in this Host's read model. */
+      readonly harness: string | null;
       readonly turn: number | null;
+    }
+  | { readonly kind: "user" }
+  | {
+      readonly kind: "outside";
+      readonly title: string;
+      readonly harness: string | null;
+      readonly command: string;
     };
 
-export type RowStatus = "needs-you" | "running" | "done" | "failed" | "dry-run" | "cancelled";
+export type LogState = "done" | "failed" | "running" | "needs-you";
 
 export interface LogRow {
+  readonly id: string;
   readonly entry: QueryLogEntry;
-  readonly who: Who;
-  readonly status: RowStatus;
-  /** The SQL on one line; an outside row shows the command it ran. */
-  readonly text: string;
+  /** The SQL on one line. */
+  readonly sql: string;
+  readonly source: string;
+  readonly author: LogAuthor;
+  readonly state: LogState;
+  /** "214 rows", "1 row", the error, or empty while it runs. */
+  readonly result: string;
 }
 
+const WRITE = /^\s*(insert|update|delete|merge|upsert|replace|alter|create|drop|truncate)\b/i;
+
+const TABLE =
+  /\b(?:from|update|into|join|table)\s+((?:"[^"]+"|`[^`]+`|[\w$]+)(?:\.(?:"[^"]+"|`[^`]+`|[\w$]+))?)/i;
+
+export const isWrite = (sql: string) => WRITE.test(sql);
+
+/** The first table a statement names, unquoted and without its schema; null for none. */
+export const tableOf = (sql: string): string | null => {
+  const name = TABLE.exec(sql)?.[1];
+
+  if (name === undefined) return null;
+
+  return (name.split(".").at(-1) ?? name).replace(/^["`]|["`]$/g, "");
+};
+
+const running = (entry: QueryLogEntry) => entry.state === "running";
+
+/** A write waiting on the user: the Daemon holds it for a Data Source Approval. */
+export const awaitsApproval = (entry: QueryLogEntry) =>
+  entry.state === "waiting-approval" || entry.approval?.status === "pending";
+
+const STATES: Record<QueryLogEntry["state"], LogState> = {
+  running: "running",
+  "waiting-approval": "needs-you",
+  completed: "done",
+  failed: "failed",
+  "dry-run": "done",
+  cancelled: "done",
+};
+
+const stateOf = (entry: QueryLogEntry): LogState =>
+  awaitsApproval(entry) ? "needs-you" : STATES[entry.state];
+
+const resultOf = (entry: QueryLogEntry, state: LogState) => {
+  if (state === "failed") return entry.error ?? "";
+
+  if (entry.state === "cancelled") return "cancelled";
+
+  if (entry.state === "dry-run") return "dry run";
+
+  if (entry.rows === undefined) return "";
+
+  return `${entry.rows} ${entry.rows === 1 ? "row" : "rows"}`;
+};
+
+export interface LogLookups {
+  readonly session: (id: SessionId) => SessionFacts | null;
+  readonly turn: (id: SessionId, turn: string) => number | null;
+}
+
+const authorOf = (entry: QueryLogEntry, lookups: LogLookups): LogAuthor => {
+  const { author } = entry;
+
+  if (author.kind === "user") return { kind: "user" };
+  const facts = lookups.session(author.sessionId);
+  const title = facts?.title || "Untitled session";
+  const harness = facts?.harness ?? null;
+
+  if (author.kind === "outside")
+    return { kind: "outside", title, harness, command: author.command };
+
+  return {
+    kind: "agent",
+    sessionId: author.sessionId,
+    title,
+    harness,
+    turn: lookups.turn(author.sessionId, author.turn),
+  };
+};
+
+const sessionOf = (entry: QueryLogEntry) =>
+  entry.author.kind === "user" ? null : entry.author.sessionId;
+
+/** Newest first, with a write waiting on the user leading (it's the one that needs you). */
+export const logRows = (
+  entries: ReadonlyArray<QueryLogEntry>,
+  lookups: LogLookups
+): ReadonlyArray<LogRow> => {
+  const rows = entries.map((entry): LogRow => {
+    const state = stateOf(entry);
+
+    return {
+      id: entry.id,
+      entry,
+      sql: entry.sql.replace(/\s+/g, " ").trim(),
+      source: entry.source.name,
+      author: authorOf(entry, lookups),
+      state,
+      result: resultOf(entry, state),
+    };
+  });
+
+  const rank = (row: LogRow) => (row.state === "needs-you" ? 1 : 0);
+
+  return rows.toSorted(
+    (a, b) => rank(b) - rank(a) || Date.parse(b.entry.at) - Date.parse(a.entry.at)
+  );
+};
+
+/**
+ * What an agent is doing to data, for its row in "Agents in this worktree": a write waiting on
+ * you, else the table of its running or (while it works) latest Query; null for nothing.
+ */
+export const dataActivity = (
+  sessionId: SessionId,
+  entries: ReadonlyArray<QueryLogEntry>,
+  facts: SessionFacts
+): string | null => {
+  const own = entries.filter((e) => sessionOf(e) === sessionId);
+
+  if (own.some(awaitsApproval)) return "Wants to write";
+  const latest = own.findLast(running) ?? (facts.working ? own.at(-1) : undefined);
+
+  if (latest === undefined) return null;
+  const table = tableOf(latest.sql);
+
+  return table === null ? "Querying data" : `Querying ${table}`;
+};
+
+export const busyKey = (source: string, table: string) => `${source}\u0000${table}`;
+
+/** Tables an agent's running read is on, to the Harness reading them (the tree's dither). */
+export const busyTables = (
+  entries: ReadonlyArray<QueryLogEntry>,
+  lookups: LogLookups
+): ReadonlyMap<string, string> => {
+  const busy = new Map<string, string>();
+
+  for (const entry of entries) {
+    if (entry.author.kind !== "agent" || !running(entry) || isWrite(entry.sql)) continue;
+    const facts = lookups.session(entry.author.sessionId);
+    const table = tableOf(entry.sql);
+
+    if (facts?.working === true && table !== null)
+      busy.set(busyKey(entry.source.name, table), facts.harness);
+  }
+
+  return busy;
+};
+
+/** What the drawer under the grid shows: one Data Source, and one table while a table tab is open. */
 export interface LogScope {
   readonly source: string;
-  /** Only queries that name this table. */
   readonly table?: string | undefined;
 }
-
-export const oneLine = (sql: string) => sql.replaceAll(/\s+/g, " ").trim();
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -58,84 +201,33 @@ export const inScope = (entry: QueryLogEntry, scope: LogScope | null) =>
   (entry.source.name === scope.source &&
     (scope.table === undefined || mentionsTable(entry.sql, scope.table)));
 
-const statusOf = (entry: QueryLogEntry): RowStatus => {
-  if (entry.approval?.status === "pending" || entry.state === "waiting-approval")
-    return "needs-you";
-
-  if (entry.state === "completed") return entry.error === undefined ? "done" : "failed";
-
-  return entry.state;
-};
-
-const whoOf = (entry: QueryLogEntry, lookup: SessionLookup): Who => {
-  const { author } = entry;
-
-  if (author.kind === "user") return { kind: "you" };
-  const facts = lookup(author.sessionId);
-
-  return {
-    kind: author.kind,
-    sessionId: author.sessionId,
-    title: facts === null || facts.title === "" ? "An agent session" : facts.title,
-    harness: facts?.harness ?? null,
-    turn: facts?.turn?.id === author.turn ? facts.turn.number : null,
-  };
-};
-
-export const logRows = (
+/** The drawer's rows: `logRows` within its scope. */
+export const scopedRows = (
   entries: ReadonlyArray<QueryLogEntry>,
-  lookup: SessionLookup,
+  lookups: LogLookups,
   scope: LogScope | null
-): ReadonlyArray<LogRow> =>
-  entries
-    .filter((entry) => inScope(entry, scope))
-    .toSorted((a, b) => b.at.localeCompare(a.at))
-    .map((entry) => ({
-      entry,
-      who: whoOf(entry, lookup),
-      status: statusOf(entry),
-      text: oneLine(entry.author.kind === "outside" ? entry.author.command : entry.sql),
-    }));
+): ReadonlyArray<LogRow> => logRows(entries, lookups).filter((row) => inScope(row.entry, scope));
 
 /** "Fix overdue totals · turn 12", "You", "Backfill currency · needs you", "… · outside Polaris". */
 export const authorText = (row: LogRow): string => {
-  const { who } = row;
+  const { author } = row;
 
-  if (who.kind === "you") return "You";
+  if (author.kind === "user") return "You";
 
-  if (row.status === "needs-you") return `${who.title} · needs you`;
+  if (row.state === "needs-you") return `${author.title} · needs you`;
 
-  if (who.kind === "outside") return `${who.title} · outside Polaris`;
+  if (author.kind === "outside") return `${author.title} · outside Polaris`;
 
-  return who.turn === null ? who.title : `${who.title} · turn ${who.turn}`;
+  return author.turn === null ? author.title : `${author.title} · turn ${author.turn}`;
 };
 
-/** "214 rows", "1 row", "failed", "waiting", "running", "—". */
-export const rowsText = (row: LogRow): string => {
-  const { entry, status } = row;
+/** The drawer's rows column: "214 rows", "failed" (the error is the row's tooltip), or "—". */
+export const resultText = (row: LogRow): string => {
+  if (row.state === "failed") return "failed";
 
-  if (status === "failed") return "failed";
+  if (row.state === "running") return "running";
 
-  if (status === "running") return "running";
-
-  if (status === "cancelled") return "cancelled";
-
-  if (entry.rows === undefined) return "—";
-
-  return entry.rows === 1 ? "1 row" : `${entry.rows.toLocaleString("en-US")} rows`;
-};
-
-/** "now", "8m", "2h", "3d": a row's age, as the drawer prints it. */
-export const ageText = (at: string, now: number): string => {
-  const minutes = Math.floor((now - Date.parse(at)) / 60_000);
-
-  if (minutes < 1) return "now";
-
-  if (minutes < 60) return `${minutes}m`;
-
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h`;
-
-  return `${Math.floor(minutes / (24 * 60))}d`;
+  return row.result === "" ? "—" : row.result;
 };
 
 /** "Query log · invoices · 6", "Query log · app · 30". */

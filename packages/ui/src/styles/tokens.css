@@ -129,6 +129,9 @@
   --color-context-skills: light-dark(#ba5689, #e39ac0);
   --color-context-memory: light-dark(#668833, #a9c27c);
 
+  /* Data Source labels only (rule/data-source-label): the blue preset. */
+  --color-data-label-blue: light-dark(#3a6cc2, #6e9be8);
+
   /* Syntax: moonlit. */
   --color-syntax-keyword: light-dark(#4a5a80, #a3afcb);
   --color-syntax-string: light-dark(#86652e, #d9c9a3);

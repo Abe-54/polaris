@@ -3,10 +3,16 @@
  * Queries read `select … from <table> [where <column> = '<value>']`; writes are refused. A scene
  * can add tables of its own (the bench's 10,000 rows, the worst case's 60 columns).
  */
-import { QueryResult, type TableDetail } from "@polaris/protocol";
-import { Option } from "effect";
+import {
+  DataSource,
+  type QueryLogEntry,
+  QueryResult,
+  type SchemaTree,
+  type TableDetail,
+} from "@polaris/protocol";
+import { Option, Schema } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
-import type { DataApi, QueryStream } from "../data/api.ts";
+import type { DataApi, QueryStream, SaveSourceInput, Snapshots, TableChange } from "../data/api.ts";
 import { cellOf, type DataRow, decodeRows } from "../grid/value.ts";
 import {
   FIXTURE_QUERY_LOG,
@@ -38,8 +44,11 @@ const STREAM_CAP = 10_000;
 const CHUNK = 500;
 
 /** The source by name, or why an agent-facing call can't reach it. */
-const reach = (name: string): Result<null> => {
-  const source = FIXTURE_SOURCES.find((s) => s.name === name);
+const reach = (name: string, sources: ReadonlyArray<DataSource>): Result<null> => {
+  const source = sources.find((s) => s.name === name);
+
+  if (source !== undefined && !source.reachable)
+    return fail("E-DATA-UNREACHABLE", source.error ?? `Can't reach ${source.host}:${source.port}`);
 
   if (source === undefined) return fail("E-DATA-UNKNOWN-SOURCE", `No data source named ${name}`);
 
@@ -154,43 +163,127 @@ const stream = (selected: Selected, limit: number, on: QueryStream) => {
   return () => clearTimeout(timer);
 };
 
+/** What a fixture api serves; the defaults are the ledger checkout (fixtures.ts). */
+export interface FixtureData {
+  readonly sources?: ReadonlyArray<DataSource>;
+  readonly queryLog?: ReadonlyArray<QueryLogEntry>;
+  /** A source's schema tree by name; the ledger schema for every source when omitted. */
+  readonly schema?: (source: string) => SchemaTree;
+  readonly tableChanges?: ReadonlyArray<TableChange>;
+  /** What each subscribe re-lists, as the Daemon re-discovers then; current sources when omitted. */
+  readonly relist?: () => ReadonlyArray<DataSource>;
+  /** A scene's own tables (the bench's 10,000 rows, the worst case's 60 columns). */
+  readonly tables?: FixtureTables;
+}
+
+/** An agent added `currencies` on app this Turn (D1's tree). */
+export const FIXTURE_TABLE_CHANGES: ReadonlyArray<TableChange> = [
+  { source: "app", schema: "public", table: "currencies", change: "added" },
+];
+
+/** A feed of whole snapshots that re-sends when the fixture changes, as a Host's would. */
+const feed = <A>(initial: ReadonlyArray<A>) => {
+  let value = initial;
+  const listeners = new Set<(snapshot: ReadonlyArray<A>) => void>();
+
+  return {
+    get: () => value,
+    set: (next: ReadonlyArray<A>) => {
+      value = next;
+
+      for (const listener of listeners) listener(next);
+    },
+    watch: (on: Snapshots<A>) => {
+      const timer = setTimeout(() => {
+        listeners.add(on.next);
+        on.next(value);
+      }, 0);
+
+      return () => {
+        clearTimeout(timer);
+        listeners.delete(on.next);
+      };
+    },
+  };
+};
+
+/** A saved source is remote until its Host says otherwise, as the Daemon fails closed. */
+const savedSource = (input: SaveSourceInput) =>
+  new DataSource({
+    id: `src-manual-${input.name}`,
+    name: input.name,
+    engine: input.engine,
+    locality: "remote",
+    host: input.host,
+    port: input.port,
+    database: input.database,
+    user: input.user,
+    foundIn: { kind: "manual" },
+    access: "needs-approval",
+    writes: "ask",
+    label: input.label,
+    reachable: true,
+  });
+
 /** Fixture snapshots arrive on the next tick, as a feed's first item would. */
-export const fixtureDataApi = (extra: FixtureTables = {}): DataApi => ({
-  watchSources: (_at, on) => {
-    const timer = setTimeout(() => on.next(FIXTURE_SOURCES), 0);
+export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
+  const sources = feed(data.sources ?? FIXTURE_SOURCES);
+  const queryLog = feed(data.queryLog ?? FIXTURE_QUERY_LOG);
+  const changes = feed(data.tableChanges ?? FIXTURE_TABLE_CHANGES);
+  const extra = data.tables ?? {};
 
-    return () => clearTimeout(timer);
-  },
-  watchQueryLog: (_at, on) => {
-    const timer = setTimeout(() => on.next(FIXTURE_QUERY_LOG), 0);
+  return {
+    watchSources: (_at, on) => {
+      if (data.relist !== undefined) sources.set(data.relist());
 
-    return () => clearTimeout(timer);
-  },
-  describe: async (_at, { source, table, sample }) => {
-    const reached = reach(source);
+      return sources.watch(on);
+    },
+    watchQueryLog: (_at, on) => queryLog.watch(on),
+    watchTableChanges: (_at, on) => changes.watch(on),
+    describe: async (_at, { source, table, sample }) => {
+      const reached = reach(source, sources.get());
 
-    if (!reached.ok) return reached;
+      if (!reached.ok) return reached;
 
-    if (table === undefined) return { ok: true, value: FIXTURE_SCHEMA };
-    const own = extra[table]?.detail;
-    const detail = own ?? fixtureTable(table, sampleOf(table, sample));
+      if (table === undefined) return { ok: true, value: data.schema?.(source) ?? FIXTURE_SCHEMA };
+      const own = extra[table]?.detail;
+      const detail = own ?? fixtureTable(table, sampleOf(table, sample));
 
-    return detail === null
-      ? fail("NotFound", `No table named ${table}`)
-      : { ok: true, value: detail };
-  },
-  query: async (_at, { source, sql, limit }) => {
-    const reached = reach(source);
+      return detail === null
+        ? fail("NotFound", `No table named ${table}`)
+        : { ok: true, value: detail };
+    },
+    query: async (_at, { source, sql, limit }) => {
+      const reached = reach(source, sources.get());
 
-    return reached.ok ? runFixtureQuery(sql, limit, extra) : reached;
-  },
-  queryStream: (_at, { source, sql, limit = STREAM_CAP }, on) => {
-    const reached = reach(source);
-    const selected = reached.ok ? select(sql, extra) : reached;
+      return reached.ok ? runFixtureQuery(sql, limit, extra) : reached;
+    },
+    queryStream: (_at, { source, sql, limit = STREAM_CAP }, on) => {
+      const reached = reach(source, sources.get());
+      const selected = reached.ok ? select(sql, extra) : reached;
 
-    if (selected.ok) return stream(selected.value, limit, on);
-    const timer = setTimeout(() => on.failed(selected.error), 0);
+      if (selected.ok) return stream(selected.value, limit, on);
+      const timer = setTimeout(() => on.failed(selected.error), 0);
 
-    return () => clearTimeout(timer);
-  },
-});
+      return () => clearTimeout(timer);
+    },
+    saveSource: async (_at, input) => {
+      const saved = savedSource(input);
+
+      sources.set([...sources.get().filter((s) => s.name !== input.name), saved]);
+
+      return { ok: true, value: saved };
+    },
+    labelSource: async (_at, name, label) => {
+      const source = sources.get().find((s) => s.name === name);
+
+      if (source === undefined)
+        return fail("E-DATA-UNKNOWN-SOURCE", `No data source named ${name}`);
+      const labelled = new DataSource({ ...Schema.encodeSync(DataSource)(source), label });
+
+      sources.set(sources.get().map((s) => (s.name === name ? labelled : s)));
+
+      return { ok: true, value: labelled };
+    },
+  };
+};

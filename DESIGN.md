@@ -77,6 +77,9 @@ colors:
   context-skills-light: "#BA5689"
   context-memory-dark: "#A9C27C"  # moss
   context-memory-light: "#668833"
+  # Data Source labels only (rule/data-source-label): the blue preset; grey, green, tan and red reuse text-subtle, diff-added, git-modified and severity-critical.
+  data-label-blue-dark: "#6E9BE8"
+  data-label-blue-light: "#3A6CC2"
   # Severity.
   # Severity. Always a filled badge: shape + label + colour.
   severity-critical: "#E5484D"   # red, diamond

@@ -19,7 +19,7 @@ import { useNow } from "../../../shell/useNow.ts";
 import { elapsed } from "../../editor/model/agent.ts";
 import { send } from "../../session/dispatch.ts";
 import { useQueryLog } from "../data/hooks.tsx";
-import { useSessionLookup } from "../data/sessions.ts";
+import { useWorkingLookup } from "../data/sessions.ts";
 import type { DataSessionKey } from "../model/store.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { readerTitle, type TableReader, tableReader } from "../model/working.ts";
@@ -84,7 +84,7 @@ export const WorkingStrip = ({
   tab: TableTab;
 }) => {
   const log = useQueryLog(at);
-  const lookup = useSessionLookup(hostKey);
+  const lookup = useWorkingLookup(hostKey);
   const entries = log.status === "ready" ? log.value : null;
 
   const reader = useMemo(

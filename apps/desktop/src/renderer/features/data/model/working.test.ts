@@ -6,8 +6,7 @@ import {
   FIXTURE_SESSIONS,
   fixtureSessionLookup,
 } from "../preview/fixtures.ts";
-import type { SessionLookup } from "./queryLog.ts";
-import { readerTitle, tableReader } from "./working.ts";
+import { readerTitle, tableReader, type WorkingLookup } from "./working.ts";
 
 const invoices = { source: "app", table: "invoices" };
 
@@ -38,7 +37,7 @@ describe("the Working strip over a table (DESIGN.md, Data)", () => {
   });
 
   test("a session that isn't Working leaves no strip", () => {
-    const idle: SessionLookup = (id) => {
+    const idle: WorkingLookup = (id) => {
       const facts = fixtureSessionLookup(id);
 
       return facts === null ? null : { ...facts, working: false };

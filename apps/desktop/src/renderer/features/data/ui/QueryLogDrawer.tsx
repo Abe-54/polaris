@@ -14,22 +14,22 @@ import {
   Kicker,
 } from "@polaris/ui";
 import { useMemo, useState } from "react";
+import { age } from "../../../shell/copy.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { useQueryLog } from "../data/hooks.tsx";
-import { useSessionLookup } from "../data/sessions.ts";
 import {
-  ageText,
   authorText,
   drawerKicker,
   type LogRow,
   type LogScope,
-  logRows,
-  rowsText,
+  resultText,
   runsOnOpen,
+  scopedRows,
 } from "../model/queryLog.ts";
 import { type DataSessionKey, dataSessionKey, dataTabsStore, openSqlTab } from "../model/store.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { queueRun, useSqlSource } from "../sql/state.ts";
+import { useLogLookups } from "./sidebar/useLogLookups.ts";
 import type { DataSlotProps } from "./slots.ts";
 
 /** Opens the query in a new SQL tab, running it when it's a read. */
@@ -45,18 +45,21 @@ const NONE: ReadonlyArray<QueryLogEntry> = [];
 /** "all", "you", or one Agent Session's id. */
 type Filter = string;
 
+const sessionOf = (row: LogRow) =>
+  row.entry.author.kind === "user" ? null : row.entry.author.sessionId;
+
 const matches = (row: LogRow, filter: Filter) => {
   if (filter === "all") return true;
 
-  if (filter === "you") return row.who.kind === "you";
+  if (filter === "you") return row.author.kind === "user";
 
-  return row.who.kind !== "you" && row.who.sessionId === filter;
+  return sessionOf(row) === filter;
 };
 
 const Dot = ({ row }: { readonly row: LogRow }) => {
-  const { who } = row;
+  const { author } = row;
 
-  if (who.kind === "you" || who.harness === null)
+  if (author.kind === "user" || author.harness === null)
     return (
       <span aria-hidden="true" className="border-text-subtle size-2 shrink-0 rounded-full border" />
     );
@@ -66,9 +69,9 @@ const Dot = ({ row }: { readonly row: LogRow }) => {
       aria-hidden="true"
       className={cn(
         "size-2 shrink-0 rounded-full",
-        who.kind === "outside" && "opacity-(--opacity-dimmed)"
+        author.kind === "outside" && "opacity-(--opacity-dimmed)"
       )}
-      style={{ backgroundColor: hueVar(who.harness) }}
+      style={{ backgroundColor: hueVar(author.harness) }}
     />
   );
 };
@@ -79,7 +82,7 @@ const Row = ({ row, now, onRun }: { row: LogRow; now: number; onRun: () => void 
       type="button"
       onClick={onRun}
       data-testid="data-query-log-row"
-      data-status={row.status}
+      data-status={row.state}
       title={row.entry.error ?? row.entry.sql}
       className="group/row hover:bg-fill-hover focus-visible:outline-starlight flex h-(--spacing-row) w-full cursor-default items-center gap-3 rounded-[8px] px-2 text-left focus-visible:outline-2"
     >
@@ -87,15 +90,15 @@ const Row = ({ row, now, onRun }: { row: LogRow; now: number; onRun: () => void 
       <span
         className={cn(
           "text-code min-w-0 flex-1 truncate font-mono",
-          row.who.kind === "outside" ? "text-text-subtle" : "text-text-default"
+          row.author.kind === "outside" ? "text-text-subtle" : "text-text-default"
         )}
       >
-        {row.text}
+        {row.author.kind === "outside" ? row.author.command : row.sql}
       </span>
       <span
         className={cn(
           "text-caption w-56 shrink-0 truncate",
-          row.status === "needs-you" ? "text-needs-you-text" : "text-text-subtle"
+          row.state === "needs-you" ? "text-needs-you-text" : "text-text-subtle"
         )}
       >
         {authorText(row)}
@@ -103,14 +106,14 @@ const Row = ({ row, now, onRun }: { row: LogRow; now: number; onRun: () => void 
       <span
         className={cn(
           "text-caption tabular w-16 shrink-0 text-right font-mono",
-          row.status === "failed" ? "text-failed-text" : "text-text-subtle"
+          row.state === "failed" ? "text-failed-text" : "text-text-subtle"
         )}
       >
-        {rowsText(row)}
+        {resultText(row)}
       </span>
       <span className="text-caption text-text-faint tabular w-10 shrink-0 text-right font-mono">
         <span className="group-hover/row:hidden group-focus-visible/row:hidden">
-          {ageText(row.entry.at, now)}
+          {age(row.entry.at, now)}
         </span>
         <span className="text-text-strong hidden group-hover/row:inline group-focus-visible/row:inline">
           Run
@@ -134,7 +137,11 @@ const FilterMenu = ({
     ["you", "You"],
   ]);
 
-  for (const { who } of rows) if (who.kind !== "you") sessions.set(who.sessionId, who.title);
+  for (const row of rows) {
+    const id = sessionOf(row);
+
+    if (id !== null && row.author.kind !== "user") sessions.set(id, row.author.title);
+  }
 
   const label = sessions.get(filter) ?? "All sessions";
   const agents = [...sessions].filter(([id]) => id !== "all" && id !== "you");
@@ -168,14 +175,14 @@ const scopeOf = (active: DataTab | null, sqlSource: string | null): LogScope | n
 
 export const QueryLogDrawer = ({ at, hostKey, active }: DataSlotProps) => {
   const log = useQueryLog(at);
-  const lookup = useSessionLookup(hostKey);
+  const lookups = useLogLookups(hostKey);
   const sqlSource = useSqlSource(at, active);
   const scope = useMemo(() => scopeOf(active, sqlSource), [active, sqlSource]);
   const now = useNow();
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState(true);
   const entries = log.status === "ready" ? log.value : NONE;
-  const rows = useMemo(() => logRows(entries, lookup, scope), [entries, lookup, scope]);
+  const rows = useMemo(() => scopedRows(entries, lookups, scope), [entries, lookups, scope]);
   const shown = rows.filter((row) => matches(row, filter));
 
   return (

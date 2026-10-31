@@ -157,7 +157,7 @@ const sceneTables = (): FixtureTables => {
   return tables;
 };
 
-const api = () => fixtureDataApi(sceneTables());
+const api = () => fixtureDataApi({ tables: sceneTables() });
 
 const show =
   (table: string, view: { filter?: string; view?: "data" | "structure" } = {}, source = "app") =>

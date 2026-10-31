@@ -1,76 +1,195 @@
 import { describe, expect, test } from "bun:test";
+import { QueryLogEntry, RequestId, type SessionId } from "@polaris/protocol";
 import {
-  FIXTURE_NOW,
+  FIXTURE_PENDING_WRITE_ID,
   FIXTURE_QUERY_LOG,
-  fixtureSessionLookup as lookup,
+  FIXTURE_SESSIONS,
 } from "../preview/fixtures.ts";
+import { WORST_QUERY_LOG } from "../preview/worstCase.ts";
 import {
-  ageText,
   authorText,
+  busyTables,
+  dataActivity,
   drawerKicker,
-  logRows,
   mentionsTable,
-  rowsText,
+  resultText,
   runsOnOpen,
+  scopedRows,
+  type LogLookups,
+  logRows,
+  type SessionFacts,
+  tableOf,
 } from "./queryLog.ts";
 
-const rows = (scope: Parameters<typeof logRows>[2] = null) =>
-  logRows(FIXTURE_QUERY_LOG, lookup, scope);
+/** The fixture a test names, or a failure saying it's gone. */
+const found = <A>(value: A | undefined): A => {
+  if (value === undefined) throw new Error("No such fixture entry");
 
-describe("the Query Log drawer's rows (Paper D1)", () => {
-  test("newest first: the pending write is the needs-you row", () => {
-    const [first] = rows();
+  return value;
+};
 
-    expect(first?.status).toBe("needs-you");
-    expect(first === undefined ? "" : authorText(first)).toBe("Backfill currency · needs you");
+const facts = (over: Partial<SessionFacts> = {}): SessionFacts => ({
+  title: "Fix overdue totals",
+  harness: "claude",
+  needsYou: false,
+  working: true,
+  ...over,
+});
+
+/** Backfill currency needs you; Fix overdue totals is working, in its Turn 12. */
+const lookups: LogLookups = {
+  session: (id: SessionId) =>
+    id === FIXTURE_SESSIONS.backfill.id
+      ? facts({ title: "Backfill currency", harness: "codex", needsYou: true, working: false })
+      : facts(),
+  turn: (_id, turn) => (turn === "turn-12" ? 12 : null),
+};
+
+test.each([
+  ["select * from invoices where id = $1", "invoices"],
+  ['SELECT "id" FROM "public"."invoice_items"', "invoice_items"],
+  ["update invoices set currency = 'USD'", "invoices"],
+  ["insert into `ledger`.`payments` values (1)", "payments"],
+  ["select 1", null],
+] as const)("%p names table %p", (sql, table) => {
+  expect(tableOf(sql)).toBe(table);
+});
+
+describe("the Query log's rows", () => {
+  const rows = logRows(FIXTURE_QUERY_LOG, lookups);
+
+  test("the write waiting on its session leads as the needs-you row; the rest are newest first", () => {
+    const times = rows.slice(1).map((row) => Date.parse(row.entry.at));
+
+    expect(rows[0]?.id).toBe(FIXTURE_PENDING_WRITE_ID);
+    expect(rows[0]?.state).toBe("needs-you");
+    expect(times).toEqual(times.toSorted((a, b) => b - a));
   });
 
-  test("an agent's read names its session and Turn; yours says You", () => {
-    const all = rows();
-    const branch = all.find((r) => r.entry.id === "q-branch-read");
-    const mine = all.find((r) => r.entry.id === "q-user-1");
-
-    expect(branch === undefined ? "" : authorText(branch)).toBe("Fix overdue totals · turn 12");
-    expect(mine === undefined ? "" : authorText(mine)).toBe("You");
-  });
-
-  test("a Turn other than the session's current one is left unnumbered", () => {
-    const old = rows().find(
-      (r) => r.who.kind === "agent" && r.who.title === "Backfill currency" && r.status === "done"
+  test.each([
+    ["pending", "needs-you"],
+    ["approved", "running"],
+  ] as const)("a running write whose approval is %s reads as %s", (status, state) => {
+    const { id, checkout, source, sql, author, at } = found(
+      FIXTURE_QUERY_LOG.find((e) => e.id === FIXTURE_PENDING_WRITE_ID)
     );
 
-    expect(old === undefined ? "" : authorText(old)).toBe("Backfill currency");
+    const entry = new QueryLogEntry({
+      id,
+      checkout,
+      source,
+      sql,
+      author,
+      at,
+      state: "running",
+      approval: { id: RequestId.make("r-write"), status },
+    });
+
+    expect(logRows([entry], lookups)[0]?.state).toBe(state);
   });
 
-  test("a psql call outside Polaris shows its command", () => {
-    const outside = rows().find((r) => r.entry.id === "q-outside");
+  test("each author reads as the Query log shows it", () => {
+    const byId = new Map(rows.map((row) => [row.id, row]));
 
-    expect(outside === undefined ? "" : authorText(outside)).toBe(
-      "Backfill currency · outside Polaris"
+    expect([
+      byId.get("q-failed")?.state,
+      byId.get("q-failed")?.result,
+      byId.get("q-user-1")?.author.kind,
+      byId.get("q-user-1")?.result,
+      byId.get("q-outside")?.author,
+      byId.get("q-branch-read")?.author,
+    ]).toEqual([
+      "failed",
+      'column "total" does not exist',
+      "user",
+      "214 rows",
+      {
+        kind: "outside",
+        title: "Backfill currency",
+        harness: "codex",
+        command: `psql $DATABASE_URL -c "select count(*) from invoices where currency is null"`,
+      },
+      {
+        kind: "agent",
+        sessionId: FIXTURE_SESSIONS.overdue.id,
+        title: "Fix overdue totals",
+        harness: "claude",
+        turn: 12,
+      },
+    ]);
+  });
+});
+
+describe("what each agent is doing to data", () => {
+  test("a session whose write waits on you wants to write", () => {
+    expect(
+      dataActivity(
+        FIXTURE_SESSIONS.backfill.id,
+        FIXTURE_QUERY_LOG,
+        facts({ needsYou: true, working: false })
+      )
+    ).toBe("Wants to write");
+  });
+
+  test("a working session is querying the table of its unfinished or latest Query", () => {
+    expect(dataActivity(FIXTURE_SESSIONS.overdue.id, WORST_QUERY_LOG, facts())).toBe(
+      "Querying invoices"
     );
-    expect(outside?.text).toStartWith("psql $DATABASE_URL -c");
+  });
+
+  test("an idle session with only finished Queries is doing nothing to data", () => {
+    expect(
+      dataActivity(FIXTURE_SESSIONS.overdue.id, FIXTURE_QUERY_LOG, facts({ working: false }))
+    ).toBeNull();
+  });
+
+  test("the tree's dither marks only tables a working agent is still reading", () => {
+    expect([...busyTables(WORST_QUERY_LOG, lookups)]).toEqual([["app\u0000invoices", "claude"]]);
+    expect(
+      busyTables(WORST_QUERY_LOG, { ...lookups, session: () => facts({ working: false }) }).size
+    ).toBe(0);
+  });
+});
+
+describe("the drawer under the grid (Paper D1)", () => {
+  const rows = scopedRows(FIXTURE_QUERY_LOG, lookups, null);
+  const row = (id: string) => found(rows.find((r) => r.id === id));
+
+  test("each row names who ran it: the session and its Turn, You, or the needs-you write", () => {
+    expect(authorText(row(FIXTURE_PENDING_WRITE_ID))).toBe("Backfill currency · needs you");
+    expect(authorText(row("q-branch-read"))).toBe("Fix overdue totals · turn 12");
+    expect(authorText(row("q-user-1"))).toBe("You");
+    expect(authorText(row("q-outside"))).toBe("Backfill currency · outside Polaris");
+  });
+
+  test("a Turn the feed can't number is left unnumbered", () => {
+    const old = found(
+      rows.find(
+        (r) =>
+          r.author.kind === "agent" &&
+          r.entry.author.kind === "agent" &&
+          r.entry.author.turn === "turn-4"
+      )
+    );
+
+    expect(authorText(old)).toBe("Backfill currency");
+  });
+
+  test("a failure says failed and the pending write has no rows yet", () => {
+    expect(resultText(row("q-failed"))).toBe("failed");
+    expect(resultText(row(FIXTURE_PENDING_WRITE_ID))).toBe("—");
+    expect(resultText(row("q-user-2"))).toBe("38 rows");
   });
 
   test("scoped to a table, only that source's queries naming it", () => {
-    const invoices = rows({ source: "app", table: "invoices" });
+    const invoices = scopedRows(FIXTURE_QUERY_LOG, lookups, { source: "app", table: "invoices" });
 
     expect(invoices.length).toBeGreaterThan(0);
-    expect(invoices.every((r) => r.entry.source.name === "app")).toBe(true);
-    expect(invoices.some((r) => r.text.includes("invoice_items"))).toBe(false);
+    expect(invoices.every((r) => r.source === "app")).toBe(true);
+    expect(invoices.some((r) => r.sql.includes("invoice_items"))).toBe(false);
     expect(drawerKicker({ source: "app", table: "invoices" }, invoices.length)).toBe(
       `Query log · invoices · ${invoices.length}`
     );
-  });
-
-  test("rows, failures and ages read as the drawer prints them", () => {
-    const failed = rows().find((r) => r.entry.id === "q-failed");
-    const pending = rows()[0];
-
-    expect(failed === undefined ? "" : rowsText(failed)).toBe("failed");
-    expect(pending === undefined ? "" : rowsText(pending)).toBe("—");
-    expect(ageText(new Date(FIXTURE_NOW - 8 * 60_000).toISOString(), FIXTURE_NOW)).toBe("8m");
-    expect(ageText(new Date(FIXTURE_NOW - 20_000).toISOString(), FIXTURE_NOW)).toBe("now");
-    expect(ageText(new Date(FIXTURE_NOW - 3 * 3_600_000).toISOString(), FIXTURE_NOW)).toBe("3h");
   });
 });
 

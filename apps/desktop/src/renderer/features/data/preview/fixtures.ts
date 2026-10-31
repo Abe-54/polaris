@@ -15,7 +15,7 @@ import {
   TableSummary,
   TurnId,
 } from "@polaris/protocol";
-import type { SessionLookup } from "../model/queryLog.ts";
+import type { WorkingLookup } from "../model/working.ts";
 
 export const FIXTURE_NOW = Date.parse("2026-10-30T18:00:00Z");
 
@@ -25,7 +25,7 @@ export const FIXTURE_SESSIONS = {
 } as const;
 
 /** The two Agent Sessions as the Host's session list has them: Fix overdue totals is Working. */
-export const fixtureSessionLookup: SessionLookup = (id) => {
+export const fixtureSessionLookup: WorkingLookup = (id) => {
   if (id === FIXTURE_SESSIONS.overdue.id)
     return {
       title: FIXTURE_SESSIONS.overdue.title,

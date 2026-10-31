@@ -4,6 +4,7 @@
  */
 import type {
   DataSource,
+  DataSourceLabel,
   QueryLogEntry,
   QueryResult,
   SchemaTree,
@@ -60,6 +61,27 @@ export interface QueryStream {
   readonly failed: (error: IpcError) => void;
 }
 
+/** A manual Data Source (`data.source.save`); the password is write-only and never read back. */
+export interface SaveSourceInput {
+  readonly name: string;
+  readonly engine: DataSource["engine"];
+  readonly host: string;
+  readonly port: number;
+  readonly database: string;
+  readonly user: string;
+  readonly password?: string;
+  readonly label: DataSourceLabel;
+}
+
+/** A table an agent added or changed in its current Turn, for the tree's git letter. */
+export interface TableChange {
+  /** The Data Source's name. */
+  readonly source: string;
+  readonly schema: string;
+  readonly table: string;
+  readonly change: "added" | "modified";
+}
+
 export interface DataApi {
   readonly watchSources: (at: DataSessionKey, on: Snapshots<DataSource>) => () => void;
   readonly watchQueryLog: (at: DataSessionKey, on: Snapshots<QueryLogEntry>) => () => void;
@@ -74,6 +96,14 @@ export interface DataApi {
     input: QueryStreamInput,
     on: QueryStream
   ) => () => void;
+  readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
+  readonly labelSource: (
+    at: DataSessionKey,
+    source: string,
+    label: DataSourceLabel
+  ) => Promise<Result<DataSource>>;
+  /** Tables changed this Turn; no Host serves them yet, so the live feed stays empty. */
+  readonly watchTableChanges: (at: DataSessionKey, on: Snapshots<TableChange>) => () => void;
 }
 
 const session = (at: DataSessionKey) => ({ hostKey: at.hostKey, sessionId: at.sessionId });
@@ -121,5 +151,13 @@ export const liveDataApi: DataApi = {
         },
       }
     );
+  },
+  saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
+  labelSource: (at, source, label) =>
+    polaris().request("data.source.label", { ...session(at), source, label }),
+  watchTableChanges: (_at, on) => {
+    on.next([]);
+
+    return () => undefined;
   },
 };

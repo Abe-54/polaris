@@ -1,14 +1,14 @@
-/** The Host's Agent Sessions as Data's views name them: title, Harness, Working, current Turn. */
+/** The Host's Agent Sessions as the Working strip needs them: title, Harness, Working, current Turn. */
 import type { SessionId } from "@polaris/protocol";
 import { useCallback } from "react";
 import { useApp } from "../../../shell/hooks.ts";
-import type { SessionFacts, SessionLookup } from "../model/queryLog.ts";
+import type { WorkingFacts, WorkingLookup } from "../model/working.ts";
 
-export const useSessionLookup = (hostKey: string): SessionLookup => {
+export const useWorkingLookup = (hostKey: string): WorkingLookup => {
   const sessions = useApp((s) => s.hostModels[hostKey]?.sessions);
 
   return useCallback(
-    (id: SessionId): SessionFacts | null => {
+    (id: SessionId): WorkingFacts | null => {
       const session = sessions?.get(id)?.session;
 
       if (session === undefined) return null;

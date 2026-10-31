@@ -2,8 +2,24 @@
  * The Working strip over a table an agent is querying (DESIGN.md, Data → Working strip): the
  * Working Agent Session whose current Turn last queried this table on this Data Source. Pure.
  */
-import type { HarnessKind, QueryLogEntry, SessionId } from "@polaris/protocol";
-import { type LogScope, inScope, runsOnOpen, type SessionLookup } from "./queryLog.ts";
+import type { HarnessKind, QueryLogEntry, SessionId, TurnId } from "@polaris/protocol";
+import { inScope, type LogScope, runsOnOpen } from "./queryLog.ts";
+
+/** What the strip needs of an Agent Session: is it Working, and on which Turn since when. */
+export interface WorkingFacts {
+  readonly title: string;
+  readonly harness: HarnessKind;
+  readonly working: boolean;
+  /** The user Turn in flight or last run: its id, 1-based number and start (ISO). */
+  readonly turn: {
+    readonly id: TurnId;
+    readonly number: number;
+    readonly startedAt: string;
+  } | null;
+}
+
+/** null when the session isn't on this Host's list. */
+export type WorkingLookup = (id: SessionId) => WorkingFacts | null;
 
 export interface TableReader {
   readonly sessionId: SessionId;
@@ -18,7 +34,7 @@ export interface TableReader {
 
 export const tableReader = (
   entries: ReadonlyArray<QueryLogEntry>,
-  lookup: SessionLookup,
+  lookup: WorkingLookup,
   scope: Required<LogScope>
 ): TableReader | null => {
   let newest: { entry: QueryLogEntry; reader: TableReader } | null = null;
