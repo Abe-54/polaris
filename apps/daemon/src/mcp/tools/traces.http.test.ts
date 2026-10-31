@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer, Schema } from "effect";
-import { AgentSession, DomainEvent } from "@polaris/protocol";
+import { AgentSession, DomainEvent, Workspace } from "@polaris/protocol";
 import { session, send } from "../../constellation/delivery/testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { TraceRuntime, TraceSessions, TraceStore, traceReceiver } from "../../traces/index.ts";
@@ -10,7 +10,7 @@ import { postTraces, spanFixture, traceFixture, TRACE_ID } from "../../traces/te
 import { McpTokens } from "../tokens.ts";
 import { mcpHttp } from "../http.ts";
 import { fakeCommands } from "../testing.ts";
-import { bindings } from "./data.testing.ts";
+import { bindings, plainBinding } from "./data.testing.ts";
 
 const Reply = Schema.Struct({
   result: Schema.Struct({
@@ -22,6 +22,19 @@ const Reply = Schema.Struct({
 
 test("real OTLP receiver to SQLite to MCP HTTP resolves each binding's session, checkout and current Turn", async () => {
   const root = await realpath(await mkdtemp("/tmp/t2-mcp-http-"));
+  const cwd = join(root, "package");
+  await mkdir(cwd);
+
+  const workspace = new Workspace({
+    id: plainBinding.workspaceId,
+    path: root,
+    name: "trace HTTP fixture",
+    isGitRepo: false,
+    worktreeRoot: `${root}.worktrees`,
+    hidden: false,
+    registeredAt: new Date().toISOString(),
+  });
+
   const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
   const port = probe.port!;
   await probe.stop(true);
@@ -43,6 +56,12 @@ test("real OTLP receiver to SQLite to MCP HTTP resolves each binding's session, 
           yield* traceReceiver({ port });
           const { origin } = yield* mcpHttp(fakeCommands().commands);
 
+          yield* events.commit({
+            commandId: null,
+            decide: () =>
+              Effect.succeed([DomainEvent.cases.WorkspaceRegistered.make({ workspace })]),
+          });
+
           for (const binding of bindings) {
             yield* events.commit({
               commandId: null,
@@ -51,7 +70,8 @@ test("real OTLP receiver to SQLite to MCP HTTP resolves each binding's session, 
                   DomainEvent.cases.SessionCreated.make({
                     session: Schema.decodeUnknownSync(AgentSession)({
                       ...Schema.encodeSync(AgentSession)(session(binding.sessionId)),
-                      cwd: root,
+                      workspaceId: workspace.id,
+                      cwd,
                     }),
                   }),
                 ]),

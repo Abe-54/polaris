@@ -94,3 +94,39 @@ preparing the patch and allowing time for user steering, TF1 includes the small
 compatibility fix under the already-authorized F12 behavior. It introduces no
 new UI, copy, theme or density treatment. Product authority: DESIGN.md Traces
 Setup and product-design's rule/design-reachable-states.
+
+## Send-back: T2 HTTP fixture on integration merge 83b165416
+
+The requested merge of `83b165416322918d7bfb8bf3efad8e7d608c46b2` fast-forwarded
+this branch. It preserves T2's history handler and the combined T4F usual-duration
+and TF1 endpoint-first-page RPC tests.
+
+The original `mcp/tools/traces.http.test.ts` reproduced the reported
+`E-TRACE-NOT-FOUND` failure before any change. Its fixture committed
+`SessionCreated` events without ever registering their Workspace. F11's
+containing-root resolver correctly refuses that orphan checkout. The previous
+resolver used the raw session cwd and therefore concealed the incomplete fixture.
+The production `StartSession` decider rejects an unknown Workspace before it
+creates a session; the fixture bypassed that guard by committing events directly.
+
+The correction is confined to that test: register a real Workspace, use its ID
+for the sessions, and put their cwd in an existing `package` subfolder. All
+existing HTTP, SQLite, current-Turn, redaction and forged-checkout assertions
+remain. The returned Span must still name the registered root rather than the
+session subfolder. The focused test passes all 21 assertions for Plain, Lead and
+Worker bindings. Temporarily reverting root resolution to raw session cwd makes
+that checkout assertion fail; product code was then restored byte for byte.
+
+Area exception: `apps/daemon/src/mcp/tools/traces.http.test.ts`, explicitly named
+and authorized by the Lead's send-back. No product code, protocol shape, history
+interface or lifecycle rule changes in this correction. Benchmarks are not
+repeated for this fixture-only change; the recorded ENG-682 limitation remains.
+
+Validation on the corrected integration tree ran sequentially: root typecheck
+passed 18/18 tasks (5 cached); `bun test apps/daemon/src/traces apps/daemon/src/mcp`
+passed 211 tests with two existing real-Postgres/MySQL skips, zero failures and
+1,945 assertions across 37 files; root format check and lint ratchet passed.
+The merged usual-duration and endpoint-first-page RPC tests both pass. The full
+monorepo test suite was not repeated for this fixture-only correction; the
+send-back requested the Traces and MCP suites. Raw logs for this round are in
+`/private/tmp/tf1/sendback/`.
