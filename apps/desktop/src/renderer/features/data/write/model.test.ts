@@ -4,18 +4,21 @@ import { Schema } from "effect";
 import { Decisions } from "../../../commands.ts";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import {
+  credentialWrite,
   fixtureWrite,
   fixtureWriteEntry,
   insertWrite,
   notPreviewedWrite,
-  PREVIEW_NOTE,
   withParams,
+  worstWrite,
 } from "../preview/writeFixtures.ts";
 import {
   cellChanges,
+  cellStandIns,
+  changedColumns,
   denyDecision,
   dryRunKicker,
-  noteLine,
+  noteLines,
   paramsLine,
   runLabel,
   settledLine,
@@ -72,7 +75,7 @@ describe("the counts come from affected", () => {
     expect(dryRunKicker(write)).toBe("Dry run · rolled back · 3 new rows");
     expect(runLabel(write)).toBe("Run 3-row insert");
     expect(showingLine(write)).toBeNull();
-    expect(cellChanges(write).flat()).toEqual(Array.from({ length: 9 }, () => "added" as const));
+    expect(cellChanges(write).flat()).toEqual(Array.from({ length: 12 }, () => "added" as const));
   });
 
   test("a schema change runs without a row count", () => {
@@ -91,16 +94,45 @@ describe("the counts come from affected", () => {
     expect(dryRunKicker(write)).toBe(`Not previewed: ${reason}`);
     expect(runLabel(write)).toBe("Run without preview");
     expect(showingLine(write)).toBeNull();
-    expect(noteLine(write)).toBeNull();
+    expect(noteLines(write)).toEqual([]);
   });
 
   test("an unpreviewed update asks to run without preview", () => {
     expect(writeWants(notPreviewedWrite())).toBe("wants to run an update without preview on app");
   });
 
-  test("a previewed write's note is the caption, sequences included", () => {
-    expect(noteLine(insertWrite())).toBe(PREVIEW_NOTE);
-    expect(noteLine(fixtureWrite())).toBeNull();
+  test.each([
+    ["an update read by key", fixtureWrite(), []],
+    [
+      "an insert with a serial id",
+      insertWrite(),
+      ["IDs the preview used are skipped; the run gets new ones."],
+    ],
+    [
+      "a clipped update on a table without a key",
+      worstWrite(),
+      [
+        "Some rows or columns aren't shown.",
+        "No primary key: rows are paired in the order they were read.",
+      ],
+    ],
+    [
+      "an update a Daemon wrongly flags with sequences",
+      fixtureWrite({
+        previewFacts: { capped: false, truncated: false, readByKey: true, sequences: true },
+      }),
+      [],
+    ],
+  ] as const)("%s is worded from the Daemon's facts, never its note (F8)", (_, write, lines) => {
+    expect(
+      noteLines({ ...write, note: "read by primary key; preview capped at 16,000 bytes" })
+    ).toEqual(lines);
+  });
+
+  test("an older Daemon's note still shows when it sends no facts", () => {
+    const { previewFacts: _, ...older } = fixtureWrite({ note: "Up to 20 rows." });
+
+    expect(noteLines(older)).toEqual(["Up to 20 rows."]);
   });
 
   test("bound params read under the SQL as $n = value, NULL included", () => {
@@ -131,6 +163,29 @@ test("an update's changed cells are the ones whose value differs", () => {
   });
 
   expect(cellChanges(write)).toEqual([["same", "changed", "same"]]);
+});
+
+test("a credential the write changes is a changed cell, though both sides read redacted (F3)", () => {
+  const write = credentialWrite();
+
+  expect(cellChanges(write)).toEqual([["same", "same", "changed", "changed"]]);
+  expect([...changedColumns(write)]).toEqual([2, 3]);
+  expect(cellStandIns(write)(0, 2, "after")).toEqual({ kind: "redacted", changed: true });
+});
+
+test("a credential the write leaves alone stays unchanged", () => {
+  const write = credentialWrite();
+
+  expect(cellChanges({ ...write, redactedCells: [{ row: 0, column: 2, changed: false }] })).toEqual(
+    [["same", "same", "same", "changed"]]
+  );
+});
+
+test("an insert's database-filled columns stand in as assigned on run, only after (F9)", () => {
+  const stand = cellStandIns(insertWrite());
+
+  expect(stand(0, 0, "after")).toEqual({ kind: "assigned" });
+  expect(stand(0, 1, "after")).toBeNull();
 });
 
 test("a delete's rows are all removed", () => {
@@ -180,12 +235,12 @@ describe("an answered card collapses to one line", () => {
     expect(settledLine(write, allowed, entry).line).toBe(line);
   });
 
-  test("a run whose COMMIT went unconfirmed says the outcome is unknown", () => {
+  test("an unconfirmed run blames no cause and promises no rerun the Daemon refuses (F5)", () => {
     expect(settledLine(write, allowed, fixtureWriteEntry(write, "unknown"))).toEqual({
       kind: "unknown",
       line: "214-row update: outcome unknown",
       detail:
-        "The connection dropped before the database answered. Check the table before running it again.",
+        "Polaris lost track of this write before the database confirmed it. Check the rows before asking the agent to try again.",
     });
   });
 
@@ -199,16 +254,34 @@ describe("an answered card collapses to one line", () => {
     });
   });
 
-  test("denied says the reason the agent got; expired says why there was no answer", () => {
+  test("denied says the reason the agent got", () => {
     expect(settledLine(write, { kind: "denied", reason: "wrong currency" }, undefined).line).toBe(
       "Denied: wrong currency"
     );
-    expect(settledLine(write, { kind: "expired", by: "harness" }, undefined).line).toBe(
-      "Expired: the turn ended before you answered"
-    );
-    expect(settledLine(write, { kind: "expired", by: "daemon" }, undefined).line).toBe(
-      "Expired: the daemon restarted before you answered"
-    );
+  });
+
+  test.each([
+    ["harness", "The Turn ended", "Expired: the turn ended before you answered"],
+    ["daemon", "The Daemon restarted", "Expired: the daemon restarted before you answered"],
+    ["daemon", "Interrupted", "Expired: the turn was stopped before you answered"],
+    ["daemon", "The session was archived", "Expired: the session was archived"],
+    ["harness", null, "Expired: the turn ended before you answered"],
+    ["daemon", null, "Expired: the daemon restarted before you answered"],
+  ] as const)("expired by the %s with %p says why there was no answer (F6)", (by, reason, line) => {
+    expect(settledLine(write, { kind: "expired", by, reason }, undefined)).toEqual({
+      kind: "expired",
+      line,
+    });
+  });
+
+  test("a write the agent's error withdrew keeps the error under the line (F6)", () => {
+    expect(
+      settledLine(write, { kind: "expired", by: "harness", reason: "rate limited" }, undefined)
+    ).toEqual({
+      kind: "expired",
+      line: "Expired: the agent stopped with an error",
+      detail: "rate limited",
+    });
   });
 });
 

@@ -11,9 +11,15 @@ import type {
   SessionId,
 } from "@polaris/protocol";
 import type { SettledWrite, WriteOutcome } from "../../../store/sessionModel.ts";
-import { isWrite, tableOf } from "../model/queryLog.ts";
+import { isWrite, tableRefOf } from "../model/queryLog.ts";
 import type { TableRef } from "../model/tabs.ts";
-import { type DataWrite, outcomeUnknown, settledLine, UNKNOWN_DETAIL } from "../write/model.ts";
+import {
+  type DataWrite,
+  expiredLine,
+  outcomeUnknown,
+  settledLine,
+  UNKNOWN_DETAIL,
+} from "../write/model.ts";
 
 export interface WriteApproval {
   readonly request: ApprovalRequest;
@@ -112,6 +118,13 @@ export interface WriteStatus {
 
 const rows = (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "row" : "rows"}`;
 
+/** A write withdrawn unanswered, after a reload: the Daemon's reason, never a denial. */
+const expiredStatus = (entry: QueryLogEntry): WriteStatus => {
+  const { line, detail } = expiredLine(null, entry.approval?.reason);
+
+  return detail === undefined ? { kind: "cancelled", line } : { kind: "cancelled", line, detail };
+};
+
 /** A write as the Query Log knows it alone, with no approval this feed saw. */
 const entryStatus = (entry: QueryLogEntry): WriteStatus => {
   if (outcomeUnknown(entry))
@@ -119,6 +132,8 @@ const entryStatus = (entry: QueryLogEntry): WriteStatus => {
 
   if (entry.state === "waiting-approval" || entry.approval?.status === "pending")
     return { kind: "needs-you", line: "Waiting for you" };
+
+  if (entry.approval?.status === "expired") return expiredStatus(entry);
 
   switch (entry.state) {
     case "running":
@@ -131,6 +146,8 @@ const entryStatus = (entry: QueryLogEntry): WriteStatus => {
             line: "Failed",
             detail: entry.error?.trim() || "The database refused the write.",
           };
+    case "expired":
+      return expiredStatus(entry);
     case "cancelled":
       return entry.approval?.status === "approved"
         ? { kind: "cancelled", line: "Allowed · not run yet" }
@@ -160,7 +177,7 @@ export const writeStatus = ({ entry, approval }: TurnWrite): WriteStatus => {
 
   const status = { kind: SETTLED_KIND[settled.kind], line: settled.line };
 
-  return settled.kind === "failed" || settled.kind === "unknown"
+  return "detail" in settled && settled.detail !== undefined
     ? { ...status, detail: settled.detail }
     : status;
 };
@@ -176,11 +193,29 @@ export const defaultSchema = (source: Pick<DataSource, "engine" | "database">) =
   source.engine === "postgres" ? "public" : source.database;
 
 /** The table "Open in Data" opens for a write: the first the Daemon counted, else the SQL's. */
-export const writeTable = (entry: QueryLogEntry, schema: string): TableRef | null => {
+export const writeTable = (
+  entry: Pick<QueryLogEntry, "affected" | "sql">,
+  schema: string
+): TableRef | null => {
   const first = entry.affected?.[0];
 
   if (first !== undefined) return { schema: first.schema ?? schema, name: first.table };
-  const name = tableOf(entry.sql);
+  const named = tableRefOf(entry.sql);
 
-  return name === null ? null : { schema, name };
+  return named === null ? null : { schema: named.schema ?? schema, name: named.name };
+};
+
+/** What a schema card's "Open in Data" opens: the first table that still exists, else why not. */
+export type SchemaTarget =
+  | { readonly kind: "table"; readonly ref: TableRef }
+  | { readonly kind: "removed"; readonly name: string }
+  | { readonly kind: "none" };
+
+export const schemaTarget = (diff: Pick<SchemaSourceDiff, "tables">): SchemaTarget => {
+  const live = diff.tables.find((t) => t.after !== null)?.after;
+
+  if (live != null) return { kind: "table", ref: { schema: live.schema, name: live.name } };
+  const removed = diff.tables[0]?.before;
+
+  return removed == null ? { kind: "none" } : { kind: "removed", name: removed.name };
 };

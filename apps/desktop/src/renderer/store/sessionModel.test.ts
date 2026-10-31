@@ -260,19 +260,19 @@ describe("session model", () => {
       { kind: "denied", reason: "use EUR" },
     ],
     [
-      "withdrawn when the Turn ended",
+      "withdrawn by Stop, keeping the Daemon's reason (F6)",
       E.ApprovalWithdrawn.make({
         sessionId,
         requestId: write.id,
-        withdrawnBy: "harness",
-        reason: "turn ended",
+        withdrawnBy: "daemon",
+        reason: "Interrupted",
       }),
-      { kind: "expired", by: "harness" },
+      { kind: "expired", by: "daemon", reason: "Interrupted" },
     ],
     [
       "withdrawn, as an older log records it",
       answeredBy(D.Deny.make({ reason: null }), "Daemon"),
-      { kind: "expired", by: "daemon" },
+      { kind: "expired", by: "daemon", reason: null },
     ],
   ])("a write %s leaves pending but keeps its card, settled", (_name, ended, outcome) => {
     const asked = applySessionItems(started, [

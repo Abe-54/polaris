@@ -98,75 +98,106 @@ try {
 
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  for (const theme of ["dark", "light"]) {
-    for (const [scene, testId] of SCENES) {
-      await open(page, scene, testId);
+  // RF2 (F10, F14, F17): -worst's files list in both themes and three densities, top and end.
+  if (args.includes("--rf2")) {
+    for (const theme of ["dark", "light"])
+      for (const density of ["calm", "balanced", "compact"]) {
+        await open(page, "session-data-worst", "schema-diff");
+        await appearance(page, theme, density);
+
+        const label = page.getByTestId("review-data-schema").first().getByText("Schema diff");
+
+        const { shown, needed } = await label.evaluate(
+          (e: { clientWidth: number; scrollWidth: number }) => ({
+            shown: e.clientWidth,
+            needed: e.scrollWidth,
+          })
+        );
+
+        check(shown >= needed, `"Schema diff" fits at ${density}: ${shown} of ${needed} px`);
+        await shoot(page, `review-worst-${theme}-${density}`);
+
+        const list = page.getByTestId("review-files").locator(".overflow-y-auto").first();
+
+        await list.evaluate((e: { scrollTop: number; scrollHeight: number }) => {
+          e.scrollTop = e.scrollHeight;
+        });
+        await page.waitForTimeout(300);
+        await shoot(page, `review-worst-end-${theme}-${density}`);
+      }
+
+    console.log("schema: RF2 OK");
+  } else {
+    for (const theme of ["dark", "light"]) {
+      for (const [scene, testId] of SCENES) {
+        await open(page, scene, testId);
+        await appearance(page, theme, "balanced");
+        await shoot(page, `${scene}-${theme}`);
+      }
+
+      await open(page, "session-data-diff", "review-schema-link");
       await appearance(page, theme, "balanced");
-      await shoot(page, `${scene}-${theme}`);
+      await shoot(page, `session-data-diff-${theme}`);
+
+      // -worst's other sources: a carried baseline, a wide table with folds, real failures.
+      await open(page, "session-data-worst", "schema-diff");
+      await appearance(page, theme, "balanced");
+
+      for (const name of ["staging", "warehouse", "billing", "legacy"]) {
+        await worstSource(page, name);
+        await shoot(page, `session-data-worst-${name}-${theme}`);
+      }
+
+      await worstSource(page, "ledger");
+
+      const show = page.getByRole("button", { name: /Show definition/ });
+
+      while ((await show.count()) > 0) await show.first().click();
+      await shoot(page, `session-data-worst-ledger-${theme}`);
     }
 
-    await open(page, "session-data-diff", "review-schema-link");
-    await appearance(page, theme, "balanced");
-    await shoot(page, `session-data-diff-${theme}`);
-
-    // -worst's other sources: a carried baseline, a wide table with folds, real failures.
-    await open(page, "session-data-worst", "schema-diff");
-    await appearance(page, theme, "balanced");
-
-    for (const name of ["staging", "warehouse", "billing", "legacy"]) {
-      await worstSource(page, name);
-      await shoot(page, `session-data-worst-${name}-${theme}`);
+    for (const density of ["calm", "compact"]) {
+      await open(page, "session-data", "schema-diff");
+      await appearance(page, "dark", density);
+      await shoot(page, `session-data-dark-${density}`);
     }
 
-    await worstSource(page, "ledger");
-
-    const show = page.getByRole("button", { name: /Show definition/ });
-
-    while ((await show.count()) > 0) await show.first().click();
-    await shoot(page, `session-data-worst-ledger-${theme}`);
-  }
-
-  for (const density of ["calm", "compact"]) {
     await open(page, "session-data", "schema-diff");
-    await appearance(page, "dark", density);
-    await shoot(page, `session-data-dark-${density}`);
+    await appearance(page, "light", "balanced", "cvd");
+    await shoot(page, "session-data-light-cvd");
+    await appearance(page, "dark", "balanced");
+
+    // The data rows sit right after the migration file in the files list.
+    const order = String(
+      await page.evaluate(
+        `[...document.querySelectorAll("[data-testid=review-files] [data-path], [data-testid=review-files] [data-testid^=review-data]")].map((e) => e.getAttribute("data-path") ?? e.getAttribute("data-testid")).join("\\n")`
+      )
+    ).split("\n");
+
+    const migration = order.findIndex((p) => p.includes("prisma/migrations/"));
+
+    check(
+      order[migration + 1] === "review-data-head",
+      `data follows the migration: ${order.join(", ")}`
+    );
+
+    // A migration's header link opens the body; opening a file returns to the diff.
+    await open(page, "session-data-diff", "review-schema-link");
+    await page.getByTestId("review-schema-link").first().click();
+    await page.getByTestId("schema-diff").waitFor();
+    check(true, "the migration's Schema diff link opens the body");
+    await page.locator("[data-testid=review-file-row] button").first().click();
+    await page.getByTestId("schema-diff").waitFor({ state: "detached" });
+    check(true, "opening a file returns to the diff");
+
+    await open(page, "session-data-unsupported", "review-file-row");
+    check(
+      (await page.getByTestId("review-data-schema").count()) === 0,
+      "an older Daemon shows no Data section"
+    );
+    await shoot(page, "session-data-unsupported-dark");
+    console.log("schema: OK");
   }
-
-  await open(page, "session-data", "schema-diff");
-  await appearance(page, "light", "balanced", "cvd");
-  await shoot(page, "session-data-light-cvd");
-  await appearance(page, "dark", "balanced");
-
-  // The data rows sit right after the migration file in the files list.
-  const order = String(
-    await page.evaluate(
-      `[...document.querySelectorAll("[data-testid=review-files] [data-path], [data-testid=review-files] [data-testid^=review-data]")].map((e) => e.getAttribute("data-path") ?? e.getAttribute("data-testid")).join("\\n")`
-    )
-  ).split("\n");
-
-  const migration = order.findIndex((p) => p.includes("prisma/migrations/"));
-
-  check(
-    order[migration + 1] === "review-data-head",
-    `data follows the migration: ${order.join(", ")}`
-  );
-
-  // A migration's header link opens the body; opening a file returns to the diff.
-  await open(page, "session-data-diff", "review-schema-link");
-  await page.getByTestId("review-schema-link").first().click();
-  await page.getByTestId("schema-diff").waitFor();
-  check(true, "the migration's Schema diff link opens the body");
-  await page.locator("[data-testid=review-file-row] button").first().click();
-  await page.getByTestId("schema-diff").waitFor({ state: "detached" });
-  check(true, "opening a file returns to the diff");
-
-  await open(page, "session-data-unsupported", "review-file-row");
-  check(
-    (await page.getByTestId("review-data-schema").count()) === 0,
-    "an older Daemon shows no Data section"
-  );
-  await shoot(page, "session-data-unsupported-dark");
-  console.log("schema: OK");
 } catch (cause) {
   const page = await app.firstWindow();
 

@@ -1,6 +1,6 @@
 import "../../../test/dom.testing.ts";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { ApprovalRequest } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { Decisions } from "../../../commands.ts";
@@ -9,8 +9,10 @@ import { standInBridge } from "../../bridge.ts";
 import { approve, deny } from "../../needs-you/respond.ts";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import {
+  credentialWrite,
   fixtureWrite,
   fixtureWriteApproval,
+  fixtureWriteEntry,
   insertWrite,
   notPreviewedWrite,
   worstWrite,
@@ -61,14 +63,6 @@ test("Run sends one Allow, never remembered, and the card collapses to what ran"
 
   await waitFor(() => expect(decisions()).toEqual([Decisions.Allow({ remember: false })]));
   expect(screen.getByTestId("data-write-settled").textContent).toBe("Allowed 214-row update");
-});
-
-test("⌘↵ in the card runs it", async () => {
-  render(card(fixtureWriteApproval()));
-
-  fireEvent.keyDown(screen.getByTestId("data-write-run"), { key: "Enter", metaKey: true });
-
-  await waitFor(() => expect(decisions()).toEqual([Decisions.Allow({ remember: false })]));
 });
 
 test("Deny needs a reason, and the reason is what the agent gets", async () => {
@@ -132,16 +126,30 @@ test("a schema change the Daemon didn't preview says so once, shows no rows and 
   expect(screen.getByTestId("data-write-run").textContent).toContain("Run without preview");
 });
 
-test("an insert shows its new rows with nothing before, and says previews consume sequences", () => {
+test("an insert shows its new rows, the serial id as assigned on run, and that IDs are skipped (F8, F9)", () => {
   render(card(fixtureWriteApproval(insertWrite())));
 
   const rows = screen.getByTestId("data-write-rows");
 
   expect(rows.querySelectorAll('tr[data-side="after"]')).toHaveLength(3);
   expect(rows.querySelectorAll('tr[data-side="before"]')).toHaveLength(0);
-  expect(screen.getByTestId("data-write-note").textContent).toContain(
-    "Sequence values used by the preview aren't reused."
+  expect(
+    [...rows.querySelectorAll('tr[data-side="after"] td:nth-child(2)')].map((td) => td.textContent)
+  ).toEqual(["assigned on run", "assigned on run", "assigned on run"]);
+  expect(screen.getByTestId("data-write-note").textContent).toBe(
+    "IDs the preview used are skipped; the run gets new ones."
   );
+});
+
+test("a password reset shows the credential as redacted and changed, never as unchanged (F3)", () => {
+  render(card(fixtureWriteApproval(credentialWrite())));
+
+  const cells = [...screen.getByTestId("data-write-rows").querySelectorAll("[data-stand-in]")];
+
+  expect(cells.map((td) => [td.textContent, td.getAttribute("data-change")])).toEqual([
+    ["redacted", "changed"],
+    ["redacted · changed", "changed"],
+  ]);
 });
 
 test("the worst case shows the changed columns, 20 of the rows, and offers the rest", () => {
@@ -173,4 +181,182 @@ test("Approve from outside a card on screen opens it and runs nothing: the SQL i
   expect(sent).toBe(false);
   expect(opened).toBe(true);
   expect(decisions()).toEqual([]);
+});
+
+/** Lays the card out in a conversation viewport from 0 to 600 px: where its parts sit, top/bottom. */
+type Span = readonly [number, number];
+
+const layOut = (parts: { readonly statement: Span; readonly run: Span }) => {
+  const rect =
+    ([top, bottom]: Span) =>
+    () =>
+      new DOMRect(0, top, 600, bottom - top);
+
+  const viewport = document.querySelector<HTMLElement>("[data-approval-viewport]");
+  const card = screen.getByTestId("data-write");
+
+  if (viewport === null) throw new Error("no viewport");
+  viewport.getBoundingClientRect = rect([0, 600]);
+  card.getBoundingClientRect = rect([parts.statement[0] - 80, parts.run[1]]);
+
+  for (const part of card.querySelectorAll<HTMLElement>("[data-approval-part]"))
+    part.getBoundingClientRect = rect(
+      part.dataset.approvalPart === "run" ? parts.run : parts.statement
+    );
+};
+
+const inConversation = (request: ApprovalRequest) =>
+  render(<div data-approval-viewport="">{card(request)}</div>);
+
+const approveFromInbox = (request: ApprovalRequest) =>
+  act(() => approve({ hostKey: "local", sessionId: request.sessionId, request }));
+
+test.each([
+  [
+    "only the Run row in view, the SQL scrolled above",
+    { statement: [-400, -100], run: [540, 590] },
+  ],
+  [
+    "scrolled under the composer, in the window but not the conversation",
+    { statement: [610, 690], run: [700, 740] },
+  ],
+] as const)(
+  "Approve from elsewhere refuses a write with %s, and brings its card's top into view (F2)",
+  async (_, parts) => {
+    const request = fixtureWriteApproval();
+
+    inConversation(request);
+    layOut(parts);
+    let scrolled: ScrollIntoViewOptions | boolean | undefined;
+
+    screen.getByTestId("data-write").scrollIntoView = (options) => {
+      scrolled = options;
+    };
+
+    act(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+
+    expect(await approveFromInbox(request)).toBe(false);
+    expect(decisions()).toEqual([]);
+    expect(scrolled).toEqual({ block: "start" });
+    expect(document.activeElement).toBe(screen.getByTestId("data-write"));
+  }
+);
+
+test("Approve from elsewhere runs a write whose SQL, dry run and Run row are all in view", async () => {
+  const request = fixtureWriteApproval();
+
+  inConversation(request);
+  layOut({ statement: [40, 260], run: [500, 548] });
+
+  expect(await approveFromInbox(request)).toBe(true);
+  expect(decisions()).toEqual([Decisions.Allow({ remember: false })]);
+});
+
+test("⌘↵ in a card in view runs it", async () => {
+  const request = fixtureWriteApproval();
+
+  inConversation(request);
+  layOut({ statement: [40, 260], run: [500, 548] });
+  fireEvent.keyDown(screen.getByTestId("data-write-run"), { key: "Enter", metaKey: true });
+
+  await waitFor(() => expect(decisions()).toEqual([Decisions.Allow({ remember: false })]));
+});
+
+test("⌘↵ in a card scrolled out of view runs nothing and brings its top into view", async () => {
+  const request = fixtureWriteApproval();
+  let scrolled = false;
+
+  inConversation(request);
+  layOut({ statement: [-400, -100], run: [540, 590] });
+  screen.getByTestId("data-write").scrollIntoView = () => {
+    scrolled = true;
+  };
+
+  fireEvent.keyDown(screen.getByTestId("data-write-run"), { key: "Enter", metaKey: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(decisions()).toEqual([]);
+  expect(scrolled).toBe(true);
+});
+
+/** Every element laid out at `top`, 100 px tall, in the window: before mount, as focus reads it. */
+const placeAll = (top: number) => {
+  const spy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    () => new DOMRect(0, top, 600, 100)
+  );
+
+  return () => spy.mockRestore();
+};
+
+test.each([
+  [10, true],
+  [-500, false],
+])(
+  "a card that opens at %p px with nothing focused takes focus only when in view: %p",
+  (top, focused) => {
+    const restore = placeAll(top);
+
+    try {
+      render(card(fixtureWriteApproval()));
+      expect(document.activeElement === screen.getByTestId("data-write")).toBe(focused);
+    } finally {
+      restore();
+    }
+  }
+);
+
+test("a card that opens never steals focus from where the user is typing", () => {
+  const restore = placeAll(10);
+
+  try {
+    render(<input aria-label="composer" />);
+    act(() => screen.getByLabelText("composer").focus());
+    render(card(fixtureWriteApproval()));
+    expect(document.activeElement).toBe(screen.getByLabelText("composer"));
+  } finally {
+    restore();
+  }
+});
+
+test("a write the Daemon couldn't preview looks riskier: its own kicker, the warning, no primary Run (F4)", () => {
+  const { unmount } = render(card(fixtureWriteApproval()));
+
+  expect(screen.getByTestId("data-write-run").dataset.variant).toBe("primary");
+  expect(screen.queryByTestId("data-write-unpreviewed")).toBeNull();
+  unmount();
+
+  render(card(fixtureWriteApproval(notPreviewedWrite())));
+
+  expect(screen.getByTestId("data-write-unpreviewed").textContent).toBe(
+    "Not previewed: this table has triggersPolaris can't show which rows this changes."
+  );
+  expect(screen.getByTestId("data-write-run").dataset.variant).toBe("secondary");
+});
+
+test("an outcome-unknown write offers its table in Data from the settled line (F5)", () => {
+  const request = fixtureWriteApproval();
+  // SAFETY: fixtureWriteApproval always carries a dataWrite.
+  const write = request.dataWrite as DataWrite;
+  let opened = 0;
+
+  render(
+    <WriteApprovalCard
+      hostKey="local"
+      request={request}
+      write={write}
+      who="Backfill currency"
+      source={APP}
+      outcome={{ kind: "allowed" }}
+      entry={fixtureWriteEntry(write, "unknown")}
+      onOpenTable={() => opened++}
+    />
+  );
+
+  const settled = screen.getByTestId("data-write-settled");
+
+  expect(settled.dataset.state).toBe("unknown");
+  fireEvent.click(screen.getByRole("button", { name: "Open in Data" }));
+  expect(opened).toBe(1);
 });

@@ -73,15 +73,19 @@ export const DataRow = ({ row, open, onOpen }: DataRowProps) => {
         <>
           <span
             className={cn(
-              "text-caption min-w-0 flex-1 truncate",
+              "text-caption shrink-0 whitespace-nowrap",
               current ? "text-text-strong" : "text-text-default"
             )}
           >
             Schema diff
           </span>
-          {row.concurrent && (
-            <span className="text-caption text-text-subtle min-w-0 shrink truncate">+ others</span>
-          )}
+          {/* "+ others" gives way first: its sentence is the row's tooltip. */}
+          <span
+            className="text-caption text-text-subtle min-w-0 flex-1 truncate"
+            data-testid="review-data-others"
+          >
+            {row.concurrent ? "+ others" : null}
+          </span>
           {STATUS_WORDS[row.status] !== null && (
             <span className="text-caption text-text-subtle shrink-0">
               {STATUS_WORDS[row.status]}

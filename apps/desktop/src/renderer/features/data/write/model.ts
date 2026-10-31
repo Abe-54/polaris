@@ -70,9 +70,33 @@ const NOT_PREVIEWED = "Not previewed";
 const notPreviewedReason = (write: DataWrite) =>
   write.note.trim().startsWith(NOT_PREVIEWED) ? write.note.trim() : NOT_PREVIEWED;
 
-/** The note under the rows: the preview's limits and sequences; an unpreviewed write's is its kicker. */
-export const noteLine = (write: DataWrite): string | null =>
-  notPreviewed(write) || write.note.trim() === "" ? null : write.note.trim();
+/**
+ * The lines under the rows, from the Daemon's typed facts: what the preview left out, how rows
+ * pair up, and an insert's IDs. An older Daemon's note stands in; an unpreviewed write has none.
+ */
+export const noteLines = (write: DataWrite): ReadonlyArray<string> => {
+  if (notPreviewed(write)) return [];
+  const facts = write.previewFacts;
+
+  if (facts === undefined) return write.note.trim() === "" ? [] : [write.note.trim()];
+  const verb = verbOf(write.sql);
+
+  return [
+    facts.truncated ? "Some rows or columns aren't shown." : null,
+    !facts.readByKey && (verb === "update" || verb === "delete")
+      ? "No primary key: rows are paired in the order they were read."
+      : null,
+    facts.sequences && verb === "insert"
+      ? "IDs the preview used are skipped; the run gets new ones."
+      : null,
+  ].filter((line) => line !== null);
+};
+
+/** Under an unpreviewed write's kicker: what the card can't show, so it reads as the riskier one. */
+export const notPreviewedWarning = (write: DataWrite) =>
+  verbOf(write.sql) === "schema change"
+    ? "Polaris can't show what this changes in the schema."
+    : "Polaris can't show which rows this changes.";
 
 /** An insert's preview holds only the new rows. */
 const isInsert = (write: DataWrite) => verbOf(write.sql) === "insert";
@@ -123,12 +147,43 @@ export type CellChange = "same" | "changed" | "added" | "removed";
 const sameValue = (a: DataValue | undefined, b: DataValue | undefined) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
+const cellKey = (row: number, column: number) => `${row}:${column}`;
+
+/** Credential cells the Daemon redacted on both sides, and whether the write changes each. */
+const redactions = (write: DataWrite): ReadonlyMap<string, boolean> =>
+  new Map((write.redactedCells ?? []).map((c) => [cellKey(c.row, c.column), c.changed]));
+
+/** What a cell shows instead of its value: redacted, or a value the database assigns on run. */
+export type CellStandIn =
+  | { readonly kind: "redacted"; readonly changed: boolean }
+  | { readonly kind: "assigned" };
+
+/** A preview cell's stand-in, by row and column; null when its value is the one to show. */
+export const cellStandIns = (
+  write: DataWrite
+): ((row: number, column: number, side: "before" | "after") => CellStandIn | null) => {
+  const redacted = redactions(write);
+  const filled = new Set(write.databaseFilledColumns ?? []);
+
+  return (row, column, side) => {
+    const changed = redacted.get(cellKey(row, column));
+
+    if (changed !== undefined) return { kind: "redacted", changed };
+    const name = write.columns[column];
+
+    return side === "after" && isInsert(write) && name !== undefined && filled.has(name)
+      ? { kind: "assigned" }
+      : null;
+  };
+};
+
 /**
  * Each preview row's change per column: an insert's rows are all added, a delete's all removed;
- * an update's cells changed where before and after differ.
+ * an update's cells changed where before and after differ, or where the Daemon says a redacted one did.
  */
 export const cellChanges = (write: DataWrite): ReadonlyArray<ReadonlyArray<CellChange>> => {
   const count = Math.max(write.before.length, write.after.length);
+  const redacted = redactions(write);
 
   return Array.from({ length: count }, (_, row) => {
     const before = write.before[row];
@@ -138,6 +193,9 @@ export const cellChanges = (write: DataWrite): ReadonlyArray<ReadonlyArray<CellC
       if (before === undefined) return "added";
 
       if (after === undefined) return "removed";
+      const changed = redacted.get(cellKey(row, col));
+
+      if (changed !== undefined) return changed ? "changed" : "same";
 
       return sameValue(before[col], after[col]) ? "same" : "changed";
     });
@@ -193,12 +251,39 @@ export type Settled =
   | { readonly kind: "cancelled"; readonly line: string }
   | { readonly kind: "unknown"; readonly line: string; readonly detail: string }
   | { readonly kind: "denied"; readonly line: string }
-  | { readonly kind: "expired"; readonly line: string };
+  | { readonly kind: "expired"; readonly line: string; readonly detail?: string };
 
 const EXPIRED = {
   harness: "Expired: the turn ended before you answered",
   daemon: "Expired: the daemon restarted before you answered",
 } as const;
+
+/** The Daemon's withdrawal reasons (engine/session.ts), in the card's words. */
+const EXPIRED_BY_REASON = new Map([
+  ["The Turn ended", EXPIRED.harness],
+  ["The Daemon restarted", EXPIRED.daemon],
+  ["The Daemon is upgrading", "Expired: the daemon upgraded before you answered"],
+  ["Interrupted", "Expired: the turn was stopped before you answered"],
+  ["The session was archived", "Expired: the session was archived"],
+  ["The terminal UI closed", "Expired: the terminal closed before you answered"],
+  ["The Harness exited", "Expired: the agent exited before you answered"],
+]);
+
+/** Why a write expired unanswered: a known reason in product words; else the agent's error. */
+export const expiredLine = (
+  by: "harness" | "daemon" | null,
+  reason: string | null | undefined
+): Extract<Settled, { kind: "expired" }> => {
+  const text = reason?.trim() ?? "";
+
+  if (text === "")
+    return { kind: "expired", line: by === null ? "Expired before you answered" : EXPIRED[by] };
+  const known = EXPIRED_BY_REASON.get(text);
+
+  return known === undefined
+    ? { kind: "expired", line: "Expired: the agent stopped with an error", detail: text }
+    : { kind: "expired", line: known };
+};
 
 /** The failure's own words, else a fix the user can act on. */
 const failureDetail = (entry: QueryLogEntry) =>
@@ -208,7 +293,7 @@ const failureDetail = (entry: QueryLogEntry) =>
 export const outcomeUnknown = (entry: QueryLogEntry | undefined) => entry?.state === "unknown";
 
 export const UNKNOWN_DETAIL =
-  "The connection dropped before the database answered. Check the table before running it again.";
+  "Polaris lost track of this write before the database confirmed it. Check the rows before asking the agent to try again.";
 
 const allowedLine = (write: DataWrite, entry: QueryLogEntry | undefined): Settled => {
   const name = writeName(write);
@@ -254,7 +339,7 @@ export const settledLine = (
         line: outcome.reason === null ? "Denied" : `Denied: ${outcome.reason}`,
       };
     case "expired":
-      return { kind: "expired", line: EXPIRED[outcome.by] };
+      return expiredLine(outcome.by, outcome.reason);
   }
 };
 

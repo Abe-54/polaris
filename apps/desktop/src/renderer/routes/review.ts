@@ -4,7 +4,7 @@
  * pull request with `openPull`; ⌘↵ in the jump menu opens an Agent Session's Turns with
  * `openSessionReview`. The Review view (`PullReview` slot) reads `useReviewSubject`.
  */
-import type { SessionId } from "@polaris/protocol";
+import type { SessionId, TurnId } from "@polaris/protocol";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { OpenPull } from "../../shared/api.ts";
@@ -21,6 +21,8 @@ export interface SessionSubject {
   readonly kind: "session";
   readonly hostKey: string;
   readonly sessionId: SessionId;
+  /** Opened at one Turn (its group's first id), as the Data tab's "Schema diff" does. */
+  readonly turnId?: TurnId;
 }
 
 export type ReviewSubject = PullSubject | SessionSubject;
@@ -39,13 +41,16 @@ export const openPull = (actions: Pick<ShellActions, "setMode">, pull: OpenPull)
   actions.setMode("review");
 };
 
-/** Opens an Agent Session's Turns in Review (⌘2). */
+/** Opens an Agent Session's Turns in Review (⌘2), at one Turn when `turnId` names it. */
 export const openSessionReview = (
   actions: Pick<ShellActions, "setMode">,
   hostKey: string,
-  sessionId: SessionId
+  sessionId: SessionId,
+  turnId?: TurnId
 ) => {
-  reviewRoute.setState({ subject: { kind: "session", hostKey, sessionId } });
+  const subject: SessionSubject = { kind: "session", hostKey, sessionId };
+
+  reviewRoute.setState({ subject: turnId === undefined ? subject : { ...subject, turnId } });
   actions.setMode("review");
 };
 

@@ -118,7 +118,7 @@ const FlatList = ({ props }: { readonly props: FileListProps }) => {
   };
 
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pb-24">
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pb-32">
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index];

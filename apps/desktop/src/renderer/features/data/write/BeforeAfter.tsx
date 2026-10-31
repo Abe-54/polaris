@@ -6,7 +6,14 @@ import type { DataValue } from "@polaris/protocol";
 import { Button, cn } from "@polaris/ui";
 import { useState } from "react";
 import { cellOf, displayOf, placeholderOf } from "../grid/value.ts";
-import { type CellChange, cellChanges, changedColumns, type DataWrite } from "./model.ts";
+import {
+  type CellChange,
+  cellChanges,
+  type CellStandIn,
+  cellStandIns,
+  changedColumns,
+  type DataWrite,
+} from "./model.ts";
 
 /** Columns shown before "Show all columns": the changed ones and the first few for context. */
 const SHOWN_COLUMNS = 12;
@@ -43,15 +50,57 @@ const FILL: Record<CellChange, Record<"before" | "after", string>> = {
 /** Title text for a long cell: enough to read, never the whole of a huge value. */
 const TITLE_CHARS = 1000;
 
+/** A credential cell's or a database-filled cell's words, in place of its value. */
+const STAND_IN = {
+  redacted: { text: "redacted", title: "A credential: Polaris doesn't show its value" },
+  changed: { text: "redacted · changed", title: "A credential this write changes" },
+  assigned: { text: "assigned on run", title: "The database fills this when the write runs" },
+} as const;
+
+const standInWords = (standIn: CellStandIn) => {
+  if (standIn.kind === "assigned") return STAND_IN.assigned;
+
+  return standIn.changed ? STAND_IN.changed : STAND_IN.redacted;
+};
+
+const StandInCell = ({
+  standIn,
+  change,
+  side,
+}: {
+  readonly standIn: CellStandIn;
+  readonly change: CellChange;
+  readonly side: "before" | "after";
+}) => {
+  const words = standInWords(standIn);
+
+  return (
+    <td
+      className={cn(
+        "border-hairline text-text-subtle h-7 max-w-[240px] truncate border-r px-2 text-[12px] leading-7 italic",
+        FILL[change][side]
+      )}
+      title={words.title}
+      data-change={change === "same" ? undefined : change}
+      data-stand-in={standIn.kind}
+    >
+      {side === "before" && standIn.kind === "redacted" ? STAND_IN.redacted.text : words.text}
+    </td>
+  );
+};
+
 const Cell = ({
   value,
   change,
   side,
+  standIn,
 }: {
   readonly value: DataValue | undefined;
   readonly change: CellChange;
   readonly side: "before" | "after";
+  readonly standIn: CellStandIn | null;
 }) => {
+  if (standIn !== null) return <StandInCell standIn={standIn} change={change} side={side} />;
   const cell = cellOf(value);
   const placeholder = placeholderOf(cell);
 
@@ -73,16 +122,22 @@ const Cell = ({
 
 const SIGN = { before: "−", after: "+" } as const;
 
+type StandIns = ReturnType<typeof cellStandIns>;
+
 const Line = ({
+  n,
   row,
   changes,
   columns,
   side,
+  standIns,
 }: {
+  readonly n: number;
   readonly row: ReadonlyArray<DataValue>;
   readonly changes: ReadonlyArray<CellChange>;
   readonly columns: ReadonlyArray<number>;
   readonly side: "before" | "after";
+  readonly standIns: StandIns;
 }) => (
   <tr data-side={side}>
     <td
@@ -95,7 +150,13 @@ const Line = ({
       {SIGN[side]}
     </td>
     {columns.map((col) => (
-      <Cell key={col} value={row[col]} change={changes[col] ?? "same"} side={side} />
+      <Cell
+        key={col}
+        value={row[col]}
+        change={changes[col] ?? "same"}
+        side={side}
+        standIn={standIns(n, col, side)}
+      />
     ))}
   </tr>
 );
@@ -111,6 +172,7 @@ export const BeforeAfter = ({
   const [all, setAll] = useState(false);
   const columns = visibleColumns(write, all);
   const changes = cellChanges(write);
+  const standIns = cellStandIns(write);
   const hidden = write.columns.length - columns.length;
 
   if (changes.length === 0) return null;
@@ -148,6 +210,8 @@ export const BeforeAfter = ({
                 <RowPair
                   // Preview rows are positional and never reorder.
                   key={n}
+                  n={n}
+                  standIns={standIns}
                   before={before}
                   after={after}
                   changes={rowChanges}
@@ -168,11 +232,15 @@ export const BeforeAfter = ({
 };
 
 const RowPair = ({
+  n,
+  standIns,
   before,
   after,
   changes,
   columns,
 }: {
+  readonly n: number;
+  readonly standIns: StandIns;
   readonly before: ReadonlyArray<DataValue> | undefined;
   readonly after: ReadonlyArray<DataValue> | undefined;
   readonly changes: ReadonlyArray<CellChange>;
@@ -180,10 +248,24 @@ const RowPair = ({
 }) => (
   <>
     {before === undefined ? null : (
-      <Line row={before} changes={changes} columns={columns} side="before" />
+      <Line
+        n={n}
+        row={before}
+        changes={changes}
+        columns={columns}
+        side="before"
+        standIns={standIns}
+      />
     )}
     {after === undefined ? null : (
-      <Line row={after} changes={changes} columns={columns} side="after" />
+      <Line
+        n={n}
+        row={after}
+        changes={changes}
+        columns={columns}
+        side="after"
+        standIns={standIns}
+      />
     )}
   </>
 );

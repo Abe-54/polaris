@@ -9,9 +9,17 @@ import type {
   DataSource,
   QueryLogEntry,
 } from "@polaris/protocol";
-import { Button, cn, Kbd, PixelCheckIcon, PixelFailedIcon, Textarea } from "@polaris/ui";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { useShownApproval } from "../../../shell/approvalInView.ts";
+import {
+  Button,
+  cn,
+  Kbd,
+  PixelAlertIcon,
+  PixelCheckIcon,
+  PixelFailedIcon,
+  Textarea,
+} from "@polaris/ui";
+import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { revealApproval, useShownApproval, writeInView } from "../../../shell/approvalInView.ts";
 import type { WriteOutcome } from "../../../store/sessionModel.ts";
 import { decide } from "../../needs-you/respond.ts";
 import { kickerText, LABEL_TONES } from "../model/source.ts";
@@ -22,8 +30,9 @@ import {
   type DataWrite,
   denyDecision,
   dryRunKicker,
-  noteLine,
+  noteLines,
   notPreviewed,
+  notPreviewedWarning,
   paramsLine,
   runDecision,
   runLabel,
@@ -34,6 +43,7 @@ import {
   writeWants,
 } from "./model.ts";
 import { cmShortcut } from "../../editor/cm/keys.ts";
+import { OpenInData } from "./OpenInData.tsx";
 import { SqlStatement } from "./SqlStatement.tsx";
 
 export interface WriteApprovalCardProps {
@@ -48,6 +58,8 @@ export interface WriteApprovalCardProps {
   readonly outcome: WriteOutcome | null;
   /** Its run in the Query Log, for running and failed. */
   readonly entry: QueryLogEntry | undefined;
+  /** Opens the write's table in Data, offered once its outcome is unknown. */
+  readonly onOpenTable?: () => void;
 }
 
 const KICKER = "font-mono text-[11px] leading-[14px] tracking-[0.06em] uppercase";
@@ -56,14 +68,23 @@ const SettledIcon = ({ settled }: { readonly settled: Settled }) => {
   if (settled.kind === "failed")
     return <PixelFailedIcon size={14} className="text-failed shrink-0" aria-hidden />;
 
+  if (settled.kind === "unknown")
+    return <PixelAlertIcon size={14} className="text-needs-you shrink-0" aria-hidden />;
+
   if (settled.kind === "ran" || settled.kind === "allowed")
     return <PixelCheckIcon size={14} className="text-text-subtle shrink-0" aria-hidden />;
 
   return <span className="w-3.5 shrink-0" aria-hidden />;
 };
 
-/** The card answered: one line, plus the failure's words when the run failed. */
-export const SettledWrite = ({ settled }: { readonly settled: Settled }) => (
+/** The card answered: one line, plus the failure's words; an unknown outcome offers its table. */
+export const SettledWrite = ({
+  settled,
+  onOpenTable,
+}: {
+  readonly settled: Settled;
+  readonly onOpenTable?: (() => void) | undefined;
+}) => (
   <div
     role="status"
     data-testid="data-write-settled"
@@ -72,9 +93,15 @@ export const SettledWrite = ({ settled }: { readonly settled: Settled }) => (
   >
     <span className="text-body text-text-default flex min-w-0 items-center gap-2">
       <SettledIcon settled={settled} />
-      <span className="min-w-0 [overflow-wrap:anywhere]">{settled.line}</span>
+      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{settled.line}</span>
+      {settled.kind === "unknown" && onOpenTable !== undefined ? (
+        <span className="-my-1 -mr-2 shrink-0">
+          <OpenInData onOpen={onOpenTable} />
+        </span>
+      ) : null}
     </span>
-    {settled.kind === "failed" || settled.kind === "unknown" ? (
+    {(settled.kind === "failed" || settled.kind === "unknown" || settled.kind === "expired") &&
+    settled.detail !== undefined ? (
       <span
         className={cn(
           "text-caption pl-[22px] [overflow-wrap:anywhere]",
@@ -101,6 +128,36 @@ const SourceLine = ({ write, source }: Pick<WriteApprovalCardProps, "write" | "s
     </div>
   );
 };
+
+/** "Dry run · rolled back · 214 rows"; unpreviewed, its reason in the needs-you tone and what it can't show. */
+const Kicker = ({
+  write,
+  showing,
+}: {
+  readonly write: DataWrite;
+  readonly showing: string | null;
+}) =>
+  notPreviewed(write) ? (
+    <div className="flex flex-col gap-1" data-testid="data-write-unpreviewed">
+      <span className="flex items-center gap-1.5">
+        <PixelAlertIcon size={12} className="text-needs-you shrink-0" aria-hidden />
+        <span className={cn(KICKER, "text-needs-you-text")} data-testid="data-write-kicker">
+          {dryRunKicker(write)}
+        </span>
+      </span>
+      <p className="text-body text-text-default">{notPreviewedWarning(write)}</p>
+    </div>
+  ) : (
+    <div className="flex items-baseline gap-2">
+      <span className={cn(KICKER, "text-text-subtle")} data-testid="data-write-kicker">
+        {dryRunKicker(write)}
+      </span>
+      <span className="flex-1" />
+      {showing === null ? null : (
+        <span className="text-caption text-text-subtle tabular">{showing}</span>
+      )}
+    </div>
+  );
 
 const DenyField = ({
   requestId,
@@ -166,13 +223,35 @@ export const WriteApprovalCard = ({
   source,
   outcome,
   entry,
+  onOpenTable,
 }: WriteApprovalCardProps) => {
   const [sent, setSent] = useState<WriteOutcome | null>(null);
   const deny = useDeny(request.id);
-  const shownRef = useShownApproval(request.id);
+  const shown = useShownApproval(request.id);
   const ended = outcome ?? sent;
 
-  if (ended !== null) return <SettledWrite settled={settledLine(write, ended, entry)} />;
+  const card = useRef<HTMLElement | null>(null);
+
+  const cardRef = useCallback(
+    (element: HTMLElement | null) => {
+      card.current = element;
+
+      return shown(element);
+    },
+    [shown]
+  );
+
+  // Opened in view with nothing else focused, the card takes focus so ⌘↵ runs it.
+  useEffect(() => {
+    const element = card.current;
+
+    if (element === null || (document.activeElement ?? document.body) !== document.body) return;
+
+    if (writeInView(element)) element.focus({ preventScroll: true });
+  }, []);
+
+  if (ended !== null)
+    return <SettledWrite settled={settledLine(write, ended, entry)} onOpenTable={onOpenTable} />;
 
   const answer = (decision: ApprovalDecision, as: WriteOutcome) => {
     setSent(as);
@@ -184,25 +263,30 @@ export const WriteApprovalCard = ({
 
   const run = () => answer(runDecision(), { kind: "allowed" });
 
-  const keys = (event: KeyboardEvent) => {
+  // ⌘↵ runs only what is in front of the user, as Approve from elsewhere does.
+  const keys = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || deny.open) return;
     event.preventDefault();
-    run();
+
+    if (writeInView(event.currentTarget)) run();
+    else revealApproval(request.id);
   };
 
   const bar = topBarColour(source);
   const params = paramsLine(write);
   const showing = showingLine(write);
-  const note = noteLine(write);
+  const notes = noteLines(write);
+  const unpreviewed = notPreviewed(write);
 
   return (
     <section
-      ref={shownRef}
+      ref={cardRef}
+      tabIndex={-1}
       data-testid="data-write"
       data-surface="raised"
       aria-label={runLabel(write)}
       onKeyDown={keys}
-      className="rounded-card border-hairline bg-surface-raised flex w-full max-w-[640px] flex-col overflow-clip border"
+      className="rounded-card border-hairline bg-surface-raised focus-visible:outline-starlight flex w-full max-w-[640px] flex-col overflow-clip border outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       {bar === null ? null : (
         <div
@@ -218,29 +302,28 @@ export const WriteApprovalCard = ({
         </h3>
       </div>
       <div className="flex flex-col gap-3 px-[18px] pb-3.5">
-        <SqlStatement sql={write.sql} />
-        {params.length === 0 ? null : (
-          <p
-            className="text-code-inline text-text-subtle -mt-1.5 font-mono [overflow-wrap:anywhere]"
-            data-testid="data-write-params"
-          >
-            {params.join(" · ")}
-          </p>
-        )}
-        <div className="flex items-baseline gap-2">
-          <span className={cn(KICKER, "text-text-subtle")} data-testid="data-write-kicker">
-            {dryRunKicker(write)}
-          </span>
-          <span className="flex-1" />
-          {showing === null ? null : (
-            <span className="text-caption text-text-subtle tabular">{showing}</span>
+        <div className="flex flex-col gap-3" data-approval-part="statement">
+          <SqlStatement sql={write.sql} />
+          {params.length === 0 ? null : (
+            <p
+              className="text-code-inline text-text-subtle -mt-1.5 font-mono [overflow-wrap:anywhere]"
+              data-testid="data-write-params"
+            >
+              {params.join(" · ")}
+            </p>
           )}
+          <Kicker write={write} showing={showing} />
         </div>
-        {notPreviewed(write) ? null : <BeforeAfter write={write} />}
-        {note === null ? null : (
-          <p className="text-caption text-text-subtle" data-testid="data-write-note">
-            {note}
-          </p>
+        {unpreviewed ? null : <BeforeAfter write={write} />}
+        {notes.length === 0 ? null : (
+          <div
+            className="text-caption text-text-subtle flex flex-col"
+            data-testid="data-write-note"
+          >
+            {notes.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
         )}
         <div className="flex flex-col gap-1">
           <span className={cn(KICKER, "text-text-faint")}>Why</span>
@@ -249,7 +332,7 @@ export const WriteApprovalCard = ({
           </p>
         </div>
       </div>
-      <div className="border-hairline border-t px-[18px] py-3">
+      <div className="border-hairline border-t px-[18px] py-3" data-approval-part="run">
         {deny.open ? (
           <DenyField
             requestId={request.id}
@@ -266,7 +349,7 @@ export const WriteApprovalCard = ({
               {DENY_PROMPT}
             </Button>
             <Button
-              variant="primary"
+              variant={unpreviewed ? "secondary" : "primary"}
               className="rounded-full"
               onClick={run}
               data-testid="data-write-run"

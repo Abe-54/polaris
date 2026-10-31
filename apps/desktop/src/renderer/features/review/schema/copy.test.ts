@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type SchemaSourceDiff, SessionId, TurnId } from "@polaris/protocol";
 import {
   caveats,
+  listFigure,
   provenance,
   prunedNote,
   rowsFigure,
@@ -20,6 +21,15 @@ const source = (more: Partial<SchemaSourceDiff> = {}): SchemaSourceDiff => ({
   truncated: false,
   tables: [],
   ...more,
+});
+
+test.each([
+  [{ kind: "exact", value: 9 }, "9 matched"],
+  [{ kind: "estimate", value: -1 }, "−1 est."],
+  [{ kind: "estimate", value: 1200 }, "1,200 est."],
+  [{ kind: "unknown", value: null }, "unknown"],
+] as const)("the files list reads %o as %s, never as the table's size (F14)", (rows, figure) => {
+  expect(listFigure(rows)).toBe(figure);
 });
 
 describe("rows wording", () => {
