@@ -26,3 +26,17 @@ export {
 } from "./data/hooks.tsx";
 
 export { liveTracesApi, type TracesApi } from "./data/api.ts";
+
+export { type TracesSettingsApi, liveTracesSettingsApi } from "./settings/api.ts";
+
+export {
+  TracesSettingsLayer,
+  useWorkspaceTracesSettings,
+  type WorkspaceTracesSettingsState,
+} from "./settings/hooks.tsx";
+
+export { takeTracesSettingsTarget, tracesSettingsTarget } from "./settings/focus.ts";
+
+export { KEEP_LINE, tracesSettingsUnavailable } from "./settings/model.ts";
+
+export { TracesSettingsCard } from "./settings/ui/TracesSettingsCard.tsx";

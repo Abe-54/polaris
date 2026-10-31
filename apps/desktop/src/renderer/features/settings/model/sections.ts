@@ -77,6 +77,27 @@ const GROUPS: ReadonlyArray<GroupSource> = [
           "interpreter",
         ],
       },
+      {
+        id: "traces",
+        title: "Traces",
+        blurb:
+          "What each workspace's traces do: copy into Polaris, forward to your collector, and instrument automatically. Saved on its host.",
+        keywords: [
+          "opentelemetry",
+          "otel",
+          "otlp",
+          "tracing",
+          "spans",
+          "forward",
+          "exporter",
+          "collector",
+          "axiom",
+          "instrument",
+          "node",
+          "deno",
+          "retention",
+        ],
+      },
     ],
   },
   {

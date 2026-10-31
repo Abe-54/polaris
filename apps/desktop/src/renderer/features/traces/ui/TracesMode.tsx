@@ -11,7 +11,7 @@ import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
 import { useTracesUnavailable } from "../model/availability.ts";
 import type { TracesSessionKey } from "../model/session.ts";
-import { setupState } from "../model/setup.ts";
+import { type SetupState, setupState } from "../model/setup.ts";
 import { useTracesSelection } from "../model/store.ts";
 import { TracesDrawer } from "./Drawer.tsx";
 import { TracesSidebar } from "./Sidebar.tsx";
@@ -21,6 +21,7 @@ import { TracesStatusBar } from "./StatusBar.tsx";
 import { TraceBar } from "./TraceBar.tsx";
 import { TraceMain } from "./TraceMain.tsx";
 import { TracesSetup } from "./setup/TracesSetup.tsx";
+import { useSetupPlace } from "./setup/useSetupPlace.ts";
 
 /** One trace is enough to know the checkout has some; the sidebar reads the list. */
 const PROBE = { limit: 1 } as const;
@@ -36,6 +37,17 @@ const useSetup = (at: TracesSessionKey) => {
     label === undefined || state === undefined ? undefined : { label, state }
   );
 };
+
+/** Setup with what it reads beside the snapshot; only mounted while there is no trace to show. */
+const SetupAt = ({
+  state,
+  at,
+  workspaceId,
+}: {
+  state: SetupState;
+  at: TracesSessionKey;
+  workspaceId: string;
+}) => <TracesSetup state={state} place={useSetupPlace(at, workspaceId)} />;
 
 const Centered = ({
   testId,
@@ -77,7 +89,7 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
             <TracesDrawer {...props} />
           </>
         ) : (
-          <TracesSetup state={setup} />
+          <SetupAt state={setup} at={slot.at} workspaceId={slot.workspaceId} />
         )}
         <TracesStatusBar {...props} />
       </section>
