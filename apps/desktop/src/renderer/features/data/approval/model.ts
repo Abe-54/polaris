@@ -44,9 +44,30 @@ const PROVIDER = { planetscale: "PlanetScale", neon: "Neon" } as const;
 /** "Let agents read analytics?" */
 export const approvalTitle = (target: DataSourceTarget) => `Let agents read ${target.sourceName}?`;
 
-/** "Backfill currency wants to query it. No agent can reach it until you approve it." */
-export const approvalBody = (who: string) =>
-  `${who} wants to query it. No agent can reach it until you approve it.`;
+/** "wants to read analytics": a Data Source Approval's ask, after the session's title (F13). */
+export const wantsToRead = (target: DataSourceTarget) => `wants to read ${target.sourceName}`;
+
+/** The ask for a request that is a Data Source Approval; null for any other. */
+export const dataWants = (request: ApprovalRequest): string | null => {
+  const target = dataSourceTarget(request);
+
+  return target === null ? null : wantsToRead(target);
+};
+
+/** "Backfill currency wants to read analytics. No agent can reach it until you approve it." */
+export const approvalBody = (who: string, target: DataSourceTarget) =>
+  `${who} ${wantsToRead(target)}. No agent can reach it until you approve it.`;
+
+/** Who asks, in every view: the Agent Session's title. */
+export const askedBy = (sessionTitle: string) =>
+  sessionTitle === "" ? "An agent session" : sessionTitle;
+
+/** "Backfill currency wants to read analytics"; null for a request of another kind. */
+export const dataWantsLine = (sessionTitle: string, request: ApprovalRequest): string | null => {
+  const wants = dataWants(request);
+
+  return wants === null ? null : `${askedBy(sessionTitle)} ${wants}`;
+};
 
 /** The well's rows: what Approve lets agents reach, exactly. */
 export const targetRows = (

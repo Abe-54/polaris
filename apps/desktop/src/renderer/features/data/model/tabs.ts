@@ -18,6 +18,8 @@ export type DataTab =
       readonly sql: string;
       /** "Query 1", "Query 2"…, numbered per session and never reused. */
       readonly title: string;
+      /** Shown over the editor until the next run, e.g. why a re-run didn't run. */
+      readonly notice?: string;
     };
 
 export type DataTabKind = DataTab["kind"];
@@ -44,9 +46,16 @@ export const openTable = (state: DataTabs, sourceId: string, table: string): Dat
 };
 
 /** Always a new SQL tab, focused: a re-run from the Query Log never overwrites one being edited. */
-export const openSqlTab = (state: DataTabs, sql: string, sourceId: string): DataTabs => {
+export const openSqlTab = (
+  state: DataTabs,
+  sql: string,
+  sourceId: string,
+  notice?: string
+): DataTabs => {
   const n = state.nextQuery;
-  const tab: DataTab = { kind: "sql", id: `sql\u0000${n}`, sourceId, sql, title: `Query ${n}` };
+
+  const opened = { kind: "sql", id: `sql\u0000${n}`, sourceId, sql, title: `Query ${n}` } as const;
+  const tab: DataTab = notice === undefined ? opened : { ...opened, notice };
 
   return { ...insertAfterActive(state, tab), nextQuery: n + 1 };
 };

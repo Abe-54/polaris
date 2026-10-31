@@ -108,7 +108,7 @@ const WaitingRow = ({ item, now, close }: ItemProps & { readonly item: WaitingSe
 
   if (copy === null || request === undefined) return null;
   const sessionId = item.entry.session.id;
-  const target = { hostKey: item.hostKey, sessionId, requestId: request.id };
+  const target = { hostKey: item.hostKey, sessionId, request };
 
   const open = () => {
     close();
@@ -174,8 +174,13 @@ const ConstellationRow = ({ group, item, now, close }: ConstellationRowProps) =>
     go();
   };
 
-  if (constellationApproval(item) && item.hostKey !== null && sessionId !== undefined) {
-    const target = { hostKey: item.hostKey, sessionId, requestId: item.request?.id ?? "" };
+  if (
+    constellationApproval(item) &&
+    item.hostKey !== null &&
+    sessionId !== undefined &&
+    item.request !== undefined
+  ) {
+    const target = { hostKey: item.hostKey, sessionId, request: item.request };
 
     return (
       <Row copy={constellationCopy(group, item, now)}>

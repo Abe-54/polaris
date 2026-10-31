@@ -95,10 +95,11 @@ export const FIXTURE_SOURCES: ReadonlyArray<DataSource> = [
     engine: "mysql",
     version: "8.0.36",
     locality: "remote",
-    host: "analytics-prod.internal.ledger.dev",
+    // Where the fixture's Data Source Approval points: a request matches its source by target.
+    host: "aws.connect.psdb.cloud",
     port: 3306,
     database: "analytics",
-    user: "readonly",
+    user: "u_7kq2xmz4p1",
     foundIn: { kind: "compose", file: "docker-compose.yml", key: "ANALYTICS_URL" },
     access: "needs-approval",
     writes: "off",
@@ -453,14 +454,35 @@ export const FIXTURE_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
   }),
 ];
 
+/** Where the fixture's Data Source Approval points: the analytics source's server. */
+export const FIXTURE_DATA_TARGET = {
+  sourceId: "src-analytics",
+  sourceName: "analytics",
+  engine: "mysql",
+  host: "aws.connect.psdb.cloud",
+  port: 3306,
+  database: "analytics",
+  user: "u_7kq2xmz4p1",
+  branch: { provider: "planetscale", name: "backfill-currency" },
+} as const;
+
 /** A Data Source Approval as X's event carries it, until the protocol has `dataSource`. */
 export const fixtureDataApproval = (
   sessionId: SessionId,
   turnId: TurnId,
-  openedAt = new Date(FIXTURE_NOW - 40_000).toISOString()
+  openedAt = new Date(FIXTURE_NOW - 40_000).toISOString(),
+  change: {
+    readonly id?: string;
+    /** Another database, port or user on the same server. */
+    readonly dataSource?: {
+      readonly database?: string;
+      readonly port?: number;
+      readonly user?: string;
+    };
+  } = {}
 ): ApprovalRequest => {
   const request = {
-    id: RequestId.make("r-analytics-read"),
+    id: RequestId.make(change.id ?? "r-analytics-read"),
     sessionId,
     turnId,
     kind: "tool",
@@ -471,16 +493,7 @@ export const fixtureDataApproval = (
     placeholder: null,
     expiresAt: null,
     openedAt,
-    dataSource: {
-      sourceId: "src-analytics",
-      sourceName: "analytics",
-      engine: "mysql",
-      host: "aws.connect.psdb.cloud",
-      port: 3306,
-      database: "analytics",
-      user: "u_7kq2xmz4p1",
-      branch: { provider: "planetscale", name: "backfill-currency" },
-    },
+    dataSource: { ...FIXTURE_DATA_TARGET, ...change.dataSource },
   } as const;
 
   return request;

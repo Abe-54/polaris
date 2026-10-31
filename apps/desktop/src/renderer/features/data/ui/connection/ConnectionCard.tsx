@@ -100,9 +100,7 @@ export const ConnectionCard = ({
         }}
       />
       <Details source={source} />
-      {source.access === "needs-approval" ? (
-        <PendingDataApproval hostKey={at.hostKey} sourceId={source.id} />
-      ) : null}
+      <PendingDataApproval hostKey={at.hostKey} source={source} />
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't save the label · {error}

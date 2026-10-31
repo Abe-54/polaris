@@ -43,8 +43,8 @@ export const showDataSession = (at: DataSessionKey | null) =>
 export const openTable = (sourceId: string, table: string, at?: DataSessionKey) =>
   update(at, (s) => tabs.openTable(s, sourceId, table));
 
-export const openSqlTab = (sql: string, sourceId: string, at?: DataSessionKey) =>
-  update(at, (s) => tabs.openSqlTab(s, sql, sourceId));
+export const openSqlTab = (sql: string, sourceId: string, at?: DataSessionKey, notice?: string) =>
+  update(at, (s) => tabs.openSqlTab(s, sql, sourceId, notice));
 
 export const focusDataTab = (id: string, at?: DataSessionKey) =>
   update(at, (s) => tabs.focusTab(s, id));

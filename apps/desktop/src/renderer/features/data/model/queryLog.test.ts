@@ -195,6 +195,8 @@ describe("the drawer under the grid (Paper D1)", () => {
 
 describe("table names", () => {
   test.each([
+    ["select * from currencies where note = 'see invoices'", false],
+    ["select * from currencies -- invoices next", false],
     ["select * from invoices", true],
     ['select * from "invoices" i', true],
     ["select * from public.invoices", true],
@@ -205,12 +207,18 @@ describe("table names", () => {
   });
 });
 
-describe("only a lone read re-runs on open; anything else waits for Run", () => {
+describe("only a lone plain SELECT that calls no function re-runs on open (F10)", () => {
   test.each([
     ["  select 1", true],
     ["select * from invoices;", true],
-    ["with t as (select 1) select * from t", true],
-    ["explain select * from invoices", true],
+    ["select * from invoices where status = 'set' and id in (1, 2)", true],
+    ["select id, comment from invoices -- delete later", true],
+    ["select pg_terminate_backend(pid) from pg_stat_activity", false],
+    ["select pg_sleep(3600)", false],
+    ["select count(*) from invoices", false],
+    ['select "lo_unlink"(1)', false],
+    ["with t as (select 1) select * from t", false],
+    ["explain select * from invoices", false],
     ["update invoices set currency = 'USD'", false],
     ["with gone as (delete from invoices returning *) select * from gone", false],
     ["explain analyze delete from invoices", false],

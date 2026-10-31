@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useDataApi, useDataSources } from "../data/hooks.tsx";
 import { formatSql } from "../sql/language.ts";
 import {
+  cancelSqlRun,
   runSqlTab,
   setSqlSource,
   setSqlText,
@@ -13,7 +14,7 @@ import {
   takeQueuedRun,
   useSqlTab,
 } from "../sql/state.ts";
-import { useCatalog } from "../sql/useCatalog.ts";
+import { reloadSchema, useCatalog } from "../sql/useCatalog.ts";
 import type { DataTabProps } from "./slots.ts";
 import { Results } from "./sql/Results.tsx";
 import { RunBar } from "./sql/RunBar.tsx";
@@ -29,12 +30,20 @@ export const SqlTabBody = ({ at, tab }: DataTabProps<SqlTab>) => {
   const source = list.find((s) => s.name === state.source);
   const catalog = useCatalog(at, state.source, state.text);
   const [formatProblem, setFormatProblem] = useState<string | null>(null);
-  const run = () => void runSqlTab(api, at, tab);
+  const run = () => runSqlTab(api, at, tab);
   const { run: last } = state;
+  const running = last.status === "running";
+
+  const cancel = () => {
+    if (!running) return false;
+    cancelSqlRun(at, tab);
+
+    return true;
+  };
 
   // A re-run from the Query Log opens this tab with its query already running.
   useEffect(() => {
-    if (takeQueuedRun(at, tab.id)) void runSqlTab(api, at, tab);
+    if (takeQueuedRun(at, tab.id)) runSqlTab(api, at, tab);
   }, [api, at, tab]);
 
   const format = async () => {
@@ -45,17 +54,34 @@ export const SqlTabBody = ({ at, tab }: DataTabProps<SqlTab>) => {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="data-sql-tab">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      data-testid="data-sql-tab"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && cancel()) e.preventDefault();
+      }}
+    >
       <RunBar
         sources={list}
         source={source}
         catalog={catalog}
-        running={last.status === "running"}
+        running={running}
         formatProblem={formatProblem}
         onSource={(name) => setSqlSource(at, tab, name)}
         onFormat={() => void format()}
         onRun={run}
+        onCancel={cancel}
+        onReloadSchema={() => reloadSchema(at, state.source)}
       />
+      {state.notice === null ? null : (
+        <p
+          role="status"
+          data-testid="data-sql-notice"
+          className="text-caption text-text-subtle border-hairline border-b px-4 py-2"
+        >
+          {state.notice}
+        </p>
+      )}
       <div className="flex h-[40%] min-h-[120px] shrink-0 flex-col">
         <SqlEditor
           text={state.text}
@@ -71,6 +97,7 @@ export const SqlTabBody = ({ at, tab }: DataTabProps<SqlTab>) => {
             setFormatProblem(null);
           }}
           onRun={run}
+          onCancel={cancel}
           label={`${tab.title} on ${state.source}`}
         />
       </div>

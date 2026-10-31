@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { ApprovalRequest, RequestId, SessionId, TurnId } from "@polaris/protocol";
 import type { WaitingSession } from "./inbox.ts";
 import { sessionWith } from "./inbox.testing.ts";
+import { fixtureDataApproval } from "../../data/preview/fixtures.ts";
+import { toSummary } from "./summary.ts";
 import { waitingCopy } from "./popover.ts";
 
 const waiting = (pending: ApprovalRequest): WaitingSession => ({
@@ -69,5 +71,22 @@ describe("waitingCopy", () => {
     expect(copy?.code).toBeNull();
     expect(copy?.kicker[1]).toBe("secret");
     expect(copy?.text).toBe("Spike is asking for a secret: Tailscale auth key");
+  });
+});
+
+describe("a Data Source Approval reads one way everywhere (F13)", () => {
+  const data = new ApprovalRequest(fixtureDataApproval(SessionId.make("s1"), TurnId.make("s1-t1")));
+
+  test("the popover: the session wants to read the source", () => {
+    expect(waitingCopy(waiting(data), Date.now())?.text).toBe("Spike wants to read analytics");
+  });
+
+  test("the notification's body says the same", () => {
+    const summary = toSummary({
+      inbox: { waiting: [waiting(data)], also: [], answered: [], count: 1 },
+      focused: null,
+    });
+
+    expect(summary.sessions[0]?.requests[0]?.title).toBe("Spike wants to read analytics");
   });
 });
