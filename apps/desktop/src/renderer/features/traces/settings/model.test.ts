@@ -1,6 +1,7 @@
 import type { DetectedTraceExporter } from "@polaris/protocol";
 import { expect, test } from "bun:test";
-import { checkForwardUrl, fixedExporters } from "./model.ts";
+import { checkForwardUrl, exporterLocation, fixedExporters, forwardCaption } from "./model.ts";
+import { FRESH_SETTINGS } from "./fixtures.ts";
 
 const at = (kind: DetectedTraceExporter["kind"], line: number): DetectedTraceExporter => ({
   kind,
@@ -28,4 +29,14 @@ test.each([
   ["   ", false],
 ])("a forward URL %s is accepted: %s", (url, ok) => {
   expect(checkForwardUrl(url).ok).toBe(ok);
+});
+
+test("evidence from process variables reads as the environment, never as a file:line", () => {
+  const env = { ...at("otlp-env", 1), file: "environment" };
+
+  expect(exporterLocation(env)).toBe("the environment");
+  expect(exporterLocation(at("fixed-url", 12))).toBe("src/otel.ts:12");
+  expect(forwardCaption({ ...FRESH_SETTINGS, forwardTo: null, detectedExporters: [env] })).toBe(
+    "Found an exporter in the environment. Add the collector it sends to."
+  );
 });

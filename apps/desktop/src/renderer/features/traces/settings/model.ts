@@ -35,8 +35,14 @@ export const fixedExporters = (
 ): ReadonlyArray<DetectedTraceExporter> =>
   settings.detectedExporters.filter((e) => FIXED_KINDS.has(e.kind));
 
+/** The Daemon's file for evidence from exported process variables: no checkout path behind it. */
+const ENVIRONMENT = "environment";
+
 export const exporterLocation = (e: Pick<DetectedTraceExporter, "file" | "line">) =>
-  `${e.file}:${e.line}`;
+  e.file === ENVIRONMENT ? "the environment" : `${e.file}:${e.line}`;
+
+const foundIn = (e: Pick<DetectedTraceExporter, "file">) =>
+  e.file === ENVIRONMENT ? "the environment" : e.file;
 
 const VENDORS: Readonly<Record<DetectedTraceExporter["kind"], string>> = {
   axiom: "Axiom",
@@ -118,11 +124,11 @@ export const forwardCaption = (settings: WorkspaceTracesSettings): string => {
   if (settings.forwardTo === null)
     return found === undefined
       ? "No exporter found here. Add the collector your app sends to."
-      : `Found an exporter in ${found.file}. Add the collector it sends to.`;
+      : `Found an exporter in ${foundIn(found)}. Add the collector it sends to.`;
 
   return found === undefined
     ? "A copy of each trace goes on to this collector."
-    : `A copy of each trace goes on to the collector found in ${found.file}.`;
+    : `A copy of each trace goes on to the collector found in ${foundIn(found)}.`;
 };
 
 /** Requested mode beside what actually happens; a skip reason wins. */
