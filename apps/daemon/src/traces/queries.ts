@@ -205,38 +205,52 @@ export const traceHistory = (
       .all(checkout, summary.id)
   );
 
-  const medians = Schema.decodeUnknownSync(
+  const pairs = [
+    ...new Map(
+      current.map((span) => [JSON.stringify([span.name, span.parent]), [span.name, span.parent]])
+    ).values(),
+  ];
+
+  const observations = Schema.decodeUnknownSync(
     Schema.Array(
       Schema.Struct({
         name: Schema.String,
         parent: Schema.NullOr(Schema.String),
-        usual: Schema.Number,
-        samples: Schema.Number,
+        durations: Schema.String,
       })
     )
   )(
     db
       .query(`
     WITH wanted AS MATERIALIZED (
-      SELECT DISTINCT name,parent_name AS parent FROM spans WHERE checkout=? AND trace_id=?
+      SELECT json_extract(value,'$[0]') AS name,json_extract(value,'$[1]') AS parent FROM json_each(?)
     ), bounded AS MATERIALIZED (
       SELECT w.name,w.parent,(
         SELECT json_group_array(duration) FROM (
-          SELECT duration FROM spans c INDEXED BY spans_history
+          SELECT duration FROM spans c INDEXED BY spans_history_covering
           WHERE c.checkout=? AND c.name=w.name AND c.parent_name IS w.parent AND c.trace_start<?
           ORDER BY c.trace_start DESC,c.start DESC LIMIT 50
         )
       ) AS durations FROM wanted w
-    ), ranked AS (
-      SELECT bounded.name,bounded.parent,j.value AS ms,row_number() OVER (PARTITION BY bounded.name,bounded.parent ORDER BY j.value) AS position,
-        count(*) OVER (PARTITION BY bounded.name,bounded.parent) AS count FROM bounded,json_each(durations) j
-    ) SELECT name,parent,avg(ms) AS usual,max(count) AS samples FROM ranked
-      WHERE count>=5 AND position IN ((count+1)/2,(count+2)/2) GROUP BY name,parent
+    ) SELECT name,parent,durations FROM bounded
   `)
-      .all(checkout, summary.id, checkout, before)
+      .all(JSON.stringify(pairs), checkout, before)
   );
 
-  const lookup = new Map(medians.map((row) => [JSON.stringify([row.name, row.parent]), row]));
+  const decodeDurations = Schema.decodeUnknownSync(
+    Schema.fromJsonString(Schema.Array(Schema.Number))
+  );
+
+  const lookup = new Map<string, { usual: number; samples: number }>();
+
+  for (const row of observations) {
+    const values = [...decodeDurations(row.durations)].sort((a, b) => a - b);
+
+    if (values.length < 5) continue;
+    const middle = Math.floor(values.length / 2);
+    const usual = values.length % 2 ? values[middle]! : (values[middle - 1]! + values[middle]!) / 2;
+    lookup.set(JSON.stringify([row.name, row.parent]), { usual, samples: values.length });
+  }
 
   for (const span of current) {
     const usual = lookup.get(JSON.stringify([span.name, span.parent]));

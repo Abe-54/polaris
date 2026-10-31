@@ -31,12 +31,14 @@ export const openTraceDatabase = (filename: string): Database => {
       age INTEGER NOT NULL,bytes INTEGER NOT NULL,value TEXT NOT NULL,
       PRIMARY KEY(checkout,trace_id,id));
     CREATE INDEX IF NOT EXISTS spans_age ON spans(checkout,status,age);
+    CREATE INDEX IF NOT EXISTS spans_retention ON spans(checkout,age,bytes);
     CREATE TABLE IF NOT EXISTS logs (
       checkout TEXT NOT NULL,id TEXT NOT NULL,trace_id TEXT,span_id TEXT,
       time TEXT NOT NULL,severity INTEGER NOT NULL,age INTEGER NOT NULL,bytes INTEGER NOT NULL,value TEXT NOT NULL,
       PRIMARY KEY(checkout,id));
     CREATE INDEX IF NOT EXISTS logs_span ON logs(checkout,trace_id,span_id,time);
     CREATE INDEX IF NOT EXISTS logs_age ON logs(checkout,age);
+    CREATE INDEX IF NOT EXISTS logs_retention ON logs(checkout,age,bytes);
     CREATE TABLE IF NOT EXISTS trace_pins (
       checkout TEXT NOT NULL,trace_id TEXT NOT NULL,PRIMARY KEY(checkout,trace_id));
     CREATE TABLE IF NOT EXISTS summaries (
@@ -68,7 +70,8 @@ const migrateHistory = (db: Database) => {
           trace_start=(SELECT s.start FROM summaries s WHERE s.checkout=c.checkout AND s.trace_id=c.trace_id);`);
     }
 
-    db.exec(`CREATE INDEX IF NOT EXISTS spans_history ON spans(checkout,name,parent_name,trace_start DESC,start DESC);
+    db.exec(`CREATE INDEX IF NOT EXISTS spans_history_covering ON spans(checkout,name,parent_name,trace_start DESC,start DESC,duration);
+      DROP INDEX IF EXISTS spans_history;
       CREATE INDEX IF NOT EXISTS summaries_history ON summaries(checkout,root,start DESC);
       CREATE INDEX IF NOT EXISTS spans_error ON spans(checkout,trace_id,status,start);`);
   })();

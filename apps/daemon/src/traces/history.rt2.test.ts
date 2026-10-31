@@ -108,7 +108,7 @@ test("opening the previous trace database backfills indexed history without losi
   try {
     for (let t = 1; t <= 6; t++)
       ingest(db, [make(t, 1, "R", 10, t * 1000), make(t, 2, "SQL", 2, t * 1000 + 1, 1)]);
-    db.exec(`DROP INDEX spans_history;
+    db.exec(`DROP INDEX spans_history_covering;
       ALTER TABLE spans DROP COLUMN name;
       ALTER TABLE spans DROP COLUMN parent_name;
       ALTER TABLE spans DROP COLUMN trace_start;
@@ -123,5 +123,23 @@ test("opening the previous trace database backfills indexed history without losi
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("bounded history computes the median of odd and even sample counts", () => {
+  const db = openTraceDatabase(":memory:");
+
+  try {
+    for (const [index, ms] of [1, 3, 9, 11, 20].entries())
+      ingest(db, [
+        make(index + 1, 1, "R", 100, (index + 1) * 1000),
+        make(index + 1, 2, "SQL", ms, (index + 1) * 1000 + 1, 1),
+      ]);
+    ingest(db, [make(7, 1, "R", 100, 7000), make(7, 2, "SQL", 200, 7001, 1)]);
+    expect(traceHistory(db, checkout, id(7)).spans[spanId(2)]).toBe(9);
+    ingest(db, [make(6, 1, "R", 100, 6000), make(6, 2, "SQL", 99, 6001, 1)]);
+    expect(traceHistory(db, checkout, id(7)).spans[spanId(2)]).toBe(10);
+  } finally {
+    db.close();
   }
 });
