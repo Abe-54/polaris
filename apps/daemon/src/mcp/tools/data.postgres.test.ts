@@ -9,6 +9,10 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { AgentSession, DomainEvent } from "@polaris/protocol";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { DataQueries, DataSourceAccess, DataSources } from "../../data/index.ts";
+import { DataDatabase } from "../../data/database.ts";
+import { DataApprovals } from "../../data/approvals.ts";
+import { QueryLog } from "../../data/queryLog.ts";
+import { sources as makeSources } from "../../data/sources.ts";
 import { session, send } from "../../constellation/delivery/testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { HostSecrets } from "../../secrets/index.ts";
@@ -66,9 +70,24 @@ test.skipIf(postgresUrl === undefined)(
       await admin.unsafe(`INSERT INTO "${schema}".invoices VALUES (1, 12.34), (2, NULL)`);
       writeFileSync(join(root, ".env.local"), `DATABASE_URL=${postgresUrl}\n`, { mode: 0o600 });
 
-      const services = Layer.mergeAll(
-        DataSources.layer.pipe(Layer.provide(DataSourceAccess.layer)),
-        DataQueries.layer
+      const services = DataQueries.layer.pipe(
+        Layer.provideMerge(
+          Layer.effect(
+            DataSources,
+            Effect.gen(function* () {
+              return yield* makeSources({
+                path: join(root, "data.sqlite"),
+                checkout: () => Effect.succeed(root),
+                secrets: yield* HostSecrets,
+                access: yield* DataSourceAccess,
+              });
+            })
+          )
+        ),
+        Layer.provideMerge(DataSourceAccess.live),
+        Layer.provideMerge(QueryLog.layer),
+        Layer.provideMerge(DataApprovals.layer),
+        Layer.provideMerge(DataDatabase.layerAt(join(root, "data.sqlite")))
       );
 
       await Effect.runPromise(

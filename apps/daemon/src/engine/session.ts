@@ -27,7 +27,12 @@ import {
 import { interruptedSetup, setupChanged } from "./session.setup.ts";
 import { acceptTurns, lastIsAccepted } from "./session.accept.ts";
 import { endBackgroundWork, subagentEnded, subagentStarted } from "./session.subagents.ts";
-import { backToWork, decisionRefusal, withdrawn } from "./session.approvals.ts";
+import {
+  backToWork,
+  decisionRefusal,
+  withdrawn,
+  canRequestDataApproval,
+} from "./session.approvals.ts";
 import {
   endTurn,
   foldEach,
@@ -311,7 +316,10 @@ const archive = ({ context, event }: { context: Context; event: { at: string } }
   );
 };
 
-type ApprovalRequestedInput = Extract<SessionInput, { type: "harness.approvalRequested" }>;
+type ApprovalRequestedInput = Extract<
+  SessionInput,
+  { type: "harness.approvalRequested" | "data.approvalRequested" }
+>;
 
 /**
  * A Harness asks for approval: recorded only for the Turn in flight. A request
@@ -327,6 +335,8 @@ const approvalRequested = (
   enter?: "needs-you"
 ) => {
   if (workingTurn(record)?.id !== event.request.turnId) return HANDLED;
+
+  if (!canRequestDataApproval(record, event)) return HANDLED;
 
   return settle(
     enq,
@@ -474,6 +484,8 @@ export const sessionMachine = createMachine({
 
       return started === null ? undefined : settle(enq, need(context), [started]);
     },
+    "data.approvalRequested": ({ context, event }, enq) =>
+      approvalRequested(need(context), event, enq, "needs-you"),
     "harness.approvalRequested": ({ context, event }, enq) =>
       approvalRequested(need(context), event, enq, "needs-you"),
     "harness.approvalWithdrawn": ({ context, event }, enq) => {
@@ -748,6 +760,7 @@ export const sessionMachine = createMachine({
           turnEnded(need(context), event, enq, false),
         "harness.turnStarted": ignore,
         "harness.approvalRequested": ignore,
+        "data.approvalRequested": ignore,
         "harness.exited": ignore,
         "session.fail": ignore,
         // Only Unarchive leaves Archived.

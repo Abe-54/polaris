@@ -1,11 +1,4 @@
-import {
-  DATA_CAPABILITY,
-  DataError,
-  DataSource,
-  NotFound,
-  Unsupported,
-  type SessionId,
-} from "@polaris/protocol";
+import { DataError, DataSource, NotFound, type SessionId } from "@polaris/protocol";
 import { Effect, Option, PubSub, Redacted, Semaphore, Stream, Schema } from "effect";
 import { paths } from "../paths.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -265,9 +258,23 @@ export const sources = Effect.fnUntraced(function* (options: {
     );
 
   return {
+    access: Effect.fnUntraced(function* (input) {
+      const checkout = yield* options.checkout(input.sessionId);
+      const source = yield* find(input);
+
+      if (options.access.change === undefined)
+        return yield* new DataError({
+          code: "E-DATA-DENIED",
+          message: "Data source access cannot be changed here.",
+          fix: "Connect to the current Daemon.",
+        });
+      yield* options.access.change(source, input.writes, input.revoke);
+      yield* PubSub.publish(changes, checkout);
+
+      return yield* find(input);
+    }),
     list: (input) => lock.withPermit(list(input)),
     resolve,
-    access: () => Effect.fail(new Unsupported({ capability: DATA_CAPABILITY })),
     save,
     remove,
     label,
@@ -279,10 +286,12 @@ export const sources = Effect.fnUntraced(function* (options: {
 
           return Stream.concat(
             Stream.fromEffect(lock.withPermit(list(input))),
-            Stream.fromSubscription(subscription).pipe(
-              Stream.filter((path) => path === checkout),
-              Stream.mapEffect(() => lock.withPermit(list(input)))
-            )
+            Stream.merge(
+              Stream.fromSubscription(subscription).pipe(
+                Stream.filter((path) => path === checkout)
+              ),
+              (options.access.changes ?? Stream.empty).pipe(Stream.map(() => checkout))
+            ).pipe(Stream.mapEffect(() => lock.withPermit(list(input))))
           );
         })
       ),

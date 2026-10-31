@@ -8,9 +8,7 @@ import { Deferred, Effect, Layer, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
-import { sources } from "./sources.ts";
-import { memorySecrets } from "../secrets/index.ts";
-import { DataSources, DataQueries, DataRpcsLive, DataSourceAccess } from "./index.ts";
+import { DataSources, DataQueries, DataRpcsLive } from "./index.ts";
 
 const sessionId = SessionId.make("stream-session");
 
@@ -72,23 +70,30 @@ test("F4/F6: 10k rows cross the real stream; cancellation closes the executor sc
           })
         );
 
-        const access = yield* DataSourceAccess.pipe(Effect.provide(DataSourceAccess.layer));
-
-        const sourceLayer = Layer.effect(
-          DataSources,
-          sources({
-            path: join(root, "data.sqlite"),
-            checkout: () => Effect.succeed(root),
-            secrets: memorySecrets(),
-            access,
-          })
-        );
-
         const server = yield* startServer({
           root,
           socketPath: join(root, "d.sock"),
           lockPath: join(root, "d.lock"),
-          handlers: DataRpcsLive.pipe(Layer.provide(Layer.merge(sourceLayer, queries))),
+          handlers: DataRpcsLive.pipe(
+            Layer.provide(
+              Layer.merge(
+                Layer.succeed(
+                  DataSources,
+                  DataSources.of({
+                    list: () => Effect.succeed([]),
+                    refresh: () => Effect.succeed([]),
+                    resolve: unavailable,
+                    watch: () => Stream.succeed([]),
+                    save: unavailable,
+                    remove: unavailable,
+                    label: unavailable,
+                    access: unavailable,
+                  })
+                ),
+                queries
+              )
+            )
+          ),
           capabilities: ["data"],
           secrets: HostSecrets.memory(),
         });

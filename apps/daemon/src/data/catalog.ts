@@ -1,0 +1,214 @@
+/** Metadata-only catalog queries; all identifiers from callers remain bound values. */
+import {
+  DataError,
+  SchemaTree,
+  TableDetail,
+  TableSummary,
+  type DataValue,
+} from "@polaris/protocol";
+import { Effect, Predicate, Schema } from "effect";
+import { readEffect, type ReadInput } from "./execution.ts";
+import { DataPools } from "./pools.ts";
+
+const pgVisible =
+  "n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'";
+
+const treeSql = {
+  postgres: `SELECT n.nspname AS schema_name,c.relname AS name,c.relkind IN ('v','m') AS view,
+    CASE WHEN c.reltuples<0 THEN NULL ELSE c.reltuples::bigint END AS estimate,
+    (SELECT count(*)::int FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped) AS column_count,
+    (SELECT coalesce(json_agg(x),'[]') FROM (SELECT a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum LIMIT 256) x) AS columns,
+    count(*) OVER() AS total FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE ${pgVisible} AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege(c.oid,'SELECT') ORDER BY n.nspname,c.relname`,
+  mysql: `SELECT t.TABLE_SCHEMA AS schema_name,t.TABLE_NAME AS name,t.TABLE_TYPE='VIEW' AS view,
+    t.TABLE_ROWS AS estimate,(SELECT count(*) FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA=t.TABLE_SCHEMA AND c.TABLE_NAME=t.TABLE_NAME) AS column_count,
+    (SELECT JSON_ARRAYAGG(JSON_OBJECT('name',c.COLUMN_NAME,'type',c.COLUMN_TYPE)) FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA=t.TABLE_SCHEMA AND c.TABLE_NAME=t.TABLE_NAME AND c.ORDINAL_POSITION<=256) AS columns,
+    count(*) OVER() AS total FROM information_schema.TABLES t WHERE t.TABLE_SCHEMA=DATABASE() ORDER BY t.TABLE_NAME`,
+};
+
+const functionsSql = {
+  postgres: `SELECT n.nspname AS schema_name,p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS name FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE ${pgVisible} ORDER BY n.nspname,p.proname`,
+  mysql:
+    "SELECT ROUTINE_SCHEMA AS schema_name,ROUTINE_NAME AS name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() ORDER BY ROUTINE_NAME",
+};
+
+const columnsSql = {
+  postgres: `SELECT a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type,NOT a.attnotnull AS nullable,
+    pg_get_expr(d.adbin,d.adrelid) AS default_value,
+    EXISTS(SELECT 1 FROM pg_constraint p WHERE p.conrelid=a.attrelid AND p.contype='p' AND a.attnum=ANY(p.conkey)) AS pk,
+    (SELECT json_build_object('schema',rn.nspname,'table',rc.relname,'column',ra.attname) FROM pg_constraint f
+      JOIN pg_class rc ON rc.oid=f.confrelid JOIN pg_namespace rn ON rn.oid=rc.relnamespace
+      CROSS JOIN LATERAL unnest(f.conkey,f.confkey) k(src,dst) JOIN pg_attribute ra ON ra.attrelid=f.confrelid AND ra.attnum=k.dst
+      WHERE f.conrelid=a.attrelid AND f.contype='f' AND k.src=a.attnum LIMIT 1) AS fk
+    FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+    WHERE a.attrelid=to_regclass($1) AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`,
+  mysql: `SELECT c.COLUMN_NAME AS name,c.COLUMN_TYPE AS type,c.IS_NULLABLE='YES' AS nullable,c.COLUMN_DEFAULT AS default_value,c.COLUMN_KEY='PRI' AS pk,
+    (SELECT JSON_OBJECT('schema',k.REFERENCED_TABLE_SCHEMA,'table',k.REFERENCED_TABLE_NAME,'column',k.REFERENCED_COLUMN_NAME) FROM information_schema.KEY_COLUMN_USAGE k
+      WHERE k.TABLE_SCHEMA=c.TABLE_SCHEMA AND k.TABLE_NAME=c.TABLE_NAME AND k.COLUMN_NAME=c.COLUMN_NAME AND k.REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1) AS fk
+    FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=? ORDER BY c.ORDINAL_POSITION`,
+};
+
+const indexesSql = {
+  postgres: `SELECT ci.relname AS name,i.indisunique AS is_unique,pg_get_indexdef(i.indexrelid) AS definition,
+    (SELECT coalesce(json_agg(pg_get_indexdef(i.indexrelid,k,true)),'[]') FROM generate_series(1,i.indnkeyatts) k) AS columns
+    FROM pg_index i JOIN pg_class ci ON ci.oid=i.indexrelid WHERE i.indrelid=to_regclass($1) ORDER BY ci.relname`,
+  mysql: `SELECT INDEX_NAME AS name,MIN(NON_UNIQUE)=0 AS is_unique,MIN(INDEX_TYPE) AS definition,
+    JSON_ARRAYAGG(COALESCE(COLUMN_NAME,EXPRESSION)) AS columns FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? GROUP BY INDEX_NAME ORDER BY INDEX_NAME`,
+};
+
+const constraintsSql = {
+  postgres: `SELECT conname AS name,contype AS kind,pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=to_regclass($1) ORDER BY conname`,
+  mysql: `SELECT t.CONSTRAINT_NAME AS name,t.CONSTRAINT_TYPE AS kind,COALESCE(c.CHECK_CLAUSE,t.CONSTRAINT_TYPE) AS definition
+    FROM information_schema.TABLE_CONSTRAINTS t LEFT JOIN information_schema.CHECK_CONSTRAINTS c
+      ON c.CONSTRAINT_SCHEMA=t.CONSTRAINT_SCHEMA AND c.CONSTRAINT_NAME=t.CONSTRAINT_NAME
+    WHERE t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME=? ORDER BY t.CONSTRAINT_NAME`,
+};
+
+const Columns = Schema.Array(Schema.Struct({ name: Schema.String, type: Schema.String }));
+
+const Strings = Schema.Array(Schema.String);
+
+function plain(value: DataValue | undefined): Schema.Json | undefined {
+  if (value === undefined || value === null || !Predicate.isObject(value)) return value;
+
+  if (Predicate.isTagged(value, "Json"))
+    return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(value.text);
+
+  if (Predicate.isTagged(value, "Numeric") || Predicate.isTagged(value, "BigInt"))
+    return Number(value.value);
+
+  return value;
+}
+
+const text = (value: Schema.Json | undefined) => Schema.decodeUnknownSync(Schema.String)(value);
+
+const number = (value: Schema.Json | undefined) => Schema.decodeUnknownSync(Schema.Number)(value);
+
+const bool = (value: Schema.Json | undefined) => value === true || value === 1;
+
+const quote = (name: string, engine: "postgres" | "mysql") =>
+  engine === "postgres" ? `"${name.replaceAll('"', '""')}"` : `\`${name.replaceAll("`", "``")}\``;
+
+export const readCatalog = Effect.fnUntraced(function* (
+  pools: DataPools,
+  input: Omit<ReadInput, "sql" | "limit">,
+  table?: string
+) {
+  const engine = input.source.engine;
+
+  const rows = Effect.fnUntraced(function* (
+    sql: string,
+    params: ReadonlyArray<DataValue> = [],
+    limit: number = 501
+  ) {
+    const result = yield* readEffect(pools, { ...input, sql, params, limit });
+
+    return result.rows.map((row) =>
+      Object.fromEntries<Schema.Json | undefined>(
+        result.columns.map((column, i): [string, Schema.Json | undefined] => [
+          column.name,
+          plain(row[i]),
+        ])
+      )
+    );
+  });
+
+  const tree = yield* rows(treeSql[engine]);
+  const functions = yield* rows(functionsSql[engine]);
+
+  const groups = new Map<
+    string,
+    { name: string; tables: TableSummary[]; views: TableSummary[]; functions: string[] }
+  >();
+
+  for (const row of tree.slice(0, 500)) {
+    const name = text(row.schema_name);
+    const group = groups.get(name) ?? { name, tables: [], views: [], functions: [] };
+
+    const summary = new TableSummary({
+      name: text(row.name),
+      rowEstimate: row.estimate === null ? null : number(row.estimate),
+      columnCount: number(row.column_count),
+      columns: Schema.decodeUnknownSync(Columns)(row.columns ?? []),
+    });
+
+    (bool(row.view) ? group.views : group.tables).push(summary);
+    groups.set(name, group);
+  }
+
+  for (const row of functions) {
+    const name = text(row.schema_name);
+    const group = groups.get(name) ?? { name, tables: [], views: [], functions: [] };
+    group.functions.push(text(row.name));
+    groups.set(name, group);
+  }
+
+  if (table === undefined)
+    return new SchemaTree({
+      loadedAt: new Date().toISOString(),
+      schemas: [...groups.values()],
+      truncatedTables: Math.max(0, number(tree[0]?.total ?? 0) - 500),
+    });
+  // PostgreSQL resolves an unqualified name through its search_path; MySQL stays in DATABASE().
+  const relation = engine === "mysql" ? table.split(".").at(-1)! : table;
+
+  const identity =
+    engine === "postgres"
+      ? yield* rows(
+          "SELECT n.nspname AS schema_name,c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=to_regclass($1)",
+          [relation],
+          1
+        )
+      : [{ schema_name: input.source.database, name: relation }];
+
+  if (identity.length === 0) return yield* missingTable();
+
+  const schema = text(identity[0]?.schema_name);
+  const name = text(identity[0]?.name);
+  const columns = yield* rows(columnsSql[engine], [relation], 256);
+
+  if (columns.length === 0) return yield* missingTable();
+
+  const indexes = yield* rows(indexesSql[engine], [relation], 256);
+  const constraints = yield* rows(constraintsSql[engine], [relation], 256);
+  const match = tree.find((row) => row.schema_name === schema && row.name === name);
+
+  const detail = new TableDetail({
+    schema,
+    name,
+    columns: columns.map((row) => ({
+      name: text(row.name),
+      type: text(row.type),
+      nullable: bool(row.nullable),
+      default: row.default_value === null ? null : text(row.default_value),
+      pk: bool(row.pk),
+      fk: Schema.decodeUnknownSync(
+        Schema.NullOr(
+          Schema.Struct({ schema: Schema.String, table: Schema.String, column: Schema.String })
+        )
+      )(row.fk),
+    })),
+    indexes: indexes.map((row) => ({
+      name: text(row.name),
+      columns: Schema.decodeUnknownSync(Strings)(row.columns),
+      unique: bool(row.is_unique),
+      definition: text(row.definition),
+    })),
+    constraints: constraints.map((row) => ({
+      name: text(row.name),
+      kind: text(row.kind),
+      definition: text(row.definition),
+    })),
+    rowEstimate: match?.estimate === null || match === undefined ? null : number(match.estimate),
+  });
+
+  return { detail, sampleSql: `SELECT * FROM ${quote(schema, engine)}.${quote(name, engine)}` };
+});
+
+const missingTable = () =>
+  new DataError({
+    code: "E-DATA-SQL",
+    message: "This table does not exist or is not visible to this database user.",
+    fix: "List the data source schema and select a table from it.",
+  });

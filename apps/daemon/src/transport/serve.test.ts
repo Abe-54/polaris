@@ -6,6 +6,6 @@ test("the Daemon announces linked-devices, so Clients offer the Relay route and 
   expect(daemonCapabilities).toContain("linked-devices");
 });
 
-test("F7: stub Data services do not advertise a working Data capability", () => {
-  expect(daemonCapabilities).not.toContain("data");
+test("the mounted Data execution services advertise the Data capability", () => {
+  expect(daemonCapabilities).toContain("data");
 });
