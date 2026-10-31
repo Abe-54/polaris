@@ -436,9 +436,17 @@ export const FIXTURE_TRACES: ReadonlyArray<TraceSpec> = [
   PARTIAL_TRACE,
 ];
 
-export const FIXTURE_DETAILS: ReadonlyArray<TraceDetail> = FIXTURE_TRACES.map((t) =>
-  buildTrace(t, FIXTURE_CHECKOUT)
-);
+export const FIXTURE_DETAILS: ReadonlyArray<TraceDetail> = FIXTURE_TRACES.map((t) => ({
+  ...buildTrace(t, FIXTURE_CHECKOUT),
+  // Illustrative history for the accepted Waterfall and Span panel scene.
+  usual:
+    t.id === BIG_TRACE.id
+      ? {
+          a91f5d6e7b8c03c2: { usualMs: 9, samples: 12 },
+          [t.spans.find((s) => s.name === "auth.verifySession")!.id]: { usualMs: 60, samples: 8 },
+        }
+      : undefined,
+}));
 
 /** Log records, newest last; the failing test's root and its timed-out call have some. */
 const LOGS: ReadonlyArray<LogSpec> = [

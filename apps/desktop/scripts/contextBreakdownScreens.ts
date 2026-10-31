@@ -11,9 +11,14 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, sizeWindow, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  sizeWindow,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 import { seedSource } from "./lib/seed.ts";
 import { seenUserData } from "./lib/userData.ts";
 

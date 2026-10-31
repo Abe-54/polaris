@@ -12,9 +12,14 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright-core";
+import { type ElectronApplication, type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { seedSource } from "./lib/seed.ts";
 
 const out = process.argv[2] ?? join(tmpdir(), "polaris-pick-screens");

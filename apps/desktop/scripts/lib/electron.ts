@@ -1,11 +1,47 @@
 /** Paths shared by the build, dev, smoke and bench scripts; runs under Bun and Node. */
 import { spawnSync } from "node:child_process";
 import type { ElectronApplication } from "playwright-core";
+import { _electron } from "playwright-core";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { devBundleBinary } from "./devBundle.ts";
+import { scriptedInstallHome } from "../../src/main/local/scripted.ts";
+
+type LaunchOptions = NonNullable<Parameters<typeof _electron.launch>[0]>;
+
+/** All automated launches opt out of the system Daemon, even when the caller inherits its env. */
+export const scriptedLaunchOptions = (options: LaunchOptions): LaunchOptions => ({
+  ...options,
+  env: { ...(options.env ?? process.env), POLARIS_DESKTOP_SCRIPTED: "1" },
+});
+
+/** Dedicated install smokes must request this before starting their fixture or Electron. */
+export const scriptedLocalInstall = (home: string, env: NodeJS.ProcessEnv = process.env) => {
+  const installedHome = scriptedInstallHome(home, env);
+
+  if (installedHome === null)
+    throw new Error("install smoke requires POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL=1");
+
+  return {
+    POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL: "1",
+    POLARIS_DESKTOP_LOCAL_HOME: installedHome,
+    HOME: installedHome,
+    POLARIS_HOME: join(installedHome, ".polaris"),
+  };
+};
+
+/** The only Playwright Electron launcher for scripts; LocalHost enforces the isolation flag. */
+export const scriptedElectron = {
+  launch: (options: LaunchOptions) => {
+    const guarded = scriptedLaunchOptions(options);
+
+    scriptedInstallHome(guarded.env?.POLARIS_DESKTOP_LOCAL_HOME || null, guarded.env ?? {});
+
+    return _electron.launch(guarded);
+  },
+};
 
 export const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "../..");
 

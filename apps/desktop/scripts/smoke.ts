@@ -11,9 +11,16 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { spawnSync } from "node:child_process";
-import { APP_DIR, electronBinary, OUT_DIR, REPO_ROOT, sizeWindow } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  OUT_DIR,
+  REPO_ROOT,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { probeSource } from "./lib/probe.ts";
 import { startDaemon } from "./lib/daemon.ts";
 import { freshStartFlow } from "./lib/freshStartFlow.ts";

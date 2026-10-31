@@ -159,6 +159,16 @@ export const TraceDetail = Schema.Struct({
   summary: TraceSummary,
   /** All retained Spans, in start-time order with id as the tie-breaker. */
   spans: Schema.Array(Span),
+  /** Earlier retained observations in this checkout, matched by Span name and parent name. */
+  usual: Schema.optional(
+    Schema.Record(
+      SpanId,
+      Schema.Struct({
+        usualMs: Milliseconds,
+        samples: Count,
+      })
+    )
+  ),
 });
 
 export type TraceDetail = typeof TraceDetail.Type;

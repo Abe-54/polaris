@@ -4,6 +4,7 @@
  * changed-host-key prompt into a failure that surfaces as Needs Attention.
  */
 import { createReadStream } from "node:fs";
+import { join } from "node:path";
 import { Transform } from "node:stream";
 import { Context, Effect, Layer, Schema } from "effect";
 import { type ChildProcessApi, childProcesses, spawnFailed } from "../process/index.ts";
@@ -235,7 +236,7 @@ export class Ssh extends Context.Service<
             alias,
             file: "/bin/sh",
             args: ["-c", command],
-            env: { ...process.env, HOME: home },
+            env: { ...process.env, HOME: home, POLARIS_HOME: join(home, ".polaris") },
             stdinFile: options?.stdinFile,
             onStdinBytes: options?.onStdinBytes,
             stdinLines: options?.stdinLines,

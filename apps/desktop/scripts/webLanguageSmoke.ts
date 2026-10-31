@@ -15,11 +15,17 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import * as P from "@polaris/protocol";
 import { Predicate, Schema } from "effect";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, REPO_ROOT, sizeWindow, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  sizeWindow,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 
 const home = realpathSync(
   process.env.POLARIS_SMOKE_HOME ?? mkdtempSync(join(tmpdir(), "polaris-web-desktop-"))
