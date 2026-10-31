@@ -11,6 +11,7 @@
  * idempotent, and with --uninstall removes it again. Never run by CI or tests.
  */
 import { join } from "node:path";
+import { BUNDLE_FILES, DAEMON_BUNDLE } from "../apps/daemon/src/service/bundle.ts";
 
 if (process.env.POLARIS_MANUAL_INSTALL !== "1") {
   console.error(
@@ -23,7 +24,15 @@ const root = join(import.meta.dir, "..");
 
 const platform = `${process.platform}-${process.arch}`;
 
-const binary = join(root, "apps", "daemon", "dist", platform, "polaris");
+// macOS builds the Daemon into its app bundle (ENG-680).
+const binary = join(
+  root,
+  "apps",
+  "daemon",
+  "dist",
+  platform,
+  process.platform === "darwin" ? join(DAEMON_BUNDLE, BUNDLE_FILES.polaris) : "polaris"
+);
 
 const step = (argv: ReadonlyArray<string>) => {
   console.log(`$ ${argv.join(" ")}`);

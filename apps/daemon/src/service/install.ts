@@ -11,11 +11,14 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir, userInfo } from "node:os";
@@ -24,6 +27,13 @@ import { Effect, Match } from "effect";
 import { defaultStateFile, stopAppServer } from "../harness/codex/AppServer.ts";
 import { currentUserSid } from "../transport/windowsPipe/win32.ts";
 import { CommandRunner } from "./CommandRunner.ts";
+import {
+  BUNDLE_FILE_NAMES,
+  BUNDLE_FILES,
+  type BundleFile,
+  bundleSources,
+  DAEMON_BUNDLE,
+} from "./bundle.ts";
 import { binaryNameFor, currentLinkFor, pointCurrent, readCurrent } from "./current.ts";
 import { InstallError, TaskConflictError } from "./errors.ts";
 import { activateLaunchd, type LaunchdTiming, unloadEverywhere } from "./launchd.ts";
@@ -248,18 +258,83 @@ const placeFile = (source: string, target: string, sha256: string, mode: number)
 /** Executables that travel beside `polaris` in a build (`scripts/build-daemon.ts`) and are installed with it. */
 export const SIBLING_EXECUTABLES = ["betterleaks"] as const;
 
+const EXECUTABLE_BUNDLE_FILES: ReadonlySet<BundleFile> = new Set(["polaris", "betterleaks"]);
+
+const isSymlink = (path: string) => {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
+/** Points `link` at the relative `target` by renaming a fresh symlink over it; false if it did. */
+const linkTo = (link: string, target: string) =>
+  fsStep(`link ${basename(link)}`, () => {
+    if (isSymlink(link) && readlinkSync(link) === target) return false;
+    const temp = `${link}.tmp-${process.pid}`;
+    rmSync(temp, { force: true });
+    symlinkSync(target, temp);
+    renameSync(temp, link);
+
+    return true;
+  });
+
+/**
+ * macOS: places a bundled build's files in `bin/<version>/PolarisDaemon.app` (`bundle.ts`),
+ * byte for byte so its signature holds, and links `bin/<version>/polaris` to its executable.
+ */
+const stageBundle = Effect.fn("stageBundle")(function* (
+  ctx: InstallContext,
+  options: InstallOptions,
+  sources: Record<BundleFile, string>
+) {
+  const versionDir = layout(ctx, options.version).versionDir!;
+  const bundle = join(versionDir, DAEMON_BUNDLE);
+
+  const sha256 =
+    options.sha256 ?? (yield* fsStep("hash binary", () => sha256File(sources.polaris)));
+
+  let changed = false;
+
+  for (const name of BUNDLE_FILE_NAMES) {
+    const source = sources[name];
+
+    if (!existsSync(source)) continue;
+
+    const hash =
+      name === "polaris" ? sha256 : yield* fsStep(`hash ${name}`, () => sha256File(source));
+
+    const mode = EXECUTABLE_BUNDLE_FILES.has(name) ? 0o755 : 0o644;
+    const placed = yield* placeFile(source, join(bundle, BUNDLE_FILES[name]), hash, mode);
+    changed = changed || placed;
+  }
+
+  const link = join(versionDir, binaryNameFor(ctx.os));
+  const linked = yield* linkTo(link, join(DAEMON_BUNDLE, BUNDLE_FILES.polaris));
+
+  return { path: join(bundle, BUNDLE_FILES.polaris), sha256, changed: changed || linked };
+});
+
 /**
  * Copies `source` to `~/.polaris/bin/<version>/polaris` (a no-op if an
  * identical file is there), and each sibling executable found next to
  * `source` beside it. Native libraries such as fff's and ast-grep's are
  * embedded by `bun build --compile`; Betterleaks is a separate Go binary.
+ * A macOS build that is a bundle is placed as one (`stageBundle`).
  */
 export const stageBinary = Effect.fn("stageBinary")(function* (
   ctx: InstallContext,
   options: InstallOptions
 ) {
+  const sources = ctx.os === "darwin" ? bundleSources(options.source) : null;
+
+  if (sources !== null) return yield* stageBundle(ctx, options, sources);
   const path = layout(ctx, options.version).installed!;
   const sha256 = options.sha256 ?? (yield* fsStep("hash binary", () => sha256File(options.source)));
+
+  // A flat copy replaces the link a bundled install of this version left.
+  if (isSymlink(path)) yield* fsStep("unlink polaris", () => rmSync(path));
   let changed = yield* placeFile(options.source, path, sha256, 0o755);
 
   for (const name of SIBLING_EXECUTABLES) {

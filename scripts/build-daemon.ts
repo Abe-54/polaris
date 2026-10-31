@@ -6,6 +6,10 @@
  *   apps/daemon/dist/<platform>/betterleaks   the pinned secrets scanner, checksum-verified (none on Windows yet)
  *   apps/daemon/dist/manifest.json            version, commit and SHA-256 per platform
  *
+ * On macOS both executables live in `darwin-arm64/PolarisDaemon.app` (ENG-680,
+ * `apps/daemon/src/service/bundle.ts`), signed as one bundle, and the manifest gives each
+ * file's `path` there. No links: the release signer refuses them in its hand-off.
+ *
  * fff's native library (`@ff-labs/fff-bun`, MIT) is embedded by the compile
  * step: fff-bun imports `@ff-labs/fff-bin-<platform>/libfff_c.*` with
  * `{ type: "file" }`, so the target platform's package must be installed at
@@ -41,6 +45,13 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { Option, Schema } from "effect";
+import {
+  BUNDLE_FILES,
+  type BundleFile,
+  DAEMON_BUNDLE,
+  DAEMON_ICON,
+  infoPlist,
+} from "../apps/daemon/src/service/bundle.ts";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
 import { BETTERLEAKS_VERSION, betterleaksAsset } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { buildVersion } from "./buildVersion.ts";
@@ -109,6 +120,7 @@ const FileEntry = Schema.Struct({
   sha256: Schema.String,
   size: Schema.Number,
   executable: Schema.optional(Schema.Boolean),
+  path: Schema.optional(Schema.String),
 });
 
 const PlatformBuild = Schema.Struct({
@@ -227,28 +239,64 @@ const binaryName = (platform: Platform) =>
 /**
  * Bun appends the bundle after linking, which leaves the linker's ad-hoc
  * signature invalid; recent macOS kills such binaries on exec (SIGKILL, exit
- * 137). Re-sign ad hoc. Needs macOS `codesign`, so darwin builds run on macOS.
+ * 137). Re-sign the app bundle ad hoc. Needs macOS `codesign`, so darwin builds run on macOS.
  */
-const signAdHoc = async (binary: string) => {
+const signAdHoc = async (bundle: string) => {
   if (process.platform !== "darwin") {
     throw new Error("darwin builds must run on macOS (codesign is needed to re-sign the binary)");
   }
 
-  await run(["codesign", "--force", "--sign", "-", binary]);
-  await run(["codesign", "--verify", "--strict", binary]);
+  await run(["codesign", "--force", "--sign", "-", bundle]);
+  await run(["codesign", "--verify", "--deep", "--strict", bundle]);
 };
 
 /** Betterleaks beside the binary; null for a platform without a pinned release (Windows, ENG-296). */
-const bundleBetterleaks = async (platform: Platform, outDir: string): Promise<string | null> => {
+const bundleBetterleaks = async (platform: Platform, dir: string): Promise<string | null> => {
   const asset = betterleaksAsset(platform);
 
   if (asset === null) return null;
-  const betterleaks = join(outDir, "betterleaks");
+  const betterleaks = join(dir, "betterleaks");
   copyFileSync(await fetchBetterleaks(asset), betterleaks);
   chmodSync(betterleaks, 0o755);
 
   return betterleaks;
 };
+
+/** The app bundle's Info.plist and icon, then its ad-hoc signature. */
+const finishBundle = async (outDir: string, version: string) => {
+  const bundle = join(outDir, DAEMON_BUNDLE);
+  const at = (name: BundleFile) => join(bundle, BUNDLE_FILES[name]);
+
+  writeFileSync(at("Info.plist"), infoPlist(version));
+  mkdirSync(dirname(at(DAEMON_ICON)), { recursive: true });
+  copyFileSync(join(root, "design", "assets", "app-icon", DAEMON_ICON), at(DAEMON_ICON));
+  await signAdHoc(bundle);
+};
+
+type FileEntry = typeof FileEntry.Type;
+
+/** A build's file: Betterleaks is marked executable, and a file not at its name gets its `path`. */
+const fileEntry = (outDir: string, name: string, path: string): FileEntry => {
+  const full = join(outDir, path);
+  const facts = { sha256: sha256(full), size: statSync(full).size };
+  const entry = name === "betterleaks" ? { ...facts, executable: true } : facts;
+
+  return path === name ? entry : { ...entry, path };
+};
+
+/** Each file of a build by name, at its path inside the platform's directory. */
+const fileEntries = (outDir: string, paths: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(paths).map(([name, path]) => [name, fileEntry(outDir, name, path)])
+  );
+
+/** Where each file of a darwin build is inside the platform directory. */
+const bundlePaths = (betterleaks: boolean): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(BUNDLE_FILES)
+      .filter(([name]) => betterleaks || name !== "betterleaks")
+      .map(([name, path]) => [name, join(DAEMON_BUNDLE, path)])
+  );
 
 const build = async (platform: Platform, version: string): Promise<PlatformBuild> => {
   const { target, define } = PLATFORMS[platform];
@@ -256,7 +304,9 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   const name = binaryName(platform);
-  const binary = join(outDir, name);
+  const darwin = platform.startsWith("darwin");
+  const binDir = darwin ? dirname(join(outDir, DAEMON_BUNDLE, BUNDLE_FILES.polaris)) : outDir;
+  const binary = join(binDir, name);
   await run([
     process.execPath,
     "build",
@@ -274,8 +324,9 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
     `--outfile=${binary}`,
   ]);
 
-  if (platform.startsWith("darwin")) await signAdHoc(binary);
-  const betterleaks = await bundleBetterleaks(platform, outDir);
+  const betterleaks = await bundleBetterleaks(platform, binDir);
+
+  if (darwin) await finishBundle(outDir, version);
 
   if (platform === hostPlatform) {
     // `selftest` also proves the embedded fff library loads and searches.
@@ -289,25 +340,14 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
     console.log(output.replaceAll(/^/gm, "  "));
   }
 
-  const daemon = { sha256: sha256(binary), size: statSync(binary).size };
-
-  const files =
-    betterleaks === null
-      ? { [name]: daemon }
-      : {
-          [name]: daemon,
-          betterleaks: {
-            sha256: sha256(betterleaks),
-            size: statSync(betterleaks).size,
-            executable: true,
-          },
-        };
+  const flat =
+    betterleaks === null ? { [name]: name } : { [name]: name, betterleaks: "betterleaks" };
 
   return {
     target,
     binary: name,
     sha256: sha256(binary),
-    files,
+    files: fileEntries(outDir, darwin ? bundlePaths(betterleaks !== null) : flat),
   };
 };
 

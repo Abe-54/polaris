@@ -184,6 +184,21 @@ class Manifest(unittest.TestCase):
                     sign.read_manifest(Path(dist), "1.0.0")
                 self.assertIn("is not a plain file name", str(raised.exception))
 
+    def test_reads_a_bundle_path_and_refuses_one_that_climbs_out(self) -> None:
+        bundled = "PolarisDaemon.app/Contents/_CodeSignature/CodeResources"
+        self.assertEqual(
+            sign.file_path(Path("/dist/darwin-arm64"), "CodeResources", {"path": bundled}),
+            Path("/dist/darwin-arm64", bundled),
+        )
+        for path in ("../../outside/polaris", "/etc/passwd", "PolarisDaemon.app/../../x", "a//b", 7):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as dist:
+                build = {"binary": "polaris", "files": {"polaris": {"path": path}}}
+                manifest = {"version": "1.0.0", "platforms": {sign.PLATFORM: build}}
+                Path(dist, "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaises(SystemExit) as raised:
+                    sign.read_manifest(Path(dist), "1.0.0")
+                self.assertIn("is not a relative path inside its platform", str(raised.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

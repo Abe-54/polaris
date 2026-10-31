@@ -20,6 +20,12 @@ describe("launchdPlist", () => {
     );
   });
 
+  test("Login Items lists it under the Desktop App, not as a bare executable (ENG-680)", () => {
+    expect(plist).toContain(
+      "<key>AssociatedBundleIdentifiers</key><array><string>dev.lux.polaris</string></array>"
+    );
+  });
+
   test("keeps the Daemon alive and logs under ~/.polaris/logs", () => {
     expect(plist).toContain("<key>KeepAlive</key><true/>");
     expect(plist).toContain("<key>RunAtLoad</key><true/>");

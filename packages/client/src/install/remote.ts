@@ -414,13 +414,13 @@ const applyPosixPlan = Effect.fn("applyPosixPlan")(function* (
           ).pipe(
             Effect.map((report) => ApplyResult.Installed({ version: plan.build.version, report }))
           ),
+        // The new build stages itself (an older one can't lay out its macOS bundle, ENG-680),
+        // then hands the running Daemon over to it.
         Upgrade: (upgrade) =>
           runPolaris(
             alias,
             "upgrade",
-            shScript(
-              `"$HOME/.polaris/bin/current/polaris" upgrade ${uploaded.binary} --json --sha256 ${sha256}`
-            )
+            shScript(`${uploaded.binary} upgrade ${uploaded.binary} --json --sha256 ${sha256}`)
           ).pipe(
             Effect.map((report) =>
               ApplyResult.Upgraded({ from: upgrade.from, version: plan.build.version, report })

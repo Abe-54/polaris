@@ -1,9 +1,11 @@
 /**
  * User-service definitions for the Daemon, as pure functions of their inputs.
  * The service always runs `~/.polaris/bin/current/polaris serve`, so an
- * upgrade only repoints the `current` symlink.
+ * upgrade only repoints the `current` symlink. On macOS that `polaris` links
+ * into the version's app bundle (`bundle.ts`), which names the process.
  */
 import { LAUNCHD_LABEL, SYSTEMD_UNIT } from "@polaris/protocol/endpoint";
+import { DESKTOP_BUNDLE_ID } from "./bundle.ts";
 
 export { LAUNCHD_LABEL, SYSTEMD_UNIT };
 
@@ -54,6 +56,10 @@ ${argv}
     <dict>
 ${envEntries}
     </dict>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+      ${string(DESKTOP_BUNDLE_ID)}
+    </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>

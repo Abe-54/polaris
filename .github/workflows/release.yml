@@ -220,9 +220,10 @@ jobs:
             if [ "$try" -eq 5 ]; then exit 1; fi
             sleep $((15 * try))
           done
-          daemon=apps/daemon/dist/darwin-arm64
-          test "$("$daemon/polaris" selftest | head -n 1)" = "polaris $VERSION darwin-arm64"
-          "$daemon/betterleaks" version
+          daemon=apps/daemon/dist/darwin-arm64/PolarisDaemon.app
+          codesign --verify --deep --strict "$daemon"
+          test "$("$daemon/Contents/MacOS/polaris" selftest | head -n 1)" = "polaris $VERSION darwin-arm64"
+          "$daemon/Contents/MacOS/betterleaks" version
       - name: Smoke-test the signed app
         timeout-minutes: 5
         run: node apps/desktop/scripts/packageCheck.ts
