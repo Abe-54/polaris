@@ -55,14 +55,18 @@ export class QueryLog extends Context.Service<
                 { value: string; status: string | null; reason: string | null },
                 [string, number, number]
               >(
-                "SELECT q.value,a.status,a.reason FROM data_query_log q LEFT JOIN data_approval_requests a ON a.id=json_extract(q.value,'$.approval.id') WHERE q.checkout=? AND q.seq<? ORDER BY q.seq DESC LIMIT ?"
+                "SELECT q.value,COALESCE(w.status,a.status) AS status,COALESCE(w.reason,a.reason) AS reason FROM data_query_log q LEFT JOIN data_approval_requests a ON a.id=json_extract(q.value,'$.approval.id') LEFT JOIN data_write_requests w ON w.id=json_extract(q.value,'$.approval.id') WHERE q.checkout=? AND q.seq<? ORDER BY q.seq DESC LIMIT ?"
               )
               .all(checkout, cut, Math.min(limit, 100) + 1);
 
             const entries = rows.slice(0, limit).map((row) => {
               const entry = decode(row.value);
 
-              if (!entry.approval || (row.status !== "approved" && row.status !== "denied"))
+              if (
+                !entry.approval ||
+                entry.state !== "waiting-approval" ||
+                (row.status !== "approved" && row.status !== "denied")
+              )
                 return entry;
 
               return new QueryLogEntry({

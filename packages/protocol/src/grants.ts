@@ -110,6 +110,7 @@ export const RPC_GRANTS = {
   "presence.report": "client",
   "data.sources.watch": "client",
   "data.describe": "client",
+  "data.edits.commit": "client",
   "data.query": "client",
   "data.queryLog.watch": "client",
   "data.source.save": "client",

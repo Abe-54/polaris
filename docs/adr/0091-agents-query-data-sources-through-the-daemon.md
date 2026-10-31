@@ -54,7 +54,16 @@ never sees a URL or a password, and the database itself enforces read-only.**
 
 - An agent that reads `.env` itself can still connect directly; the Query Log marks it and the
   tools make the direct route unnecessary, but this is not a sandbox.
-- A dry run executes the write's reads and locks once more; long-running or side-effecting
-  statements (sequences, triggers that call out) are visible in the approval, not prevented.
+- A dry run protects transactional rows, not every side effect. Sequence allocation (`nextval`
+  and auto-increment) can survive rollback, as can independent transactions or external calls
+  hidden in user functions/triggers. MySQL row writes therefore require InnoDB, and MySQL DDL
+  is refused because it commits implicitly. Local Postgres transactional DDL is supported;
+  remote DDL is refused. Direct dblink, signal and lock functions use the shared guard;
+  restricted database roles remain the boundary for wrappers. PostgreSQL NOTIFY is transactional
+  and is not delivered on rollback ([PostgreSQL 16 documentation](https://www.postgresql.org/docs/16/sql-notify.html)).
+- Remote execute requires remembered read access and writes allowed, plus one per-statement
+  write approval. A one-request read grant does not authorize a dry run. Consumed write authority
+  is never replayed automatically after an uncertain external commit; this prevents duplicate
+  dispatch but cannot make SQLite and an external database one atomic transaction.
 - Adding a database engine means a `Bun.SQL` adapter and its read-only transaction statement;
   SQLite (ENG-646) is next.

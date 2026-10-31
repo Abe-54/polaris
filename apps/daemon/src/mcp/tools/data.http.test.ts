@@ -4,8 +4,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { DomainEvent, type TurnId } from "@polaris/protocol";
-import { Effect, Layer, Redacted, Stream } from "effect";
+import { DataSource, DomainEvent, RequestId, type TurnId } from "@polaris/protocol";
+import { Effect, Layer, Redacted, Stream, Schema } from "effect";
+import { DataApprovalRequired } from "../../data/approvalRequired.ts";
 import { DataSources, DataQueries } from "../../data/index.ts";
 import { session, send } from "../../constellation/delivery/testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
@@ -13,12 +14,20 @@ import { shortTemp } from "../../platform/testing.ts";
 import { McpTokens } from "../tokens.ts";
 import { mcpHttp } from "../http.ts";
 import { fakeCommands } from "../testing.ts";
-import { bindings, result, source, table } from "./data.testing.ts";
+import { bindings, result, source, sourceFields, table } from "./data.testing.ts";
 
 for (const binding of bindings)
   test(`${binding._tag} Data tools over real MCP HTTP bind the current Turn`, async () => {
     const root = mkdtempSync(shortTemp("pl-m-data-"));
     const reads: Array<{ sessionId: string; turn?: TurnId; tool?: string }> = [];
+    let waitStarted!: () => void;
+
+    const waiting = new Promise<void>((resolve) => {
+      waitStarted = resolve;
+    });
+
+    let interrupted = false;
+    let waitCalls = 0;
 
     try {
       await Effect.runPromise(
@@ -52,7 +61,13 @@ for (const binding of bindings)
                     true
                   );
                 const sources = await client.callTool({ name: "data_sources", arguments: {} });
-                expect(sources.structuredContent).toMatchObject({ sources: [{ name: "app" }] });
+
+                const visible = Schema.decodeUnknownSync(
+                  Schema.Struct({ sources: Schema.Array(Schema.Struct({ name: Schema.String })) })
+                )(sources.structuredContent).sources.map((source) => source.name);
+
+                expect(visible).toContain("app");
+                expect(visible).toContain("broken");
 
                 const described = await client.callTool({
                   name: "describe",
@@ -85,6 +100,33 @@ for (const binding of bindings)
                   { sessionId: binding.sessionId, turn, tool: "query" },
                 ]);
                 expect(JSON.stringify([sources, described, queried])).not.toContain("://");
+
+                const post = (body: Schema.Json) =>
+                  fetch(`${origin}/mcp/${token}`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(body),
+                  });
+
+                const cancellable = post({
+                  jsonrpc: "2.0",
+                  id: "cancel-me",
+                  method: "tools/call",
+                  params: { name: "query", arguments: { source: "app", sql: "wait" } },
+                });
+
+                await waiting;
+
+                const cancelled = await post({
+                  jsonrpc: "2.0",
+                  method: "notifications/cancelled",
+                  params: { requestId: "cancel-me" },
+                });
+
+                expect(cancelled.status).toBe(202);
+                await cancellable;
+                expect(interrupted).toBe(true);
+                expect(waitCalls).toBe(1);
               } finally {
                 await client.close();
               }
@@ -98,10 +140,17 @@ for (const binding of bindings)
               Layer.succeed(
                 DataSources,
                 DataSources.of({
-                  list: () => Effect.succeed([source]),
+                  list: () =>
+                    Effect.succeed([
+                      source,
+                      new DataSource({ ...sourceFields, id: "bad", name: "broken" }),
+                    ]),
                   refresh: () => Effect.succeed([source]),
-                  resolve: () =>
-                    Effect.succeed({
+                  resolve: (input) => {
+                    if (input.source !== "app")
+                      throw new Error("Unrelated broken source must not be resolved");
+
+                    return Effect.succeed({
                       source,
                       connection: {
                         hostname: "localhost",
@@ -112,7 +161,8 @@ for (const binding of bindings)
                         tls: false,
                       },
                       matchUrl: Redacted.make("postgres://user:private@localhost/db"),
-                    }),
+                    });
+                  },
                   watch: () => Stream.succeed([source]),
                   save: () => Effect.succeed(source),
                   remove: () => Effect.void,
@@ -123,6 +173,8 @@ for (const binding of bindings)
               Layer.succeed(
                 DataQueries,
                 DataQueries.of({
+                  execute: () => Effect.die("Unexpected execute"),
+                  commitEdits: () => Effect.die("Unexpected commit"),
                   describe: (input) => {
                     reads.push(input);
 
@@ -131,9 +183,32 @@ for (const binding of bindings)
                   query: (input) => {
                     reads.push(input);
 
+                    if (input.sql === "wait") {
+                      waitCalls++;
+
+                      return Effect.fail(
+                        new DataApprovalRequired({
+                          approvalId: RequestId.make("cancel-approval"),
+                          sourceId: source.id,
+                          sourceName: source.name,
+                        })
+                      );
+                    }
+
                     return Effect.succeed(result);
                   },
-                  awaitApproval: () => Effect.succeed({ status: "pending" }),
+                  awaitApproval: () =>
+                    Effect.gen(function* () {
+                      waitStarted();
+
+                      return yield* Effect.never;
+                    }).pipe(
+                      Effect.onInterrupt(() =>
+                        Effect.sync(() => {
+                          interrupted = true;
+                        })
+                      )
+                    ),
                   recordOutside: () => Effect.void,
                   watchLog: () => Stream.succeed([]),
                   queryStream: () => Stream.empty,

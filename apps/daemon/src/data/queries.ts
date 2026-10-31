@@ -21,6 +21,7 @@ import { readEffect, knownCredentials } from "./execution.ts";
 import { readCatalog } from "./catalog.ts";
 import { resultChunks } from "./chunks.ts";
 import { resolveReadSource } from "./readSource.ts";
+import { writeQueries } from "./writeQueries.ts";
 import { type DataAgentContext } from "./approvalRequired.ts";
 
 const noSession = () =>
@@ -59,6 +60,8 @@ export const queries = Effect.gen(function* () {
 
     return { checkout: record.session.cwd, author };
   });
+
+  const writes = yield* writeQueries(sources, approvals, log, pools, context, store);
 
   const query = Effect.fnUntraced(function* (
     input: Parameters<DataQueries["Service"]["query"]>[0],
@@ -208,6 +211,7 @@ export const queries = Effect.gen(function* () {
   });
 
   return {
+    ...writes,
     query: (input) => Effect.map(query(input), (result) => new QueryResult(result)),
     describe,
     queryStream,

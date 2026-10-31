@@ -89,6 +89,34 @@ a needs-you approval in the conversation showing the SQL, `reason`, the affected
 denied, `E-DATA-DENIED` with the user's reason ("Deny and tell the agent why"). A Remote Data
 Source also needs writes allowed on it, else `E-DATA-DENIED` without asking.
 
+The phase-2 grammar accepts one explicit-target INSERT, UPDATE or DELETE, including read-only
+subqueries in SET/WHERE and INSERT … SELECT. Joins, aliases, CTEs, RETURNING, ORDER/LIMIT,
+tuple assignments and primary-key changes are refused with `E-DATA-SQL` and rewrite or migration
+guidance (ENG-669). A trigger that changes a sampled primary key also causes rollback/refusal
+when its after-row cannot be read. Key changes belong in a migration or the app's own code.
+Local Postgres transactional DDL is allowed; remote DDL is refused. MySQL DDL is refused because
+it commits implicitly; use the project's migration tool. MySQL row writes require an InnoDB target.
+
+Remote execute needs remembered source read access (exact target, or server as this user), writes
+allowed, and its own one-shot write approval. A `remember:false` source read grant authorizes only
+the query or describe that requested it. `remember` never makes a write approval reusable.
+Repeating the same source, SQL, params and reason in the same Turn reuses its card or completed
+result. Actual affected-count drift rolls back the real transaction. Interrupted consumption or
+an unknown external commit outcome is never retried automatically; inspect the Query Log and
+request a new preview with a new reason if needed.
+
+The active call's deadline includes its preview and approval wait. A late approval returns
+“Approved; call execute again” without starting a write past that deadline. Cancellation waits
+for the transaction to settle; pending cards are denied when the Turn ends. UPDATE/DELETE show
+up to 20 before/after rows read by primary key (16,000-byte preview budget); without a key the
+card says rows aren't shown. The completed result remains `{queryId, affected, elapsedMs}`.
+
+A rolled-back dry run leaves transactional rows unchanged, but sequence allocation (`nextval`,
+auto-increment), external calls, and independent transactions in user functions/triggers can
+survive. Direct dblink, signal and lock calls are refused by the shared function guard; wrappers
+still need database-role restrictions. Non-InnoDB targets are refused because their rows survive
+rollback. PostgreSQL NOTIFY itself is transactional and is not delivered after rollback.
+
 ## Outside Polaris
 
 A shell Tool Call that runs `psql`, `mysql`, `pg_dump` or a driver one-liner against a URL from the

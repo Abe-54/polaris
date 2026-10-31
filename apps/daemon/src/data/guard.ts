@@ -89,12 +89,12 @@ function literalEnd(sql: string, i: number, mode: LexicalMode): number | null {
   return end + delimiter.length;
 }
 
-interface Token {
+export interface Token {
   end: number;
   token?: string;
 }
 
-function tokenAt(sql: string, i: number, mode: LexicalMode): Token {
+export function tokenAt(sql: string, i: number, mode: LexicalMode): Token {
   const pg = mode.engine === "postgres";
 
   if (/\s/.test(sql[i]!)) return { end: i + 1 };
@@ -151,13 +151,14 @@ function singleStatement(sql: string, mode: LexicalMode) {
   return { terminator, keyword };
 }
 
-export function guardSql(sql: string, mode: LexicalMode) {
+export function guardSql(sql: string, mode: LexicalMode, write = false) {
   if (mode.engine === "mysql") mysqlRawGuard(sql, mode);
   const { terminator, keyword } = singleStatement(sql, mode);
 
   if (!keyword) refuse("Supply one SQL statement.");
 
   if (
+    !write &&
     mode.engine === "mysql" &&
     !["SELECT", "WITH", "TABLE", "VALUES", "SHOW", "DESCRIBE", "DESC", "EXPLAIN"].includes(keyword)
   )

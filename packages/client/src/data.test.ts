@@ -16,6 +16,7 @@ const session: DataSession = {
     "data.queryLog.watch": watchNotCalled,
     "data.describe": notCalled,
     "data.query": notCalled,
+    "data.edits.commit": notCalled,
     "data.source.save": notCalled,
     "data.source.remove": notCalled,
     "data.source.label": notCalled,

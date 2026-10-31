@@ -1,6 +1,9 @@
 /** Data service interfaces and RPC wiring; discovery and execution replace the stub Layers. */
 import {
   DataRpcs,
+  type ExecuteDataInput,
+  type CommitDataEdits,
+  type DataWriteResult,
   Unsupported,
   DataError,
   type RequestId,
@@ -85,6 +88,12 @@ export class DataSources extends Context.Service<
 export class DataQueries extends Context.Service<
   DataQueries,
   {
+    readonly execute: (
+      input: typeof ExecuteDataInput.Type & DataAgentContext
+    ) => Effect.Effect<DataWriteResult, Failure | DataApprovalRequired>;
+    readonly commitEdits: (
+      input: Input<typeof CommitDataEdits>
+    ) => Effect.Effect<DataWriteResult, Failure>;
     readonly describe: (
       input: Input<typeof DescribeData> & DataAgentContext
     ) => Effect.Effect<SchemaTree | TableDetail, Failure | DataApprovalRequired>;
@@ -132,6 +141,7 @@ export const DataRpcsLive = DataRpcs.toLayer(
     return {
       "data.sources.watch": (input) => sources.watch(input).pipe(Stream.mapError(wireFailure)),
       "data.describe": (input) => queries.describe(input).pipe(Effect.mapError(wireFailure)),
+      "data.edits.commit": (input) => queries.commitEdits(input).pipe(Effect.mapError(wireFailure)),
       "data.query": (input) => queries.query(input).pipe(Effect.mapError(wireFailure)),
       "data.query.stream": (input) =>
         queries.queryStream(input).pipe(Stream.rechunk(1), Stream.mapError(wireFailure)),

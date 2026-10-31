@@ -13,12 +13,14 @@ import { workingTurn } from "../store/model.ts";
 import { decideSession } from "../engine/session.ts";
 import { DataDatabase, storageError } from "./database.ts";
 import { ApprovalStore, targetKey, targetOf } from "./approvalStore.ts";
+import { writeApprovalMethods, type WriteApprovals } from "./writeApprovals.ts";
 import { DataApprovalRequired, type DataApprovalOutcome } from "./approvalRequired.ts";
 
 export class DataApprovals extends Context.Service<
   DataApprovals,
   {
     readonly changes: Stream.Stream<void>;
+    readonly writes: WriteApprovals;
     readonly read: (
       source: DataSource
     ) => Effect.Effect<{ access: DataSource["access"]; writes: DataSource["writes"] }, DataError>;
@@ -215,6 +217,7 @@ export class DataApprovals extends Context.Service<
 
       return {
         changes: Stream.fromPubSub(changes),
+        writes: writeApprovalMethods(events, repository.writes, sync),
         read,
         require,
         awaitApproval,

@@ -1,235 +1,35 @@
-/** Opt-in real PostgreSQL, discovery, execution and MCP HTTP; owns only its random schema. */
+/** Opt-in native acceptance; the child imports the real Daemon service composition. */
 import { expect, test } from "bun:test";
-import { SQL } from "bun";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { AgentSession, ApprovalDecision, DomainEvent } from "@polaris/protocol";
-import { Effect, Layer, Schema, Stream } from "effect";
-import { DataQueries, DataSourceAccess, DataSources } from "../../data/index.ts";
-import { DataDatabase } from "../../data/database.ts";
-import { DataApprovals } from "../../data/approvals.ts";
-import { QueryLog } from "../../data/queryLog.ts";
-import { sources as makeSources } from "../../data/sources.ts";
-import { session, send } from "../../constellation/delivery/testing.ts";
-import { EventStore } from "../../store/EventStore.ts";
-import { decideSession } from "../../engine/session.ts";
-import { HostSecrets } from "../../secrets/index.ts";
 import { shortTemp } from "../../platform/testing.ts";
-import { McpTokens } from "../tokens.ts";
-import { mcpHttp } from "../http.ts";
-import { fakeCommands } from "../testing.ts";
-import { plainBinding } from "./data.testing.ts";
 
-const postgresUrl = process.env.POLARIS_DATA_POSTGRES_URL;
+const target = process.env.POLARIS_DATA_POSTGRES_URL;
 
-if (postgresUrl === undefined)
-  console.info(
-    "Skipping real MCP/Postgres Data test: set POLARIS_DATA_POSTGRES_URL to a disposable local Postgres."
-  );
-
-const Sources = Schema.Struct({
-  sources: Schema.Array(
-    Schema.Struct({ name: Schema.String, engine: Schema.String, database: Schema.String })
-  ),
-});
-
-const Result = Schema.Struct({
-  queryId: Schema.String,
-  rows: Schema.Array(Schema.Array(Schema.Json)),
-});
-
-// Docker's listener need not be owned by the random checkout; record a test user decision.
-const approveFixture = Effect.gen(function* () {
-  const sources = yield* DataSources;
-  const fixture = yield* sources.resolve({ sessionId: plainBinding.sessionId, source: "app" });
-  const approvals = yield* DataApprovals;
-  const store = yield* EventStore;
-  yield* approvals.require(plainBinding.sessionId, fixture.source).pipe(
-    Effect.catchTag("DataApprovalRequired", (request) =>
-      Effect.gen(function* () {
-        yield* store.commit({
-          commandId: null,
-          decide: (model) =>
-            Effect.succeed(
-              decideSession(model.sessions.get(plainBinding.sessionId), {
-                type: "approval.respond",
-                requestId: request.approvalId,
-                decision: ApprovalDecision.cases.Allow.make({
-                  remember: true,
-                  dataScope: "target",
-                }),
-                resolvedBy: "test",
-              }).events
-            ),
-        });
-        expect((yield* approvals.read(fixture.source)).access).toBe("approved");
-      })
-    )
-  );
-});
-
-test.skipIf(postgresUrl === undefined)(
-  "Data tools through real MCP HTTP discover, describe, sample and query local Postgres",
+test.skipIf(target === undefined)(
+  "postgres Data tools through the production Engine/MCP composition",
   async () => {
-    const url = new URL(postgresUrl!);
-
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
-      throw new Error("The fixture requires a local Postgres");
-
-    const admin = new SQL({
-      adapter: "postgres",
-      hostname: url.hostname,
-      port: Number(url.port || 5432),
-      username: decodeURIComponent(url.username),
-      password: decodeURIComponent(url.password),
-      database: decodeURIComponent(url.pathname.slice(1)),
-      tls: false,
-      max: 1,
-    });
-
-    const schema = `mcp_${crypto.randomUUID().replaceAll("-", "")}`;
-    const root = mkdtempSync(shortTemp("pl-m-pg-"));
+    const root = mkdtempSync(shortTemp("pl-mx-real-"));
 
     try {
-      await admin.unsafe(`CREATE SCHEMA "${schema}"`);
-      await admin.unsafe(
-        `CREATE TABLE "${schema}".invoices (id integer PRIMARY KEY, amount numeric(12,4))`
-      );
-      await admin.unsafe(`INSERT INTO "${schema}".invoices VALUES (1, 12.34), (2, NULL)`);
-      writeFileSync(join(root, ".env.local"), `DATABASE_URL=${postgresUrl}\n`, { mode: 0o600 });
-
-      const services = DataQueries.layer.pipe(
-        Layer.provideMerge(
-          Layer.effect(
-            DataSources,
-            Effect.gen(function* () {
-              return yield* makeSources({
-                path: join(root, "data.sqlite"),
-                checkout: () => Effect.succeed(root),
-                secrets: yield* HostSecrets,
-                access: yield* DataSourceAccess,
-              });
-            })
-          )
-        ),
-        Layer.provideMerge(DataSourceAccess.live),
-        Layer.provideMerge(QueryLog.layer),
-        Layer.provideMerge(DataApprovals.layer),
-        Layer.provideMerge(DataDatabase.layerAt(join(root, "data.sqlite")))
+      const child = Bun.spawn(
+        [process.execPath, join(import.meta.dir, "data.real.testing.ts"), "postgres"],
+        {
+          env: { ...process.env, POLARIS_HOME: root },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
       );
 
-      await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const store = yield* EventStore;
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
 
-            const created = Schema.decodeUnknownSync(AgentSession)({
-              ...Schema.encodeSync(AgentSession)(session(plainBinding.sessionId)),
-              cwd: root,
-            });
-
-            yield* store.commit({
-              commandId: null,
-              decide: () =>
-                Effect.succeed([DomainEvent.cases.SessionCreated.make({ session: created })]),
-            });
-            yield* send(plainBinding.sessionId, "Read invoices");
-            const turn = (yield* store.model).sessions.get(plainBinding.sessionId)!.turns[0]!.id;
-            yield* approveFixture;
-            const { origin } = yield* mcpHttp(fakeCommands().commands);
-            const tokens = yield* McpTokens;
-            const token = yield* tokens.issue(plainBinding);
-            const queries = yield* DataQueries;
-            const client = new Client({ name: "data-postgres-test", version: "1" });
-            let queryId = "";
-
-            yield* Effect.promise(async () => {
-              try {
-                // SAFETY: the SDK's optional sessionId differs only under exactOptionalPropertyTypes.
-                await client.connect(
-                  new StreamableHTTPClientTransport(new URL(`${origin}/mcp/${token}`)) as Transport
-                );
-                const listed = await client.callTool({ name: "data_sources", arguments: {} });
-                expect(listed.isError).not.toBe(true);
-                const sources = Schema.decodeUnknownSync(Sources)(listed.structuredContent).sources;
-
-                const source = sources.find(
-                  (source) =>
-                    source.engine === "postgres" &&
-                    source.database === decodeURIComponent(url.pathname.slice(1))
-                );
-
-                if (source === undefined)
-                  throw new Error("The fixture database was not discovered");
-
-                const described = await client.callTool({
-                  name: "describe",
-                  arguments: { source: source.name, table: `${schema}.invoices`, sample: 1 },
-                });
-
-                expect(described.isError).not.toBe(true);
-                expect(described.structuredContent).toMatchObject({
-                  schema,
-                  name: "invoices",
-                  columns: [{ name: "id", pk: true }, { name: "amount" }],
-                });
-
-                const queried = await client.callTool({
-                  name: "query",
-                  arguments: {
-                    source: source.name,
-                    sql: `SELECT id, amount::text FROM "${schema}".invoices WHERE id=$1`,
-                    params: [1],
-                    limit: 1,
-                  },
-                });
-
-                expect(queried.isError).not.toBe(true);
-                const result = Schema.decodeUnknownSync(Result)(queried.structuredContent);
-                expect(result.rows).toEqual([[1, "12.3400"]]);
-                queryId = result.queryId;
-                expect(JSON.stringify([listed, described, queried])).not.toContain("://");
-
-                if (url.password.length >= 4)
-                  expect(JSON.stringify([listed, described, queried])).not.toContain(
-                    decodeURIComponent(url.password)
-                  );
-              } finally {
-                await client.close();
-              }
-            });
-
-            const log = yield* queries
-              .watchLog({ sessionId: plainBinding.sessionId })
-              .pipe(Stream.take(1), Stream.runCollect);
-
-            expect(log.flat().find((entry) => entry.id === queryId)).toMatchObject({
-              author: { kind: "agent", sessionId: plainBinding.sessionId, turn },
-              tool: "query",
-            });
-            expect(log.flat().some((entry) => entry.tool === "describe")).toBe(true);
-          })
-        ).pipe(
-          Effect.provide(services),
-          Effect.provide(
-            Layer.mergeAll(
-              EventStore.layerSqlite(":memory:"),
-              McpTokens.layer(join(root, "tokens.sqlite")),
-              HostSecrets.memory()
-            )
-          )
-        )
-      );
+      expect({ exit, stdout, stderr }).toEqual({ exit: 0, stdout: "", stderr: "" });
     } finally {
-      try {
-        await admin.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      } finally {
-        await admin.close();
-        rmSync(root, { recursive: true, force: true });
-      }
+      rmSync(root, { recursive: true, force: true });
     }
   },
   60_000

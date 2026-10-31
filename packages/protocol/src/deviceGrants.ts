@@ -110,6 +110,7 @@ export const DEVICE_RPCS = {
   "presence.report": "local",
   "data.sources.watch": "local",
   "data.describe": "local",
+  "data.edits.commit": "local",
   "data.query": "local",
   "data.queryLog.watch": "local",
   "data.source.save": "local",

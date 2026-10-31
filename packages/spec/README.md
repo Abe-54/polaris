@@ -872,3 +872,32 @@ acknowledgment or recovery semantics change. Runtime trace replay includes Evict
 ### Findings
 
 MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.
+
+
+## Data write approvals (ENG-645)
+
+`data_writes` in `polaris.qnt` models the rolled-back preview, pending/approved/denied authority,
+one durable consumption, count-checked execution and retries. Turn end/recovery deny pending
+cards and prevent starting a write. The safety checks constrain observed write effects and
+consumption, including count-drift rollback; seven scenarios and 3,000 safety traces run in
+`bun run spec`.
+
+| Model | Runtime mapping |
+| --- | --- |
+| `dryRun`, `request` | `data/writeExecution.ts` rolls back before `writeApprovals.open` invokes `decideSession(data.approvalRequested)`; the card contains the affected count and bounded rows. |
+| `allow`, `deny`, `endTurn`, `restart` | Existing `RespondToApproval`, Session machine withdrawal events, and `ApprovalStore` projection into `WriteApprovalStore`; `data/writeApprovals.test.ts` exercises decisions and all ending paths. |
+| `claim`, `retry` | `WriteApprovalStore.claim` uses a durable SQLite compare-and-set; `verification/dataWrites.model.test.ts` compares random real machine/projection sequences and repository reopen with an independent reference. |
+| `execute` | Shared `executeTransaction` runs the statement with exact affected-count equality, or rolls back. `duringWriteTurn` interrupts the scoped operation when its Turn ends. |
+
+The native `data/writes.real.test.ts` drives DataQueries, the real Session machine/SQLite stores
+and Postgres 16 or MySQL 8.4. It records the preview, approval, execution and retry with actual
+database values, and replays them through `scripts/data-write-replay`. The adapter's regression
+test rejects an unapproved execution and a retry that changes the database again. Discovery is
+injected at the connection boundary; these are not live Harness/UI tests. The driver suite also
+covers before/after rows, denied storage engines, DDL, affected-count drift, key validation and
+whole-grid rollback. Run/replay commands are in `apps/daemon/src/data/README.md`.
+
+The finite model does not claim distributed exactly-once commit across SQLite and an external
+SQL server. A consumed operation with an unknown outcome cannot be automatically replayed.
+Sequence allocation, external user-function effects, and driver receive-before-clip memory are
+outside its transactional-row model and are documented in ADR 0091.

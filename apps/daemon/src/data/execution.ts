@@ -90,7 +90,7 @@ export const knownCredentials = (connection: DataConnection) => [
   Redacted.make(encodeURIComponent(Redacted.value(connection.password))),
 ];
 
-interface Active {
+export interface Active {
   query?: SQL.Query<unknown>;
   stopped: boolean;
   kill: Promise<unknown>;
@@ -118,7 +118,7 @@ function cancellation(
   });
 }
 
-async function configure(tx: TransactionSQL, engine: "postgres" | "mysql", timeout: number) {
+export async function configure(tx: TransactionSQL, engine: "postgres" | "mysql", timeout: number) {
   if (engine === "postgres") {
     await tx`SELECT set_config('statement_timeout', ${String(timeout)}, true)`;
     await tx`SET LOCAL standard_conforming_strings = on`;
@@ -161,15 +161,22 @@ async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active)
     return await query;
   }
 
-  const declare = tx`${tx.unsafe(`DECLARE polaris_data NO SCROLL CURSOR FOR\n${checked.sql}`, params)}`;
+  return cursorRead(tx, active, checked.sql, params, input.limit + 1);
+}
+
+export async function cursorRead(
+  tx: TransactionSQL,
+  active: Active,
+  sql: string,
+  params: Array<ReturnType<typeof bindValues>[number] | Uint8Array>,
+  limit: number
+) {
+  const declare = tx`${tx.unsafe(`DECLARE polaris_data NO SCROLL CURSOR FOR\n${sql}`, params)}`;
   active.query = declare;
   await declare;
 
   // Only this Daemon-authored FETCH uses text protocol; user SQL always uses the tagged path.
-  const query = tx
-    .unsafe<RawResult>(`FETCH FORWARD ${input.limit + 1} FROM polaris_data`)
-    .simple()
-    .raw();
+  const query = tx.unsafe<RawResult>(`FETCH FORWARD ${limit} FROM polaris_data`).simple().raw();
 
   active.query = query;
   const result = await query;
@@ -178,7 +185,13 @@ async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active)
   return result;
 }
 
-export async function executeRead(pools: DataPools, input: ReadInput, signal: AbortSignal) {
+export async function executeTransaction<A>(
+  pools: DataPools,
+  input: Pick<ReadInput, "source" | "connection" | "timeoutMs">,
+  signal: AbortSignal,
+  options: string,
+  work: (tx: TransactionSQL, active: Active) => Promise<A>
+) {
   const lease = await pools.acquire(input.source, input.connection);
   let reserved: ReservedSQL | undefined;
   const active: Active = { stopped: false, kill: Promise.resolve() };
@@ -206,9 +219,13 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
       abort();
     }, input.timeoutMs ?? 30000);
 
-    const raw = await connection.begin("read only", async (tx) => {
+    const result = await connection.begin(options, async (tx) => {
       try {
-        return await boundedRead(tx, input, active);
+        const result = await work(tx, active);
+
+        if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
+
+        return result;
       } finally {
         await active.kill;
       }
@@ -221,23 +238,7 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
         fix: "Narrow the query before trying again.",
       });
 
-    const decoded = decodeResult(
-      raw,
-      input.source.engine,
-      knownCredentials(input.connection),
-      input.catalogText
-    );
-
-    const columns = decoded.columns.slice(0, 256).map((column) => ({
-      name: scrubCredentials(column.name, knownCredentials(input.connection)).slice(0, 256),
-      type: typeName(input.source.engine, column),
-    }));
-
-    return {
-      columns,
-      rows: decoded.rows.slice(0, input.limit).map((row) => row.slice(0, 256)),
-      truncated: decoded.rows.length > input.limit || decoded.columns.length > 256,
-    };
+    return result;
   } catch (error) {
     if (signal.aborted)
       throw new DataError({
@@ -260,6 +261,30 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
     reserved?.release();
     await lease.release();
   }
+}
+
+export async function executeRead(pools: DataPools, input: ReadInput, signal: AbortSignal) {
+  const raw = await executeTransaction(pools, input, signal, "read only", (tx, active) =>
+    boundedRead(tx, input, active)
+  );
+
+  const decoded = decodeResult(
+    raw,
+    input.source.engine,
+    knownCredentials(input.connection),
+    input.catalogText
+  );
+
+  const columns = decoded.columns.slice(0, 256).map((column) => ({
+    name: scrubCredentials(column.name, knownCredentials(input.connection)).slice(0, 256),
+    type: typeName(input.source.engine, column),
+  }));
+
+  return {
+    columns,
+    rows: decoded.rows.slice(0, input.limit).map((row) => row.slice(0, 256)),
+    truncated: decoded.rows.length > input.limit || decoded.columns.length > 256,
+  };
 }
 
 export function readEffect(pools: DataPools, input: ReadInput) {

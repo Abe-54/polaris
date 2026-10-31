@@ -29,6 +29,8 @@ test("F4/F6: 10k rows cross the real stream; cancellation closes the executor sc
           DataQueries.of({
             awaitApproval: () => Effect.succeed({ status: "pending" }),
             recordOutside: () => Effect.void,
+            execute: unavailable,
+            commitEdits: unavailable,
             describe: unavailable,
             query: unavailable,
             pageLog: unavailable,

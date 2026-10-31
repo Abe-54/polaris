@@ -2,6 +2,8 @@
 import {
   DescribeData,
   QueryData,
+  CommitDataEdits,
+  type DataWriteResult,
   SaveDataSource,
   RemoveDataSource,
   LabelDataSource,
@@ -24,6 +26,7 @@ const OnHost = { hostKey: Schema.String.check(Schema.isMinLength(1)) };
 
 export const DataRequestInputs = {
   "data.describe": Schema.Struct({ ...OnHost, ...DescribeData.payloadSchema.fields }),
+  "data.edits.commit": Schema.Struct({ ...OnHost, ...CommitDataEdits.payloadSchema.fields }),
   "data.query": Schema.Struct({ ...OnHost, ...QueryData.payloadSchema.fields }),
   "data.source.save": Schema.Struct({
     ...OnHost,
@@ -38,6 +41,7 @@ export const DataRequestInputs = {
 
 export interface DataRequestOutputs {
   readonly "data.describe": SchemaTree | TableDetail;
+  readonly "data.edits.commit": DataWriteResult;
   readonly "data.query": QueryResult;
   readonly "data.source.save": DataSource;
   readonly "data.source.remove": null;

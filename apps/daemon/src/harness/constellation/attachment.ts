@@ -51,7 +51,7 @@ export const attachConstellation = Effect.fn("attachConstellation")(function* (
   // The listed catalog is fixed; each call runs against the binding as it stands now.
   const tools = constellationTools(binding, commands, started, options).map((tool): BoundTool => ({
     ...tool,
-    call: async (input) => {
+    call: async (input, signal) => {
       const current = await Effect.runPromise(tokens.authenticate(token));
 
       const bound =
@@ -61,7 +61,7 @@ export const attachConstellation = Effect.fn("attachConstellation")(function* (
               (t) => t.name === tool.name
             );
 
-      return bound === undefined ? revoked() : bound.call(input);
+      return bound === undefined ? revoked() : bound.call(input, signal);
     },
   }));
 

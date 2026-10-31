@@ -1302,3 +1302,56 @@ module data_approvals {
   run deniedRetryTest = init.then(request("server1/db1/user1")).then(deny("server1/db1/user1"))
     .expect(data.pending.size() == 0 and not(allowed("server1/db1/user1")) and safety)
 }
+
+/** Transactional writes: rollback before request, one-shot authority and count-drift rollback. */
+module data_writes {
+  type WriteState = { turn: bool, phase: str, dryRuns: int, approval: str,
+    claims: int, runs: int, affected: int, expected: int, value: int }
+  var write: WriteState
+  action init = write' = { turn: true, phase: "new", dryRuns: 0, approval: "none",
+    claims: 0, runs: 0, affected: 0, expected: 0, value: 0 }
+  action dryRun(n: int): bool = all { write.turn, write.phase == "new",
+    write' = { ...write, phase: "previewed", dryRuns: 1, expected: n } }
+  action request = all { write.turn, write.phase == "previewed",
+    write' = { ...write, phase: "pending", approval: "pending" } }
+  action waitExpired = write' = write
+  action allow = all { write.turn, write.phase == "pending",
+    write' = { ...write, phase: "approved", approval: "approved" } }
+  action deny = all { write.turn, write.phase == "pending",
+    write' = { ...write, phase: "denied", approval: "denied" } }
+  action claim = all { write.turn, write.phase == "approved", write.claims == 0,
+    write' = { ...write, phase: "started", claims: 1 } }
+  action execute(n: int): bool = all { write.turn, write.phase == "started", write.runs == 0,
+    write' = { ...write, phase: if (n == write.expected) "completed" else "failed",
+      runs: 1, affected: n, value: if (n == write.expected) n else 0 } }
+  action endTurn = write' = { ...write, turn: false,
+    phase: if (write.phase == "pending" or write.phase == "approved" or write.phase == "started") "denied" else write.phase,
+    approval: if (write.approval == "pending") "denied" else write.approval }
+  action restart = endTurn
+  action retry = write' = write
+  action step = {
+    nondet n = Set(0,1,2).oneOf()
+    any { dryRun(n),request,waitExpired,allow,deny,claim,execute(n),endTurn,restart,retry }
+  }
+  val safety = all {
+    write.claims <= 1, write.runs <= write.claims,
+    write.claims > 0 implies write.approval == "approved",
+    write.approval == "denied" implies write.runs == 0,
+    write.approval != "none" implies write.dryRuns == 1,
+    write.value != 0 implies write.phase == "completed" and write.affected == write.expected,
+    not(write.turn) implies write.phase != "pending"
+  }
+  run rollbackPreviewTest = init.then(dryRun(2)).expect(write.value == 0 and safety)
+  run approvedOnceTest = init.then(dryRun(2)).then(request).then(allow).then(claim).then(execute(2))
+    .then(retry).expect(write.value == 2 and write.runs == 1 and safety)
+  run deniedNeverRunsTest = init.then(dryRun(2)).then(request).then(deny).then(retry)
+    .expect(write.value == 0 and write.claims == 0 and write.runs == 0 and safety)
+  run turnEndDeniesTest = init.then(dryRun(2)).then(request).then(endTurn)
+    .expect(write.approval == "denied" and write.claims == 0 and safety)
+  run restartDeniesTest = init.then(dryRun(2)).then(request).then(restart)
+    .expect(write.approval == "denied" and write.claims == 0 and safety)
+  run countDriftRollsBackTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(execute(2))
+    .expect(write.phase == "failed" and write.value == 0 and safety)
+  run timeoutDoesNotRunTest = init.then(dryRun(1)).then(request).then(waitExpired)
+    .expect(write.phase == "pending" and write.runs == 0 and safety)
+}

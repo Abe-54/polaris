@@ -121,6 +121,18 @@ run("Data approval safety", [
   `--seed=${seed}`,
 ]);
 
+run("Data write scenarios", ["test", "polaris.qnt", "--main=data_writes"]);
+
+run("Data write safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_writes",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
 run("typecheck polaris_test.qnt", ["typecheck", "polaris_test.qnt"]);
 
 run("typecheck worker-admission.qnt", ["typecheck", "worker-admission.qnt"]);
