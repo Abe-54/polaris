@@ -11,6 +11,7 @@ import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import {
   fixtureWrite,
   fixtureWriteApproval,
+  fixtureWriteEntry,
   insertWrite,
   notPreviewedWrite,
   worstWrite,
@@ -173,4 +174,133 @@ test("Approve from outside a card on screen opens it and runs nothing: the SQL i
   expect(sent).toBe(false);
   expect(opened).toBe(true);
   expect(decisions()).toEqual([]);
+});
+
+/** Lays the card out in a conversation viewport from 0 to 600 px: where its parts sit, top/bottom. */
+type Span = readonly [number, number];
+
+const layOut = (parts: { readonly statement: Span; readonly run: Span }) => {
+  const rect =
+    ([top, bottom]: Span) =>
+    () =>
+      new DOMRect(0, top, 600, bottom - top);
+
+  const viewport = document.querySelector<HTMLElement>("[data-approval-viewport]");
+  const card = screen.getByTestId("data-write");
+
+  if (viewport === null) throw new Error("no viewport");
+  viewport.getBoundingClientRect = rect([0, 600]);
+  card.getBoundingClientRect = rect([parts.statement[0] - 80, parts.run[1]]);
+
+  for (const part of card.querySelectorAll<HTMLElement>("[data-approval-part]"))
+    part.getBoundingClientRect = rect(
+      part.dataset.approvalPart === "run" ? parts.run : parts.statement
+    );
+};
+
+const inConversation = (request: ApprovalRequest) =>
+  render(<div data-approval-viewport="">{card(request)}</div>);
+
+const approveFromInbox = (request: ApprovalRequest) =>
+  act(() => approve({ hostKey: "local", sessionId: request.sessionId, request }));
+
+test.each([
+  [
+    "only the Run row in view, the SQL scrolled above",
+    { statement: [-400, -100], run: [540, 590] },
+  ],
+  [
+    "scrolled under the composer, in the window but not the conversation",
+    { statement: [610, 690], run: [700, 740] },
+  ],
+] as const)(
+  "Approve from elsewhere refuses a write with %s, and brings its card's top into view (F2)",
+  async (_, parts) => {
+    const request = fixtureWriteApproval();
+
+    inConversation(request);
+    layOut(parts);
+    let scrolled: ScrollIntoViewOptions | boolean | undefined;
+
+    screen.getByTestId("data-write").scrollIntoView = (options) => {
+      scrolled = options;
+    };
+
+    act(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+
+    expect(await approveFromInbox(request)).toBe(false);
+    expect(decisions()).toEqual([]);
+    expect(scrolled).toEqual({ block: "start" });
+    expect(document.activeElement).toBe(screen.getByTestId("data-write"));
+  }
+);
+
+test("Approve from elsewhere runs a write whose SQL, dry run and Run row are all in view", async () => {
+  const request = fixtureWriteApproval();
+
+  inConversation(request);
+  layOut({ statement: [40, 260], run: [500, 548] });
+
+  expect(await approveFromInbox(request)).toBe(true);
+  expect(decisions()).toEqual([Decisions.Allow({ remember: false })]);
+});
+
+test("a card that opens with nothing focused takes focus, so ⌘↵ runs it; it never steals focus", () => {
+  const { unmount } = render(card(fixtureWriteApproval()));
+
+  expect(document.activeElement).toBe(screen.getByTestId("data-write"));
+  unmount();
+
+  render(
+    <>
+      <input aria-label="composer" />
+      {null}
+    </>
+  );
+  act(() => screen.getByLabelText("composer").focus());
+  render(card(fixtureWriteApproval()));
+  expect(document.activeElement).toBe(screen.getByLabelText("composer"));
+});
+
+test("a write the Daemon couldn't preview looks riskier: its own kicker, the warning, no primary Run (F4)", () => {
+  const { unmount } = render(card(fixtureWriteApproval()));
+
+  expect(screen.getByTestId("data-write-run").dataset.variant).toBe("primary");
+  expect(screen.queryByTestId("data-write-unpreviewed")).toBeNull();
+  unmount();
+
+  render(card(fixtureWriteApproval(notPreviewedWrite())));
+
+  expect(screen.getByTestId("data-write-unpreviewed").textContent).toBe(
+    "Not previewed: this table has triggersPolaris can't show which rows this changes."
+  );
+  expect(screen.getByTestId("data-write-run").dataset.variant).toBe("secondary");
+});
+
+test("an outcome-unknown write offers its table in Data from the settled line (F5)", () => {
+  const request = fixtureWriteApproval();
+  // SAFETY: fixtureWriteApproval always carries a dataWrite.
+  const write = request.dataWrite as DataWrite;
+  let opened = 0;
+
+  render(
+    <WriteApprovalCard
+      hostKey="local"
+      request={request}
+      write={write}
+      who="Backfill currency"
+      source={APP}
+      outcome={{ kind: "allowed" }}
+      entry={fixtureWriteEntry(write, "unknown")}
+      onOpenTable={() => opened++}
+    />
+  );
+
+  const settled = screen.getByTestId("data-write-settled");
+
+  expect(settled.dataset.state).toBe("unknown");
+  fireEvent.click(screen.getByRole("button", { name: "Open in Data" }));
+  expect(opened).toBe(1);
 });

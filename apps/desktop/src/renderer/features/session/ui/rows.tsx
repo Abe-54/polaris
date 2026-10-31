@@ -32,7 +32,7 @@ import { age } from "../../../shell/copy.ts";
 import { SentAttachments } from "../../attachments/index.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { Decisions } from "../../../commands.ts";
-import { useApp } from "../../../shell/hooks.ts";
+import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { type Row, turnReceipt, turnTime } from "../model/conversation.ts";
 import { totals } from "../model/diff.ts";
 import { plural } from "../model/format.ts";
@@ -54,6 +54,7 @@ import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCa
 import { sourceForTarget } from "../../data/approval/decide.ts";
 import { askedBy, type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
 import { useDataSources } from "../../data/data/hooks.tsx";
+import { dataOpeners } from "../../data/output/open.ts";
 import { useWriteEntry } from "../../data/write/hooks.ts";
 import type { DataWrite } from "../../data/write/model.ts";
 import { WriteApprovalCard } from "../../data/write/WriteApprovalCard.tsx";
@@ -467,9 +468,11 @@ const DataWriteApproval = ({
   const sources = useDataSources({ hostKey, sessionId });
   const listed = sources.status === "ready" ? sources.value : [];
   const entry = useWriteEntry({ hostKey, sessionId }, write, wrote?.kind === "allowed");
+  const open = dataOpeners({ hostKey, sessionId }, listed, useShellActions());
 
   return (
     <WriteApprovalCard
+      onOpenTable={() => open.approval(write, entry)}
       hostKey={hostKey}
       request={request}
       write={write}

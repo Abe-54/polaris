@@ -169,3 +169,10 @@ export const prunedNote = (diff: DataSchemaDiff | null): PrunedNote | null => {
 
 export const DETAILS_TRUNCATED_NOTE =
   "Partial: a wide table, so added or removed columns, indexes and constraints aren’t shown";
+
+/** The files list's figure: "9 matched", "−12 est.", "unknown", so it never reads as a size. */
+export const listFigure = (rows: Rows): string => {
+  if (rows.kind === "unknown" || rows.value === null) return "unknown";
+
+  return rows.kind === "estimate" ? `${figure(rows.value)} est.` : `${figure(rows.value)} matched`;
+};

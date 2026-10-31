@@ -11,7 +11,7 @@ import type {
   SessionId,
 } from "@polaris/protocol";
 import type { SettledWrite, WriteOutcome } from "../../../store/sessionModel.ts";
-import { isWrite, tableOf } from "../model/queryLog.ts";
+import { isWrite, tableRefOf } from "../model/queryLog.ts";
 import type { TableRef } from "../model/tabs.ts";
 import { type DataWrite, outcomeUnknown, settledLine, UNKNOWN_DETAIL } from "../write/model.ts";
 
@@ -176,11 +176,29 @@ export const defaultSchema = (source: Pick<DataSource, "engine" | "database">) =
   source.engine === "postgres" ? "public" : source.database;
 
 /** The table "Open in Data" opens for a write: the first the Daemon counted, else the SQL's. */
-export const writeTable = (entry: QueryLogEntry, schema: string): TableRef | null => {
+export const writeTable = (
+  entry: Pick<QueryLogEntry, "affected" | "sql">,
+  schema: string
+): TableRef | null => {
   const first = entry.affected?.[0];
 
   if (first !== undefined) return { schema: first.schema ?? schema, name: first.table };
-  const name = tableOf(entry.sql);
+  const named = tableRefOf(entry.sql);
 
-  return name === null ? null : { schema, name };
+  return named === null ? null : { schema: named.schema ?? schema, name: named.name };
+};
+
+/** What a schema card's "Open in Data" opens: the first table that still exists, else why not. */
+export type SchemaTarget =
+  | { readonly kind: "table"; readonly ref: TableRef }
+  | { readonly kind: "removed"; readonly name: string }
+  | { readonly kind: "none" };
+
+export const schemaTarget = (diff: Pick<SchemaSourceDiff, "tables">): SchemaTarget => {
+  const live = diff.tables.find((t) => t.after !== null)?.after;
+
+  if (live != null) return { kind: "table", ref: { schema: live.schema, name: live.name } };
+  const removed = diff.tables[0]?.before;
+
+  return removed == null ? { kind: "none" } : { kind: "removed", name: removed.name };
 };

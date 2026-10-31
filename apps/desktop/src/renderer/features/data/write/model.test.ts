@@ -180,12 +180,12 @@ describe("an answered card collapses to one line", () => {
     expect(settledLine(write, allowed, entry).line).toBe(line);
   });
 
-  test("a run whose COMMIT went unconfirmed says the outcome is unknown", () => {
+  test("an unconfirmed run blames no cause and promises no rerun the Daemon refuses (F5)", () => {
     expect(settledLine(write, allowed, fixtureWriteEntry(write, "unknown"))).toEqual({
       kind: "unknown",
       line: "214-row update: outcome unknown",
       detail:
-        "The connection dropped before the database answered. Check the table before running it again.",
+        "Polaris lost track of this write before the database confirmed it. Check the rows before asking the agent to try again.",
     });
   });
 

@@ -5,7 +5,7 @@
  * `FOLD_AFTER` tables the rest wait behind "Show N more tables".
  */
 import type { SchemaSourceDiff, SchemaTableDiff } from "@polaris/protocol";
-import { Badge, Button, cn, EmptyState, Kbd, PixelForkIcon } from "@polaris/ui";
+import { Badge, Button, cn, EmptyState, PixelForkIcon } from "@polaris/ui";
 import { useState } from "react";
 import { commandShortcut } from "../../../../shared/keymap.ts";
 import type { TableRef } from "../../data/model/tabs.ts";
@@ -88,9 +88,9 @@ const TableCard = ({
             size="sm"
             className="shrink-0"
             onClick={() => onOpenTable(current)}
+            title={shortcut === "" ? undefined : `Data ${shortcut}`}
           >
             Open in Data
-            {shortcut !== "" && <Kbd variant="plain">{shortcut}</Kbd>}
           </Button>
         )}
       </header>

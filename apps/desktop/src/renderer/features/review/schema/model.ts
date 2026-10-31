@@ -4,7 +4,7 @@
  * section sits among the files (right after the migrations that caused it). Pure, so tested.
  */
 import type { DataSchemaDiff, SchemaSourceDiff, SchemaTableDiff } from "@polaris/protocol";
-import { type PrunedNote, rowsFigure, rowsLine, unavailableReason } from "./copy.ts";
+import { listFigure, type PrunedNote, rowsLine, unavailableReason } from "./copy.ts";
 
 export type TableKind = SchemaTableDiff["kind"];
 
@@ -155,7 +155,7 @@ export const dataListRows = (
         key: `data:${id}:rows:${currentName(table)}`,
         sourceId: id,
         table: currentName(table),
-        figure: rowsFigure(table.rows),
+        figure: listFigure(table.rows),
         title: rowsLine(table.rows),
       })),
       ...(rows.length > LISTED_ROWS

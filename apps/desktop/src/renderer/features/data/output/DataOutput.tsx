@@ -4,54 +4,36 @@
  * and "Open in Data ⌘4" on each. The caller shows the tab only when the Turn touched data.
  */
 import type { DataSource, SchemaSourceDiff, SessionId } from "@polaris/protocol";
-import { Button, cn, Kbd, PixelFailedIcon, PixelHandIcon } from "@polaris/ui";
+import { Button, cn, PixelAlertIcon, PixelFailedIcon, PixelHandIcon } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { useShellActions } from "../../../shell/hooks.ts";
-import { menuShortcut } from "../../../shell/menu/index.ts";
-import { openSessionReview } from "../../../routes/review.ts";
-import { setTab } from "../../review/overview/index.ts";
 import { countParts, currentName, tableCounts } from "../../review/schema/model.ts";
-import { openSchemaDiff } from "../../review/schema/store.ts";
-import { subjectKey } from "../../review/surface.ts";
-import { sourceForTarget } from "../approval/decide.ts";
 import { useDataSources } from "../data/hooks.tsx";
-import { showLogTurn } from "../model/sidebar.ts";
-import { type DataSessionKey, openSqlTab, openTable } from "../model/store.ts";
 import { BeforeAfter } from "../write/BeforeAfter.tsx";
+import { OpenInData } from "../write/OpenInData.tsx";
 import { SqlStatement } from "../write/SqlStatement.tsx";
 import { verbOf } from "../write/model.ts";
 import {
   affectedLines,
-  defaultSchema,
   readsLine,
+  schemaTarget,
   type TurnData,
   type TurnWrite,
   writeStatus,
-  writeTable,
 } from "./model.ts";
+import { dataOpeners, type ShownTurn } from "./open.ts";
 
 export interface DataOutputProps {
   readonly hostKey: string;
   readonly sessionId: SessionId;
   readonly data: TurnData;
   /** The Turn's number and its Turns' ids, for the Query log's filter. */
-  readonly turn: { readonly number: number; readonly ids: ReadonlyArray<string> };
+  readonly turn: ShownTurn;
 }
 
 const KICKER = "font-mono text-[11px] leading-[14px] tracking-[0.06em] uppercase text-text-faint";
 
 const CARD = "rounded-card border-hairline bg-surface-raised flex flex-col gap-2.5 border p-3.5";
-
-const OpenInData = ({ onOpen }: { readonly onOpen: () => void }) => {
-  const shortcut = menuShortcut("view.data");
-
-  return (
-    <Button variant="ghost" size="xs" onClick={onOpen} data-testid="data-output-open">
-      Open in Data
-      {shortcut === undefined ? null : <Kbd variant="plain">{shortcut}</Kbd>}
-    </Button>
-  );
-};
 
 const Footer = ({ children }: { readonly children: ReactNode }) => (
   <div className="-mx-1 -mb-1 flex flex-wrap items-center justify-end gap-1">{children}</div>
@@ -69,6 +51,9 @@ const StatusIcon = ({ kind }: { readonly kind: ReturnType<typeof writeStatus>["k
 
   if (kind === "failed")
     return <PixelFailedIcon size={12} className="text-failed shrink-0" aria-hidden />;
+
+  if (kind === "unknown")
+    return <PixelAlertIcon size={12} className="text-needs-you shrink-0" aria-hidden />;
 
   return null;
 };
@@ -143,6 +128,7 @@ const SchemaCard = ({
   readonly onOpen: () => void;
 }) => {
   const parts = countParts(tableCounts(source));
+  const target = schemaTarget(source);
 
   return (
     <article className={CARD} data-testid="data-output-schema">
@@ -188,61 +174,23 @@ const SchemaCard = ({
         >
           Schema diff
         </Button>
-        <OpenInData onOpen={onOpen} />
+        {target.kind === "removed" ? (
+          <span className="text-caption text-text-subtle px-1" data-testid="data-output-removed">
+            {`${target.name} was removed`}
+          </span>
+        ) : (
+          <OpenInData onOpen={onOpen} />
+        )}
       </Footer>
     </article>
   );
-};
-
-/** The actions each item takes into Data (⌘4) and Review, on this session. */
-const useOpeners = (at: DataSessionKey, sources: ReadonlyArray<DataSource>) => {
-  const actions = useShellActions();
-
-  const toData = () => {
-    actions.selectSession(at);
-    actions.setMode("data");
-  };
-
-  return {
-    write: (item: TurnWrite) => {
-      const { entry } = item;
-
-      const source =
-        sources.find((s) => s.id === entry.source.id) ??
-        (item.approval === null ? undefined : sourceForTarget(sources, item.approval.write.target));
-
-      const table = source === undefined ? null : writeTable(entry, defaultSchema(source));
-
-      if (source !== undefined && table !== null) openTable(source.name, table, at);
-      else openSqlTab(entry.sql, source?.name ?? "", at, entry.params ?? []);
-      toData();
-    },
-    schema: (diff: SchemaSourceDiff) => {
-      const identity = diff.tables[0]?.after ?? diff.tables[0]?.before;
-
-      if (identity != null) openTable(diff.source.name, identity, at);
-      toData();
-    },
-    schemaDiff: (diff: SchemaSourceDiff) => {
-      const key = subjectKey({ kind: "session", hostKey: at.hostKey, sessionId: at.sessionId });
-
-      actions.selectSession(at);
-      openSessionReview(actions, at.hostKey, at.sessionId);
-      setTab(key, "changes");
-      openSchemaDiff(key, diff.source.id);
-    },
-    log: (turn: DataOutputProps["turn"]) => {
-      showLogTurn(at, { turnIds: turn.ids, label: `Turn ${turn.number}` });
-      toData();
-    },
-  };
 };
 
 export const DataOutput = ({ hostKey, sessionId, data, turn }: DataOutputProps) => {
   const at = { hostKey, sessionId };
   const listed = useDataSources(at);
   const sources = listed.status === "ready" ? listed.value : [];
-  const open = useOpeners(at, sources);
+  const open = dataOpeners(at, sources, useShellActions());
 
   return (
     <div
@@ -261,7 +209,7 @@ export const DataOutput = ({ hostKey, sessionId, data, turn }: DataOutputProps) 
         <SchemaCard
           key={source.source.id}
           source={source}
-          onSchemaDiff={() => open.schemaDiff(source)}
+          onSchemaDiff={() => open.schemaDiff(source, turn)}
           onOpen={() => open.schema(source)}
         />
       ))}

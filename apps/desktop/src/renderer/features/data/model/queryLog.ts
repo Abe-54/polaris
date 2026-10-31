@@ -59,14 +59,23 @@ export const isWrite = (sql: string) => {
   return WRITE.test(masked) || CTE_WRITE.test(masked);
 };
 
-/** The first table a statement names, unquoted and without its schema; null for none. */
-export const tableOf = (sql: string): string | null => {
+const unquote = (part: string) => part.replace(/^["`]|["`]$/g, "");
+
+/** The first table a statement names, unquoted, with its schema when the SQL names one. */
+export const tableRefOf = (sql: string): { schema?: string; name: string } | null => {
   const name = TABLE.exec(sql)?.[1];
 
   if (name === undefined) return null;
+  const parts = name.split(".").map(unquote);
+  const table = parts.at(-1) ?? name;
 
-  return (name.split(".").at(-1) ?? name).replace(/^["`]|["`]$/g, "");
+  return parts.length > 1 && parts[0] !== undefined
+    ? { schema: parts[0], name: table }
+    : { name: table };
 };
+
+/** The first table a statement names, unquoted and without its schema; null for none. */
+export const tableOf = (sql: string): string | null => tableRefOf(sql)?.name ?? null;
 
 const running = (entry: QueryLogEntry) => entry.state === "running";
 

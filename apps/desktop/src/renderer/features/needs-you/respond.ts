@@ -6,7 +6,7 @@ import type { ApprovalDecision, ApprovalRequest, RequestId, SessionId } from "@p
 import { Commands, Decisions } from "../../commands.ts";
 import { allowFor, forgetDecision, noteDecision, noteGrant } from "../data/approval/decide.ts";
 import { askDenyReason } from "../data/write/deny.ts";
-import { isApprovalOnScreen } from "../../shell/approvalInView.ts";
+import { isApprovalOnScreen, revealApproval } from "../../shell/approvalInView.ts";
 import { send } from "../session/dispatch.ts";
 import { markAnswered } from "./answered.ts";
 
@@ -55,11 +55,12 @@ export const decide = async (
 
 /**
  * A Data Source Approval sends its card's scope, remembered, whatever `remember` says. A write
- * runs only from its card on screen, where its SQL and dry run are: elsewhere `open` shows it.
+ * runs only while its card's SQL, dry run and Run row are in view; else `open` and the card show.
  */
 export const approve = async (target: ApprovalTarget, remember = false, open?: () => void) => {
   if (target.request.dataWrite !== undefined && !isApprovalOnScreen(target.request.id)) {
     open?.();
+    revealApproval(target.request.id);
 
     return false;
   }

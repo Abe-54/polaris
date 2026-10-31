@@ -230,6 +230,7 @@ export const Conversation = ({
         ref={scrollRef}
         className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain select-text [overflow-anchor:none]"
         data-testid="conversation"
+        data-approval-viewport
       >
         <div ref={virtualizer.containerRef} className="relative w-full">
           {virtualizer.getVirtualItems().map((item) => {

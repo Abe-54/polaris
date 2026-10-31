@@ -75,7 +75,7 @@ describe("the files list's Data section", () => {
       "−1",
     ]);
     expect(rows.flatMap((r) => (r.kind === "data-rows" ? [`${r.table} ${r.figure}`] : []))).toEqual(
-      ["currencies 3", "invoices ~214"]
+      ["currencies 3 matched", "invoices 214 est."]
     );
   });
 

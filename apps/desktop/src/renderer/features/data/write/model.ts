@@ -74,6 +74,12 @@ const notPreviewedReason = (write: DataWrite) =>
 export const noteLine = (write: DataWrite): string | null =>
   notPreviewed(write) || write.note.trim() === "" ? null : write.note.trim();
 
+/** Under an unpreviewed write's kicker: what the card can't show, so it reads as the riskier one. */
+export const notPreviewedWarning = (write: DataWrite) =>
+  verbOf(write.sql) === "schema change"
+    ? "Polaris can't show what this changes in the schema."
+    : "Polaris can't show which rows this changes.";
+
 /** An insert's preview holds only the new rows. */
 const isInsert = (write: DataWrite) => verbOf(write.sql) === "insert";
 
@@ -208,7 +214,7 @@ const failureDetail = (entry: QueryLogEntry) =>
 export const outcomeUnknown = (entry: QueryLogEntry | undefined) => entry?.state === "unknown";
 
 export const UNKNOWN_DETAIL =
-  "The connection dropped before the database answered. Check the table before running it again.";
+  "Polaris lost track of this write before the database confirmed it. Check the rows before asking the agent to try again.";
 
 const allowedLine = (write: DataWrite, entry: QueryLogEntry | undefined): Settled => {
   const name = writeName(write);

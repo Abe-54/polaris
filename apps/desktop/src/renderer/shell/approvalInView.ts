@@ -7,6 +7,12 @@ import { useCallback } from "react";
 
 const shown = new Map<string, Set<HTMLElement>>();
 
+/** Marks the scroller cards sit in (the conversation), so "on screen" means inside it. */
+export const APPROVAL_VIEWPORT = "data-approval-viewport";
+
+/** Marks a part of a write's card that must be fully in view before it runs from elsewhere. */
+export const APPROVAL_PART = "data-approval-part";
+
 /** A ref for an approval's card: while mounted, the card can be the one in view. */
 export const useShownApproval = (requestId: string) =>
   useCallback(
@@ -26,16 +32,59 @@ export const useShownApproval = (requestId: string) =>
     [requestId]
   );
 
-/** Whether a card of the approval is on screen now, so what it asks is in front of the user. */
-export const isApprovalOnScreen = (
-  requestId: string,
-  visible: (e: HTMLElement) => boolean = onScreen
-) => [...(shown.get(requestId) ?? [])].some((element) => visible(element));
+/** The window, narrowed to the scroller the element sits in: what the user can see of it. */
+const viewportOf = (element: HTMLElement) => {
+  const scroller = element.closest(`[${APPROVAL_VIEWPORT}]`)?.getBoundingClientRect();
+  const top = Math.max(0, scroller?.top ?? 0);
+  const bottom = Math.min(window.innerHeight, scroller?.bottom ?? window.innerHeight);
 
+  return { top, bottom };
+};
+
+/** Any of the card inside its viewport: it can be the one ⌘⇧A means. */
 export const onScreen = (element: HTMLElement) => {
   const rect = element.getBoundingClientRect();
+  const view = viewportOf(element);
 
-  return rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
+  return rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom;
+};
+
+// Sub-pixel layout can put a fully shown edge a fraction outside.
+const SLACK = 1;
+
+const fullyShown = (part: Element, view: { top: number; bottom: number }) => {
+  const rect = part.getBoundingClientRect();
+
+  return rect.height > 0 && rect.top >= view.top - SLACK && rect.bottom <= view.bottom + SLACK;
+};
+
+/**
+ * A write's card is in view when its statement (SQL through the dry run's kicker) and its Run row
+ * are wholly inside the conversation's viewport; a card without parts must be wholly inside.
+ */
+export const writeInView = (card: HTMLElement) => {
+  const view = viewportOf(card);
+  const parts = [...card.querySelectorAll(`[${APPROVAL_PART}]`)];
+
+  return (parts.length === 0 ? [card] : parts).every((part) => fullyShown(part, view));
+};
+
+/** Whether a card of the approval is in front of the user now, so what it asks has been seen. */
+export const isApprovalOnScreen = (
+  requestId: string,
+  visible: (e: HTMLElement) => boolean = writeInView
+) => [...(shown.get(requestId) ?? [])].some((element) => visible(element));
+
+/** Brings a mounted card's top into view and focuses it, so ⌘↵ there runs it; false if none. */
+export const revealApproval = (requestId: string) => {
+  const cards = [...(shown.get(requestId) ?? [])];
+  const card = cards.find((c) => c.hasAttribute("tabindex")) ?? cards[0];
+
+  if (card === undefined) return false;
+  card.scrollIntoView?.({ block: "start" });
+  card.focus({ preventScroll: true });
+
+  return true;
 };
 
 export const approvalInView = (
