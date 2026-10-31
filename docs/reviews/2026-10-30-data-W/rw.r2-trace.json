@@ -1,0 +1,1 @@
+{"version":1,"source":"data-queries-write","steps":[{"action":"preview","affected":1,"value":0,"phase":"pending"},{"action":"approve","affected":1,"value":0,"phase":"approved"},{"action":"execute","affected":1,"value":42,"phase":"failed"}]}

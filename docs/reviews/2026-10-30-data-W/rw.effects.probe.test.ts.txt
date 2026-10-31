@@ -1,0 +1,123 @@
+/** RW probe E: effects that survive W's rolled-back dry run, and decided limits that don't hold. */
+import { expect, test } from "bun:test";
+import { prefix, setup } from "./rw.probe.setup.ts";
+
+const log = (...a: unknown[]) => console.log("[RW-E]", ...a);
+
+test("postgres: dry-run escapes", async () => {
+  const { admin, write, outcome } = setup("postgres");
+  const t = prefix();
+  try {
+    await admin.unsafe(`CREATE TABLE ${t} (id serial PRIMARY KEY, v int NOT NULL DEFAULT 0, api_token text)`);
+    await admin.unsafe(`CREATE TABLE ${t}_audit (id serial PRIMARY KEY, note text)`);
+    await admin.unsafe(`INSERT INTO ${t}(v, api_token) VALUES (0,'tok_live_SECRET123'),(0,'tok_live_OTHER456')`);
+
+    // E1 sequence
+    const seq0 = (await admin.unsafe(`SELECT last_value FROM ${t}_id_seq`))[0].last_value;
+    log("E1 dry-run insert:", await outcome(write(`INSERT INTO ${t}(v) VALUES (9)`)));
+    const seq1 = (await admin.unsafe(`SELECT last_value FROM ${t}_id_seq`))[0].last_value;
+    log("E1 sequence last_value before/after dry run:", seq0, seq1);
+
+    // E2 preview carries secrets verbatim
+    const preview = await write(`UPDATE ${t} SET v = v + 1 WHERE id = 1`);
+    log("E2 preview.before:", JSON.stringify(preview.before), "columns:", preview.columns.join(","));
+
+    // E3 user wrapper (SECURITY INVOKER) around dblink_exec: XF's catalog guard only flags secdef-by-superuser or extension members
+    await admin.unsafe(`CREATE EXTENSION IF NOT EXISTS dblink`);
+    await admin.unsafe(`CREATE FUNCTION ${t}_wrap() RETURNS int LANGUAGE sql AS $$ SELECT 1 FROM dblink_exec('dbname=' || current_database(), 'INSERT INTO ${t}_audit(note) VALUES (''wrapper'')') $$`);
+    log("E3 dry run SET v = wrap():", await outcome(write(`UPDATE ${t} SET v = ${t}_wrap() WHERE id = 1`)));
+    log("E3 audit rows after dry run:", JSON.stringify(await admin.unsafe(`SELECT note FROM ${t}_audit`)));
+
+    // E4 trigger calling dblink_exec: no function call in the statement text at all
+    await admin.unsafe(`CREATE FUNCTION ${t}_trg() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM dblink_exec('dbname=' || current_database(), 'INSERT INTO ${t}_audit(note) VALUES (''trigger'')'); RETURN NEW; END $$`);
+    await admin.unsafe(`CREATE TRIGGER ${t}_t AFTER UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION ${t}_trg()`);
+    log("E4 dry run plain UPDATE:", await outcome(write(`UPDATE ${t} SET v = 5 WHERE id = 2`)));
+    log("E4 audit rows after dry run:", JSON.stringify(await admin.unsafe(`SELECT note FROM ${t}_audit ORDER BY id`)));
+    await admin.unsafe(`DROP TRIGGER ${t}_t ON ${t}`);
+
+    // E5 trigger taking a session advisory lock: does it outlive the rolled-back preview on the pooled connection?
+    await admin.unsafe(`CREATE FUNCTION ${t}_lock() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_lock(424242); RETURN NEW; END $$`);
+    await admin.unsafe(`CREATE TRIGGER ${t}_l AFTER UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION ${t}_lock()`);
+    log("E5 dry run:", await outcome(write(`UPDATE ${t} SET v = 6 WHERE id = 2`)));
+    log("E5 advisory locks held after preview:", JSON.stringify(await admin.unsafe(`SELECT pid, granted FROM pg_locks WHERE locktype='advisory' AND objid=424242`)));
+    await admin.unsafe(`DROP TRIGGER ${t}_l ON ${t}`);
+
+    // E6 upsert that assigns the primary key: the PK-assignment check only looks at UPDATE statements
+    const upsert = `INSERT INTO ${t}(id, v) VALUES (1, 0) ON CONFLICT (id) DO UPDATE SET id = 777`;
+    const up = await write(upsert);
+    log("E6 upsert dry run:", JSON.stringify({ affected: up.affected, note: up.note, before: up.before }));
+    log("E6 upsert real run:", await outcome(write(upsert, { dryRun: false, expected: up.affected })));
+    log("E6 ids after:", JSON.stringify(await admin.unsafe(`SELECT id FROM ${t} ORDER BY id`)));
+    expect(true).toBe(true);
+  } finally {
+    await admin.unsafe(`DROP TABLE IF EXISTS ${t}, ${t}_audit CASCADE`);
+    await admin.unsafe(`DROP FUNCTION IF EXISTS ${t}_wrap(), ${t}_trg(), ${t}_lock()`);
+    await admin.unsafe(`SELECT pg_advisory_unlock_all()`);
+    await admin.unsafe(`SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND objid=424242`);
+    await admin.unsafe(`DROP EXTENSION IF EXISTS dblink`);
+    await admin.close();
+  }
+}, 60000);
+
+test("mysql: dry-run escapes and decided limits", async () => {
+  const { admin, write, outcome, connection } = setup("mysql");
+  const t = prefix();
+  const other = `${t}_db`;
+  try {
+    await admin.unsafe(`CREATE TABLE ${t} (id INT AUTO_INCREMENT PRIMARY KEY, v INT NOT NULL DEFAULT 0) ENGINE=InnoDB`);
+    await admin.unsafe(`CREATE TABLE ${t}_log (note VARCHAR(40)) ENGINE=MyISAM`);
+    await admin.unsafe(`INSERT INTO ${t}(v) VALUES (0),(0),(0)`);
+    const ai = async () => (await admin.unsafe(`SELECT AUTO_INCREMENT AS a FROM information_schema.TABLES WHERE TABLE_SCHEMA='${connection.database}' AND TABLE_NAME='${t}'`))[0].a;
+
+    // E7 auto-increment
+    await admin.unsafe(`ANALYZE TABLE ${t}`);
+    const a0 = await ai();
+    log("E7 dry-run insert:", await outcome(write(`INSERT INTO ${t}(v) VALUES (9)`)));
+    await admin.unsafe(`ANALYZE TABLE ${t}`);
+    log("E7 AUTO_INCREMENT before/after dry run:", a0, await ai());
+
+    // E8 InnoDB target, trigger writes a MyISAM table
+    await admin.unsafe(`CREATE TRIGGER ${t}_tr AFTER UPDATE ON ${t} FOR EACH ROW INSERT INTO ${t}_log VALUES ('trigger')`);
+    log("E8 dry run plain UPDATE:", await outcome(write(`UPDATE ${t} SET v = 5 WHERE id = 1`)));
+    log("E8 MyISAM rows after dry run:", JSON.stringify(await admin.unsafe(`SELECT note FROM ${t}_log`)));
+    await admin.unsafe(`DROP TRIGGER ${t}_tr`);
+
+    // E9 stored function writing MyISAM in SET
+    await admin.unsafe(`CREATE FUNCTION ${t}_f() RETURNS INT MODIFIES SQL DATA NOT DETERMINISTIC BEGIN INSERT INTO ${t}_log VALUES ('function'); RETURN 1; END`);
+    log("E9 dry run SET v = f():", await outcome(write(`UPDATE ${t} SET v = ${t}_f() WHERE id = 2`)));
+    log("E9 MyISAM rows after:", JSON.stringify(await admin.unsafe(`SELECT note FROM ${t}_log`)));
+
+    // E10 primary-key assignment with different case: PK check compares names case-sensitively
+    log("E10 SET ID = id + 100 (all rows):", await outcome(write(`UPDATE ${t} SET ID = id + 100`)));
+    await admin.unsafe(`INSERT INTO ${t}(v) VALUES ${Array.from({ length: 25 }, () => "(0)").join(",")}`);
+    log("E10 lowercase control SET id = id:", await outcome(write(`UPDATE ${t} SET id = id WHERE id = 1`)));
+    const caseSql = `UPDATE ${t} SET ID = CASE WHEN id > 120 THEN id + 1000 ELSE id END`;
+    log("E10 ids before:", JSON.stringify((await admin.unsafe(`SELECT id FROM ${t} ORDER BY id`)).map((r: { id: number }) => r.id)));
+    log("E10 SET ID = CASE (first rows unchanged) dry:", await outcome(write(caseSql)));
+    const p = await write(caseSql);
+    log("E10 real:", await outcome(write(caseSql, { dryRun: false, expected: p.affected })));
+    log("E10 ids after:", JSON.stringify(await admin.unsafe(`SELECT id FROM ${t} ORDER BY id`)));
+
+    // E11 ON DUPLICATE KEY UPDATE assigning the key
+    const dup = `INSERT INTO ${t}(id, v) VALUES (1, 0) ON DUPLICATE KEY UPDATE id = 555`;
+    const d = await write(dup);
+    log("E11 dry:", JSON.stringify({ affected: d.affected, before: d.before }));
+    log("E11 real:", await outcome(write(dup, { dryRun: false, expected: d.affected })));
+    log("E11 ids after:", JSON.stringify(await admin.unsafe(`SELECT id FROM ${t} ORDER BY id`)));
+
+    // E12 write to a different database on the same server than the source's target
+    await admin.unsafe(`CREATE DATABASE ${other}`);
+    await admin.unsafe(`CREATE TABLE ${other}.acct (id INT PRIMARY KEY, bal INT) ENGINE=InnoDB`);
+    await admin.unsafe(`INSERT INTO ${other}.acct VALUES (1, 100)`);
+    const x = await write(`UPDATE ${other}.acct SET bal = 0 WHERE id = 1`);
+    log("E12 source database:", connection.database, "preview target:", JSON.stringify(x.target));
+    log("E12 real:", await outcome(write(`UPDATE ${other}.acct SET bal = 0 WHERE id = 1`, { dryRun: false, expected: x.affected })));
+    log("E12 other db after:", JSON.stringify(await admin.unsafe(`SELECT * FROM ${other}.acct`)));
+    expect(true).toBe(true);
+  } finally {
+    await admin.unsafe(`DROP TABLE IF EXISTS ${t}, ${t}_log`);
+    await admin.unsafe(`DROP FUNCTION IF EXISTS ${t}_f`);
+    await admin.unsafe(`DROP DATABASE IF EXISTS ${other}`);
+    await admin.close();
+  }
+}, 60000);

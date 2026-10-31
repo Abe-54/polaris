@@ -1,0 +1,37 @@
+/** RW probe: W's write path on disposable databases. Not committed as code. */
+import { SQL } from "bun";
+import { DataSource, type DataValue } from "@polaris/protocol";
+import { Redacted } from "effect";
+import { parseConnection } from "./connection.ts";
+import { executeRead } from "./execution.ts";
+import { executeWrite, executeEdits } from "./writeExecution.ts";
+import { DataPools, sqlOptions } from "./pools.ts";
+
+export const URLS = {
+  postgres: process.env.RW_PG_URL ?? process.env.POLARIS_TEST_PG_URL,
+  mysql: process.env.RW_MYSQL_URL ?? process.env.POLARIS_TEST_MYSQL_URL,
+} as const;
+
+export const prefix = () => `rw_${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`;
+
+export function setup(engine: "postgres" | "mysql", locality: "local" | "remote" = "local") {
+  const { connection } = parseConnection({ name: "rw", url: Redacted.make(URLS[engine]!), foundIn: { kind: "manual" } })!;
+  const source = new DataSource({ id: `rw-${engine}`, name: "rw", engine, host: connection.hostname,
+    port: connection.port, database: connection.database, user: connection.username, locality,
+    foundIn: { kind: "manual" }, access: "read", writes: "ask", label: { text: "", colour: "none" }, reachable: true });
+  const admin = new SQL({ ...sqlOptions(source, connection), max: 4, allowPublicKeyRetrieval: engine === "mysql" });
+  const pools = new DataPools();
+  const write = (sql: string, opts: { dryRun?: boolean; expected?: number; params?: DataValue[]; signal?: AbortSignal; timeoutMs?: number } = {}) =>
+    executeWrite(pools, { source, connection, sql, params: opts.params ?? [], dryRun: opts.dryRun ?? true,
+      ...(opts.expected === undefined ? {} : { expected: opts.expected }), timeoutMs: opts.timeoutMs ?? 30000 },
+      opts.signal ?? new AbortController().signal);
+  const edits = (table: { schema: string; name: string }, primaryKey: string[], list: Array<{ key: DataValue[]; column: string; value: DataValue }>) =>
+    executeEdits(pools, { source, connection, timeoutMs: 30000, edits: { sessionId: "s" as never, source: "rw", table, primaryKey, edits: list } as never },
+      new AbortController().signal);
+  const read = (sql: string) => executeRead(pools, { source, connection, sql, params: [], limit: 200, timeoutMs: 30000 }, new AbortController().signal);
+  const outcome = async (p: Promise<unknown>) => {
+    try { const r = await p; return `ok ${JSON.stringify(r).slice(0, 160)}`; }
+    catch (e) { const x = e as { code?: string; message?: string }; return `${x.code} ${String(x.message).slice(0, 140)}`; }
+  };
+  return { source, connection, admin, pools, write, edits, read, outcome };
+}
