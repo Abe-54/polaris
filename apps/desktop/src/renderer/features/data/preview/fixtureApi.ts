@@ -1,11 +1,12 @@
 /**
  * A `DataApi` over the fixtures, for `<DataLayer api={fixtureDataApi()}>` in previews and tests.
  * Queries read `select … from [schema.]<table> [where (<column> = <literal>)] [limit n] [offset m]`;
- * writes are refused. A scene can add tables of its own (the bench's 10,000 rows, the stress table).
+ * staged edits commit (unless the scene fails them) without changing the rows. A scene can add tables of its own (the bench's 10,000 rows, the stress table).
  */
 import {
   type DataSchemaDiff,
   DataSource,
+  DataWriteResult,
   type QueryLogEntry,
   QueryResult,
   type SchemaTree,
@@ -184,6 +185,8 @@ export interface FixtureData {
   readonly relist?: () => ReadonlyArray<DataSource>;
   /** `data.schemaDiff`'s answer per Turn (`all` without one); "unsupported" as an older Daemon. */
   readonly schemaDiff?: ((turn: string) => DataSchemaDiff) | "unsupported";
+  /** How `data.edits.commit` fails, for the error state; it succeeds when omitted. */
+  readonly commitError?: IpcError;
 }
 
 /** An agent added `currencies` on app this Turn (D1's tree). */
@@ -288,6 +291,31 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
       const timer = setTimeout(() => on.failed(selected.error), 0);
 
       return () => clearTimeout(timer);
+    },
+    setWrites: async (_at, name, writes) => {
+      const source = sources.get().find((s) => s.name === name);
+
+      if (source === undefined)
+        return fail("E-DATA-UNKNOWN-SOURCE", `No data source named ${name}`);
+      const changed = new DataSource({ ...Schema.encodeSync(DataSource)(source), writes });
+
+      sources.set(sources.get().map((s) => (s.name === name ? changed : s)));
+
+      return { ok: true, value: changed };
+    },
+    commitEdits: async (_at, { source, edits }) => {
+      const found = sources.get().find((s) => s.name === source);
+
+      if (data.commitError !== undefined) return { ok: false, error: data.commitError };
+
+      if (found?.locality === "remote" && (found.access !== "approved" || found.writes !== "ask"))
+        return fail("E-DATA-DENIED", "Writes aren't allowed on this remote data source.");
+      const rows = new Set(edits.map((e) => JSON.stringify(e.key))).size;
+
+      return {
+        ok: true,
+        value: new DataWriteResult({ queryId: "q_fixture_commit", affected: rows, elapsedMs: 12 }),
+      };
     },
     saveSource: async (_at, input) => {
       const saved = savedSource(input);

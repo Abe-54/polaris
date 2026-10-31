@@ -1,11 +1,13 @@
 /**
- * The Table tab's Data view (Paper D1/D2): the grid, then a footer with the row count, "Add n rows
- * to agent session ⌘L" for the selected rows, and Copy as CSV (the selection, else every row).
+ * The Table tab's Data view (Paper D1/D2): the grid, then a footer with the row count, the staged
+ * edits with Discard and Commit ⌘S, "Add n rows to agent session ⌘L" for the selected rows, and
+ * Copy as CSV (the selection, else every row).
  */
 import { Button, CopyButton, EmptyState, Kbd, PixelServerIcon, useCopyWrite } from "@polaris/ui";
 import { useEffect, useMemo, useRef } from "react";
 import { commandShortcut } from "../../../../../shared/keymap.ts";
 import { useCommands } from "../../../../shell/hooks.ts";
+import { useDataApi } from "../../data/hooks.tsx";
 import { DataGrid } from "../../grid/DataGrid.tsx";
 import type { GridColumn } from "../../grid/columns.ts";
 import { toCsv } from "../../grid/csv.ts";
@@ -13,6 +15,12 @@ import { type GridSelection, selectedRows } from "../../grid/selection.ts";
 import { addLabel, useAddPlan, useAddRows } from "../../grid/useAddRows.tsx";
 import type { DataRow, DataValue } from "../../grid/value.ts";
 import type { DataSessionKey } from "../../model/store.ts";
+import { openConnectionCard } from "../connection/cardStore.ts";
+import { cancelCommit, requestCommit, runCommit, writesBlocked } from "./edits/commit.ts";
+import { ConfirmCommit } from "./edits/ConfirmCommit.tsx";
+import { CommitError, StagedBar } from "./edits/StagedBar.tsx";
+import { discardEdits } from "./edits/store.ts";
+import type { useTableEdits } from "./edits/useTableEdits.ts";
 import { type Pages, ROW_CAP } from "./usePages.ts";
 
 const number = (n: number) => n.toLocaleString("en-US");
@@ -39,6 +47,8 @@ export interface TableDataProps {
   readonly from: string;
   readonly columns: ReadonlyArray<GridColumn>;
   readonly pages: Pages;
+  /** The tab's edits: the rows as shown (staged values laid over), the grid's editing, commit. */
+  readonly edit: ReturnType<typeof useTableEdits>;
   readonly selection: GridSelection;
   readonly onSelectionChange: (selection: GridSelection) => void;
   readonly onMore: () => void;
@@ -46,21 +56,26 @@ export interface TableDataProps {
 }
 
 export const TableData = (props: TableDataProps) => {
-  const { at, source, from, columns, pages, selection } = props;
+  const { at, source, from, columns, pages, selection, edit } = props;
+  const api = useDataApi();
+  const shown = edit.rows;
   const add = useAddRows(at);
   const commands = useCommands();
   const write = useCopyWrite();
   const picked = selectedRows(selection);
 
   const chosen = (): ReadonlyArray<DataRow> =>
-    picked.flatMap((i) => (pages.rows[i] === undefined ? [] : [pages.rows[i]]));
+    picked.flatMap((i) => (shown[i] === undefined ? [] : [shown[i]]));
 
-  const rows = useMemo(chosen, [selection, pages.rows]);
+  const rows = useMemo(chosen, [selection, shown]);
   const plan = useAddPlan(at, rows.length === 0 ? null : { source, from, columns, rows });
   const addChosen = () => add({ source, from, columns, rows });
-  const latest = useRef({ addChosen, count: plan.rows });
+  const target = edit.target;
+  const commit = () => (target === null ? undefined : requestCommit(api, target));
+  const staged = edit.edits.staged.cells.size;
+  const latest = useRef({ addChosen, count: plan.rows, commit, staged });
 
-  latest.current = { addChosen, count: plan.rows };
+  latest.current = { addChosen, count: plan.rows, commit, staged };
 
   useEffect(
     () =>
@@ -69,18 +84,27 @@ export const TableData = (props: TableDataProps) => {
           run: () => latest.current.addChosen(),
           enabled: () => latest.current.count > 0,
         },
+        "data.commitEdits": {
+          run: () => latest.current.commit(),
+          enabled: () => latest.current.staged > 0,
+        },
       }),
     [commands]
   );
 
-  const csv = () => toCsv(columns, picked.length > 0 ? chosen() : pages.rows);
+  const csv = () => toCsv(columns, picked.length > 0 ? chosen() : shown);
+
+  const blockedByWrites =
+    edit.target === null && edit.source !== null && writesBlocked(edit.source) !== null;
 
   return (
     <>
       <DataGrid
         label={from}
         columns={columns}
-        rows={pages.rows}
+        rows={shown}
+        isStaged={edit.isStaged}
+        editing={edit.editing}
         selection={selection}
         onSelectionChange={props.onSelectionChange}
         onForeignKey={props.onForeignKey}
@@ -96,6 +120,7 @@ export const TableData = (props: TableDataProps) => {
           ) : undefined
         }
       />
+      <CommitError edits={edit.edits} />
       <footer
         data-testid="data-table-footer"
         className="border-hairline text-caption text-text-subtle flex h-11 shrink-0 items-center gap-3 border-t px-3.5"
@@ -103,6 +128,13 @@ export const TableData = (props: TableDataProps) => {
         <span className="min-w-0 flex-1 truncate">
           <Count pages={pages} />
         </span>
+        <StagedBar
+          edits={edit.edits}
+          readOnly={edit.readOnly}
+          onConnection={blockedByWrites ? openConnectionCard : null}
+          onDiscard={() => discardEdits(at, edit.tabId)}
+          onCommit={commit}
+        />
         <Button
           size="default"
           variant="ghost"
@@ -123,6 +155,17 @@ export const TableData = (props: TableDataProps) => {
           buttonSize="default"
         />
       </footer>
+      {target === null || target.source.locality !== "remote" ? null : (
+        <ConfirmCommit
+          open={edit.edits.commit.status === "confirming"}
+          source={target.source}
+          table={target.table.name}
+          primaryKey={target.primaryKey}
+          staged={edit.edits.staged}
+          onCancel={() => cancelCommit(at, edit.tabId)}
+          onConfirm={() => void runCommit(api, target)}
+        />
+      )}
     </>
   );
 };

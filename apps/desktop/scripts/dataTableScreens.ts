@@ -7,8 +7,11 @@
  * picks the bench's table: `bench` (10,000 × 20) or RU2's `stress`, `stress-long`,
  * `stress-control` (10,000 × 60). `--profile` prints the renderer's hottest functions during jumps.
  *
- *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--scene <name>]
- *     [--profile] [--json <path>]
+ * `--edits-only` takes only grid edits' screenshots (E): staged cells, the editor, a failed
+ * commit, the remote bulk confirm, read-only tables and closing a tab with edits.
+ *
+ *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--edits-only]
+ *     [--scene <name>] [--profile] [--json <path>]
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -158,6 +161,79 @@ const screens = async (page: Page) => {
     await shoot(page, `no-rows-${theme}`);
     await open(page, "denied", "data-table-failed");
     await shoot(page, `denied-${theme}`);
+  }
+};
+
+/** Opens the cell's editor with ↵ and types `value`, leaving it open. */
+const typeInto = async (page: Page, row: number, col: number, value: string) => {
+  await cell(page, row, col).click();
+  await page.keyboard.press("Enter");
+  await page.getByTestId("data-cell-editor-field").fill(value);
+};
+
+const editScreens = async (page: Page) => {
+  for (const theme of THEMES) {
+    for (const density of DENSITIES) {
+      await appearance(page, theme, density);
+      await open(page, "edit-staged");
+      await cell(page, 5, 1).click();
+      await page.mouse.move(1300, 120);
+      await shoot(page, `edit-staged-${theme}-${density}`);
+      await typeInto(page, 5, 4, "120000");
+      await shoot(page, `edit-editor-${theme}-${density}`);
+    }
+
+    await appearance(page, theme, "calm");
+    await open(page, "edit-staged");
+    await typeInto(page, 6, 4, "12 thousand");
+    await page.keyboard.press("Enter");
+    await shoot(page, `edit-invalid-${theme}`);
+    await page.keyboard.press("Escape");
+    await cell(page, 6, 7).click();
+    await page.keyboard.press("Enter");
+    await shoot(page, `edit-timestamp-${theme}`);
+    await page.keyboard.press("Escape");
+    await cell(page, 1, 0).click();
+    await page.keyboard.press("Enter");
+    await page.getByTestId("data-cell-inspector").waitFor();
+    await shoot(page, `edit-key-reason-${theme}`);
+
+    await open(page, "edit-staged");
+    await page.getByTestId("data-commit").click();
+    await page.getByTestId("data-committed").waitFor();
+    await shoot(page, `edit-committed-${theme}`);
+
+    await open(page, "edit-error");
+    await page.getByTestId("data-commit").click();
+    await page.getByTestId("data-commit-error").waitFor();
+    await shoot(page, `edit-error-${theme}`);
+
+    for (const scene of ["edit-confirm", "edit-confirm-production"]) {
+      await open(page, scene);
+      await page.getByTestId("data-commit").click();
+      await page.getByTestId("data-confirm-commit").waitFor();
+      await page.waitForTimeout(300);
+      await shoot(page, `${scene}-${theme}`);
+    }
+
+    await open(page, "edit-no-key");
+    await cell(page, 0, 1).click();
+    await page.keyboard.press("Enter");
+    await page.getByTestId("data-cell-inspector").waitFor();
+    await shoot(page, `edit-no-key-${theme}`);
+
+    await open(page, "edit-writes-off");
+    await shoot(page, `edit-writes-off-${theme}`);
+    await page.getByTestId("data-open-connection").click();
+    await page.getByTestId("data-writes").waitFor();
+    await page.waitForTimeout(300);
+    await shoot(page, `edit-writes-off-card-${theme}`);
+
+    await open(page, "edit-staged");
+    await page.getByRole("button", { name: "Close invoices" }).click({ force: true });
+    await page.getByTestId("data-close-staged").waitFor();
+    await page.waitForTimeout(300);
+    await shoot(page, `edit-close-${theme}`);
   }
 };
 
@@ -479,8 +555,11 @@ try {
 
   await sizeWindow(app, 1440, 900);
 
-  if (!args.includes("--bench-only")) await screens(page);
-  ok = await bench(page);
+  if (args.includes("--edits-only")) await editScreens(page);
+  else {
+    if (!args.includes("--bench-only")) await screens(page);
+    ok = await bench(page);
+  }
 } finally {
   await app.close();
   await daemon.stop();

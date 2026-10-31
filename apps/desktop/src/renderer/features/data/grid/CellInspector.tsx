@@ -1,6 +1,6 @@
 /**
  * The cell inspector: a clipped value whole, in an instrument card over the grid's right edge
- * (↵ or a double-click opens it, esc closes). JSON is indented, never re-written; bidi controls
+ * (↵ or a double-click on a cell that doesn't edit, or space; esc closes). JSON is indented, never re-written; bidi controls
  * are named so they can't reorder the value; past 64K characters only the start shows.
  */
 import { CopyButton, IconButton, CloseIcon } from "@polaris/ui";
@@ -35,11 +35,14 @@ export const CellInspector = ({
   column,
   value,
   row,
+  note = null,
   onClose,
 }: {
   readonly column: LaidColumn;
   readonly value: DataValue | undefined;
   readonly row: number;
+  /** Why the cell can't be edited, when ↵ asked to edit it. */
+  readonly note?: string | null;
   readonly onClose: () => void;
 }) => {
   const cell = cellOf(value);
@@ -75,6 +78,14 @@ export const CellInspector = ({
           onClick={onClose}
         />
       </header>
+      {note === null ? null : (
+        <p
+          data-testid="data-cell-inspector-note"
+          className="text-caption text-text-subtle px-3 pt-1.5"
+        >
+          Not editable · {note}
+        </p>
+      )}
       <div className="flex min-h-0 flex-1 flex-col px-2 pt-2 pb-2">
         <pre
           tabIndex={0}

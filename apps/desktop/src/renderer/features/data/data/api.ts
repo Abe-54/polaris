@@ -5,6 +5,7 @@
 import type {
   DataSchemaDiff,
   DataSource,
+  DataWriteResult,
   DataValue,
   DataSourceLabel,
   QueryLogEntry,
@@ -82,6 +83,18 @@ export interface SaveSourceInput {
   readonly label: DataSourceLabel;
 }
 
+/** The user's staged grid edits, one transaction keyed by primary key (`data.edits.commit`). */
+export interface CommitEditsInput {
+  readonly source: string;
+  readonly table: { readonly schema: string; readonly name: string };
+  readonly primaryKey: ReadonlyArray<string>;
+  readonly edits: ReadonlyArray<{
+    readonly key: ReadonlyArray<DataValue>;
+    readonly column: string;
+    readonly value: DataValue;
+  }>;
+}
+
 /** A table an agent added or changed in its current Turn, for the tree's git letter. */
 export interface TableChange {
   /** The Data Source's name. */
@@ -110,6 +123,17 @@ export interface DataApi {
     source: string,
     revoke: boolean
   ) => Promise<Result<DataSource>>;
+  /** Whether writes are allowed on a source (`data.source.access`'s `writes`). */
+  readonly setWrites?: (
+    at: DataSessionKey,
+    source: string,
+    writes: DataSource["writes"]
+  ) => Promise<Result<DataSource>>;
+  /** Commits staged grid edits in one transaction; fails Unsupported on Daemons without writes. */
+  readonly commitEdits?: (
+    at: DataSessionKey,
+    input: CommitEditsInput
+  ) => Promise<Result<DataWriteResult>>;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
   /** Removes a source the user added (`data.source.remove`); discovered ones can't be. */
   readonly removeSource: (at: DataSessionKey, source: string) => Promise<Result<null>>;
@@ -179,6 +203,15 @@ export const liveDataApi: DataApi = {
   },
   accessSource: (at, source, revoke) =>
     polaris().request("data.source.access", { ...session(at), source, revoke }),
+  setWrites: (at, source, writes) =>
+    polaris().request("data.source.access", { ...session(at), source, writes }),
+  commitEdits: (at, input) =>
+    polaris().request("data.edits.commit", {
+      ...session(at),
+      ...input,
+      primaryKey: [...input.primaryKey],
+      edits: input.edits.map((e) => ({ ...e, key: [...e.key] })),
+    }),
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
   removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
