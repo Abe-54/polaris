@@ -5,6 +5,8 @@ import { SessionId, WorkspaceId, TraceError, type TraceTurn } from "@polaris/pro
 import { traceReceiver } from "./receiver.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { TraceSessions } from "./sessions.ts";
+import { TraceSettings } from "./settings.ts";
+import { ForwardQueue } from "./forwardQueue.ts";
 import { TraceStore } from "./store.ts";
 import type { TraceWorkerOptions } from "./workerClient.ts";
 import type { ExportTraces } from "./otlp.ts";
@@ -99,6 +101,8 @@ export interface TraceFixture {
   readonly endpoint: string | null;
   readonly store: TraceStore["Service"];
   readonly runtime: TraceRuntime["Service"];
+  readonly settings: TraceSettings["Service"];
+  readonly forwarding: ForwardQueue;
   readonly state: {
     active: boolean;
     turns: ReadonlyArray<{ turn: TraceTurn; start: string; end: string | null }>;
@@ -108,6 +112,7 @@ export interface TraceFixture {
 
 export interface FixtureOptions extends TraceWorkerOptions {
   readonly port?: number;
+  readonly beforeIngest?: () => Promise<void>;
   readonly owner?: (port: number) => Promise<string | null>;
 }
 
@@ -152,9 +157,14 @@ export const withTraceFixture = async (
     })
   );
 
+  const forwarding = new ForwardQueue({ retryMs: 30 });
+
   const layer = TraceRuntime.layerAt(join(root, "tokens.json"), port).pipe(
     Layer.provideMerge(TraceStore.layerAt(join(root, "traces.sqlite"), options)),
-    Layer.provideMerge(sessions)
+    Layer.provideMerge(sessions),
+    Layer.provideMerge(
+      TraceSettings.layerAt(join(root, "settings.json"), () => Effect.succeed(root))
+    )
   );
 
   try {
@@ -163,7 +173,21 @@ export const withTraceFixture = async (
         Effect.gen(function* () {
           const store = yield* TraceStore;
           const runtime = yield* TraceRuntime;
-          yield* traceReceiver({ ...options, port });
+          const settings = yield* TraceSettings;
+          const beforeIngest = options.beforeIngest;
+
+          const receiverStore =
+            beforeIngest === undefined
+              ? store
+              : TraceStore.of({
+                  ...store,
+                  ingest: (request) =>
+                    Effect.promise(beforeIngest).pipe(Effect.andThen(store.ingest(request))),
+                });
+
+          yield* traceReceiver({ ...options, port, forwarding }).pipe(
+            Effect.provideService(TraceStore, receiverStore)
+          );
           const env = yield* runtime.environment(TEST_SESSION, {});
           yield* Effect.promise(() =>
             run({
@@ -172,6 +196,8 @@ export const withTraceFixture = async (
               endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT ?? null,
               store,
               runtime,
+              settings,
+              forwarding,
               state,
               context,
             })

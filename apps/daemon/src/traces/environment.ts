@@ -6,7 +6,11 @@ import { TraceRuntime, type TraceEnvironment } from "./runtime.ts";
 export const traceEndpointEnvironment = (source: TraceEnvironment) => {
   const result: Record<string, string> = {};
 
-  for (const key of ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] as const)
+  for (const key of [
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+  ] as const)
     if (source[key] !== undefined) result[key] = source[key];
 
   return result;

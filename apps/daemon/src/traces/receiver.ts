@@ -4,6 +4,9 @@ import { TraceAvailability } from "@polaris/protocol";
 import { loopbackRequest } from "../transport/loopbackHttp.ts";
 import { IngestError, MAX_BODY_BYTES } from "./ingest.ts";
 import { TraceRuntime, TRACE_PORT } from "./runtime.ts";
+import { TraceSettings } from "./settings.ts";
+import { ForwardQueue } from "./forwardQueue.ts";
+import { forwardReceived } from "./forwarding.ts";
 import { TraceStore } from "./store.ts";
 import { TRACE_TOKEN_PATTERN } from "./tokens.ts";
 
@@ -72,6 +75,12 @@ const refuse = (request: Request, status: number): Response => {
   return new Response(null, { status, headers: { connection: "close" } });
 };
 
+const acknowledge = (type: string) =>
+  new Response(type === "application/json" ? "{}" : new Uint8Array(), {
+    status: 200,
+    headers: { "content-type": type },
+  });
+
 const listenerOwner = async (port: number): Promise<string | null> => {
   try {
     const { listenerOwners } = await import("../data/listener.ts");
@@ -98,6 +107,7 @@ const listenerOwner = async (port: number): Promise<string | null> => {
 export interface ReceiverOptions {
   /** Tests may use an isolated fixed port. Production always uses TRACE_PORT, including collisions. */
   readonly port?: number;
+  readonly forwarding?: ForwardQueue;
   readonly owner?: (port: number) => Promise<string | null>;
 }
 
@@ -105,6 +115,19 @@ export const traceReceiver = (options: ReceiverOptions = {}) =>
   Effect.gen(function* () {
     const runtime = yield* TraceRuntime;
     const store = yield* TraceStore;
+    const settings = yield* Effect.serviceOption(TraceSettings);
+    const forwarding = options.forwarding ?? new ForwardQueue();
+
+    const unsubscribe = Option.isSome(settings)
+      ? settings.value.subscribe((id) => forwarding.cancel(id))
+      : () => {};
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        unsubscribe();
+        forwarding.close();
+      })
+    );
     const port = options.port ?? TRACE_PORT;
     let inFlight = 0;
     let stopping = false;
@@ -142,12 +165,24 @@ export const traceReceiver = (options: ReceiverOptions = {}) =>
         admitted = token;
         inFlight++;
         const bytes = await body(request);
+        const signal = path[2] === "logs" ? "logs" : "traces";
+
+        const storeEnabled = await forwardReceived(
+          Option.getOrNull(settings),
+          forwarding,
+          context,
+          signal,
+          request,
+          bytes
+        );
+
+        if (!storeEnabled) return acknowledge(type);
 
         const result = await Effect.runPromise(
           Effect.result(
             store.ingest({
               bytes,
-              signal: path[2] === "logs" ? "logs" : "traces",
+              signal,
               contentType: type,
               context,
             })
@@ -156,10 +191,7 @@ export const traceReceiver = (options: ReceiverOptions = {}) =>
 
         if (Result.isFailure(result)) return refuse(request, result.failure.status);
 
-        return new Response(type === "application/json" ? "{}" : new Uint8Array(), {
-          status: 200,
-          headers: { "content-type": type },
-        });
+        return acknowledge(type);
       } catch (cause) {
         return refuse(request, cause instanceof IngestError ? cause.status : 503);
       } finally {

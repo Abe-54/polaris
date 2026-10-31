@@ -136,22 +136,25 @@ test("terminals use a Workspace endpoint in both ordinary and repository environ
     );
   }));
 
-test("a user exporter suppresses injection and marks the session as user-exported", () =>
+test("an existing exporter no longer suppresses injection or marks setup as user-exported", () =>
   withTraceFixture(async (f) => {
     for (const key of ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]) {
       expect(
         await Effect.runPromise(
           f.runtime.environment(TEST_SESSION, { [key]: "https://collector.example" })
         )
-      ).toEqual({});
+      ).toMatchObject({
+        OTEL_EXPORTER_OTLP_ENDPOINT: f.endpoint,
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${f.endpoint}/v1/traces`,
+      });
       expect(await Effect.runPromise(f.runtime.setup(TEST_SESSION))).toMatchObject({
-        endpoint: null,
-        userExported: true,
+        endpoint: f.endpoint,
+        userExported: false,
       });
       expect(
         await Effect.runPromise(
           f.runtime.terminalEnvironment(f.root, { [key]: "https://collector.example" })
         )
-      ).toEqual({});
+      ).toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
     }
   }));

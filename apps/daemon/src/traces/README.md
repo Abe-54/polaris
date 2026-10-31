@@ -29,8 +29,8 @@ The pre-release hash-only vault migrates by revoking its old endpoints once;
 subsequent restarts retain the derived endpoints.
 
 Claude, Codex (including read-only configuration), and terminal processes receive
-`OTEL_EXPORTER_OTLP_ENDPOINT` without a trailing slash. Existing endpoint or
-traces-endpoint variables suppress injection. Reviewer environment allowlists
+`OTEL_EXPORTER_OTLP_ENDPOINT` without a trailing slash. The trace and log signal-specific variables are also injected, so an existing
+signal-specific target cannot bypass Polaris. Existing targets become upstream collectors. The legacy `userExported` snapshot flag is false because a collector no longer prevents injection; existing clients keep the live endpoint. Reviewer environment allowlists
 retain endpoint variables but no exporter credentials; reviewer network policy
 still blocks network access (ENG-676).
 
@@ -141,10 +141,9 @@ counts omitted Spans under the text cap. Its full contract is `docs/specs/traces
 ## Phase 2 contracts (ENG-657)
 
 `packages/protocol/src/traces.ts` owns these additive contracts. The phase 1
-shapes and `traces` capability are unchanged. Each owner replaces its default
-`Unsupported` handlers and advertises its capability when the implementation lands.
-`traces.compare` is implemented and advertised. Profiles supplies all three of its
-handlers and `traces.profiles`; see `profiles/README.md`.
+shapes and `traces` capability are unchanged. Settings and comparison are implemented
+and advertised as `traces.settings` and `traces.compare`. Profiles supplies all three
+of its handlers and `traces.profiles`; see `profiles/README.md`.
 All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
 The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
 merged into `DaemonRpcs` alongside the unchanged phase 1 `TracesRpcs` group.
@@ -209,3 +208,54 @@ retention, without pins, timers or the history helper's five-sample SLOW rule.
 A missing selector still uses `TraceError`
 rather than silently comparing another Turn or checkout. P8 owns aggregation,
 expiry/partial-data handling and selector authorization.
+
+## Forwarding and Workspace settings (ENG-674, ENG-675)
+
+`TraceSettings` owns registered-Workspace settings and private launch-time target resolution.
+`traces.settings` and `traces.setSettings` share this service. Patches persist atomically in
+`trace-settings.json` (0600); detection, exporter header values and inferred collector URLs
+are never persisted. Source environment takes precedence over checkout `.env*`, then the
+Workspace target, then vendor suggestions. Within an environment, a signal-specific endpoint
+is used verbatim; a general endpoint gets `/v1/traces` or `/v1/logs` appended. The Workspace
+field is a full traces URL. Clearing it suppresses vendor suggestions; an explicitly exported
+or file-defined endpoint still wins. The forwarding switch overrides every source.
+
+Discovery reads at most 16 regular files of 64 KiB, scans at most 256 directory entries,
+refuses symlinks, and never executes checkout code or expands environment expressions.
+Mode-specific `.env.<NODE_ENV>.local`, `.env.local`, `.env.<NODE_ENV>` and `.env` precede
+other `.env*` files; example/sample/template files are excluded. Detection refreshes on launch,
+without watchers or timers. Per-launch private targets are memory-only; after a Daemon restart,
+authenticated traffic re-resolves from the Daemon environment and current checkout files.
+App headers received with a request always override configured environment headers.
+
+Axiom packages and `AXIOM_TOKEN`/`AXIOM_DATASET` prefill its OTLP traces target. Vercel packages
+and exporter environment produce evidence; `VERCEL_OTEL_ENDPOINTS` prefills the platform's
+loopback collector (port 4318 or its configured port). `@vercel/otel` with a direct imported
+`registerOTel` call, an explicit exporter constructed with a known separate HTTP(S) URL, and automatic processors is marked already
+exporting. Its incoming spans are stored without forwarding a duplicate. Syntax analysis
+ignores comments, strings and unrelated calls. Dynamic/spread configurations, unresolved exporter variables and custom processor lists
+without `"auto"` are not inferred. An exporter reading an injected OTLP variable is never
+classified as already sending to the vendor. Fixed-exporter suggestions and automatic
+instrumentation are P3's separate helpers; `recordInstrumentation` accepts their read-only
+skip reason and evidence. P1 persists the requested auto-instrumentation fields.
+
+The receiver enqueues raw bytes and the original content type before calling the existing
+store. It never serializes/redacts a forwarded payload. A failed collector cannot drop local
+storage, and a blocked store cannot delay the collector. `enabled` controls local storage
+independently of `forwarding`. A patch turning forwarding off cancels queued requests and
+retries; a request already delivered cannot be recalled. No second receiver or store is created.
+
+Each receiver's `ForwardQueue.stats` counts delivered requests, failures and dropped requests.
+The queue caps pending/in-flight entries at 32 and 8 MiB of body, URL and header accounting,
+dropping oldest first. An aborted in-flight fetch can retain its body until cancellation completes
+in addition to the queue cap (at most one 4 MiB body). One request is sent at a time, with a
+five-second timeout and at most five attempts; network/429/5xx retries back off from 250 ms
+up to 30 seconds. Redirects are not followed; connection/framing headers are regenerated.
+There is no timer when the queue is empty. All raw bodies/headers are memory-only and dropped
+on close. Collector exceptions and credentials are never logged. Public inferred URLs expose
+only `/` or `/v1/traces` paths, with no userinfo, query or fragment; other paths may contain
+credentials and are omitted from settings even though the private target remains usable.
+
+`POLARIS_BENCH_TRACE_FORWARDING=down bun run bench traces ...` enables forwarding to an
+unavailable loopback collector for the existing scenario; its notes record this mode. It uses
+the same receiver/store and baseline metrics. The idle scenario leaves the queue unused.

@@ -1,0 +1,73 @@
+[
+  {
+    "snapshot": "heap-traces-quiet.heapsnapshot",
+    "selfBytesByType": {
+      "synthetic": 0,
+      "string": 1406378,
+      "object shape": 1891456,
+      "hidden": 1998320,
+      "symbol": 8384,
+      "code": 3952543,
+      "bigint": 13968,
+      "closure": 1552285,
+      "object": 28984863,
+      "native": 43676,
+      "regexp": 5440,
+      "concatenated string": 32
+    },
+    "knownBufferAndQueueSelfBytes": {
+      "Uint8Array": 925115,
+      "ForwardQueue": 146,
+      "Buffer": 58,
+      "ArrayBuffer": 15159501,
+      "Headers": 99,
+      "Request": 12631,
+      "SharedArrayBuffer": 52
+    },
+    "knownBufferAndQueueCounts": {
+      "Uint8Array": 124,
+      "ForwardQueue": 2,
+      "Buffer": 1,
+      "ArrayBuffer": 62,
+      "Headers": 2,
+      "Request": 46,
+      "SharedArrayBuffer": 1
+    }
+  },
+  {
+    "snapshot": "heap-traces-ingested.heapsnapshot",
+    "selfBytesByType": {
+      "synthetic": 0,
+      "string": 1358971,
+      "object": 29841582,
+      "hidden": 2022904,
+      "object shape": 1883952,
+      "closure": 1547632,
+      "native": 42776,
+      "code": 7043041,
+      "symbol": 8064,
+      "regexp": 5536,
+      "bigint": 13968,
+      "concatenated string": 40064,
+      "sliced string": 9056
+    },
+    "knownBufferAndQueueSelfBytes": {
+      "Uint8Array": 925259,
+      "Buffer": 58,
+      "ForwardQueue": 146,
+      "ArrayBuffer": 16030236,
+      "Headers": 99,
+      "SharedArrayBuffer": 52,
+      "Request": 12631
+    },
+    "knownBufferAndQueueCounts": {
+      "Uint8Array": 127,
+      "Buffer": 1,
+      "ForwardQueue": 2,
+      "ArrayBuffer": 65,
+      "Headers": 2,
+      "SharedArrayBuffer": 1,
+      "Request": 46
+    }
+  }
+]
