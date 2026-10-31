@@ -6,6 +6,7 @@ import {
   type TurnId,
 } from "@polaris/protocol";
 import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect";
+import { initializeLogRetention, pruneQueryLog } from "./logRetention.ts";
 import { DataApprovals } from "./approvals.ts";
 import { DataDatabase, storageError } from "./database.ts";
 
@@ -46,12 +47,14 @@ export class QueryLog extends Context.Service<
       const { db } = yield* DataDatabase;
       const approvals = yield* DataApprovals;
       yield* Effect.try({
-        try: () =>
+        try: () => {
           db.exec(`CREATE TABLE IF NOT EXISTS data_query_log (
       seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,checkout TEXT NOT NULL,value TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS data_query_checkout ON data_query_log(checkout,seq);
       CREATE INDEX IF NOT EXISTS data_query_author ON data_query_log(json_extract(value,'$.author.sessionId'));
-      CREATE TABLE IF NOT EXISTS data_query_activity (checkout TEXT NOT NULL,session TEXT NOT NULL,updated TEXT NOT NULL,PRIMARY KEY(checkout,session));`),
+      CREATE TABLE IF NOT EXISTS data_query_activity (checkout TEXT NOT NULL,session TEXT NOT NULL,updated TEXT NOT NULL,PRIMARY KEY(checkout,session));`);
+          initializeLogRetention(db);
+        },
         catch: storageError,
       });
       const changes = yield* PubSub.sliding<string>(64);
@@ -74,6 +77,8 @@ export class QueryLog extends Context.Service<
       const page = (checkout: string, before?: string, limit = 100) =>
         Effect.try({
           try: () => {
+            pruneQueryLog(db);
+
             const cut =
               before === undefined
                 ? Number.MAX_SAFE_INTEGER
@@ -115,21 +120,20 @@ export class QueryLog extends Context.Service<
         yield* Effect.try({
           try: () =>
             db.transaction(() => {
+              const value = JSON.stringify(entry);
               db.query(
                 once
-                  ? "INSERT OR IGNORE INTO data_query_log(id,checkout,value) VALUES (?,?,?)"
-                  : "INSERT INTO data_query_log(id,checkout,value) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value"
-              ).run(entry.id, entry.checkout, JSON.stringify(entry));
+                  ? "INSERT OR IGNORE INTO data_query_log(id,checkout,value,logged_at,bytes) VALUES (?,?,?,?,?)"
+                  : "INSERT INTO data_query_log(id,checkout,value,logged_at,bytes) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,logged_at=excluded.logged_at,bytes=excluded.bytes"
+              ).run(entry.id, entry.checkout, value, entry.at, Buffer.byteLength(value));
               db.query(
                 "INSERT INTO data_query_activity VALUES (?,?,?) ON CONFLICT(checkout,session) DO UPDATE SET updated=excluded.updated"
               ).run(entry.checkout, entry.author.sessionId ?? "", new Date().toISOString());
-              db.query(
-                "DELETE FROM data_query_log WHERE checkout=? AND seq <= (SELECT seq FROM data_query_log WHERE checkout=? ORDER BY seq DESC LIMIT 1 OFFSET 10000)"
-              ).run(entry.checkout, entry.checkout);
+              pruneQueryLog(db);
             })(),
           catch: storageError,
         });
-        yield* PubSub.publish(changes, entry.checkout);
+        yield* PubSub.publish(changes, "*");
         yield* touch(entry);
       });
 
@@ -143,7 +147,7 @@ export class QueryLog extends Context.Service<
               Stream.succeed(initial.entries),
               Stream.merge(
                 Stream.fromSubscription(subscription).pipe(
-                  Stream.filter((key) => key === checkout)
+                  Stream.filter((key) => key === "*" || key === checkout)
                 ),
                 approvals.changes.pipe(Stream.map(() => checkout))
               ).pipe(Stream.mapEffect(() => Effect.map(page(checkout), (result) => result.entries)))

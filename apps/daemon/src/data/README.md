@@ -194,3 +194,11 @@ The native fixture writes an actual migration file between git checkpoints,
 adds a column and index, renames a table, and reads the stored per-Turn comparison.
 Unit tests establish policy/persistence/lifecycle behavior; they do not establish
 native database or idle-performance acceptance.
+
+Result column metadata currently comes from a zero-row probe before the bounded projection.
+MySQL may evaluate constant expressions while optimizing that probe, so it is not an independent
+side-effect boundary: it runs after the function/UDF guard in the same read-only transaction,
+on the same reservation, under the same total deadline. SLEEP, BENCHMARK, lock functions and
+user-variable assignments are refused before probing; session release clears any remaining user
+variables. Use SELECT-only credentials (ADR 0091's guard matrix). ENG-670 tracks a driver path
+that obtains prepared-statement column metadata without executing a probe.

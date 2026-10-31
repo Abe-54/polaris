@@ -264,3 +264,37 @@ describe("a source the user added", () => {
     expect(page().queryByTestId("data-connection-card")).toBeNull();
   });
 });
+
+test("connection privileges and revoke scope are visible; a denied revoke shows its reason", async () => {
+  const sources = FIXTURE_SOURCES.map((source, i) =>
+    i === 0
+      ? new DataSource({
+          ...Schema.encodeSync(DataSource)(source),
+          privilegeWarnings: ["superuser", "pg_read_server_files"],
+        })
+      : source
+  );
+
+  const api = fixtureDataApi({ sources });
+  mountData({
+    ...api,
+    accessSource: async () => ({
+      ok: false,
+      error: { code: "E-DATA-DENIED", message: "Access changed on the host" },
+    }),
+  });
+  click(await waitFor(() => page().getByTestId("data-connection-bar")));
+  expect(page().getByRole("status").textContent).toContain(
+    "superuser, pg_read_server_files. Use a SELECT-only database user."
+  );
+  expect(page().getByText(/Revoke removes this target's approval/).textContent).toContain(
+    "any server-wide approval for this user"
+  );
+  expect(page().getByText(/Revoke removes this target's approval/).textContent).toContain(
+    "Local access returns to its default: agents may read it"
+  );
+  click(page().getByRole("button", { name: "Revoke agent approval" }));
+  await waitFor(() =>
+    expect(page().getByRole("alert").textContent).toContain("Access changed on the host")
+  );
+});

@@ -1,0 +1,24 @@
+postgres SELECT repeat('x',17*1024*1024) AS huge
+postgres limit=200 rows=1 truncated=true chunks=3 wireBytes=336 firstCell={"_tag":"Truncated","preview":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  192ms baseRSS=54MiB peakRSS=54MiB delta=0MiB
+postgres SELECT repeat('x',100*1024*1024) AS huge
+postgres limit=200 rows=1 truncated=true chunks=3 wireBytes=337 firstCell={"_tag":"Truncated","preview":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  1142ms baseRSS=51MiB peakRSS=51MiB delta=0MiB
+postgres SELECT repeat('x',10*1024*1024) AS huge FROM generate_series(1,20)
+postgres limit=200 rows=20 truncated=true chunks=3 wireBytes=3776 firstCell={"_tag":"Truncated","preview":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  488ms baseRSS=52MiB peakRSS=52MiB delta=1MiB
+postgres SELECT repeat('x',1024) AS val FROM generate_series(1,1000000)
+postgres limit=10000 rows=992 truncated=true chunks=4 wireBytes=1020948 firstCell="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  148ms baseRSS=53MiB peakRSS=63MiB delta=10MiB
+mysql SELECT repeat('x',17*1024*1024) AS huge
+mysql limit=200 rows=1 truncated=true chunks=3 wireBytes=341 firstCell={"_tag":"Truncated","preview":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  233ms baseRSS=52MiB peakRSS=52MiB delta=0MiB
+mysql SELECT repeat('x',100*1024*1024) AS huge
+mysql limit=200 rows=1 truncated=false chunks=3 wireBytes=168 firstCell=null
+  13ms baseRSS=50MiB peakRSS=51MiB delta=0MiB
+mysql WITH RECURSIVE n AS (SELECT 1 AS i UNION ALL SELECT i+1 FROM n WHERE i<20) SELECT repeat('x',10*1024*1024) AS huge FROM n
+mysql limit=200 rows=20 truncated=true chunks=3 wireBytes=3775 firstCell={"_tag":"Truncated","preview":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  2792ms baseRSS=48MiB peakRSS=48MiB delta=-0MiB
+mysql WITH d AS (SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10) SELECT repeat('x',1024) AS val FROM d a,d b,d c,d e,d f
+mysql limit=10000 rows=992 truncated=true chunks=4 wireBytes=1020951 firstCell="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  95ms baseRSS=53MiB peakRSS=71MiB delta=18MiB

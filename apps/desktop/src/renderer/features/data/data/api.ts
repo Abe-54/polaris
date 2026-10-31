@@ -101,6 +101,11 @@ export interface DataApi {
     input: QueryStreamInput,
     on: QueryStream
   ) => () => void;
+  readonly accessSource?: (
+    at: DataSessionKey,
+    source: string,
+    revoke: boolean
+  ) => Promise<Result<DataSource>>;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
   /** Removes a source the user added (`data.source.remove`); discovered ones can't be. */
   readonly removeSource: (at: DataSessionKey, source: string) => Promise<Result<null>>;
@@ -159,6 +164,8 @@ export const liveDataApi: DataApi = {
       }
     );
   },
+  accessSource: (at, source, revoke) =>
+    polaris().request("data.source.access", { ...session(at), source, revoke }),
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
   removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
