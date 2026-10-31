@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  readdirSync,
+  mkdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import { SessionId, NotFound } from "@polaris/protocol";
 import { Effect, Fiber, Option, Redacted, Stream } from "effect";
@@ -32,6 +40,7 @@ const fixture = Effect.gen(function* () {
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => rmSync(root, { recursive: true, force: true }))
   );
+  mkdirSync(join(root, "other"));
   const secrets = fileSecrets(join(root, "secrets"));
   const access = yield* DataSourceAccess.pipe(Effect.provide(DataSourceAccess.layer));
 
@@ -77,12 +86,20 @@ test("manual sources and labels survive restart, share a checkout, isolate anoth
         expect(yield* service.list({ sessionId: second })).toEqual([source]);
         expect(yield* service.list({ sessionId: SessionId.make("other") })).toEqual([]);
         const resolved = yield* service.resolve({ sessionId: second, source: source.id });
-        expect(decodeURIComponent(new URL(Redacted.value(resolved.url)).password)).toBe(password);
+        expect(decodeURIComponent(new URL(Redacted.value(resolved.matchUrl)).password)).toBe(
+          password
+        );
         const override = { text: "READ ME", colour: "green" } as const;
         const labelled = yield* service.label({ sessionId, source: "manual", label: override });
         expect(labelled.label).toEqual(override);
         const { password: _password, ...withoutPassword } = input;
-        const saved = yield* service.save({ ...withoutPassword, label: override });
+
+        const saved = yield* service.save({
+          ...withoutPassword,
+          previousName: "manual",
+          label: override,
+        });
+
         expect(
           JSON.stringify([source, labelled, saved, yield* service.list({ sessionId })])
         ).not.toMatch(/postgres:\/\/|pa ss/);
@@ -135,7 +152,7 @@ test("watch emits real checkout snapshots on save, label and remove without poll
     )
   ));
 
-test("resolve re-reads changed credentials and target, preserving label but recomputing access", () =>
+test("resolve re-reads changed credentials and target, dropping the old target label and recomputing access", () =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -143,7 +160,7 @@ test("resolve re-reads changed credentials and target, preserving label but reco
         writeFileSync(join(root, ".env"), "DATABASE_URL=postgres://u:first@localhost/dev");
         const service = yield* sources(options);
         const first = yield* service.resolve({ sessionId, source: "app" });
-        expect(first.source.access).toBe("read");
+        expect(first.source.access).toBe("needs-approval");
         yield* service.label({ sessionId, source: "app", label });
         writeFileSync(join(root, ".env"), "DATABASE_URL=postgres://u:second@remote.test/prod");
         const next = yield* service.resolve({ sessionId, source: first.source.id });
@@ -151,9 +168,9 @@ test("resolve re-reads changed credentials and target, preserving label but reco
           host: "remote.test",
           database: "prod",
           access: "needs-approval",
-          label,
+          label: { text: "REMOTE", colour: "red" },
         });
-        expect(new URL(Redacted.value(next.url)).password).toBe("second");
+        expect(new URL(Redacted.value(next.matchUrl)).password).toBe("second");
         expect(readFileSync(options.path).includes(Buffer.from("first"))).toBe(false);
         expect(readFileSync(options.path).includes(Buffer.from("second"))).toBe(false);
       })
@@ -171,8 +188,9 @@ test("password encoding does not relax token validation in other namespaces", ()
         const service = yield* sources(options);
         const saved = yield* service.save({ ...input, password: Redacted.make("") });
         expect(
-          new URL(Redacted.value((yield* service.resolve({ sessionId, source: saved.id })).url))
-            .password
+          new URL(
+            Redacted.value((yield* service.resolve({ sessionId, source: saved.id })).matchUrl)
+          ).password
         ).toBe("");
       })
     )
@@ -282,7 +300,7 @@ test("manual rename/edit keeps its password, then explicit clear removes it", ()
           ...withoutPassword,
           name: "renamed",
           previousName: "manual",
-          host: "changed.test",
+          host: input.host,
           passwordAction: "keep",
         } as const;
 
