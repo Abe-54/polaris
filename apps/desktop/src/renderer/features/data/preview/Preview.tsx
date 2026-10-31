@@ -25,14 +25,14 @@ import { standInBridge } from "../../bridge.ts";
 import type { DataApi } from "../data/api.ts";
 import { DataLayer } from "../data/hooks.tsx";
 import { fixtureDataApi } from "./fixtureApi.ts";
-import { FIXTURE_NOW } from "./fixtures.ts";
+import { FIXTURE_NOW, FIXTURE_SESSIONS } from "./fixtures.ts";
 import { sceneNamed } from "./scenes/index.ts";
 
 const HOST = "local";
 
 const workspaceId = WorkspaceId.make("ledger");
 
-export const PREVIEW_SESSION = SessionId.make("s-overdue");
+export const PREVIEW_SESSION = FIXTURE_SESSIONS.overdue.id;
 
 const host: HostView = {
   key: HOST,
@@ -111,8 +111,8 @@ const appState = (): AppState => ({
       ],
       worktrees: [],
       sessions: [
-        session(PREVIEW_SESSION, "Fix overdue totals", "claude", 5),
-        session(SessionId.make("s-backfill"), "Backfill currency", "codex", 42),
+        session(PREVIEW_SESSION, FIXTURE_SESSIONS.overdue.title, "claude", 5),
+        session(FIXTURE_SESSIONS.backfill.id, FIXTURE_SESSIONS.backfill.title, "codex", 42),
       ],
     }),
   },
@@ -155,7 +155,7 @@ export const mountDataPreview = (root: HTMLElement, hash: string) => {
   const name = hash.replace(/^#data\//, "");
   const scene = sceneNamed(name) ?? sceneNamed("table");
   const api = scene?.api?.() ?? fixtureDataApi();
-  const store = createStore<AppState>(appState);
+  const store = createStore<AppState>(() => scene?.state?.(appState()) ?? appState());
 
   const connection: Connection = {
     store,

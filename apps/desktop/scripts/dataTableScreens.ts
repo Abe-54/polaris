@@ -3,8 +3,9 @@
  * The Table tab on fixtures (`#data/<scene>`, DESIGN.md Data; Paper D1/D2): screenshots in both
  * themes and every density, the worst case (60 columns, a 200-char text, a 1 MB JSON value), and
  * the grid's scroll frame rate over 10,000 rows × 20 columns against the display's interval.
+ * `--profile` prints the renderer's hottest functions during the jumps run.
  *
- *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--json <path>]
+ *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--profile] [--json <path>]
  */
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -32,8 +33,26 @@ mkdirSync(out, { recursive: true });
 if (args.includes("--build"))
   spawnSync("bun", [join(APP_DIR, "scripts/build.ts"), "--no-app"], { stdio: "inherit" });
 
-/** DESIGN.md Performance: frame p95 within 1.5 display intervals, at most 2% dropped. */
-const BUDGET = { frameP95Intervals: 1.5, droppedShare: 0.02, maxIntervalMs: 34 } as const;
+/** DESIGN.md Performance: frame p95 within 1.5 intervals, at most 2% dropped; U2's floor is 120 Hz. */
+const BUDGET = {
+  frameP95Intervals: 1.5,
+  droppedShare: 0.02,
+  maxIntervalMs: 34,
+  floorMs: 1000 / 120,
+} as const;
+
+/** Whether `gaps` keep to a frame every `interval` ms. */
+const within = (gaps: ReadonlyArray<number>, interval: number) => {
+  const dropped = gaps.filter((g) => g > 2 * interval).length / Math.max(1, gaps.length);
+
+  return {
+    dropped,
+    pass:
+      interval <= BUDGET.maxIntervalMs &&
+      percentile(gaps, 0.95) <= BUDGET.frameP95Intervals * interval &&
+      dropped <= BUDGET.droppedShare,
+  };
+};
 
 const home = mkdtempSync(join(tmpdir(), "polaris-data-table-"));
 
@@ -152,11 +171,71 @@ const frames = (page: Page, ms: number, drive: string) =>
     requestAnimationFrame(tick);
   })`);
 
+interface ProfileNode {
+  readonly id: number;
+  readonly callFrame: {
+    readonly functionName: string;
+    readonly url: string;
+    readonly lineNumber: number;
+    readonly columnNumber: number;
+  };
+}
+
+/** The renderer's CPU profile while `run` runs: the functions with the most self time. */
+const profiled = async <A>(page: Page, run: () => Promise<A>) => {
+  const cdp = await page.context().newCDPSession(page);
+
+  await cdp.send("Profiler.enable");
+  await cdp.send("Profiler.setSamplingInterval", { interval: 100 });
+  await cdp.send("Profiler.start");
+  const result = await run();
+  const { profile } = await cdp.send("Profiler.stop");
+  const nodes = new Map<number, ProfileNode>(profile.nodes.map((n) => [n.id, n]));
+  const self = new Map<string, number>();
+
+  for (const [i, id] of (profile.samples ?? []).entries()) {
+    const frame = nodes.get(id)?.callFrame;
+    const name = `${frame?.functionName || "(anonymous)"} ${frame?.url.split("/").at(-1) ?? ""}:${frame?.lineNumber ?? 0}:${frame?.columnNumber ?? 0}`;
+
+    self.set(name, (self.get(name) ?? 0) + (profile.timeDeltas?.[i] ?? 0) / 1000);
+  }
+
+  for (const [name, ms] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 20))
+    log(`  ${ms.toFixed(0).padStart(6)} ms  ${name}`);
+
+  return result;
+};
+
 const percentile = (values: ReadonlyArray<number>, p: number) => {
   const sorted = [...values].sort((a, b) => a - b);
 
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? 0;
 };
+
+const maybeProfiled = <A>(page: Page, run: () => Promise<A>) =>
+  args.includes("--profile") ? profiled(page, run) : run();
+
+const summary = (name: string, gaps: ReadonlyArray<number>, interval: number) => {
+  const display = within(gaps, interval);
+
+  return {
+    name,
+    frames: gaps.length,
+    p50: percentile(gaps, 0.5),
+    p95: percentile(gaps, 0.95),
+    max: Math.max(...gaps),
+    dropped: display.dropped,
+    displayRate: display.pass,
+    at120Hz: within(gaps, Math.max(interval, BUDGET.floorMs)).pass,
+  };
+};
+
+const verdict = (pass: boolean) => (pass ? "PASS" : "FAIL");
+
+const line = (r: ReturnType<typeof summary>) =>
+  `${r.name}: ${r.frames} frames, p50 ${r.p50.toFixed(2)} ms, p95 ${r.p95.toFixed(2)} ms, ` +
+  `max ${r.max.toFixed(1)} ms, dropped ${(r.dropped * 100).toFixed(2)}%; ` +
+  `display rate ${verdict(r.displayRate)}, 120 Hz ${verdict(r.at120Hz)}`;
 
 const bench = async (page: Page) => {
   await appearance(page, "dark", "calm");
@@ -180,10 +259,12 @@ const bench = async (page: Page) => {
     // A fast flick: 96 px (3 rows) a frame, top to bottom.
     vertical: await frames(page, 5000, "(grid) => { grid.scrollTop += 96; }"),
     // A jump a frame: 40 rows, as a dragged scrollbar does.
-    jumps: await frames(
-      page,
-      3000,
-      "(grid) => { grid.scrollTop = (grid.scrollTop + 1280) % grid.scrollHeight; }"
+    jumps: await maybeProfiled(page, () =>
+      frames(
+        page,
+        3000,
+        "(grid) => { grid.scrollTop = (grid.scrollTop + 1280) % grid.scrollHeight; }"
+      )
     ),
     horizontal: await frames(
       page,
@@ -195,39 +276,18 @@ const bench = async (page: Page) => {
   const columns = await page.locator('[role="columnheader"]').count();
   const heapMb = Number(await page.evaluate("performance.memory.usedJSHeapSize")) / 1_048_576;
 
-  const results = Object.entries(runs).map(([name, gaps]) => {
-    const p95 = percentile(gaps, 0.95);
-    const dropped = gaps.filter((g) => g > 2 * interval).length / Math.max(1, gaps.length);
-
-    const pass =
-      interval <= BUDGET.maxIntervalMs &&
-      p95 <= BUDGET.frameP95Intervals * interval &&
-      dropped <= BUDGET.droppedShare;
-
-    return {
-      name,
-      frames: gaps.length,
-      p50: percentile(gaps, 0.5),
-      p95,
-      max: Math.max(...gaps),
-      dropped,
-      pass,
-    };
-  });
+  const results = Object.entries(runs).map(([name, gaps]) => summary(name, gaps, interval));
 
   log(`display interval ${interval.toFixed(2)} ms (${(1000 / interval).toFixed(0)} Hz)`);
   log(`rendered column headers ${columns} of 20; renderer JS heap ${heapMb.toFixed(0)} MB`);
 
-  for (const r of results)
-    log(
-      `${r.name}: ${r.frames} frames, p50 ${r.p50.toFixed(2)} ms, p95 ${r.p95.toFixed(2)} ms, max ${r.max.toFixed(1)} ms, dropped ${(r.dropped * 100).toFixed(2)}% ${r.pass ? "PASS" : "FAIL"}`
-    );
+  for (const r of results) log(line(r));
   const json = option("--json");
 
   if (json !== null)
     writeFileSync(json, JSON.stringify({ loaded, interval, heapMb, results }, null, 2));
 
-  return results.every((r) => r.pass);
+  return results.every((r) => r.at120Hz);
 };
 
 let ok = true;

@@ -1,5 +1,4 @@
 import "../../../test/dom.testing.ts";
-import { SessionId } from "@polaris/protocol";
 import { Toaster, TooltipProvider } from "@polaris/ui";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
@@ -13,7 +12,7 @@ import { DataLayer } from "../data/hooks.tsx";
 import { dataTabsStore, openTable } from "../model/store.ts";
 import { tableTabId } from "../model/tabs.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
-import { FIXTURE_INVOICES } from "../preview/fixtures.ts";
+import { FIXTURE_INVOICES, FIXTURE_SESSIONS } from "../preview/fixtures.ts";
 import { tableViews } from "./table/state.ts";
 import { TableTabBody } from "./TableTab.tsx";
 
@@ -40,7 +39,7 @@ afterEach(() => {
   dataTabsStore.setState({ sessions: {}, shown: null });
 });
 
-const at = { hostKey: "local", sessionId: SessionId.make("s-overdue") };
+const at = { hostKey: "local", sessionId: FIXTURE_SESSIONS.overdue.id };
 
 const tab = {
   kind: "table",
@@ -116,9 +115,9 @@ test("a foreign key opens its table filtered to the row it points at", async () 
   openTable("app", "invoices", at);
   fireEvent.click(link);
 
-  const key = `local\u0000s-overdue\u0000${tableTabId("app", "customers")}`;
+  const key = `local\u0000${at.sessionId}\u0000${tableTabId("app", "customers")}`;
 
-  expect(dataTabsStore.getState().sessions["local\u0000s-overdue"]?.active).toBe(
+  expect(dataTabsStore.getState().sessions[`local\u0000${at.sessionId}`]?.active).toBe(
     tableTabId("app", "customers")
   );
   expect(tableViews.getState()[key]?.filter).toBe(`"id" = '${customer}'`);

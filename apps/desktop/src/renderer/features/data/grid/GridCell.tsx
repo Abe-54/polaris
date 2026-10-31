@@ -24,7 +24,8 @@ const BASE = "h-full shrink-0 overflow-hidden px-2.5 text-ellipsis whitespace-pr
 const classes = (column: LaidColumn, kind: string, active: boolean, staged: boolean) => {
   let name = BASE;
 
-  if (column.numeric) name += " tabular text-right";
+  // The grid is mono, so its figures are already tabular: no OpenType feature to shape.
+  if (column.numeric) name += " text-right";
 
   if (kind === "null") name += " text-text-faint";
   else if (staged) name += " bg-git-modified/12 text-git-modified-text";

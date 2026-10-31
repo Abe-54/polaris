@@ -68,7 +68,7 @@ interface RowProps {
 }
 
 const ROW_CLASS =
-  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono";
+  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono [contain:layout_style] [font-kerning:none] [text-rendering:optimizeSpeed]";
 
 const GridRow = memo(function GridRow(props: RowProps) {
   const { index, row, columns, first, last, offset, start, height, gutter, selected } = props;
@@ -164,7 +164,9 @@ export const DataGrid = ({
     count: rows.length,
     getScrollElement: () => scroller.current,
     estimateSize: () => height,
-    overscan: 6,
+    overscan: 2,
+    // Render on the next frame, not inside the scroll event: one layout a frame, never forced.
+    useFlushSync: false,
     paddingStart: HEADER,
     initialRect: FIRST_RECT,
   });
@@ -174,7 +176,7 @@ export const DataGrid = ({
     count: laid.length,
     getScrollElement: () => scroller.current,
     estimateSize: (at) => laid[at]?.width ?? 120,
-    overscan: 3,
+    overscan: 1,
     initialRect: FIRST_RECT,
   });
 
@@ -310,7 +312,8 @@ export const DataGrid = ({
 
             return row === undefined ? null : (
               <GridRow
-                key={r.index}
+                // A slot, not the row: a jump reuses each row's elements rather than remounting.
+                key={r.index % virtualRows.length}
                 index={r.index}
                 row={row}
                 columns={laid}
