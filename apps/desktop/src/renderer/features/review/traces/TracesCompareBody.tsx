@@ -25,7 +25,9 @@ export interface TracesCompareBodyProps {
 export const ROUTES_FOOTNOTE =
   "p50 is the median duration of a route’s traces in each turn. Only traces Polaris still keeps are counted.";
 
-const COLUMNS = "grid grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-x-4";
+/** Each row is its own grid on fixed lanes, so figures line up and nothing meets the card edge. */
+const COLUMNS =
+  "px-row-pad grid grid-cols-[minmax(0,1fr)_10.5rem_8.5rem_7rem] items-center gap-x-4";
 
 const HEAD = "text-micro text-text-subtle";
 
@@ -49,13 +51,18 @@ const RouteLine = ({
       data-change={row.change}
       onClick={() => onOpen(row)}
       title={`${routeTitle(row)}\nOpen turn ${turn}’s traces${shortcut === "" ? "" : ` ${shortcut}`}`}
-      className="rounded-row hover:bg-fill-hover h-row px-row-pad focus-visible:ring-starlight col-span-4 grid cursor-default grid-cols-subgrid items-center text-left outline-none focus-visible:ring-2"
+      className={cn(
+        COLUMNS,
+        "rounded-row hover:bg-fill-hover h-row focus-visible:ring-starlight w-full cursor-default text-left outline-none focus-visible:ring-2"
+      )}
     >
       <span className="gap-row-x flex min-w-0 items-baseline">
         <span className="text-caption text-text-strong min-w-0 truncate font-mono">
           {row.route}
         </span>
-        <span className="text-caption text-text-faint shrink-0 truncate">{row.service}</span>
+        <span className="text-caption text-text-faint max-w-[12rem] shrink-0 truncate">
+          {row.service}
+        </span>
       </span>
       <span className="gap-row-x text-caption tabular flex items-baseline justify-end font-mono">
         <span className="text-text-default whitespace-nowrap">{p50Line(row)}</span>
@@ -66,7 +73,7 @@ const RouteLine = ({
       <span className="text-caption text-text-subtle tabular text-right whitespace-nowrap">
         {runsLine(row)}
       </span>
-      <span className="text-caption text-text-subtle w-24 text-right whitespace-nowrap">
+      <span className="text-caption text-text-subtle text-right whitespace-nowrap">
         {change ?? ""}
       </span>
     </button>
@@ -83,20 +90,20 @@ const Routes = ({ answer, plan, onOpenRoute }: TracesCompareBodyProps) =>
   ) : (
     <section
       data-testid="traces-routes"
-      className={cn(COLUMNS, "border-hairline rounded-row py-gap border")}
+      className="border-hairline rounded-row py-gap flex flex-col border px-1"
     >
-      <div className="px-row-pad col-span-4 grid grid-cols-subgrid pb-1">
+      <div className={cn(COLUMNS, "pb-1")}>
         <span className={HEAD}>Route</span>
         <span className={cn(HEAD, "text-right")}>p50 before → after</span>
         <span className={cn(HEAD, "text-right")}>Runs</span>
-        <span className={cn(HEAD, "w-24 text-right")}>Change</span>
+        <span className={cn(HEAD, "text-right")}>Change</span>
       </div>
       {answer.rows.map((row) => (
         <RouteLine key={row.key} row={row} plan={plan} onOpen={onOpenRoute} />
       ))}
       <p
         data-testid="traces-routes-footnote"
-        className="text-micro text-text-subtle px-row-pad col-span-4 pt-1"
+        className="text-micro text-text-subtle px-row-pad pt-1"
       >
         {ROUTES_FOOTNOTE}
       </p>

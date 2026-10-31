@@ -69,6 +69,25 @@ const open = async (page: Page, scene: string, testId: string) => {
   await page.waitForTimeout(1200);
 };
 
+const listEnd = async (page: Page) => {
+  await page
+    .getByTestId("review-files")
+    .locator(".overflow-y-auto")
+    .first()
+    .evaluate((e: { scrollTop: number; scrollHeight: number }) => {
+      e.scrollTop = e.scrollHeight;
+    });
+  await page.waitForTimeout(300);
+  // Then the Traces kicker to the list's top, so the whole section shows.
+  await page
+    .getByTestId("review-traces-head")
+    .first()
+    .evaluate((e: { scrollIntoView: (options: { block: string }) => void }) =>
+      e.scrollIntoView({ block: "start" })
+    );
+  await page.waitForTimeout(300);
+};
+
 const check = (ok: boolean, what: string) => {
   if (!ok) throw new Error(what);
   console.log(`traces: ✓ ${what}`);
@@ -93,6 +112,9 @@ try {
       for (const [scene, testId] of SCENES) {
         await open(page, scene, testId);
         await appearance(page, theme, density);
+
+        // The section sits after the migration and Data: scroll the list to it.
+        if (testId === "review-traces-head") await listEnd(page);
         await shoot(page, `${scene}-${theme}-${density}`);
       }
 
