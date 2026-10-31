@@ -35,6 +35,7 @@ import { totals } from "../model/diff.ts";
 import { plural } from "../model/format.ts";
 import { useTurnDiff } from "../turnDiff.ts";
 import { answerDecision, questionSteps, questionViews } from "../model/question.ts";
+import { questionProgress, setQuestionProgress, uiKey, useSessionUi } from "../state.ts";
 import type { OutboxActions } from "../outbox.ts";
 import type { Entry } from "../model/runs.ts";
 import { Trigger, Waiting } from "./background.tsx";
@@ -368,6 +369,8 @@ const KIND_WANTS: Record<Exclude<ApprovalRequest["kind"], "secret">, string> = {
 const Question = ({ request, ctx }: { request: ApprovalRequest; ctx: RowContext }) => {
   const now = useNow(60_000);
   const views = questionViews(request);
+  const key = uiKey(ctx.diff.hostKey, ctx.diff.sessionId);
+  const progress = questionProgress(useSessionUi(key), request.id);
 
   return (
     <QuestionCard
@@ -376,7 +379,9 @@ const Question = ({ request, ctx }: { request: ApprovalRequest; ctx: RowContext 
       harness={ctx.harness ?? ""}
       age={age(request.openedAt, now)}
       questions={questionSteps(views)}
-      onAnswer={(picks) => ctx.onRespond(request, answerDecision(views, picks))}
+      {...(progress === null ? {} : { progress })}
+      onProgressChange={(next) => setQuestionProgress(key, request.id, next)}
+      onAnswer={(picks, typed) => ctx.onRespond(request, answerDecision(views, picks, typed))}
     />
   );
 };

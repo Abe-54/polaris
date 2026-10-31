@@ -1,5 +1,5 @@
 import type { ApprovalDecision, ApprovalRequest } from "@polaris/protocol";
-import type { QuestionStep } from "@polaris/ui";
+import { type QuestionProgress, type QuestionStep, startProgress } from "@polaris/ui";
 import { Decisions } from "../../../commands.ts";
 
 /**
@@ -67,20 +67,25 @@ export const questionViews = (request: ApprovalRequest): ReadonlyArray<QuestionV
       });
 
 /**
- * The Answer for the card's picks: each question's chosen values, and as text one line per
- * question (labels joined with ", "), which a Daemon before ENG-450 reads instead.
+ * The Answer for the card's picks: each question's chosen values (or its typed answer), and as
+ * text one line per question (labels joined with ", "), which a Daemon before ENG-450 reads.
  */
 export const answerDecision = (
   views: ReadonlyArray<QuestionView>,
-  picks: ReadonlyArray<ReadonlyArray<number>>
+  picks: ReadonlyArray<ReadonlyArray<number>>,
+  typed: ReadonlyArray<string | null> = []
 ): ApprovalDecision => {
-  const answers = views.map((view, i) =>
-    (picks[i] ?? []).flatMap((n) => {
+  const answers = views.map((view, i) => {
+    const own = typed[i] ?? null;
+
+    if (own !== null) return [own];
+
+    return (picks[i] ?? []).flatMap((n) => {
       const answer = view.answers[n];
 
       return answer === undefined ? [] : [answer.value];
-    })
-  );
+    });
+  });
 
   return Decisions.Answer({ text: answers.map((a) => a.join(", ")).join("\n"), answers });
 };
@@ -98,3 +103,44 @@ export const questionSteps = (views: ReadonlyArray<QuestionView>): ReadonlyArray
     })),
     multiSelect: v.multiSelect,
   }));
+
+/** What the composer's typed answer does: fill the question on screen, then move on or send. */
+export type TypedAnswer =
+  | { readonly kind: "next"; readonly progress: QuestionProgress }
+  | {
+      readonly kind: "send";
+      readonly progress: QuestionProgress;
+      readonly decision: ApprovalDecision;
+    };
+
+/** Answers the card's current question with `text`; the last question sends them all. */
+export const answerTyped = (
+  views: ReadonlyArray<QuestionView>,
+  progress: QuestionProgress | null,
+  text: string
+): TypedAnswer => {
+  const from = progress ?? startProgress(views.length);
+  const step = Math.min(from.step, views.length - 1);
+  const typed = views.map((_, n) => (n === step ? text : (from.typed[n] ?? null)));
+  const picks = views.map((_, n) => (n === step ? [] : (from.picks[n] ?? [])));
+
+  if (step >= views.length - 1)
+    return {
+      kind: "send",
+      progress: { step, picks, typed },
+      decision: answerDecision(views, picks, typed),
+    };
+
+  return { kind: "next", progress: { step: step + 1, picks, typed } };
+};
+
+/** The composer's typed answer to a request of several questions; null for a single question. */
+export const typedStep = (
+  request: ApprovalRequest,
+  progress: QuestionProgress | null,
+  text: string
+): TypedAnswer | null => {
+  const views = questionViews(request);
+
+  return views.length > 1 ? answerTyped(views, progress, text) : null;
+};

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ApprovalQuestion, ApprovalRequest, QuestionOption } from "@polaris/protocol";
 import { approval } from "../../../store/fixtures.testing.ts";
-import { answerDecision, questionAnswers, questionViews } from "./question.ts";
+import { answerDecision, questionAnswers, questionViews, typedStep } from "./question.ts";
 
 describe("question answers", () => {
   test("the Harness's (Recommended) marker fills that row and leaves the label", () => {
@@ -56,5 +56,25 @@ describe("several questions", () => {
 
     expect(views).toHaveLength(1);
     expect(views[0]).toMatchObject({ question: "Which scope?", answers: [] });
+  });
+
+  test("a typed answer answers only the question on screen, then moves on (ENG-677)", () => {
+    const request = ask(["Own", "Host"], ["Search", "Read"], ["Yes", "No"], ["Now", "Later"]);
+    const first = typedStep(request, null, "Only my sessions");
+
+    if (first?.kind !== "next") throw new Error("the first typed answer should move on");
+    expect(first.progress.step).toBe(1);
+
+    // The card's picks for questions 2 and 3, then a typed answer to the last.
+    const picked = { ...first.progress, step: 3, picks: [[], [1], [1], []] };
+
+    expect(typedStep(request, picked, "Tomorrow")).toMatchObject({
+      kind: "send",
+      decision: { answers: [["Only my sessions"], ["Read"], ["No"], ["Tomorrow"]] },
+    });
+  });
+
+  test("a single question keeps the composer's plain answer", () => {
+    expect(typedStep(ask(["Own", "Host"]), null, "Mine")).toBeNull();
   });
 });

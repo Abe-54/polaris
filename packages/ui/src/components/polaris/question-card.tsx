@@ -26,11 +26,31 @@ export interface QuestionStep {
   readonly multiSelect?: boolean;
 }
 
+/** Where the card is: the question on screen, and each question's picks or typed answer. */
+export interface QuestionProgress {
+  readonly step: number;
+  readonly picks: ReadonlyArray<ReadonlyArray<number>>;
+  /** An answer typed in place of a pick (in the composer), per question; null where none. */
+  readonly typed: ReadonlyArray<string | null>;
+}
+
+export const startProgress = (count: number): QuestionProgress => ({
+  step: 0,
+  picks: Array.from({ length: count }, () => []),
+  typed: Array.from({ length: count }, () => null),
+});
+
 export interface QuestionCardProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
   readonly harness: Harness;
   readonly questions: readonly QuestionStep[];
-  /** Once every question has an answer: the chosen indexes, per question in order. */
-  readonly onAnswer?: (picks: ReadonlyArray<ReadonlyArray<number>>) => void;
+  /** Once every question has an answer: the chosen indexes and typed answers, per question. */
+  readonly onAnswer?: (
+    picks: ReadonlyArray<ReadonlyArray<number>>,
+    typed: ReadonlyArray<string | null>
+  ) => void;
+  /** Set to hold the progress outside the card (a composer answers its current question). */
+  readonly progress?: QuestionProgress;
+  readonly onProgressChange?: (progress: QuestionProgress) => void;
   /** "18m". */
   readonly age?: ReactNode;
 }
@@ -39,38 +59,51 @@ export interface QuestionCardProps extends Omit<HTMLAttributes<HTMLDivElement>, 
  * A Harness's question in the conversation: a needs-you washed header strip, then numbered
  * answer rows with the recommended one filled (DESIGN.md, Needs You inbox). Several questions
  * are asked one at a time ("1 of 2", Back); a pick moves on, and the last sends them all.
+ * An answer typed in the composer stands in for a pick on the question on screen.
  */
 export function QuestionCard({
   harness,
   questions,
   onAnswer,
+  progress,
+  onProgressChange,
   age,
   className,
   ...props
 }: QuestionCardProps) {
-  const [step, setStep] = useState(0);
+  const [own, setOwn] = useState(() => startProgress(questions.length));
+  const { step, picks, typed } = progress ?? own;
 
-  const [picks, setPicks] = useState<ReadonlyArray<ReadonlyArray<number>>>(() =>
-    questions.map(() => [])
-  );
+  const set = (next: QuestionProgress) => {
+    setOwn(next);
+    onProgressChange?.(next);
+  };
 
   const current = questions[Math.min(step, questions.length - 1)];
 
   if (current === undefined) return null;
   const chosen = picks[step] ?? [];
+  const typedHere = typed[step] ?? null;
   const last = step >= questions.length - 1;
 
-  const advance = (next: ReadonlyArray<ReadonlyArray<number>>) => {
-    if (last) onAnswer?.(next);
-    else setStep(step + 1);
+  const advance = (next: QuestionProgress) => {
+    if (last) {
+      set(next);
+      onAnswer?.(next.picks, next.typed);
+    } else set({ ...next, step: step + 1 });
   };
 
   const pick = (index: number) => {
-    const own = current.multiSelect === true ? toggle(chosen, index) : [index];
-    const next = picks.map((p, n) => (n === step ? own : p));
-    setPicks(next);
+    const mine = current.multiSelect === true ? toggle(chosen, index) : [index];
 
-    if (current.multiSelect !== true) advance(next);
+    const next = {
+      step,
+      picks: picks.map((p, n) => (n === step ? mine : p)),
+      typed: typed.map((t, n) => (n === step ? null : t)),
+    };
+
+    if (current.multiSelect === true) set(next);
+    else advance(next);
   };
 
   return (
@@ -114,21 +147,35 @@ export function QuestionCard({
                 answer={answer}
                 index={index}
                 multiSelect={current.multiSelect === true}
-                filled={isFilled(answer, index, chosen, current.multiSelect === true)}
+                filled={
+                  typedHere === null &&
+                  isFilled(answer, index, chosen, current.multiSelect === true)
+                }
                 checked={chosen.includes(index)}
                 onPick={() => pick(index)}
               />
             </li>
           ))}
+          {typedHere === null ? null : (
+            <li
+              className="rounded-row bg-primary text-primary-foreground flex min-h-9 items-center gap-2.5 px-3 py-1.5"
+              data-testid="typed-answer"
+            >
+              <span className="text-label min-w-0 flex-1 [overflow-wrap:anywhere]">
+                {typedHere}
+              </span>
+              <span className="text-caption shrink-0 opacity-70">Your answer</span>
+            </li>
+          )}
         </ol>
         <StepFooter
-          back={step > 0 ? () => setStep(step - 1) : null}
+          back={step > 0 ? () => set({ step: step - 1, picks, typed }) : null}
           confirm={
             current.multiSelect === true
               ? {
                   label: last ? "Send" : "Next",
-                  ready: chosen.length > 0,
-                  run: () => advance(picks),
+                  ready: chosen.length > 0 || typedHere !== null,
+                  run: () => advance({ step, picks, typed }),
                 }
               : null
           }

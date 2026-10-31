@@ -4,7 +4,7 @@
  * the Harness can't switch).
  */
 import { fastToggle } from "../../harness/model/fast.ts";
-import type { Command, SessionId } from "@polaris/protocol";
+import type { Command, RequestId, SessionId } from "@polaris/protocol";
 import { useMemo, useState } from "react";
 import { turnNumber } from "../model/turnGroups.ts";
 import { type Harness, harnessHue, sessionCelestial } from "@polaris/ui";
@@ -38,7 +38,8 @@ import {
   placeholderFor,
   submitCommand,
 } from "../model/intent.ts";
-import { patchSessionUi, useSessionUi } from "../state.ts";
+import { patchSessionUi, questionProgress, setQuestionProgress, useSessionUi } from "../state.ts";
+import { typedStep } from "../model/question.ts";
 import type { OutboxActions } from "../outbox.ts";
 import { promptFor, sentMessages, shellDraft, useMentionSearch } from "../../composer/index.ts";
 import { RotatingVerb, useWorkingVerbs } from "../verbs/index.ts";
@@ -289,10 +290,38 @@ export const SessionComposer = (props: SessionComposerProps) => {
     }
 
     const kept = ui;
+    const answer = mode.kind === "answer" ? answerQuestion(mode.requestId) : null;
+
+    if (answer === "next") return;
 
     patchSessionUi(uiKey, () => ({ draft: "", attachments: [] }));
-    void send(hostKey, command, SEND_FAILURES[mode.kind]).then((ok) => {
+    void send(hostKey, answer ?? command, SEND_FAILURES[mode.kind]).then((ok) => {
       if (!ok) patchSessionUi(uiKey, () => ({ draft: kept.draft, attachments: kept.attachments }));
+    });
+  };
+
+  /** A typed answer fills the question card's current question: "next" moves on, else it sends. */
+  const answerQuestion = (requestId: RequestId): Command | "next" | null => {
+    const request = model.pendingApprovals.find((r) => r.id === requestId);
+
+    const step =
+      request === undefined
+        ? null
+        : typedStep(request, questionProgress(ui, requestId), text.trim());
+
+    if (step === null) return null;
+    setQuestionProgress(uiKey, requestId, step.progress);
+
+    if (step.kind === "next") {
+      patchSessionUi(uiKey, () => ({ draft: "", attachments: [] }));
+
+      return "next";
+    }
+
+    return Commands.RespondToApproval({
+      sessionId: session.id,
+      requestId,
+      decision: step.decision,
     });
   };
 

@@ -4,6 +4,7 @@
  * view, so switching back to a session paints it as it was left.
  */
 import type { AttachmentId } from "@polaris/protocol";
+import type { QuestionProgress } from "@polaris/ui";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { type Folds, noFolds } from "./model/conversation.ts";
@@ -40,6 +41,8 @@ export interface SessionUi {
   readonly attachments: ReadonlyArray<StagedAttachment>;
   /** Steers and queued follow-ups (⌘↵) not in the conversation yet (`model/outbox.ts`). */
   readonly outbox: ReadonlyArray<Outgoing<StagedAttachment>>;
+  /** The open question card's progress, shared with the composer, which answers its question. */
+  readonly question: { readonly requestId: string; readonly progress: QuestionProgress } | null;
 }
 
 const EMPTY: SessionUi = {
@@ -49,6 +52,7 @@ const EMPTY: SessionUi = {
   draft: "",
   attachments: [],
   outbox: [],
+  question: null,
 };
 
 type UiState = Readonly<Record<string, SessionUi>>;
@@ -110,3 +114,10 @@ export const onDraftChange = (listener: (key: string, draft: string) => void) =>
     for (const [key, ui] of Object.entries(next))
       if (ui.draft !== (prev[key]?.draft ?? "")) listener(key, ui.draft);
   });
+
+/** The question card's progress for this request; null before the user answered any of it. */
+export const questionProgress = (ui: SessionUi, requestId: string): QuestionProgress | null =>
+  ui.question?.requestId === requestId ? ui.question.progress : null;
+
+export const setQuestionProgress = (key: string, requestId: string, progress: QuestionProgress) =>
+  patchSessionUi(key, () => ({ question: { requestId, progress } }));

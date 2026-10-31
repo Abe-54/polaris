@@ -8,7 +8,7 @@ import { HostStateCard, HostStateChip } from "./host-state";
 import { MachineBar } from "./machine-bar";
 import { NeedsYouCard, WaitingCard } from "./needs-you";
 import { SetupRow } from "./onboarding";
-import { QuestionCard } from "./question-card";
+import { QuestionCard, startProgress } from "./question-card";
 
 afterEach(cleanup);
 
@@ -188,7 +188,10 @@ describe("Needs You", () => {
   });
 
   test("a question numbers its answers and fills only the recommended one", () => {
-    const onAnswer = mock((_picks: ReadonlyArray<ReadonlyArray<number>>) => undefined);
+    const onAnswer = mock(
+      (_picks: ReadonlyArray<ReadonlyArray<number>>, _typed: ReadonlyArray<string | null>) =>
+        undefined
+    );
 
     const { getAllByRole, container } = render(
       <QuestionCard
@@ -214,11 +217,14 @@ describe("Needs You", () => {
 
     if (monthly === undefined) throw new Error("no second answer");
     fireEvent.click(monthly);
-    expect(onAnswer).toHaveBeenCalledWith([[1]]);
+    expect(onAnswer).toHaveBeenCalledWith([[1]], [null]);
   });
 
   test("several questions are asked one at a time and sent together", () => {
-    const onAnswer = mock((_picks: ReadonlyArray<ReadonlyArray<number>>) => undefined);
+    const onAnswer = mock(
+      (_picks: ReadonlyArray<ReadonlyArray<number>>, _typed: ReadonlyArray<string | null>) =>
+        undefined
+    );
 
     const { getByRole, getByText, container } = render(
       <QuestionCard
@@ -254,7 +260,7 @@ describe("Needs You", () => {
     fireEvent.click(getByText("Own"));
     fireEvent.click(getByRole("button", { name: "Send" }));
     expect(onAnswer).toHaveBeenCalledTimes(1);
-    expect(onAnswer).toHaveBeenCalledWith([[0], [0, 2]]);
+    expect(onAnswer).toHaveBeenCalledWith([[0], [0, 2]], [null, null]);
   });
 });
 
@@ -297,5 +303,34 @@ describe("SetupRow", () => {
 
     expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).toContain("Needs a workspace");
+  });
+
+  test("a typed answer stands in for a pick on its question, and a pick replaces it", () => {
+    const onProgressChange = mock((_p: ReturnType<typeof startProgress>) => undefined);
+    const progress = { ...startProgress(2), typed: ["Only mine", null] };
+
+    const { getByText, getByTestId, getAllByRole } = render(
+      <QuestionCard
+        harness="claude"
+        questions={[
+          {
+            question: "Which history?",
+            answers: [{ label: "Own", recommended: true }, { label: "Host" }],
+          },
+          { question: "Which tools?", answers: [{ label: "Search" }] },
+        ]}
+        progress={progress}
+        onProgressChange={onProgressChange}
+      />
+    );
+
+    expect(getByTestId("typed-answer").textContent).toBe("Only mineYour answer");
+    expect(getAllByRole("button").some((b) => b.className.includes("bg-primary"))).toBe(false);
+    fireEvent.click(getByText("Host"));
+    expect(onProgressChange).toHaveBeenCalledWith({
+      step: 1,
+      picks: [[1], []],
+      typed: [null, null],
+    });
   });
 });
