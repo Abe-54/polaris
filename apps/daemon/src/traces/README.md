@@ -69,7 +69,11 @@ measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
 over earlier retained traces; fewer than five samples produce no baseline. The read-only helper
-runs inside the existing worker. SLOW requires over 20 ms and over three times the median.
+runs inside the existing worker and also returns each Span's actual sample count.
+`traces.get` attaches `usual: { [spanId]: { usualMs, samples } }` from one history call;
+older Daemons may omit it. Desktop uses the same SLOW rule (over 20 ms and over three times
+the median), and FAST when below a third of a median over 20 ms. Both require five samples.
+No baseline means no badge or panel line. Folded sums have no per-call verdict.
 The MCP summary retains error paths before the critical path, collapses repeated siblings, and
 counts omitted Spans under the text cap. Its full contract is `docs/specs/traces-tools-v1.md`.
 

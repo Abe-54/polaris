@@ -61,6 +61,7 @@ export const useTraceView = (detail: TraceDetail) => {
 
   return {
     times,
+    usual: detail.usual,
     roots,
     rows,
     table,

@@ -3,6 +3,8 @@
  * count badge on a parent (a tan ×n on a fold) or a square on a leaf, the name, the service where
  * it changes, the FAST/SLOW lane, and the bar in its service's hue with its duration after it.
  */
+import type { TraceDetail } from "@polaris/protocol";
+import { durationVerdict } from "../../model/usual.ts";
 import { cn } from "@polaris/ui";
 import { memo } from "react";
 import { durationLabel, ERROR_HUE, type WaterfallRow } from "../../model/waterfall/index.ts";
@@ -161,6 +163,7 @@ const Bar = ({
 
 export interface SpanRowProps {
   readonly row: WaterfallRow;
+  readonly usual?: TraceDetail["usual"];
   readonly hue: string;
   readonly selected: boolean;
   readonly collapsed: boolean;
@@ -171,9 +174,12 @@ export interface SpanRowProps {
 }
 
 export const SpanRow = memo(
-  ({ row, hue, selected, collapsed, range, dim, actions }: SpanRowProps) => {
+  ({ row, usual, hue, selected, collapsed, range, dim, actions }: SpanRowProps) => {
     const { node } = row;
     const tone = node.error ? ERROR_HUE : hue;
+    const span = node.spans[0]?.span;
+    const baseline = span === undefined || node.fold ? undefined : usual?.[span.id];
+    const verdict = durationVerdict(node.duration, baseline);
 
     return (
       <div
@@ -212,7 +218,17 @@ export const SpanRow = memo(
             <span className="text-micro text-text-subtle shrink-0">parent not kept</span>
           ) : null}
         </div>
-        <div role="gridcell" aria-hidden className="h-full" />
+        <div role="gridcell" className="flex h-full items-center">
+          {verdict === null ? null : (
+            <span
+              className="border-hairline text-text-subtle rounded-[3px] border px-1 font-mono text-[10px] leading-[14px]"
+              title={`Usually ${durationLabel(baseline!.usualMs)} in this checkout (${baseline!.samples} samples)`}
+              data-testid="duration-verdict"
+            >
+              {verdict}
+            </span>
+          )}
+        </div>
         <div role="gridcell" className="relative h-full">
           <Bar row={row} hue={tone} selected={selected} range={range} dim={dim} />
         </div>
