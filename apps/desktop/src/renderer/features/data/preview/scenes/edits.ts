@@ -1,10 +1,11 @@
 /**
  * Grid edits' scenes (E, ENG-645): staged cells on invoices, a failed commit, the remote bulk
- * confirm on a tan branch and a red production source, a table without a primary key, and a
- * remote source with writes off.
+ * confirm on a tan branch and a red production source, a table without a primary key, a remote
+ * source with writes off, and EF's conflicts, refusals and local writes off.
  */
-import { DataSource, TableDetail } from "@polaris/protocol";
+import { DataEditConflict, DataSource, TableDetail } from "@polaris/protocol";
 import { Schema } from "effect";
+import type { IpcError } from "../../../../../shared/api.ts";
 import type { DataValue } from "../../grid/value.ts";
 import { openTable } from "../../model/store.ts";
 import { tableTabId } from "../../model/tabs.ts";
@@ -73,6 +74,48 @@ const BULK: ReadonlyArray<readonly [number, string, DataValue]> = [
   [4, "number", "INV-2004-B"],
 ];
 
+const column = (name: string, type: string, pk = false) => ({
+  name,
+  type,
+  nullable: !pk,
+  default: null,
+  pk,
+  fk: null,
+});
+
+const SHIFTS = new TableDetail({
+  schema: "public",
+  name: "shifts",
+  columns: [column("id", "int4", true), column("starts_at", "timestamp"), column("note", "text")],
+  indexes: [],
+  constraints: [],
+  rowEstimate: 2,
+  primaryKey: ["id"],
+});
+
+const READINGS = new TableDetail({
+  schema: "public",
+  name: "readings",
+  columns: [column("at", "float8", true), column("value", "numeric(6,2)")],
+  indexes: [],
+  constraints: [],
+  rowEstimate: 2,
+  primaryKey: ["at"],
+});
+
+const rowKey = (row: number) => [FIXTURE_INVOICES[row]?.[0] ?? null];
+
+/** Row 0's status changed since it was staged, and row 2 was deleted. */
+const CONFLICT: IpcError = {
+  code: "E-DATA-CONFLICT",
+  message: "2 staged rows changed since they were read.",
+  fix: "Read the rows again.",
+  conflicts: [
+    DataEditConflict.cases.Changed.make({ key: rowKey(0), column: "status", value: "void" }),
+    DataEditConflict.cases.Missing.make({ key: rowKey(2) }),
+  ],
+};
+
 export const EDIT_SCENES = {
   "edit-staged": {
     api: api(),
@@ -103,5 +146,54 @@ export const EDIT_SCENES = {
   "edit-writes-off": {
     api: api({ sources: sourcesWith("ledger", { writes: "off" }) }),
     play: (at: At) => openTable("ledger", INVOICES, at),
+  },
+  "edit-conflict": {
+    api: api({ commitError: CONFLICT }),
+    play: (at: At) => {
+      withEdits("app", [
+        [0, "status", "paid"],
+        [1, "currency", "EUR"],
+        [2, "currency", null],
+        [2, "number", "INV-2002-B"],
+      ])(at);
+      stageEdit(at, tableTabId("app", INVOICES), {
+        key: ["00000000-0000-4000-8000-000000000999"],
+        column: "status",
+        before: "draft",
+        value: "void",
+      });
+    },
+  },
+  "edit-zone": {
+    api: api({
+      tables: {
+        shifts: {
+          detail: SHIFTS,
+          rows: [
+            ["1", "2026-10-30 09:00:00", "early"],
+            ["2", "2026-10-30 17:00:00", "late"],
+          ],
+        },
+      },
+    }),
+    play: (at: At) => openTable("app", { schema: "public", name: "shifts" }, at),
+  },
+  "edit-float-key": {
+    api: api({
+      tables: {
+        readings: {
+          detail: READINGS,
+          rows: [
+            ["0.1", "12.50"],
+            ["0.2", "13.75"],
+          ],
+        },
+      },
+    }),
+    play: (at: At) => openTable("app", { schema: "public", name: "readings" }, at),
+  },
+  "edit-writes-off-local": {
+    api: api({ sources: sourcesWith("app", { writes: "off" }) }),
+    play: (at: At) => openTable("app", INVOICES, at),
   },
 } satisfies Record<string, DataScene>;
