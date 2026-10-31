@@ -10,6 +10,9 @@ const shown = new Map<string, Set<HTMLElement>>();
 /** Marks the scroller cards sit in (the conversation), so "on screen" means inside it. */
 export const APPROVAL_VIEWPORT = "data-approval-viewport";
 
+/** Asks the conversation around a card to release the end and bring the card's row to the top. */
+export const REVEAL_APPROVAL = "polaris:reveal-approval";
+
 /** Marks a part of a write's card that must be fully in view before it runs from elsewhere. */
 export const APPROVAL_PART = "data-approval-part";
 
@@ -81,7 +84,12 @@ export const revealApproval = (requestId: string) => {
   const card = cards.find((c) => c.hasAttribute("tabindex")) ?? cards[0];
 
   if (card === undefined) return false;
-  card.scrollIntoView?.({ block: "start" });
+
+  const handled = !card.dispatchEvent(
+    new Event(REVEAL_APPROVAL, { bubbles: true, cancelable: true })
+  );
+
+  if (!handled) card.scrollIntoView?.({ block: "start" });
   card.focus({ preventScroll: true });
 
   return true;
