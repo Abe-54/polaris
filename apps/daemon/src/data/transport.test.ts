@@ -8,7 +8,7 @@ import {
   watchDataSources,
   watchDataQueryLog,
 } from "@polaris/client";
-import { DaemonRpcs, RequestId, SessionId, Unsupported } from "@polaris/protocol";
+import { DaemonRpcs, SessionId, Unsupported } from "@polaris/protocol";
 import { Effect, Layer, Redacted, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -76,13 +76,14 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
         const source = { sessionId, source: "app" };
 
         const requests = [
-          client["data.describe"](source),
-          client["data.query"]({ ...source, sql: "select 1", params: [], limit: 1 }),
-          client["data.approval.decide"]({
-            approvalId: RequestId.make("approval"),
-            decision: "deny",
-            scope: "target",
-          }),
+          client["data.describe"](source).pipe(Effect.asVoid),
+          client["data.query"]({ ...source, sql: "select 1", params: [], limit: 1 }).pipe(
+            Effect.asVoid
+          ),
+          client["data.source.access"]({ ...source, writes: "off", revoke: true }).pipe(
+            Effect.asVoid
+          ),
+          client["data.queryLog.page"]({ sessionId }).pipe(Effect.asVoid),
         ];
 
         for (const request of requests) {

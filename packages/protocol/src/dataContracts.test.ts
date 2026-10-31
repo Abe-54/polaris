@@ -80,6 +80,7 @@ test.each([
   ['host=db password="hunter 2" dbname=app', "host=db password=[redacted] dbname=app"],
   ["mysql://app:hun%40ter@db/app", "mysql://[redacted]@db/app"],
   ["password=hunter2; next", "password=[redacted]; next"],
+  [String.raw`password='hun\'ter2' host=db`, "password=[redacted] host=db"],
 ])("F1: scrubs credential syntax %s", (input, expected) => {
   expect(scrubCredentials(input)).toBe(expected);
 });
@@ -275,4 +276,40 @@ test("F10: password actions reject ambiguous set/keep/clear combinations", () =>
       })
     ).toThrow();
   }
+});
+
+test("F1: JSON escapes cannot hide a known credential in an innocuous nested value", () => {
+  const value = DataValueTags.cases.Json.make({ text: JSON.stringify({ note: ['hun"ter2'] }) });
+  expect(scrubDataValue(value, [Redacted.make('hun"ter2')])).toEqual(
+    DataValueTags.cases.Json.make({ text: '{"note":["[redacted]"]}' })
+  );
+});
+
+test("F1/F2: scrubbing JSON strings preserves numeric lexemes through wire encode and decode", () => {
+  const text = '{"token":9007199254740993,"ratio":100.001000000000000001,"note":"hunter2"}';
+
+  const expected = DataValueTags.cases.Json.make({
+    text: '{"token":9007199254740993,"ratio":100.001000000000000001,"note":"[redacted]"}',
+  });
+
+  const cell = scrubDataValue(DataValueTags.cases.Json.make({ text }), [Redacted.make("hunter2")]);
+
+  expect(cell).toEqual(expected);
+
+  const result = Schema.decodeUnknownSync(QueryResult)({
+    queryId: "lossless",
+    columns: [],
+    rows: [[cell]],
+    rowCount: 1,
+    returned: 1,
+    truncated: false,
+    elapsedMs: 1,
+  });
+
+  expect(result.rows).toEqual([[expected]]);
+
+  const encoded = Schema.encodeSync(QueryResult)(result);
+
+  expect(encoded.rows).toEqual([[expected]]);
+  expect(Schema.decodeUnknownSync(QueryResult)(encoded).rows).toEqual([[expected]]);
 });

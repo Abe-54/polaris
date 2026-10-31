@@ -180,6 +180,8 @@ export class DataError extends Schema.TaggedError<DataError>()("DataError", {
   code: DataErrorCode,
   message: ScrubbedText,
   fix: ScrubbedText,
+  position: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  sqlLine: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
 }) {}
 
 const Errors = Schema.Union([DataError, Unsupported]);
