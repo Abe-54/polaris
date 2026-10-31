@@ -21,13 +21,14 @@ import {
   topBarColour,
   verbOf,
   writeWants,
+  type WriteVerb,
 } from "./model.ts";
 import { sqlTokens } from "./sqlTokens.ts";
 
 const fields = Schema.encodeSync(DataSource);
 
 describe("the verb follows the statement", () => {
-  test.each([
+  test.each<[string, WriteVerb]>([
     ["update invoices set currency = 'USD'", "update"],
     ["  INSERT INTO currencies VALUES ('CHF', 2)", "insert"],
     ["replace into currencies values ('CHF', 2)", "insert"],
