@@ -5,7 +5,7 @@ import {
   type SessionId,
   type TurnId,
 } from "@polaris/protocol";
-import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect";
+import { Context, Effect, Layer, Match, PubSub, Schema, Stream } from "effect";
 import { initializeLogRetention, pruneQueryLog } from "./logRetention.ts";
 import { DataApprovals } from "./approvals.ts";
 import { DataDatabase, storageError } from "./database.ts";
@@ -94,7 +94,7 @@ export class QueryLog extends Context.Service<
         Effect.gen(function* () {
           if (
             entry.target &&
-            !["failed", "cancelled", "dry-run", "waiting-approval"].includes(entry.state)
+            !["failed", "cancelled", "expired", "dry-run", "waiting-approval"].includes(entry.state)
           )
             db.query(
               "INSERT INTO data_target_activity VALUES (?,?,?,?,?) ON CONFLICT(target,session,kind) DO UPDATE SET updated=excluded.updated,turn=excluded.turn"
@@ -147,14 +147,22 @@ export class QueryLog extends Context.Service<
               if (
                 !entry.approval ||
                 entry.state !== "waiting-approval" ||
-                (row.status !== "approved" && row.status !== "denied")
+                (row.status !== "approved" && row.status !== "denied" && row.status !== "expired")
               )
                 return entry;
 
               return new QueryLogEntry({
                 ...Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields))(entry),
-                approval: { id: entry.approval.id, status: row.status },
-                state: row.status === "denied" ? "failed" : "cancelled",
+                approval: {
+                  id: entry.approval.id,
+                  status: row.status,
+                  ...(row.reason === null ? undefined : { reason: row.reason }),
+                },
+                state: Match.value(row.status).pipe(
+                  Match.when("expired", () => "expired" as const),
+                  Match.when("denied", () => "failed" as const),
+                  Match.orElse(() => "cancelled" as const)
+                ),
                 error: row.reason ?? "The approval was answered; retry the query to run it.",
               });
             });

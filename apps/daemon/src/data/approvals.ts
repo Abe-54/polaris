@@ -96,6 +96,9 @@ export class DataApprovals extends Context.Service<
         if (row.status === "denied")
           return { status: "denied", reason: row.reason ?? "The user denied this data source." };
 
+        if (row.status === "expired")
+          return { status: "expired", reason: row.reason ?? "The write approval expired." };
+
         return { status: row.status };
       });
 

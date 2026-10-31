@@ -222,6 +222,22 @@ Clients negotiate `data.writes`; the Desktop App owns the Remote bulk confirmati
 
 ### Write verification
 
+Write cards carry optional `redactedCells` (`row`, `column`, `changed` indexes into the
+capped grids), `databaseFilledColumns` (INSERT column names), and `previewFacts`
+(`capped`, `truncated`, `readByKey`, `sequences`). Redacted change flags compare raw
+cells before credential scrubbing; a clipped credential comparison refuses the preview.
+The grids and redaction metadata share the 16,000-byte display budget. Previewed cards
+have an empty `note`; not-previewed cards retain their reason. Sequence facts describe
+only INSERTs using an omitted serial, identity or auto-increment column. INSERT values
+in database-filled columns are provisional; Clients label them as assigned on run.
+
+Credential assignments scrub their parameter bindings before `ApprovalRequested` is
+committed. INSERT SELECT and implicit column order scrub all bindings conservatively.
+Withdrawals retain their reason in the approval outcome and Query Log (`expired`,
+`approval.status: expired`, `approval.reason`), separately from the user's denial.
+Existing ApprovalWithdrawn events remain the source of lifecycle reasons; the Session
+machine's authority and one-shot consumption are unchanged.
+
 RW regression tests are `writeFixes`, `writeRemote`, `writeRecovery`, `writeSafety.real`,
 `writeIdentity.real` and `writeReplay.real`, alongside the original write suites. The native replay
 records actual ApprovalRequested/Resolved events, WriteApprovalStore statuses, Query Log entries

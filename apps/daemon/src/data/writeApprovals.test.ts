@@ -5,8 +5,10 @@ import {
   DataSourceApproval,
   DataWriteResult,
   RequestId,
+  QueryLogEntry,
 } from "@polaris/protocol";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Layer } from "effect";
+import { QueryLog } from "./queryLog.ts";
 import { DataApprovals } from "./approvals.ts";
 import { approvalLayer, seedDataSession, started } from "./approvals.testing.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -41,8 +43,13 @@ export const writeCard = (fingerprint = "write") => ({
 });
 
 const run = <A, E>(
-  program: Effect.Effect<A, E, DataApprovals | EventStore | import("effect").Scope.Scope>
-) => Effect.runPromise(Effect.scoped(program).pipe(Effect.provide(approvalLayer())));
+  program: Effect.Effect<A, E, DataApprovals | EventStore | QueryLog | import("effect").Scope.Scope>
+) =>
+  Effect.runPromise(
+    Effect.scoped(program).pipe(
+      Effect.provide(QueryLog.layer.pipe(Layer.provideMerge(approvalLayer())))
+    )
+  );
 
 const decide = (input: SessionInput) =>
   EventStore.use((store) =>
@@ -108,7 +115,7 @@ const endings: SessionInput[] = [
 ];
 
 for (const ending of endings)
-  test(`${ending.type} denies a pending write and prevents consumption`, () =>
+  test(`${ending.type} expires a pending write and prevents consumption`, () =>
     run(
       Effect.gen(function* () {
         yield* seedDataSession;
@@ -120,9 +127,38 @@ for (const ending of endings)
           writeCard()
         );
 
+        const log = yield* QueryLog;
+        yield* log.put(
+          new QueryLogEntry({
+            id: "q-write",
+            checkout: "/repo",
+            source: { id: "source", name: "app" },
+            sql: writeCard().sql,
+            state: "waiting-approval",
+            approval: { id, status: "pending" },
+            author: { kind: "agent", sessionId: started.session.id, turn: started.turns[0]!.id },
+            at: new Date().toISOString(),
+          })
+        );
         const waiting = yield* approvals.awaitApproval(id, 1000).pipe(Effect.forkScoped);
         yield* decide(ending);
-        expect(yield* Fiber.join(waiting)).toMatchObject({ status: "denied" });
+        const outcome = yield* Fiber.join(waiting);
+
+        const reasons: Partial<Record<SessionInput["type"], string>> = {
+          "harness.turnEnded": "The Turn ended",
+          "session.archive": "The session was archived",
+          "turn.interruptUnattended": "Interrupted",
+          "session.fail": "lost",
+          "daemon.recover": "The Daemon restarted",
+        };
+
+        const reason = reasons[ending.type] ?? "Unexpected lifecycle ending";
+        expect(outcome).toEqual({ status: "expired", reason });
+        expect((yield* log.page("/repo")).entries[0]).toMatchObject({
+          state: "expired",
+          approval: { status: "expired", reason },
+          error: reason,
+        });
         expect(yield* approvals.writes.claim(id)).toBe(false);
         expect(
           (yield* (yield* EventStore).model).sessions.get(started.session.id)!.pending.size

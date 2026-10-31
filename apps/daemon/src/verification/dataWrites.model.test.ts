@@ -86,7 +86,7 @@ function reference(before: Reference, step: Step): Reference {
     case "deny":
       return advance(before, before.phase === "pending", "denied");
     case "end":
-      return { ...advance(before, before.phase === "pending", "denied"), active: false };
+      return { ...advance(before, before.phase === "pending", "expired"), active: false };
     case "complete":
     case "unknown":
     case "fail":

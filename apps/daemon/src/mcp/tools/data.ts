@@ -84,7 +84,22 @@ export const withDataApproval = <A>(
           ),
           Match.when({ status: "denied" }, ({ reason }) =>
             Effect.succeed(
-              failure("E-DATA-DENIED", safeDataText(reason, known), "Don't retry; ask the user.")
+              failure(
+                "E-DATA-DENIED",
+                safeDataText(reason, known),
+                operation === "execute"
+                  ? "Read the user's reason; try another way with a new preview, or ask the user."
+                  : "Don't retry; ask the user."
+              )
+            )
+          ),
+          Match.when({ status: "expired" }, ({ reason }) =>
+            Effect.succeed(
+              failure(
+                "E-DATA-DENIED",
+                safeDataText(reason, known),
+                "Request a new preview in the current turn."
+              )
             )
           ),
           Match.when({ status: "approved" }, () =>

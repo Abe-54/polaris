@@ -388,3 +388,27 @@ test("bare source passwords in innocuous cells and SQL errors are scrubbed befor
 
   expect(error.structuredContent?.message).toBe("bad syntax near '[redacted]' at position 5");
 });
+
+test("RRV F7: a denied write keeps the reason and permits another approach with a fresh preview", async () => {
+  const required = new DataApprovalRequired({
+    approvalId: RequestId.make("denied-write"),
+    sourceId: source.id,
+    sourceName: source.name,
+  });
+
+  const response = await toolsWithData({
+    execute: () => Effect.fail(required),
+    awaitApproval: () => Effect.succeed({ status: "denied", reason: "Use EUR instead of USD" }),
+  })("execute").call({
+    source: "app",
+    sql: "UPDATE invoices SET currency=$1",
+    params: ["USD"],
+    reason: "Repair currency",
+  });
+
+  expect(response.structuredContent).toEqual({
+    code: "E-DATA-DENIED",
+    message: "Use EUR instead of USD",
+    fix: "Read the user's reason; try another way with a new preview, or ask the user.",
+  });
+});

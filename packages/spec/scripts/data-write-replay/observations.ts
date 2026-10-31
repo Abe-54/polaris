@@ -12,6 +12,7 @@ export const DataWriteTraceStep = Schema.Struct({
     "pending",
     "approved",
     "denied",
+    "expired",
     "started",
     "completed",
     "failed",
@@ -101,11 +102,19 @@ export function observationActions(step: Observation, previous?: Observation) {
 
   if (step.status === "denied") {
     if (decision(step, false)) return ".then(deny)";
+    throw rejected();
+  }
+
+  if (step.status === "expired") {
+    if (step.log?.state !== "expired" || step.log.approval?.status !== "expired") throw rejected();
 
     if (
       step.events.some(
         ({ event }) =>
-          Predicate.isTagged(event, "ApprovalWithdrawn") && event.requestId === step.request.id
+          Predicate.isTagged(event, "ApprovalWithdrawn") &&
+          event.requestId === step.request.id &&
+          event.reason === step.log?.approval?.reason &&
+          event.reason === step.log.error
       )
     )
       return ".then(endTurn)";

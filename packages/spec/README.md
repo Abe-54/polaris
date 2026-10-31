@@ -884,11 +884,11 @@ unknown outcomes and recovery. The Session machine remains the approval authorit
 | --- | --- |
 | `policy`, `inspect` | `writeQueries.resolve`, `approvalStore`, `writePreflight` and the extended function guard reject writes off, Remote defaults, unsafe functions and non-InnoDB dependencies before preview. |
 | `dryRun`, `notPreviewed`, `request` | `writeExecution` rolls back eligible previews; triggers skip execution and `writeApprovals.open` commits the card through the Session machine. |
-| `allow`, `deny`, `endTurn` | ApprovalResolved/Withdrawn events projected into WriteApprovalStore; Turn end denies pending authority but does not invent a definite outcome for a started write. |
+| `allow`, `deny`, `endTurn` | ApprovalResolved/Withdrawn events projected into WriteApprovalStore; Turn end expires pending authority with the withdrawal reason but does not invent a definite outcome for a started write. |
 | `rows`, `execute` | Complete affected-key/full-row identity plus count checked before commit; INSERT excludes database-filled columns. |
 | `claim`, `retry` | Durable SQLite compare-and-set and immutable request arguments; completed receipts do not reopen a source. |
 | `sendCommit`, `confirm`, `unknown` | `writeCommit` shields confirmation for five seconds; `settleWrite` persists the result even under interruption. Lost confirmation has a distinct DataError and Query Log state. |
-| `restart` | Pending cards are denied; started requests and running Query Log writes become unknown. |
+| `restart` | Pending cards expire with the withdrawal reason; started requests and running Query Log writes become unknown. |
 
 `dataWrites.model.test.ts` drives the real machine/projection and independent lifecycle model,
 including recovery from started. Policy, actual effects, identity and wire values are exercised
