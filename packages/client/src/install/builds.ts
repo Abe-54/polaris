@@ -139,6 +139,8 @@ const FileEntry = Schema.Struct({
   size: Schema.Number,
   /** Absent in manifests from before executables travelled beside the binary. */
   executable: Schema.optional(Schema.Boolean),
+  /** Where it is in the platform's directory when not at its name: macOS's are in an app bundle. */
+  path: Schema.optional(Schema.String),
 });
 
 const ArchiveEntry = Schema.Struct({
@@ -195,7 +197,7 @@ export const loadBuilds = (distDir: string): ReadonlyArray<DaemonBuild> => {
         archive,
         files: names.map((name) => ({
           name,
-          path: join(distDir, platform, name),
+          path: join(distDir, platform, build.files[name]!.path ?? name),
           sha256: build.files[name]!.sha256,
           size: build.files[name]!.size,
           executable: name === build.binary || build.files[name]!.executable === true,

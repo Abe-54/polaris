@@ -70,6 +70,8 @@ BLOCK = 512
 # packages/client/src/install/archive.ts: the same fixed mtime keeps archives reproducible.
 MTIME = 1_767_225_600
 PLAIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
+# One component of a manifest file's `path` in its platform directory (`_CodeSignature` too).
+PATH_PART = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._+-]*")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -101,6 +103,23 @@ def plain(name, what: str) -> str:
     if not isinstance(name, str) or not PLAIN.fullmatch(name):
         raise SystemExit(f'{what} "{name}" is not a plain file name')
     return name
+
+
+def file_path(root: Path, name: str, entry: dict) -> Path:
+    """Where a manifest file is under its platform directory: its relative `path`, else its name."""
+    relative = entry.get("path", name)
+    parts = relative.split("/") if isinstance(relative, str) else [None]
+    if any(not isinstance(part, str) or not PATH_PART.fullmatch(part) or part in (".", "..") for part in parts):
+        raise SystemExit(f'{name}: path "{relative}" is not a relative path inside its platform')
+    return root.joinpath(*parts)
+
+
+def app_bundle_of(executable: Path) -> Path:
+    """The `.app` whose `Contents/MacOS` holds the Daemon's executable."""
+    bundle = executable.parent.parent.parent
+    if executable.parent.name != "MacOS" or executable.parent.parent.name != "Contents" or bundle.suffix != ".app":
+        raise SystemExit(f"{PLATFORM}: the Daemon is not in an app bundle")
+    return bundle
 
 
 def read_bytes(path: Path) -> bytes:
@@ -387,7 +406,7 @@ def rewrite_archive(dist: Path, manifest: dict) -> None:
     entries = [
         (name,
          0o755 if name == build["binary"] or build["files"][name].get("executable") else 0o644,
-         read_bytes(dist / PLATFORM / name))
+         read_bytes(file_path(dist / PLATFORM, name, build["files"][name])))
         for name in names
     ]
     path = dist / "release" / archive["name"]
@@ -407,8 +426,9 @@ def read_manifest(dist: Path, version: str) -> dict:
     for platform, build in manifest["platforms"].items():
         plain(platform, "Daemon platform")
         plain(build["binary"], f"{platform} binary")
-        for name in build["files"]:
+        for name, entry in build["files"].items():
             plain(name, f"{platform} file")
+            file_path(Path(platform), name, entry)
         if build.get("archive") is not None:
             plain(build["archive"]["name"], f"{platform} archive")
     return manifest
@@ -419,13 +439,17 @@ def sign_daemon(signer: Signer, dist: Path, entitlements: Path, version: str) ->
     build = manifest["platforms"][PLATFORM]
     if build["binary"] != "polaris" or any(name not in build["files"] for name in DAEMON_ENTITLEMENTS):
         raise SystemExit(f"missing {PLATFORM} polaris or betterleaks")
-    for name, plist in DAEMON_ENTITLEMENTS.items():
-        binary = dist / PLATFORM / name
-        entry = build["files"][name]
-        if facts(binary) != {"sha256": entry["sha256"], "size": entry["size"]}:
+    paths = {name: file_path(dist / PLATFORM, name, entry) for name, entry in build["files"].items()}
+    for name, entry in build["files"].items():
+        if facts(paths[name]) != {"sha256": entry["sha256"], "size": entry["size"]}:
             raise SystemExit(f"{PLATFORM}/{name}: bytes differ from the Daemon manifest")
-        sign(signer, binary, entitlements / plist)
-        entry.update(facts(binary))
+    # Nested code first, then the app bundle, which seals it and signs the Daemon (ENG-680).
+    bundle = app_bundle_of(paths["polaris"])
+    sign(signer, paths["betterleaks"], entitlements / DAEMON_ENTITLEMENTS["betterleaks"])
+    sign(signer, bundle, entitlements / DAEMON_ENTITLEMENTS["polaris"])
+    run(["codesign", "--verify", "--deep", "--strict", bundle])
+    for name, entry in build["files"].items():
+        entry.update(facts(paths[name]))
     build["sha256"] = build["files"]["polaris"]["sha256"]
     rewrite_archive(dist, manifest)
     write_json(dist / "manifest.json", manifest)
@@ -437,12 +461,14 @@ def restage_daemon(app: Path, dist: Path, manifest: dict) -> None:
     bundled = read_json(staged / "manifest.json").get("bundled")
     if bundled != [PLATFORM]:
         raise SystemExit(f"the app must bundle only {PLATFORM}'s Daemon, found {bundled}")
-    for name in DAEMON_ENTITLEMENTS:
-        target = staged / PLATFORM / name
+    for name, entry in manifest["platforms"][PLATFORM]["files"].items():
+        source = file_path(dist / PLATFORM, name, entry)
+        target = file_path(staged / PLATFORM, name, entry)
+        make_dirs(staged, list(target.relative_to(staged).parts[:-1]))
         target.unlink(missing_ok=True)
         with open(target, "xb") as file:
-            file.write(read_bytes(dist / PLATFORM / name))
-        shutil.copystat(dist / PLATFORM / name, target, follow_symlinks=False)
+            file.write(read_bytes(source))
+        shutil.copystat(source, target, follow_symlinks=False)
     write_json(staged / "manifest.json", {**manifest, "bundled": bundled})
 
 

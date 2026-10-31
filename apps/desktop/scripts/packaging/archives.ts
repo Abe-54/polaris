@@ -4,7 +4,7 @@
  * and a staged app that bundles only its own platform's files.
  */
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   DAEMON_DOWNLOAD_URL,
   daemonArchiveName,
@@ -13,7 +13,7 @@ import {
   PLATFORMS,
   type Platform,
 } from "@polaris/client/install";
-import { type DaemonManifest, fileFacts, readManifest } from "./manifest.ts";
+import { buildFilePath, type DaemonManifest, fileFacts, readManifest } from "./manifest.ts";
 import type { PackageTarget } from "./targets.ts";
 
 /** Under the Daemon dist; never staged into an app. */
@@ -46,7 +46,7 @@ export const writeDaemonArchives = (dist: string): string[] => {
       names.map((name) => ({
         name,
         mode: name === build.binary || build.files[name]!.executable ? 0o755 : 0o644,
-        bytes: readFileSync(join(dist, platform, name)),
+        bytes: readFileSync(buildFilePath(dist, platform, name, build.files[name]!)),
       }))
     );
 
@@ -107,8 +107,9 @@ export const bundledPlatforms = (target: PackageTarget, release: boolean): Platf
 };
 
 /**
- * Copies the Daemon dist into `dest` (the app's `Resources/daemon`). With a
- * platform list, only those platforms' files go, and the manifest says so.
+ * Copies the Daemon dist into `dest` (the app's `Resources/daemon`): each platform's
+ * manifest files at their paths, never the dist's convenience links (the packager would
+ * point them at this machine). With a platform list, only those go, and the manifest says so.
  */
 export const stageDaemon = (dist: string, dest: string, bundled: Platform[] | null): void => {
   rmSync(dest, { recursive: true, force: true });
@@ -116,8 +117,13 @@ export const stageDaemon = (dist: string, dest: string, bundled: Platform[] | nu
   const manifest = readManifest(dist);
   const platforms = bundled ?? Object.keys(manifest.platforms);
 
-  for (const platform of platforms)
-    cpSync(join(dist, platform), join(dest, platform), { recursive: true });
+  for (const platform of platforms) {
+    for (const [name, entry] of Object.entries(manifest.platforms[platform]?.files ?? {})) {
+      const target = buildFilePath(dest, platform, name, entry);
+      mkdirSync(dirname(target), { recursive: true });
+      cpSync(buildFilePath(dist, platform, name, entry), target);
+    }
+  }
 
   if (bundled === null) cpSync(join(dist, "manifest.json"), join(dest, "manifest.json"));
   else writeManifest(dest, { ...manifest, bundled });

@@ -45,9 +45,19 @@ describe("release Daemon archives", () => {
       expect(hash(bytes)).toBe(build.archive!.sha256);
       expect(sums).toContain(`${build.archive!.sha256}  ${build.archive!.name}`);
       const entries = unpackArchive(bytes);
+      // macOS's app bundle travels flat; `polaris install` puts it back together.
+      const bundle = build.platform === "darwin-arm64";
+
       expect(entries.map((e) => [e.name, e.mode])).toEqual([
         ["polaris", 0o755],
         ["betterleaks", 0o755],
+        ...(bundle
+          ? [
+              ["Info.plist", 0o644],
+              ["Polaris.icns", 0o644],
+              ["CodeResources", 0o644],
+            ]
+          : []),
       ]);
 
       for (const file of build.files)

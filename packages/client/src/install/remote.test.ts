@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect, Layer, Predicate } from "effect";
 import { type DaemonBuild, loadBuilds, platformFromUname } from "./builds.ts";
 import { Delivery, InstallPlan } from "./plan.ts";
@@ -119,7 +119,9 @@ const writeDist = (version: string): ReadonlyArray<DaemonBuild> => {
   writeFileSync(join(dist, platform, "polaris"), binary);
   chmodSync(join(dist, platform, "polaris"), 0o755);
   writeFileSync(join(dist, platform, "libnative.so"), native);
-  writeFileSync(join(dist, platform, "betterleaks"), scanner);
+  // At its own `path`, as a macOS build keeps it in the app bundle; it uploads flat.
+  mkdirSync(join(dist, platform, dirname(SCANNER_PATH)), { recursive: true });
+  writeFileSync(join(dist, platform, SCANNER_PATH), scanner);
   writeFileSync(
     join(dist, "manifest.json"),
     JSON.stringify({
@@ -133,7 +135,12 @@ const writeDist = (version: string): ReadonlyArray<DaemonBuild> => {
           files: {
             polaris: { sha256: sha(binary), size: binary.length },
             "libnative.so": { sha256: sha(native), size: native.length },
-            betterleaks: { sha256: sha(scanner), size: scanner.length, executable: true },
+            betterleaks: {
+              sha256: sha(scanner),
+              size: scanner.length,
+              executable: true,
+              path: SCANNER_PATH,
+            },
           },
         },
       },
@@ -142,6 +149,8 @@ const writeDist = (version: string): ReadonlyArray<DaemonBuild> => {
 
   return loadBuilds(dist);
 };
+
+const SCANNER_PATH = "Polaris.app/Contents/MacOS/betterleaks";
 
 beforeEach(() => {
   host = mkdtempSync(join(tmpdir(), "polaris-host-"));
@@ -248,7 +257,11 @@ describe("ensureDaemon", () => {
       })
     );
     expect(current()).toBe("1.1.0");
-    expect(commands.some((c) => c.includes("current/polaris") && c.includes("upgrade"))).toBe(true);
+    // The uploaded build runs the upgrade, so its own staging lays the version out.
+    expect(commands.some((c) => /upload-[0-9a-f]+\/polaris" upgrade /.test(c))).toBe(true);
+    expect(commands.some((c) => c.includes("current/polaris") && c.includes("upgrade"))).toBe(
+      false
+    );
   });
 
   test("refuses an upload whose SHA-256 does not match on the Host", async () => {

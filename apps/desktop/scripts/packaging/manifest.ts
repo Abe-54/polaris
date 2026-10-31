@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { PLATFORMS } from "@polaris/client/install";
 import { Schema } from "effect";
 import { type Run, run } from "./command.ts";
@@ -10,7 +10,22 @@ const FileEntry = Schema.Struct({
   sha256: Schema.String,
   size: Schema.Number,
   executable: Schema.optional(Schema.Boolean),
+  /** Where it is in the platform's directory when not at its name (macOS: in the app bundle). */
+  path: Schema.optional(Schema.String),
 });
+
+type FileEntry = typeof FileEntry.Type;
+
+/** Where a build's file is on disk: its `path` in the platform directory, else its name. */
+export const buildFilePath = (dist: string, platform: string, name: string, entry: FileEntry) =>
+  join(dist, platform, entry.path ?? name);
+
+/** The `.app` whose `Contents/MacOS` holds `executable`; null when it isn't in one. */
+export const appBundleOf = (executable: string): string | null => {
+  const root = dirname(dirname(dirname(executable)));
+
+  return executable.endsWith(`.app/Contents/MacOS/${basename(executable)}`) ? root : null;
+};
 
 const Embedded = Schema.Struct({
   package: Schema.String,
@@ -78,7 +93,7 @@ export const verifyDaemonManifest = (dist: string, version?: string): void => {
     if (manifest.bundled !== undefined && !manifest.bundled.includes(platform)) continue;
 
     for (const [name, entry] of Object.entries(build.files)) {
-      const facts = fileFacts(join(dist, platform, name));
+      const facts = fileFacts(buildFilePath(dist, platform, name, entry));
 
       if (facts.sha256 !== entry.sha256 || facts.size !== entry.size)
         throw new Error(`${platform}/${name}: bytes differ from Daemon manifest`);
@@ -102,11 +117,12 @@ export const signDaemonBuilds = (
   if (!build || build.binary !== "polaris" || !build.files.polaris || !build.files.betterleaks)
     throw new Error("missing darwin-arm64 polaris or betterleaks");
 
-  const files = { ...build.files };
+  const at = (name: string) => buildFilePath(dist, "darwin-arm64", name, build.files[name]!);
+  const bundle = appBundleOf(at("polaris"));
 
-  for (const name of ["polaris", "betterleaks"]) {
-    const binary = join(dist, "darwin-arm64", name);
+  if (bundle === null) throw new Error("the darwin-arm64 Daemon is not in an app bundle (ENG-680)");
 
+  const sign = (path: string, entitlements: string) => {
     execute([
       "codesign",
       "--force",
@@ -117,20 +133,26 @@ export const signDaemonBuilds = (
       "--timestamp",
       ...(signing.keychain ? ["--keychain", signing.keychain] : []),
       "--entitlements",
-      join(entitlementsDir, name === "polaris" ? "daemon.plist" : "betterleaks.plist"),
-      binary,
+      join(entitlementsDir, entitlements),
+      path,
     ]);
-    execute(["codesign", "--verify", "--strict", binary]);
-    files[name] = { ...files[name]!, ...fileFacts(binary) };
-  }
+  };
 
-  const binary = join(dist, "darwin-arm64", "polaris");
-  const output = execute([binary, "selftest"]).trim();
+  // Nested code first: the bundle's signature seals Betterleaks' as it is then.
+  sign(at("betterleaks"), "betterleaks.plist");
+  sign(bundle, "daemon.plist");
+  execute(["codesign", "--verify", "--deep", "--strict", bundle]);
+
+  const files = Object.fromEntries(
+    Object.entries(build.files).map(([name, entry]) => [name, { ...entry, ...fileFacts(at(name)) }])
+  );
+
+  const output = execute([at("polaris"), "selftest"]).trim();
 
   if (output.split("\n")[0] !== `polaris ${manifest.version} darwin-arm64`)
     throw new Error("signed Daemon selftest did not report the expected version and platform");
 
-  execute([join(dist, "darwin-arm64", "betterleaks"), "version"]);
+  execute([at("betterleaks"), "version"]);
 
   const signedManifest = {
     ...manifest,

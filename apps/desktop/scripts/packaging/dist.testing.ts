@@ -1,11 +1,11 @@
 /**
  * A Daemon build directory for the packaging tests: every platform's `polaris`
- * and `betterleaks` plus the manifest that describes them.
+ * and `betterleaks` (macOS's in its app bundle) plus the manifest that describes them.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { PLATFORMS } from "@polaris/client/install";
 
 export const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -17,16 +17,39 @@ export const removeDists = () => {
   for (const dir of dists.splice(0)) rmSync(dir, { recursive: true, force: true });
 };
 
+/** Where macOS's files are in the app bundle, as `scripts/build-daemon.ts` writes them. */
+export const DARWIN_PATHS = {
+  polaris: "PolarisDaemon.app/Contents/MacOS/polaris",
+  betterleaks: "PolarisDaemon.app/Contents/MacOS/betterleaks",
+  "Info.plist": "PolarisDaemon.app/Contents/Info.plist",
+  "Polaris.icns": "PolarisDaemon.app/Contents/Resources/Polaris.icns",
+  CodeResources: "PolarisDaemon.app/Contents/_CodeSignature/CodeResources",
+} satisfies Record<string, string>;
+
+/** Each file a platform's build has, and its path in the platform directory. */
+const filePaths = (platform: string): ReadonlyArray<readonly [string, string | null]> =>
+  platform === "darwin-arm64"
+    ? Object.entries(DARWIN_PATHS)
+    : [
+        ["polaris", null],
+        ["betterleaks", null],
+      ];
+
 const platformFiles = (dist: string, platform: string) =>
   Object.fromEntries(
-    ["polaris", "betterleaks"].map((name) => {
+    filePaths(platform).map(([name, path]) => {
       const bytes = `${platform}/${name}`;
-      writeFileSync(join(dist, platform, name), bytes);
+      const at = join(dist, platform, path ?? name);
+      mkdirSync(dirname(at), { recursive: true });
+      writeFileSync(at, bytes);
 
-      return [
-        name,
-        { sha256: hash(bytes), size: Buffer.byteLength(bytes), executable: name === "betterleaks" },
-      ];
+      const entry = {
+        sha256: hash(bytes),
+        size: Buffer.byteLength(bytes),
+        executable: name === "betterleaks",
+      };
+
+      return [name, path === null ? entry : { ...entry, path }];
     })
   );
 

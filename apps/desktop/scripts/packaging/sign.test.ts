@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { unpackArchive } from "@polaris/client/install";
 import { REPO_ROOT } from "../lib/build.ts";
 import { daemonChecksumsName, RELEASE_DIR, stageDaemon, writeDaemonArchives } from "./archives.ts";
-import { daemonDist, hash, removeDists } from "./dist.testing.ts";
+import { DARWIN_PATHS, daemonDist, hash, removeDists } from "./dist.testing.ts";
 import { fileFacts, readManifest, verifyDaemonManifest } from "./manifest.ts";
 
 const roots: string[] = [];
@@ -47,7 +47,12 @@ const plist = (keys: Record<string, string>) =>
     .map(([key, value]) => `<key>${key}</key><string>${value}</string>`)
     .join("")}</dict></plist>\n`;
 
-/** A release dist whose darwin-arm64 tools are real Mach-O files, archived like a release. */
+/** The macOS Daemon's app bundle and its executables, under a dist. */
+const DAEMON_APP = "darwin-arm64/PolarisDaemon.app";
+
+const daemonFile = (name: keyof typeof DARWIN_PATHS) => `darwin-arm64/${DARWIN_PATHS[name]}`;
+
+/** A release dist whose darwin-arm64 bundle holds real Mach-O files, archived like a release. */
 const releaseDist = () => {
   const dist = daemonDist(VERSION);
   const path = join(dist, "manifest.json");
@@ -55,10 +60,15 @@ const releaseDist = () => {
   const build = manifest.platforms["darwin-arm64"]!;
   const files = { ...build.files };
 
-  for (const name of ["polaris", "betterleaks"]) {
-    copyFileSync(MACHO, join(dist, "darwin-arm64", name));
-    files[name] = { ...files[name]!, ...fileFacts(join(dist, "darwin-arm64", name)) };
-  }
+  copyFileSync(MACHO, join(dist, daemonFile("polaris")));
+  copyFileSync(MACHO, join(dist, daemonFile("betterleaks")));
+  writeFileSync(
+    join(dist, daemonFile("Info.plist")),
+    plist({ CFBundleExecutable: "polaris", CFBundleIdentifier: "dev.lux.polaris.daemon" })
+  );
+
+  for (const name of Object.keys(files))
+    files[name] = { ...files[name]!, ...fileFacts(join(dist, "darwin-arm64", files[name]!.path!)) };
 
   const platforms = {
     ...manifest.platforms,
@@ -199,14 +209,17 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
   test("re-records the signed Daemon in the manifests, its archive and checksums", () => {
     const source = releaseDist();
     const bundle = handoff(source, releaseApp(source));
-    const unsigned = readFileSync(join(source, "darwin-arm64/polaris"));
+    const unsigned = readFileSync(join(source, daemonFile("polaris")));
 
     expect(signApp(bundle)).toEqual({ ok: true, error: "" });
 
     const { dist, app } = signed(bundle);
-    const polaris = readFileSync(join(dist, "darwin-arm64/polaris"));
+    const polaris = readFileSync(join(dist, daemonFile("polaris")));
     expect(polaris.equals(unsigned)).toBe(false);
-    expect(signature(join(dist, "darwin-arm64/polaris"))).toContain("(adhoc,runtime)");
+    // Signed as one app bundle, so System Settings names it from its Info.plist (ENG-680).
+    expect(signature(join(dist, DAEMON_APP))).toContain("Identifier=dev.lux.polaris.daemon");
+    expect(signature(join(dist, DAEMON_APP))).toContain("(adhoc,runtime)");
+    expect(verifies("--deep", join(dist, DAEMON_APP))).toBe(true);
     verifyDaemonManifest(dist, VERSION);
 
     const manifest = readManifest(dist);
@@ -215,8 +228,13 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     expect(archived.map((entry) => [entry.name, entry.mode])).toEqual([
       ["polaris", 0o755],
       ["betterleaks", 0o755],
+      ["Info.plist", 0o644],
+      ["Polaris.icns", 0o644],
+      ["CodeResources", 0o644],
     ]);
     expect(Buffer.from(archived[0]!.bytes).equals(polaris)).toBe(true);
+    const sealed = readFileSync(join(dist, daemonFile("CodeResources")));
+    expect(Buffer.from(archived[4]!.bytes).equals(sealed)).toBe(true);
     expect(fileFacts(join(dist, RELEASE_DIR, archive.name))).toEqual({
       sha256: archive.sha256,
       size: archive.size,
@@ -228,6 +246,7 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     const staged = join(app, "Contents/Resources/daemon");
     verifyDaemonManifest(staged, VERSION);
     expect(readManifest(staged)).toEqual({ ...manifest, bundled: ["darwin-arm64"] });
+    expect(verifies("--deep", join(staged, DAEMON_APP))).toBe(true);
   });
 
   test("signs the app from the inside out, keeping the Daemon's own entitlements", () => {
@@ -244,7 +263,7 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
       "Contents/Frameworks/Fake.framework/Versions/A/Libraries/libfake.dylib",
     ])
       expect(signature(join(app, nested))).toContain("(adhoc,runtime)");
-    expect(signature(join(app, "Contents/Resources/daemon/darwin-arm64/polaris"))).toContain(
+    expect(signature(join(app, "Contents/Resources/daemon", DAEMON_APP))).toContain(
       "com.apple.security.cs.disable-library-validation"
     );
 
@@ -294,7 +313,7 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
   test("refuses a Daemon whose bytes differ from its manifest", () => {
     const source = releaseDist();
     const app = releaseApp(source);
-    writeFileSync(join(source, "darwin-arm64/betterleaks"), "replaced");
+    writeFileSync(join(source, daemonFile("betterleaks")), "replaced");
 
     const { ok, error } = signApp(handoff(source, app));
 
@@ -307,8 +326,8 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     const app = releaseApp(source);
     const outside = join(scratch(), "outside");
     copyFileSync(MACHO, outside);
-    rmSync(join(source, "darwin-arm64/polaris"));
-    symlinkSync(outside, join(source, "darwin-arm64/polaris"));
+    rmSync(join(source, daemonFile("polaris")));
+    symlinkSync(outside, join(source, daemonFile("polaris")));
 
     const { ok, error } = signApp(handoff(source, app));
 
