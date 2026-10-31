@@ -5,6 +5,7 @@
  * only, so the renderer and the sandboxed preload can import it.
  */
 import type { DataRequestOutputs, DataSubscriptionItems } from "./dataContract.ts";
+import type { TracesRequestOutputs, TracesSubscriptionItems } from "./tracesContract.ts";
 import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
 import type {
   PredictionOutcomeOutputs,
@@ -441,6 +442,7 @@ export interface RequestOutputs
     VoiceRequestOutputs,
     SecretRequestOutputs,
     DataRequestOutputs,
+    TracesRequestOutputs,
     PredictionPlacementOutputs,
     PredictionOutcomeOutputs {
   "constellation.stats": ConstellationStatsView;
@@ -576,7 +578,8 @@ export interface SubscriptionItems
     GitHubSubscriptionItems,
     GitSubscriptionItems,
     BrowserSubscriptionItems,
-    DataSubscriptionItems {
+    DataSubscriptionItems,
+    TracesSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
   "prediction.edit": EditPredictionFeedItem;
   "prediction.managed.watch": import("@polaris/protocol").ManagedServerStatus;
@@ -616,7 +619,7 @@ export interface SubscriptionListener<A> {
 
 // ── App events ──────────────────────────────────────────────────────────────
 
-export type Route = "orchestrate" | "review" | "edit" | "data";
+export type Route = "orchestrate" | "review" | "edit" | "data" | "traces";
 
 export type AppEvent =
   | {

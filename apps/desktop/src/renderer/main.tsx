@@ -122,6 +122,9 @@ const dataPreview = location.hash.startsWith("#data/");
 // `#data-sidebar/<scene>`: Data's sidebar, connection bar and status bar on worst-case fixtures (features/data/preview).
 const dataSidebarPreview = location.hash.startsWith("#data-sidebar/");
 
+// `#traces/<scene>`: Traces on fixtures (features/traces/preview).
+const tracesPreview = location.hash.startsWith("#traces/");
+
 // `#settings/<scene>`: Settings on worst-case fixtures (features/settings/preview).
 const settingsPreview = location.hash.startsWith("#settings/");
 
@@ -239,6 +242,14 @@ if (root !== null && preview) {
 } else if (root !== null && dataPreview) {
   void import("./features/data/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountDataPreview(
+      root,
+      location.hash,
+      settingsStore.getState().appearance
+    );
+  });
+} else if (root !== null && tracesPreview) {
+  void import("./features/traces/preview/Preview.tsx").then((m) => {
+    setPreviewDensity = m.mountTracesPreview(
       root,
       location.hash,
       settingsStore.getState().appearance

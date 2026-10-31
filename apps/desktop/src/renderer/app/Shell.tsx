@@ -6,6 +6,7 @@ import { EditorRequests } from "../features/editor-links/index.ts";
 import { LazyInline } from "../features/editor-inline/index.ts";
 import { useOnboardingState, Welcome } from "../features/onboarding/index.ts";
 import { DataMode } from "../features/data/index.ts";
+import { TracesMode } from "../features/traces/index.ts";
 import { EditMode } from "../features/editor/explorer/index.ts";
 import { Arcade } from "../features/arcade/index.ts";
 import { CommandPalette } from "../features/palette/index.ts";
@@ -51,6 +52,8 @@ const Body = () => {
   if (mode === "edit") return <EditMode />;
 
   if (mode === "data") return <DataMode />;
+
+  if (mode === "traces") return <TracesMode />;
 
   // Panels on a ground, the horizon behind them along the window's foot (DESIGN.md, Chrome redesign).
   return (

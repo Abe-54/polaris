@@ -7,6 +7,7 @@
 import type { SessionId } from "@polaris/protocol";
 import { Commands } from "../commands.ts";
 import { harnessBackgroundsCommands } from "../features/harness/index.ts";
+import { tracesUnavailable } from "../features/traces/index.ts";
 import { approve, deny } from "../features/needs-you/respond.ts";
 import { runInBackground, send } from "../features/session/dispatch.ts";
 import { foregroundCommands } from "../features/session/model/running.ts";
@@ -80,6 +81,8 @@ export const shellContext =
     if (mode === "edit") keys.push("mode.edit");
 
     if (mode === "data") keys.push("mode.data");
+
+    if (mode === "traces") keys.push("mode.traces");
 
     return { keys, values };
   };
@@ -171,6 +174,14 @@ export const shellCommands = ({
     "view.review": { run: () => actions.setMode("review") },
     "view.edit": { run: () => actions.setMode("edit") },
     "view.data": { run: () => actions.setMode("data") },
+    "view.traces": {
+      run: () => actions.setMode("traces"),
+      enabled: () => {
+        const { hostKey } = navigation.current();
+
+        return tracesUnavailable(app().hosts.find((h) => h.key === hostKey)) === null;
+      },
+    },
     "view.wordWrap": {
       run: () => setAppearance({ wordWrap: !settingsStore.getState().appearance.wordWrap }),
     },

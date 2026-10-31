@@ -5,6 +5,7 @@
  * code reaches its bundle.
  */
 import { DataRequestInputs, DataSubscriptionInputs } from "./dataContract.ts";
+import { TracesRequestInputs, TracesSubscriptionInputs } from "./tracesContract.ts";
 import { PredictionPlacementInputs } from "./predictionPlacement.ts";
 import { PredictionOutcomeInputs } from "./predictionOutcomes.ts";
 import {
@@ -592,6 +593,7 @@ export const RequestInputs = {
   ...BrowserRequestInputs,
   ...SecretRequestInputs,
   ...DataRequestInputs,
+  ...TracesRequestInputs,
 } as const;
 
 export type RequestMethod = keyof typeof RequestInputs;
@@ -650,6 +652,7 @@ export const SubscriptionInputs = {
   ...GitSubscriptionInputs,
   ...BrowserSubscriptionInputs,
   ...DataSubscriptionInputs,
+  ...TracesSubscriptionInputs,
   /** One Constellation's stream (`constellation.subscribe`): Snapshot, Synchronized, then events. */
   constellation: Schema.Struct({
     hostKey: HostKey,

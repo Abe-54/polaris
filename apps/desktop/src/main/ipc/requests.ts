@@ -4,6 +4,7 @@
  * Daemon sends (file contents, diffs) are taken here and cross IPC as bytes.
  */
 import { dataHandlers } from "./data.ts";
+import { tracesHandlers } from "./traces.ts";
 import { modelServerResources } from "@polaris/client/prediction/probe";
 import type { MainPredictionPlacement } from "../prediction/placement.ts";
 import type { PredictionSettings } from "../prediction/preferences.ts";
@@ -263,6 +264,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...browserHandlers(ctx.browser),
   ...secretHandlers,
   ...dataHandlers,
+  ...tracesHandlers,
   "updates.get": () => Effect.sync(ctx.updates.get),
   "updates.check": () => Effect.sync(ctx.updates.check),
   "updates.setAutomatic": ({ enabled }) => Effect.sync(() => ctx.updates.setAutomatic(enabled)),
