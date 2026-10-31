@@ -1,17 +1,14 @@
-/** Re-lists the checkout's sources when Data shows and whenever the window regains focus. */
+/** Re-lists the checkout's sources whenever the window regains focus; showing Data subscribes anew. */
 import { useEffect } from "react";
-import { useDataApi } from "../../data/hooks.tsx";
+import { refreshSources } from "../../model/refresh.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 
 export const useRefreshSources = ({ hostKey, sessionId }: DataSessionKey) => {
-  const api = useDataApi();
-
   useEffect(() => {
-    const refresh = () => void api.refreshSources({ hostKey, sessionId });
+    const refresh = () => refreshSources({ hostKey, sessionId });
 
-    refresh();
     window.addEventListener("focus", refresh);
 
     return () => window.removeEventListener("focus", refresh);
-  }, [api, hostKey, sessionId]);
+  }, [hostKey, sessionId]);
 };

@@ -6,7 +6,8 @@
 import type { DataSource } from "@polaris/protocol";
 import { cn, Popover, PopoverTrigger } from "@polaris/ui";
 import { useApp } from "../../../shell/hooks.ts";
-import { useDataApi, useDataSources } from "../data/hooks.tsx";
+import { useDataSources } from "../data/hooks.tsx";
+import { refreshSources } from "../model/refresh.ts";
 import { accessText, barParts, kickerText, LABEL_TONES } from "../model/source.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { ConnectionCard } from "./connection/ConnectionCard.tsx";
@@ -29,7 +30,6 @@ const Access = ({ source, tone }: { readonly source: DataSource; readonly tone: 
 
 export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
   const sources = useDataSources(at);
-  const api = useDataApi();
 
   const connected = useApp(
     (s) => s.hosts.find((h) => h.key === hostKey)?.status.state === "connected"
@@ -43,8 +43,8 @@ export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
   const table = active?.kind === "table" && active.sourceId === source.name ? active.table : null;
 
   return (
-    // Opening the card re-lists first, so an approval in it targets what the checkout holds now.
-    <Popover onOpenChange={(open) => open && void api.refreshSources(at)}>
+    // Opening the card re-lists, so an approval in it targets what the checkout holds now.
+    <Popover onOpenChange={(open) => open && refreshSources(at)}>
       <PopoverTrigger asChild>
         <button
           type="button"

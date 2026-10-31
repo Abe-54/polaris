@@ -2,7 +2,7 @@ import "../../../test/dom.testing.ts";
 import { type ConnectionState, DataSource } from "@polaris/protocol";
 import { TooltipProvider } from "@polaris/ui";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { Schema } from "effect";
 import { createStore } from "zustand/vanilla";
 import { createCommandRegistry } from "../../../routes/commands.ts";
@@ -290,38 +290,35 @@ describe("the connection bar", () => {
     );
   });
 
-  test("opening the card re-lists the checkout first, so it shows the source as it is now", async () => {
-    const fields = Schema.encodeSync(DataSource);
+  let hours = 0;
 
-    const down = FIXTURE_SOURCES.map((s) =>
-      s.name === "app" ? new DataSource({ ...fields(s), reachable: false, error: "gone" }) : s
-    );
+  test.each([
+    ["the window regains focus", () => window.dispatchEvent(new Event("focus"))],
+    ["its card opens", () => click(page().getByTestId("data-connection-bar"))],
+  ])(
+    "when %s the sources are re-listed, and the bar shows them as they are now",
+    async (_, act) => {
+      const fields = Schema.encodeSync(DataSource);
 
-    let relisted = false;
+      const down = FIXTURE_SOURCES.map((s) =>
+        s.name === "app" ? new DataSource({ ...fields(s), reachable: false, error: "gone" }) : s
+      );
 
-    mount(
-      fixtureDataApi({
-        relist: () => {
-          relisted = true;
+      let lists = 0;
 
-          return down;
-        },
-      })
-    );
-    const bar = await waitFor(() => page().getByTestId("data-connection-bar"));
+      mount(fixtureDataApi({ relist: () => (++lists > 1 ? down : FIXTURE_SOURCES) }));
+      const access = () => page().getByTestId("data-connection-access").textContent;
 
-    // Data's first showing re-lists too; only the card's own re-list matters here.
-    await waitFor(() => expect(relisted).toBe(true));
-    relisted = false;
-    click(bar);
+      await waitFor(() => expect(access()).toBe("Agents read · writes ask you"));
+      // Each case runs an hour after the last, past the once-a-second throttle.
+      hours += 1;
+      setSystemTime(new Date(Date.now() + hours * 3_600_000));
+      act();
 
-    await waitFor(() =>
-      expect(page().getByTestId("data-connection-details").textContent).toContain(
-        "can't reach it · gone"
-      )
-    );
-    expect(relisted).toBe(true);
-  });
+      await waitFor(() => expect(access()).toBe("Can't reach it"));
+      setSystemTime();
+    }
+  );
 
   test("the label text posts on Enter, uppercased", async () => {
     const api = fixtureDataApi();

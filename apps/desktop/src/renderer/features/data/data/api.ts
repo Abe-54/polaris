@@ -59,11 +59,6 @@ export interface TableChange {
 export interface DataApi {
   readonly watchSources: (at: DataSessionKey, on: Snapshots<DataSource>) => () => void;
   readonly watchQueryLog: (at: DataSessionKey, on: Snapshots<QueryLogEntry>) => () => void;
-  /**
-   * Re-discovers the checkout's sources so the watch's snapshot is current: on Data focus and
-   * before an approval shows. No Host serves it yet (DF), so live it resolves at once.
-   */
-  readonly refreshSources: (at: DataSessionKey) => Promise<void>;
   readonly describe: (
     at: DataSessionKey,
     input: DescribeInput
@@ -94,7 +89,6 @@ const latest = <A>(on: Snapshots<A>) => ({
 export const liveDataApi: DataApi = {
   watchSources: (at, on) => polaris().subscribe("data.sources.watch", session(at), latest(on)),
   watchQueryLog: (at, on) => polaris().subscribe("data.queryLog.watch", session(at), latest(on)),
-  refreshSources: () => Promise.resolve(),
   describe: (at, { source, table, sample }) => {
     const base = { ...session(at), source };
     const withTable = table === undefined ? base : { ...base, table };
