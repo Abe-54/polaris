@@ -81,4 +81,4 @@ export const endpointLine = (endpoint: string) => `OTEL_EXPORTER_OTLP_ENDPOINT=$
  * read Polaris's trace endpoint from the environment, keeping today's URL as the fallback.
  */
 export const FIXED_EXPORTER_CHANGE =
-  "url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? existingUrl,";
+  "url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? existingVendorUrl,";

@@ -1,3 +1,5 @@
+import { Profiles } from "../traces/profiles/index.ts";
+import { ProfilesRpcsLive } from "../traces/profiles/rpcs.ts";
 import { DataDatabase } from "../data/database.ts";
 import {
   TraceReceiverLive,
@@ -5,6 +7,9 @@ import {
   TraceSessions,
   TraceStore,
   TracesRpcsLive,
+  TracesSettingsRpcsLive,
+  TraceSettings,
+  TraceCompareRpcsLive,
 } from "../traces/index.ts";
 import { DataApprovals } from "../data/approvals.ts";
 import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
@@ -144,11 +149,12 @@ export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer
 /** One receiver, one token authority and one lazy trace worker per Host. */
 export const traceServices = TraceReceiverLive.pipe(
   Layer.provideMerge(TraceRuntime.layer),
+  Layer.provideMerge(TraceSettings.layer),
   Layer.provideMerge(TraceSessions.layer),
   Layer.provideMerge(TraceStore.layer)
 );
 
-export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(Engine.layer, Profiles.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,
@@ -188,6 +194,9 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 export const daemonHandlers = Layer.mergeAll(
   DataRpcsLive,
   TracesRpcsLive,
+  TracesSettingsRpcsLive,
+  TraceCompareRpcsLive,
+  ProfilesRpcsLive,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -245,6 +254,9 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data.writes",
   "data.schemaDiff",
   "traces",
+  "traces.settings",
+  "traces.compare",
+  "traces.profiles",
   "constellation",
   "constellation.defaults",
   "extensions",

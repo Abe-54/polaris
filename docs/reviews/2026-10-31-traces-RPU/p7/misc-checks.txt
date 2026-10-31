@@ -1,0 +1,25 @@
+# no endpoint set: cost of node --import ./instrumentation.ts on an empty script (3 runs each)
+ 0.03 real 0.02 user 0.00 sys  47595520 maximum resident set size 
+ 0.02 real 0.02 user 0.00 sys  47562752 maximum resident set size 
+ 0.03 real 0.02 user 0.00 sys  47677440 maximum resident set size 
+with --import:
+ 0.26 real 0.19 user 0.04 sys  118865920 maximum resident set size 
+ 0.18 real 0.19 user 0.03 sys  121815040 maximum resident set size 
+ 0.19 real 0.20 user 0.03 sys  121683968 maximum resident set size 
+
+# ungated OTLPLogExporter (existing-exporters.md:9,19) with no endpoint variable: posts to localhost:4318
+4318 got /v1/logs
+
+# bunfig top-level preload under bun test (Bun 1.4.4): marker file written only by 'bun main.ts', not 'bun test'
+
+# helper (tracing-helper.md block) compiled with tsc 7.0.2 --module commonjs
+src/tracing.ts(9,30): error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', or 'nodenext'.
+# helper required from a "type": "commonjs" package on Node 24.22.1
+/private/tmp/rpu-p7/cjs/src/tracing.ts:1
+import { logs, SeverityNumber, SpanStatusCode, trace,                            } from "@opentelemetry/api";
+^^^^^^
+
+# typecheck of the verbatim blocks: node app (tsc 7.0.2, nodenext)
+ok
+# bun app (tsc 7.0.2, bundler)
+ok

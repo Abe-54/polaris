@@ -65,6 +65,7 @@ import type { PlanLimitReporter } from "../limits/PlanLimitReporter.ts";
 import { ClaudeHookReceiver } from "./hooks.ts";
 import { contextWindowOf } from "./payloads.ts";
 import { titleHooks } from "./title.ts";
+import { applyClaudeTraceHooks } from "./traces.ts";
 import { Inbox } from "./inbox.ts";
 import { buildUserMessage, landedSteer, type SteerInput, type SteerSent } from "./input.ts";
 import { shellCommandMessage } from "./shellInput.ts";
@@ -405,6 +406,8 @@ const openSession = Effect.fnUntraced(function* (
     sdkOptions.cwd = confinement.root;
     sdkOptions.env = env;
   }
+
+  yield* applyClaudeTraceHooks(sdkOptions, options, () => active?.turnId ?? null);
 
   if (options.model !== null) sdkOptions.model = options.model;
 

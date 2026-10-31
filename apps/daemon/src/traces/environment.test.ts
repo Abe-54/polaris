@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { Effect, Stream } from "effect";
+import { TraceTurn, TurnId } from "@polaris/protocol";
 import { makeClaudeDriver } from "../harness/claude/ClaudeDriver.ts";
 import { FakeClaude } from "../harness/claude/fakeClaude.ts";
 import { makeCodexDriver } from "../harness/codex/CodexDriver.ts";
 import { cleanup, scripted, sessionWith } from "../harness/codex/testing/session.ts";
 import { Terminals, TerminalsLive, TerminalItem } from "../terminal/Terminals.ts";
 import { TraceRuntime } from "./runtime.ts";
-import { postTraces, TEST_SESSION, withTraceFixture } from "./testing.ts";
+import { postTraces, TEST_SESSION, TRACE_ID, withTraceFixture } from "./testing.ts";
 
 for (const readOnly of [false, true]) {
   test(`Claude ${readOnly ? "reviewer" : "agent"} keeps its live endpoint after Harness retirement`, () =>
@@ -52,8 +53,16 @@ for (const readOnly of [false, true]) {
       expect((await postTraces(endpoint)).status).toBe(401);
     }));
 
-  test(`Codex ${readOnly ? "reviewer" : "agent"} shell environment reaches the receiver`, () =>
+  test(`Codex ${readOnly ? "reviewer" : "agent"} shell environment reaches the receiver with unknown launch Turn`, () =>
     withTraceFixture(async (f) => {
+      const turn = TraceTurn.make({
+        sessionId: TEST_SESSION,
+        id: TurnId.make("codex-turn"),
+        number: 5,
+      });
+
+      f.state.turns = [{ turn, start: "0", end: null }];
+
       const withSession = sessionWith((options) =>
         makeCodexDriver(options).pipe(
           Effect.map((driver) => ({
@@ -82,6 +91,8 @@ for (const readOnly of [false, true]) {
           },
         });
         expect((await postTraces(f.endpoint!)).status).toBe(200);
+        const detail = await Effect.runPromise(f.store.get(f.root, TRACE_ID));
+        expect(detail.spans[0]?.polaris).toMatchObject({ turn, launchedTurn: null });
         f.state.active = false;
         expect((await postTraces(f.endpoint!)).status).toBe(401);
       } finally {
@@ -113,7 +124,9 @@ test("terminals use a Workspace endpoint in both ordinary and repository environ
               .map((i) => new TextDecoder().decode(i.data))
               .join("");
 
-            expect(endpoint).toMatch(new RegExp(`^http://127.0.0.1:${f.port}/otlp/[a-f0-9]{64}$`));
+            expect(endpoint).toMatch(
+              new RegExp(`^http://127.0.0.1:${f.port}/otlp/[a-f0-9]{64}\\.`)
+            );
             expect(endpoint).not.toBe(f.endpoint!);
             expect((yield* Effect.promise(() => postTraces(endpoint))).status).toBe(200);
             yield* terminals.close(terminal);
@@ -123,22 +136,25 @@ test("terminals use a Workspace endpoint in both ordinary and repository environ
     );
   }));
 
-test("a user exporter suppresses injection and marks the session as user-exported", () =>
+test("an existing exporter no longer suppresses injection or marks setup as user-exported", () =>
   withTraceFixture(async (f) => {
     for (const key of ["OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]) {
       expect(
         await Effect.runPromise(
           f.runtime.environment(TEST_SESSION, { [key]: "https://collector.example" })
         )
-      ).toEqual({});
+      ).toMatchObject({
+        OTEL_EXPORTER_OTLP_ENDPOINT: f.endpoint,
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${f.endpoint}/v1/traces`,
+      });
       expect(await Effect.runPromise(f.runtime.setup(TEST_SESSION))).toMatchObject({
-        endpoint: null,
-        userExported: true,
+        endpoint: f.endpoint,
+        userExported: false,
       });
       expect(
         await Effect.runPromise(
           f.runtime.terminalEnvironment(f.root, { [key]: "https://collector.example" })
         )
-      ).toEqual({});
+      ).toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
     }
   }));

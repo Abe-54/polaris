@@ -1,0 +1,106 @@
+# node --import ./instrumentation.ts src/server.ts, endpoint set (app has a 300 ms SIGTERM drain that exits 3)
+== app stdout
+listening 44527
+app: SIGTERM, draining
+app exit code: 0
+== requests
+2026-10-31T22:28:13.016Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=4052
+2026-10-31T22:28:13.025Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=893
+== spans
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"286c60ef","parent":null,"span":"6a4c26","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"062fa6e1","parent":null,"span":"b712d5","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"23f8541f","parent":null,"span":"f58747","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"error","statusMessage":"","trace":"0af76519","parent":"b7ad6b","span":"132888","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"orders.load","kind":"internal","status":"unset","statusMessage":"","trace":"062fa6e1","parent":"b712d5","span":"da3f31","scope":"app","service":"orders-api","code":["loadOrders","/private/tmp/rpu-p7/node/src/server.ts","5"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"132888","span":"c80b94","scope":"app","service":"orders-api","code":["charge","/private/tmp/rpu-p7/node/src/server.ts","12"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at file:///private/tmp/rpu-p7/node/src/server.ts:13:11 |     at file:///private/tmp/rpu-p7/node/src/tracing.ts:42:20"}}
+== logs
+{"body":"loaded orders","severity":"INFO","trace":"062fa6e1","span":"da3f31"}
+
+# same, endpoint unset
+== app stdout
+listening 41271
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+(none)
+== spans
+(none)
+== logs
+(none)
+
+# app's SIGTERM handler exits on the next tick
+== app stdout
+listening 48056
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+(none)
+== spans
+(none)
+== logs
+(none)
+
+# receiver holds the token 50 ms per request (one in flight per token, as receiver.ts)
+== app stdout
+listening 40729
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+2026-10-31T22:28:19.751Z POST /otlp/tok_review/v1/logs -> 429 (token busy)
+2026-10-31T22:28:19.803Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=4052
+== spans
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"6bc76c9a","parent":null,"span":"7aefbc","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"59de67bd","parent":null,"span":"0734ec","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"fdc27995","parent":null,"span":"5f3d0b","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"error","statusMessage":"","trace":"0af76519","parent":"b7ad6b","span":"8f9cb5","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"orders.load","kind":"internal","status":"unset","statusMessage":"","trace":"59de67bd","parent":"0734ec","span":"f4bf5b","scope":"app","service":"orders-api","code":["loadOrders","/private/tmp/rpu-p7/node/src/server.ts","5"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"8f9cb5","span":"f3da4f","scope":"app","service":"orders-api","code":["charge","/private/tmp/rpu-p7/node/src/server.ts","12"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at file:///private/tmp/rpu-p7/node/src/server.ts:13:11 |     at file:///private/tmp/rpu-p7/node/src/tracing.ts:42:20"}}
+== logs
+(none)
+
+# same, app has no SIGTERM handler
+== app stdout
+listening 48424
+app exit code: 0
+== requests
+2026-10-31T22:28:22.135Z POST /otlp/tok_review/v1/logs -> 429 (token busy)
+2026-10-31T22:28:22.185Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=4122
+2026-10-31T22:28:23.224Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=913
+== spans
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"5831216f","parent":null,"span":"916c4d","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"29020136","parent":null,"span":"bfda24","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"2d5f0ace","parent":null,"span":"855241","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"error","statusMessage":"","trace":"0af76519","parent":"b7ad6b","span":"d508ac","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"orders.load","kind":"internal","status":"unset","statusMessage":"","trace":"29020136","parent":"bfda24","span":"5a71a7","scope":"app","service":"orders-api","code":["loadOrders","/private/tmp/rpu-p7/node/src/server-nohandler.ts","5"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"d508ac","span":"9d692f","scope":"app","service":"orders-api","code":["charge","/private/tmp/rpu-p7/node/src/server-nohandler.ts","12"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at file:///private/tmp/rpu-p7/node/src/server-nohandler.ts:13:11 |     at file:///private/tmp/rpu-p7/node/src/tracing.ts:42:20"}}
+== logs
+{"body":"loaded orders","severity":"INFO","trace":"29020136","span":"5a71a7"}
+
+# metricReaders line removed
+== requests
+2026-10-31T22:28:25.091Z POST /otlp/tok_review/v1/metrics type=application/x-protobuf enc= bytes=7706
+2026-10-31T22:28:25.332Z POST /otlp/tok_review/v1/metrics type=application/x-protobuf enc= bytes=8248
+2026-10-31T22:28:25.332Z POST /otlp/tok_review/v1/traces -> 429 (token busy)
+2026-10-31T22:28:25.333Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=903
+== spans
+
+# register(hook.mjs) line removed
+== spans
+{"name":"orders.load","kind":"internal","status":"unset","statusMessage":"","trace":"5bb0a1e7","parent":null,"span":"a3bfcb","scope":"app","service":"orders-api","code":["loadOrders","/private/tmp/rpu
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"acea3a0a","parent":null,"span":"7417fe","scope":"app","service":"orders-api","code":
+== logs
+{"body":"loaded orders","severity":"INFO","trace":"5bb0a1e7","span":"a3bfcb"}
+
+# tsx --import
+== spans
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"3d63619a","parent":null,"span":"0449f0","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"94e89a5f","parent":null,"span":"32907f","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"unset","statusMessage":"","trace":"124e5ffc","parent":null,"span":"66330f","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET","kind":"server","status":"error","statusMessage":"","trace":"0af76519","parent":"b7ad6b","span":"963c32","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"orders.load","kind":"internal","status":"unset","statusMessage":"","trace":"94e89a5f","parent":"32907f","span":"edb91d","scope":"app","service":"orders-api","code":["loadOrders","/private/tmp/rpu-p7/node/src/server.ts","5"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"963c32","span":"94ea97","scope":"app","service":"orders-api","code":["charge","/private/tmp/rpu-p7/node/src/server.ts","12"]
+== logs
+{"body":"loaded orders","severity":"INFO","trace":"94e89a5f","span":"edb91d"}

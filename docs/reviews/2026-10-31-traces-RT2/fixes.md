@@ -186,3 +186,41 @@ format/lint, and **11 retention/history tests, 0 failures, 90 assertions**. Init
 quality failures (complexity in the retention loop and a missing blank line) were fixed without
 baseline or suppression changes. The earlier 226-pass traces/MCP run remains the broad functional
 checkpoint; the final follow-up reran only the affected tests and F6 performance as directed.
+
+## Integration send-back: merge `9a0fac48`
+
+Merged the exact requested integration head `9a0fac480958ce46e47a478c2c3cb3a412ebae9f` onto
+`cd62a2b6f`, resolving five conflicts additively. The shared session/tool entry points retain
+P8's compare tool and session resolution. The store and worker retain both Compare and Overlap
+requests alongside TF2's bounded View/ToolList/ToolSpan reads. Queries retain P4's
+`overlappingTraces` and TF2's indexed history/list reads. P2's launch attribution, P1's forwarding,
+and the Profiles services/hooks merged unchanged. The automatically merged worker schemas and
+trace-tools spec contain both sides. No new feature or behavioral change was introduced by the
+conflict resolution.
+
+Fresh checks ran sequentially under one Host `bench` lease:
+
+- Root typecheck: **18/18 tasks passed**, 17 cached, 13.54 seconds.
+- Daemon traces + MCP: **308 passed, 7 skipped, 0 failed**, 2,381 assertions across 52 files,
+  59.13 seconds. The seven skips are five opt-in performance tests and two database-dependent
+  integration cases; the five performance tests ran separately immediately afterward.
+- Full RT2 performance suite with `POLARIS_TRACE_PERF=1`: **5 passed, 0 failed**, 18.81 seconds.
+- Conflict-resolution quality and root format/lint checks passed.
+
+| Merged performance measurement | Result |
+| --- | ---: |
+| F4 trace with 50k Spans | 732 ms |
+| F4 main-thread stall | 11 ms |
+| Original F6 5k fixture (includes intentional 1s delay) | 1,005 ms; list 2 ms |
+| F7 list, 20 error traces × 5k Spans | 29 ms |
+| F8 single Span in 50k-Span trace | 37 ms; direct store 33 ms |
+| F6 105,105-Span trace | 34.9 ms (<500) |
+| F6 concurrent list | 32.7 ms (<100) |
+
+Performance load averages at the measured calls were 9.8–11.0 (one minute); all original limits
+remain unchanged. Logs and per-step commands/UTC times/load/exit codes are under
+`/private/tmp/tf2/merge/`. The combined suite includes the accepted compare, Profiles, launch and
+forwarding regressions. The prior controlled before/after benchmark numbers above remain
+historical evidence, with the shared ENG-682 post-quiet RSS failure disclosed. This send-back did
+not rerun the full three-run traces benchmark or change its baseline. No Desktop or screenshot
+process was launched.

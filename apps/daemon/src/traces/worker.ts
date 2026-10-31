@@ -19,7 +19,9 @@ import {
   traceHistory,
   summaryFor,
   listToolTraces,
+  overlappingTraces,
 } from "./queries.ts";
+import { compareTraces } from "./compareQuery.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
 
@@ -161,6 +163,15 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
 
     return records;
   }),
+  Match.tag("Compare", (request) =>
+    compareTraces(
+      prune(request.checkout),
+      request.checkout,
+      request.a,
+      request.b,
+      request.baselineStart
+    )
+  ),
   Match.tag("List", (request) =>
     listTraces(prune(request.checkout), request.checkout, request.filter)
   ),
@@ -182,6 +193,9 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
       start: summaryFor(db, request.checkout, detail.span.traceId).startTimeUnixNano,
     };
   }),
+  Match.tag("Overlap", (request) =>
+    overlappingTraces(prune(request.checkout), request.checkout, request.start, request.end)
+  ),
   Match.tag("Get", (request) =>
     getTrace(prune(request.checkout), request.checkout, request.traceId)
   ),

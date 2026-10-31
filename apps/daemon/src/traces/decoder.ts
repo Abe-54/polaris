@@ -105,8 +105,7 @@ const attribution = (context: IngestContext, start: string): TraceAttribution =>
     workspaceId: context.workspaceId,
     sessionId: context.sessionId,
     turn: interval?.turn ?? null,
-    // A session endpoint cannot establish which Turn launched a child process (ENG-673).
-    launchedTurn: null,
+    launchedTurn: context.launchedTurn ?? null,
   });
 };
 
