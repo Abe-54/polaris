@@ -13,7 +13,7 @@ import { AppProvider } from "../../../../shell/hooks.ts";
 import type { AppState } from "../../../../store/store.ts";
 import { DataLayer } from "../../../data/data/hooks.tsx";
 import { fixtureDataApi } from "../../../data/preview/fixtureApi.ts";
-import { onDraftChange } from "../../../session/state.ts";
+import { onDraftChange, updateDraft } from "../../../session/state.ts";
 import { TracesLayer } from "../../data/hooks.tsx";
 import { ProfilesLayer } from "../../data/profiles.tsx";
 import type { ProfilesApi } from "../../data/profilesApi.ts";
@@ -219,6 +219,9 @@ test("a hot function in the checkout opens in the Editor; a native one isn't a l
 test("⌘L in the profile panel adds the Profile to the session's draft", async () => {
   const { at, commands } = mount();
   const drafts: Array<string> = [];
+
+  // The draft store is shared across test files; start from an empty draft.
+  updateDraft(at.hostKey, at.sessionId, () => "");
   const stop = onDraftChange((_key, draft) => drafts.push(draft));
 
   act(() => selectProfile(at, LEDGER_PROFILE));
