@@ -134,7 +134,7 @@ export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer
   Layer.provideMerge(HostSecrets.layer)
 );
 
-const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,

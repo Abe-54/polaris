@@ -56,7 +56,7 @@ for (const binding of bindings)
 test("data_sources lists provenance and access without internal fields or credentials", async () => {
   const response = await toolsWithData()("data_sources").call({});
   expect(response.content[0]?.text).toBe(
-    "1 data sources in ~/code/ledger\napp  postgres 16.4  local  localhost:5432/ledger  from .env.local (DATABASE_URL)  read · writes ask you"
+    "1 data source in ~/code/ledger\napp  postgres 16.4  local  localhost:5432/ledger  from .env.local (DATABASE_URL)  read · writes ask you"
   );
   expect(response.structuredContent?.sources).toEqual([
     {
@@ -110,6 +110,8 @@ test("query binds params and limit, preserving NULL and database numerics in ali
   );
   expect(response.structuredContent).toEqual({
     queryId: "q_7f3a",
+    summary: "2 rows · 34 ms · query q_7f3a",
+    returned: 2,
     columns: [
       { name: "id", type: "int4" },
       { name: "total", type: "numeric" },
@@ -232,7 +234,9 @@ test("query drops complete rows under 16k, with the count and a useful next acti
           ...resultFields,
           columns: [{ name: "body", type: "text" }],
           rows: Array.from({ length: 200 }, () => ["x".repeat(200)]),
-          rowCount: 18402,
+          rowCount: 200,
+          returned: 200,
+          total: 18402,
           truncated: true,
         })
       ),
@@ -240,7 +244,7 @@ test("query drops complete rows under 16k, with the count and a useful next acti
 
   const content = response.content[0]!.text;
   expect(content.length).toBeLessThanOrEqual(16000);
-  expect(content).toMatch(/\n\d+ of 18,402 rows; add a WHERE or an aggregate$/);
+  expect(content).toMatch(/\n\d+ of 18,402 rows; select fewer columns$/);
   expect(response.structuredContent?.truncated).toBe(true);
 });
 
@@ -288,7 +292,8 @@ for (const name of ["query", "describe"])
       describe: () =>
         Effect.suspend(() => (approved ? Effect.succeed(table) : Effect.fail(required))),
       awaitApproval: (_id, timeoutMs) => {
-        expect(timeoutMs).toBe(50000);
+        expect(timeoutMs).toBeGreaterThan(54000);
+        expect(timeoutMs).toBeLessThanOrEqual(55000);
         waits++;
 
         return Effect.succeed({ status: "pending" });
