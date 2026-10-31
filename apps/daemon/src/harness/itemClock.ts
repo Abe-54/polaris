@@ -9,6 +9,8 @@ import { HarnessEvent } from "./HarnessDriver.ts";
 export class ItemClock {
   /** Items seen but not completed, by Turn, Subagent and id. */
   private readonly seen = new Map<string, string>();
+  /** The latest completed items' stamps: a reply completed again with its stats keeps its own. */
+  private readonly completed = new Map<string, string>();
   private last = 0;
 
   constructor(private readonly now: () => number = Date.now) {}
@@ -27,6 +29,7 @@ export class ItemClock {
         const key = keyOf(e.turnId, e.subagentId, e.item.id);
         const item = this.stamped(e.turnId, e.subagentId, e.item);
         this.seen.delete(key);
+        this.remember(key, item.startedAt);
 
         return HarnessEvent.ItemCompleted({ ...e, item });
       },
@@ -55,7 +58,7 @@ export class ItemClock {
 
   /** The item's stamp: the one it was first given, else now (or the Harness's own time). */
   private startOf(key: string, own: string | null): string {
-    const known = this.seen.get(key);
+    const known = this.seen.get(key) ?? this.completed.get(key);
 
     if (known !== undefined) return known;
     const at = own === null ? this.now() : Date.parse(own);
@@ -65,7 +68,20 @@ export class ItemClock {
 
     return stamp;
   }
+
+  private remember(key: string, stamp: string | null): void {
+    if (stamp === null) return;
+    this.completed.delete(key);
+    this.completed.set(key, stamp);
+    const oldest = this.completed.keys().next();
+
+    if (this.completed.size > RECENT_COMPLETIONS && oldest.done !== true)
+      this.completed.delete(oldest.value);
+  }
 }
+
+/** How many completed items keep their stamps: a model call's own items, with room to spare. */
+const RECENT_COMPLETIONS = 64;
 
 const keyOf = (turnId: string, subagentId: string | undefined, itemId: string) =>
   `${turnId}\u0000${subagentId ?? ""}\u0000${itemId}`;

@@ -28,7 +28,14 @@ import { ConstellationCommand } from "./constellation/commands.ts";
 import { ConstellationOutboxEntry } from "./constellation/events.ts";
 import { WorkerActivity, WorkerLiveness } from "./constellation/liveness.ts";
 import { ConstellationStreamItem } from "./constellation/rpc.ts";
-import { BackgroundTask, ContextUsage, Subagent, TurnItem, Workspace } from "./domain.ts";
+import {
+  BackgroundTask,
+  ContextUsage,
+  ReplyStats,
+  Subagent,
+  TurnItem,
+  Workspace,
+} from "./domain.ts";
 import { DomainEvent, EventEnvelope, StreamKey } from "./events.ts";
 import { ChangedOnDisk, FileVersion } from "./files.ts";
 import {
@@ -195,6 +202,16 @@ const sessionEvents: ReadonlyArray<DomainEvent> = [
     sessionId: s,
     turnId: t,
     item: TurnItem.cases.UserMessage.make({ id: "steer:1", text: "also run lint" }),
+    subagentId: null,
+  }),
+  DomainEvent.cases.TurnItemCompleted.make({
+    sessionId: s,
+    turnId: t,
+    item: TurnItem.cases.AssistantMessage.make({
+      id: "m:1",
+      text: "Done.",
+      stats: new ReplyStats({ outputTokens: 842, latencyMs: 1_200, durationMs: null }),
+    }),
     subagentId: null,
   }),
   DomainEvent.cases.SubagentStarted.make({ subagent: subagent("working", null) }),

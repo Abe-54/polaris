@@ -436,6 +436,18 @@ export class Subagent extends Schema.Class<Subagent>("Subagent")({
 }) {}
 
 /**
+ * The model call that wrote a reply, as its driver timed it (ENG-678). Its tokens cover the
+ * whole call: reasoning, every reply block and tool input.
+ */
+export class ReplyStats extends Schema.Class<ReplyStats>("ReplyStats")({
+  outputTokens: Schema.Int,
+  /** From the request to the call's first token; null when the driver couldn't see either. */
+  latencyMs: Schema.NullOr(Schema.Int),
+  /** From the first token to the last: tokens per second is `outputTokens` over this. */
+  durationMs: Schema.NullOr(Schema.Int),
+}) {}
+
+/**
  * When the Harness started an item, as its driver first saw it; strictly increasing per
  * Agent Session. Null on older items, the Daemon's own, and drivers that don't stamp.
  */
@@ -464,7 +476,13 @@ export type McpTool = typeof McpTool.Type;
 
 /** One normalized piece of Harness output within a Turn. `raw` keeps the native frame. */
 export const TurnItem = Schema.TaggedUnion({
-  AssistantMessage: { id: Schema.String, text: Schema.String, startedAt },
+  AssistantMessage: {
+    id: Schema.String,
+    text: Schema.String,
+    startedAt,
+    /** Set once the model call ends, when the Harness reports its usage. */
+    stats: optionalNullable(ReplyStats),
+  },
   /**
    * Guidance the user sent into the Turn in flight (a steer), once the model took it in;
    * `startedAt` is when it did, so it follows whatever held it back. `attachments` are

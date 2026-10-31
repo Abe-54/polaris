@@ -58,6 +58,7 @@ import { ReasoningTimes } from "./reasoning.ts";
 import { CodexProcesses, terminateProcess } from "./processes.ts";
 import { CodexCompaction } from "./compaction.ts";
 import { CodexSteers } from "./steers.ts";
+import { type CodexReply, CodexReplyTimer, withStats } from "./replyStats.ts";
 import { CodexSubagents } from "./subagents.ts";
 import { requestCompat } from "./compat.ts";
 import { collaborationFor, setCollaboration } from "./collaboration.ts";
@@ -165,6 +166,7 @@ export const openSession = (
   Effect.gen(function* () {
     const events = yield* Queue.unbounded<HarnessEvent, Cause.Done>();
     const clock = new ItemClock();
+    const replies = new CodexReplyTimer<CodexReply>();
 
     const emit = (event: HarnessEvent) => {
       Queue.offerUnsafe(events, clock.stamp(event));
@@ -456,6 +458,7 @@ export const openSession = (
       if (p === null) return;
 
       if (p.threadId !== threadId) return onSubagentItem(p, false);
+      replies.started(p.item.type, p.startedAtMs);
 
       if (p.item.type === "userMessage") return onUserMessage(p);
 
@@ -484,6 +487,7 @@ export const openSession = (
       if (p === null) return;
 
       if (p.threadId !== threadId) return onSubagentItem(p, true);
+      replies.completed(p.completedAtMs);
 
       if (p.item.type === "userMessage") return onUserMessage(p);
 
@@ -498,6 +502,9 @@ export const openSession = (
 
       if (item !== null)
         emit(HarnessEvent.ItemCompleted({ turnId, item: reasoning.finish(item, p.completedAtMs) }));
+
+      if (item !== null && TurnItem.guards.AssistantMessage(item))
+        replies.replied({ turnId, item });
 
       if (isCommand(p.item)) backgroundChanged(processes.completed(p.item.id));
 
@@ -529,6 +536,7 @@ export const openSession = (
       }
 
       endedTurns.add(p.turn.id);
+      replies.turnEnded();
       landSteers(turnId, steers.end(p.turn.id));
       backgroundChanged(processes.turnEnded());
 
@@ -657,6 +665,9 @@ export const openSession = (
               windowTokens: modelContextWindow,
             })
           );
+          const ended = replies.ended(last.outputTokens);
+
+          if (ended !== null) emit(withStats(ended.reply, ended.stats));
         },
       ],
     ]);
