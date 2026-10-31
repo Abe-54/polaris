@@ -109,6 +109,7 @@ export const RPC_GRANTS = {
   "continuity.saveDraft": "client",
   "presence.report": "client",
   "data.sources.watch": "client",
+  "data.schemaDiff": "client",
   "data.describe": "client",
   "data.query": "client",
   "data.queryLog.watch": "client",

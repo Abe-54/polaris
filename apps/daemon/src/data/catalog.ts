@@ -75,7 +75,12 @@ const quote = (name: string, engine: "postgres" | "mysql") =>
 
 export const makeCatalogReader = (read: typeof readEffect) =>
   Effect.fnUntraced(
-    function* (pools: DataPools, input: Omit<ReadInput, "sql" | "limit">, table?: string) {
+    function* (
+      pools: DataPools,
+      input: Omit<ReadInput, "sql" | "limit">,
+      table?: string,
+      snapshotTree?: SchemaTree
+    ) {
       const engine = input.source.engine;
       const { plain, text, number, bool, json, decode } = catalogValues(engine);
 
@@ -96,8 +101,8 @@ export const makeCatalogReader = (read: typeof readEffect) =>
         );
       });
 
-      const tree = yield* rows(treeSql[engine]);
-      const functions = yield* rows(functionsSql[engine]);
+      const tree = snapshotTree ? [] : yield* rows(treeSql[engine]);
+      const functions = snapshotTree ? [] : yield* rows(functionsSql[engine]);
 
       const groups = new Map<
         string,
@@ -133,7 +138,7 @@ export const makeCatalogReader = (read: typeof readEffect) =>
           truncatedTables: Math.max(0, number("tables.total", tree[0]?.total ?? 0) - 500),
         });
       // PostgreSQL resolves an unqualified name through its search_path; MySQL stays in DATABASE().
-      const relation = engine === "mysql" ? table.split(".").at(-1)! : table;
+      const relation = engine === "mysql" && !snapshotTree ? table.split(".").at(-1)! : table;
 
       const identity =
         engine === "postgres"
@@ -155,6 +160,10 @@ export const makeCatalogReader = (read: typeof readEffect) =>
       const indexes = yield* rows(indexesSql[engine], [relation], 256);
       const constraints = yield* rows(constraintsSql[engine], [relation], 256);
       const match = tree.find((row) => row.schema_name === schema && row.name === name);
+
+      const estimate = snapshotTree?.schemas
+        .find((x) => x.name === schema)
+        ?.tables.find((x) => x.name === name)?.rowEstimate;
 
       const detail = decode("table.detail", TableDetail, {
         schema,
@@ -186,14 +195,15 @@ export const makeCatalogReader = (read: typeof readEffect) =>
           definition: text("constraints.definition", row.definition),
         })),
         rowEstimate:
-          match?.estimate === null || match === undefined
+          estimate ??
+          (match?.estimate === null || match === undefined
             ? null
-            : number("tables.estimate", match.estimate),
+            : number("tables.estimate", match.estimate)),
       });
 
       return { detail, sampleSql: `SELECT * FROM ${quote(schema, engine)}.${quote(name, engine)}` };
     },
-    (effect, _pools, input, _table?: string) =>
+    (effect, _pools, input, _table?: string, _snapshotTree?: SchemaTree) =>
       effect.pipe(
         Effect.catchDefect((cause) => {
           const error = Schema.decodeUnknownOption(DataError)(cause);

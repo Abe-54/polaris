@@ -109,3 +109,5 @@ export * from "./managedPrediction.ts";
 export * from "./predictionRpcs.ts";
 
 export * from "./data.ts";
+
+export * from "./schemaDiff.ts";

@@ -1,14 +1,31 @@
 /** Checkout-scoped Query Log with bounded retention and event-driven snapshots. */
-import { QueryLogEntry, type DataQueryLogPage } from "@polaris/protocol";
+import {
+  QueryLogEntry,
+  type DataQueryLogPage,
+  type SessionId,
+  type TurnId,
+} from "@polaris/protocol";
 import { Context, Effect, Layer, PubSub, Schema, Stream } from "effect";
 import { DataApprovals } from "./approvals.ts";
 import { DataDatabase, storageError } from "./database.ts";
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(QueryLogEntry));
 
+export interface DataActivity {
+  readonly checkout: string;
+  readonly source: QueryLogEntry["source"];
+  readonly author: { readonly sessionId?: SessionId; readonly turn?: TurnId };
+}
+
 export class QueryLog extends Context.Service<
   QueryLog,
   {
+    readonly subscribe: Effect.Effect<
+      Stream.Stream<DataActivity>,
+      never,
+      import("effect").Scope.Scope
+    >;
+    readonly touch: (entry: QueryLogEntry) => Effect.Effect<void>;
     readonly put: (
       entry: QueryLogEntry,
       once?: boolean
@@ -32,11 +49,27 @@ export class QueryLog extends Context.Service<
         try: () =>
           db.exec(`CREATE TABLE IF NOT EXISTS data_query_log (
       seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE NOT NULL,checkout TEXT NOT NULL,value TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS data_query_checkout ON data_query_log(checkout,seq);`),
+      CREATE INDEX IF NOT EXISTS data_query_checkout ON data_query_log(checkout,seq);
+      CREATE INDEX IF NOT EXISTS data_query_author ON data_query_log(json_extract(value,'$.author.sessionId'));
+      CREATE TABLE IF NOT EXISTS data_query_activity (checkout TEXT NOT NULL,session TEXT NOT NULL,updated TEXT NOT NULL,PRIMARY KEY(checkout,session));`),
         catch: storageError,
       });
       const changes = yield* PubSub.sliding<string>(64);
+      const activity = yield* PubSub.unbounded<DataActivity>();
+      yield* Effect.addFinalizer(() => PubSub.shutdown(activity));
       yield* Effect.addFinalizer(() => PubSub.shutdown(changes));
+
+      const touch = (entry: QueryLogEntry) =>
+        PubSub.publish(activity, {
+          checkout: entry.checkout,
+          source: entry.source,
+          author: {
+            ...(entry.author.sessionId === undefined
+              ? undefined
+              : { sessionId: entry.author.sessionId }),
+            ...(entry.author.turn === undefined ? undefined : { turn: entry.author.turn }),
+          },
+        }).pipe(Effect.asVoid);
 
       const page = (checkout: string, before?: string, limit = 100) =>
         Effect.try({
@@ -88,12 +121,16 @@ export class QueryLog extends Context.Service<
                   : "INSERT INTO data_query_log(id,checkout,value) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value"
               ).run(entry.id, entry.checkout, JSON.stringify(entry));
               db.query(
+                "INSERT INTO data_query_activity VALUES (?,?,?) ON CONFLICT(checkout,session) DO UPDATE SET updated=excluded.updated"
+              ).run(entry.checkout, entry.author.sessionId ?? "", new Date().toISOString());
+              db.query(
                 "DELETE FROM data_query_log WHERE checkout=? AND seq <= (SELECT seq FROM data_query_log WHERE checkout=? ORDER BY seq DESC LIMIT 1 OFFSET 10000)"
               ).run(entry.checkout, entry.checkout);
             })(),
           catch: storageError,
         });
         yield* PubSub.publish(changes, entry.checkout);
+        yield* touch(entry);
       });
 
       const watch = (checkout: string) =>
@@ -114,7 +151,13 @@ export class QueryLog extends Context.Service<
           })
         );
 
-      return { put, page, watch };
+      return {
+        put,
+        page,
+        watch,
+        subscribe: Effect.map(PubSub.subscribe(activity), Stream.fromSubscription),
+        touch,
+      };
     })
   );
 }
