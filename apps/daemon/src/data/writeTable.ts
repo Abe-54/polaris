@@ -44,6 +44,11 @@ export async function writeTable(
   source: DataSource,
   target: { schema?: string; table: string }
 ) {
+  if (source.engine === "mysql" && target.schema !== undefined && target.schema !== source.database)
+    throw writeError(
+      "The statement names a different database.",
+      "Select that database as a data source and request approval there."
+    );
   const initial = await resolveTable(tx, source, target);
   const sql = `${identifier(initial.schema, source.engine)}.${identifier(initial.name, source.engine)}`;
   // Acquire metadata locks before verifying the engine and primary key used by the mutation.

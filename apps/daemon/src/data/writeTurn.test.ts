@@ -14,16 +14,21 @@ test("Turn end interrupts an active write and awaits its rollback finalizer", ()
         const entered = yield* Deferred.make<void>();
         let rolledBack = false;
 
-        const work = Effect.gen(function* () {
-          yield* Deferred.succeed(entered, undefined);
-          yield* Effect.never;
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              rolledBack = true;
-            })
-          )
-        );
+        const work = (signal: AbortSignal) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(entered, undefined);
+            yield* Effect.callback<void, Error>((resume) => {
+              signal.addEventListener("abort", () => resume(Effect.fail(new Error("cancelled"))), {
+                once: true,
+              });
+            });
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                rolledBack = true;
+              })
+            )
+          );
 
         const running = yield* duringWriteTurn(
           store,

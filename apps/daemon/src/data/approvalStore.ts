@@ -52,6 +52,9 @@ export class ApprovalStore {
       );
       db.exec("DELETE FROM data_approval_rules WHERE json_array_length(key)=3");
     }
+
+    if (!columns.some((column) => column.name === "write_locality"))
+      db.exec("ALTER TABLE data_approval_rules ADD COLUMN write_locality TEXT");
   }
   get cursor() {
     return this.db
@@ -127,9 +130,14 @@ export class ApprovalStore {
     const target = targetOf(source);
 
     const query = this.db.query<
-      { access: DataSource["access"]; writes: DataSource["writes"]; origin: string },
+      {
+        access: DataSource["access"];
+        writes: DataSource["writes"];
+        origin: string;
+        write_locality: string | null;
+      },
       [string]
-    >("SELECT access,writes,origin FROM data_approval_rules WHERE key=?");
+    >("SELECT access,writes,origin,write_locality FROM data_approval_rules WHERE key=?");
 
     const exact = query.get(targetKey(target));
     const server = query.get(serverKey(target));
@@ -138,13 +146,12 @@ export class ApprovalStore {
 
     return {
       access: decision?.origin === "decision" ? decision.access : local ? "read" : "needs-approval",
-      writes: exact?.writes ?? (local ? "ask" : "off"),
+      writes: exact?.write_locality === source.locality ? exact.writes : local ? "ask" : "off",
     };
   }
   change(source: DataSource, writes?: DataSource["writes"], revoke?: boolean) {
     const target = targetOf(source);
     const key = targetKey(target);
-    const current = this.read(source);
     this.db.transaction(() => {
       if (revoke) {
         this.db
@@ -157,11 +164,12 @@ export class ApprovalStore {
           .run(target.engine, target.host, target.port, target.user);
       }
 
-      this.db
-        .query(
-          "INSERT INTO data_approval_rules(key,access,writes,origin) VALUES (?,'needs-approval',?,'default') ON CONFLICT(key) DO UPDATE SET writes=excluded.writes"
-        )
-        .run(key, writes ?? current.writes);
+      if (writes !== undefined)
+        this.db
+          .query(
+            "INSERT INTO data_approval_rules(key,access,writes,origin,write_locality) VALUES (?,'needs-approval',?,'default',?) ON CONFLICT(key) DO UPDATE SET writes=excluded.writes,write_locality=excluded.write_locality"
+          )
+          .run(key, writes, source.locality);
     })();
   }
   join(id: string, session: string, turn: string) {

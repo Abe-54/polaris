@@ -18,7 +18,7 @@ export function budgetProjection(
   const names = all.map((_, i) => `c${i}`);
 
   const text = (name: string) =>
-    engine === "postgres" ? `${name}::text` : `CAST(${name} AS CHAR)`;
+    engine === "postgres" ? `${name}::text` : `CAST(${name} AS BINARY)`;
 
   const size = (name: string) => `OCTET_LENGTH(${text(name)})`;
 

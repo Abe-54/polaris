@@ -143,68 +143,87 @@ and check constraints.
 
 ## Writes (ENG-645)
 
-`DataQueries.execute` uses the same pools, single-statement lexer, transaction deadline and
-cancellation boundary as reads. A preview runs in a writable transaction and is rolled back
-before `data.approvalRequested` opens a write card. `RespondToApproval` decides that card;
-ending the Turn, stopping the Agent Session, or recovery denies pending cards. Remote execute
-requires remembered read access for the exact target or server **as this user**, and writes set
-to `ask`; a one-request read approval cannot authorize a preview. Each write still needs its
-own approval, regardless of the Session's permission mode or `remember` choice.
+`DataQueries.execute` always needs one user approval, independent of the Agent Session's
+permission mode. Writes off refuses both execute and grid commits before a preview or card,
+on Local and Remote sources. Remote writes additionally require remembered read access.
+Write policy is stored with its locality; revocation restores defaults without saving a rule.
+A Local default or explicit Local write grant never enables a Remote target.
 
-An explicit `execute.requestId` binds a retry to its Agent Session and durable argument hash.
-Completed receipts are returned before checking for an active Turn or opening the source.
-A different payload under the same key is refused; a different key requests a separate write.
-Uncompleted approvals remain bound to their original Turn. Calls without a key retain the
-exact-argument, per-Turn fingerprint.
+Before a preview, the Daemon checks the statement's functions and the target's metadata under
+locks. Non-built-in functions, dblink and privileged functions are refused; PostgreSQL defaults,
+constraints, policies, rules and expression indexes cannot call user functions either. A table
+with triggers is **not previewed**. Its card says "Not previewed: this table has triggers", shows
+SQL and scrubbed parameters, and offers "Run without preview". MySQL checks the tables reached
+through trigger chains too: every inspected table must use InnoDB and stay in the approved
+database. Routine calls and uninspectable dependencies fail closed (at most 100 tables).
 
-Without a requestId, a fingerprint binds the Agent Session, Turn, source id, target, SQL, parameters and reason.
-Retries share one card. A durable compare-and-set consumes approved authority before the
-transaction starts, and a completed retry returns the original result. Concurrent retries
-cannot execute twice. If a process or connection fails after consumption, automatic replay is
-refused: inspect the Query Log and database before requesting another write. This is an
-at-most-once dispatch guarantee, not an atomic commit spanning SQLite and an external database.
+A safe preview runs in a writable transaction and rolls back before opening a card through the
+Session machine. The card shows scrubbed parameters and up to 20 before/after rows in a 16,000
+byte budget. INSERT has an empty before image and its inserted rows in after. Credential column
+names (password, passwd, secret, token, api_key, private_key, credential and their compound forms)
+are redacted before persistence; all other cells use the shared scrubber. Only the capped display
+rows enter the durable event. Original values are used internally to bind keys and hash identity.
+Sequence values used by the preview aren't reused: serial, identity and AUTO_INCREMENT allocation
+can advance even though the transactional rows roll back.
 
-The real transaction must affect exactly the previewed count or it rolls back. UPDATE/DELETE
-previews read up to 20 rows, ordered by primary key; UPDATE after-rows use the original keys.
-The card is capped at 16,000 bytes of row data, with the existing per-cell clipping. Tables
-without a primary key show the count and say why rows aren't shown. Preview values are scrubbed
-only for display; subsequent key lookups bind original values. A resolved table is qualified in
-the statement and its metadata is locked through the transaction.
+A real run must match the preview's count **and complete identity hash** before COMMIT, or the
+transaction rolls back. UPDATE/DELETE hash primary-key tuples, or full row images without a key.
+INSERT hashes inserted row images, excluding columns omitted from the explicit column list that
+the database fills itself (including identity/serial/AUTO_INCREMENT and volatile defaults).
+Explicit keys and values stay in the hash. INSERT rows are identified by a before/after multiset;
+the current implementation requires the complete table snapshot to fit the identity budget.
+Identity reads are bounded at 10,000 rows and the existing server byte/column limits; any omitted
+or clipped identity fails closed. This limit applies independently of the 20-row display cap.
 
-`data.edits.commit` groups staged cells by their primary-key tuple. It verifies the actual
-primary key, updates each row once, requires one matched row per update (including MySQL
-no-op assignments), and rolls back the entire batch on any mismatch. Its one Query Log entry
-has author `user`. Completed writes carry `affected: [{schema, table, rows}]` for exact target
-attribution; read result counts never populate that field. Clients negotiate `data.writes`
-before sending this RPC. The Desktop App owns the remote bulk confirmation.
+An explicit requestId binds a retry to its Agent Session and durable argument hash. Without one,
+the fingerprint binds the Session, Turn, source, target, SQL, parameters and reason. Changed
+arguments cannot reuse a key. Completed receipts are returned without reopening the source,
+even after Turn end. A durable compare-and-set consumes approved authority once. Locks are per
+target and removed when idle; a slow target does not queue all writes on the Daemon.
+
+Cancellation before COMMIT rolls back and reports E-DATA-CANCELLED. Once COMMIT is sent, its
+confirmation gets a non-cancellable five-second grace period. A confirmed result stays successful
+even if the Turn ends. A lost connection or grace timeout reports E-DATA-OUTCOME-UNKNOWN and a
+Query Log state of unknown: **check the rows before retrying**. Recovery marks unfinished writes
+unknown. Failed, started and unknown requests cannot dispatch again. This is at-most-once dispatch,
+not an atomic commit spanning the database and data.sqlite. Pending cards are denied on Turn end
+or recovery; a denial without a reason says "The user denied this write."
+
+`data.edits.commit` groups cells by typed key equality, checks the actual database row identities
+to reject coercion duplicates, and requires one matched row per update (including MySQL no-ops).
+The whole batch rolls back on a mismatch. Bytes keys carry a complete base64 payload and bind as
+bytes on both engines; display-only, clipped or unsupported keys are refused with a reason.
+The Query Log attributes the batch to the user and completed writes name their affected tables.
+Clients negotiate `data.writes`; the Desktop App owns the Remote bulk confirmation.
 
 ### Write limits (ENG-669)
 
-- INSERT, UPDATE and DELETE must name one explicit table. Read-only subqueries in SET/WHERE
-  and INSERT … SELECT are supported. Joins, aliases, CTEs, RETURNING, ORDER/LIMIT and tuple
-  assignments are refused with rewrite or migration guidance.
-- Primary-key assignments are refused. A trigger that moves a sampled key also makes the
-  preview or real transaction roll back when after-rows cannot be read. Change keys through
-  a migration or the app's own code, not execute.
-- DDL is local Postgres only. MySQL DDL commits implicitly and cannot be previewed; remote
-  DDL is refused. MySQL row writes require an InnoDB target, checked under its metadata lock.
-- Rollback protects transactional rows, not every effect of executing SQL. Sequences (including
-  `nextval` and auto-increment allocation) can advance. External or independently committed
-  effects in user functions/triggers can survive; a restricted database role remains necessary.
-  Non-InnoDB writes survive rollback, which is why those targets are refused. PostgreSQL NOTIFY
-  is transactional and is not delivered on rollback. Direct function-call restrictions use the shared lexical and
-  catalog guard before the preview or real write. User-defined wrappers remain a database-role
-  boundary.
-- Preview reads use the same server byte budget and cell projection as ordinary reads.
-  Missing or clipped primary keys refuse mutation, and omitted rows or columns are noted.
+- INSERT, UPDATE and DELETE name one explicit table. Read-only subqueries and INSERT … SELECT
+  are supported; joins, aliases, CTEs, RETURNING, ORDER/LIMIT and tuple assignments are refused.
+- Upserts (ON CONFLICT and ON DUPLICATE KEY UPDATE) are refused. Primary-key assignments are
+  checked across the entire statement, case-insensitively on MySQL, before any write executes.
+- Every Local Postgres DDL statement (including TRUNCATE) requires "Run without preview";
+  the card says "Not previewed: this statement changes the schema" and shows exact SQL and
+  scrubbed parameters. MySQL implicit-commit DDL and Remote DDL are refused.
+- A changed trigger definition after preview requires a new approval without preview. Database
+  roles still limit what an **approved** trigger can do; no unapproved trigger is executed.
+- Explicit DEFAULT in an INSERT value list is refused when database-filled columns cannot be
+  distinguished; omit those columns instead. Complete identity must fit the budget above.
+
+### Write verification
+
+RW regression tests are `writeFixes`, `writeRemote`, `writeRecovery`, `writeSafety.real`,
+`writeIdentity.real` and `writeReplay.real`, alongside the original write suites. The native replay
+records actual ApprovalRequested/Resolved events, WriteApprovalStore statuses, Query Log entries
+and database observations. Version 2 rejects test-authored phase labels. It covers normal retries,
+denial, same-count identity drift, not-previewed triggers and unknown COMMIT outcomes.
 
 ```sh
 POLARIS_TEST_PG_URL='<disposable Postgres 16 URL>' \
 POLARIS_TEST_MYSQL_URL='<disposable MySQL 8.4 URL>' \
 POLARIS_DATA_WRITE_TRACE_DIR=/private/tmp/polaris-w-traces \
-bun test apps/daemon/src/data/writeExecution.real.test.ts apps/daemon/src/data/writes.real.test.ts
-bun packages/spec/scripts/replay-data-write.ts /private/tmp/polaris-w-traces/postgres.json
-bun packages/spec/scripts/replay-data-write.ts /private/tmp/polaris-w-traces/mysql.json
+bun test apps/daemon/src/data
+bun packages/spec/scripts/replay-data-write.ts /private/tmp/polaris-w-traces/*.json
 ```
 
 ## Schema Diff (ENG-645)

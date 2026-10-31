@@ -1,6 +1,11 @@
 /** Write approval consumption is durable and one-shot, including after a Daemon restart. */
 import type { Database } from "bun:sqlite";
-import { ApprovalRequest, DataWriteResult, type EventEnvelope } from "@polaris/protocol";
+import {
+  ApprovalRequest,
+  DataWriteResult,
+  type DataError,
+  type EventEnvelope,
+} from "@polaris/protocol";
 import { Match, Schema } from "effect";
 
 export class WriteApprovalStore {
@@ -8,6 +13,7 @@ export class WriteApprovalStore {
     db.exec(`CREATE TABLE IF NOT EXISTS data_write_requests (
       id TEXT PRIMARY KEY,fingerprint TEXT UNIQUE NOT NULL,request TEXT NOT NULL,
       status TEXT NOT NULL,reason TEXT,result TEXT);`);
+    db.exec("UPDATE data_write_requests SET status='unknown' WHERE status='started'");
   }
   apply({ event }: EventEnvelope) {
     Match.value(event).pipe(
@@ -81,7 +87,7 @@ export class WriteApprovalStore {
         Match.when("denied", () => "denied" as const),
         Match.orElse(() => "approved" as const)
       ),
-      reason: row.reason,
+      reason: row.reason || (row.status === "denied" ? "The user denied this write." : null),
     };
   }
   claim(id: string) {
@@ -90,6 +96,11 @@ export class WriteApprovalStore {
         .query("UPDATE data_write_requests SET status='started' WHERE id=? AND status='approved'")
         .run(id).changes === 1
     );
+  }
+  fail(id: string, error: DataError) {
+    this.db
+      .query("UPDATE data_write_requests SET status=?,reason=? WHERE id=? AND status='started'")
+      .run(error.code === "E-DATA-OUTCOME-UNKNOWN" ? "unknown" : "failed", error.message, id);
   }
   finish(id: string, result: DataWriteResult) {
     this.db

@@ -6,6 +6,7 @@ import type { DataConnection } from "./connection.ts";
 import { guardSql } from "./guard.ts";
 import { budgetProjection, unpackBudget } from "./resultBudget.ts";
 import { guardFunctions } from "./functionGuard.ts";
+import { commitWindow } from "./writeCommit.ts";
 import { DataPools } from "./pools.ts";
 import { decodeResult, type RawResult, typeName } from "./values.ts";
 
@@ -105,6 +106,22 @@ export function bindValues(params: ReadonlyArray<DataValue>) {
       Match.tag("BigInt", "Numeric", (v) => v.value),
       Match.tag("Json", (v) => v.text),
       Match.tag("Timestamp", (v) => v.iso),
+      Match.tag("Bytes", (v) => {
+        if (v.base64 === undefined)
+          throw invalid(
+            "This binary parameter has no bindable bytes.",
+            "Reload the original value before editing it."
+          );
+        const bytes = Buffer.from(v.base64, "base64");
+
+        if (bytes.length !== v.length || bytes.toString("base64") !== v.base64)
+          throw invalid(
+            "This binary parameter is incomplete.",
+            "Reload the original value before editing it."
+          );
+
+        return bytes;
+      }),
       Match.orElse(() => {
         throw invalid(
           "This parameter is a display-only value.",
@@ -290,6 +307,10 @@ export async function executeTransaction<A>(
   const active: Active = { stopped: false, kill: Promise.resolve() };
   let abort = () => {};
 
+  const commit = commitWindow(async () => {
+    await reserved?.close({ timeout: 0 });
+  });
+
   const expired = () => deadline.signal.aborted;
 
   try {
@@ -302,22 +323,33 @@ export async function executeTransaction<A>(
         : [{ id: 0 }];
 
     const id = Schema.decodeUnknownSync(Schema.Int)(ids[0]?.id);
-    abort = () => cancellation(active, connection, lease.control, input.source.engine, id);
+    abort = () => {
+      if (!commit.sent) cancellation(active, connection, lease.control, input.source.engine, id);
+    };
+
     combined.addEventListener("abort", abort, { once: true });
 
     if (combined.aborted) abort();
 
-    const result = await connection.begin(options, async (tx) => {
+    const transaction = connection.begin(options, async (tx) => {
       try {
         const result = await work(tx, active);
 
         if (active.stopped) throw invalid("The query was cancelled.", "Run it again when needed.");
+
+        if (options === "") {
+          // The callback returning sends COMMIT; cancellation must stop before returning to the driver.
+          clearTimeout(timer);
+          commit.start();
+        }
 
         return { value: result };
       } finally {
         await active.kill;
       }
     });
+
+    const result = await commit.wait(transaction);
 
     if (active.stopped)
       throw new DataError({
@@ -328,6 +360,8 @@ export async function executeTransaction<A>(
 
     return result.value;
   } catch (error) {
+    if (commit.sent) throw queryError(error, knownCredentials(input.connection));
+
     if (signal.aborted)
       throw new DataError({
         code: "E-DATA-CANCELLED",

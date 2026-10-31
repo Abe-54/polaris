@@ -118,6 +118,44 @@ export function topLevel(tokens: ReturnType<typeof sqlTokens>) {
   });
 }
 
+export function refuseCommaJoins(sql: string, mode: LexicalMode) {
+  let depth = 0;
+  const from = new Set<number>();
+
+  for (const token of sqlTokens(sql, mode)) {
+    if (token.word === "(") depth++;
+
+    if (token.word === ")") {
+      from.delete(depth);
+      depth--;
+    }
+
+    if (token.word === "FROM") from.add(depth);
+
+    if (
+      [
+        "WHERE",
+        "GROUP",
+        "HAVING",
+        "ORDER",
+        "UNION",
+        "EXCEPT",
+        "INTERSECT",
+        "SET",
+        "VALUES",
+        ";",
+      ].includes(token.word)
+    )
+      from.delete(depth);
+
+    if (token.word === "," && from.has(depth))
+      throw writeError(
+        "Comma-separated joins cannot be previewed.",
+        "Use a single explicit table or the app's own code."
+      );
+  }
+}
+
 export function writePlan(sql: string, source: DataSource, mode: LexicalMode) {
   const checked = guardSql(sql, mode, true);
   const tokens = sqlTokens(checked.sql, mode);
@@ -143,12 +181,37 @@ export function writePlan(sql: string, source: DataSource, mode: LexicalMode) {
       "Use a single INSERT, UPDATE or DELETE, or your project's migration tool."
     );
   const target = explicitTarget(tokens, checked.keyword, source.engine);
+  refuseCommaJoins(checked.sql, mode);
 
   if (tokens.some((t) => ["RETURNING", "JOIN", "USING", "LIMIT", "ORDER", "WITH"].includes(t.word)))
     throw writeError(
       "This write form cannot be safely previewed.",
       "Rewrite joins, aliases, CTEs, RETURNING and ORDER/LIMIT with a read-only subquery, or use your project's migration tool."
     );
+
+  if (
+    tokens.some(
+      (t, i) => t.word === "ON" && ["CONFLICT", "DUPLICATE"].includes(tokens[i + 1]?.word ?? "")
+    )
+  )
+    throw writeError(
+      "Upserts cannot be previewed.",
+      "Use separate INSERT or UPDATE statements; upserts are tracked in ENG-669."
+    );
+
+  if (source.engine === "mysql")
+    for (let i = 0; i < tokens.length; i++) {
+      if (
+        ["FROM", "INTO", "UPDATE", "JOIN"].includes(tokens[i]!.word) &&
+        tokens[i + 2]?.word === "." &&
+        name(tokens[i + 1]?.raw, source.engine) !== source.database
+      )
+        throw writeError(
+          "The statement names a different database.",
+          "Select that database as a data source and request approval there."
+        );
+    }
+
   const top = topLevel(tokens);
 
   if (checked.keyword === "UPDATE" && top.some((token) => token.word === "FROM"))

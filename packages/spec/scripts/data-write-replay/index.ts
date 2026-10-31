@@ -3,35 +3,9 @@ import { copyFile, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
-export const DataWriteTraceStep = Schema.Struct({
-  action: Schema.Literals(["preview", "approve", "deny", "execute", "retry", "end"]),
-  affected: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  value: Schema.Int,
-  phase: Schema.Literals(["pending", "approved", "denied", "completed", "failed"]),
-});
+import { DataWriteTrace, observationActions } from "./observations.ts";
 
-export const DataWriteTrace = Schema.Struct({
-  version: Schema.Literal(1),
-  source: Schema.Literal("data-queries-write"),
-  steps: Schema.Array(DataWriteTraceStep).check(Schema.isMaxLength(1000)),
-});
-
-function actions(step: typeof DataWriteTraceStep.Type) {
-  switch (step.action) {
-    case "preview":
-      return `.then(dryRun(${step.affected})).then(request)`;
-    case "approve":
-      return ".then(allow)";
-    case "deny":
-      return ".then(deny)";
-    case "execute":
-      return `.then(claim).then(execute(${step.affected}))`;
-    case "end":
-      return ".then(endTurn)";
-    case "retry":
-      return ".then(retry)";
-  }
-}
+export { DataWriteTrace, DataWriteTraceStep } from "./observations.ts";
 
 export async function replayDataWrite(input: typeof DataWriteTrace.Type) {
   const trace = Schema.decodeUnknownSync(DataWriteTrace)(input);
@@ -45,8 +19,8 @@ export async function replayDataWrite(input: typeof DataWriteTrace.Type) {
 
     const steps = trace.steps
       .map(
-        (step) =>
-          `${actions(step)}.expect(write.value == ${step.value} and write.phase == "${step.phase}" and safety)`
+        (step, i) =>
+          `${observationActions(step, trace.steps[i - 1])}.expect(write.value == ${step.value} and write.external == ${step.external} and write.phase == "${step.status}" and safety)`
       )
       .join("\n");
 

@@ -14,6 +14,7 @@ import {
   DataWriteTrace,
   replayDataWrite,
 } from "../../../../packages/spec/scripts/data-write-replay/index.ts";
+import { observeWrite } from "./writeTrace.testing.ts";
 import { decideSession } from "../engine/session.ts";
 
 for (const engine of ["postgres", "mysql"] as const) {
@@ -72,7 +73,7 @@ for (const engine of ["postgres", "mysql"] as const) {
       );
 
       const trace: typeof DataWriteTrace.Type = {
-        version: 1,
+        version: 2,
         source: "data-queries-write",
         steps: [],
       };
@@ -112,12 +113,7 @@ for (const engine of ["postgres", "mysql"] as const) {
               if (!Predicate.isTagged(required, "DataApprovalRequired"))
                 throw new Error(required.message);
               expect(yield* value()).toBe(0);
-              steps.push({
-                action: "preview",
-                affected: 1,
-                value: yield* value(),
-                phase: "pending",
-              });
+              steps.push(yield* observeWrite(input, { affected: 1, value: yield* value() }));
               const again = yield* Effect.flip(queries.execute(input));
               expect(again).toEqual(required);
 
@@ -142,19 +138,11 @@ for (const engine of ["postgres", "mysql"] as const) {
               expect(yield* approvals.awaitApproval(required.approvalId, 100)).toEqual({
                 status: "approved",
               });
-              steps.push({
-                action: "approve",
-                affected: 1,
-                value: yield* value(),
-                phase: "approved",
-              });
+              steps.push(yield* observeWrite(input, { affected: 1, value: yield* value() }));
               const first = yield* queries.execute(input);
-              steps.push({
-                action: "execute",
-                affected: first.affected,
-                value: yield* value(),
-                phase: "completed",
-              });
+              steps.push(
+                yield* observeWrite(input, { affected: first.affected, value: yield* value() })
+              );
 
               const [retry, retry2] = yield* Effect.all(
                 [queries.execute(input), queries.execute(input)],
@@ -162,12 +150,9 @@ for (const engine of ["postgres", "mysql"] as const) {
               );
 
               expect(retry2).toEqual(first);
-              steps.push({
-                action: "retry",
-                affected: retry.affected,
-                value: yield* value(),
-                phase: "completed",
-              });
+              steps.push(
+                yield* observeWrite(input, { affected: retry.affected, value: yield* value() })
+              );
               expect(first).toEqual(retry);
               expect(
                 yield* Effect.flip(queries.execute({ ...input, reason: "Changed intent" }))

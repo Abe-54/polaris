@@ -5,6 +5,8 @@ import {
   ApprovalDecision,
   ApprovalRequest,
   DataSourceApproval,
+  DataError,
+  DataWriteResult,
   EventEnvelope,
   RequestId,
   Sequence,
@@ -48,7 +50,17 @@ const request = new ApprovalRequest({
   },
 });
 
-type Step = "request" | "allow" | "deny" | "claim" | "end" | "restart" | "wait";
+type Step =
+  | "request"
+  | "allow"
+  | "deny"
+  | "claim"
+  | "end"
+  | "restart"
+  | "wait"
+  | "complete"
+  | "unknown"
+  | "fail";
 
 interface Reference {
   phase: string;
@@ -56,24 +68,38 @@ interface Reference {
   claims: number;
 }
 
+const terminal = { complete: "completed", unknown: "unknown", fail: "failed" };
+
+const advance = (
+  before: Reference,
+  allowed: boolean,
+  phase: string,
+  claims = before.claims
+): Reference => (allowed ? { ...before, phase, claims } : before);
+
 function reference(before: Reference, step: Step): Reference {
   switch (step) {
     case "request":
-      return before.phase === "new" && before.active ? { ...before, phase: "pending" } : before;
+      return advance(before, before.phase === "new" && before.active, "pending");
     case "allow":
-      return before.phase === "pending" ? { ...before, phase: "approved" } : before;
+      return advance(before, before.phase === "pending", "approved");
     case "deny":
-      return before.phase === "pending" ? { ...before, phase: "denied" } : before;
+      return advance(before, before.phase === "pending", "denied");
     case "end":
-      return {
-        ...before,
-        active: false,
-        phase: before.phase === "pending" ? "denied" : before.phase,
-      };
+      return { ...advance(before, before.phase === "pending", "denied"), active: false };
+    case "complete":
+    case "unknown":
+    case "fail":
+      return advance(before, before.phase === "started", terminal[step]);
+    case "restart":
+      return advance(before, before.phase === "started", "unknown");
     case "claim":
-      return before.active && before.phase === "approved"
-        ? { ...before, phase: "started", claims: before.claims + 1 }
-        : before;
+      return advance(
+        before,
+        before.active && before.phase === "approved",
+        "started",
+        before.claims + 1
+      );
     default:
       return before;
   }
@@ -137,6 +163,23 @@ class Actual {
         break;
       case "claim":
         return workingTurn(this.record) !== undefined && this.repo.writes.claim(request.id);
+      case "complete":
+        this.repo.writes.finish(
+          request.id,
+          new DataWriteResult({ queryId: "q", affected: 2, elapsedMs: 1 })
+        );
+        break;
+      case "unknown":
+      case "fail":
+        this.repo.writes.fail(
+          request.id,
+          new DataError({
+            code: step === "unknown" ? "E-DATA-OUTCOME-UNKNOWN" : "E-DATA-SQL",
+            message: "Test outcome",
+            fix: "Inspect rows",
+          })
+        );
+        break;
       case "wait":
         break;
     }
@@ -149,7 +192,18 @@ test("write decisions, retries and withdrawal agree with an independent one-shot
   fc.assert(
     fc.property(
       fc.array(
-        fc.constantFrom<Step>("request", "allow", "deny", "claim", "end", "restart", "wait"),
+        fc.constantFrom<Step>(
+          "request",
+          "allow",
+          "deny",
+          "claim",
+          "end",
+          "restart",
+          "wait",
+          "complete",
+          "unknown",
+          "fail"
+        ),
         { minLength: 1, maxLength: 60 }
       ),
       (steps) => {
