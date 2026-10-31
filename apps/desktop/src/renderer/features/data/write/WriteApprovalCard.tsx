@@ -19,7 +19,7 @@ import {
   Textarea,
 } from "@polaris/ui";
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useShownApproval } from "../../../shell/approvalInView.ts";
+import { revealApproval, useShownApproval, writeInView } from "../../../shell/approvalInView.ts";
 import type { WriteOutcome } from "../../../store/sessionModel.ts";
 import { decide } from "../../needs-you/respond.ts";
 import { kickerText, LABEL_TONES } from "../model/source.ts";
@@ -100,7 +100,8 @@ export const SettledWrite = ({
         </span>
       ) : null}
     </span>
-    {settled.kind === "failed" || settled.kind === "unknown" ? (
+    {(settled.kind === "failed" || settled.kind === "unknown" || settled.kind === "expired") &&
+    settled.detail !== undefined ? (
       <span
         className={cn(
           "text-caption pl-[22px] [overflow-wrap:anywhere]",
@@ -229,16 +230,25 @@ export const WriteApprovalCard = ({
   const shown = useShownApproval(request.id);
   const ended = outcome ?? sent;
 
-  // Opened with nothing else focused, the card takes focus so ⌘↵ runs it.
-  const shownRef = useCallback(
+  const card = useRef<HTMLElement | null>(null);
+
+  const cardRef = useCallback(
     (element: HTMLElement | null) => {
-      if (element !== null && (document.activeElement ?? document.body) === document.body)
-        element.focus({ preventScroll: true });
+      card.current = element;
 
       return shown(element);
     },
     [shown]
   );
+
+  // Opened in view with nothing else focused, the card takes focus so ⌘↵ runs it.
+  useEffect(() => {
+    const element = card.current;
+
+    if (element === null || (document.activeElement ?? document.body) !== document.body) return;
+
+    if (writeInView(element)) element.focus({ preventScroll: true });
+  }, []);
 
   if (ended !== null)
     return <SettledWrite settled={settledLine(write, ended, entry)} onOpenTable={onOpenTable} />;
@@ -253,10 +263,13 @@ export const WriteApprovalCard = ({
 
   const run = () => answer(runDecision(), { kind: "allowed" });
 
-  const keys = (event: KeyboardEvent) => {
+  // ⌘↵ runs only what is in front of the user, as Approve from elsewhere does.
+  const keys = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || deny.open) return;
     event.preventDefault();
-    run();
+
+    if (writeInView(event.currentTarget)) run();
+    else revealApproval(request.id);
   };
 
   const bar = topBarColour(source);
@@ -267,7 +280,7 @@ export const WriteApprovalCard = ({
 
   return (
     <section
-      ref={shownRef}
+      ref={cardRef}
       tabIndex={-1}
       data-testid="data-write"
       data-surface="raised"

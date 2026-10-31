@@ -199,16 +199,34 @@ describe("an answered card collapses to one line", () => {
     });
   });
 
-  test("denied says the reason the agent got; expired says why there was no answer", () => {
+  test("denied says the reason the agent got", () => {
     expect(settledLine(write, { kind: "denied", reason: "wrong currency" }, undefined).line).toBe(
       "Denied: wrong currency"
     );
-    expect(settledLine(write, { kind: "expired", by: "harness" }, undefined).line).toBe(
-      "Expired: the turn ended before you answered"
-    );
-    expect(settledLine(write, { kind: "expired", by: "daemon" }, undefined).line).toBe(
-      "Expired: the daemon restarted before you answered"
-    );
+  });
+
+  test.each([
+    ["harness", "The Turn ended", "Expired: the turn ended before you answered"],
+    ["daemon", "The Daemon restarted", "Expired: the daemon restarted before you answered"],
+    ["daemon", "Interrupted", "Expired: the turn was stopped before you answered"],
+    ["daemon", "The session was archived", "Expired: the session was archived"],
+    ["harness", null, "Expired: the turn ended before you answered"],
+    ["daemon", null, "Expired: the daemon restarted before you answered"],
+  ] as const)("expired by the %s with %p says why there was no answer (F6)", (by, reason, line) => {
+    expect(settledLine(write, { kind: "expired", by, reason }, undefined)).toEqual({
+      kind: "expired",
+      line,
+    });
+  });
+
+  test("a write the agent's error withdrew keeps the error under the line (F6)", () => {
+    expect(
+      settledLine(write, { kind: "expired", by: "harness", reason: "rate limited" }, undefined)
+    ).toEqual({
+      kind: "expired",
+      line: "Expired: the agent stopped with an error",
+      detail: "rate limited",
+    });
   });
 });
 

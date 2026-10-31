@@ -65,7 +65,13 @@ const ENDED: ReadonlyArray<
     null,
     "denied",
   ],
-  [fixtureWrite({ queryId: "q-expired" }), { kind: "expired", by: "harness" }, null, "expired"],
+  [fixtureWrite({ queryId: "q-unknown", affected: 1 }), { kind: "allowed" }, "unknown", "unknown"],
+  [
+    fixtureWrite({ queryId: "q-expired" }),
+    { kind: "expired", by: "daemon", reason: "Interrupted" },
+    null,
+    "expired",
+  ],
 ];
 
 const settledWrites: ReadonlyArray<SettledWrite> = ENDED.map(([write, outcome, , n]) => ({

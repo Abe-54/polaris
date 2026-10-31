@@ -199,12 +199,38 @@ export type Settled =
   | { readonly kind: "cancelled"; readonly line: string }
   | { readonly kind: "unknown"; readonly line: string; readonly detail: string }
   | { readonly kind: "denied"; readonly line: string }
-  | { readonly kind: "expired"; readonly line: string };
+  | { readonly kind: "expired"; readonly line: string; readonly detail?: string };
 
 const EXPIRED = {
   harness: "Expired: the turn ended before you answered",
   daemon: "Expired: the daemon restarted before you answered",
 } as const;
+
+/** The Daemon's withdrawal reasons (engine/session.ts), in the card's words. */
+const EXPIRED_BY_REASON = new Map([
+  ["The Turn ended", EXPIRED.harness],
+  ["The Daemon restarted", EXPIRED.daemon],
+  ["The Daemon is upgrading", "Expired: the daemon upgraded before you answered"],
+  ["Interrupted", "Expired: the turn was stopped before you answered"],
+  ["The session was archived", "Expired: the session was archived"],
+  ["The terminal UI closed", "Expired: the terminal closed before you answered"],
+  ["The Harness exited", "Expired: the agent exited before you answered"],
+]);
+
+/** Why a write expired unanswered: a known reason in product words; else the agent's error. */
+export const expiredLine = (
+  by: "harness" | "daemon",
+  reason: string | null | undefined
+): Extract<Settled, { kind: "expired" }> => {
+  const text = reason?.trim() ?? "";
+
+  if (text === "") return { kind: "expired", line: EXPIRED[by] };
+  const known = EXPIRED_BY_REASON.get(text);
+
+  return known === undefined
+    ? { kind: "expired", line: "Expired: the agent stopped with an error", detail: text }
+    : { kind: "expired", line: known };
+};
 
 /** The failure's own words, else a fix the user can act on. */
 const failureDetail = (entry: QueryLogEntry) =>
@@ -260,7 +286,7 @@ export const settledLine = (
         line: outcome.reason === null ? "Denied" : `Denied: ${outcome.reason}`,
       };
     case "expired":
-      return { kind: "expired", line: EXPIRED[outcome.by] };
+      return expiredLine(outcome.by, outcome.reason);
   }
 };
 

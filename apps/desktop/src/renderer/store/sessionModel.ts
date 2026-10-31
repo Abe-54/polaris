@@ -69,7 +69,12 @@ export interface SettledSecret {
 export type WriteOutcome =
   | { readonly kind: "allowed" }
   | { readonly kind: "denied"; readonly reason: string | null }
-  | { readonly kind: "expired"; readonly by: "harness" | "daemon" };
+  | {
+      readonly kind: "expired";
+      readonly by: "harness" | "daemon";
+      /** The Daemon's withdrawal reason ("Interrupted", "The Turn ended"); null in older logs. */
+      readonly reason: string | null;
+    };
 
 export interface SettledWrite {
   readonly request: ApprovalRequest;
@@ -152,9 +157,11 @@ const writeOutcomeOf = (decision: ApprovalDecision, resolvedBy: string): WriteOu
   return Match.value(decision).pipe(
     Match.tag("Allow", (): WriteOutcome => ({ kind: "allowed" })),
     Match.tag("Deny", ({ reason }): WriteOutcome =>
-      legacy === undefined ? { kind: "denied", reason } : { kind: "expired", by: legacy }
+      legacy === undefined
+        ? { kind: "denied", reason }
+        : { kind: "expired", by: legacy, reason: null }
     ),
-    Match.orElse((): WriteOutcome => ({ kind: "expired", by: "daemon" }))
+    Match.orElse((): WriteOutcome => ({ kind: "expired", by: "daemon", reason: null }))
   );
 };
 
@@ -433,9 +440,12 @@ const fold = (event: DomainEvent): Fold =>
             write: writeOutcomeOf(decision, resolvedBy),
           }),
       ApprovalWithdrawn:
-        ({ requestId, withdrawnBy }): Fold =>
+        ({ requestId, withdrawnBy, reason }): Fold =>
         (m) =>
-          settle(m, requestId, { secret: "ended", write: { kind: "expired", by: withdrawnBy } }),
+          settle(m, requestId, {
+            secret: "ended",
+            write: { kind: "expired", by: withdrawnBy, reason },
+          }),
     })
   );
 

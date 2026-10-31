@@ -1,6 +1,6 @@
 import "../../../test/dom.testing.ts";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { ApprovalRequest } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { Decisions } from "../../../commands.ts";
@@ -62,14 +62,6 @@ test("Run sends one Allow, never remembered, and the card collapses to what ran"
 
   await waitFor(() => expect(decisions()).toEqual([Decisions.Allow({ remember: false })]));
   expect(screen.getByTestId("data-write-settled").textContent).toBe("Allowed 214-row update");
-});
-
-test("⌘↵ in the card runs it", async () => {
-  render(card(fixtureWriteApproval()));
-
-  fireEvent.keyDown(screen.getByTestId("data-write-run"), { key: "Enter", metaKey: true });
-
-  await waitFor(() => expect(decisions()).toEqual([Decisions.Allow({ remember: false })]));
 });
 
 test("Deny needs a reason, and the reason is what the agent gets", async () => {
@@ -247,21 +239,70 @@ test("Approve from elsewhere runs a write whose SQL, dry run and Run row are all
   expect(decisions()).toEqual([Decisions.Allow({ remember: false })]);
 });
 
-test("a card that opens with nothing focused takes focus, so ⌘↵ runs it; it never steals focus", () => {
-  const { unmount } = render(card(fixtureWriteApproval()));
+test("⌘↵ in a card in view runs it", async () => {
+  const request = fixtureWriteApproval();
 
-  expect(document.activeElement).toBe(screen.getByTestId("data-write"));
-  unmount();
+  inConversation(request);
+  layOut({ statement: [40, 260], run: [500, 548] });
+  fireEvent.keyDown(screen.getByTestId("data-write-run"), { key: "Enter", metaKey: true });
 
-  render(
-    <>
-      <input aria-label="composer" />
-      {null}
-    </>
+  await waitFor(() => expect(decisions()).toEqual([Decisions.Allow({ remember: false })]));
+});
+
+test("⌘↵ in a card scrolled out of view runs nothing and brings its top into view", async () => {
+  const request = fixtureWriteApproval();
+  let scrolled = false;
+
+  inConversation(request);
+  layOut({ statement: [-400, -100], run: [540, 590] });
+  screen.getByTestId("data-write").scrollIntoView = () => {
+    scrolled = true;
+  };
+
+  fireEvent.keyDown(screen.getByTestId("data-write-run"), { key: "Enter", metaKey: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(decisions()).toEqual([]);
+  expect(scrolled).toBe(true);
+});
+
+/** Every element laid out at `top`, 100 px tall, in the window: before mount, as focus reads it. */
+const placeAll = (top: number) => {
+  const spy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    () => new DOMRect(0, top, 600, 100)
   );
-  act(() => screen.getByLabelText("composer").focus());
-  render(card(fixtureWriteApproval()));
-  expect(document.activeElement).toBe(screen.getByLabelText("composer"));
+
+  return () => spy.mockRestore();
+};
+
+test.each([
+  [10, true],
+  [-500, false],
+])(
+  "a card that opens at %p px with nothing focused takes focus only when in view: %p",
+  (top, focused) => {
+    const restore = placeAll(top);
+
+    try {
+      render(card(fixtureWriteApproval()));
+      expect(document.activeElement === screen.getByTestId("data-write")).toBe(focused);
+    } finally {
+      restore();
+    }
+  }
+);
+
+test("a card that opens never steals focus from where the user is typing", () => {
+  const restore = placeAll(10);
+
+  try {
+    render(<input aria-label="composer" />);
+    act(() => screen.getByLabelText("composer").focus());
+    render(card(fixtureWriteApproval()));
+    expect(document.activeElement).toBe(screen.getByLabelText("composer"));
+  } finally {
+    restore();
+  }
 });
 
 test("a write the Daemon couldn't preview looks riskier: its own kicker, the warning, no primary Run (F4)", () => {
