@@ -1,0 +1,7 @@
+# Polaris injects only OTEL_EXPORTER_OTLP_ENDPOINT (runtime.ts:109). skill = SKILL.md:47-55; desktop = setup.ts:83-84 FIXED_EXPORTER_CHANGE
+skill: exported to http://127.0.0.1:55349/otlp/tok_review/v1/traces
+desktop: exported to http://127.0.0.1:55350/otlp/vendor/v1/traces
+polaris stand-in received:
+2026-10-31T22:29:20.079Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=243
+vendor stand-in received:
+2026-10-31T22:29:20.516Z POST /otlp/vendor/v1/traces type=application/x-protobuf enc= bytes=245
