@@ -1,0 +1,168 @@
+/** RW probe P: writes policy through the production DataQueries, Session machine and approval projection. */
+import { expect, test } from "bun:test";
+import { ApprovalDecision, DataSource, Unsupported } from "@polaris/protocol";
+import { Effect, Layer, Predicate, Redacted, Stream } from "effect";
+import { DataQueries, DataSources } from "./index.ts";
+import { DataApprovals } from "./approvals.ts";
+import { QueryLog } from "./queryLog.ts";
+import { approvalLayer, seedDataSession, started } from "./approvals.testing.ts";
+import { parseConnection } from "./connection.ts";
+import { EventStore } from "../store/EventStore.ts";
+import { decideSession } from "../engine/session.ts";
+import { prefix, setup, URLS } from "./rw.probe.setup.ts";
+
+const log = (...a: unknown[]) => console.log("[RW-P]", ...a);
+
+for (const mode of ["P1", "P2"] as const)
+  test(`postgres: writes policy ${mode}`, async () => {
+    const url = URLS.postgres!;
+    const { connection } = parseConnection({
+      name: "rw",
+      url: Redacted.make(url),
+      foundIn: { kind: "manual" },
+    })!;
+    const { admin } = setup("postgres");
+    const t = prefix();
+    const make = (locality: "local" | "remote", database = connection.database) =>
+      new DataSource({
+        id: "rw",
+        name: "rw",
+        engine: "postgres",
+        host: connection.hostname,
+        port: connection.port,
+        database,
+        user: connection.username,
+        locality,
+        foundIn: { kind: "manual" },
+        access: "read",
+        writes: "ask",
+        label: { text: "", colour: "none" },
+      });
+    let current = make("local");
+    const unavailable = () => Effect.fail(new Unsupported({ capability: "test" }));
+    const sources = Layer.succeed(
+      DataSources,
+      DataSources.of({
+        list: () => Effect.succeed([current]),
+        refresh: () => Effect.succeed([current]),
+        watch: () => Stream.succeed([current]),
+        resolve: () =>
+          Effect.succeed({ source: current, connection, matchUrl: Redacted.make(url) }),
+        save: unavailable,
+        remove: unavailable,
+        label: unavailable,
+        access: unavailable,
+      })
+    );
+    const layer = DataQueries.layer.pipe(
+      Layer.provideMerge(Layer.merge(sources, QueryLog.layer)),
+      Layer.provideMerge(approvalLayer())
+    );
+    try {
+      await admin.unsafe(`CREATE TABLE ${t} (id serial PRIMARY KEY, v int NOT NULL)`);
+      await admin.unsafe(`INSERT INTO ${t}(v) VALUES (0)`);
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* seedDataSession;
+            const queries = yield* DataQueries;
+            const approvals = yield* DataApprovals;
+            const store = yield* EventStore;
+            const turn = started.turns[0]!.id;
+            const input = (sql: string, reason: string) => ({
+              sessionId: started.session.id,
+              turn,
+              tool: "execute" as const,
+              source: "rw",
+              sql,
+              reason,
+            });
+            const show = (e: unknown) =>
+              Predicate.isTagged(e, "DataApprovalRequired")
+                ? "DataApprovalRequired (write card opened)"
+                : `${(e as { code: string }).code} ${(e as { message: string }).message}`;
+            const allow = (requestId: string, remember: boolean) =>
+              store.commit({
+                commandId: null,
+                decide: (model) =>
+                  Effect.succeed(
+                    decideSession(model.sessions.get(started.session.id), {
+                      type: "approval.respond",
+                      requestId: requestId as never,
+                      decision: ApprovalDecision.cases.Allow.make({ remember }),
+                      resolvedBy: "test",
+                    }).events
+                  ),
+              });
+
+            if (mode === "P1") {
+              // P1: the user sets this Local source to "writes off" (Desktop: "Agents read · writes off" / "Read only").
+              yield* approvals.change(current, "off");
+              log("P1 Local policy read:", JSON.stringify(yield* approvals.read(current)));
+              const seq0 = (yield* Effect.promise(() =>
+                admin.unsafe(`SELECT last_value FROM ${t}_id_seq`)
+              ))[0].last_value;
+              const p1 = yield* Effect.flip(
+                queries.execute(input(`INSERT INTO ${t}(v) VALUES (1)`, "writes off"))
+              );
+              const seq1 = (yield* Effect.promise(() =>
+                admin.unsafe(`SELECT last_value FROM ${t}_id_seq`)
+              ))[0].last_value;
+              log("P1 execute on Local with writes off:", show(p1), "| sequence", seq0, "->", seq1);
+              log(
+                "P1 Query Log states:",
+                (yield* queries.pageLog({ sessionId: started.session.id })).entries
+                  .map((e) => e.state)
+                  .join(",")
+              );
+
+              return;
+            }
+            // P2: the user only revokes the Local source (stores writes from the Local default), then the same target turns Remote.
+            yield* approvals.change(current, undefined, true);
+            current = make("remote");
+            log(
+              "P2 Remote policy before read approval:",
+              JSON.stringify(yield* approvals.read(current))
+            );
+            const read = yield* Effect.flip(approvals.require(started.session.id, current, turn));
+            if (!Predicate.isTagged(read, "DataApprovalRequired")) throw new Error(String(read));
+            yield* allow(read.approvalId, true);
+            log(
+              "P2 Remote policy after a remembered READ approval:",
+              JSON.stringify(yield* approvals.read(current))
+            );
+            const p2 = yield* Effect.flip(
+              queries.execute(input(`UPDATE ${t} SET v = 2 WHERE id = 1`, "inherited"))
+            );
+            log("P2 Remote execute, writes never allowed on Remote:", show(p2));
+
+            // Control: a Remote target that was never Local, with the same remembered read approval flow.
+            current = make("remote", `${connection.database}`);
+            const other = new DataSource({
+              ...current,
+              port: connection.port,
+              database: "postgres",
+            });
+            current = other;
+            const read2 = yield* Effect.flip(approvals.require(started.session.id, current, turn));
+            if (Predicate.isTagged(read2, "DataApprovalRequired"))
+              yield* allow(read2.approvalId, true);
+            log("P2 control Remote policy:", JSON.stringify(yield* approvals.read(current)));
+            log(
+              "P2 control execute:",
+              show(
+                yield* Effect.flip(
+                  queries.execute(input(`UPDATE ${t} SET v = 3 WHERE id = 1`, "control"))
+                )
+              )
+            );
+          })
+        ).pipe(Effect.provide(layer))
+      );
+      expect(true).toBe(true);
+    } finally {
+      await admin.unsafe(`DROP TABLE IF EXISTS ${t}`);
+      await admin.close();
+    }
+  }, 60000);

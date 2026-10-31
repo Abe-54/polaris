@@ -1,0 +1,51 @@
+/** RW probe R: dry run vs real run divergence, and a committed write reported as cancelled. */
+import { expect, test } from "bun:test";
+import { prefix, setup } from "./rw.probe.setup.ts";
+
+const log = (...a: unknown[]) => console.log("[RW-R]", ...a);
+
+for (const engine of ["postgres", "mysql"] as const)
+  test(`${engine}: same count, different rows passes the drift check`, async () => {
+    const { admin, write } = setup(engine);
+    const t = prefix();
+    try {
+      await admin.unsafe(`CREATE TABLE ${t} (id INT PRIMARY KEY, status VARCHAR(10) NOT NULL)`);
+      await admin.unsafe(`INSERT INTO ${t} VALUES (1,'stale'),(2,'stale'),(3,'live')`);
+      const sql = `DELETE FROM ${t} WHERE status = 'stale'`;
+      const preview = await write(sql);
+      log(engine, "R1 approved preview: affected", preview.affected, "rows", JSON.stringify(preview.before));
+      // Between the card and the approval: the app touches rows.
+      await admin.unsafe(`UPDATE ${t} SET status = 'live' WHERE id = 1`);
+      await admin.unsafe(`UPDATE ${t} SET status = 'stale' WHERE id = 3`);
+      const real = await write(sql, { dryRun: false, expected: preview.affected });
+      log(engine, "R1 real run: affected", real.affected, "rows actually deleted", JSON.stringify(real.before));
+      log(engine, "R1 remaining:", JSON.stringify(await admin.unsafe(`SELECT id, status FROM ${t} ORDER BY id`)));
+      expect(real.affected).toBe(preview.affected);
+    } finally {
+      await admin.unsafe(`DROP TABLE IF EXISTS ${t}`);
+      await admin.close();
+    }
+  }, 60000);
+
+test("postgres: an abort that lands while COMMIT runs reports E-DATA-CANCELLED for a committed write", async () => {
+  const { admin, write, outcome } = setup("postgres");
+  const t = prefix();
+  try {
+    await admin.unsafe(`CREATE TABLE ${t} (id int PRIMARY KEY, v int NOT NULL)`);
+    await admin.unsafe(`INSERT INTO ${t} VALUES (1, 0)`);
+    // A deferred constraint trigger runs inside COMMIT; it absorbs the cancel request like any slow commit would outlast it.
+    await admin.unsafe(`CREATE FUNCTION ${t}_slow() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN BEGIN PERFORM pg_sleep(1.5); EXCEPTION WHEN query_canceled THEN NULL; END; RETURN NULL; END $$`);
+    await admin.unsafe(`CREATE CONSTRAINT TRIGGER ${t}_c AFTER UPDATE ON ${t} DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ${t}_slow()`);
+    const abort = new AbortController();
+    const started = performance.now();
+    setTimeout(() => abort.abort(), 500);
+    const result = await outcome(write(`UPDATE ${t} SET v = 42 WHERE id = 1`, { dryRun: false, expected: 1, signal: abort.signal }));
+    log("R2 outcome after", Math.round(performance.now() - started), "ms:", result);
+    log("R2 row after:", JSON.stringify(await admin.unsafe(`SELECT v FROM ${t}`)));
+  } finally {
+    await admin.unsafe(`DROP TABLE IF EXISTS ${t}`);
+    await admin.unsafe(`DROP FUNCTION IF EXISTS ${t}_slow()`);
+    await admin.close();
+  }
+}, 60000);
