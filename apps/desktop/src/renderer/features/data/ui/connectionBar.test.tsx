@@ -22,8 +22,11 @@ useDataLayout();
 
 const fields = Schema.encodeSync(DataSource);
 
-/** As IPC delivers them: every snapshot decodes fresh objects, equal in value to the last. */
-const fresh = (sources: ReadonlyArray<DataSource>) => sources.map((s) => new DataSource(fields(s)));
+const decode = Schema.decodeUnknownSync(DataSource);
+
+/** As IPC delivers them: every snapshot decodes fresh objects, labels too, equal in value. */
+const fresh = (sources: ReadonlyArray<DataSource>) =>
+  sources.map((s) => decode(JSON.parse(JSON.stringify(fields(s)))));
 
 /** Labels posted through the card, as `[source, label]`. */
 const posting = (api: DataApi) => {
@@ -136,10 +139,10 @@ describe("the connection bar", () => {
 
   test("a snapshot landing while the user types leaves the field alone", async () => {
     const api = fixtureDataApi({ relist: () => fresh(FIXTURE_SOURCES) });
-    let snapshots = 0;
+    let opened = false;
     let relisted: () => void = () => undefined;
 
-    const second = new Promise<void>((resolve) => {
+    const landed = new Promise<void>((resolve) => {
       relisted = resolve;
     });
 
@@ -151,17 +154,18 @@ describe("the connection bar", () => {
           next: (sources) => {
             on.next(sources);
 
-            if (++snapshots === 2) relisted();
+            if (opened) relisted();
           },
         }),
     });
     await waitFor(() => bar());
     // Opening the card re-lists: its snapshot lands after the user has started typing.
     later(() => click(bar()));
+    opened = true;
     const field = inputOf(page().getByTestId("data-label-field"));
 
     type(field, "pro");
-    await waitFor(() => second);
+    await waitFor(() => landed);
 
     expect(field.value).toBe("pro");
   });
