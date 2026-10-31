@@ -63,7 +63,8 @@ export const queries = Effect.gen(function* () {
   const query = Effect.fnUntraced(function* (
     input: Parameters<DataQueries["Service"]["query"]>[0],
     limit: number = input.limit ?? 200,
-    agentCap = true
+    agentCap = true,
+    authorized = false
   ) {
     const ctx = yield* context(input.sessionId, input);
     const started = performance.now();
@@ -95,8 +96,10 @@ export const queries = Effect.gen(function* () {
         });
       yield* log.put(entry);
 
-      if (input.tool !== undefined)
-        yield* approvals.require(input.sessionId, resolved.source, input.turn);
+      if (input.tool !== undefined && !authorized)
+        yield* approvals.require(input.sessionId, resolved.source, input.turn, input.approvalId);
+
+      if (sources.inspect) yield* sources.inspect(resolved.source, resolved.connection);
 
       yield* log.touch(entry);
 
@@ -182,7 +185,9 @@ export const queries = Effect.gen(function* () {
     const resolved = yield* resolveReadSource(sources, input);
 
     if (input.tool !== undefined)
-      yield* approvals.require(input.sessionId, resolved.source, input.turn);
+      yield* approvals.require(input.sessionId, resolved.source, input.turn, input.approvalId);
+
+    if (sources.inspect) yield* sources.inspect(resolved.source, resolved.connection);
     yield* log.touch(
       new QueryLogEntry({
         id: `describe:${crypto.randomUUID()}`,
@@ -200,7 +205,13 @@ export const queries = Effect.gen(function* () {
     if (result instanceof SchemaTree) return result;
 
     if ((input.sample ?? 0) === 0) return result.detail;
-    const sample = yield* query({ ...input, sql: result.sampleSql, limit: input.sample ?? 0 });
+
+    const sample = yield* query(
+      { ...input, sql: result.sampleSql, limit: input.sample ?? 0 },
+      input.sample ?? 0,
+      true,
+      true
+    );
 
     return new TableDetail({
       ...Schema.decodeUnknownSync(Schema.Struct(TableDetail.fields))(result.detail),

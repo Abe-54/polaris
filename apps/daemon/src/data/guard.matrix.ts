@@ -21,7 +21,7 @@ export const mysqlMatrix: ReadonlyArray<readonly [string, string, boolean]> = [
   ["EXECUTE s", "", false],
   ["/*!50000 DROP TABLE guard_target */", "", false],
   ["SELECT * FROM probe FOR UPDATE", "", true],
-  ["SELECT * FROM probe LOCK IN SHARE MODE", "", true],
+  ["SELECT * FROM probe LOCK IN SHARE MODE", "", false],
   ["SELECT spike_write()", "", true],
   ["SELECT spike_ddl()", "", true],
   ["WITH c AS (SELECT 1) UPDATE probe SET v=99", "", true],
@@ -41,7 +41,7 @@ export const mysqlMatrix: ReadonlyArray<readonly [string, string, boolean]> = [
   ["SELECT 'ordinary;string' AS value; /* trailing comment */", "", true],
   ["SELECT 1 AS `semi;name`;", "", true],
   ["SELECT 1 # ; DROP TABLE guard_target", "", true],
-  ["SELECT * FROM probe FOR SHARE", "", true],
+  ["SELECT * FROM probe FOR SHARE", "", false],
   [
     "SELECT '\\' INTO OUTFILE '/var/lib/mysql-files/spike-mode.csv' -- '",
     "NO_BACKSLASH_ESCAPES",

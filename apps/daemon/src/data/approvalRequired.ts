@@ -14,6 +14,7 @@ export type DataApprovalOutcome =
 
 export interface DataAgentContext {
   readonly turn?: TurnId;
+  readonly approvalId?: RequestId;
   readonly tool?: "describe" | "query";
 }
 

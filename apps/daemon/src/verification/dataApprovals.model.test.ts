@@ -2,6 +2,10 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
+  AgentSession,
+  SessionId,
+  Turn,
+  TurnId,
   ApprovalDecision,
   ApprovalRequest,
   DataSource,
@@ -15,9 +19,10 @@ import fc from "fast-check";
 import { decideSession } from "../engine/session.ts";
 import { started } from "../data/approvals.testing.ts";
 import { ApprovalStore, targetOf } from "../data/approvalStore.ts";
+import { workingTurn } from "../store/model.ts";
 import { pbtRuns, pbtSeed } from "./pbt.ts";
 
-const source = (index: number) =>
+const source = (index: number, local = false) =>
   new DataSource({
     id: `source-${index}`,
     name: `source-${index}`,
@@ -25,8 +30,8 @@ const source = (index: number) =>
     host: index === 2 ? "server2" : "server1",
     port: 5432,
     database: index === 1 ? "db2" : "db1",
-    user: "reader",
-    locality: "remote",
+    user: index === 3 ? "admin" : "reader",
+    locality: local ? "local" : "remote",
     foundIn: { kind: "manual" },
     access: "needs-approval",
     writes: "off",
@@ -41,17 +46,49 @@ test("approval target, server, denial and revocation sequences agree with an ind
     fc.property(
       fc.array(
         fc.record({
-          target: fc.integer({ min: 0, max: 2 }),
-          action: fc.constantFrom("allow", "server", "deny", "revoke", "restart"),
+          target: fc.integer({ min: 0, max: 3 }),
+          session: fc.integer({ min: 0, max: 1 }),
+          action: fc.constantFrom(
+            "allow",
+            "server",
+            "once",
+            "deny",
+            "revoke",
+            "restart",
+            "local",
+            "remote",
+            "writes",
+            "end"
+          ),
         }),
         { minLength: 1, maxLength: 50 }
       ),
       (steps) => {
         const db = new Database(":memory:");
         let repository = new ApprovalStore(db);
-        let record = started;
+
+        const records = [
+          started,
+          {
+            ...started,
+            session: new AgentSession({
+              ...Schema.decodeUnknownSync(Schema.Struct(AgentSession.fields))(started.session),
+              id: SessionId.make("model-session-2"),
+            }),
+            turns: [
+              new Turn({
+                ...Schema.decodeUnknownSync(Schema.Struct(Turn.fields))(started.turns[0]!),
+                id: TurnId.make("model-turn-2"),
+                sessionId: SessionId.make("model-session-2"),
+              }),
+            ],
+          },
+        ];
+
         let sequence = 0;
-        const exact = new Map<number, "approved" | "denied" | "needs-approval">();
+        const exact = new Map<number, "approved" | "denied">();
+        const local = new Set<number>();
+        const writes = new Map<number, "ask" | "off">();
         const servers = new Set<string>();
 
         const apply = (events: ReadonlyArray<DomainEvent>) => {
@@ -70,22 +107,35 @@ test("approval target, server, denial and revocation sequences agree with an ind
 
         try {
           for (const step of steps) {
-            const target = source(step.target);
+            const target = source(step.target, local.has(step.target));
+            const key = `${target.host}/${target.user}`;
 
-            if (step.action === "revoke") {
-              repository.change(target, undefined, true);
-              exact.set(step.target, "needs-approval");
-            } else if (step.action === "restart") {
-              // Recreate the repository over the same SQLite contents; decisions must survive.
-              repository = new ApprovalStore(db);
-            } else {
-              record = decideApproval(record, sequence, target, step.action, apply);
+            const handled = applyPolicy(
+              step.action,
+              step.target,
+              target,
+              key,
+              repository,
+              exact,
+              servers,
+              local,
+              writes
+            );
 
-              if (step.action === "server") servers.add(target.host);
-              exact.set(step.target, step.action === "deny" ? "denied" : "approved");
+            if (step.action === "restart") repository = new ApprovalStore(db);
+            else if (!handled) {
+              records[step.session] = decideApproval(
+                records[step.session]!,
+                sequence,
+                target,
+                step.action,
+                apply,
+                repository
+              );
+              updateModelDecision(step.action, step.target, key, exact, servers, writes);
             }
 
-            checkPolicy(repository, exact, servers);
+            checkPolicy(repository, exact, servers, local, writes);
           }
         } finally {
           db.close();
@@ -101,14 +151,16 @@ function decideApproval(
   sequence: number,
   target: DataSource,
   action: string,
-  apply: (events: ReadonlyArray<DomainEvent>) => void
+  apply: (events: ReadonlyArray<DomainEvent>) => void,
+  repository: ApprovalStore
 ) {
   const id = RequestId.make(`data-source-${sequence}`);
+  const turn = workingTurn(record)!;
 
   const request = new ApprovalRequest({
     id,
     sessionId: record.session.id,
-    turnId: record.turns[0]!.id,
+    turnId: turn.id,
     kind: "tool",
     dataSource: targetOf(target),
     title: "Read",
@@ -133,11 +185,40 @@ function decideApproval(
   expect(duplicate.events).toHaveLength(0);
   expect(record.session.state).toBe("needs-you");
 
+  repository.join(id, record.session.id, turn.id);
+
+  if (action === "end") {
+    const ended = decideSession(record, {
+      type: "harness.turnEnded",
+      turnId: turn.id,
+      status: "completed",
+      error: null,
+      checkpoint: null,
+      at,
+    });
+
+    apply(ended.events);
+    expect(repository.outcome(id)?.status).toBe("denied");
+    expect(ended.next.context.record!.pending.size).toBe(0);
+
+    const next = new Turn({
+      ...Schema.decodeUnknownSync(Schema.Struct(Turn.fields))(turn),
+      id: TurnId.make(`model-turn-${sequence}`),
+      index: record.turns.length + 1,
+    });
+
+    const continued = decideSession(ended.next.context.record!, { type: "turn.send", turn: next });
+    apply(continued.events);
+    expect(workingTurn(continued.next.context.record!)?.id).toBe(next.id);
+
+    return continued.next.context.record!;
+  }
+
   const decision =
     action === "deny"
       ? ApprovalDecision.cases.Deny.make({ reason: "No" })
       : ApprovalDecision.cases.Allow.make({
-          remember: true,
+          remember: action !== "once",
           dataScope: action === "server" ? "server" : "target",
         });
 
@@ -153,18 +234,86 @@ function decideApproval(
   expect(record.session.state).toBe("working");
   expect(record.pending.size).toBe(0);
 
+  if (action === "once") {
+    expect(repository.consume(id, record.session.id, turn.id, target)).toBe(true);
+    expect(repository.consume(id, record.session.id, turn.id, target)).toBe(false);
+  }
+
   return record;
 }
 
 function checkPolicy(
   repository: ApprovalStore,
-  exact: Map<number, "approved" | "denied" | "needs-approval">,
-  servers: Set<string>
+  exact: Map<number, "approved" | "denied">,
+  servers: Set<string>,
+  local: Set<number>,
+  writes: Map<number, "ask" | "off">
 ) {
-  for (let target = 0; target < 3; target++) {
+  for (let target = 0; target < 4; target++) {
     const expected =
-      exact.get(target) ?? (servers.has(source(target).host) ? "approved" : "needs-approval");
+      exact.get(target) ??
+      (servers.has(`${source(target).host}/${source(target).user}`)
+        ? "approved"
+        : local.has(target)
+          ? "read"
+          : "needs-approval");
 
-    expect(repository.read(source(target)).access).toBe(expected);
+    expect(repository.read(source(target, local.has(target)))).toEqual({
+      access: expected,
+      writes: writes.get(target) ?? (local.has(target) ? "ask" : "off"),
+    });
+  }
+}
+
+function updateModelDecision(
+  action: string,
+  target: number,
+  key: string,
+  exact: Map<number, "approved" | "denied">,
+  servers: Set<string>,
+  writes: Map<number, "ask" | "off">
+) {
+  if (action === "server") servers.add(key);
+  else if (action === "allow" || action === "deny") {
+    exact.set(target, action === "deny" ? "denied" : "approved");
+
+    if (!writes.has(target)) writes.set(target, "off");
+  }
+}
+
+function applyPolicy(
+  action: string,
+  index: number,
+  target: DataSource,
+  key: string,
+  repository: ApprovalStore,
+  exact: Map<number, "approved" | "denied">,
+  servers: Set<string>,
+  local: Set<number>,
+  writes: Map<number, "ask" | "off">
+) {
+  switch (action) {
+    case "revoke":
+      repository.change(target, undefined, true);
+      exact.delete(index);
+      servers.delete(key);
+      writes.set(index, writes.get(index) ?? (local.has(index) ? "ask" : "off"));
+
+      return true;
+    case "local":
+      local.add(index);
+
+      return true;
+    case "remote":
+      local.delete(index);
+
+      return true;
+    case "writes":
+      repository.change(target, "off");
+      writes.set(index, "off");
+
+      return true;
+    default:
+      return false;
   }
 }
