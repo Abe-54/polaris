@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { TracesRpcs } from "@polaris/protocol";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
 import { TracesRpcsLive } from "./rpcs.ts";
 import { TraceRuntime } from "./runtime.ts";
@@ -92,4 +92,32 @@ test("traces.get exposes batched medians and actual sample counts from earlier c
     expect(detail.usual?.[SPAN_ID]?.samples).toBe(6);
     expect(detail.spans.find((s) => s.id === "2222222222222222")?.durationMs).toBe(112);
     expect(historyCalls).toBe(2);
+  }));
+
+test("each watch sends its endpoint on the first page only", () =>
+  withTraceFixture(async (f) => {
+    const layer = TracesRpcsLive.pipe(
+      Layer.provide(
+        Layer.mergeAll(Layer.succeed(TraceRuntime, f.runtime), Layer.succeed(TraceStore, f.store))
+      )
+    );
+
+    const pages = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* RpcTest.makeClient(TracesRpcs);
+
+          return yield* client["traces.watch"]({ sessionId: TEST_SESSION, filter: {} }).pipe(
+            Stream.tap((page) => (page.endpoint === null ? Effect.void : f.store.notify)),
+            Stream.take(2),
+            Stream.runCollect,
+            Effect.timeout("3 seconds")
+          );
+        }).pipe(Effect.provide(layer))
+      )
+    );
+
+    expect(pages[0]?.endpoint).toBe(f.endpoint);
+    expect(pages[1]?.endpoint).toBeNull();
+    expect(JSON.stringify(pages[1])).not.toContain(f.endpoint!.split("/").at(-1)!);
   }));

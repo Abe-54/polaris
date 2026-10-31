@@ -195,7 +195,7 @@ export const TracesSnapshot = Schema.Struct({
   availability: TraceAvailability,
   /** True when the user's exporter endpoint prevented injection for this Agent Session. */
   userExported: Schema.Boolean,
-  /** This session's token-bearing base URL, or null when unavailable/user-exported. Never persist it. */
+  /** Token-bearing URL on the first watch page only; null on later pages or when disabled. Never persist it. */
   endpoint: Schema.NullOr(Schema.String),
   traces: Schema.Array(TraceSummary),
   /** Number matching the filters before the limit. */

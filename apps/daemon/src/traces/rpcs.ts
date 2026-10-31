@@ -13,14 +13,18 @@ export const TracesRpcsLive = TracesRpcs.toLayer(
         Stream.unwrap(
           Effect.gen(function* () {
             const checkout = yield* runtime.checkout(sessionId);
+            let first = true;
 
-            return store
-              .watch(checkout, filter)
-              .pipe(
-                Stream.mapEffect((page) =>
-                  Effect.map(runtime.setup(sessionId), (setup) => ({ ...setup, ...page }))
-                )
-              );
+            return store.watch(checkout, filter).pipe(
+              Stream.mapEffect((page) =>
+                Effect.gen(function* () {
+                  const setup = yield* runtime.setup(sessionId, first);
+                  first = false;
+
+                  return { ...setup, ...page };
+                })
+              )
+            );
           })
         ),
       "traces.get": ({ sessionId, traceId }) =>

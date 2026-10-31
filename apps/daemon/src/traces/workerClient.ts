@@ -55,7 +55,8 @@ export class TraceWorkerClient {
   constructor(
     readonly filename: string,
     readonly options: TraceWorkerOptions,
-    readonly changed: () => void
+    readonly changed: () => void,
+    readonly retired: () => void = () => {}
   ) {}
 
   get running(): boolean {
@@ -131,6 +132,7 @@ export class TraceWorkerClient {
     if (this.worker !== null) return;
 
     this.worker = new Worker(workerUrl());
+    this.worker.addEventListener("close", () => this.retired(), { once: true });
     this.worker.onmessage = (event: MessageEvent<unknown>) => {
       try {
         this.receive(decodeReply(event.data));
@@ -173,12 +175,19 @@ export class TraceWorkerClient {
 
     try {
       await this.closing;
-    } finally {
-      worker.terminate();
-      this.worker = null;
+    } catch (error) {
       this.closing = null;
-      clearTimeout(this.timer);
+
+      if (!this.disposed) {
+        this.armQuiet();
+        throw error;
+      }
     }
+
+    worker.terminate();
+    this.worker = null;
+    this.closing = null;
+    clearTimeout(this.timer);
   }
 
   async close(): Promise<void> {

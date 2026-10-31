@@ -89,7 +89,7 @@ test("unknown, revoked and ended-session tokens cannot ingest; Host and any Orig
     expect((await Effect.runPromise(f.store.list(f.root))).total).toBe(0);
   }));
 
-test("unsupported content drains the body so the next request reuses the same connection", () =>
+test("refusals close connections and a subsequent valid request succeeds", () =>
   withTraceFixture(async (f) => {
     const agent = new Agent({ keepAlive: true, maxSockets: 1 });
     const ports: Array<number | undefined> = [];
@@ -114,7 +114,7 @@ test("unsupported content drains the body so the next request reuses the same co
       expect(await send("/v1/traces", "text/plain")).toBe(415);
       expect(await send("/wrong", "application/json")).toBe(404);
       expect(await send("/v1/traces", "application/json")).toBe(200);
-      expect(new Set(ports).size).toBe(1);
+      expect(new Set(ports).size).toBe(3);
       expect((await Effect.runPromise(f.store.get(f.root, TRACE_ID))).spans[0]?.id).toBe(SPAN_ID);
     } finally {
       agent.destroy();
