@@ -37,8 +37,10 @@ never sees a URL or a password, and the database itself enforces read-only.**
   takes a single statement whose first keyword is SELECT, WITH, TABLE, VALUES, SHOW, DESCRIBE or
   EXPLAIN, and refuses `INTO OUTFILE`/`DUMPFILE`. This allowlist is a second guard, not the
   first; a SELECT-only database user per Data Source is the recommended hardening (later).
-- **Local and Remote.** A Local Data Source (loopback, a Unix socket, a compose service on the
-  Host) is readable by agents without asking. A Remote one needs a Data Source Approval: per
+- **Local and Remote.** A Local Data Source is readable by agents without asking. Loopback and
+  Unix sockets require a known database-server listener owner; a Docker/OrbStack proxy also requires
+  a running compose database published from this real checkout. Resolve-time owner probes fail
+  closed, so tunnels and unknown owners are Remote. A Remote one needs a Data Source Approval: per
   Host, for its exact server, database and user (or the whole server); a target that changes needs
   a new one.
 - **Writes.** `execute` always asks the user. Before asking, the Daemon runs the statement in a

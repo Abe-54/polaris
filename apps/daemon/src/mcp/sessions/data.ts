@@ -2,7 +2,7 @@
 import { NotFound, type SessionId } from "@polaris/protocol";
 import { Effect } from "effect";
 import type { DataQueries, DataSources } from "../../data/index.ts";
-import { knownFromUrl } from "../../data/knownCredentials.ts";
+import { knownFromConnection } from "../../data/knownCredentials.ts";
 import type { EventStore } from "../../store/EventStore.ts";
 import { workingTurn } from "../../store/model.ts";
 
@@ -52,7 +52,7 @@ export const sessionDataTools = (
         if (name !== undefined && source.name !== name && source.id !== name) continue;
 
         const resolved = yield* sources.resolve({ sessionId, source: source.name });
-        known.push(...knownFromUrl(resolved.url));
+        known.push(...knownFromConnection(resolved.connection, resolved.matchUrl));
       }
 
       return known;

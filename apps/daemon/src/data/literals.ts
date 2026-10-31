@@ -1,11 +1,9 @@
 export const unquote = (value: string) => {
   const trimmed = value.trim();
 
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  )
-    return trimmed.slice(1, -1);
+  const quoted = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*(?:#.*)?$/.exec(trimmed)?.[1];
+
+  if (quoted) return quoted.slice(1, -1);
 
   return trimmed.replace(/\s+#.*$/, "").trim();
 };
@@ -62,4 +60,39 @@ export const blocks = (text: string): string[] => {
   }
 
   return result;
+};
+
+/** Resume after a block, including an unterminated one, so malformed input is scanned once. */
+export const namedBlocks = (text: string, pattern: RegExp) => {
+  const result: { name: string; body: string }[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text))) {
+    const start = pattern.lastIndex;
+    const end = blockEnd(text, start);
+    pattern.lastIndex = end;
+
+    if (end <= text.length && match[1])
+      result.push({ name: match[1], body: text.slice(start, end - 1) });
+  }
+
+  return result;
+};
+
+const blockEnd = (text: string, start: number) => {
+  let depth = 1;
+  let quote = "";
+
+  for (let end = start; end < text.length; end++) {
+    const char = text[end];
+
+    if (quote) {
+      if (char === "\\") end++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) return end + 1;
+  }
+
+  return text.length + 1;
 };

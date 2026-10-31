@@ -1,8 +1,9 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { targetFingerprint } from "./connection.ts";
 import { DataSource, DataSourceLabel, DataError } from "@polaris/protocol";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 const Manual = Schema.Struct({
   id: DataSource.fields.id,
@@ -18,7 +19,9 @@ export type ManualSource = typeof Manual.Type;
 
 const decodeManual = Schema.decodeUnknownSync(Schema.fromJsonString(Manual));
 
-const decodeLabel = Schema.decodeUnknownSync(Schema.fromJsonString(DataSourceLabel));
+const Label = Schema.Struct({ fingerprint: Schema.String, label: DataSourceLabel });
+
+const decodeLabel = Schema.decodeUnknownOption(Schema.fromJsonString(Label));
 
 const Rows = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ value: Schema.String })));
 
@@ -73,7 +76,7 @@ export const sourceStorage = (db: Database) => ({
         db.query("INSERT OR REPLACE INTO data_source_labels VALUES (?, ?, ?)").run(
           checkout,
           source.id,
-          JSON.stringify(label)
+          JSON.stringify({ fingerprint: targetFingerprint(source), label })
         );
 
         if (previousId !== source.id) {
@@ -95,21 +98,35 @@ export const sourceStorage = (db: Database) => ({
         db.query("DELETE FROM data_source_labels WHERE checkout = ? AND id = ?").run(checkout, id);
       })()
     ),
-  label: (checkout: string, id: string) =>
+  label: (checkout: string, source: DataSource) =>
     storageCall(() => {
       const row = Row(
         db
           .query("SELECT value FROM data_source_labels WHERE checkout = ? AND id = ?")
-          .get(checkout, id)
+          .get(checkout, source.id)
       );
 
-      return row ? decodeLabel(row.value) : undefined;
+      const stored = row ? Option.getOrUndefined(decodeLabel(row.value)) : undefined;
+
+      if (stored?.fingerprint === targetFingerprint(source)) return stored.label;
+
+      if (row)
+        db.query("DELETE FROM data_source_labels WHERE checkout = ? AND id = ?").run(
+          checkout,
+          source.id
+        );
+
+      return undefined;
     }),
-  setLabel: (checkout: string, id: string, label: DataSourceLabel) =>
+  setLabel: (checkout: string, source: DataSource, label: DataSourceLabel) =>
     storageCall(
       () =>
         void db
           .query("INSERT OR REPLACE INTO data_source_labels VALUES (?, ?, ?)")
-          .run(checkout, id, JSON.stringify(label))
+          .run(
+            checkout,
+            source.id,
+            JSON.stringify({ fingerprint: targetFingerprint(source), label })
+          )
     ),
 });

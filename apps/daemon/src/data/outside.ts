@@ -219,7 +219,7 @@ export const recordOutsideCommand = Effect.fnUntraced(function* (
   for (const source of yield* sources.list({ sessionId: event.sessionId })) {
     const resolved = yield* sources.resolve({ sessionId: event.sessionId, source: source.name });
 
-    if (!outsideMatches(command, source, resolved.url)) continue;
+    if (!outsideMatches(command, source, resolved.matchUrl)) continue;
     yield* queries.recordOutside({
       sessionId: event.sessionId,
       turn: event.turnId,

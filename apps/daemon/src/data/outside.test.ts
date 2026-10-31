@@ -83,7 +83,7 @@ test("completed command records authenticated session, Turn, source and id witho
         resolve: () =>
           Effect.succeed({
             source,
-            url,
+            matchUrl: url,
             connection: {
               hostname: "localhost",
               port: 5432,
