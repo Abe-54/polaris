@@ -7,9 +7,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron } from "playwright-core";
 import { startDaemon } from "./daemon.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./electron.ts";
+import { scriptedElectron as electron, APP_DIR, electronBinary, sizeWindow } from "./electron.ts";
 import { initRepo } from "./sessionFlow.ts";
 
 export const freshStartFlow = async (options: {

@@ -153,7 +153,8 @@ export class LocalHost extends Context.Service<LocalHost, LocalHostApi>()(
     options: NativeOptions,
     arch: string = process.arch
   ) =>
-    platform === "win32" && arch !== "x64"
+    (options.env.POLARIS_DESKTOP_SCRIPTED === "1" && !options.env.POLARIS_DESKTOP_LOCAL_SOCKET) ||
+    (platform === "win32" && arch !== "x64")
       ? LocalHost.unsupported(platform)
       : LocalHost.native({ ...options, platform });
 

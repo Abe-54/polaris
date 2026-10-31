@@ -31,7 +31,9 @@ function Get-PlainTaskFacts {
 $tasksBefore = Get-PolarisTasks
 $plainBefore = Get-PlainTaskFacts
 $checkFailed = $null
+$previousScriptedInstall = $env:POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL
 try {
+  $env:POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL = '1'
   & node (Join-Path $PSScriptRoot 'windowsConnect.ts') $Application $throwaway $TimeoutSeconds
   if ($LASTEXITCODE -ne 0) { throw "The app did not connect to This PC: $LASTEXITCODE" }
 
@@ -47,6 +49,7 @@ try {
     Write-Output "--- $($_.FullName)"; Get-Content $_.FullName -Tail 40
   }
 } finally {
+  $env:POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL = $previousScriptedInstall
   $previousHome = $env:POLARIS_HOME
   $env:POLARIS_HOME = $polarisHome
   try {

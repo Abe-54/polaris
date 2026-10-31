@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { isPipePath, localDaemonFailure } from "@polaris/client";
 import { childProcesses, type Spawned, stopChild } from "@polaris/client/process";
 import { localEndpoint } from "@polaris/protocol/endpoint";
+import { assertScriptedDaemon, scriptedInstallHome } from "./scripted.ts";
 
 export interface LocalDaemon {
   readonly socketPath: string;
@@ -147,15 +148,19 @@ export const awaitInstalledDaemon = async (
 export const resolveLocalDaemon = async (options: LocalDaemonOptions): Promise<LocalDaemon> => {
   const { env } = options;
   const explicit = env.POLARIS_DESKTOP_LOCAL_SOCKET;
+  const home = env.POLARIS_DESKTOP_LOCAL_HOME || null;
+
+  const installedHome =
+    env.POLARIS_DESKTOP_SCRIPTED === "1" ? scriptedInstallHome(home, env) : home;
+
+  if (env.POLARIS_DESKTOP_SCRIPTED === "1") {
+    if (explicit === undefined || explicit === "")
+      throw new Error("scripted launches have no automatic local Daemon");
+    assertScriptedDaemon(explicit, installedHome);
+  }
 
   if (explicit !== undefined && explicit !== "") {
-    const home = env.POLARIS_DESKTOP_LOCAL_HOME;
-
-    return external(
-      explicit,
-      env.POLARIS_DESKTOP_BENCH_HARNESS === "1",
-      home === undefined || home === "" ? null : home
-    );
+    return external(explicit, env.POLARIS_DESKTOP_BENCH_HARNESS === "1", installedHome);
   }
 
   const system = systemSocket();
