@@ -195,8 +195,26 @@ const TaskTitle = ({ row }: { readonly row: TaskRow }) => (
       </span>
     )}
     <span className="truncate">{row.task.title}</span>
+    <Also deps={row.also} />
   </span>
 );
+
+/** "← M, X": its deps other than the row it hangs under, each id in its state's tone. */
+const Also = ({ deps }: { readonly deps: TaskRow["also"] }) =>
+  deps.length === 0 ? null : (
+    <span
+      className="text-caption text-text-faint shrink-0 whitespace-nowrap"
+      aria-label={`also after ${deps.map((d) => d.id).join(", ")}`}
+    >
+      {"← "}
+      {deps.map((dep, n) => (
+        <Fragment key={dep.id}>
+          {n === 0 ? null : ", "}
+          <span className={cn("text-code-inline font-mono", ID_TONE[dep.tone])}>{dep.id}</span>
+        </Fragment>
+      ))}
+    </span>
+  );
 
 /** "blocks F2": a row whose Task a blocked Attempt waits on. */
 const Blocks = ({ ids }: { readonly ids: ReadonlyArray<string> }) =>

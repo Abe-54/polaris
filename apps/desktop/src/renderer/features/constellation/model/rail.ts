@@ -7,7 +7,8 @@ import type { TaskId } from "@polaris/protocol";
 import { areaOverlaps } from "./areas.ts";
 import { idRanges, span } from "./copy.ts";
 import type { Facts, SubagentFact } from "./facts.ts";
-import type { Bucket, TaskGlyphKind } from "./look.ts";
+import { arrange, flatten, type Placed } from "./forest.ts";
+import { type Bucket, type TaskGlyphKind, type Tone, toneOf } from "./look.ts";
 import { type TaskContext, type TaskRow, taskRow, TRUNK, type TreeLane } from "./task.ts";
 import { childrenOf, isContainer, rootGroup } from "./tree.ts";
 import type {
@@ -334,6 +335,8 @@ interface Emit {
   readonly options: RailOptions;
   readonly large: boolean;
   readonly filtering: boolean;
+  /** A Task's tone, for the "← X" ids. */
+  readonly tone: (id: TaskId) => Tone;
 }
 
 const shownOf = (node: Node, emit: Emit) =>
@@ -351,13 +354,30 @@ const lay = (entries: ReadonlyArray<Entry>, depth: number, through: ReadonlyArra
 const defaultOpen = (tally: Tally, large: boolean) =>
   !large || tally["needs-you"] > 0 || tally.blocked > 0;
 
-/** A leaf; one whose children are all canceled keeps them under it. */
+/** Its own deps but the one it hangs under; a Gate's show as its input dots instead. */
+const alsoOf = (placed: Placed<Node>, emit: Emit) => {
+  const { task } = placed.item.row;
+
+  if (task.kind === "gate") return [];
+
+  return task.deps
+    .filter((dep) => dep !== placed.host)
+    .map((id) => ({ id: `${id}`, tone: emit.tone(id) }));
+};
+
+/** A leaf, with any canceled children and then the siblings that depend on it under it. */
 const leafEntry =
-  (node: Node, emit: Emit): Entry =>
+  (placed: Placed<Node>, emit: Emit): Entry =>
   (lane) => {
-    const kids = childEntries(node.children, parentFold(node.row.task.id), emit);
+    const node = placed.item;
+
+    const kids = [
+      ...childEntries(node.children, parentFold(node.row.task.id), emit),
+      ...placedEntries(placed.under, `after\u0000${node.row.task.id}`, emit),
+    ];
+
     const tree = { ...lane, down: kids.length > 0 };
-    const row: TaskRow = { ...node.row, nested: lane.depth > 0, tree };
+    const row: TaskRow = { ...node.row, nested: lane.depth > 0, tree, also: alsoOf(placed, emit) };
 
     return [
       ...(emit.large ? [row] : withSubagents(row, emit.facts)),
@@ -390,25 +410,51 @@ const parentEntry =
     return [row, ...lay(children, lane.depth + 1, under(lane))];
   };
 
-/** A container's children, with large Constellations' waiting leaves folded into one line. */
+const entryOf = (placed: Placed<Node>, emit: Emit): Entry =>
+  placed.item.container ? parentEntry(placed.item, emit) : leafEntry(placed, emit);
+
+const flat = (node: Node): Placed<Node> => ({ item: node, host: null, under: [] });
+
+/** Siblings hang under the sibling they depend on, except while filtering, which lists matches. */
+const forest = (nodes: ReadonlyArray<Node>, filtering: boolean) =>
+  filtering
+    ? nodes.map(flat)
+    : arrange(nodes, (n) => ({
+        id: n.row.task.id,
+        deps: n.row.task.deps,
+        nests: n.row.task.kind !== "gate",
+        hosts: !n.container && n.row.task.kind !== "gate",
+      }));
+
+const allWaiting = (p: Placed<Node>) =>
+  flatten(p).every((n) => !n.container && n.row.look.bucket === "waiting");
+
+/** A container's children, with large Constellations' waiting subtrees folded into one line. */
 const childEntries = (
   nodes: ReadonlyArray<Node>,
   fold: string,
   emit: Emit
 ): ReadonlyArray<Entry> => {
+  const shown = nodes.filter((n) => !emit.filtering || shownOf(n, emit));
+
+  return placedEntries(forest(shown, emit.filtering), fold, emit);
+};
+
+/** Placed siblings as entries; in a large Constellation, waiting subtrees fold into one line. */
+const placedEntries = (
+  shown: ReadonlyArray<Placed<Node>>,
+  fold: string,
+  emit: Emit
+): ReadonlyArray<Entry> => {
   const { large, filtering, options } = emit;
-  const shown = nodes.filter((n) => !filtering || shownOf(n, emit));
   const waitingKey = `${fold}\u0000waiting`;
   const foldWaiting = large && !filtering && !(options.folds.get(waitingKey) ?? false);
-
-  const waiting = foldWaiting
-    ? shown.filter((n) => !n.container && n.row.look.bucket === "waiting")
-    : [];
-
+  const waitingRoots = foldWaiting ? shown.filter(allWaiting) : [];
+  const waiting = waitingRoots.flatMap(flatten);
   const folded = waiting.length >= 2;
 
-  const entries = (folded ? shown.filter((n) => !waiting.includes(n)) : shown).map((n) =>
-    n.container ? parentEntry(n, emit) : leafEntry(n, emit)
+  const entries = (folded ? shown.filter((p) => !waitingRoots.includes(p)) : shown).map((p) =>
+    entryOf(p, emit)
   );
 
   if (!folded) return entries;
@@ -502,6 +548,7 @@ export const buildRail = (
   const large = record.constellation.tasks.length >= LARGE;
   const ctx = indexBy(record, facts, large);
   const filtering = options.filter !== "all" || options.query.trim() !== "";
+  const tone = (id: TaskId) => toneOf(ctx.projections.get(id)?.state ?? "waiting");
 
   const emit: Emit = {
     facts,
@@ -509,6 +556,7 @@ export const buildRail = (
     options: { ...options, query: options.query.trim() },
     large,
     filtering,
+    tone,
   };
 
   const { groups, trunk, loose } = gather(record, ctx, large);
