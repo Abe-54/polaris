@@ -26,6 +26,24 @@ const LABEL_WIDTH = 212;
 
 const dim = (on: boolean) => ({ opacity: on ? 1 : "var(--opacity-dimmed)" });
 
+/** Selects a service; `byPointer` when a mouse or pen pressed it, so a pan can veto it. */
+export type Select = (name: string, byPointer: boolean) => void;
+
+/** A node's button in map coordinates: its name and kicker over its art. */
+export const labelBox = (x: number, base: number) => ({
+  x: x - LABEL_WIDTH / 2,
+  y: base - LABEL_ABOVE - 4,
+  width: LABEL_WIDTH,
+  height: LABEL_ABOVE + 8,
+});
+
+const boxStyle = (box: ReturnType<typeof labelBox>) => ({
+  left: box.x,
+  top: box.y,
+  width: box.width,
+  height: box.height,
+});
+
 const Label = ({
   node,
   map,
@@ -34,6 +52,7 @@ const Label = ({
   selected,
   lit,
   onSelect,
+  onFocus,
 }: {
   readonly node: MapNode;
   readonly map: ServiceMap;
@@ -41,22 +60,19 @@ const Label = ({
   readonly base: number;
   readonly selected: boolean;
   readonly lit: boolean;
-  readonly onSelect: (name: string) => void;
+  readonly onSelect: Select;
+  readonly onFocus: (name: string) => void;
 }) => (
   <button
     type="button"
     aria-pressed={selected}
     data-testid="map-node"
     data-node={node.name}
-    onClick={() => onSelect(node.name)}
+    // A click with no count came from the keyboard or a screen reader, never a drag.
+    onClick={(event) => onSelect(node.name, event.detail > 0)}
+    onFocus={() => onFocus(node.name)}
     className="focus-visible:ring-starlight rounded-row absolute flex cursor-default flex-col items-center gap-1 pt-1 outline-none focus-visible:ring-2"
-    style={{
-      left: x - LABEL_WIDTH / 2,
-      top: base - LABEL_ABOVE - 4,
-      width: LABEL_WIDTH,
-      height: LABEL_ABOVE + 8,
-      ...dim(lit),
-    }}
+    style={{ ...boxStyle(labelBox(x, base)), ...dim(lit) }}
   >
     <span
       title={node.name}
@@ -87,13 +103,15 @@ export const MapLayer = memo(function MapLayer({
   selected,
   lit,
   onSelect,
+  onFocus,
 }: {
   readonly map: ServiceMap;
   readonly layout: MapLayout;
   readonly selected: string | null;
   /** The services Find spans, Errors only or the Services chip keep; null keeps them all. */
   readonly lit: ReadonlySet<string> | null;
-  readonly onSelect: (name: string) => void;
+  readonly onSelect: Select;
+  readonly onFocus: (name: string) => void;
 }) {
   const on = (name: string) => lit === null || lit.has(name);
 
@@ -141,6 +159,7 @@ export const MapLayer = memo(function MapLayer({
         <span
           key={`${r.edge.from}\u0000${r.edge.to}`}
           data-testid="map-edge"
+          aria-hidden
           className={cn(KICKER, "text-text-subtle absolute whitespace-nowrap")}
           style={{ left: r.label.x, top: r.label.y - 7, ...dim(on(r.edge.from) && on(r.edge.to)) }}
         >
@@ -157,6 +176,7 @@ export const MapLayer = memo(function MapLayer({
           selected={selected === p.node.name}
           lit={on(p.node.name)}
           onSelect={onSelect}
+          onFocus={onFocus}
         />
       ))}
     </>

@@ -14,8 +14,19 @@ export const shortCommand = (command: string) => {
   return [program, ...kept].map(base).join(" ");
 };
 
-export const turnWords = (caller: Caller) =>
-  caller.turn === null ? "between turns" : `turn ${caller.turn.number}`;
+/** "turn 12" for a run its Turn launched; "during turn 12" when it only ran while one was open. */
+export const turnWords = (caller: Pick<Caller, "turn" | "launched">) => {
+  if (caller.turn === null) return "between turns";
+
+  return caller.launched ? `turn ${caller.turn.number}` : `during turn ${caller.turn.number}`;
+};
+
+/** The legend's words for the caller's dotted line. */
+export const startedWords = (caller: Pick<Caller, "turn" | "launched">) => {
+  if (caller.turn === null) return "Started between turns";
+
+  return caller.launched ? "Started by the agent" : "Started during a turn";
+};
 
 export const callerWords = (caller: Caller): ReadonlyArray<string> =>
   caller.command === null ? [turnWords(caller)] : [shortCommand(caller.command), turnWords(caller)];

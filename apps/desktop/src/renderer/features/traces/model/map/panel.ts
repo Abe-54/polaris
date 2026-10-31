@@ -7,7 +7,10 @@ import type { TimedSpan } from "../waterfall/trace.ts";
 import { formatDuration } from "../format.ts";
 import type { Caller, MapEdge, MapNode, NodeKind, ServiceMap } from "./graph.ts";
 
-/** One request making this many calls to the same service is an N+1, and the panel says so. */
+/**
+ * One span, or one served request, making this many calls to the same service is an N+1, and the
+ * panel says so. A test runner's root isn't a served request, so its tests aren't counted together.
+ */
 export const N_PLUS_ONE_AT = 10;
 
 /** Slowest requests listed. */
@@ -42,7 +45,7 @@ export interface ServicePanelModel {
   readonly slowest: ReadonlyArray<TimedSpan>;
 }
 
-export const isNPlusOne = (edge: MapEdge) => edge.perRequest >= N_PLUS_ONE_AT;
+export const isNPlusOne = (edge: MapEdge) => edge.repeated >= N_PLUS_ONE_AT;
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 

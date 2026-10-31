@@ -32,15 +32,17 @@ export {
   servicePanel,
 } from "./panel.ts";
 
-export { callerWords, edgeWords, nodeWords, turnWords } from "./words.ts";
+export { callerWords, edgeWords, nodeWords, startedWords, turnWords } from "./words.ts";
 
 export {
+  type Box,
   fitView,
   MARGIN,
   MAX_ZOOM,
   MIN_ZOOM,
   OPEN_ZOOM,
   openView,
+  revealView,
   type Size,
   transformOf,
   type Viewport,

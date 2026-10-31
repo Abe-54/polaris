@@ -116,13 +116,22 @@ export const protocolOf = (attributes: TraceAttributes): string | null => {
   return isHttp(attributes) || text(attributes, "http.route") !== null ? "HTTP" : null;
 };
 
+/** Private DNS suffixes, under which a host's first label is the service's own name. */
+const PRIVATE_SUFFIXES = ["internal", "local", "localhost", "lan", "home.arpa", "svc"];
+
+const isPrivate = (rest: string) =>
+  PRIVATE_SUFFIXES.some((suffix) => rest === suffix || rest.endsWith(`.${suffix}`));
+
 /**
- * A traced service the host names: the service itself, or the first label of its host name
- * ("fx-rates.internal" is fx-rates) when exactly that service is in the trace.
+ * A traced service the host names: the service itself, or the first label of a private host
+ * name ("fx-rates.internal" is fx-rates, "api.stripe.com" is never api).
  */
 export const matchService = (name: string, services: ReadonlySet<string>): string | null => {
   if (services.has(name)) return name;
-  const label = name.split(".")[0] ?? "";
+  const dot = name.indexOf(".");
 
-  return label !== name && services.has(label) ? label : null;
+  if (dot <= 0) return null;
+  const label = name.slice(0, dot);
+
+  return services.has(label) && isPrivate(name.slice(dot + 1)) ? label : null;
 };
