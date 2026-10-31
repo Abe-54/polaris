@@ -7,6 +7,7 @@ import type { TableRef } from "../../data/model/tabs.ts";
 import { useEffect, useMemo } from "react";
 import { setTab } from "../overview/index.ts";
 import type { FileListData } from "../ui/FileList.tsx";
+import type { PrunedNote } from "./copy.ts";
 import { dataListRows } from "./model.ts";
 import { closeSchemaDiff, openSchemaDiff, setSchemaLink, useOpenSchema } from "./store.ts";
 
@@ -16,6 +17,12 @@ export interface ReviewSchema {
   readonly sources: ReadonlyArray<SchemaSourceDiff>;
   /** "start → end of turn 7", "across this session". */
   readonly scope: string;
+  /** The Turn picked; undefined across the session. */
+  readonly turn: string | undefined;
+  /** A Turn id's number as the Review shows it, for a carried baseline's "Since turn 4". */
+  readonly turnNumber: (turn: string) => number | undefined;
+  /** Said when retention dropped the history asked for (`prunedNote`). */
+  readonly pruned: PrunedNote | null;
   /** Opens a table in Data (⌘4). */
   readonly onOpenTable: (source: SchemaSourceDiff, table: TableRef) => void;
 }
@@ -34,6 +41,7 @@ export const useSchemaSection = (
 ): SchemaSection => {
   const open = useOpenSchema(subjectKey);
   const sources = schema?.sources;
+  const pruned = schema?.pruned ?? null;
   const first = sources?.[0]?.source.id ?? null;
 
   useEffect(() => {
@@ -44,17 +52,17 @@ export const useSchemaSection = (
 
   const data = useMemo<FileListData | null>(
     () =>
-      sources === undefined || sources.length === 0
+      sources === undefined || (sources.length === 0 && pruned === null)
         ? null
         : {
-            rows: dataListRows(sources),
+            rows: dataListRows(sources, pruned),
             open,
             onOpen: (sourceId) => {
               setTab(subjectKey, "changes");
               openSchemaDiff(subjectKey, sourceId);
             },
           },
-    [sources, open, subjectKey]
+    [sources, pruned, open, subjectKey]
   );
 
   return {

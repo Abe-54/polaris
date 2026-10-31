@@ -257,6 +257,9 @@ const Ready = ({
                 <SchemaDiffBody
                   source={section.shown}
                   scope={schema.scope}
+                  turn={schema.turn}
+                  turnNumber={schema.turnNumber}
+                  pruned={schema.pruned?.text ?? null}
                   onOpenTable={(table) =>
                     section.shown === null ? undefined : schema.onOpenTable(section.shown, table)
                   }

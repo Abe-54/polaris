@@ -73,7 +73,20 @@ const SCENES = [
   ["session-data-worst", "schema-diff"],
   ["session-data-pending", "schema-pending"],
   ["session-data-unavailable", "schema-diff"],
+  ["session-data-pruned", "review-data-note"],
 ] as const;
+
+/** Opens a source of `-worst` by its Data kicker's name. */
+const worstSource = async (page: Page, name: string) => {
+  const head = page.getByTestId("review-data-head").filter({ hasText: `Data · ${name}` });
+  await head.waitFor();
+  const heads = await page.getByTestId("review-data-head").allTextContents();
+  const index = heads.indexOf(`Data · ${name}`);
+
+  await page.getByTestId("review-data-schema").nth(index).click();
+  await page.getByTestId("schema-diff").waitFor();
+  await page.waitForTimeout(300);
+};
 
 const check = (ok: boolean, what: string) => {
   if (!ok) throw new Error(what);
@@ -95,6 +108,22 @@ try {
     await open(page, "session-data-diff", "review-schema-link");
     await appearance(page, theme, "balanced");
     await shoot(page, `session-data-diff-${theme}`);
+
+    // -worst's other sources: a carried baseline, a wide table with folds, real failures.
+    await open(page, "session-data-worst", "schema-diff");
+    await appearance(page, theme, "balanced");
+
+    for (const name of ["staging", "warehouse", "billing", "legacy"]) {
+      await worstSource(page, name);
+      await shoot(page, `session-data-worst-${name}-${theme}`);
+    }
+
+    await worstSource(page, "ledger");
+
+    const show = page.getByRole("button", { name: /Show definition/ });
+
+    while ((await show.count()) > 0) await show.first().click();
+    await shoot(page, `session-data-worst-ledger-${theme}`);
   }
 
   for (const density of ["calm", "compact"]) {

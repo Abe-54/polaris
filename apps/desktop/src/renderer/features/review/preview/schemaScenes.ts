@@ -1,7 +1,8 @@
 /**
  * Review's Data section on fixtures (Paper D4, ENG-645): `#review/session-data` (a Prisma
  * migration adds `currencies` and links `invoices`), `-worst` (240 tables, long names,
- * truncated, every baseline and state), `-pending`, `-unavailable` and `-unsupported`.
+ * truncated, every baseline, caveat, failure and column detail, triggers and views, wide tables),
+ * `-pending`, `-unavailable`, `-pruned` (history dropped by retention) and `-unsupported`.
  */
 import {
   type DataSchemaDiff,
@@ -9,6 +10,7 @@ import {
   type SchemaSourceDiff,
   type SchemaTableDiff,
   type SessionId,
+  TurnId,
 } from "@polaris/protocol";
 import type { HostView } from "../../../../shared/api.ts";
 import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
@@ -56,15 +58,26 @@ export const schemaHosts = (scene: string, hosts: ReadonlyArray<HostView>) =>
 
 const id = (name: string, schema = "public") => ({ schema, name });
 
-const column = (
-  name: string,
-  type: string,
-  more: Partial<{ nullable: boolean; pk: boolean; default: string; fk: string }> = {}
-) => ({
+type ColumnMore = Partial<{
+  nullable: boolean;
+  pk: boolean;
+  default: string;
+  fk: string;
+  generated: string;
+  collation: string;
+  extra: string;
+  fingerprint: string;
+}>;
+
+const column = (name: string, type: string, more: ColumnMore = {}) => ({
   name,
   type,
   nullable: more.nullable ?? false,
   default: more.default ?? null,
+  ...(more.generated === undefined ? undefined : { generated: more.generated }),
+  ...(more.collation === undefined ? undefined : { collation: more.collation }),
+  ...(more.extra === undefined ? undefined : { extra: more.extra }),
+  ...(more.fingerprint === undefined ? undefined : { fingerprint: more.fingerprint }),
   pk: more.pk ?? false,
   fk:
     more.fk === undefined
@@ -165,6 +178,79 @@ const REMOVED: SchemaTableDiff = {
   rows: UNKNOWN,
 };
 
+const TRIGGER_BEFORE =
+  "CREATE TRIGGER orders_audit AFTER UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION audit_order_change('orders', 'update')";
+
+const VIEW_AFTER = [
+  " SELECT o.id,",
+  "    o.customer_id,",
+  "    sum(l.quantity * l.unit_price_cents) AS total_cents",
+  "   FROM orders o",
+  "     JOIN order_lines l ON l.order_id = o.id",
+  "  WHERE o.status <> 'cancelled'::text",
+  "  GROUP BY o.id, o.customer_id;",
+].join("\n");
+
+/** A wide table with every column detail, a trigger, a view and a fingerprint-only change. */
+const ORDERS: SchemaTableDiff = {
+  kind: "changed",
+  before: id("orders"),
+  after: id("orders"),
+  detailsTruncated: true,
+  columns: [
+    {
+      name: "total_cents",
+      before: column("total_cents", "bigint", { generated: "subtotal_cents + tax_cents" }),
+      after: column("total_cents", "bigint", {
+        generated: "subtotal_cents + tax_cents - discount_cents",
+      }),
+    },
+    {
+      name: "reference",
+      before: column("reference", "varchar(64)", { collation: "utf8mb4_general_ci" }),
+      after: column("reference", "varchar(64)", { collation: "utf8mb4_bin" }),
+    },
+    {
+      name: "updated_at",
+      before: column("updated_at", "timestamp"),
+      after: column("updated_at", "timestamp", { extra: "on update CURRENT_TIMESTAMP" }),
+    },
+    {
+      name: "status",
+      before: column("status", "text", { default: "[redacted]", fingerprint: "a1" }),
+      after: column("status", "text", { default: "[redacted]", fingerprint: "b2" }),
+    },
+  ],
+  indexes: [],
+  constraints: [
+    {
+      name: "orders_audit",
+      before: { name: "orders_audit", kind: "trigger", definition: TRIGGER_BEFORE },
+      after: {
+        name: "orders_audit",
+        kind: "trigger",
+        definition: TRIGGER_BEFORE.replace("AFTER UPDATE", "AFTER INSERT OR UPDATE"),
+      },
+    },
+    {
+      name: "view",
+      before: null,
+      after: { name: "view", kind: "view", definition: VIEW_AFTER },
+    },
+    {
+      name: "orders_total_check",
+      before: { name: "orders_total_check", kind: "c", definition: "CHECK (total_cents > 0)" },
+      after: { name: "orders_total_check", kind: "c", definition: "CHECK (total_cents >= 0)" },
+    },
+    {
+      name: "row_security",
+      before: { name: "row_security", kind: "security", definition: "false:false" },
+      after: { name: "row_security", kind: "security", definition: "true:true" },
+    },
+  ],
+  rows: { kind: "unknown", value: null, agent: 1_204_331, user: 2 },
+};
+
 const source = (
   name: string,
   tables: ReadonlyArray<SchemaTableDiff>,
@@ -198,19 +284,42 @@ const manyTables = (): ReadonlyArray<SchemaTableDiff> =>
     return { ...REMOVED, before: id(name), rows };
   });
 
+/** Two hours before the fixtures' Turn ended: a baseline carried from turn 21. */
+const CARRIED = {
+  baseline: "first-use" as const,
+  baselineTurn: TurnId.make("t21"),
+  baselineCapturedAt: "2026-10-30T10:04:00.000Z",
+};
+
 const sourcesFor = (scene: string): ReadonlyArray<SchemaSourceDiff> => {
   if (scene === "session-data-pending")
     return [source("app", [], { status: "pending", afterAt: null })];
 
   if (scene === "session-data-unavailable")
-    return [source("app", [], { status: "unavailable", beforeAt: null })];
+    return [
+      source("app", [], { status: "unavailable", beforeAt: null, errorCode: "E-DATA-UNREACHABLE" }),
+    ];
+
+  if (scene === "session-data-pruned") return [];
 
   if (scene === "session-data-worst")
     return [
-      source(`${LONG}_replica`, manyTables(), { truncated: true, baseline: "previous-turn-end" }),
-      source("staging", [{ ...INVOICES, rows: UNKNOWN }], { baseline: "first-use" }),
+      source(`${LONG}_replica`, [ORDERS, ...manyTables()], {
+        truncated: true,
+        concurrent: true,
+        capturedLate: true,
+        baseline: "previous-turn-end",
+      }),
+      source("staging", [{ ...INVOICES, rows: UNKNOWN }], CARRIED),
+      source("ledger", [ORDERS], { baseline: "first-use", capturedLate: true }),
       source("analytics", [], { status: "pending", afterAt: null }),
-      source("warehouse", [], { status: "unavailable", afterAt: null }),
+      source("warehouse", [], {
+        status: "unavailable",
+        afterAt: null,
+        errorCode: "E-DATA-TIMEOUT",
+      }),
+      source("billing", [], { status: "unavailable", beforeAt: null, errorCode: "E-DATA-DENIED" }),
+      source("legacy", [], { status: "unavailable", errorCode: "E-DATA-SOMETHING-NEW" }),
       source("untouched", []),
     ];
 
@@ -221,7 +330,17 @@ const sourcesFor = (scene: string): ReadonlyArray<SchemaSourceDiff> => {
 };
 
 /** The stand-in bridge's `data.schemaDiff`, through the same fixture api Data's previews use. */
-export const schemaDiffAnswer = (scene: string, sessionId: SessionId) =>
+export const schemaDiffAnswer = (scene: string, sessionId: SessionId, turn?: string) =>
   fixtureDataApi({
-    schemaDiff: (): DataSchemaDiff => ({ sessionId, sources: sourcesFor(scene) }),
-  }).schemaDiff({ hostKey: "local", sessionId }, undefined);
+    schemaDiff: (turn): DataSchemaDiff => ({
+      sessionId,
+      ...(turn === "all" ? undefined : { turn: TurnId.make(turn) }),
+      ...(scene === "session-data-pruned" || scene === "session-data-worst"
+        ? { pruned: true }
+        : undefined),
+      sources: sourcesFor(scene),
+    }),
+  }).schemaDiff(
+    { hostKey: "local", sessionId },
+    turn === undefined ? undefined : TurnId.make(turn)
+  );

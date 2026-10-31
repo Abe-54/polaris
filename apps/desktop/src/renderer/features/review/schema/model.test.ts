@@ -2,16 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { type SchemaSourceDiff, type SchemaTableDiff, SessionId } from "@polaris/protocol";
 import { type FileListRow, fileListRows } from "../model/fileList.ts";
 import type { ReviewFile } from "../model/layout.ts";
-import { tableLines } from "./lines.ts";
 import {
   type DataListRow,
   dataListRows,
   isDataRow,
   isMigrationPath,
   placeData,
-  rowsFigure,
-  rowsWording,
-  rowsSplit,
   shownSources,
 } from "./model.ts";
 
@@ -41,30 +37,6 @@ const source = (
   afterAt: "2026-10-30T12:01:00.000Z",
   truncated: false,
   tables,
-});
-
-describe("rows wording", () => {
-  test.each([
-    [{ kind: "exact", value: 214 }, "214", "214 rows changed"],
-    [{ kind: "exact", value: 1 }, "1", "1 row changed"],
-    [{ kind: "exact", value: 0 }, "0", "0 rows changed"],
-    [{ kind: "estimate", value: 1200 }, "~1,200", "~1,200 rows · estimate"],
-    [{ kind: "estimate", value: -12 }, "~−12", "~−12 rows · estimate"],
-    [{ kind: "unknown", value: null }, "unknown", "Rows changed: unknown"],
-    // A Daemon that sent a value with "unknown" still never reads as a count.
-    [{ kind: "unknown", value: 0 }, "unknown", "Rows changed: unknown"],
-  ] as const)("%o reads %s / %s", (rows, figure, wording) => {
-    expect(rowsFigure(rows)).toBe(figure);
-    expect(rowsWording(rows)).toBe(wording);
-  });
-
-  test("splits agents' and the user's exact counts only when the Daemon did", () => {
-    expect(rowsSplit({ kind: "exact", value: 214, agent: 200, user: 14 })).toBe(
-      "200 by agents · 14 by you"
-    );
-    expect(rowsSplit({ kind: "exact", value: 3, agent: 3 })).toBe("3 by agents");
-    expect(rowsSplit({ kind: "exact", value: 3 })).toBeNull();
-  });
 });
 
 describe("the files list's Data section", () => {
@@ -105,6 +77,46 @@ describe("the files list's Data section", () => {
     expect(rows.flatMap((r) => (r.kind === "data-rows" ? [`${r.table} ${r.figure}`] : []))).toEqual(
       ["currencies 3", "invoices ~214"]
     );
+  });
+
+  test("a Schema diff row carries why it's unavailable and whether others' changes are in it", () => {
+    const schemaRow = (s: SchemaSourceDiff) =>
+      dataListRows([s]).find((r) => r.kind === "data-schema");
+
+    expect(
+      schemaRow(source("app", [table("t", "added", { kind: "exact", value: 1 })]))
+    ).toMatchObject({
+      concurrent: false,
+      reason: null,
+    });
+    expect(schemaRow({ ...source("app", []), concurrent: true })).toMatchObject({
+      concurrent: true,
+    });
+    expect(
+      schemaRow({
+        ...source("warehouse", [], "unavailable"),
+        afterAt: null,
+        errorCode: "E-DATA-TIMEOUT",
+      })
+    ).toMatchObject({ reason: "Reading the schema timed out at the end of the turn" });
+  });
+
+  test("pruned history closes the section with its note, under a bare kicker when alone", () => {
+    const note = {
+      text: "Schema snapshot no longer kept for this turn",
+      short: "Snapshot no longer kept",
+    };
+
+    expect(dataListRows([], note)).toEqual([
+      { kind: "data-head", key: "data", name: null },
+      { kind: "data-note", key: "data:pruned", ...note },
+    ]);
+    expect(dataListRows([source("app", [])], note).map((r) => r.kind)).toEqual([
+      "data-head",
+      "data-schema",
+      "data-note",
+    ]);
+    expect(dataListRows([], null)).toEqual([]);
   });
 
   test("names five tables' rows, then how many more", () => {
@@ -203,40 +215,6 @@ describe("where the Data section sits", () => {
       "data-schema",
       "data-rows",
       "fold:generated",
-    ]);
-  });
-});
-
-describe("a table's lines", () => {
-  test("a changed column says what changed, before → after", () => {
-    const column = (type: string, nullable: boolean) => ({
-      name: "total_cents",
-      type,
-      nullable,
-      default: null,
-      pk: false,
-      fk: null,
-    });
-
-    const lines = tableLines({
-      ...table("invoices", "changed", { kind: "unknown", value: null }),
-      columns: [
-        { name: "total_cents", before: column("integer", true), after: column("bigint", false) },
-        { name: "currency", before: null, after: column("char(3)", true) },
-      ],
-      indexes: [
-        {
-          name: "invoices_old_idx",
-          before: { name: "invoices_old_idx", columns: ["id"], unique: true, definition: "" },
-          after: null,
-        },
-      ],
-    });
-
-    expect(lines.map((l) => [l.change, l.what, l.name, l.detail])).toEqual([
-      ["changed", "column", "total_cents", "integer → bigint · nullable → not null"],
-      ["added", "column", "currency", "char(3)  nullable"],
-      ["removed", "index", "invoices_old_idx", "(id) unique"],
     ]);
   });
 });

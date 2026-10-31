@@ -4,6 +4,7 @@ import {
   type SchemaSourceDiff,
   type SchemaTableDiff,
   SessionId,
+  TurnId,
 } from "@polaris/protocol";
 import { act, cleanup, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -54,9 +55,13 @@ describe("the Schema Diff body", () => {
       })
     ).querySelector("[data-testid=schema-rows]")?.textContent;
 
-    expect(text).toContain("paymentsRows changed: unknown");
+    expect(text).toContain("paymentsRows: unknown");
     expect(text).toContain("customers~1,200 rows · estimate");
-    expect(text).toContain("invoices214 rows changed · 200 by agents · 14 by you");
+    expect(text).toContain(
+      "invoices214 rows matched by writes through Polaris · 200 by agents · 14 by you"
+    );
+    expect(text).toContain("Writes made outside Polaris aren’t counted");
+    expect(text).toContain("on MySQL, matched rows that didn’t change are included");
     expect(text).not.toMatch(/payments0/);
   });
 
@@ -67,11 +72,116 @@ describe("the Schema Diff body", () => {
       "Polaris couldn’t read this schema at the start of the turn",
     ],
     [{ truncated: true }, "Large schema: additions and removals may be incomplete"],
+    [
+      { concurrent: true },
+      "Includes changes from other sessions on this database, not only this turn’s",
+    ],
+    [
+      { capturedLate: true },
+      "Schema read after the turn started: changes made before then may be missing",
+    ],
+    [
+      { status: "unavailable" as const, afterAt: null, errorCode: "E-DATA-UNREACHABLE" },
+      "Polaris couldn’t reach the database at the end of the turn",
+    ],
     [{ baseline: "previous-turn-end" as const }, "Since the end of the previous turn"],
     [{ baseline: "first-use" as const }, "Since this source was first used in the turn"],
     [{}, "Start → end of turn 7"],
   ])("%o says %s", (more, words) => {
     expect(body(source(more)).textContent).toContain(words);
+  });
+
+  test("an unavailable diff never shows the raw error code", () => {
+    const text = body(
+      source({ status: "unavailable", afterAt: null, errorCode: "E-DATA-TIMEOUT" })
+    ).textContent;
+
+    expect(text).toContain("Reading the schema timed out at the end of the turn");
+    expect(text).not.toContain("E-DATA");
+  });
+
+  test("a carried baseline names its Turn and time, with the absolute time on hover", () => {
+    const view = render(
+      <SchemaDiffBody
+        source={source({
+          baseline: "first-use",
+          baselineTurn: TurnId.make("t4"),
+          baselineCapturedAt: "2026-10-30T12:00:00.000Z",
+        })}
+        scope="Start → end of turn 7"
+        turn={TurnId.make("t7")}
+        turnNumber={(id) => (id === "t4" ? 4 : undefined)}
+        now={Date.parse("2026-10-30T15:00:00.000Z")}
+      />
+    );
+
+    const line = view.getByTestId("schema-provenance");
+
+    expect(line.textContent).toBe("Since turn 4 · 3 hours ago");
+    expect(line.getAttribute("title")).toContain("2026");
+  });
+
+  test("a session with pruned history says so above what it still has", () => {
+    const view = render(
+      <SchemaDiffBody
+        source={source()}
+        scope="Across this session"
+        pruned="Schema snapshots of older turns are no longer kept"
+      />
+    );
+
+    expect(view.getByTestId("schema-caveats").textContent).toBe(
+      "Schema snapshots of older turns are no longer kept"
+    );
+  });
+
+  test("a wide table is marked partial and says what it leaves out", () => {
+    const view = render(
+      <SchemaDiffBody
+        source={source({
+          tables: [{ ...table("events", { kind: "exact", value: 1 }), detailsTruncated: true }],
+        })}
+        scope=""
+      />
+    );
+
+    expect(view.getByTestId("schema-partial").textContent).toBe("partial");
+    expect(view.getByTestId("schema-table").textContent).toContain(
+      "added or removed columns, indexes and constraints aren’t shown"
+    );
+  });
+
+  test("a long view definition stays folded until asked, then shows before and after", () => {
+    const before = `SELECT ${"a, ".repeat(40)}b FROM invoices`;
+    const after = `${before} WHERE paid`;
+
+    const view = render(
+      <SchemaDiffBody
+        source={source({
+          tables: [
+            {
+              ...table("open_invoices", { kind: "unknown", value: null }),
+              constraints: [
+                {
+                  name: "view",
+                  before: { name: "view", kind: "view", definition: before },
+                  after: { name: "view", kind: "view", definition: after },
+                },
+              ],
+            },
+          ],
+        })}
+        scope=""
+      />
+    );
+
+    expect(view.getByTestId("schema-line").textContent).toBe(
+      "~viewdefinition changedShow definition"
+    );
+    expect(view.queryByTestId("schema-definition")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: /Show definition/ }));
+    expect(view.getByLabelText("Before").textContent).toBe(before);
+    expect(view.getByLabelText("After").textContent).toBe(after);
   });
 
   test("Open in Data names the table by its schema and name, not one joined string", () => {
