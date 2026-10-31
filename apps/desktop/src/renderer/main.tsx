@@ -116,6 +116,9 @@ const completionCardPreview = location.hash.startsWith("#completion-card/");
 // `#edit-prediction/<scene>`: the Editor with an Edit Prediction drawn on fixtures (features/editor/prediction/preview).
 const editPredictionPreview = location.hash.startsWith("#edit-prediction/");
 
+// `#data-sidebar/<scene>`: Data's sidebar, connection bar and status bar on worst-case fixtures (features/data/preview).
+const dataSidebarPreview = location.hash.startsWith("#data-sidebar/");
+
 // `#settings/<scene>`: Settings on worst-case fixtures (features/settings/preview).
 const settingsPreview = location.hash.startsWith("#settings/");
 
@@ -195,6 +198,10 @@ if (root !== null && preview) {
 } else if (root !== null && constellationPreview) {
   void import("./features/constellation/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountConstellationPreview(root, location.hash);
+  });
+} else if (root !== null && dataSidebarPreview) {
+  void import("./features/data/preview/SidebarPreview.tsx").then((m) => {
+    setPreviewDensity = m.mountDataSidebarPreview(root, location.hash);
   });
 } else if (root !== null && explorerPreview) {
   void import("./features/editor/explorer/preview/Preview.tsx").then((m) => {
