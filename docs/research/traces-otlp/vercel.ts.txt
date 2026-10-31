@@ -1,0 +1,39 @@
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { trace, type ProxyTracerProvider } from "@opentelemetry/api";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import type { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
+import { registerOTel } from "@vercel/otel";
+import { endpoint } from "./codec.ts";
+
+registerOTel({
+  serviceName: "vercel-spike",
+  instrumentations: [],
+  traceExporter: new OTLPTraceExporter({
+    url: `${endpoint}/vendor/v1/traces`, headers: { "x-spike-sender": "vercel-vendor" },
+  }),
+});
+const server = createServer((_req, res) => {
+  const span = trace.getTracer("vercel-spike").startSpan("GET /hello");
+  span.setAttribute("spike.sender", "vercel");
+  res.end("hello");
+  span.end();
+});
+try {
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing app port");
+  const response = await fetch(`http://127.0.0.1:${address.port}/hello`);
+  if (await response.text() !== "hello") throw new Error("App failed");
+  // SAFETY: registerOTel installed its SDK provider behind OTel 1.9's global proxy.
+  const proxy = trace.getTracerProvider() as ProxyTracerProvider;
+  // SAFETY: @vercel/otel 2.1.1 uses an SDK BasicTracerProvider with flush/shutdown.
+  const provider = proxy.getDelegate() as BasicTracerProvider;
+  await provider.forceFlush();
+  await provider.shutdown();
+  console.log(JSON.stringify({ sender: "vercel", app: "GET /hello", flushed: true }));
+} finally {
+  server.closeAllConnections();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+}

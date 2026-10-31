@@ -1,0 +1,187 @@
+import assert from "node:assert/strict";
+import { cpus, loadavg, release, totalmem } from "node:os";
+import { decode, endpoint, port, summary } from "./codec.ts";
+import { procReader } from "./proc.ts";
+
+const children = new Set<ReturnType<typeof Bun.spawn>>();
+const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR };
+const runs = Number(process.env.SPIKE_RUNS ?? 3);
+const idleMs = Number(process.env.SPIKE_IDLE_MS ?? 10000);
+const settleMs = Number(process.env.SPIKE_SETTLE_MS ?? 5000);
+const reader = procReader();
+function cleanup() { for (const child of children) child.kill(); }
+process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+process.on("SIGINT", () => { cleanup(); process.exit(130); });
+const watchdog = setTimeout(() => { cleanup(); process.exit(124); }, 600000);
+function emit(label: string, value: unknown) { console.log(JSON.stringify({ label, value })); }
+
+async function start(mode: "bare" | "receiver", capture = false) {
+  const child = Bun.spawn([process.execPath, "receiver.ts", mode], {
+    stdin: "pipe", stdout: "pipe", stderr: "pipe",
+    env: { ...env, SPIKE_CAPTURE: capture ? "1" : "0" },
+  });
+  children.add(child);
+  const stream = child.stdout.getReader();
+  const ready = await stream.read();
+  if (ready.done) throw new Error(await new Response(child.stderr).text());
+  assert.equal(JSON.parse(new TextDecoder().decode(ready.value)).ready, true);
+  stream.releaseLock();
+  return child;
+}
+async function stop(child: ReturnType<typeof Bun.spawn>) {
+  child.stdin?.end();
+  assert.equal(await child.exited, 0);
+  children.delete(child);
+}
+async function sender(file: string, vars: Record<string, string>) {
+  const child = Bun.spawn([process.env.SPIKE_NODE ?? "node", "--experimental-strip-types", file], {
+    env: { ...env, ...vars }, stdout: "pipe", stderr: "pipe",
+  });
+  children.add(child);
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+  ]);
+  children.delete(child);
+  assert.equal(code, 0, stderr);
+  emit(file, { stdout: stdout.trim(), stderr: stderr.trim() });
+}
+async function stats() { return (await fetch(`${endpoint}/stats`)).json(); }
+async function post(bytes: Uint8Array, type: string, path = "/v1/traces") {
+  const response = await fetch(`${endpoint}${path}`, {
+    method: "POST", headers: { "content-type": type }, body: bytes,
+  });
+  await response.arrayBuffer();
+  return response.status;
+}
+function counters(pid: number) {
+  const value = reader.read(pid);
+  assert.ok(value, `Cannot read process counters for ${pid}`);
+  return value;
+}
+
+try {
+  emit("host", { platform: process.platform, arch: process.arch, kernel: release(),
+    cpu: cpus()[0]?.model, cores: cpus().length, totalMemBytes: totalmem(),
+    bun: Bun.version, node: Bun.spawnSync([env.PATH ? "node" : "/usr/bin/node", "--version"]).stdout.toString().trim(),
+    loadavg: loadavg(), reader: reader.backend, runs, idleMs, settleMs });
+
+  const capture = await start("receiver", true);
+  const conflict = Bun.spawn([process.execPath, "receiver.ts", "receiver"], {
+    env, stdin: "pipe", stdout: "pipe", stderr: "pipe",
+  });
+  children.add(conflict);
+  const conflictCode = await conflict.exited;
+  const conflictStderr = await new Response(conflict.stderr).text();
+  children.delete(conflict);
+  assert.notEqual(conflictCode, 0);
+  assert.match(conflictStderr, /EADDRINUSE/);
+  emit("port", { address: "127.0.0.1", port, initiallyFree: true,
+    secondBindExit: conflictCode, secondBindError: "EADDRINUSE" });
+
+  await sender("manual.ts", {
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/v1/traces`,
+  });
+  const protobuf = new Uint8Array(await Bun.file("fixture.pb").arrayBuffer());
+  const json = new Uint8Array(await Bun.file("fixture.json").arrayBuffer());
+  assert.equal(summary(decode(protobuf, "application/x-protobuf")).spans, 1000);
+  assert.equal(summary(decode(json, "application/json")).spans, 1000);
+  // Both fixtures come from the same ended SDK spans, via its two official serializers.
+  const decoded = decode(protobuf, "application/x-protobuf");
+  const jsonObject = decode(json, "application/json");
+  const first = decoded.resourceSpans[0].scopeSpans[0].spans[0];
+  const jsonFirst = jsonObject.resourceSpans[0].scopeSpans[0].spans[0];
+  assert.equal(first.name, "GET /fixture/0");
+  assert.equal(first.status.code, 2);
+  assert.equal(first.events[0].name, "cache.miss");
+  assert.equal(first.links.length, 1);
+  assert.equal(Buffer.from(first.traceId).toString("hex"), jsonFirst.traceId);
+  assert.equal(first.startTimeUnixNano.toString(), jsonFirst.startTimeUnixNano);
+  assert.equal(first.attributes[2].value.intValue.toString(), "0");
+  assert.equal(await post(json, "application/json"), 200);
+  assert.equal(await post(new Uint8Array([10, 255]), "application/x-protobuf"), 400);
+  assert.equal(await post(new TextEncoder().encode("{"), "application/json"), 400);
+  assert.equal(await post(json, "text/plain"), 415);
+  assert.equal(await post(json, "application/json", "/wrong"), 404);
+
+  await sender("vercel.ts", {
+    OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+    OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+    OTEL_EXPORTER_OTLP_HEADERS: "x-spike-sender=vercel-base",
+  });
+  await sender("vercel.ts", {
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:1/unused",
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/otlp/spike/v1/traces`,
+    OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json",
+    OTEL_EXPORTER_OTLP_HEADERS: "x-spike-sender=base-overridden",
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: "x-spike-sender=vercel-signal",
+  });
+  const received = await stats();
+  for (const name of ["manual", "vercel-base", "vercel-signal", "vercel-vendor"]) {
+    assert.ok(received.requests.some((r: any) => r.sender === name), `Missing sender ${name}`);
+  }
+  const dual = received.requests.filter((r: any) => r.names.includes("GET /hello"));
+  assert.equal(dual.length, 4);
+  assert.equal(dual.filter((r: any) => r.firstTraceId === dual[0].firstTraceId).length, 2);
+  emit("sender-receipts", received);
+  await stop(capture);
+
+  emit("fixtures", { spans: 1000, protobufBytes: protobuf.length, jsonBytes: json.length,
+    checked: "span count, names, error status, events, links, exact timestamp and hex ID" });
+  for (const [type, bytes] of [["application/x-protobuf", protobuf], ["application/json", json]] as const) {
+    for (let i = 0; i < 50; i++) decode(bytes, type);
+    const samples = [];
+    let checksum = 0;
+    for (let sample = 0; sample < 30; sample++) {
+      const start = performance.now();
+      for (let i = 0; i < 20; i++) {
+        const parsed = decode(bytes, type);
+        checksum += parsed.resourceSpans[0].scopeSpans[0].spans.length;
+      }
+      samples.push((performance.now() - start) / 20);
+    }
+    assert.equal(checksum, 600000);
+    const sorted = [...samples].sort((a, b) => a - b);
+    emit("decode-ms-per-1000", { type, samples, median: (sorted[14] + sorted[15]) / 2, p95: sorted[28], checksum });
+  }
+
+  for (let run = 1; run <= runs; run++) {
+    for (const mode of ["bare", "receiver"] as const) {
+      const child = await start(mode);
+      await Bun.sleep(settleMs);
+      const before = counters(child.pid);
+      const idleStart = performance.now();
+      await Bun.sleep(idleMs);
+      const elapsedSec = (performance.now() - idleStart) / 1000;
+      const afterIdle = counters(child.pid);
+      let peakRss = afterIdle.rssBytes;
+      if (mode === "receiver") {
+        // 100k protobuf + 100k JSON spans, sequential batches, no retained span graph.
+        for (const [type, bytes] of [["application/x-protobuf", protobuf], ["application/json", json]] as const) {
+          for (let i = 0; i < 100; i++) {
+            assert.equal(await post(bytes, type), 200);
+            peakRss = Math.max(peakRss, counters(child.pid).rssBytes);
+          }
+        }
+        assert.equal((await stats()).spans, 200000);
+      }
+      const afterTraffic = counters(child.pid);
+      await Bun.sleep(settleMs);
+      const afterSettle = counters(child.pid);
+      emit("idle-and-rss", { run, mode, elapsedSec, before, afterIdle, afterTraffic, afterSettle, peakRss,
+        wakeupsPerSec: before.wakeups === null || afterIdle.wakeups === null ? null :
+          (afterIdle.wakeups - before.wakeups) / elapsedSec,
+        cpuPct: (afterIdle.cpuNs - before.cpuNs) / (elapsedSec * 1e9) * 100,
+        idleRssGrowth: afterIdle.rssBytes - before.rssBytes,
+        trafficRssGrowth: afterSettle.rssBytes - afterIdle.rssBytes });
+      await stop(child);
+    }
+  }
+  // Prove shutdown released the chosen port, with no receiver left behind.
+  const final = await start("receiver");
+  await stop(final);
+  emit("finished", { allChildrenStopped: children.size === 0, portReleased: true });
+} finally {
+  clearTimeout(watchdog);
+  cleanup();
+  await Promise.all([...children].map((child) => child.exited));
+}

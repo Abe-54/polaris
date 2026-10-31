@@ -1,0 +1,24 @@
+import root from "@opentelemetry/otlp-transformer/build/src/generated/root.js";
+const { opentelemetry } = root;
+
+export const Request = opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+export const port = 4319;
+export const endpoint = `http://127.0.0.1:${port}`;
+
+export function decode(bytes: Uint8Array, contentType: string) {
+  if (contentType === "application/x-protobuf") return Request.decode(bytes);
+  if (contentType === "application/json") return JSON.parse(new TextDecoder().decode(bytes));
+  throw new Error(`Unsupported content type: ${contentType}`);
+}
+
+export function summary(request: ReturnType<typeof Request.decode>) {
+  const spans = (request.resourceSpans ?? []).flatMap((r) =>
+    (r.scopeSpans ?? []).flatMap((s) => s.spans ?? []),
+  );
+  return {
+    spans: spans.length,
+    names: spans.slice(0, 3).map((s) => s.name),
+    firstTraceId: typeof spans[0]?.traceId === "string" ? spans[0].traceId :
+      spans[0]?.traceId && Buffer.from(spans[0].traceId).toString("hex"),
+  };
+}
