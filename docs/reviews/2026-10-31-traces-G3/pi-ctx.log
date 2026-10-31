@@ -1,0 +1,6 @@
+main threads=7->7 ctx_per_s=0.30
+head threads=7->7 ctx_per_s=0.23
+main threads=7->7 ctx_per_s=0.33
+head threads=7->7 ctx_per_s=0.28
+main threads=7->7 ctx_per_s=0.30
+head threads=7->7 ctx_per_s=0.22
