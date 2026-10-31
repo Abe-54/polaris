@@ -78,7 +78,7 @@ const SourceRow = ({
       <span
         className={cn(
           "text-label min-w-[6ch] flex-auto truncate font-medium",
-          source.reachable ? "text-text-strong" : "text-text-subtle"
+          source.reachable === false ? "text-text-subtle" : "text-text-strong"
         )}
       >
         {source.name}

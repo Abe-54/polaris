@@ -1,8 +1,9 @@
 import "../../../test/dom.testing.ts";
-import type { ConnectionState } from "@polaris/protocol";
+import { type ConnectionState, DataSource } from "@polaris/protocol";
 import { TooltipProvider } from "@polaris/ui";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { Schema } from "effect";
 import { createStore } from "zustand/vanilla";
 import { createCommandRegistry } from "../../../routes/commands.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
@@ -12,6 +13,7 @@ import type { DataApi } from "../data/api.ts";
 import { DataLayer } from "../data/hooks.tsx";
 import { dataTabsStore, openTable, useDataTabs } from "../model/store.ts";
 import { fixtureDataApi } from "../preview/fixtureApi.ts";
+import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import { DATA_AT, DATA_WORKSPACE_ID, dataHost, dataHostModel } from "../preview/scene.ts";
 import { ConnectionBar } from "./ConnectionBar.tsx";
 import { DataSidebar } from "./Sidebar.tsx";
@@ -286,6 +288,39 @@ describe("the connection bar", () => {
     await waitFor(() =>
       expect(page().getByTestId("data-connection-bar").dataset.colour).toBe("blue")
     );
+  });
+
+  test("opening the card re-lists the checkout first, so it shows the source as it is now", async () => {
+    const fields = Schema.encodeSync(DataSource);
+
+    const down = FIXTURE_SOURCES.map((s) =>
+      s.name === "app" ? new DataSource({ ...fields(s), reachable: false, error: "gone" }) : s
+    );
+
+    let relisted = false;
+
+    mount(
+      fixtureDataApi({
+        relist: () => {
+          relisted = true;
+
+          return down;
+        },
+      })
+    );
+    const bar = await waitFor(() => page().getByTestId("data-connection-bar"));
+
+    // Data's first showing re-lists too; only the card's own re-list matters here.
+    await waitFor(() => expect(relisted).toBe(true));
+    relisted = false;
+    click(bar);
+
+    await waitFor(() =>
+      expect(page().getByTestId("data-connection-details").textContent).toContain(
+        "can't reach it · gone"
+      )
+    );
+    expect(relisted).toBe(true);
   });
 
   test("the label text posts on Enter, uppercased", async () => {

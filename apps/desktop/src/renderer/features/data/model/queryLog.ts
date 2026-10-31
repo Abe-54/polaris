@@ -3,7 +3,6 @@
  * ("Querying invoices", "Wants to write") for "Agents in this worktree".
  */
 import type { QueryLogEntry, SessionId } from "@polaris/protocol";
-import { Schema } from "effect";
 
 /** The facts a row needs about an entry's Agent Session, from the Host's read model. */
 export interface SessionFacts {
@@ -44,13 +43,6 @@ export interface LogRow {
   readonly result: string;
 }
 
-/** The approval the contract is gaining (ENG-644); read structurally until it lands. */
-const PendingApproval = Schema.Struct({
-  approval: Schema.Struct({ status: Schema.Literal("pending") }),
-});
-
-const hasPendingApproval = Schema.is(PendingApproval);
-
 const WRITE = /^\s*(insert|update|delete|merge|upsert|replace|alter|create|drop|truncate)\b/i;
 
 const TABLE =
@@ -67,35 +59,30 @@ export const tableOf = (sql: string): string | null => {
   return (name.split(".").at(-1) ?? name).replace(/^["`]|["`]$/g, "");
 };
 
-/** No rows, no time and no error yet: the Query hasn't finished. */
-const unfinished = (entry: QueryLogEntry) =>
-  entry.rows === undefined && entry.elapsedMs === undefined && entry.error === undefined;
+const running = (entry: QueryLogEntry) => entry.state === "running";
 
-/**
- * A write waiting on the user: the entry's approval is pending, or (until the contract carries
- * one) an unfinished agent write whose session needs you.
- */
-export const awaitsApproval = (entry: QueryLogEntry, facts: SessionFacts | null) => {
-  if (hasPendingApproval(entry)) return true;
+/** A write waiting on the user: the Daemon holds it for a Data Source Approval. */
+export const awaitsApproval = (entry: QueryLogEntry) =>
+  entry.state === "waiting-approval" || entry.approval?.status === "pending";
 
-  return (
-    entry.author.kind === "agent" &&
-    unfinished(entry) &&
-    isWrite(entry.sql) &&
-    facts?.needsYou === true
-  );
+const STATES: Record<QueryLogEntry["state"], LogState> = {
+  running: "running",
+  "waiting-approval": "needs-you",
+  completed: "done",
+  failed: "failed",
+  "dry-run": "done",
+  cancelled: "done",
 };
 
-const stateOf = (entry: QueryLogEntry, facts: SessionFacts | null): LogState => {
-  if (awaitsApproval(entry, facts)) return "needs-you";
-
-  if (entry.error !== undefined) return "failed";
-
-  return unfinished(entry) && entry.author.kind === "agent" ? "running" : "done";
-};
+const stateOf = (entry: QueryLogEntry): LogState =>
+  awaitsApproval(entry) ? "needs-you" : STATES[entry.state];
 
 const resultOf = (entry: QueryLogEntry, state: LogState) => {
   if (state === "failed") return entry.error ?? "";
+
+  if (entry.state === "cancelled") return "cancelled";
+
+  if (entry.state === "dry-run") return "dry run";
 
   if (entry.rows === undefined) return "";
 
@@ -136,8 +123,7 @@ export const logRows = (
   lookups: LogLookups
 ): ReadonlyArray<LogRow> => {
   const rows = entries.map((entry): LogRow => {
-    const id = sessionOf(entry);
-    const state = stateOf(entry, id === null ? null : lookups.session(id));
+    const state = stateOf(entry);
 
     return {
       id: entry.id,
@@ -159,7 +145,7 @@ export const logRows = (
 
 /**
  * What an agent is doing to data, for its row in "Agents in this worktree": a write waiting on
- * you, else the table of its unfinished or (while it works) latest Query; null for nothing.
+ * you, else the table of its running or (while it works) latest Query; null for nothing.
  */
 export const dataActivity = (
   sessionId: SessionId,
@@ -168,8 +154,8 @@ export const dataActivity = (
 ): string | null => {
   const own = entries.filter((e) => sessionOf(e) === sessionId);
 
-  if (own.some((e) => awaitsApproval(e, facts))) return "Wants to write";
-  const latest = own.findLast(unfinished) ?? (facts.working ? own.at(-1) : undefined);
+  if (own.some(awaitsApproval)) return "Wants to write";
+  const latest = own.findLast(running) ?? (facts.working ? own.at(-1) : undefined);
 
   if (latest === undefined) return null;
   const table = tableOf(latest.sql);
@@ -179,7 +165,7 @@ export const dataActivity = (
 
 export const busyKey = (source: string, table: string) => `${source}\u0000${table}`;
 
-/** Tables an agent's unfinished read is on, to the Harness reading them (the tree's dither). */
+/** Tables an agent's running read is on, to the Harness reading them (the tree's dither). */
 export const busyTables = (
   entries: ReadonlyArray<QueryLogEntry>,
   lookups: LogLookups
@@ -187,7 +173,7 @@ export const busyTables = (
   const busy = new Map<string, string>();
 
   for (const entry of entries) {
-    if (entry.author.kind !== "agent" || !unfinished(entry) || isWrite(entry.sql)) continue;
+    if (entry.author.kind !== "agent" || !running(entry) || isWrite(entry.sql)) continue;
     const facts = lookups.session(entry.author.sessionId);
     const table = tableOf(entry.sql);
 

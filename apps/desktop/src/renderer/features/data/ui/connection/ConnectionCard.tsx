@@ -7,7 +7,7 @@ import { Button, Input, Kicker, PopoverContent } from "@polaris/ui";
 import { useEffect, useState } from "react";
 import { useDataApi } from "../../data/hooks.tsx";
 import { openSourceForm } from "../../model/sidebar.ts";
-import { accessLine, driverText, foundText, kickerText } from "../../model/source.ts";
+import { accessLine, driverText, foundText, kickerText, statusText } from "../../model/source.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { LabelSwatches } from "./LabelSwatches.tsx";
 
@@ -34,12 +34,7 @@ const Details = ({ source }: { readonly source: DataSource }) => (
     />
     <Line label="From" value={foundText(source)} />
     <Line label="Agents" value={accessLine(source)} />
-    {source.reachable ? null : (
-      <Line
-        label="Status"
-        value={`can't reach it${source.error === undefined ? "" : ` · ${source.error}`}`}
-      />
-    )}
+    <Line label="Status" value={statusText(source)} />
   </div>
 );
 

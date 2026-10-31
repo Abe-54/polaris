@@ -128,7 +128,13 @@ const longName = (i: number) => {
     : base;
 };
 
+const COLUMNS = [
+  { name: "id", type: "uuid" },
+  { name: "created_at", type: "timestamptz" },
+];
+
 export const WORST_SCHEMA = new SchemaTree({
+  loadedAt: new Date(FIXTURE_NOW).toISOString(),
   schemas: [
     {
       name: "public",
@@ -138,14 +144,16 @@ export const WORST_SCHEMA = new SchemaTree({
           new TableSummary({
             name: longName(i),
             rowEstimate: i % 11 === 0 ? null : (i * 7919) % 9_800_000,
-            columnCount: 6,
+            columnCount: COLUMNS.length,
+            columns: COLUMNS,
           })
       ),
       views: [
         new TableSummary({
           name: "overdue_invoices_by_customer_and_month_v",
           rowEstimate: null,
-          columnCount: 4,
+          columnCount: COLUMNS.length,
+          columns: COLUMNS,
         }),
       ],
       functions: ["overdue_total(uuid)", "set_updated_at()"],
@@ -169,6 +177,7 @@ export const WORST_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
     { length: 30 },
     (_, i) =>
       new QueryLogEntry({
+        state: "completed",
         id: `q-long-${i}`,
         checkout: "/Users/lucas/code/ledger.worktrees/overdue-totals",
         source: { id: "src-app", name: "app" },
@@ -186,6 +195,7 @@ export const WORST_QUERY_LOG: ReadonlyArray<QueryLogEntry> = [
   ),
   ...FIXTURE_QUERY_LOG,
   new QueryLogEntry({
+    state: "running",
     id: "q-running",
     checkout: "/Users/lucas/code/ledger.worktrees/overdue-totals",
     source: { id: "src-app", name: "app" },

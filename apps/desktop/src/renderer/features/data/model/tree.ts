@@ -61,7 +61,7 @@ const join = (...parts: ReadonlyArray<string>) => parts.join("\u0000");
 
 export const sourceKey = (source: string) => join("source", source);
 
-const expandable = (source: DataSource) => source.reachable && !isLocked(source);
+const expandable = (source: DataSource) => source.reachable !== false && !isLocked(source);
 
 /** The first source the user can browse starts open; schemas start open, functions closed. */
 const defaultOpen = (kind: TreeRow["kind"], key: string, firstOpen: string | null) => {
@@ -80,7 +80,7 @@ const noteFor = (source: DataSource, load: TreeLoad | undefined): string | null 
       ? "You denied agents this data source."
       : "Agents can't reach it until you approve it.";
 
-  if (!source.reachable)
+  if (source.reachable === false)
     return `Can't reach ${source.host}:${source.port}${source.error === undefined ? "" : ` · ${source.error}`}`;
 
   if (load?.status === "failed") return `Couldn't read its schema · ${load.message}`;

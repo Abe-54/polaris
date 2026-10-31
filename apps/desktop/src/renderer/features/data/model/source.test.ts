@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DataSource } from "@polaris/protocol";
 import { Schema } from "effect";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
-import { accessText, barParts, formatEstimate, kickerText } from "./source.ts";
+import { accessText, barParts, formatEstimate, kickerText, statusText } from "./source.ts";
 
 // SAFETY: the fixtures hold app, the ledger branch and analytics, in that order.
 const [app, branch, analytics] = FIXTURE_SOURCES as [DataSource, DataSource, DataSource];
@@ -36,6 +36,13 @@ describe("the connection bar's words", () => {
   ] as const)("access %s with writes %s reads %p", (access, writes, text) => {
     expect(accessText(new DataSource({ ...fields(analytics), access, writes }))).toBe(text);
   });
+});
+
+test("the card's status says why a source can't be reached", () => {
+  expect([
+    statusText(app),
+    statusText(new DataSource({ ...fields(app), reachable: false, error: "connection refused" })),
+  ]).toEqual(["connected", "can't reach it · connection refused"]);
 });
 
 describe("row estimates", () => {

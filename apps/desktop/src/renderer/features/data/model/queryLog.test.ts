@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionId } from "@polaris/protocol";
+import { QueryLogEntry, RequestId, type SessionId } from "@polaris/protocol";
 import {
   FIXTURE_PENDING_WRITE_ID,
   FIXTURE_QUERY_LOG,
@@ -14,6 +14,13 @@ import {
   type SessionFacts,
   tableOf,
 } from "./queryLog.ts";
+
+/** The fixture a test names, or a failure saying it's gone. */
+const found = <A>(value: A | undefined): A => {
+  if (value === undefined) throw new Error("No such fixture entry");
+
+  return value;
+};
 
 const facts = (over: Partial<SessionFacts> = {}): SessionFacts => ({
   title: "Fix overdue totals",
@@ -53,13 +60,26 @@ describe("the Query log's rows", () => {
     expect(times).toEqual(times.toSorted((a, b) => b - a));
   });
 
-  test("an unfinished write is only the needs-you row while its session needs you", () => {
-    const calm = logRows(FIXTURE_QUERY_LOG, {
-      ...lookups,
-      session: () => facts({ needsYou: false }),
+  test.each([
+    ["pending", "needs-you"],
+    ["approved", "running"],
+  ] as const)("a running write whose approval is %s reads as %s", (status, state) => {
+    const { id, checkout, source, sql, author, at } = found(
+      FIXTURE_QUERY_LOG.find((e) => e.id === FIXTURE_PENDING_WRITE_ID)
+    );
+
+    const entry = new QueryLogEntry({
+      id,
+      checkout,
+      source,
+      sql,
+      author,
+      at,
+      state: "running",
+      approval: { id: RequestId.make("r-write"), status },
     });
 
-    expect(calm.find((row) => row.id === FIXTURE_PENDING_WRITE_ID)?.state).toBe("running");
+    expect(logRows([entry], lookups)[0]?.state).toBe(state);
   });
 
   test("each author reads as the Query log shows it", () => {

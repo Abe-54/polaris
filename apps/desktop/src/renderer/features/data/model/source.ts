@@ -134,6 +134,15 @@ export const accessLine = (source: DataSource): string => {
     : `${reads[source.access]} · ${WRITES[source.writes]}`;
 };
 
+/** Connected, can't reach it (with why), or not tried yet: an unprobed source is never "down". */
+export const statusText = (source: DataSource) => {
+  if (source.reachable === undefined) return "not connected yet";
+
+  if (source.reachable) return "connected";
+
+  return `can't reach it${source.error === undefined ? "" : ` · ${source.error}`}`;
+};
+
 /** Where discovery found it (".env.local · DATABASE_URL"), or that the user added it. */
 export const foundText = (source: DataSource): string => {
   const { kind, file, key } = source.foundIn;

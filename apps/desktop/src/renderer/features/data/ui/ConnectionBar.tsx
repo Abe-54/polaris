@@ -6,7 +6,7 @@
 import type { DataSource } from "@polaris/protocol";
 import { cn, Popover, PopoverTrigger } from "@polaris/ui";
 import { useApp } from "../../../shell/hooks.ts";
-import { useDataSources } from "../data/hooks.tsx";
+import { useDataApi, useDataSources } from "../data/hooks.tsx";
 import { accessText, barParts, kickerText, LABEL_TONES } from "../model/source.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { ConnectionCard } from "./connection/ConnectionCard.tsx";
@@ -17,7 +17,7 @@ const shownSource = (sources: ReadonlyArray<DataSource>, active: DataTab | null)
   sources.find((s) => s.name === active?.sourceId) ?? sources[0] ?? null;
 
 const Access = ({ source, tone }: { readonly source: DataSource; readonly tone: string }) =>
-  source.reachable ? (
+  source.reachable !== false ? (
     <span className={cn("text-caption shrink-0", tone)} data-testid="data-connection-access">
       {accessText(source)}
     </span>
@@ -29,6 +29,7 @@ const Access = ({ source, tone }: { readonly source: DataSource; readonly tone: 
 
 export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
   const sources = useDataSources(at);
+  const api = useDataApi();
 
   const connected = useApp(
     (s) => s.hosts.find((h) => h.key === hostKey)?.status.state === "connected"
@@ -42,7 +43,8 @@ export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
   const table = active?.kind === "table" && active.sourceId === source.name ? active.table : null;
 
   return (
-    <Popover>
+    // Opening the card re-lists first, so an approval in it targets what the checkout holds now.
+    <Popover onOpenChange={(open) => open && void api.refreshSources(at)}>
       <PopoverTrigger asChild>
         <button
           type="button"

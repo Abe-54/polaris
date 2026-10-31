@@ -114,9 +114,15 @@ describe("the Sources tree", () => {
   });
 
   test("past one schema, tables are schema-qualified for their tabs; truncation is counted", () => {
-    const table = new TableSummary({ name: "events", rowEstimate: 10, columnCount: 2 });
+    const table = new TableSummary({
+      name: "events",
+      rowEstimate: 10,
+      columnCount: 0,
+      columns: [],
+    });
 
     const tree = new SchemaTree({
+      loadedAt: "2026-10-30T12:00:00Z",
       schemas: [
         { name: "public", tables: [table], views: [], functions: [] },
         { name: "audit", tables: [table], views: [], functions: [] },

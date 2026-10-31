@@ -13,6 +13,7 @@ import { QueryLogView } from "./sidebar/QueryLogView.tsx";
 import { SourceFormDialog } from "./sidebar/SourceForm.tsx";
 import { SourcesView } from "./sidebar/SourcesView.tsx";
 import { useLogLookups } from "./sidebar/useLogLookups.ts";
+import { useRefreshSources } from "./sidebar/useRefreshSources.ts";
 import type { DataSlotProps } from "./slots.ts";
 import { useBranch } from "./useBranch.ts";
 
@@ -59,6 +60,7 @@ export const DataSidebar = (props: DataSlotProps) => {
     (s) => s.hosts.find((h) => h.key === hostKey)?.status.state === "connected"
   );
 
+  useRefreshSources(at);
   const { view } = useSidebar(at);
   const log = useQueryLog(at);
   const lookups = useLogLookups(hostKey);

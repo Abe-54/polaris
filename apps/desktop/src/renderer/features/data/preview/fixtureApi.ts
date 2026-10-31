@@ -84,6 +84,8 @@ export interface FixtureData {
   /** A source's schema tree by name; the ledger schema for every source when omitted. */
   readonly schema?: (source: string) => SchemaTree;
   readonly tableChanges?: ReadonlyArray<TableChange>;
+  /** What re-discovering the checkout finds now; the current sources when omitted. */
+  readonly relist?: () => ReadonlyArray<DataSource>;
 }
 
 /** An agent added `currencies` on app this Turn (D1's tree). */
@@ -145,6 +147,7 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
     watchSources: (_at, on) => sources.watch(on),
     watchQueryLog: (_at, on) => queryLog.watch(on),
     watchTableChanges: (_at, on) => changes.watch(on),
+    refreshSources: async () => sources.set(data.relist?.() ?? sources.get()),
     describe: async (_at, { source, table, sample }) => {
       const reached = reach(source, sources.get());
 
