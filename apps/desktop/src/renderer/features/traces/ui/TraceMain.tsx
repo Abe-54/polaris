@@ -1,28 +1,131 @@
 /**
- * Placeholder: the waterfall and Table with their toolbar, minimap and ruler (DESIGN.md, Traces →
- * Waterfall) replace this file. Until then it says whether there is a trace to show.
+ * The main slot (DESIGN.md, Traces → Waterfall): the open trace as the waterfall or Table under
+ * their toolbar. Selecting a span sets the selection the span panel reads (model/store.ts).
  */
-import { EmptyState, PixelHourglassIcon } from "@polaris/ui";
-import { useTraces } from "../data/hooks.tsx";
+import type { TraceDetail } from "@polaris/protocol";
+import { EmptyState, PixelAlertIcon, PixelHourglassIcon } from "@polaris/ui";
+import { useCallback, useEffect, useState } from "react";
+import { useTrace, useTraces } from "../data/hooks.tsx";
+import { publishOpenTrace } from "../model/openTrace.ts";
+import type { TracesSessionKey } from "../model/session.ts";
+import { selectSpan } from "../model/store.ts";
 import type { TracesSlotProps } from "./slots.ts";
+import { TableView } from "./waterfall/TableView.tsx";
+import { type MainView, Toolbar } from "./waterfall/Toolbar.tsx";
+import { useTraceView } from "./waterfall/useTraceView.ts";
+import { Waterfall } from "./waterfall/Waterfall.tsx";
 
-export const TraceMain = ({ at, traceId }: TracesSlotProps) => {
+const Shown = ({
+  at,
+  detail,
+  spanId,
+  view,
+  onView,
+}: {
+  readonly at: TracesSessionKey;
+  readonly detail: TraceDetail;
+  readonly spanId: string | null;
+  readonly view: MainView;
+  readonly onView: (view: MainView) => void;
+}) => {
+  const trace = useTraceView(detail);
+  const { hostKey, sessionId } = at;
+
+  const onSelect = useCallback(
+    (id: string | null) => selectSpan({ hostKey, sessionId }, id),
+    [hostKey, sessionId]
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="traces-main" data-view={view}>
+      <Toolbar view={view} onView={onView} trace={trace} />
+      {view === "waterfall" ? (
+        <Waterfall trace={trace} spanId={spanId} onSelect={onSelect} />
+      ) : (
+        <TableView trace={trace} spanId={spanId} onSelect={onSelect} />
+      )}
+    </div>
+  );
+};
+
+const Centered = ({ children }: { readonly children: React.ReactNode }) => (
+  <div className="grid min-h-0 flex-1 place-items-center" data-testid="traces-main">
+    {children}
+  </div>
+);
+
+const Open = ({
+  at,
+  traceId,
+  spanId,
+  view,
+  onView,
+}: {
+  readonly at: TracesSessionKey;
+  readonly traceId: string;
+  readonly spanId: string | null;
+  readonly view: MainView;
+  readonly onView: (view: MainView) => void;
+}) => {
+  const loaded = useTrace(at, traceId);
+  const detail = loaded.status === "ready" ? loaded.value : null;
+
+  const { hostKey, sessionId } = at;
+
+  useEffect(() => {
+    publishOpenTrace({ hostKey, sessionId }, detail);
+
+    return () => publishOpenTrace({ hostKey, sessionId }, null);
+  }, [hostKey, sessionId, detail]);
+
+  if (loaded.status === "loading") return <Centered>{null}</Centered>;
+
+  if (loaded.status === "failed")
+    return (
+      <Centered>
+        <EmptyState
+          icon={<PixelAlertIcon size={24} className="text-text-strong" />}
+          title={loaded.error.message}
+          fact={loaded.error.fix ?? "Choose another trace in the sidebar"}
+        />
+      </Centered>
+    );
+
+  return (
+    <Shown
+      key={loaded.value.summary.id}
+      at={at}
+      detail={loaded.value}
+      spanId={spanId}
+      view={view}
+      onView={onView}
+    />
+  );
+};
+
+const NoTrace = ({ at }: { readonly at: TracesSessionKey }) => {
   const snapshot = useTraces(at);
   const none = snapshot.status === "ready" && snapshot.value.total === 0;
 
   return (
-    <div className="grid min-h-0 flex-1 place-items-center" data-testid="traces-main">
-      {traceId === null && (
-        <EmptyState
-          icon={<PixelHourglassIcon size={24} className="text-text-strong" />}
-          title={none ? "No traces yet" : "No trace open"}
-          fact={
-            none
-              ? "Code run in this agent session's checkout sends its traces here"
-              : "Choose a trace in the sidebar"
-          }
-        />
-      )}
-    </div>
+    <Centered>
+      <EmptyState
+        icon={<PixelHourglassIcon size={24} className="text-text-strong" />}
+        title={none ? "No traces yet" : "No trace open"}
+        fact={
+          none
+            ? "Code run in this agent session's checkout sends its traces here"
+            : "Choose a trace in the sidebar"
+        }
+      />
+    </Centered>
   );
+};
+
+export const TraceMain = ({ at, traceId, spanId }: TracesSlotProps) => {
+  const [view, setView] = useState<MainView>("waterfall");
+
+  if (traceId === null) return <NoTrace at={at} />;
+
+  return <Open at={at} traceId={traceId} spanId={spanId} view={view} onView={setView} />;
 };

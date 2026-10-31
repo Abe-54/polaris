@@ -21,6 +21,7 @@ import { modelFromSnapshot } from "../../../store/hostModel.ts";
 import { type AppState, type Connection, initialState } from "../../../store/store.ts";
 import { TracesLayer } from "../data/hooks.tsx";
 import { fixtureTracesApi } from "./fixtureApi.ts";
+import { withLargeTrace } from "./large.ts";
 import {
   FIXTURE_CHECKOUT,
   FIXTURE_SESSION,
@@ -139,7 +140,7 @@ export const mountTracesPreview = (
   navigation.actions.setMode("traces");
 
   createRoot(root).render(
-    <TracesLayer api={fixtureTracesApi(sceneOf(hash))}>
+    <TracesLayer api={withLargeTrace(hash, fixtureTracesApi(sceneOf(hash)))}>
       <App
         value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
       />
