@@ -8,13 +8,27 @@ import {
   type TurnId,
 } from "@polaris/protocol";
 import { Context, Effect, Layer, Option, Predicate, Semaphore, Stream, PubSub } from "effect";
-import { EventStore } from "../store/EventStore.ts";
+import { EventStore, type LiveItem } from "../store/EventStore.ts";
 import { workingTurn } from "../store/model.ts";
 import { decideSession } from "../engine/session.ts";
 import { DataDatabase, storageError } from "./database.ts";
 import { ApprovalStore, targetKey, targetOf } from "./approvalStore.ts";
 import { writeApprovalMethods, type WriteApprovals } from "./writeApprovals.ts";
 import { DataApprovalRequired, type DataApprovalOutcome } from "./approvalRequired.ts";
+
+const approvalItem = (item: LiveItem, id?: RequestId) => {
+  if (!Predicate.isTagged(item, "Event")) return false;
+  const event = item.envelope.event;
+
+  if (Predicate.isTagged(event, "ApprovalRequested"))
+    return id === undefined || event.request.id === id;
+
+  return (
+    (Predicate.isTagged(event, "ApprovalResolved") ||
+      Predicate.isTagged(event, "ApprovalWithdrawn")) &&
+    (id === undefined || event.requestId === id)
+  );
+};
 
 export class DataApprovals extends Context.Service<
   DataApprovals,
@@ -206,7 +220,7 @@ export class DataApprovals extends Context.Service<
       const awaitApproval = (id: RequestId, timeoutMs: number) =>
         Effect.scoped(
           Effect.gen(function* () {
-            const commits = yield* events.subscribe();
+            const commits = yield* events.subscribe({ filter: (item) => approvalItem(item, id) });
             const current = yield* outcome(id);
 
             if (current.status !== "pending") return current;
@@ -227,7 +241,7 @@ export class DataApprovals extends Context.Service<
       // The durable log closes the crash window; the subscription just keeps the projection fresh.
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const commits = yield* events.subscribe();
+          const commits = yield* events.subscribe({ filter: approvalItem });
           yield* sync;
           yield* Stream.runForEach(commits, () => sync);
         })

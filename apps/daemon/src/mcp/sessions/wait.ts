@@ -68,7 +68,13 @@ export const waitForCommand = (
   Effect.scoped(
     Effect.gen(function* () {
       // Subscribe first, so a command that ends while the model is read still wakes the wait.
-      const commits = yield* store.subscribe({ sessionId });
+      const commits = yield* store.subscribe({
+        sessionId,
+        filter: (item) =>
+          Predicate.isTagged(item, "Event") &&
+          Predicate.isTagged(item.envelope.event, "SessionBackgroundTasksChanged"),
+      });
+
       const start = yield* store.model;
 
       if (!start.sessions.has(sessionId)) return WaitOutcome.NotFound();
