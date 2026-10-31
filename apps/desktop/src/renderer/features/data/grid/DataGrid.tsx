@@ -68,7 +68,7 @@ interface RowProps {
 }
 
 const ROW_CLASS =
-  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono [contain:layout_style] [font-kerning:none] [text-rendering:optimizeSpeed]";
+  "border-hairline text-code-inline absolute top-0 left-0 flex w-full border-b font-mono select-none [contain:layout_style] [font-kerning:none] [text-rendering:optimizeSpeed]";
 
 const GridRow = memo(function GridRow(props: RowProps) {
   const { index, row, columns, first, last, offset, start, height, gutter, selected } = props;

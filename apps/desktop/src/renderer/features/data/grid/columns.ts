@@ -26,8 +26,8 @@ const NUMERIC =
 
 export const isNumericType = (type: string) => NUMERIC.test(type.trim());
 
-/** JetBrains Mono at 12px advances 0.6em a glyph. */
-const CHAR_PX = 7.2;
+/** JetBrains Mono at 12px advances 7.2px a glyph; the rest keeps a full-width value from clipping. */
+const CHAR_PX = 7.6;
 
 const PAD_PX = 20;
 

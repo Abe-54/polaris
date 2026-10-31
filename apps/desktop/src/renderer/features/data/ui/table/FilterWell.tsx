@@ -5,7 +5,7 @@
  */
 import { cn } from "@polaris/ui";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
-import type { GridColumn } from "../../grid/columns.ts";
+import { type GridColumn, isNumericType } from "../../grid/columns.ts";
 import { applyCompletion, complete, type Completions } from "./completion.ts";
 
 const STRING = /('(?:[^']|'')*'?)/;
@@ -21,6 +21,16 @@ const parts = (text: string) => {
 
     return { start, part, literal: part.startsWith("'") };
   });
+};
+
+/** The empty well's example, on this table's own columns: a text one where there is one. */
+const example = (columns: ReadonlyArray<GridColumn>) => {
+  const column =
+    columns.find((c) => /char|text/i.test(c.type) && c.fk == null) ??
+    columns.find((c) => !isNumericType(c.type)) ??
+    columns[0];
+
+  return column === undefined ? "" : `${column.name} = '…'`;
 };
 
 const Mirror = ({ text }: { readonly text: string }) => (
@@ -108,7 +118,7 @@ export const FilterWell = ({ columns, value, onApply }: FilterWellProps) => {
             className="text-text-default pointer-events-none absolute inset-0 overflow-hidden whitespace-pre"
           >
             {draft === "" ? (
-              <span className="text-text-faint">status = 'overdue'</span>
+              <span className="text-text-faint">{example(columns)}</span>
             ) : (
               <Mirror text={draft} />
             )}
