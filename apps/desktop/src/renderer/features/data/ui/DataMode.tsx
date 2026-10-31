@@ -64,7 +64,7 @@ const Workbench = ({ slot }: { slot: Omit<DataSlotProps, "active"> }) => {
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="data-mode">
       <div className="relative isolate flex min-h-0 shrink-0 flex-col">
         <DataSidebar {...props} />
-        <Horizon />
+        <Horizon moon={false} />
       </div>
       <section className="border-hairline bg-panel shadow-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border">
         <ConnectionBar {...props} />
