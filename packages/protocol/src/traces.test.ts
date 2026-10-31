@@ -4,7 +4,7 @@ import { CapabilityList } from "./capabilities.ts";
 import { decideDeviceAccess } from "./deviceGrants.ts";
 import { Pairing } from "./extensions.ts";
 import { decideAccess } from "./grants.ts";
-import { PairingId } from "./ids.ts";
+import { PairingId, TurnId } from "./ids.ts";
 import {
   Profile,
   TraceComparison,
@@ -12,7 +12,6 @@ import {
   TraceForwardTarget,
   TraceForwardUrl,
 } from "./traces.ts";
-import { TurnId } from "./ids.ts";
 
 test("collector addresses exclude credentials and URL components that commonly carry tokens", () => {
   const accepts = Schema.is(TraceForwardUrl);
