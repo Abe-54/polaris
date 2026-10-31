@@ -139,7 +139,11 @@ const Approval = ({ item, now }: ItemProps) => {
         {request.detail ?? request.title}
       </CodeWell>
       <Actions>
-        <Button variant="primary" size="xs" onClick={() => void approve(target)}>
+        <Button
+          variant="primary"
+          size="xs"
+          onClick={() => void approve(target, false, () => selectSession(target))}
+        >
           Approve
         </Button>
         {offersAlwaysAllow(request) ? (

@@ -38,7 +38,7 @@ import type {
   WaitingSession,
 } from "../model/inbox.ts";
 import { offersAlwaysAllow } from "../../data/approval/decide.ts";
-import { DENY_PROMPT, dryRunKicker, runLabel, writeWants } from "../../data/write/model.ts";
+import { DENY_PROMPT, dryRunKicker, writeName, writeWants } from "../../data/write/model.ts";
 import {
   type ApprovalTarget,
   approve,
@@ -115,14 +115,14 @@ const inboxAsk = (request: ApprovalRequest) => {
   return request.kind === "secret" ? secretLine(request.title) : request.title;
 };
 
-/** A write is answered in its card: Run here, Deny there, where the reason is typed. */
+/** A write is answered in its card, where its SQL and dry run are: both open it. */
 const writeAnswers = (target: ApprovalTarget, open: () => void): ReadonlyArray<CardAction> => {
   const write = target.request.dataWrite;
 
   return write === undefined
     ? []
     : [
-        { label: runLabel(write), run: () => void approve(target), command: "approval.approve" },
+        { label: `Review the ${writeName(write)}`, run: open },
         {
           label: `${DENY_PROMPT}…`,
           run: () => void deny(target, open),

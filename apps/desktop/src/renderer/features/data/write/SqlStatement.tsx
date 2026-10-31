@@ -1,6 +1,7 @@
 /** A statement read-only in `code-inline`, syntax-coloured, a long one folded to its start. */
 import { Button, cn } from "@polaris/ui";
 import { useMemo, useState } from "react";
+import { showBidi } from "../grid/value.ts";
 import { foldedSql, isLongSql } from "./model.ts";
 import { type SqlTokenKind, sqlTokens } from "./sqlTokens.ts";
 
@@ -12,9 +13,6 @@ const COLOUR: Record<SqlTokenKind, string> = {
   punctuation: "text-syntax-punctuation",
   plain: "",
 };
-
-/** The statement's characters drawn at most; the rest is the Query Log's. */
-const DRAWN_CHARS = 20_000;
 
 export const SqlStatement = ({
   sql,
@@ -30,7 +28,7 @@ export const SqlStatement = ({
   const shown = useMemo(() => {
     const text = folded ? foldedSql(sql) : sql;
 
-    return sqlTokens(text.slice(0, DRAWN_CHARS));
+    return sqlTokens(text);
   }, [sql, folded]);
 
   return (
@@ -41,7 +39,7 @@ export const SqlStatement = ({
       >
         {shown.map((token, i) => (
           <span key={i} className={COLOUR[token.kind]}>
-            {token.text}
+            {showBidi(token.text)}
           </span>
         ))}
         {folded ? <span className="text-text-faint">{"\n…"}</span> : null}

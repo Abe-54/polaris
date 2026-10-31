@@ -13,6 +13,7 @@ import {
   UsageStreamItem,
   Workspace,
   Worktree,
+  type SessionId,
 } from "@polaris/protocol";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
@@ -55,7 +56,10 @@ import { items as itemsScene } from "./itemsScene.ts";
 import { tools as toolsScene } from "./toolsScene.ts";
 import { polarisTools, PREVIEW_NOTICE } from "./polarisScene.ts";
 import { secret } from "./secretScene.ts";
+import { setDataOutputShown } from "../../data/output/index.ts";
+import { showOutput } from "../output/actions.ts";
 import { dataApproval } from "./dataApprovalScene.ts";
+import { dataWrite, dataWriteFeed, dataWriteSchemaDiff, dataWriteWorst } from "./dataWriteScene.ts";
 import { visualizations, visualizations30 } from "./visualizationScene.ts";
 import { background, waitingSidebar } from "./background.ts";
 import { MODELS, PATCH } from "./fixtureData.ts";
@@ -152,6 +156,8 @@ const SCENES = {
   question,
   secret,
   "data-approval": dataApproval,
+  "data-write": dataWrite,
+  "data-write-worst": dataWriteWorst,
   interrupted,
   failed,
   long,
@@ -174,6 +180,8 @@ const SCENE_NAMES = [
   "question",
   "secret",
   "data-approval",
+  "data-write",
+  "data-write-worst",
   "interrupted",
   "failed",
   "long",
@@ -193,6 +201,7 @@ const SCENE_NAMES = [
   "usage-3",
   "no-host",
   "windows",
+  "data-output",
   ...WORST_SCENES,
   ...WORST_CONVERSATION_SCENES,
 ] as const;
@@ -348,6 +357,8 @@ const feed = (scene: Scene, kind: SubscriptionKind): ReadonlyArray<unknown> => {
       UsageStreamItem.cases.PlanLimitChanged.make({ limit })
     );
 
+  if (kind === "data.sources.watch" || kind === "data.queryLog.watch") return dataWriteFeed(kind);
+
   return kind === "plan-limits" ? LIMITS : [];
 };
 
@@ -452,6 +463,18 @@ const drawImage = async (path: string): Promise<Result<unknown>> => {
   };
 };
 
+/** The data write scene's schema diff, for the Turn asked about. */
+const answerData = (
+  scene: Scene,
+  method: RequestMethod,
+  input: RequestInput<RequestMethod>
+): Result<unknown> => {
+  if (method !== "data.schemaDiff") return answer(scene, method, input);
+  const turn = "turn" in input ? input.turn : undefined;
+
+  return { ok: true, value: dataWriteSchemaDiff(turn) };
+};
+
 const bridgeFor = (scene: Scene): PolarisApi => ({
   // SAFETY: fixture answers match RequestOutputs for the methods the session feature calls.
   request: (method, input) =>
@@ -460,7 +483,7 @@ const bridgeFor = (scene: Scene): PolarisApi => ({
       ? window.polaris.request(method, input)
       : method === "files.read" && "path" in input && input.path.endsWith(".png")
         ? fixtureImage(input.path)
-        : Promise.resolve(answer(scene, method, input))) as never,
+        : Promise.resolve(answerData(scene, method, input))) as never,
   subscribe: (kind, _input, listener) => {
     // SAFETY: each fixture feed's items match SubscriptionItems for its kind.
     const items = feed(scene, kind) as never;
@@ -511,8 +534,18 @@ const sceneOf = (hash: string): Scene => {
   return SCENE_NAMES.find((n) => n === name) ?? "session";
 };
 
+/** Output open on the Data tab, for the Turn with the pending write. */
+const showDataOutput = (sessionId: SessionId) => {
+  showOutput({ hostKey: HOST, workspaceId }, sessionId);
+  setDataOutputShown(uiKey(HOST, sessionId), true);
+};
+
 /** `windows` shows the default session, on "This PC". */
-const modelScene = (scene: Scene): Scene => (scene === "windows" ? "session" : scene);
+const modelScene = (scene: Scene): Scene => {
+  if (scene === "windows") return "session";
+
+  return scene === "data-output" ? "data-write" : scene;
+};
 
 const previewPlatform = (scene: Scene) => {
   if (scene === "windows") setClientPlatform("win32");
@@ -580,8 +613,12 @@ export const mountPreview = (root: HTMLElement, hash: string) => {
       banner: "shown",
     });
 
+  // These open every Turn; the long one so scrolling crosses thousands of rows.
   if (
-    (scene === "attachments" || scene === "background" || scene === "polaris") &&
+    (scene === "attachments" ||
+      scene === "background" ||
+      scene === "polaris" ||
+      scene === "long") &&
     shown?.session != null
   ) {
     const folds = { chosen: new Map(), openFrom: shown.turns[0]?.turn.id ?? null };
@@ -589,12 +626,7 @@ export const mountPreview = (root: HTMLElement, hash: string) => {
     patchSessionUi(uiKey(HOST, shown.session.id), () => ({ folds }));
   }
 
-  // The long scene opens every Turn, so scrolling crosses thousands of rows.
-  if (scene === "long" && shown?.session != null) {
-    const folds = { chosen: new Map(), openFrom: shown.turns[0]?.turn.id ?? null };
-
-    patchSessionUi(uiKey(HOST, shown.session.id), () => ({ folds }));
-  }
+  if (scene === "data-output" && shown?.session != null) showDataOutput(shown.session.id);
 
   if (isUsage(scene)) navigation.actions.openSettings("usage");
 

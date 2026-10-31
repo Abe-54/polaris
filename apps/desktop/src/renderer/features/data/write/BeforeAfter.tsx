@@ -100,7 +100,14 @@ const Line = ({
   </tr>
 );
 
-export const BeforeAfter = ({ write }: { readonly write: DataWrite }) => {
+export const BeforeAfter = ({
+  write,
+  className,
+}: {
+  readonly write: DataWrite;
+  /** The rows' height cap, where the card sits (Output's is shorter). */
+  readonly className?: string;
+}) => {
   const [all, setAll] = useState(false);
   const columns = visibleColumns(write, all);
   const changes = cellChanges(write);
@@ -111,7 +118,10 @@ export const BeforeAfter = ({ write }: { readonly write: DataWrite }) => {
   return (
     <div className="flex flex-col gap-1.5">
       <div
-        className="border-hairline bg-surface-sunken max-h-[420px] overflow-auto rounded-[10px] border"
+        className={cn(
+          "border-hairline bg-surface-sunken max-h-[420px] overflow-auto rounded-[10px] border",
+          className
+        )}
         data-testid="data-write-rows"
       >
         <table className="w-max min-w-full border-collapse">

@@ -197,6 +197,7 @@ export type Settled =
   | { readonly kind: "allowed"; readonly line: string }
   | { readonly kind: "failed"; readonly line: string; readonly detail: string }
   | { readonly kind: "cancelled"; readonly line: string }
+  | { readonly kind: "unknown"; readonly line: string; readonly detail: string }
   | { readonly kind: "denied"; readonly line: string }
   | { readonly kind: "expired"; readonly line: string };
 
@@ -209,8 +210,21 @@ const EXPIRED = {
 const failureDetail = (entry: QueryLogEntry) =>
   entry.error?.trim() || "The database refused the write. Open the query log for what it ran.";
 
+/** WF's `unknown` state (E-DATA-OUTCOME-UNKNOWN), read as a string until the protocol has it. */
+export const outcomeUnknown = (entry: QueryLogEntry | undefined) => {
+  const state: string | undefined = entry?.state;
+
+  return state === "unknown";
+};
+
+export const UNKNOWN_DETAIL =
+  "The connection dropped before the database answered. Check the table before running it again.";
+
 const allowedLine = (write: DataWrite, entry: QueryLogEntry | undefined): Settled => {
   const name = writeName(write);
+
+  if (outcomeUnknown(entry))
+    return { kind: "unknown", line: `${name}: outcome unknown`, detail: UNKNOWN_DETAIL };
 
   switch (entry?.state) {
     case "running":

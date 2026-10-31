@@ -6,7 +6,7 @@ import { Predicate } from "effect";
 import { Decisions } from "../../../commands.ts";
 import { type FakeBridge, installFakeBridge } from "../../../test/bridge.testing.ts";
 import { standInBridge } from "../../bridge.ts";
-import { deny } from "../../needs-you/respond.ts";
+import { approve, deny } from "../../needs-you/respond.ts";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import { fixtureWrite, fixtureWriteApproval, worstWrite } from "../preview/writeFixtures.ts";
 import type { DataWrite } from "./model.ts";
@@ -125,4 +125,22 @@ test("the worst case shows the changed columns, 20 of the rows, and offers the r
   fireEvent.click(screen.getByText("Show all 256 columns"));
   expect(rows.querySelectorAll("thead th")).toHaveLength(257);
   expect(screen.getByText("Show the whole statement")).toBeTruthy();
+});
+
+test("Approve from outside a card on screen opens it and runs nothing: the SQL is seen first", async () => {
+  const request = fixtureWriteApproval();
+  let opened = false;
+
+  // Rendered, but with no layout: not on screen.
+  render(card(request));
+
+  const sent = await act(() =>
+    approve({ hostKey: "local", sessionId: request.sessionId, request }, false, () => {
+      opened = true;
+    })
+  );
+
+  expect(sent).toBe(false);
+  expect(opened).toBe(true);
+  expect(decisions()).toEqual([]);
 });

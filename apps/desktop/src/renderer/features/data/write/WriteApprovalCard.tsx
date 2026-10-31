@@ -73,8 +73,13 @@ export const SettledWrite = ({ settled }: { readonly settled: Settled }) => (
       <SettledIcon settled={settled} />
       <span className="min-w-0 [overflow-wrap:anywhere]">{settled.line}</span>
     </span>
-    {settled.kind === "failed" ? (
-      <span className="text-caption text-failed-text pl-[22px] [overflow-wrap:anywhere]">
+    {settled.kind === "failed" || settled.kind === "unknown" ? (
+      <span
+        className={cn(
+          "text-caption pl-[22px] [overflow-wrap:anywhere]",
+          settled.kind === "failed" ? "text-failed-text" : "text-text-subtle"
+        )}
+      >
         {settled.detail}
       </span>
     ) : null}

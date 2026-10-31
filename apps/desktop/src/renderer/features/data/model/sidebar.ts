@@ -6,12 +6,20 @@ import { type DataSessionKey, dataSessionKey } from "./store.ts";
 
 export type SidebarView = "sources" | "log";
 
+/** The Query log narrowed to one Turn's queries, from Output's "Query log". */
+export interface LogTurn {
+  readonly turnIds: ReadonlyArray<string>;
+  /** "Turn 12". */
+  readonly label: string;
+}
+
 export interface SidebarState {
   readonly view: SidebarView;
   readonly toggled: ReadonlyMap<string, boolean>;
+  readonly logTurn?: LogTurn | null;
 }
 
-const EMPTY: SidebarState = { view: "sources", toggled: new Map() };
+const EMPTY: SidebarState = { view: "sources", toggled: new Map(), logTurn: null };
 
 export const sidebarStore = createStore<Readonly<Record<string, SidebarState>>>(() => ({}));
 
@@ -23,6 +31,10 @@ const patch = (at: DataSessionKey, change: (state: SidebarState) => SidebarState
 
 export const setSidebarView = (at: DataSessionKey, view: SidebarView) =>
   patch(at, (s) => ({ ...s, view }));
+
+/** Shows the Query log narrowed to a Turn; null shows every query again. */
+export const showLogTurn = (at: DataSessionKey, logTurn: LogTurn | null) =>
+  patch(at, (s) => ({ ...s, view: logTurn === null ? s.view : "log", logTurn }));
 
 /** Opens or closes a tree row; `open` is what it shows now. */
 export const toggleTreeRow = (at: DataSessionKey, key: string, open: boolean) =>
