@@ -11,6 +11,8 @@ import {
   constellationTools,
 } from "./tools.ts";
 import { DataSources, DataQueries } from "../data/index.ts";
+import { TraceStore, TraceRuntime, TraceSessions } from "../traces/index.ts";
+import { sessionTraceTools } from "./sessions/traces.ts";
 import { sessionDataTools } from "./sessions/data.ts";
 import { McpTokens } from "./tokens.ts";
 import { loopbackRequest } from "../transport/loopbackHttp.ts";
@@ -124,6 +126,9 @@ export const mcpHttp = (
     // The same commands reach Claude's in-process tools, so they serve the session tools too.
     const sources = yield* Effect.serviceOption(DataSources);
     const queries = yield* Effect.serviceOption(DataQueries);
+    const traceStore = yield* Effect.serviceOption(TraceStore);
+    const traceRuntime = yield* Effect.serviceOption(TraceRuntime);
+    const traceSessions = yield* Effect.serviceOption(TraceSessions);
 
     if (Option.isSome(store) && notifications !== null) {
       const sessions = sessionTools(store.value, notifications, requestSecret);
@@ -132,6 +137,21 @@ export const mcpHttp = (
         Option.isSome(sources) && Option.isSome(queries)
           ? sessionDataTools(store.value, sources.value, queries.value)
           : undefined;
+
+      if (
+        Option.isSome(traceStore) &&
+        Option.isSome(traceRuntime) &&
+        Option.isSome(traceSessions)
+      ) {
+        Object.assign(sessions, {
+          traces: sessionTraceTools(
+            traceStore.value,
+            traceRuntime.value,
+            traceSessions.value,
+            Option.getOrUndefined(sources)
+          ),
+        });
+      }
 
       attachSessionTools(
         commands,

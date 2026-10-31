@@ -65,3 +65,10 @@ event-log semantics, or model spec changes are required for ingest.
 Run `bun test apps/daemon/src/traces` with native loopback/PTY access. The
 `packages/bench` `traces` scenario drives 200k Spans through the real Daemon,
 measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
+
+MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
+`TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
+over earlier retained traces; fewer than five samples produce no baseline. The read-only helper
+runs inside the existing worker. SLOW requires over 20 ms and over three times the median.
+The MCP summary retains error paths before the critical path, collapses repeated siblings, and
+counts omitted Spans under the text cap. Its full contract is `docs/specs/traces-tools-v1.md`.

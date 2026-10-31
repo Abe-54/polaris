@@ -161,3 +161,77 @@ export const linkTrace = (db: Database, checkout: string, prefix: string): void 
   db.query("INSERT OR IGNORE INTO trace_pins VALUES (?,?)").run(checkout, summary.id);
   refreshSummary(db, checkout, summary.id);
 };
+
+/** Medians use earlier retained traces only; five observations are required for a baseline. */
+export const traceHistory = (
+  db: Database,
+  checkout: string,
+  traceId: string,
+  includeSpans = true
+) => {
+  const summary = summaryFor(db, checkout, traceId);
+  const before = summary.startTimeUnixNano.padStart(20, "0");
+
+  const rootRows = Schema.decodeUnknownSync(
+    Schema.Array(Schema.Struct({ usual: Schema.NullOr(Schema.Number) }))
+  )(
+    db
+      .query(`
+    WITH samples AS (
+      SELECT duration,row_number() OVER (ORDER BY duration) AS position,count(*) OVER () AS count
+      FROM summaries WHERE checkout=? AND root=? AND start<? AND trace_id<>?
+    ) SELECT avg(duration) AS usual FROM samples WHERE count>=5 AND position IN ((count+1)/2,(count+2)/2)
+  `)
+      .all(checkout, summary.root, before, summary.id)
+  );
+
+  const spans: Record<string, number> = {};
+  const root = rootRows[0]?.usual ?? null;
+
+  if (!includeSpans) return { root, spans };
+  const trace = getTrace(db, checkout, summary.id);
+
+  const medians = Schema.decodeUnknownSync(
+    Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        parent: Schema.NullOr(Schema.String),
+        usual: Schema.Number,
+      })
+    )
+  )(
+    db
+      .query(`
+    WITH wanted AS (
+      SELECT DISTINCT json_extract(c.value,'$.name') AS name,
+        json_extract(p.value,'$.name') AS parent
+      FROM spans c LEFT JOIN spans p
+        ON p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent
+      WHERE c.checkout=? AND c.trace_id=?
+    ), samples AS (
+      SELECT w.name,w.parent,json_extract(c.value,'$.durationMs') AS ms
+      FROM wanted w JOIN spans c ON c.checkout=? AND json_extract(c.value,'$.name')=w.name
+      JOIN summaries s ON s.checkout=c.checkout AND s.trace_id=c.trace_id
+      LEFT JOIN spans p ON p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent
+      WHERE s.start<? AND s.trace_id<>? AND json_extract(p.value,'$.name') IS w.parent
+    ), ranked AS (
+      SELECT *,row_number() OVER (PARTITION BY name,parent ORDER BY ms) AS position,
+        count(*) OVER (PARTITION BY name,parent) AS count FROM samples
+    ) SELECT name,parent,avg(ms) AS usual FROM ranked
+      WHERE count>=5 AND position IN ((count+1)/2,(count+2)/2) GROUP BY name,parent
+  `)
+      .all(checkout, trace.summary.id, checkout, before, trace.summary.id)
+  );
+
+  const byId = new Map(trace.spans.map((span) => [span.id, span]));
+  const lookup = new Map(medians.map((row) => [JSON.stringify([row.name, row.parent]), row.usual]));
+
+  for (const span of trace.spans) {
+    const parent = span.parentId === null ? null : (byId.get(span.parentId)?.name ?? null);
+    const usual = lookup.get(JSON.stringify([span.name, parent]));
+
+    if (usual !== undefined) spans[span.id] = usual;
+  }
+
+  return { root, spans };
+};
