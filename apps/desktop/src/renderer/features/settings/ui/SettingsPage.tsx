@@ -40,6 +40,7 @@ import { HarnessesPage } from "./HarnessesPage.tsx";
 import { ReviewerPage } from "./ReviewerPage.tsx";
 import { SessionsPage } from "./SessionsPage.tsx";
 import { EditorPage } from "./EditorPage.tsx";
+import { TracesPage, WaterfallGlyph } from "./TracesPage.tsx";
 import { UsagePage } from "./UsagePage.tsx";
 import { VoicePage } from "./VoicePage.tsx";
 import { ConstellationsPage } from "./ConstellationsPage.tsx";
@@ -49,6 +50,7 @@ const ICONS: Readonly<Record<SettingsSection, ReactNode>> = {
   appearance: <ContrastIcon />,
   sessions: <BranchIcon />,
   editor: <CommandIcon />,
+  traces: <WaterfallGlyph />,
   harnesses: <GridIcon />,
   constellations: <ConstellationMark size={16} className="opacity-90" />,
   usage: <ChartColumnIcon />,
@@ -179,6 +181,8 @@ const Page = ({ route }: { readonly route: SettingsRoute }) => {
       return <SessionsPage />;
     case "editor":
       return <EditorPage />;
+    case "traces":
+      return <TracesPage />;
     case "harnesses":
       return <HarnessesPage />;
     case "constellations":

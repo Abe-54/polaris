@@ -1,49 +1,37 @@
 /**
  * Traces in place of a trace when there is none to show (DESIGN.md, Traces → Setup; Paper T4):
- * no traces yet with the endpoint and the fixed-exporter change to copy, the receiver unavailable,
- * the app exporting on its own, reading, the Host away, and a failed read.
+ * no traces yet with "Set up tracing", the endpoint and the fixed-exporter card, the receiver
+ * unavailable, the app exporting on its own, reading, the Host away, and a failed read.
  */
-import { CopyButton, EmptyState, PixelAlertIcon, PlugIcon } from "@polaris/ui";
+import { Button, EmptyState, PixelAlertIcon, PlugIcon } from "@polaris/ui";
 import { Match } from "effect";
 import type { ReactNode } from "react";
 import { endpointLine, FIXED_EXPORTER_CHANGE, type SetupState } from "../../model/setup.ts";
+import { FixedExporterCard } from "./FixedExporterCard.tsx";
+import { Column, Copyable, Lead, Section } from "./parts.tsx";
+import { SetUpWithAgent } from "./SetUpWithAgent.tsx";
+import type { SetupPlaceView } from "./useSetupPlace.ts";
 
-const Copyable = ({ text, label }: { readonly text: string; readonly label: string }) => (
-  <div className="border-hairline bg-surface-sunken rounded-control flex items-start gap-2 border py-2 pr-2 pl-2.5">
-    <code className="text-code-inline text-text-default min-w-0 flex-1 font-mono break-all whitespace-pre-wrap">
-      {text}
-    </code>
-    <CopyButton text={text} label={label} />
-  </div>
+const Fixed = ({ place }: { readonly place: SetupPlaceView }) => (
+  <FixedExporterCard
+    hostKey={place.hostKey}
+    workspaceId={place.workspaceId}
+    workspaceName={place.workspaceName}
+    session={place.session}
+    exporters={place.fixed}
+    forwarding={place.forwarding}
+    onSettings={place.openSettings ?? (() => undefined)}
+    onDismiss={place.dismiss}
+  />
 );
 
-const Section = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
-  <section className="flex flex-col gap-2">
-    <h3 className="text-label text-text-strong font-medium">{title}</h3>
-    {children}
-  </section>
-);
-
-const Column = ({
-  testId,
-  children,
+const Empty = ({
+  endpoint,
+  place,
 }: {
-  readonly testId: string;
-  readonly children: ReactNode;
+  readonly endpoint: string | null;
+  readonly place: SetupPlaceView;
 }) => (
-  <div className="flex min-h-0 flex-1 overflow-y-auto" data-testid={testId}>
-    <div className="m-auto flex w-full max-w-[460px] flex-col gap-6 px-6 py-10">{children}</div>
-  </div>
-);
-
-const Lead = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
-  <div className="flex flex-col gap-1.5">
-    <h2 className="text-heading text-text-strong">{title}</h2>
-    <div className="text-body text-text-subtle flex flex-col gap-1.5">{children}</div>
-  </div>
-);
-
-const Empty = ({ endpoint }: { readonly endpoint: string | null }) => (
   <Column testId="traces-setup-empty">
     <Lead title="No traces from this checkout yet">
       <p>
@@ -51,18 +39,28 @@ const Empty = ({ endpoint }: { readonly endpoint: string | null }) => (
         trace. An app sends them once it has OpenTelemetry set up.
       </p>
     </Lead>
+    <SetUpWithAgent
+      hostKey={place.hostKey}
+      workspaceId={place.workspaceId}
+      session={place.session}
+      onInstrument={place.openSettings}
+    />
     {endpoint === null ? null : (
       <Section title="A server you start yourself can send here too">
         <Copyable text={endpointLine(endpoint)} label="Copy" />
       </Section>
     )}
-    <Section title="An exporter with its URL fixed in code">
-      <p className="text-caption text-text-subtle">
-        The environment can’t redirect it. Change its URL to read Polaris’s endpoint, keeping the
-        current one as the fallback:
-      </p>
-      <Copyable text={FIXED_EXPORTER_CHANGE} label="Copy" />
-    </Section>
+    {place.fixed.length > 0 ? (
+      <Fixed place={place} />
+    ) : (
+      <Section title="An exporter with its URL fixed in code">
+        <p className="text-caption text-text-subtle">
+          The environment can’t redirect it. Change its URL to read Polaris’s endpoint, keeping the
+          current one as the fallback:
+        </p>
+        <Copyable text={FIXED_EXPORTER_CHANGE} label="Copy" />
+      </Section>
+    )}
   </Column>
 );
 
@@ -88,17 +86,32 @@ const Unavailable = ({
   </Column>
 );
 
-const UserExported = () => (
+const UserExported = ({ place }: { readonly place: SetupPlaceView }) => (
   <Column testId="traces-setup-user-exported">
-    <Lead title="This app sends its traces elsewhere">
-      <p>
-        Its exporter already has an endpoint, so Polaris didn’t add its own to this agent session’s
-        commands, and its traces don’t reach Polaris.
-      </p>
-      <p className="text-text-faint">
-        Forwarding a copy of them into Polaris, on their way to where they go now, is a follow-up.
-      </p>
-    </Lead>
+    {place.fixed.length > 0 ? (
+      <Fixed place={place} />
+    ) : (
+      <Lead title="This app sends its traces elsewhere">
+        <p>
+          Its exporter is set up with an endpoint of its own, so its traces go there and don’t reach
+          Polaris.
+        </p>
+        {place.openSettings === null ? (
+          <p className="text-text-faint">
+            Forwarding a copy of them into Polaris needs a newer daemon on this host.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="min-w-0 flex-1">
+              Polaris can take a copy on their way: forward to the collector in Settings → Traces.
+            </p>
+            <Button variant="ghost" className="border-hairline border" onClick={place.openSettings}>
+              Traces settings
+            </Button>
+          </div>
+        )}
+      </Lead>
+    )}
   </Column>
 );
 
@@ -114,7 +127,13 @@ const Centered = ({
   </div>
 );
 
-export const TracesSetup = ({ state }: { readonly state: SetupState }) =>
+export const TracesSetup = ({
+  state,
+  place,
+}: {
+  readonly state: SetupState;
+  readonly place: SetupPlaceView;
+}) =>
   Match.value(state).pipe(
     Match.discriminatorsExhaustive("kind")({
       loading: () => (
@@ -165,7 +184,7 @@ export const TracesSetup = ({ state }: { readonly state: SetupState }) =>
         </Centered>
       ),
       unavailable: (u) => <Unavailable code={u.code} message={u.message} owner={u.owner} />,
-      userExported: () => <UserExported />,
-      empty: ({ endpoint }) => <Empty endpoint={endpoint} />,
+      userExported: () => <UserExported place={place} />,
+      empty: ({ endpoint }) => <Empty endpoint={endpoint} place={place} />,
     })
   );

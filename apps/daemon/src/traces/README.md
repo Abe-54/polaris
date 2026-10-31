@@ -18,7 +18,7 @@ The event store owns authority. Archived or failed sessions and removed Workspac
 revoke their bindings and prune exporter preferences. The lifecycle subscriber
 also reconciles on startup; authentication rechecks authority before ingest.
 Dormancy, Harness scope close, graceful restart and upgrade preserve endpoints.
-Terminals share a Workspace endpoint. Sessions in subfolders resolve the same
+Terminals use child endpoints of their Workspace binding. Sessions in subfolders resolve the same
 containing Workspace/worktree checkout root as terminals. Turn intervals load
 once, then update from the read model's recent Turns; a missed history window
 causes a fresh history read.
@@ -88,14 +88,44 @@ The `traces.watch/get/span` RPCs resolve checkout from the selected Agent Sessio
 Only the first watch page includes the endpoint; later pages set it to null.
 Clients keep the initial endpoint separately in memory and never persist it.
 
-Span start time chooses the historical Turn interval. `launchedTurn` is null
-until per-command process launch attribution is implemented (ENG-673). Forwarding
-and Vercel duplicate-export detection are ENG-674 and ENG-675. No Engine command,
-event-log semantics, or model spec changes are required for ingest.
+Span start time chooses the historical Turn interval; batch arrival never chooses
+either attribution field. Managed Claude Bash commands on macOS/Linux receive a
+per-command endpoint from the SDK `PreToolUse` hook (ENG-673). Its child token
+contains the parent endpoint, a launch Turn id and a random nonce, authenticated
+with the Daemon's private seed. The receiver verifies that signature, parent
+revocation/checkout authority, and the Turn's membership in the bound Agent Session.
+The token is stateless and survives graceful restart without retaining one vault
+entry per command. A server launched in Turn 2 keeps `launchedTurn=2` while Spans
+started during Turn 5 get `turn=5`; between Turns, `turn=null` and `launchedTurn=2`.
+
+The Bash hook sources a private 0600 environment file in a 0700 temporary directory,
+so raw tokens never enter tool command text. Sourcing removes the file; Harness
+scope close removes unused files. Preparation failure leaves the session endpoint
+and unknown launch attribution. Polaris terminal opens also receive unique child
+endpoints; user terminals have Workspace authority and `launchedTurn=null` because
+no Agent Session Turn launched them. Commands typed into an interactive user shell
+inherit that terminal's endpoint.
+
+Codex agent, reviewer and TUI shell launches retain `launchedTurn=null`: the current
+app-server contract exposes only thread-level `shell_environment_policy.set`, not
+a per-command environment hook. Notifications cannot prove which environment a
+child inherited. [ENG-691](https://linear.app/luxdev/issue/ENG-691) tracks enabling
+this when Codex supplies a hook. Claude reviewer launches retain null to preserve
+their checkout sandbox. Claude Subagent hooks have no verified owner-Turn binding
+here, so they never borrow the foreground Turn. Claude In Terminal, Windows Bash,
+OpenCode and ACP launches
+also have no supported per-command injection here and remain null. Ordinary session
+endpoints and process-supplied `polaris.launch.*` attributes cannot establish launch
+authority. `environment.test.ts` pins Codex's null result, including reviewers.
+
+Forwarding and Vercel duplicate-export detection are ENG-674 and ENG-675. No Engine
+command, event-log semantics, protocol shape or model spec changes are required.
 
 Run `bun test apps/daemon/src/traces` with native loopback/PTY access. The
 `packages/bench` `traces` scenario drives 200k Spans through the real Daemon,
 measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
+ENG-673's default-timeout checks, negative control and raw paired measurements
+are in [launch-bench/README.md](./launch-bench/README.md).
 
 MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
@@ -111,9 +141,9 @@ counts omitted Spans under the text cap. Its full contract is `docs/specs/traces
 ## Phase 2 contracts (ENG-657)
 
 `packages/protocol/src/traces.ts` owns these additive contracts. The phase 1
-shapes and `traces` capability are unchanged. P1 implements and advertises `traces.settings`; profile and compare RPCs remain
-owned by their respective implementation lanes. Each owner
-replaces its handlers and advertises its capability when the implementation lands.
+shapes and `traces` capability are unchanged. Settings and comparison are implemented
+and advertised as `traces.settings` and `traces.compare`. Profiles supplies all three
+of its handlers and `traces.profiles`; see `profiles/README.md`.
 All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
 The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
 merged into `DaemonRpcs` alongside the unchanged phase 1 `TracesRpcs` group.
@@ -144,7 +174,9 @@ auto-instrumented, and an override never bypasses Workspace Trust.
 Profiles use a store-assigned `ProfileId`; a path in a summary is display data,
 never authority to read a file. `path` is null until a `.cpuprofile` exists.
 `status` is `recording`, `completed` or `failed`, and `turn` is a nullable
-`TraceTurn`. `ProfileDetail.hotFunctions` contains self and inclusive milliseconds
+`TraceTurn`. Optional `origin` (`command`, `restart`, `attach`) says how it was
+recorded and optional `service` names the process's `service.name`; older Daemons
+omit both and Clients fall back to the Turn and status. `ProfileDetail.hotFunctions` contains self and inclusive milliseconds
 and nullable file/line for unresolved frames. Its indices remain stable when a UI
 sorts a view by self time. `hotPath` indexes those functions from root to leaf;
 each flame chart node indexes a function and an earlier parent (null for roots),
@@ -154,10 +186,26 @@ identity and checkout ownership; a caller-supplied pid alone is never authority.
 
 Compare selectors are tagged `{_tag: "Turn", turnId}` or
 `{_tag: "Trace", traceId}` (full id or unique prefix). The Daemon resolves both in
-the session's checkout. `a` is before and `b` after, without an inferred baseline.
+the session's checkout. `a` is before and `b` after. Additive `{_tag: "Baseline"}`
+is valid only as `a`,
+against a Turn `b`; it explicitly selects that route's earlier attributed traces
+in the checkout, before the target Turn's start and within retention. Omitted
+MCP `a` means Baseline; equal explicit selectors compare with themselves. Turn
+selectors resolve in the caller's Agent Session; Trace selectors resolve in its
+checkout. Baseline as `b`, mixed explicit selector types and Baseline against a
+Trace return `E-INPUT` with accepted input forms. This is the Lead's owner decision
+for ENG-660; it supersedes the original contract's absence of a baseline mode.
 Routes are grouped by service and Trace root name, sorted by service then route.
-Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; no samples
-means count zero and null percentiles. A missing selector still uses `TraceError`
+Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; fewer than
+three complete retained samples on either side means "no baseline":
+both sides retain their counts with null percentiles. A missing route side has
+count zero. Partial traces are excluded and reported in optional per-route
+`partial:{before,after}` counts. Optional `slowestNew:{name,service,durationMs,traceId,spanId}`
+identifies the longest after Span whose service/name/parent-name is absent from
+the same before root route. RPC and MCP return these same facts. The separate
+`compareQuery.ts` runs only on demand inside the existing SQLite worker, after
+retention, without pins, timers or the history helper's five-sample SLOW rule.
+A missing selector still uses `TraceError`
 rather than silently comparing another Turn or checkout. P8 owns aggregation,
 expiry/partial-data handling and selector authorization.
 

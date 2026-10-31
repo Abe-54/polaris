@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect";
 import type { DataSources } from "../../data/index.ts";
 import type { TraceRuntime, TraceSessions, TraceStore } from "../../traces/index.ts";
 import type { TraceSessionTools } from "../tools/traces.ts";
+import { compareForSession } from "../../traces/compare.ts";
 import { attributeValue } from "../tools/traceFormat.ts";
 import { matchingSource } from "../tools/spanFormat.ts";
 
@@ -13,6 +14,7 @@ export const sessionTraceTools = (
   sessions: Pick<TraceSessions["Service"], "session">,
   sources?: Pick<DataSources["Service"], "list">
 ): TraceSessionTools => ({
+  compare: (sessionId, a, b) => compareForSession(store, sessions, sessionId, a, b),
   context: Effect.fnUntraced(function* (id, input) {
     const context = yield* sessions.session(id);
     const setup = yield* runtime.setup(id);

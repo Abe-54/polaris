@@ -1,18 +1,24 @@
 /**
- * The main slot (DESIGN.md, Traces → Waterfall): the open trace as the waterfall or Table under
- * their toolbar. Selecting a span sets the selection the span panel reads (model/store.ts).
+ * The main slot (DESIGN.md, Traces → Waterfall, Service map): the open trace as the waterfall,
+ * Table or Service map under their toolbar. Selecting a span sets the selection the span panel
+ * reads (model/store.ts); the view is kept per Agent Session (model/mainView.ts).
  */
 import type { TraceDetail } from "@polaris/protocol";
 import { EmptyState, PixelAlertIcon, PixelHourglassIcon } from "@polaris/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useTrace, useTraces } from "../data/hooks.tsx";
+import { type MainView, setMainView, useMainView } from "../model/mainView.ts";
 import { useListedVersion } from "../model/listed.ts";
 import { publishOpenTrace } from "../model/openTrace.ts";
+import { openTraceNs } from "../model/profile/openTrace.ts";
+import { overlap } from "../model/profile/overlap.ts";
+import { useProfileSelection } from "../model/profile/store.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { selectSpan } from "../model/store.ts";
+import { ServiceMap } from "./map/ServiceMap.tsx";
 import type { TracesSlotProps } from "./slots.ts";
 import { TableView } from "./waterfall/TableView.tsx";
-import { type MainView, Toolbar } from "./waterfall/Toolbar.tsx";
+import { Toolbar } from "./waterfall/Toolbar.tsx";
 import { useTraceView } from "./waterfall/useTraceView.ts";
 import { Waterfall } from "./waterfall/Waterfall.tsx";
 
@@ -31,9 +37,25 @@ const Shown = ({
 }) => {
   const trace = useTraceView(detail);
   const { hostKey, sessionId } = at;
+  const { profile } = useProfileSelection(at);
+
+  const mark = useMemo(() => {
+    if (profile === null) return null;
+    const { startNs, endNs } = openTraceNs(detail);
+
+    return overlap(profile, startNs, endNs)?.stretch ?? null;
+  }, [profile, detail]);
 
   const onSelect = useCallback(
     (id: string | null) => selectSpan({ hostKey, sessionId }, id),
+    [hostKey, sessionId]
+  );
+
+  const onOpenSpan = useCallback(
+    (id: string) => {
+      setMainView({ hostKey, sessionId }, "waterfall");
+      selectSpan({ hostKey, sessionId }, id);
+    },
     [hostKey, sessionId]
   );
 
@@ -41,10 +63,10 @@ const Shown = ({
     <div className="flex min-h-0 flex-1 flex-col" data-testid="traces-main" data-view={view}>
       <Toolbar view={view} onView={onView} trace={trace} />
       {view === "waterfall" ? (
-        <Waterfall trace={trace} spanId={spanId} onSelect={onSelect} />
-      ) : (
-        <TableView trace={trace} spanId={spanId} onSelect={onSelect} />
-      )}
+        <Waterfall trace={trace} mark={mark} spanId={spanId} onSelect={onSelect} />
+      ) : null}
+      {view === "table" ? <TableView trace={trace} spanId={spanId} onSelect={onSelect} /> : null}
+      {view === "map" ? <ServiceMap trace={trace} onOpenSpan={onOpenSpan} /> : null}
     </div>
   );
 };
@@ -124,9 +146,15 @@ const NoTrace = ({ at }: { readonly at: TracesSessionKey }) => {
 };
 
 export const TraceMain = ({ at, traceId, spanId }: TracesSlotProps) => {
-  const [view, setView] = useState<MainView>("waterfall");
+  const view = useMainView(at);
+  const { hostKey, sessionId } = at;
+
+  const onView = useCallback(
+    (next: MainView) => setMainView({ hostKey, sessionId }, next),
+    [hostKey, sessionId]
+  );
 
   if (traceId === null) return <NoTrace at={at} />;
 
-  return <Open at={at} traceId={traceId} spanId={spanId} view={view} onView={setView} />;
+  return <Open at={at} traceId={traceId} spanId={spanId} view={view} onView={onView} />;
 };

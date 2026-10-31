@@ -31,7 +31,7 @@ describe("parseTraceFilter", () => {
       "GET /invoices?status=overdue",
       "POST /invoices/import",
     ]);
-    expect(roots("status:error")).toEqual(["test overdue-totals"]);
+    expect(roots("status:error")).toEqual(["test overdue-totals", "settlements.run"]);
   });
 });
 
@@ -42,7 +42,7 @@ describe("groupByTurn", () => {
     expect(groups.map((g) => [turnKicker(g.turn, 12), g.traces.length])).toEqual([
       ["TURN 12 · NOW", 4],
       ["BETWEEN TURNS", 1],
-      ["TURN 11", 2],
+      ["TURN 11", 3],
       ["TURN 10", 2],
     ]);
   });

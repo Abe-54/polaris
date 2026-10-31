@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer, Schema } from "effect";
 import { RpcTest } from "effect/rpc";
-import { TracesSettingsRpcs } from "@polaris/protocol";
+import { TraceTurn, TracesSettingsRpcs, TurnId } from "@polaris/protocol";
 import { decodeBatch } from "./decoder.ts";
 import { TraceSettings } from "./settings.ts";
 import { TracesSettingsRpcsLive } from "./rpcs.ts";
@@ -304,3 +304,67 @@ test("a pending local store never delays delivery to the collector", async () =>
     { beforeIngest: () => blocked }
   );
 });
+
+for (const kind of ["session", "terminal"] as const)
+  test(`${kind} child endpoints forward while preserving launch attribution`, () =>
+    withTraceFixture(async (f) => {
+      const target = collector();
+
+      const launched = TraceTurn.make({
+        sessionId: TEST_SESSION,
+        id: TurnId.make("launch"),
+        number: 2,
+      });
+
+      const current = TraceTurn.make({
+        sessionId: TEST_SESSION,
+        id: TurnId.make("current"),
+        number: 5,
+      });
+
+      f.state.turns = [
+        { turn: launched, start: "0", end: "1" },
+        { turn: current, start: "1", end: null },
+      ];
+
+      try {
+        const source = {
+          OTEL_EXPORTER_OTLP_ENDPOINT: target.endpoint,
+          OTEL_EXPORTER_OTLP_HEADERS: "x-collector=private-child-header",
+        };
+
+        const parent = await Effect.runPromise(
+          kind === "session"
+            ? f.runtime.environment(TEST_SESSION, source)
+            : f.runtime.terminalEnvironment(f.root, source)
+        );
+
+        const child = await Effect.runPromise(
+          kind === "session"
+            ? f.runtime.environment(TEST_SESSION, parent, launched.id)
+            : f.runtime.terminalEnvironment(f.root, parent)
+        );
+
+        const body = JSON.stringify(traceFixture());
+
+        const response = await fetch(child.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT!, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        });
+
+        expect(response.status).toBe(200);
+        await until(() => f.forwarding.stats.delivered === 1);
+        expect(target.received[0]!.body).toEqual(new TextEncoder().encode(body));
+        expect(target.received[0]!.headers.get("x-collector")).toBe("private-child-header");
+        const detail = await Effect.runPromise(f.store.get(f.root, TRACE_ID));
+        expect(detail.spans[0]?.polaris).toMatchObject({
+          checkout: f.root,
+          sessionId: kind === "session" ? TEST_SESSION : null,
+          launchedTurn: kind === "session" ? launched : null,
+          turn: kind === "session" ? current : null,
+        });
+      } finally {
+        await target.server.stop(true);
+      }
+    }));

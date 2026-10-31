@@ -9,4 +9,4 @@ export { TraceReceiverLive, traceReceiver } from "./receiver.ts";
 
 export { TraceSettings } from "./settings.ts";
 
-export { TracesRpcsLive, TracesSettingsRpcsLive } from "./rpcs.ts";
+export { TracesRpcsLive, TracesSettingsRpcsLive, TraceCompareRpcsLive } from "./rpcs.ts";
