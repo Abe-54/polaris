@@ -864,3 +864,11 @@ held retirement, and retirement timeout without spending crash retries.
 The authenticated Host setting is configuration outside EventStore, like SQL
 dialect and Python interpreter selection. No EventStore command, commit, stream,
 acknowledgment or recovery semantics change. Runtime trace replay includes Evict.
+
+## Data Source Approvals (ENG-644)
+
+`data_approvals` in `polaris.qnt` refines the existing HRequest/Respond lifecycle with exact target and whole-server remembering, duplicate requests, bounded waits, revocation and restart. `engine/session.ts` decides `data.approvalRequested`; `data/approvals.ts` commits its events, and `data/approvalStore.ts` projects durable decisions into data.sqlite. Approvals remain pending only with a Turn in flight; waits leave the card in place. Target identity includes engine, host, port, database and user; source names are not permission keys. The existing commit/replay/first-response-wins properties still apply. `verification/dataApprovals.model.test.ts` drives the real machine and persistence against an independent model.
+
+### Findings
+
+MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.

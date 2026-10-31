@@ -474,10 +474,12 @@ export const defaultHandlers = (options: {
     "data.queryLog.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
     "data.describe": () => Effect.fail(new Unsupported({ capability: "data" })),
     "data.query": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.query.stream": () => Stream.fail(new Unsupported({ capability: "data" })),
+    "data.queryLog.page": () => Effect.fail(new Unsupported({ capability: "data" })),
     "data.source.save": () => Effect.fail(new Unsupported({ capability: "data" })),
     "data.source.remove": () => Effect.fail(new Unsupported({ capability: "data" })),
     "data.source.label": () => Effect.fail(new Unsupported({ capability: "data" })),
-    "data.approval.decide": () => Effect.fail(new Unsupported({ capability: "data" })),
+    "data.source.access": () => Effect.fail(new Unsupported({ capability: "data" })),
     "host.stats.watch": () => Stream.fail(new Unsupported({ capability: "host.stats" })),
     "commit.suggestMessage": () =>
       Stream.fail(

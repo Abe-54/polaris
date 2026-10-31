@@ -1,3 +1,9 @@
+/**
+ * The typed bridge between the main process and the renderer: channel names,
+ * what every request returns, what every subscription delivers, and the API
+ * the preload script exposes as `window.polaris`. Types plus plain constants
+ * only, so the renderer and the sandboxed preload can import it.
+ */
 import type { DataRequestOutputs, DataSubscriptionItems } from "./dataContract.ts";
 import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
 import type {
@@ -5,12 +11,6 @@ import type {
   PredictionNotification,
   PredictionNotificationInput,
 } from "./predictionOutcomes.ts";
-/**
- * The typed bridge between the main process and the renderer: channel names,
- * what every request returns, what every subscription delivers, and the API
- * the preload script exposes as `window.polaris`. Types plus plain constants
- * only, so the renderer and the sandboxed preload can import it.
- */
 import type {
   AcceptCommitted,
   AcceptDraft,
@@ -148,6 +148,11 @@ export interface IpcError {
   /** The failure's tag, e.g. "NotConnected", "FileError", "InvalidInput". */
   readonly code: string;
   readonly message: string;
+  /** A Data failure retains its E-DATA code and suggested fix. */
+  readonly fix?: string;
+  /** One-based position in the submitted SQL, or a database-reported line. */
+  readonly position?: number;
+  readonly line?: number;
   /** A Constellation refusal's findings, so the renderer can word each by its code. */
   readonly findings?: ReadonlyArray<IpcFinding>;
 }

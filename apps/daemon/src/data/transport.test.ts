@@ -8,7 +8,7 @@ import {
   watchDataSources,
   watchDataQueryLog,
 } from "@polaris/client";
-import { DaemonRpcs, RequestId, SessionId, Unsupported } from "@polaris/protocol";
+import { DaemonRpcs, SessionId, Unsupported } from "@polaris/protocol";
 import { Effect, Layer, Redacted, Stream } from "effect";
 import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -47,7 +47,25 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
           root,
           socketPath: join(root, "d.sock"),
           lockPath: join(root, "d.lock"),
-          handlers: DataRpcsLive.pipe(Layer.provide(Layer.merge(sourceLayer, DataQueries.layer))),
+          handlers: DataRpcsLive.pipe(
+            Layer.provide(
+              Layer.merge(
+                sourceLayer,
+                Layer.succeed(
+                  DataQueries,
+                  DataQueries.of({
+                    query: () => Effect.fail(new Unsupported({ capability: "data" })),
+                    describe: () => Effect.fail(new Unsupported({ capability: "data" })),
+                    queryStream: () => Stream.empty,
+                    watchLog: () => Stream.succeed([]),
+                    pageLog: () => Effect.succeed({ entries: [], next: null }),
+                    awaitApproval: () => Effect.succeed({ status: "pending" }),
+                    recordOutside: () => Effect.void,
+                  })
+                )
+              )
+            )
+          ),
           capabilities: ["data"],
           secrets: HostSecrets.memory(),
         });
@@ -76,13 +94,10 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
         const source = { sessionId, source: "app" };
 
         const requests = [
-          client["data.describe"](source),
-          client["data.query"]({ ...source, sql: "select 1", params: [], limit: 1 }),
-          client["data.approval.decide"]({
-            approvalId: RequestId.make("approval"),
-            decision: "deny",
-            scope: "target",
-          }),
+          client["data.describe"](source).pipe(Effect.asVoid),
+          client["data.query"]({ ...source, sql: "select 1", params: [], limit: 1 }).pipe(
+            Effect.asVoid
+          ),
         ];
 
         for (const request of requests) {

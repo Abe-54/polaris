@@ -1,3 +1,6 @@
+import { DataDatabase } from "../data/database.ts";
+import { DataApprovals } from "../data/approvals.ts";
+import { QueryLog } from "../data/queryLog.ts";
 import { DataRpcsLive, DataSources, DataSourceAccess, DataQueries } from "../data/index.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
 import { PredictionServerLive } from "../prediction/server.ts";
@@ -121,6 +124,15 @@ const harnesses = HarnessRegistryLive.pipe(
  * a Review Checkout), the Rules and the Reviewer (whose sessions' approvals the
  * engine asks its policy about), and giving memory back once work settles.
  */
+export const dataServices = DataQueries.layer.pipe(
+  Layer.provideMerge(DataSources.layer),
+  Layer.provideMerge(DataSourceAccess.live),
+  Layer.provideMerge(QueryLog.layer),
+  Layer.provideMerge(DataApprovals.layer),
+  Layer.provideMerge(DataDatabase.layer),
+  Layer.provideMerge(HostSecrets.layer)
+);
+
 const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
@@ -141,9 +153,7 @@ const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   ),
   Layer.provideMerge(usageServices),
   Layer.provideMerge(ReviewerSessions.layer),
-  Layer.provideMerge(
-    DataSources.layer.pipe(Layer.provide(Layer.merge(HostSecrets.layer, DataSourceAccess.layer)))
-  ),
+  Layer.provideMerge(dataServices),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -160,7 +170,7 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
-  DataRpcsLive.pipe(Layer.provide(DataQueries.layer)),
+  DataRpcsLive,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,

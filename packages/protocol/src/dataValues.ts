@@ -1,13 +1,5 @@
 /** Wire values and credential scrubbing shared by Data producers (ENG-644). */
-import {
-  Array as Arrays,
-  Match,
-  Option,
-  Predicate,
-  Redacted,
-  Schema,
-  SchemaTransformation,
-} from "effect";
+import { Match, Option, Predicate, Redacted, Schema, SchemaTransformation } from "effect";
 
 /** Known credentials must include URL-decoded and percent-encoded forms from the resolver. */
 export const scrubCredentials = (
@@ -91,26 +83,14 @@ export const DataValue = Schema.Union([
 
 export type DataValue = typeof DataValue.Type;
 
-const scrubJsonValue = (
-  value: Schema.Json,
-  known: ReadonlyArray<Redacted.Redacted<string>>
-): Schema.Json => {
-  if (Predicate.isString(value)) return scrubCredentials(value, known);
-
-  if (Arrays.isArray<Schema.Json>(value)) return value.map((item) => scrubJsonValue(item, known));
-
-  if (value === null || Predicate.isNumber(value) || Predicate.isBoolean(value)) return value;
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, scrubJsonValue(item, known)])
-  );
-};
-
+/** Decode only string tokens: parsing the whole document rounds database numeric lexemes. */
 const scrubJsonText = (text: string, known: ReadonlyArray<Redacted.Redacted<string>>): string =>
-  Option.match(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))(text), {
-    onNone: () => scrubCredentials(text, known),
-    onSome: (value) => JSON.stringify(scrubJsonValue(value, known)),
-  });
+  text.replace(/"(?:\\.|[^"\\])*"/g, (token) =>
+    Option.match(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.String))(token), {
+      onNone: () => scrubCredentials(token, known),
+      onSome: (value) => JSON.stringify(scrubCredentials(value, known)),
+    })
+  );
 
 /** Apply known credentials to every string value, regardless of the column name. */
 export const scrubDataValue = (

@@ -109,6 +109,18 @@ const run = (label: string, argv: ReadonlyArray<string>, expectFailure = false) 
 
 run("typecheck polaris.qnt", ["typecheck", "polaris.qnt"]);
 
+run("Data approval scenarios", ["test", "polaris.qnt", "--main=data_approvals"]);
+
+run("Data approval safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_approvals",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
 run("typecheck polaris_test.qnt", ["typecheck", "polaris_test.qnt"]);
 
 run("typecheck worker-admission.qnt", ["typecheck", "worker-admission.qnt"]);

@@ -585,11 +585,26 @@ export class ApprovalQuestion extends Schema.Class<ApprovalQuestion>("ApprovalQu
   multiSelect: Schema.Boolean,
 }) {}
 
+/** The exact credential-free target whose agent read the user is deciding. */
+export class DataSourceApproval extends Schema.Class<DataSourceApproval>("DataSourceApproval")({
+  sourceId: Schema.String,
+  sourceName: Schema.String,
+  branch: Schema.optionalKey(
+    Schema.Struct({ provider: Schema.Literals(["planetscale", "neon"]), name: Schema.String })
+  ),
+  engine: Schema.Literals(["postgres", "mysql"]),
+  host: Schema.String,
+  port: Schema.Int,
+  database: Schema.String,
+  user: Schema.String,
+}) {}
+
 export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequest")({
   id: RequestId,
   sessionId: SessionId,
   turnId: TurnId,
   kind: ApprovalKind,
+  dataSource: Schema.optionalKey(DataSourceApproval),
   /** One-line summary for hover cards and notifications. */
   title: Schema.String,
   detail: Schema.NullOr(Schema.String),

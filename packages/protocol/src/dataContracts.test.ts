@@ -284,3 +284,32 @@ test("F1: JSON escapes cannot hide a known credential in an innocuous nested val
     DataValueTags.cases.Json.make({ text: '{"note":["[redacted]"]}' })
   );
 });
+
+test("F1/F2: scrubbing JSON strings preserves numeric lexemes through wire encode and decode", () => {
+  const text = '{"token":9007199254740993,"ratio":100.001000000000000001,"note":"hunter2"}';
+
+  const expected = DataValueTags.cases.Json.make({
+    text: '{"token":9007199254740993,"ratio":100.001000000000000001,"note":"[redacted]"}',
+  });
+
+  const cell = scrubDataValue(DataValueTags.cases.Json.make({ text }), [Redacted.make("hunter2")]);
+
+  expect(cell).toEqual(expected);
+
+  const result = Schema.decodeUnknownSync(QueryResult)({
+    queryId: "lossless",
+    columns: [],
+    rows: [[cell]],
+    rowCount: 1,
+    returned: 1,
+    truncated: false,
+    elapsedMs: 1,
+  });
+
+  expect(result.rows).toEqual([[expected]]);
+
+  const encoded = Schema.encodeSync(QueryResult)(result);
+
+  expect(encoded.rows).toEqual([[expected]]);
+  expect(Schema.decodeUnknownSync(QueryResult)(encoded).rows).toEqual([[expected]]);
+});

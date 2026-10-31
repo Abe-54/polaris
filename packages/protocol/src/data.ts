@@ -148,7 +148,11 @@ export class QueryLogEntry extends Schema.Class<QueryLogEntry>("QueryLogEntry")(
   ]),
   author: Schema.Union([
     Schema.Struct({ kind: Schema.Literal("agent"), sessionId: SessionId, turn: TurnId }),
-    Schema.Struct({ kind: Schema.Literal("user") }),
+    Schema.Struct({
+      kind: Schema.Literal("user"),
+      sessionId: Schema.optionalKey(SessionId),
+      turn: Schema.optionalKey(TurnId),
+    }),
     Schema.Struct({
       kind: Schema.Literal("outside"),
       sessionId: SessionId,
