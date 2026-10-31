@@ -1,0 +1,1 @@
+{"private":true,"type":"module","dependencies":{"@opentelemetry/api":"1.9.0","@opentelemetry/sdk-trace-base":"2.7.0","@opentelemetry/resources":"2.7.0","@opentelemetry/exporter-trace-otlp-proto":"0.213.0","@opentelemetry/otlp-transformer":"0.213.0","@vercel/otel":"2.1.1","protobufjs":"7.5.4"}}

@@ -1,0 +1,43 @@
+import { writeFile } from "node:fs/promises";
+import { context, trace, SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+import { BasicTracerProvider, BatchSpanProcessor, type ReadableSpan } from "@opentelemetry/sdk-trace-base";
+import { JsonTraceSerializer } from "@opentelemetry/otlp-transformer";
+import { endpoint } from "./codec.ts";
+
+// A literal vendor URL wins over env. This one-line fallback is the required app change.
+const url = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? `${endpoint}/vendor/v1/traces`;
+const exporter = new OTLPTraceExporter({ url, headers: { "x-spike-sender": "manual" } });
+const fixtureSpans: ReadableSpan[] = [];
+const provider = new BasicTracerProvider({
+  resource: resourceFromAttributes({ "service.name": "manual-spike" }),
+  spanProcessors: [{
+    onStart() {}, onEnd(span) { fixtureSpans.push(span); },
+    async forceFlush() {}, async shutdown() {},
+  }, new BatchSpanProcessor(exporter, {
+    maxExportBatchSize: 1000, maxQueueSize: 2000, scheduledDelayMillis: 60_000,
+  })],
+});
+const tracer = provider.getTracer("manual-spike", "1");
+const root = tracer.startSpan("manual-root", { startTime: [1700000000, 1] });
+const parent = trace.setSpan(context.active(), root);
+for (let i = 0; i < 999; i++) {
+  const span = tracer.startSpan(`GET /fixture/${i}`, {
+    kind: SpanKind.CLIENT,
+    startTime: [1700000000, 1000 + i * 10],
+    attributes: {
+      "http.request.method": "GET", "url.path": `/fixture/${i}`,
+      "spike.index": i, "spike.cached": false, "spike.tags": ["fixture", "otlp"],
+    },
+    links: [{ context: root.spanContext() }],
+  }, parent);
+  span.addEvent("cache.miss", { "cache.key": `key-${i}` }, [1700000000, 2000 + i * 10]);
+  if (i === 0) span.setStatus({ code: SpanStatusCode.ERROR, message: "fixture error" });
+  span.end([1700000000, 5000 + i * 10]);
+}
+root.end([1700000000, 1000000]);
+await provider.forceFlush();
+await writeFile("fixture.json", JsonTraceSerializer.serializeRequest(fixtureSpans)!);
+await provider.shutdown();
+console.log(JSON.stringify({ sender: "manual", url, generatedSpans: 1000 }));

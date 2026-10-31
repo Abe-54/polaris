@@ -1,0 +1,13 @@
+// The spike is outside the production workspaces. Check every installed package explicitly.
+const allowed = new Set(["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD",
+  "Unlicense", "OFL-1.1", "MPL-2.0"]);
+const packages = [];
+for await (const file of new Bun.Glob("**/package.json").scan({ cwd: "node_modules", followSymlinks: true })) {
+  const pkg = await Bun.file(`node_modules/${file}`).json();
+  // Package subdirectories can contain configuration-only package.json files.
+  if (!pkg.name || !pkg.version) continue;
+  if (!allowed.has(pkg.license)) throw new Error(`Disallowed license: ${pkg.name} ${pkg.license}`);
+  packages.push({ name: pkg.name, version: pkg.version, license: pkg.license });
+}
+if (!packages.some((p) => p.name === "protobufjs")) throw new Error("Decoder not audited");
+console.log(JSON.stringify({ label: "spike-licenses", value: packages.sort((a, b) => a.name.localeCompare(b.name)) }));
