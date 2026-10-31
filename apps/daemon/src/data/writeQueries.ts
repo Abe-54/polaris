@@ -188,6 +188,7 @@ export const writeQueries = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         yield* update({
           source: { id: resolved.source.id, name: resolved.source.name },
+          target: targetKey(targetOf(resolved.source)),
           sql: scrubCredentials(input.sql, known).slice(0, 32000),
         });
 
@@ -208,6 +209,7 @@ export const writeQueries = Effect.fnUntraced(function* (
                 ...fields(initial),
                 id: `${initial.id}:dry-run`,
                 source: { id: resolved.source.id, name: resolved.source.name },
+                target: targetKey(targetOf(resolved.source)),
                 sql: scrubCredentials(input.sql, known).slice(0, 32000),
                 state: "dry-run",
                 rows: preview.affected,
@@ -262,6 +264,14 @@ export const writeQueries = Effect.fnUntraced(function* (
             "The data source target changed after approval.",
             "Preview the write on the new target."
           );
+
+        yield* log.beforeWrite(
+          new QueryLogEntry({
+            ...fields(initial),
+            source: { id: fresh.source.id, name: fresh.source.name },
+            target: targetKey(targetOf(fresh.source)),
+          })
+        );
 
         if (!(yield* approvals.writes.claim(approvalId)))
           return yield* denied(
@@ -322,8 +332,18 @@ export const writeQueries = Effect.fnUntraced(function* (
 
     return yield* logged(initial, (update) =>
       Effect.gen(function* () {
-        yield* update({ source: { id: resolved.source.id, name: resolved.source.name } });
+        yield* update({
+          source: { id: resolved.source.id, name: resolved.source.name },
+          target: targetKey(targetOf(resolved.source)),
+        });
         const started = performance.now();
+        yield* log.beforeWrite(
+          new QueryLogEntry({
+            ...fields(initial),
+            source: { id: resolved.source.id, name: resolved.source.name },
+            target: targetKey(targetOf(resolved.source)),
+          })
+        );
         const result = yield* editsEffect(pools, { ...resolved, edits: input, signal });
 
         const answer = new DataWriteResult({

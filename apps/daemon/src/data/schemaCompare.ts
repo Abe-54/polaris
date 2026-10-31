@@ -1,9 +1,14 @@
 /** Pure catalog comparison; ambiguous column matches remain additions/removals. */
 import type { SchemaTableDiff, TableDetail } from "@polaris/protocol";
 
+export interface SnapshotTable extends TableDetail {
+  readonly identity?: string;
+  readonly detailsTruncated?: boolean;
+}
+
 export interface CatalogSnapshot {
   readonly at: string;
-  readonly tables: ReadonlyArray<TableDetail>;
+  readonly tables: ReadonlyArray<SnapshotTable>;
   readonly truncated: boolean;
 }
 
@@ -37,16 +42,15 @@ const changes = <T extends { readonly name: string }>(
     );
 };
 
-// A rename may also add columns; require a unique, same-schema superset of the old columns.
-const renameMatch = (a: TableDetail, b: TableDetail) =>
-  a.schema === b.schema &&
-  a.columns.length > 0 &&
-  a.columns.every((c) => b.columns.some((d) => c.name === d.name && c.type === d.type));
+// Only engine identity can establish a rename; equal columns do not preserve data.
+const renameMatch = (a: SnapshotTable, b: SnapshotTable) =>
+  a.identity !== undefined && a.identity === b.identity;
 
 const rowsChanged = (
   before: TableDetail | undefined,
   after: TableDetail | undefined,
-  affected: ReadonlyArray<AffectedTable>
+  affected: ReadonlyArray<AffectedTable>,
+  uncertain: boolean
 ): SchemaTableDiff["rows"] => {
   const hits = affected.filter((x) =>
     [before, after].some(
@@ -56,8 +60,8 @@ const rowsChanged = (
 
   if (hits.length)
     return {
-      kind: "exact",
-      value: hits.reduce((n, x) => n + x.rows, 0),
+      kind: uncertain ? "unknown" : "exact",
+      value: uncertain ? null : hits.reduce((n, x) => n + x.rows, 0),
       agent: hits.filter((x) => x.author === "agent").reduce((n, x) => n + x.rows, 0),
       user: hits.filter((x) => x.author === "user").reduce((n, x) => n + x.rows, 0),
     };
@@ -72,7 +76,8 @@ const rowsChanged = (
 export const compareCatalogs = (
   before: CatalogSnapshot,
   after: CatalogSnapshot,
-  affected: ReadonlyArray<AffectedTable> = []
+  affected: ReadonlyArray<AffectedTable> = [],
+  uncertain = false
 ): ReadonlyArray<SchemaTableDiff> => {
   const qualified = affected.filter(
     (x) =>
@@ -84,10 +89,13 @@ export const compareCatalogs = (
 
   const a = new Map(before.tables.map((t) => [key(t), t]));
   const b = new Map(after.tables.map((t) => [key(t), t]));
-  const pairs: Array<[TableDetail | undefined, TableDetail | undefined]> = [];
+  const pairs: Array<[SnapshotTable | undefined, SnapshotTable | undefined]> = [];
 
   for (const [id, table] of a)
-    if (b.has(id)) {
+    if (
+      b.has(id) &&
+      (!table.identity || !b.get(id)?.identity || table.identity === b.get(id)?.identity)
+    ) {
       pairs.push([table, b.get(id)]);
       a.delete(id);
       b.delete(id);
@@ -118,12 +126,14 @@ export const compareCatalogs = (
 
   return pairs.flatMap(([old, next]): SchemaTableDiff[] => {
     const visible = <T extends { before: unknown; after: unknown }>(items: T[]) =>
-      partial ? items.filter((x) => x.before !== null && x.after !== null) : items;
+      old?.detailsTruncated || next?.detailsTruncated
+        ? items.filter((x) => x.before !== null && x.after !== null)
+        : items;
 
     const columns = visible(changes(old?.columns ?? [], next?.columns ?? []));
     const indexes = visible(changes(old?.indexes ?? [], next?.indexes ?? []));
     const constraints = visible(changes(old?.constraints ?? [], next?.constraints ?? []));
-    const rows = rowsChanged(old, next, qualified);
+    const rows = rowsChanged(old, next, qualified, uncertain);
     const renamed = old && next && key(old) !== key(next);
 
     if (
@@ -133,6 +143,7 @@ export const compareCatalogs = (
       !columns.length &&
       !indexes.length &&
       !constraints.length &&
+      !uncertain &&
       rows.kind !== "exact" &&
       (rows.value === 0 || rows.value === null)
     )
@@ -146,6 +157,9 @@ export const compareCatalogs = (
         columns,
         indexes,
         constraints,
+        ...(old?.detailsTruncated || next?.detailsTruncated
+          ? { detailsTruncated: true }
+          : undefined),
         rows,
       },
     ];

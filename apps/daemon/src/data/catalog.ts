@@ -18,7 +18,7 @@ const treeSql = {
   postgres: `SELECT n.nspname AS schema_name,c.relname AS name,c.relkind IN ('v','m') AS view,
     CASE WHEN c.reltuples<0 THEN NULL ELSE c.reltuples::bigint END AS estimate,
     (SELECT count(*)::int FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped) AS column_count,
-    (SELECT coalesce(json_agg(x),'[]') FROM (SELECT a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum LIMIT 256) x) AS columns,
+    (SELECT coalesce(json_agg(x),'[]') FROM (SELECT a.attnum AS position,a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum LIMIT 256) x) AS columns,
     count(*) OVER() AS total FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE ${pgVisible} AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege(c.oid,'SELECT') ORDER BY n.nspname,c.relname`,
   mysql: `SELECT t.TABLE_SCHEMA AS schema_name,t.TABLE_NAME AS name,t.TABLE_TYPE='VIEW' AS view,
@@ -33,9 +33,11 @@ const functionsSql = {
     "SELECT ROUTINE_SCHEMA AS schema_name,ROUTINE_NAME AS name FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() ORDER BY ROUTINE_NAME",
 };
 
-const columnsSql = {
-  postgres: `SELECT a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type,NOT a.attnotnull AS nullable,
-    pg_get_expr(d.adbin,d.adrelid) AS default_value,
+export const columnsSql = {
+  postgres: `SELECT a.attnum AS position,a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type,NOT a.attnotnull AS nullable,
+    CASE WHEN a.attgenerated='' THEN pg_get_expr(d.adbin,d.adrelid) ELSE NULL END AS default_value,
+    CASE WHEN a.attgenerated<>'' THEN pg_get_expr(d.adbin,d.adrelid) ELSE '' END AS generated_expression,
+    COALESCE((SELECT n.nspname || '.' || c.collname FROM pg_collation c JOIN pg_namespace n ON n.oid=c.collnamespace WHERE c.oid=a.attcollation),'') AS collation_name,
     EXISTS(SELECT 1 FROM pg_constraint p WHERE p.conrelid=a.attrelid AND p.contype='p' AND a.attnum=ANY(p.conkey)) AS pk,
     (SELECT array_position(p.conkey,a.attnum) FROM pg_constraint p WHERE p.conrelid=a.attrelid AND p.contype='p') AS pk_position,
     (SELECT json_build_object('schema',rn.nspname,'table',rc.relname,'column',ra.attname) FROM pg_constraint f
@@ -44,7 +46,8 @@ const columnsSql = {
       WHERE f.conrelid=a.attrelid AND f.contype='f' AND k.src=a.attnum LIMIT 1) AS fk
     FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
     WHERE a.attrelid=to_regclass($1) AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`,
-  mysql: `SELECT c.COLUMN_NAME AS name,c.COLUMN_TYPE AS type,c.IS_NULLABLE='YES' AS nullable,c.COLUMN_DEFAULT AS default_value,c.COLUMN_KEY='PRI' AS pk,
+  mysql: `SELECT c.ORDINAL_POSITION AS position,c.COLUMN_NAME AS name,c.COLUMN_TYPE AS type,c.IS_NULLABLE='YES' AS nullable,c.COLUMN_DEFAULT AS default_value,c.COLUMN_KEY='PRI' AS pk,
+    c.GENERATION_EXPRESSION AS generated_expression,COALESCE(c.COLLATION_NAME,'') AS collation_name,c.EXTRA AS extra,
     (SELECT k.ORDINAL_POSITION FROM information_schema.KEY_COLUMN_USAGE k WHERE k.TABLE_SCHEMA=c.TABLE_SCHEMA AND k.TABLE_NAME=c.TABLE_NAME
       AND k.COLUMN_NAME=c.COLUMN_NAME AND k.CONSTRAINT_NAME='PRIMARY') AS pk_position,
     (SELECT JSON_OBJECT('schema',k.REFERENCED_TABLE_SCHEMA,'table',k.REFERENCED_TABLE_NAME,'column',k.REFERENCED_COLUMN_NAME) FROM information_schema.KEY_COLUMN_USAGE k
@@ -52,16 +55,16 @@ const columnsSql = {
     FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=? ORDER BY c.ORDINAL_POSITION`,
 };
 
-const indexesSql = {
+export const indexesSql = {
   postgres: `SELECT ci.relname AS name,i.indisunique AS is_unique,pg_get_indexdef(i.indexrelid) AS definition,
     (SELECT coalesce(json_agg(pg_get_indexdef(i.indexrelid,k,true)),'[]') FROM generate_series(1,i.indnkeyatts) k) AS columns
     FROM pg_index i JOIN pg_class ci ON ci.oid=i.indexrelid WHERE i.indrelid=to_regclass($1) ORDER BY ci.relname`,
-  mysql: `SELECT INDEX_NAME AS name,MIN(NON_UNIQUE)=0 AS is_unique,MIN(INDEX_TYPE) AS definition,
-    JSON_ARRAYAGG(COALESCE(COLUMN_NAME,EXPRESSION)) AS columns FROM information_schema.STATISTICS
-    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? GROUP BY INDEX_NAME ORDER BY INDEX_NAME`,
+  mysql: `SELECT TABLE_NAME AS relation_id,INDEX_NAME AS name,CAST(NON_UNIQUE=0 AS UNSIGNED) AS is_unique,INDEX_TYPE AS definition,
+    SEQ_IN_INDEX AS position,CONCAT(COALESCE(COLUMN_NAME,EXPRESSION),IF(SUB_PART IS NULL,'',CONCAT('(',SUB_PART,')')),IF(COLLATION='D',' DESC','')) AS column_name
+    FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX`,
 };
 
-const constraintsSql = {
+export const constraintsSql = {
   postgres: `SELECT conname AS name,contype AS kind,pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=to_regclass($1) ORDER BY conname`,
   mysql: `SELECT t.CONSTRAINT_NAME AS name,t.CONSTRAINT_TYPE AS kind,COALESCE(c.CHECK_CLAUSE,t.CONSTRAINT_TYPE) AS definition
     FROM information_schema.TABLE_CONSTRAINTS t LEFT JOIN information_schema.CHECK_CONSTRAINTS c
@@ -160,7 +163,11 @@ export const makeCatalogReader = (read: typeof readEffect) =>
 
       if (columns.length === 0) return yield* missingTable();
 
-      const indexes = yield* rows(indexesSql[engine], [relation], 256);
+      const indexes = normalizeIndexes(
+        yield* rows(indexesSql[engine], [relation], 257 * 256),
+        engine
+      ).slice(0, 256);
+
       const constraints = yield* rows(constraintsSql[engine], [relation], 256);
       const match = tree.find((row) => row.schema_name === schema && row.name === name);
 
@@ -187,6 +194,13 @@ export const makeCatalogReader = (read: typeof readEffect) =>
           nullable: bool("columns.nullable", row.nullable),
           default:
             row.default_value === null ? null : text("columns.default_value", row.default_value),
+          ...(row.generated_expression === undefined
+            ? undefined
+            : { generated: text("columns.generated", row.generated_expression) }),
+          ...(row.collation_name === undefined
+            ? undefined
+            : { collation: text("columns.collation", row.collation_name) }),
+          ...(row.extra === undefined ? undefined : { extra: text("columns.extra", row.extra) }),
           pk: bool("columns.pk", row.pk),
           fk: json(
             "columns.fk",
@@ -236,3 +250,27 @@ const missingTable = () =>
     message: "This table does not exist or is not visible to this database user.",
     fix: "List the data source schema and select a table from it.",
   });
+
+export type CatalogRow = Record<string, Schema.Json | undefined>;
+
+/** Build MySQL index keys in SEQ_IN_INDEX order; JSON_ARRAYAGG has no ordering guarantee. */
+export function normalizeIndexes(rows: CatalogRow[], engine: "postgres" | "mysql"): CatalogRow[] {
+  if (engine === "postgres") return rows;
+  const groups = new Map<string, CatalogRow>();
+  const { text, number } = catalogValues(engine);
+
+  for (const row of rows.sort(
+    (a, b) => number("index.position", a.position) - number("index.position", b.position)
+  )) {
+    const key = JSON.stringify([row.relation_id, row.name]);
+    const group = groups.get(key);
+    const column = text("index.column", row.column_name);
+
+    if (group) {
+      const columns = Schema.decodeUnknownSync(Schema.Array(Schema.String))(group.columns);
+      group.columns = [...columns, column];
+    } else groups.set(key, { ...row, columns: [column] });
+  }
+
+  return [...groups.values()];
+}

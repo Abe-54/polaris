@@ -126,6 +126,10 @@ export class TableDetail extends Schema.Class<TableDetail>("TableDetail")({
       type: Schema.String,
       nullable: Schema.Boolean,
       default: Schema.NullOr(Schema.String),
+      fingerprint: Schema.optionalKey(Schema.String),
+      generated: Schema.optionalKey(Schema.String),
+      collation: Schema.optionalKey(Schema.String),
+      extra: Schema.optionalKey(Schema.String),
       pk: Schema.Boolean,
       fk: Schema.NullOr(Schema.Struct({ schema: Name, table: Name, column: Name })),
     })
@@ -136,6 +140,7 @@ export class TableDetail extends Schema.Class<TableDetail>("TableDetail")({
       columns: Schema.Array(Schema.String),
       unique: Schema.Boolean,
       definition: Schema.String,
+      fingerprint: Schema.optionalKey(Schema.String),
     })
   ),
   constraints: Schema.Array(
@@ -143,6 +148,7 @@ export class TableDetail extends Schema.Class<TableDetail>("TableDetail")({
       name: Name,
       kind: Schema.String,
       definition: Schema.String,
+      fingerprint: Schema.optionalKey(Schema.String),
     })
   ),
   rowEstimate: Schema.NullOr(Count),
@@ -169,6 +175,8 @@ export class QueryLogEntry extends Schema.Class<QueryLogEntry>("QueryLogEntry")(
   id: Name,
   checkout: Schema.String,
   source: Schema.Struct({ id: Name, name: Name }),
+  /** Canonical target key, independent of checkout or source alias. */
+  target: Schema.optionalKey(Schema.String),
   sql: ScrubbedText,
   params: Schema.optionalKey(Schema.Array(ScrubbedDataValue)),
   state: Schema.Literals([

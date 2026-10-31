@@ -36,7 +36,7 @@ export const table = (name = "invoices") =>
 
 export const catalog = (name = "invoices") => ({
   at: new Date().toISOString(),
-  tables: [table(name)],
+  tables: [{ ...Schema.encodeSync(TableDetail)(table(name)), identity: "fixture-relation" }],
   truncated: false,
 });
 
@@ -53,6 +53,13 @@ export const entry = (state: QueryLogEntry["state"] = "running") =>
     id: "q1",
     checkout: started.session.cwd,
     source: { id: source.id, name: source.name },
+    target: JSON.stringify([
+      source.engine,
+      source.host,
+      source.port,
+      source.database,
+      source.user ?? "",
+    ]),
     sql: "select 1",
     state,
     author: { kind: "agent", sessionId: turn.sessionId, turn: turn.id },

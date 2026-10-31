@@ -1,5 +1,5 @@
 /** Event-driven Schema Diff worker; catalog I/O never joins decide/ack or opens approvals. */
-import { Context, Effect, Layer, Predicate, Stream } from "effect";
+import { Context, Effect, Layer, Predicate, Semaphore, Stream } from "effect";
 import {
   DataError,
   type DataSchemaDiff,
@@ -15,7 +15,9 @@ import { SchemaStore, type SnapshotRecord } from "./schemaStore.ts";
 import { DataPools } from "./pools.ts";
 import { snapshotAllowed, snapshotCatalog, type ResolvedSource } from "./schemaCatalog.ts";
 import { targetKey, targetOf } from "./approvalStore.ts";
+import { keyedSnapshotGate } from "./schemaLocks.ts";
 import { outsideMatches } from "./outside.ts";
+import { knownSchemaCommand } from "./schemaCommands.ts";
 import { migrationCheckout, migrationChanged } from "./schemaMigrations.ts";
 import type { CatalogSnapshot } from "./schemaCompare.ts";
 
@@ -29,10 +31,25 @@ export interface SnapshotDependencies {
   readonly migrationChanged: (checkout: string, turn: Turn) => Promise<boolean>;
 }
 
+const baselineKind = (
+  turn: Turn,
+  previous: SnapshotRecord | undefined,
+  reuse: boolean,
+  requested: SnapshotRecord["baseline"]
+): SnapshotRecord["baseline"] => {
+  if (!reuse) return turn.index > 0 ? "first-use" : requested;
+
+  return previous?.endCaptured ? "previous-turn-end" : "first-use";
+};
+
 const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependencies) {
   const { sources, store, log, records } = deps;
-  // The merged worker consumes one signal at a time; simultaneous starts share a catalog until activity.
-  const shared = new Map<string, CatalogSnapshot>();
+  const captures = yield* Semaphore.make(4);
+  const onTarget = keyedSnapshotGate();
+  const inSession = keyedSnapshotGate();
+  const usedSessions = new Set<SessionId>();
+  const turnSources = new Map<TurnId, ReadonlyArray<import("@polaris/protocol").DataSource>>();
+  const outsideTurns = new Set<TurnId>();
 
   const safely = <A>(work: Effect.Effect<A, unknown>) =>
     work.pipe(
@@ -47,32 +64,24 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     yield* Effect.try({ try: () => records.put(record), catch: storageError });
   });
 
-  const capture = Effect.fnUntraced(function* (
-    resolved: ResolvedSource,
-    checkout: string,
-    coalesce: boolean
-  ) {
-    const key = JSON.stringify([checkout, targetKey(targetOf(resolved.source))]);
-    const cached = coalesce ? shared.get(key) : undefined;
-
-    if (cached) return cached;
-
-    const result = yield* deps.capture(resolved).pipe(
-      Effect.timeout(30000),
-      Effect.mapError(
-        () =>
-          new DataError({
-            code: "E-DATA-TIMEOUT",
-            message: "The schema snapshot could not be completed.",
-            fix: "Retry after the data source is available.",
-          })
+  const capture = (resolved: ResolvedSource) =>
+    onTarget(
+      targetKey(targetOf(resolved.source)),
+      captures.withPermit(
+        deps.capture(resolved).pipe(
+          Effect.timeout(30000),
+          Effect.catchTag("TimeoutError", () =>
+            Effect.fail(
+              new DataError({
+                code: "E-DATA-TIMEOUT",
+                message: "The schema capture exceeded its time limit.",
+                fix: "Retry after the data source is available.",
+              })
+            )
+          )
+        )
       )
     );
-
-    shared.set(key, result);
-
-    return result;
-  });
 
   const beginSource = Effect.fnUntraced(function* (
     turn: Turn,
@@ -95,17 +104,24 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
         snapshotAllowed(resolved) &&
         existing.target === targetKey(targetOf(resolved.source))
       ) {
-        yield* capture(resolved, checkout, true).pipe(
-          Effect.flatMap((before) =>
-            save({
+        yield* capture(resolved).pipe(
+          Effect.flatMap((before) => {
+            const next = {
               ...existing,
               used: existing.used || used,
               before,
-              baseline: "first-use",
+              baseline: "first-use" as const,
+              capturedLate: before.at > turn.startedAt,
               failed: false,
-            })
-          ),
-          Effect.ignore
+            };
+
+            delete next.errorCode;
+
+            return save(next);
+          }),
+          Effect.catch((error) =>
+            save({ ...existing, used: existing.used || used, failed: true, errorCode: error.code })
+          )
         );
       }
 
@@ -116,18 +132,10 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     const previous = records.previous(turn.sessionId, resolved.source.id, turn.index);
     const target = targetKey(targetOf(resolved.source));
 
-    const concurrent = [...(yield* store.model).sessions.values()].some(
-      (x) =>
-        x.session.id !== turn.sessionId &&
-        x.session.cwd === checkout &&
-        x.turns.some((t) => t.status === "working")
-    );
-
     const reuse =
       resolved.source.locality === "local" &&
       previous?.target === target &&
-      !records.stale(previous) &&
-      !concurrent;
+      !records.stale(previous);
 
     const row: SnapshotRecord = {
       sessionId: turn.sessionId,
@@ -136,7 +144,11 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
       checkout,
       source: { id: resolved.source.id, name: resolved.source.name },
       target,
-      baseline: reuse ? "previous-turn-end" : baseline,
+      startedAt: turn.startedAt,
+      baseline: baselineKind(turn, previous, reuse, baseline),
+      baselineTurn: reuse
+        ? (previous.afterTurn ?? previous.baselineTurn ?? previous.turn)
+        : turn.id,
       before: reuse ? previous.after : null,
       after: null,
       used,
@@ -146,15 +158,17 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     yield* save(row);
 
     if (!snapshotAllowed(resolved)) {
-      yield* save({ ...row, failed: true });
+      yield* save({ ...row, failed: true, errorCode: "E-DATA-DENIED" });
 
       return;
     }
 
     if (reuse) return;
-    yield* capture(resolved, checkout, true).pipe(
-      Effect.flatMap((before) => save({ ...row, before })),
-      Effect.catch(() => save({ ...row, failed: true }))
+    yield* capture(resolved).pipe(
+      Effect.flatMap((before) =>
+        save({ ...row, before, capturedLate: before.at > turn.startedAt })
+      ),
+      Effect.catch((error) => save({ ...row, failed: true, errorCode: error.code }))
     );
   });
 
@@ -162,10 +176,16 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     const record = (yield* store.model).sessions.get(turn.sessionId);
 
     if (!record) return;
-    const found = yield* sources.list({ sessionId: turn.sessionId });
 
-    if (!found.length || !(yield* Effect.promise(() => deps.migrationCheckout(record.session.cwd))))
-      return;
+    const eligible =
+      usedSessions.has(turn.sessionId) ||
+      (yield* Effect.promise(() => deps.migrationCheckout(record.session.cwd)));
+
+    if (!eligible) return;
+    const found = yield* sources.list({ sessionId: turn.sessionId });
+    turnSources.set(turn.id, found);
+
+    if (!found.length) return;
 
     for (const source of found)
       if (source.locality === "local")
@@ -173,10 +193,12 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
   });
 
   const touch = Effect.fnUntraced(function* (entry: DataActivity) {
-    shared.clear();
     const { sessionId, turn } = entry.author;
 
-    if (sessionId === undefined || turn === undefined) return;
+    if (sessionId === undefined) return;
+    usedSessions.add(sessionId);
+
+    if (turn === undefined) return;
     const record = (yield* store.model).sessions.get(sessionId);
 
     if (!record) return;
@@ -189,44 +211,99 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     if (current.status !== "working") yield* end(current);
   });
 
+  const finishSource = Effect.fnUntraced(function* (
+    row: SnapshotRecord,
+    turn: Turn,
+    used: boolean,
+    uncertain: boolean,
+    after: CatalogSnapshot
+  ) {
+    const live = (yield* store.model).sessions.get(turn.sessionId);
+
+    const overlapped =
+      live?.turns.some((next) => next.index > turn.index && next.startedAt <= after.at) ?? false;
+
+    const concurrent = records.concurrent(row, new Date().toISOString());
+    yield* save({
+      ...row,
+      used,
+      after,
+      afterTurn: turn.id,
+      endCaptured: true,
+      concurrent,
+      capturedLate: row.capturedLate || overlapped,
+      uncertain: uncertain || concurrent || overlapped,
+      affected: records.affected(turn.sessionId, turn.id, row.source.id),
+    });
+  });
+
   const end = Effect.fnUntraced(function* (turn: Turn) {
-    shared.clear();
     const rows = records.records(turn.sessionId, turn.id);
 
-    if (!rows.length) return;
+    if (!rows.length) {
+      turnSources.delete(turn.id);
+      outsideTurns.delete(turn.id);
+
+      return;
+    }
+
     const migration = yield* Effect.promise(() => deps.migrationChanged(rows[0]!.checkout, turn));
     const entries = records.entries(turn.sessionId, turn.id);
 
     for (const row of rows) {
-      if (row.after) {
+      if (row.after && row.endCaptured) {
         yield* save({ ...row, affected: records.affected(turn.sessionId, turn.id, row.source.id) });
         continue;
       }
 
-      const used = row.used || migration || entries.some((x) => x.source.id === row.source.id);
+      const used =
+        row.used ||
+        migration ||
+        outsideTurns.has(turn.id) ||
+        entries.some((x) => x.source.id === row.source.id);
 
-      if (!used) continue;
-      const resolved = yield* sources.resolve({ sessionId: turn.sessionId, source: row.source.id });
-
-      if (row.target !== targetKey(targetOf(resolved.source)) || !snapshotAllowed(resolved)) {
-        yield* save({ ...row, used, failed: true });
+      if (!used) {
+        yield* save({
+          ...row,
+          after: row.before,
+          afterTurn: row.baselineTurn ?? row.turn,
+          endCaptured: false,
+        });
         continue;
       }
 
-      yield* capture(resolved, row.checkout, false).pipe(
+      const resolved = yield* sources.resolve({ sessionId: turn.sessionId, source: row.source.id });
+
+      if (row.target !== targetKey(targetOf(resolved.source)) || !snapshotAllowed(resolved)) {
+        yield* save({ ...row, used, failed: true, errorCode: "E-DATA-DENIED" });
+        continue;
+      }
+
+      yield* capture(resolved).pipe(
         Effect.flatMap((after) =>
-          save({
-            ...row,
+          finishSource(
+            row,
+            turn,
             used,
-            after,
-            affected: records.affected(turn.sessionId, turn.id, row.source.id),
-          })
+            migration ||
+              outsideTurns.has(turn.id) ||
+              entries.some(
+                (entry) =>
+                  entry.source.id === row.source.id &&
+                  (entry.author.kind === "outside" ||
+                    (entry.state === "completed" &&
+                      entry.tool?.includes("execute") &&
+                      entry.affected === undefined))
+              ),
+            after
+          )
         ),
-        Effect.catch(() => save({ ...row, used, failed: true }))
+        Effect.catch((error) => save({ ...row, used, failed: true, errorCode: error.code }))
       );
     }
 
-    shared.clear();
+    turnSources.delete(turn.id);
+    outsideTurns.delete(turn.id);
   });
 
   const outside = Effect.fnUntraced(function* (
@@ -234,67 +311,102 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     turnId: TurnId,
     command: string
   ) {
-    if (!/\b(psql|mysql|pg_dump|mysqldump|bun|node)\b/.test(command)) return;
+    if (!knownSchemaCommand(command) || outsideTurns.has(turnId)) return;
+    const record = (yield* store.model).sessions.get(sessionId);
+    const current = record?.turns.find((t) => t.id === turnId);
 
-    const current = (yield* store.model).sessions
-      .get(sessionId)
-      ?.turns.find((t) => t.id === turnId);
+    if (!current || !record) return;
 
-    if (!current) return;
+    if (
+      !usedSessions.has(sessionId) &&
+      !(yield* Effect.promise(() => deps.migrationCheckout(record.session.cwd)))
+    )
+      return;
+    outsideTurns.add(turnId);
+    const found = turnSources.get(turnId) ?? (yield* sources.list({ sessionId }));
+    turnSources.set(turnId, found);
 
-    for (const source of yield* sources.list({ sessionId })) {
+    for (const source of found) {
       const resolved = yield* sources.resolve({ sessionId, source: source.id });
 
-      if (outsideMatches(command, resolved.source, resolved.matchUrl))
-        yield* beginSource(current, source.id, "first-use", true);
+      const baseline = records
+        .records(sessionId, turnId)
+        .some((row) => row.source.id === source.id);
+
+      if (!baseline && !outsideMatches(command, resolved.source, resolved.matchUrl)) continue;
+
+      records.activity(targetKey(targetOf(resolved.source)), sessionId, turnId);
+      yield* beginSource(current, source.id, "first-use", true);
     }
   });
 
+  yield* log.registerBeforeWrite((entry) =>
+    entry.author.sessionId ? inSession(entry.author.sessionId, safely(touch(entry))) : Effect.void
+  );
+
   const events = yield* store.subscribe({
     filter: (item) =>
-      (Predicate.isTagged(item, "ItemProgress") &&
-        Predicate.isTagged(item.item, "CommandExecution")) ||
-      (Predicate.isTagged(item, "Event") &&
-        (Predicate.isTagged(item.envelope.event, "TurnStarted") ||
-          Predicate.isTagged(item.envelope.event, "TurnEnded"))),
+      Predicate.isTagged(item, "Event") &&
+      (Predicate.isTagged(item.envelope.event, "TurnStarted") ||
+        Predicate.isTagged(item.envelope.event, "TurnEnded") ||
+        Predicate.isTagged(item.envelope.event, "TurnItemCompleted")),
   });
 
   const activity = yield* log.subscribe;
+
   yield* Stream.merge(
     events.pipe(Stream.map((item) => ({ item, entry: undefined }))),
     activity.pipe(Stream.map((entry) => ({ item: undefined, entry })))
   ).pipe(
-    Stream.runForEach((signal) =>
-      safely(
-        Effect.gen(function* () {
-          if (signal.entry) {
-            yield* touch(signal.entry);
+    Stream.mapEffect(
+      (signal) => {
+        const event =
+          signal.item && Predicate.isTagged(signal.item, "Event")
+            ? signal.item.envelope.event
+            : undefined;
 
-            return;
-          }
+        let id = signal.entry?.author.sessionId;
 
-          const item = signal.item;
+        if (event && Predicate.isTagged(event, "TurnItemCompleted")) id = event.sessionId;
 
-          if (!item) return;
+        if (
+          event &&
+          (Predicate.isTagged(event, "TurnStarted") || Predicate.isTagged(event, "TurnEnded"))
+        )
+          id = event.turn.sessionId;
 
-          if (
-            Predicate.isTagged(item, "ItemProgress") &&
-            Predicate.isTagged(item.item, "CommandExecution")
-          ) {
-            yield* outside(item.sessionId, item.turnId, item.item.command);
+        const work = safely(
+          Effect.gen(function* () {
+            if (signal.entry) {
+              yield* touch(signal.entry);
 
-            return;
-          }
+              return;
+            }
 
-          if (!Predicate.isTagged(item, "Event")) return;
-          const event = item.envelope.event;
+            const item = signal.item;
 
-          if (Predicate.isTagged(event, "TurnStarted")) yield* begin(event.turn);
+            if (!item) return;
 
-          if (Predicate.isTagged(event, "TurnEnded")) yield* end(event.turn);
-        })
-      )
+            if (!Predicate.isTagged(item, "Event")) return;
+            const event = item.envelope.event;
+
+            if (
+              Predicate.isTagged(event, "TurnItemCompleted") &&
+              Predicate.isTagged(event.item, "CommandExecution")
+            )
+              yield* outside(event.sessionId, event.turnId, event.item.command);
+
+            if (Predicate.isTagged(event, "TurnStarted")) yield* begin(event.turn);
+
+            if (Predicate.isTagged(event, "TurnEnded")) yield* end(event.turn);
+          })
+        );
+
+        return id ? inSession(id, work) : work;
+      },
+      { concurrency: 16, unordered: true }
     ),
+    Stream.runDrain,
     Effect.forkScoped
   );
 
@@ -302,10 +414,19 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
     get: (input: { sessionId: SessionId; turn?: TurnId }) =>
       Effect.try({ try: () => records.diff(input.sessionId, input.turn), catch: storageError }),
     remove: (sessionId: SessionId) =>
-      Effect.try({ try: () => records.remove(sessionId), catch: storageError }),
-    begin,
-    end,
-    touch,
+      Effect.try({
+        try: () => {
+          usedSessions.delete(sessionId);
+          records.remove(sessionId);
+        },
+        catch: storageError,
+      }),
+    begin: (turn: Turn) => inSession(turn.sessionId, begin(turn)),
+    end: (turn: Turn) => inSession(turn.sessionId, end(turn)),
+    touch: (entry: DataActivity) =>
+      entry.author.sessionId ? inSession(entry.author.sessionId, touch(entry)) : touch(entry),
+    outside: (sessionId: SessionId, turnId: TurnId, command: string) =>
+      inSession(sessionId, outside(sessionId, turnId, command)),
   };
 });
 
