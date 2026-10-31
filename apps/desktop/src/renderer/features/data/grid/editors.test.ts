@@ -1,19 +1,25 @@
 import { expect, test } from "bun:test";
 import { Predicate } from "effect";
-import { draftOf, editorFor, parseDraft } from "./editors.ts";
+import { type ColumnFacts, draftOf, editorFor, parseDraft, sameTyped } from "./editors.ts";
 import { DataValueTags } from "./value.ts";
 
 const { BigInt: Big, Bytes, Json, Numeric, Timestamp, Truncated } = DataValueTags.cases;
 
-const column = (type: string, extra: { nullable?: boolean; pk?: boolean } = {}) => ({
-  name: "c",
-  type,
-  nullable: extra.nullable ?? true,
-  pk: extra.pk ?? false,
-});
+const column = (
+  type: string,
+  extra: { nullable?: boolean; pk?: boolean; engine?: "postgres" | "mysql" } = {}
+): ColumnFacts => {
+  const facts = { name: "c", type, nullable: extra.nullable ?? true, pk: extra.pk ?? false };
 
-const editable = (type: string, value: Parameters<typeof editorFor>[1]) => {
-  const how = editorFor(column(type), value);
+  return extra.engine === undefined ? facts : { ...facts, engine: extra.engine };
+};
+
+const editable = (
+  type: string,
+  value: Parameters<typeof editorFor>[1],
+  engine?: "postgres" | "mysql"
+) => {
+  const how = editorFor(column(type, engine === undefined ? {} : { engine }), value);
 
   if (Predicate.isString(how)) throw new Error(how);
 
@@ -35,7 +41,7 @@ test("each type gets its own editor, NULL cells by their column type", () => {
   expect(editable("int8", null).kind).toBe("number");
   expect(editable("tinyint(1)", 1).kind).toBe("bool");
   expect(editable("json", '{"a":1}').kind).toBe("json");
-  expect(editable("timestamptz", null)).toMatchObject({ kind: "time", zoned: true });
+  expect(editable("timestamptz", null)).toMatchObject({ kind: "time", zone: "required" });
   expect(editable("date", "2026-08-02")).toMatchObject({ kind: "time", dateOnly: true });
   expect(editorFor(column("text", { nullable: false }), "a")).toMatchObject({ nullable: false });
 });
@@ -79,7 +85,9 @@ test("a timestamp with a zone needs its offset; a date takes only a date", () =>
   expect(parseDraft(zoned, "2026-08-02 09:30:00+02:00", null)).toEqual({
     value: Timestamp.make({ iso: "2026-08-02 09:30:00+02:00" }),
   });
-  expect(parseDraft(editable("timestamp", null), "2026-08-02 09:30", null)).toMatchObject({
+  expect(
+    parseDraft(editable("timestamp without time zone", null), "2026-08-02 09:30", null)
+  ).toMatchObject({
     value: Timestamp.make({ iso: "2026-08-02 09:30" }),
   });
   expect(errorOf(parseDraft(editable("date", null), "2026-08-02 09:30", null))).toBe(
@@ -88,4 +96,66 @@ test("a timestamp with a zone needs its offset; a date takes only a date", () =>
   expect(errorOf(parseDraft(zoned, "2026-13-45 09:30:00Z", null))).toBe(
     "Write a time as 2026-08-02 09:30:00+00:00"
   );
+});
+
+test("a column without a time zone refuses an offset and offers the local time instead", () => {
+  for (const [type, engine] of [
+    ["timestamp without time zone", "postgres"],
+    ["datetime(6)", "mysql"],
+  ] as const)
+    expect(parseDraft(editable(type, null, engine), "2026-08-02 09:30:00+05:30", null)).toEqual({
+      error: "This column has no time zone; write a local time",
+      suggestion: "2026-08-02 09:30:00",
+    });
+  // MySQL's TIMESTAMP is absolute: its offset is required, as on timestamptz.
+  expect(
+    errorOf(parseDraft(editable("timestamp", null, "mysql"), "2026-08-02 09:30:00", null))
+  ).toBe("Add an offset, like +00:00 or Z");
+});
+
+test("integer columns take whole numbers; numeric(p,s) refuses digits it would round", () => {
+  for (const typed of ["2.7", ".5", "1e3"])
+    expect(errorOf(parseDraft(editable("integer", 1), typed, 1))).toBe("A whole number, like 42");
+  expect(errorOf(parseDraft(editable("int(10) unsigned", 1, "mysql"), "-3", 1))).toBe(
+    "This column takes no negative numbers"
+  );
+  const money = editable("numeric(10,2)", Numeric.make({ value: "1.00" }));
+
+  expect(errorOf(parseDraft(money, "1.005", null))).toBe("At most 2 digits after the point");
+  expect(errorOf(parseDraft(money, "123456789", null))).toBe("At most 8 digits before the point");
+  expect(parseDraft(money, "1.500", null)).toEqual({ value: Numeric.make({ value: "1.500" }) });
+  // Floats are free.
+  expect(errorOf(parseDraft(editable("double precision", 1), "1e3", 1))).toBeNull();
+});
+
+test("a value the column stores alike is a typed no-op: numbers, MySQL booleans, times, CRLF", () => {
+  expect(sameTyped(editable("int4", 42), 42, Numeric.make({ value: "42.0" }))).toBe(true);
+  expect(sameTyped(editable("int4", 42), 42, Numeric.make({ value: "43" }))).toBe(false);
+  expect(sameTyped(editable("tinyint(1)", 1), 1, true)).toBe(true);
+  expect(sameTyped(editable("tinyint(1)", 1), 1, false)).toBe(false);
+  const zoned = editable("timestamptz", null);
+
+  expect(
+    sameTyped(
+      zoned,
+      Timestamp.make({ iso: "2026-10-30T06:30:00.123456+00:00" }),
+      Timestamp.make({ iso: "2026-10-30 12:00:00.123456+05:30" })
+    )
+  ).toBe(true);
+  expect(
+    sameTyped(
+      editable("timestamp without time zone", null),
+      "2026-10-30 06:30:00",
+      Timestamp.make({ iso: "2026-10-30 06:30" })
+    )
+  ).toBe(true);
+  expect(sameTyped(editable("text", "a\r\nb"), "a\r\nb", "a\nb")).toBe(true);
+});
+
+test("text that was CRLF keeps its line ending when edited", () => {
+  const crlf = editable("text", "one\r\ntwo");
+
+  expect(parseDraft(crlf, "one\ntwo\nthree", "one\r\ntwo")).toEqual({
+    value: "one\r\ntwo\r\nthree",
+  });
 });

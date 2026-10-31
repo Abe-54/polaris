@@ -40,8 +40,8 @@ export interface DataGridProps {
   readonly selection: GridSelection;
   readonly onSelectionChange: (selection: GridSelection) => void;
   readonly onForeignKey?: (column: GridColumn, value: DataValue | undefined) => void;
-  /** Whether a cell holds a staged edit. */
-  readonly isStaged?: (row: number, col: number) => boolean;
+  /** Whether a cell holds a staged edit, or one the last commit refused as a conflict. */
+  readonly isStaged?: (row: number, col: number) => boolean | "conflict";
   /** Cells edit in place (↵, F2, double-click or typing); without it ↵ inspects. */
   readonly editing?: GridEditing;
   /** ⌘C with rows selected. */
@@ -59,6 +59,8 @@ export interface GridEditing {
   readonly onStage: (at: CellAt, value: DataValue) => void;
   /** ⌘Z: takes back the last staged edit. */
   readonly onUndo: () => void;
+  /** ⌘S inside an open editor, after it stages its draft. */
+  readonly onCommit?: () => void;
 }
 
 interface Editing {
@@ -67,11 +69,17 @@ interface Editing {
   readonly typed: string | null;
 }
 
-/** A printable key typed on a cell starts its edit over with that character. */
-const typedKey = (event: KeyboardEvent<HTMLDivElement>) =>
-  event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey && event.key !== " "
+/**
+ * A printable key typed on a cell starts its edit over with that character (⌥ characters too);
+ * an IME's first keystroke starts it empty, so the composition continues in the field.
+ */
+const typedKey = (event: KeyboardEvent<HTMLDivElement>) => {
+  if (event.key === "Process" || event.keyCode === 229) return "";
+
+  return event.key.length === 1 && !event.metaKey && !event.ctrlKey && event.key !== " "
     ? event.key
     : null;
+};
 
 const NEAR_END = 100;
 
@@ -450,6 +458,7 @@ export const DataGrid = ({
               closeEdit();
             }}
             onCancel={closeEdit}
+            onCommit={editing.onCommit}
           />
         ) : null}
         {rows.length === 0 && empty !== undefined ? (

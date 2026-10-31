@@ -8,12 +8,14 @@ import {
   fixtureWriteEntry,
   insertWrite,
   notPreviewedWrite,
+  PREVIEW_NOTE,
   withParams,
 } from "../preview/writeFixtures.ts";
 import {
   cellChanges,
   denyDecision,
   dryRunKicker,
+  noteLine,
   paramsLine,
   runLabel,
   settledLine,
@@ -80,13 +82,25 @@ describe("the counts come from affected", () => {
     expect(dryRunKicker(write)).toBe("Dry run · rolled back");
   });
 
-  test("a write that couldn't be previewed says so and runs without preview", () => {
-    const write = notPreviewedWrite();
+  test.each([
+    ["this table has triggers", "update payments set settled = true where invoice_id = $1"],
+    ["this statement changes the schema", "alter table payments add column note text"],
+  ])("a write the Daemon didn't preview says why in its words: %s", (reason, sql) => {
+    const write = notPreviewedWrite(`Not previewed: ${reason}`, sql);
 
-    expect(dryRunKicker(write)).toBe("Not previewed: this table has triggers");
+    expect(dryRunKicker(write)).toBe(`Not previewed: ${reason}`);
     expect(runLabel(write)).toBe("Run without preview");
-    expect(writeWants(write)).toBe("wants to run an update without preview on app");
     expect(showingLine(write)).toBeNull();
+    expect(noteLine(write)).toBeNull();
+  });
+
+  test("an unpreviewed update asks to run without preview", () => {
+    expect(writeWants(notPreviewedWrite())).toBe("wants to run an update without preview on app");
+  });
+
+  test("a previewed write's note is the caption, sequences included", () => {
+    expect(noteLine(insertWrite())).toBe(PREVIEW_NOTE);
+    expect(noteLine(fixtureWrite())).toBeNull();
   });
 
   test("bound params read under the SQL as $n = value, NULL included", () => {
@@ -164,6 +178,15 @@ describe("an answered card collapses to one line", () => {
     ["interrupted", fixtureWriteEntry(write, "cancelled"), "Cancelled 214-row update"],
   ])("%s", (_name, entry, line) => {
     expect(settledLine(write, allowed, entry).line).toBe(line);
+  });
+
+  test("a run whose COMMIT went unconfirmed says the outcome is unknown", () => {
+    expect(settledLine(write, allowed, fixtureWriteEntry(write, "unknown"))).toEqual({
+      kind: "unknown",
+      line: "214-row update: outcome unknown",
+      detail:
+        "The connection dropped before the database answered. Check the table before running it again.",
+    });
   });
 
   test("a failed run keeps the database's words", () => {

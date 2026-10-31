@@ -35,6 +35,8 @@ export const toDataIpcError = (error: {
       message: scrubCredentials(error.message),
       fix: scrubCredentials(error.fix),
       ...location,
+      ...(error.conflicts === undefined ? undefined : { conflicts: error.conflicts }),
+      ...(error.row === undefined ? undefined : { row: error.row }),
     };
   }
 

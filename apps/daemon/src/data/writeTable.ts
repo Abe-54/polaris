@@ -4,7 +4,7 @@ import type { DataSource } from "@polaris/protocol";
 import { Schema } from "effect";
 import { identifier, writeError } from "./writeSql.ts";
 
-const Strings = Schema.Array(Schema.Struct({ name: Schema.String }));
+const Keys = Schema.Array(Schema.Struct({ name: Schema.String, type: Schema.String }));
 
 const Table = Schema.Array(
   Schema.Struct({ schema: Schema.String, name: Schema.String, engine: Schema.String })
@@ -68,17 +68,21 @@ export async function writeTable(
 
   const keys: unknown =
     source.engine === "postgres"
-      ? await tx`SELECT a.attname::text AS name FROM pg_index i CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum,ord)
+      ? await tx`SELECT a.attname::text AS name,format_type(a.atttypid,a.atttypmod)::text AS type FROM pg_index i CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum,ord)
         JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum
         WHERE i.indrelid=to_regclass(${sql}) AND i.indisprimary ORDER BY k.ord`
-      : await tx`SELECT CAST(COLUMN_NAME AS CHAR) AS name FROM information_schema.KEY_COLUMN_USAGE
-        WHERE TABLE_SCHEMA=${found.schema} AND TABLE_NAME=${found.name} AND CONSTRAINT_NAME='PRIMARY' ORDER BY ORDINAL_POSITION`;
+      : await tx`SELECT CAST(k.COLUMN_NAME AS CHAR) AS name,CAST(c.DATA_TYPE AS CHAR) AS type FROM information_schema.KEY_COLUMN_USAGE k
+        JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA=k.TABLE_SCHEMA AND c.TABLE_NAME=k.TABLE_NAME AND c.COLUMN_NAME=k.COLUMN_NAME
+        WHERE k.TABLE_SCHEMA=${found.schema} AND k.TABLE_NAME=${found.name} AND k.CONSTRAINT_NAME='PRIMARY' ORDER BY k.ORDINAL_POSITION`;
+
+  const decoded = Schema.decodeUnknownSync(Keys)(keys);
 
   return {
     schema: found.schema,
     table: found.name,
     sql,
-    primaryKey: Schema.decodeUnknownSync(Strings)(keys).map((key) => key.name),
+    primaryKey: decoded.map((key) => key.name),
+    keyTypes: decoded.map((key) => key.type),
   };
 }
 

@@ -91,6 +91,8 @@ export interface CommitEditsInput {
   readonly edits: ReadonlyArray<{
     readonly key: ReadonlyArray<DataValue>;
     readonly column: string;
+    /** The value it was staged from; the commit refuses the cell if the database changed it. */
+    readonly before: DataValue;
     readonly value: DataValue;
   }>;
 }

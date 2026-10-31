@@ -24,6 +24,7 @@ import { decodeResult, mysqlValue, type RawResult, type Column } from "./values.
 import { writePlan, sqlTokens, identifier, writeError, updatedColumns } from "./writeSql.ts";
 import { writeTable, type WriteTable } from "./writeTable.ts";
 import { editStatements, type EditInput } from "./writeEdits.ts";
+import { checkEdits, readWritten, refuseFloatKeys } from "./writeEditCheck.ts";
 import type { LexicalMode } from "./guard.ts";
 import { writePreflight } from "./writePreflight.ts";
 import {
@@ -127,7 +128,7 @@ async function beforeRows(
     tx,
     active,
     `SELECT * FROM ${table.sql} ${where.sql} ORDER BY ${table.primaryKey.map((key) => identifier(key, input.source.engine)).join(",")} LIMIT 20 FOR UPDATE`,
-    bindValues(where.params),
+    bindValues(where.params, input.source.engine),
     input
   );
 }
@@ -155,7 +156,7 @@ async function afterRows(
 
       if ([16, 245, 249, 250, 251, 252, 253, 254].includes(column.type)) return buffer;
 
-      return bindValues([mysqlValue(buffer, column, false)])[0]!;
+      return bindValues([mysqlValue(buffer, column, false)], "mysql")[0]!;
     });
 
     const predicate = table.primaryKey
@@ -426,7 +427,7 @@ async function write(tx: TransactionSQL, active: Active, input: WriteInput): Pro
 
   const query = tx<
     Array<never> & { count: number }
-  >`${tx.unsafe(statement, bindValues(input.params ?? []))}`;
+  >`${tx.unsafe(statement, bindValues(input.params ?? [], input.source.engine))}`;
 
   active.query = query;
   const result = await query;
@@ -498,6 +499,50 @@ export function writeEffect(pools: DataPools, input: WriteInput) {
   );
 }
 
+const onRow = (error: DataError, key: ReadonlyArray<DataValue>) =>
+  new DataError({ ...Schema.encodeSync(DataError)(error), row: [...key] });
+
+async function editRow(
+  tx: TransactionSQL,
+  active: Active,
+  input: WriteInput,
+  table: WriteTable,
+  mode: Awaited<ReturnType<typeof configure>>,
+  statement: ReturnType<typeof editStatements>[number],
+  matched: Set<string>
+) {
+  const plan = writePlan(statement.sql, input.source, mode);
+  await writePreflight(tx, input.source, table, plan.sql, mode);
+
+  const keys = await identityRows(
+    tx,
+    active,
+    input,
+    table,
+    whereParams(plan, mode, statement.params)
+  );
+
+  if (keys.length !== 1 || matched.has(rawIdentity(keys[0]!)))
+    throw writeError(
+      "These edits contain a missing or repeated database row.",
+      "Reload the table and stage each row once."
+    );
+  matched.add(rawIdentity(keys[0]!));
+
+  const query = tx<
+    Array<never> & { count: number }
+  >`${tx.unsafe(statement.sql, bindValues(statement.params, input.source.engine))}`;
+
+  active.query = query;
+  const result = await query;
+
+  if (result.count !== 1)
+    throw writeError(
+      `An edit affected ${result.count ?? 0} rows instead of one. All edits were rolled back.`,
+      "Reload the table and stage the edits again."
+    );
+}
+
 export async function executeEdits(
   pools: DataPools,
   input: Omit<WriteInput, "dryRun" | "sql"> & { edits: EditInput },
@@ -520,46 +565,33 @@ export async function executeEdits(
         "The table's primary key does not match these edits.",
         "Reload the table before editing it."
       );
+    refuseFloatKeys(table);
     const statements = editStatements(requested, input.source.engine);
+    const write = { ...input, sql: "", dryRun: false };
+    await checkEdits(tx, active, write, table, statements);
     const matched = new Set<string>();
 
     for (const statement of statements) {
       if (active.stopped) throw writeError("The commit was cancelled.");
 
-      const plan = writePlan(statement.sql, input.source, mode);
-      await writePreflight(tx, input.source, table, plan.sql, mode);
-
-      const keys = await identityRows(
-        tx,
-        active,
-        { ...input, sql: statement.sql, dryRun: false },
-        table,
-        whereParams(plan, mode, statement.params)
-      );
-
-      if (keys.length !== 1 || matched.has(rawIdentity(keys[0]!)))
-        throw writeError(
-          "These edits contain a missing or repeated database row.",
-          "Reload the table and stage each row once."
+      try {
+        await editRow(
+          tx,
+          active,
+          { ...write, sql: statement.sql },
+          table,
+          mode,
+          statement,
+          matched
         );
-      matched.add(rawIdentity(keys[0]!));
-
-      const query = tx<
-        Array<never> & { count: number }
-      >`${tx.unsafe(statement.sql, bindValues(statement.params))}`;
-
-      active.query = query;
-      const result = await query;
-
-      if (result.count !== 1)
-        throw writeError(
-          `An edit affected ${result.count ?? 0} rows instead of one. All edits were rolled back.`,
-          "Reload the table and stage the edits again."
-        );
+      } catch (error) {
+        throw onRow(queryError(error, knownCredentials(input.connection)), statement.key);
+      }
     }
 
     return {
       affected: statements.length,
+      written: await readWritten(tx, active, write, table, statements),
       target: { schema: table.schema, table: table.table },
     };
   });

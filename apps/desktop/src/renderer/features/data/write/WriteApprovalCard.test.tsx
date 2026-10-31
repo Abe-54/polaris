@@ -8,7 +8,13 @@ import { type FakeBridge, installFakeBridge } from "../../../test/bridge.testing
 import { standInBridge } from "../../bridge.ts";
 import { approve, deny } from "../../needs-you/respond.ts";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
-import { fixtureWrite, fixtureWriteApproval, worstWrite } from "../preview/writeFixtures.ts";
+import {
+  fixtureWrite,
+  fixtureWriteApproval,
+  insertWrite,
+  notPreviewedWrite,
+  worstWrite,
+} from "../preview/writeFixtures.ts";
 import type { DataWrite } from "./model.ts";
 import { WriteApprovalCard } from "./WriteApprovalCard.tsx";
 
@@ -112,6 +118,30 @@ test("a remote source's card takes its label colour on the top bar; a local one 
 
   render(card(fixtureWriteApproval(fixtureWrite({ target: worstWrite().target })), BRANCH));
   expect(screen.getByTestId("data-write-bar").getAttribute("data-colour")).toBe("tan");
+});
+
+test("a schema change the Daemon didn't preview says so once, shows no rows and runs without preview", () => {
+  const reason = "Not previewed: this statement changes the schema";
+
+  render(card(fixtureWriteApproval(notPreviewedWrite(reason, "alter table t add column n int"))));
+
+  expect(screen.getByTestId("data-write-kicker").textContent).toBe(reason);
+  expect(screen.getAllByText(reason)).toHaveLength(1);
+  expect(screen.queryByTestId("data-write-rows")).toBeNull();
+  expect(screen.getByTestId("data-write-params").textContent).toBe("$1 = inv_04810");
+  expect(screen.getByTestId("data-write-run").textContent).toContain("Run without preview");
+});
+
+test("an insert shows its new rows with nothing before, and says previews consume sequences", () => {
+  render(card(fixtureWriteApproval(insertWrite())));
+
+  const rows = screen.getByTestId("data-write-rows");
+
+  expect(rows.querySelectorAll('tr[data-side="after"]')).toHaveLength(3);
+  expect(rows.querySelectorAll('tr[data-side="before"]')).toHaveLength(0);
+  expect(screen.getByTestId("data-write-note").textContent).toContain(
+    "Sequence values used by the preview aren't reused."
+  );
 });
 
 test("the worst case shows the changed columns, 20 of the rows, and offers the rest", () => {

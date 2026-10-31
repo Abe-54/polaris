@@ -22,7 +22,8 @@ import {
   type DataWrite,
   denyDecision,
   dryRunKicker,
-  NOT_PREVIEWED,
+  noteLine,
+  notPreviewed,
   paramsLine,
   runDecision,
   runLabel,
@@ -192,6 +193,7 @@ export const WriteApprovalCard = ({
   const bar = topBarColour(source);
   const params = paramsLine(write);
   const showing = showingLine(write);
+  const note = noteLine(write);
 
   return (
     <section
@@ -234,9 +236,11 @@ export const WriteApprovalCard = ({
             <span className="text-caption text-text-subtle tabular">{showing}</span>
           )}
         </div>
-        <BeforeAfter write={write} />
-        {write.note.trim() === "" || write.note.trim() === NOT_PREVIEWED ? null : (
-          <p className="text-caption text-text-subtle">{write.note}</p>
+        {notPreviewed(write) ? null : <BeforeAfter write={write} />}
+        {note === null ? null : (
+          <p className="text-caption text-text-subtle" data-testid="data-write-note">
+            {note}
+          </p>
         )}
         <div className="flex flex-col gap-1">
           <span className={cn(KICKER, "text-text-faint")}>Why</span>

@@ -1,15 +1,18 @@
 /**
  * The footer's edit state (DESIGN.md, Data: Table tab; Paper D1): "1 change staged · 1 row" in
  * tan with Discard and Commit ⌘S, the last commit's word, or why the table is read-only. A
- * failed commit keeps everything staged and shows its E-DATA code and fix above the footer.
+ * failed commit keeps everything staged and says why above the footer, in the user's words.
  */
 import { Button, Kbd } from "@polaris/ui";
 import { commandShortcut } from "../../../../../../shared/keymap.ts";
-import { changesLabel, countStaged, stagedLabel } from "./staged.ts";
+import { commitCopy } from "./commitCopy.ts";
+import { changesLabel, countStaged, type SortedStaged, stagedLabel } from "./staged.ts";
 import type { TabEdits } from "./store.ts";
 
 export interface StagedBarProps {
   readonly edits: TabEdits;
+  /** What a commit would send: the count is of these; a changed conflict holds Commit back. */
+  readonly sorted: SortedStaged;
   readonly readOnly: string | null;
   /** The remote source's writes are what block edits: the connection card can change that. */
   readonly onConnection: (() => void) | null;
@@ -38,13 +41,15 @@ const ReadOnly = ({
 
 export const StagedBar = ({
   edits,
+  sorted,
   readOnly,
   onConnection,
   onDiscard,
   onCommit,
 }: StagedBarProps) => {
-  const count = countStaged(edits.staged);
+  const count = countStaged({ cells: sorted.send });
   const committing = edits.commit.status === "committing";
+  const held = sorted.changed.length > 0;
 
   if (count.changes === 0) {
     if (edits.commit.status === "committed")
@@ -79,7 +84,8 @@ export const StagedBar = ({
       <Button
         variant="secondary"
         className="rounded-full shadow-[inset_0_0_0_1px_var(--color-hairline)]"
-        disabled={committing}
+        disabled={committing || held}
+        title={held ? "Overwrite or drop each conflict to commit" : undefined}
         onClick={onCommit}
         data-testid="data-commit"
       >
@@ -90,10 +96,17 @@ export const StagedBar = ({
   );
 };
 
-/** A failed commit, above the footer: the code, what happened and the fix. */
-export const CommitError = ({ edits }: { readonly edits: TabEdits }) => {
+/** A failed commit, above the footer: the code, what happened and what to do. */
+export const CommitError = ({
+  edits,
+  keyNames,
+}: {
+  readonly edits: TabEdits;
+  readonly keyNames: ReadonlyArray<string>;
+}) => {
   if (edits.commit.status !== "failed") return null;
   const { error } = edits.commit;
+  const copy = commitCopy(error, keyNames);
 
   return (
     <div
@@ -102,13 +115,9 @@ export const CommitError = ({ edits }: { readonly edits: TabEdits }) => {
       className="border-hairline flex shrink-0 flex-col gap-0.5 border-t px-3.5 py-2"
     >
       <span className="text-caption text-failed-text min-w-0">
-        <span className="font-mono">{error.code}</span> · Commit failed · {error.message}
+        <span className="font-mono">{error.code}</span> · Commit failed · {copy.message}
       </span>
-      {error.fix === undefined ? null : (
-        <span className="text-caption text-text-subtle">
-          {error.fix} Your edits are still staged.
-        </span>
-      )}
+      <span className="text-caption text-text-subtle">{copy.fix} Your edits are still staged.</span>
     </div>
   );
 };

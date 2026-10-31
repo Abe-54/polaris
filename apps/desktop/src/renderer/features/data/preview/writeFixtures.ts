@@ -89,29 +89,31 @@ export const fixtureWriteApproval = (
   openedAt: new Date(FIXTURE_NOW - 30_000).toISOString(),
 });
 
-/** WF's planned fields (RW F1/F4), until the protocol has them: params and the trigger path. */
-export const withParams = (write: DataWrite, params: ReadonlyArray<DataValue>): DataWrite => {
-  const planned = { ...write, params };
+/** The statement's bound params, as the Daemon sends them (scrubbed). */
+export const withParams = (write: DataWrite, params: ReadonlyArray<DataValue>): DataWrite => ({
+  ...write,
+  params,
+});
 
-  return planned;
-};
-
-export const notPreviewedWrite = (): DataWrite => {
-  const planned = {
-    ...fixtureWrite({
-      sql: "update payments set settled = true where invoice_id = $1",
-      affected: 0,
-      columns: [],
-      before: [],
-      after: [],
-      note: "Not previewed: this table has triggers",
-    }),
+/** A write the Daemon ran no dry run for: the note says why, in the Daemon's words. */
+export const notPreviewedWrite = (
+  note = "Not previewed: this table has triggers",
+  sql = "update payments set settled = true where invoice_id = $1"
+): DataWrite =>
+  fixtureWrite({
+    sql,
+    affected: 0,
+    columns: [],
+    before: [],
+    after: [],
+    note,
     previewed: false,
     params: ["inv_04810"],
-  };
+  });
 
-  return planned;
-};
+/** The Daemon's note on a previewed write: its limits, and that previews consume sequences. */
+export const PREVIEW_NOTE =
+  "Up to 20 rows, read by primary key; preview capped at 16,000 bytes. Sequence values used by the preview aren't reused.";
 
 /** An insert: no before, three new rows. */
 export const insertWrite = (): DataWrite =>
@@ -125,6 +127,7 @@ export const insertWrite = (): DataWrite =>
       ["JPY", 0, "Yen"],
       ["KWD", 3, "Kuwaiti dinar"],
     ],
+    note: PREVIEW_NOTE,
   });
 
 const HUGE = "x".repeat(4000);

@@ -139,7 +139,7 @@ test("F2: Local writes off refuses execute and grid commits before dry-run or ap
               source: "app",
               table: { schema: "public", name: "t" },
               primaryKey: ["id"],
-              edits: [{ key: [1], column: "v", value: 2 }],
+              edits: [{ key: [1], column: "v", before: 1, value: 2 }],
             })
           )
         ).toMatchObject({ code: "E-DATA-READ-ONLY" });

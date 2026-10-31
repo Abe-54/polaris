@@ -8,9 +8,10 @@
  * `stress-control` (10,000 × 60). `--profile` prints the renderer's hottest functions during jumps.
  *
  * `--edits-only` takes only grid edits' screenshots (E): staged cells, the editor, a failed
- * commit, the remote bulk confirm, read-only tables and closing a tab with edits.
+ * commit, the remote bulk confirm, read-only tables and closing a tab with edits. `--fixes-only`
+ * takes EF's: conflicts, the zone and float-key refusals, local writes off and Discard's Undo.
  *
- *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--edits-only]
+ *   node scripts/dataTableScreens.ts --out <dir> [--build] [--bench-only] [--edits-only] [--fixes-only]
  *     [--scene <name>] [--profile] [--json <path>]
  */
 import { execFileSync, spawnSync } from "node:child_process";
@@ -93,8 +94,12 @@ const shoot = async (page: Page, name: string) => {
   log(`saved ${name}.png`);
 };
 
+/** Each scene starts without the staged edits the last one left on the shelf (F12). */
+const CLEAR_SHELF = `localStorage.removeItem("polaris.data.staged.v1");
+  addEventListener("pagehide", () => localStorage.removeItem("polaris.data.staged.v1"));`;
+
 const open = async (page: Page, scene: string, testId = "data-grid") => {
-  await page.evaluate(`location.hash = "#data/${scene}"; location.reload()`);
+  await page.evaluate(`${CLEAR_SHELF} location.hash = "#data/${scene}"; location.reload()`);
   await page.waitForLoadState("domcontentloaded");
   await page.getByTestId(testId).first().waitFor({ timeout: 20_000 });
   await page.waitForTimeout(500);
@@ -234,6 +239,41 @@ const editScreens = async (page: Page) => {
     await page.getByTestId("data-close-staged").waitFor();
     await page.waitForTimeout(300);
     await shoot(page, `edit-close-${theme}`);
+  }
+};
+
+const fixScreens = async (page: Page) => {
+  for (const theme of THEMES) {
+    await appearance(page, theme, "calm");
+    await open(page, "edit-conflict");
+    await page.getByTestId("data-commit").click();
+    await page.getByTestId("data-conflicts").waitFor();
+    await page.mouse.move(1300, 120);
+    await shoot(page, `edit-conflict-${theme}`);
+
+    await open(page, "edit-zone");
+    await typeInto(page, 0, 1, "2026-10-30 09:00:00+02:00");
+    await page.keyboard.press("Enter");
+    await shoot(page, `edit-zone-${theme}`);
+
+    await open(page, "edit-float-key");
+    await cell(page, 0, 1).click();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(300);
+    await shoot(page, `edit-float-key-${theme}`);
+
+    await open(page, "edit-writes-off-local");
+    await cell(page, 0, 3).click();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(300);
+    await shoot(page, `edit-writes-off-local-${theme}`);
+
+    await open(page, "edit-staged");
+    await page.getByTestId("data-discard").click();
+    await page.getByRole("button", { name: "Undo" }).waitFor();
+    await page.mouse.move(1300, 120);
+    await page.waitForTimeout(800);
+    await shoot(page, `edit-discard-undo-${theme}`);
   }
 };
 
@@ -556,6 +596,7 @@ try {
   await sizeWindow(app, 1440, 900);
 
   if (args.includes("--edits-only")) await editScreens(page);
+  else if (args.includes("--fixes-only")) await fixScreens(page);
   else {
     if (!args.includes("--bench-only")) await screens(page);
     ok = await bench(page);

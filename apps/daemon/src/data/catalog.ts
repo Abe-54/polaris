@@ -39,6 +39,7 @@ export const columnsSql = {
     CASE WHEN a.attgenerated<>'' THEN pg_get_expr(d.adbin,d.adrelid) ELSE '' END AS generated_expression,
     COALESCE((SELECT n.nspname || '.' || c.collname FROM pg_collation c JOIN pg_namespace n ON n.oid=c.collnamespace WHERE c.oid=a.attcollation),'') AS collation_name,
     EXISTS(SELECT 1 FROM pg_constraint p WHERE p.conrelid=a.attrelid AND p.contype='p' AND a.attnum=ANY(p.conkey)) AS pk,
+    (SELECT array_position(p.conkey,a.attnum) FROM pg_constraint p WHERE p.conrelid=a.attrelid AND p.contype='p') AS pk_position,
     (SELECT json_build_object('schema',rn.nspname,'table',rc.relname,'column',ra.attname) FROM pg_constraint f
       JOIN pg_class rc ON rc.oid=f.confrelid JOIN pg_namespace rn ON rn.oid=rc.relnamespace
       CROSS JOIN LATERAL unnest(f.conkey,f.confkey) k(src,dst) JOIN pg_attribute ra ON ra.attrelid=f.confrelid AND ra.attnum=k.dst
@@ -47,6 +48,8 @@ export const columnsSql = {
     WHERE a.attrelid=to_regclass($1) AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`,
   mysql: `SELECT c.ORDINAL_POSITION AS position,c.COLUMN_NAME AS name,c.COLUMN_TYPE AS type,c.IS_NULLABLE='YES' AS nullable,c.COLUMN_DEFAULT AS default_value,c.COLUMN_KEY='PRI' AS pk,
     c.GENERATION_EXPRESSION AS generated_expression,COALESCE(c.COLLATION_NAME,'') AS collation_name,c.EXTRA AS extra,
+    (SELECT k.ORDINAL_POSITION FROM information_schema.KEY_COLUMN_USAGE k WHERE k.TABLE_SCHEMA=c.TABLE_SCHEMA AND k.TABLE_NAME=c.TABLE_NAME
+      AND k.COLUMN_NAME=c.COLUMN_NAME AND k.CONSTRAINT_NAME='PRIMARY') AS pk_position,
     (SELECT JSON_OBJECT('schema',k.REFERENCED_TABLE_SCHEMA,'table',k.REFERENCED_TABLE_NAME,'column',k.REFERENCED_COLUMN_NAME) FROM information_schema.KEY_COLUMN_USAGE k
       WHERE k.TABLE_SCHEMA=c.TABLE_SCHEMA AND k.TABLE_NAME=c.TABLE_NAME AND k.COLUMN_NAME=c.COLUMN_NAME AND k.REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1) AS fk
     FROM information_schema.COLUMNS c WHERE c.TABLE_SCHEMA=DATABASE() AND c.TABLE_NAME=? ORDER BY c.ORDINAL_POSITION`,
@@ -172,9 +175,19 @@ export const makeCatalogReader = (read: typeof readEffect) =>
         .find((x) => x.name === schema)
         ?.tables.find((x) => x.name === name)?.rowEstimate;
 
+      const primaryKey = columns
+        .filter((row) => row.pk_position !== null && row.pk_position !== undefined)
+        .map((row) => ({
+          name: text("columns.name", row.name),
+          at: number("columns.pk_position", row.pk_position),
+        }))
+        .sort((a, b) => a.at - b.at)
+        .map((key) => key.name);
+
       const detail = decode("table.detail", TableDetail, {
         schema,
         name,
+        primaryKey,
         columns: columns.map((row) => ({
           name: text("columns.name", row.name),
           type: text("columns.type", row.type),

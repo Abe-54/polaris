@@ -8,7 +8,7 @@ import { executeWrite, type WriteInput } from "./writeExecution.ts";
 export const databaseUrl = (engine: "postgres" | "mysql") =>
   process.env[engine === "postgres" ? "POLARIS_TEST_PG_URL" : "POLARIS_TEST_MYSQL_URL"];
 
-export function writeFixture(engine: "postgres" | "mysql") {
+export function writeFixture(engine: "postgres" | "mysql", prefix = "wf") {
   const url = databaseUrl(engine)!;
 
   const { connection } = parseConnection({
@@ -17,7 +17,7 @@ export function writeFixture(engine: "postgres" | "mysql") {
     foundIn: { kind: "manual" },
   })!;
 
-  const name = `wf_${crypto.randomUUID().replaceAll("-", "")}`;
+  const name = `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
 
   const source = new DataSource({
     id: name,

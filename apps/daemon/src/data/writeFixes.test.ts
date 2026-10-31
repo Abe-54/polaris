@@ -88,13 +88,13 @@ test("F7/F8: upserts and MySQL cross-database subqueries fail before a transacti
 test("F11/F12: typed keys ignore object field order and Bytes bind their complete payload", () => {
   const a = DataValueTags.cases.Bytes.make({ length: 2, base64: "AP8=" });
   const b = DataValueTags.cases.Bytes.make({ base64: "AP8=", length: 2 });
-  expect(bindValues([a])).toEqual([Buffer.from([0, 255])]);
-  expect(() => bindValues([DataValueTags.cases.Bytes.make({ length: 2 })])).toThrow(
+  expect(bindValues([a], "postgres")).toEqual([Buffer.from([0, 255])]);
+  expect(() => bindValues([DataValueTags.cases.Bytes.make({ length: 2 })], "postgres")).toThrow(
     "no bindable bytes"
   );
-  expect(() => bindValues([DataValueTags.cases.Bytes.make({ length: 3, base64: "AP8=" })])).toThrow(
-    "incomplete"
-  );
+  expect(() =>
+    bindValues([DataValueTags.cases.Bytes.make({ length: 3, base64: "AP8=" })], "postgres")
+  ).toThrow("incomplete");
   expect(() =>
     editStatements(
       {
@@ -103,8 +103,8 @@ test("F11/F12: typed keys ignore object field order and Bytes bind their complet
         table: { schema: "public", name: "t" },
         primaryKey: ["id"],
         edits: [
-          { key: [a], column: "v", value: 1 },
-          { key: [b], column: "v", value: 2 },
+          { key: [a], column: "v", before: 0, value: 1 },
+          { key: [b], column: "v", before: 0, value: 2 },
         ],
       },
       "postgres"
@@ -208,3 +208,17 @@ test("F13: a held target lock allows another target through and queues its own s
       })
     )
   ));
+
+test("EF F1: Postgres JSON binds as the document with its numbers intact; MySQL keeps the text", () => {
+  const doc = DataValueTags.cases.Json.make({
+    text: '{"a": 12345678901234567890, "b": [1, null]}',
+  });
+
+  expect(JSON.stringify(bindValues([doc], "postgres")[0])).toBe(
+    '{"a":12345678901234567890,"b":[1,null]}'
+  );
+  expect(bindValues([doc], "mysql")).toEqual([doc.text]);
+  expect(() => bindValues([DataValueTags.cases.Json.make({ text: "{" })], "postgres")).toThrow(
+    "not valid JSON"
+  );
+});

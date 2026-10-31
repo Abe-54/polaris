@@ -53,7 +53,7 @@ export interface DiffLine {
 }
 
 /** One line per staged row, the first DIFF_ROWS of them, and how many rows aren't listed. */
-export const diffLines = (primaryKey: ReadonlyArray<string>, staged: Staged) => {
+export const diffLines = (primaryKey: ReadonlyArray<string>, staged: Pick<Staged, "cells">) => {
   const rows = stagedRows(staged);
 
   const lines = rows.slice(0, DIFF_ROWS).map((row): DiffLine => ({
@@ -113,7 +113,7 @@ export interface ConfirmCommitProps {
   readonly source: DataSource;
   readonly table: string;
   readonly primaryKey: ReadonlyArray<string>;
-  readonly staged: Staged;
+  readonly staged: Pick<Staged, "cells">;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }
