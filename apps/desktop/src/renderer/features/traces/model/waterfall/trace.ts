@@ -82,11 +82,47 @@ interface Draft {
   readonly end: number;
 }
 
-const groupChildren = (drafts: ReadonlyArray<Draft>, ids: ReadonlySet<string>) => {
+/**
+ * Each span's parent as drawn: null for a root, a parent that wasn't kept, or the first span
+ * reached on a cycle (one naming itself counts), so bad data never hides a subtree.
+ */
+const parentsOf = (drafts: ReadonlyArray<Draft>) => {
+  const ids = new Set(drafts.map((d) => d.span.id));
+
+  const parent = new Map<string, string | null>(
+    drafts.map((d) => [
+      d.span.id,
+      d.span.parentId !== null && ids.has(d.span.parentId) ? d.span.parentId : null,
+    ])
+  );
+
+  const settled = new Set<string>();
+
+  for (const d of drafts) {
+    const walked = new Set<string>();
+    let at: string | null = d.span.id;
+
+    while (at !== null && !settled.has(at) && !walked.has(at)) {
+      walked.add(at);
+      at = parent.get(at) ?? null;
+    }
+
+    if (at !== null && walked.has(at)) parent.set(at, null);
+
+    for (const id of walked) settled.add(id);
+  }
+
+  return parent;
+};
+
+const groupChildren = (
+  drafts: ReadonlyArray<Draft>,
+  parents: ReadonlyMap<string, string | null>
+) => {
   const children = new Map<string | null, Array<Draft>>();
 
   for (const d of drafts) {
-    const parent = d.span.parentId !== null && ids.has(d.span.parentId) ? d.span.parentId : null;
+    const parent = parents.get(d.span.id) ?? null;
     const list = children.get(parent);
 
     if (list === undefined) children.set(parent, [d]);
@@ -148,8 +184,8 @@ export const traceTimes = (detail: TraceDetail): TraceTimes => {
     })
     .sort(byStart);
 
-  const ids = new Set(drafts.map((d) => d.span.id));
-  const grouped = groupChildren(drafts, ids);
+  const parents = parentsOf(drafts);
+  const grouped = groupChildren(drafts, parents);
   const depth = depths(grouped);
 
   const timed = new Map<string, TimedSpan>(
@@ -171,7 +207,7 @@ export const traceTimes = (detail: TraceDetail): TraceTimes => {
 
   const orphans = new Set(
     drafts
-      .filter((d) => d.span.parentId !== null && !ids.has(d.span.parentId))
+      .filter((d) => d.span.parentId !== null && parents.get(d.span.id) === null)
       .map((d) => d.span.id)
   );
 

@@ -508,19 +508,19 @@ export const FIXTURE_ENDPOINT = "http://127.0.0.1:4319/otlp/tok_fixture_overdue"
 
 const listening = TraceAvailability.cases.Listening.make({});
 
-/** The receiver's states: listening with traces, listening with none, the port taken, and the user's own exporter. */
+const portTaken = TraceAvailability.cases.Unavailable.make({
+  code: "E-TRACE-PORT-IN-USE",
+  message: "127.0.0.1:4319 is in use by another process",
+  owner: "otelcol-contrib (pid 4127)",
+});
+
+/** The receiver's states: listening with traces or none, the port taken (with traces stored or none), and the user's own exporter. */
 export const FIXTURE_SNAPSHOTS = {
   traces: { availability: listening, userExported: false, endpoint: FIXTURE_ENDPOINT },
   empty: { availability: listening, userExported: false, endpoint: FIXTURE_ENDPOINT },
-  unavailable: {
-    availability: TraceAvailability.cases.Unavailable.make({
-      code: "E-TRACE-PORT-IN-USE",
-      message: "127.0.0.1:4319 is in use by another process",
-      owner: "otelcol-contrib (pid 4127)",
-    }),
-    userExported: false,
-    endpoint: null,
-  },
+  unavailable: { availability: portTaken, userExported: false, endpoint: null },
+  /** The port taken after traces arrived: they stay readable, the status bar says why. */
+  unavailableStored: { availability: portTaken, userExported: false, endpoint: null },
   userExported: { availability: listening, userExported: true, endpoint: null },
 } as const satisfies Record<string, Omit<TracesSnapshot, "traces" | "total">>;
 

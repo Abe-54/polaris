@@ -2,11 +2,11 @@ import "../../../test/dom.testing.ts";
 import type { TraceFilter } from "@polaris/protocol";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, test } from "bun:test";
-import type { ReactNode } from "react";
 import { fixtureTracesApi } from "../preview/fixtureApi.ts";
 import { BIG_TRACE, FIXTURE_SESSION } from "../preview/fixtures.ts";
 import type { TracesApi } from "./api.ts";
-import { TracesLayer, useSpan, useTraces } from "./hooks.tsx";
+import { providers } from "../ui/mode.testing.tsx";
+import { useSpan, useTraces } from "./hooks.tsx";
 
 afterEach(cleanup);
 
@@ -38,9 +38,7 @@ const recording = () => {
     },
   };
 
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <TracesLayer api={api}>{children}</TracesLayer>
-  );
+  const { wrapper } = providers(api);
 
   return { api, open, reads, wrapper };
 };

@@ -8,15 +8,23 @@ import { durationLabel } from "./waterfall/time.ts";
 const count = (n: number, one: string) =>
   `${n.toLocaleString("en-US")} ${one}${n === 1 ? "" : "s"}`;
 
-const turnPart = (summary: TraceSummary) =>
-  summary.turn === null ? "between turns" : `turn ${summary.turn.number}`;
+const turnPart = (summary: TraceSummary, other: string | null) => {
+  if (summary.turn === null) return "between turns";
 
-export const traceReference = (summary: TraceSummary, span: Span | null): string => {
+  return other === null ? `turn ${summary.turn.number}` : `turn ${summary.turn.number} of ${other}`;
+};
+
+/** `other` names the session whose Turn ran the trace when it isn't the draft's own session. */
+export const traceReference = (
+  summary: TraceSummary,
+  span: Span | null,
+  other: string | null = null
+): string => {
   const facts = [
     durationLabel(summary.durationMs),
     count(summary.spans, "span"),
     ...(summary.errors > 0 ? [count(summary.errors, "error")] : []),
-    turnPart(summary),
+    turnPart(summary, other),
     ...(summary.partial ? ["partial: some spans were removed"] : []),
   ];
 

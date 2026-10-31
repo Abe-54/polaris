@@ -29,7 +29,10 @@ const read = (attributes: TraceAttributes, ...keys: ReadonlyArray<string>) => {
 /** `db.namespace` may carry a schema after a `|` (semantic conventions); the database leads. */
 const databaseOf = (namespace: string) => namespace.split("|")[0] ?? namespace;
 
-/** The Data Source a database Span ran against; null for any other Span or when none matches. */
+/**
+ * The Data Source a database Span ran against; null for any other Span, or when none or several
+ * match. A Span that names no server only matches Local Data Sources, never production.
+ */
 export const spanDataSource = (
   attributes: TraceAttributes,
   sources: ReadonlyArray<DataSource>
@@ -42,15 +45,15 @@ export const spanDataSource = (
   const host = read(attributes, "server.address", "net.peer.name");
   const port = read(attributes, "server.port", "net.peer.port");
 
-  return (
-    sources.find(
-      (s) =>
-        s.engine === engine &&
-        s.database === databaseOf(namespace) &&
-        (port === null || String(s.port) === port) &&
-        (host === null || sameHost(host, s.host))
-    ) ?? null
+  const matches = sources.filter(
+    (s) =>
+      s.engine === engine &&
+      s.database === databaseOf(namespace) &&
+      (port === null || String(s.port) === port) &&
+      (host === null ? s.locality === "local" : sameHost(host, s.host))
   );
+
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 };
 
 export interface SpanTable {

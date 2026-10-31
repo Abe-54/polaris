@@ -58,6 +58,17 @@ const SHOTS: ReadonlyArray<Shot> = [
     hash: "#traces/traces?view=reconnecting",
     ready: "traces-setup-reconnecting",
   },
+  { name: "offline", hash: "#traces/traces?view=offline", ready: "traces-setup-offline" },
+  {
+    name: "needs-attention",
+    hash: "#traces/traces?view=needs-attention",
+    ready: "traces-setup-needs-attention",
+  },
+  {
+    name: "unavailable-stored",
+    hash: "#traces/unavailableStored?view=span-error",
+    ready: "traces-receiver",
+  },
   { name: "output", hash: "#preview/traces-output", ready: "traces-output" },
 ];
 

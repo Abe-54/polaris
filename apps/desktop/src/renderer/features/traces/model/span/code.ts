@@ -26,11 +26,30 @@ const whole = (value: TraceAttributes[string] | undefined): number | null => {
 
 const FILE_URL = /^file:\/\//;
 
+const WINDOWS = /^[A-Za-z]:[\\/]|^\\\\/;
+
+/** A relative path without `.` and `..`; null when it climbs above where it starts. */
+const normalized = (path: string): string | null => {
+  const parts: Array<string> = [];
+
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+
+    if (part !== "..") parts.push(part);
+    else if (parts.pop() === undefined) return null;
+  }
+
+  return parts.join("/");
+};
+
 /** `path` relative to `checkout` when it lies inside it; null when it lies outside. */
 const insideCheckout = (path: string, checkout: string): string | null => {
   const plain = path.replace(FILE_URL, "");
 
-  if (!plain.startsWith("/")) return plain;
+  // A Windows path never lies in a POSIX checkout; a relative one resolves against the checkout.
+  if (WINDOWS.test(plain)) return null;
+
+  if (!plain.startsWith("/")) return normalized(plain);
   const root = checkout.endsWith("/") ? checkout : `${checkout}/`;
 
   return plain.startsWith(root) ? plain.slice(root.length) : null;

@@ -39,7 +39,8 @@ const newestFirst = (a: TraceSummary, b: TraceSummary) => {
   return a.id < b.id ? -1 : 1;
 };
 
-const details = (scene: TracesScene) => (scene === "traces" ? FIXTURE_DETAILS : []);
+const details = (scene: TracesScene) =>
+  scene === "traces" || scene === "unavailableStored" ? FIXTURE_DETAILS : [];
 
 /** The snapshot `traces.watch` would emit for `filter` in `scene`. */
 export const fixtureSnapshot = (scene: TracesScene, filter: TraceFilter = {}): TracesSnapshot => {
