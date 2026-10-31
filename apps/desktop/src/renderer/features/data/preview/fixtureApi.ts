@@ -47,7 +47,7 @@ export type FixtureTables = Readonly<Record<string, FixtureTable>>;
 const reach = (name: string, sources: ReadonlyArray<DataSource>): Result<null> => {
   const source = sources.find((s) => s.name === name);
 
-  if (source !== undefined && !source.reachable)
+  if (source?.reachable === false)
     return fail("E-DATA-UNREACHABLE", source.error ?? `Can't reach ${source.host}:${source.port}`);
 
   if (source === undefined) return fail("E-DATA-UNKNOWN-SOURCE", `No data source named ${name}`);
