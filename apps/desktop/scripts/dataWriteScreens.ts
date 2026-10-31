@@ -68,17 +68,51 @@ const open = async (page: Page, scene: string, testId: string) => {
   await page.waitForTimeout(1200);
 };
 
-/** Scrolls an element into view; a string, as the script has no DOM types. */
+/** Releases the conversation's end with a real wheel, as the user would, then scrolls to the element. */
 const scrollTo = async (page: Page, testId: string, block: "start" | "end", index = 0) => {
-  await page
-    .getByTestId(testId)
+  const box = await page.getByTestId("conversation").boundingBox();
+
+  if (box !== null) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -200);
+    await page.waitForTimeout(150);
+  }
+
+  const target = page.getByTestId(testId);
+
+  for (let i = 0; i < 40 && (await target.count()) <= index; i++) {
+    await page.mouse.wheel(0, -800);
+    await page.waitForTimeout(150);
+  }
+
+  await target
     .nth(index)
-    .evaluate(`(e) => e.scrollIntoView({ block: "${block}" })`);
+    .evaluate(
+      (e: { scrollIntoView: (options: { block: string }) => void }, at: string) =>
+        e.scrollIntoView({ block: at }),
+      block
+    );
   await page.waitForTimeout(300);
 };
 
 /** The card's top in view: the conversation follows the end, the card is taller than the window. */
 const toCard = (page: Page, index = 0) => scrollTo(page, "data-write", "start", index);
+
+/** Scrolls up until the approval's card is mounted (the conversation is virtualized), then to its top. */
+const toApproval = async (page: Page, requestId: string) => {
+  const card = page.locator(`[data-approval-id="${requestId}"]`);
+
+  for (let i = 0; i < 40 && (await card.count()) === 0; i++) {
+    await page.getByTestId("conversation").evaluate("(e) => { e.scrollTop -= 600; }");
+    await page.waitForTimeout(150);
+  }
+
+  // As Approve from elsewhere does: the conversation releases the end and puts the card on top.
+  await card.evaluate((e: { dispatchEvent: (event: Event) => boolean }) =>
+    e.dispatchEvent(new Event("polaris:reveal-approval", { bubbles: true, cancelable: true }))
+  );
+  await page.waitForTimeout(500);
+};
 
 const check = (ok: boolean, what: string) => {
   if (!ok) throw new Error(what);
@@ -94,35 +128,39 @@ try {
     await open(page, "data-write", "data-write");
     await appearance(page, theme, "balanced");
     await toCard(page);
-    await shoot(page, `write-card-${theme}`);
-
-    await scrollTo(page, "data-write-settled", "start");
-    await shoot(page, `write-settled-${theme}`);
-
-    await toCard(page);
     await page.getByTestId("data-write-deny-open").click();
     await page.waitForTimeout(300);
     await scrollTo(page, "data-write-deny", "end");
     await shoot(page, `write-deny-${theme}`);
-
-    await open(page, "data-write-worst", "data-write");
-    await appearance(page, theme, "balanced");
-    await toCard(page);
-    await shoot(page, `write-worst-${theme}`);
-    await toCard(page, 1);
-    await shoot(page, `write-insert-unpreviewed-${theme}`);
-
-    await open(page, "data-output", "data-output");
-    await appearance(page, theme, "balanced");
-    await shoot(page, `output-data-${theme}`);
   }
 
-  for (const density of ["calm", "compact"]) {
-    await open(page, "data-write", "data-write");
-    await appearance(page, "dark", density);
-    await toCard(page);
-    await shoot(page, `write-card-dark-${density}`);
-  }
+  // RF2: every changed state in both themes and all three densities.
+  for (const theme of ["dark", "light"])
+    for (const density of ["calm", "balanced", "compact"]) {
+      const at = `${theme}-${density}`;
+
+      await open(page, "data-write", "data-write");
+      await appearance(page, theme, density);
+      await toCard(page);
+      await shoot(page, `write-card-${at}`);
+      await scrollTo(page, "data-write-settled", "start");
+      await shoot(page, `write-settled-${at}`);
+
+      await open(page, "data-write-worst", "data-write");
+      await appearance(page, theme, density);
+      await toApproval(page, "r-worst");
+      await shoot(page, `write-worst-${at}`);
+      await toApproval(page, "r-insert");
+      await shoot(page, `write-insert-${at}`);
+      await toApproval(page, "r-unpreviewed");
+      await shoot(page, `write-unpreviewed-${at}`);
+      await toApproval(page, "r-credential");
+      await shoot(page, `write-credential-${at}`);
+
+      await open(page, "data-output", "data-output");
+      await appearance(page, theme, density);
+      await shoot(page, `output-data-${at}`);
+    }
 
   await open(page, "data-write", "data-write");
   await appearance(page, "light", "balanced", "cvd");
@@ -139,7 +177,15 @@ try {
     (await page.getByTestId("data-output-reads").textContent())?.includes("12 reads") === true,
     "reads fold to one row"
   );
-  check((await page.getByTestId("data-output-write").count()) === 1, "the Turn's write is a card");
+  check((await page.getByTestId("data-output-write").count()) === 3, "the Turn's writes are cards");
+  check(
+    (await page.locator('[data-testid="data-output-write"][data-state="unknown"]').count()) === 1,
+    "an unknown outcome reads unknown"
+  );
+  check(
+    (await page.getByText("Expired: the turn was stopped before you answered").count()) >= 1,
+    "an expired write says why, not Denied"
+  );
   check((await page.getByTestId("data-output-schema").count()) === 1, "the schema change shows");
 
   // Turn 4 touched data too; the session scene's Turn touched none, so it has no Data tab.

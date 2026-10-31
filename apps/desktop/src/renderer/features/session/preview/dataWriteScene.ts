@@ -14,6 +14,7 @@ import type { SessionModel, SettledWrite } from "../../../store/sessionModel.ts"
 import { FIXTURE_QUERY_LOG, FIXTURE_SOURCES } from "../../data/preview/fixtures.ts";
 import {
   BRANCH_TARGET,
+  credentialWrite,
   fixtureWrite,
   fixtureWriteApproval,
   fixtureWriteEntry,
@@ -111,6 +112,16 @@ const ENTRIES: ReadonlyArray<QueryLogEntry> = [
       at: at(10 - i / 2),
     })
   ),
+  fixtureWriteEntry(
+    fixtureWrite({ queryId: "q-t5-unknown", sql: "update billing.invoices set paid = true" }),
+    "unknown",
+    { author: author(5), at: at(4) }
+  ),
+  fixtureWriteEntry(fixtureWrite({ queryId: "q-t5-expired" }), "expired", {
+    author: author(5),
+    approval: { id: RequestId.make("r-t5-expired"), status: "expired", reason: "Interrupted" },
+    at: at(3),
+  }),
   fixtureWriteEntry(fixtureWrite(), "waiting-approval", {
     author: author(5),
     approval: { id: RequestId.make("r-pending"), status: "pending" },
@@ -192,7 +203,7 @@ export const dataWrite = (): SessionModel => {
   });
 };
 
-/** A wide update on the PlanetScale branch (tan), an insert, and a write with no preview. */
+/** A wide update on the PlanetScale branch (tan), an insert, a write with no preview, a password reset. */
 export const dataWriteWorst = (): SessionModel => {
   const worst = session("s-data-worst", {
     title: "Restore the ledger defaults after the import went sideways on the EMEA accounts",
@@ -213,6 +224,7 @@ export const dataWriteWorst = (): SessionModel => {
       on(worstWrite(), "worst"),
       on({ ...insertWrite(), target: BRANCH_TARGET }, "insert"),
       on(notPreviewedWrite(), "unpreviewed"),
+      on(credentialWrite(), "credential"),
     ],
   });
 };
