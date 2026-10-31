@@ -235,3 +235,46 @@ test("legacy and injected catalog text is scrubbed before content-addressed pers
     db.close();
   }
 });
+
+test("an evicted payload can be re-referenced by an in-flight next Turn", () => {
+  const { db, store } = setup();
+
+  try {
+    store.put(record());
+    const held = store.records(sessionId, turn)[0]!;
+    store.remove(sessionId);
+    const other = SessionId.make("other-session");
+    store.put({ ...held, sessionId: other, turn: TurnId.make("in-flight") });
+    expect(store.records(other, "in-flight")[0]?.before?.tables[0]?.name).toBe("invoices");
+  } finally {
+    db.close();
+  }
+});
+
+test("legacy inline catalogs migrate into bounded, scrubbed, readable references", () => {
+  const db = new Database(":memory:");
+  db.exec("CREATE TABLE data_query_log (seq INTEGER PRIMARY KEY,id TEXT,checkout TEXT,value TEXT)");
+  db.exec(
+    "CREATE TABLE data_schema_snapshots (session TEXT,turn TEXT,source TEXT,value TEXT,PRIMARY KEY(session,turn,source))"
+  );
+
+  try {
+    for (let index = 0; index < 200; index++) {
+      const value = record({ turn: TurnId.make(`legacy${index}`), index });
+      db.query("INSERT INTO data_schema_snapshots VALUES (?,?,?,?)").run(
+        sessionId,
+        value.turn,
+        value.source.id,
+        JSON.stringify(value)
+      );
+    }
+
+    const store = new SchemaStore(db);
+    expect(store.records(sessionId)).toHaveLength(50);
+    expect(store.records(sessionId, "legacy199")[0]?.before?.tables[0]?.name).toBe("invoices");
+    expect(db.query("SELECT count(*) n FROM data_schema_catalogs").get()).toEqual({ n: 1 });
+    expect(store.diff(sessionId, TurnId.make("legacy0")).pruned).toBe(true);
+  } finally {
+    db.close();
+  }
+});

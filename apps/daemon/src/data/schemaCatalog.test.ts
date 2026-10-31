@@ -43,8 +43,10 @@ for (const engine of ["postgres", "mysql"] as const)
         fk: null,
       }));
 
-    const capture = makeSnapshotCatalog(() =>
+    const capture = makeSnapshotCatalog((_pools, input) =>
       Effect.sync(() => {
+        if (engine === "mysql") expect(input.sql).not.toContain("JOIN information_schema");
+
         const sets: CatalogRow[][] = [
           tables,
           columns(),
@@ -53,7 +55,7 @@ for (const engine of ["postgres", "mysql"] as const)
             {
               relation_id: "1",
               name: "c",
-              kind: "check",
+              kind: engine === "mysql" ? "CHECK" : "check",
               definition: `CHECK(token <> '${secret}')`,
             },
           ],
@@ -61,7 +63,10 @@ for (const engine of ["postgres", "mysql"] as const)
           engine === "postgres" ? [{ total: 1 }] : [{ name: "public/t", identity: "1" }],
         ];
 
-        return response(sets[query++ % 6]!);
+        if (engine === "mysql")
+          sets.splice(4, 0, [{ name: "c", definition: `CHECK(token <> '${secret}')` }]);
+
+        return response(sets[query++ % sets.length]!);
       })
     );
 
@@ -122,4 +127,49 @@ test("MySQL index normalization uses ordinal key order and preserves prefixes an
       "mysql"
     )[0]?.columns
   ).toEqual(["a", "b(4) DESC"]);
+});
+
+test("malformed catalog metadata is a typed SQL failure instead of a permanently pending defect", async () => {
+  let query = 0;
+
+  const capture = makeSnapshotCatalog(() =>
+    Effect.sync(() => {
+      query++;
+
+      if (query === 1)
+        return response([
+          { name: "t", schema_name: 123, relation_id: "1", identity: "1", estimate: 0, total: 1 },
+        ]);
+
+      return response(query === 6 ? [{ total: 1 }] : []);
+    })
+  );
+
+  const pools = new DataPools();
+
+  try {
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        capture(pools, {
+          source,
+          connection: {
+            hostname: "localhost",
+            port: 5432,
+            database: "app",
+            username: "user",
+            password: Redacted.make(""),
+            tls: false,
+          },
+          matchUrl: Redacted.make("postgres://user@localhost/app"),
+        })
+      )
+    );
+
+    expect(failure).toMatchObject({
+      code: "E-DATA-SQL",
+      message: "Could not decode postgres catalog field table.schema.",
+    });
+  } finally {
+    await pools.close();
+  }
 });

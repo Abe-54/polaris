@@ -5,16 +5,12 @@ const pgRelations = `SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c
   WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'
   AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege(c.oid,'SELECT') ORDER BY n.nspname,c.relname LIMIT 500`;
 
-const myRelations =
-  "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME LIMIT 500";
+export const MYSQL_SNAPSHOT_TABLES = "__POLARIS_SNAPSHOT_TABLES__";
 
 const mysqlSet = (sql: string, prefix: string) =>
   sql
     .replace("SELECT ", `SELECT ${prefix}TABLE_NAME AS relation_id,`)
-    .replace(
-      `${prefix}TABLE_NAME=?`,
-      `${prefix}TABLE_NAME IN (SELECT TABLE_NAME FROM (${myRelations}) polaris_relations)`
-    );
+    .replace(`${prefix}TABLE_NAME=?`, `${prefix}TABLE_NAME IN (${MYSQL_SNAPSHOT_TABLES})`);
 
 const pgSet = (sql: string, relation: string) =>
   sql
@@ -26,8 +22,11 @@ const details = (sql: string, order = "name") =>
 
 const myIndexes = indexesSql.mysql.replace(
   "TABLE_NAME=?",
-  `TABLE_NAME IN (SELECT TABLE_NAME FROM (${myRelations}) polaris_relations)`
+  `TABLE_NAME IN (${MYSQL_SNAPSHOT_TABLES})`
 );
+
+const myConstraints = `SELECT t.CONSTRAINT_NAME AS name,t.CONSTRAINT_TYPE AS kind,t.CONSTRAINT_TYPE AS definition
+  FROM information_schema.TABLE_CONSTRAINTS t WHERE t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME=? ORDER BY t.CONSTRAINT_NAME`;
 
 const myOrderedIndexes = `SELECT relation_id,name,is_unique,definition,columns FROM (SELECT d.*,
   JSON_ARRAYAGG(column_name) OVER(PARTITION BY relation_id,name ORDER BY position ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS columns,
@@ -50,13 +49,14 @@ export const snapshotSql = {
       AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege(c.oid,'SELECT')`,
   },
   mysql: {
-    tables: `SELECT TABLE_NAME AS relation_id,TABLE_SCHEMA AS schema_name,TABLE_NAME AS name,TABLE_ROWS AS estimate,count(*) OVER() AS total
+    tables: `SELECT TABLE_NAME AS relation_id,TABLE_SCHEMA AS schema_name,TABLE_NAME AS name,TABLE_ROWS AS estimate,(SELECT count(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()) AS total
       FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME LIMIT 501`,
     columns: details(mysqlSet(columnsSql.mysql, "c."), "position"),
     indexes: details(myOrderedIndexes),
-    constraints: details(mysqlSet(constraintsSql.mysql, "t.")),
-    objects: `SELECT TABLE_NAME AS relation_id,'view' AS kind,'view' AS name,VIEW_DEFINITION AS definition FROM information_schema.VIEWS WHERE TABLE_SCHEMA=DATABASE()
-      UNION ALL SELECT EVENT_OBJECT_TABLE,'trigger',TRIGGER_NAME,CONCAT(ACTION_TIMING,' ',EVENT_MANIPULATION,' ',ACTION_ORIENTATION,' ',ACTION_STATEMENT) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()`,
-    identities: `SELECT NAME AS name,CAST(TABLE_ID AS CHAR) AS identity FROM information_schema.INNODB_TABLES WHERE NAME LIKE CONCAT(DATABASE(),'/%')`,
+    constraints: details(mysqlSet(myConstraints, "t.")),
+    checks: `SELECT CONSTRAINT_NAME AS name,CHECK_CLAUSE AS definition FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_NAME IN (${MYSQL_SNAPSHOT_TABLES})`,
+    objects: `SELECT * FROM (SELECT TABLE_NAME AS relation_id,'view' AS kind,'view' AS name,VIEW_DEFINITION AS definition FROM information_schema.VIEWS WHERE TABLE_SCHEMA=DATABASE()
+      UNION ALL SELECT EVENT_OBJECT_TABLE,'trigger',TRIGGER_NAME,CONCAT(ACTION_TIMING,' ',EVENT_MANIPULATION,' ',ACTION_ORIENTATION,' ',ACTION_STATEMENT) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE()) polaris_objects WHERE relation_id IN (${MYSQL_SNAPSHOT_TABLES})`,
+    identities: `SELECT NAME AS name,CAST(TABLE_ID AS CHAR) AS identity FROM information_schema.INNODB_TABLES WHERE NAME IN (${MYSQL_SNAPSHOT_TABLES})`,
   },
 };

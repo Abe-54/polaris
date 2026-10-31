@@ -81,6 +81,8 @@ test("remote baseline never reads or asks; existing approval admits first use on
 
       f.source(remote("needs-approval"));
       yield* f.worker.begin(turn);
+      yield* f.worker.outside(turn.sessionId, turn.id, "prisma db push");
+      expect(f.records.records(turn.sessionId, turn.id)).toEqual([]);
       expect(f.reads()).toBe(0);
       yield* f.worker.touch(entry());
       expect(f.reads()).toBe(0);
@@ -89,6 +91,9 @@ test("remote baseline never reads or asks; existing approval admits first use on
       expect(f.reads()).toBe(1);
       yield* f.worker.end(turn);
       expect(f.reads()).toBe(2);
+      expect(
+        (yield* f.worker.get({ sessionId: turn.sessionId })).sources[0]?.errorCode
+      ).toBeUndefined();
       expect((yield* f.worker.get({ sessionId: turn.sessionId })).sources[0]).toMatchObject({
         baseline: "first-use",
         status: "complete",

@@ -257,7 +257,12 @@ Archive and Workspace removal collect catalogs; late saves cannot resurrect them
 
 `complete`, `pending` and `unavailable` distinguish a comparison, missing capture,
 and failure. `errorCode` preserves the real capture failure. Catalog capture uses
-six bounded relation-set queries rather than per-table transactions. The table
+six Postgres or seven typical MySQL relation-set requests rather than per-table
+transactions (MySQL CHECK names batch at 60,000). MySQL filters detail/identity
+reads with bound selected names and reads CHECK clauses separately: joining
+information_schema constraint views caused quadratic work at 5,000 tables. A native
+Mac run of that fixture took 1.388 s after the fix, with the identity lookup taking
+847 ms; no stats refresh or longer deadline is required. The table
 list is capped at 500; `truncated` then suppresses unmatched table additions and
 removals. Each table independently keeps its first 256 columns/indexes/constraints;
 `detailsTruncated` marks omissions without hiding unrelated table changes. Exactly

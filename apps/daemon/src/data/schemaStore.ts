@@ -87,18 +87,23 @@ export class SchemaStore {
       CREATE TABLE IF NOT EXISTS data_target_activity (target TEXT NOT NULL,session TEXT NOT NULL,kind TEXT NOT NULL,updated TEXT NOT NULL,turn TEXT,PRIMARY KEY(target,session,kind));`);
 
     // Convert legacy inline catalogs once; subsequent reads only hydrate the requested Turn.
-    for (const row of db
-      .query<{ value: string }, []>(
-        "SELECT value FROM data_schema_snapshots WHERE json_type(value,'$.before.tables')='array' OR json_type(value,'$.after.tables')='array'"
-      )
-      .all())
+    const legacy = db.query<{ value: string }, []>(
+      "SELECT value FROM data_schema_snapshots WHERE json_type(value,'$.before.tables')='array' OR json_type(value,'$.after.tables')='array' LIMIT 1"
+    );
+
+    let row = legacy.get();
+
+    while (row) {
       this.put(decode(row.value));
+      row = legacy.get();
+    }
   }
   private reference(snapshot: typeof Snapshot.Type | null) {
     if (!snapshot) return null;
     const existing = this.references.get(snapshot);
 
-    if (existing) return { hash: existing, at: snapshot.at };
+    if (existing && this.db.query("SELECT 1 FROM data_schema_catalogs WHERE hash=?").get(existing))
+      return { hash: existing, at: snapshot.at };
 
     const tables = snapshot.tables.map((table) => ({
       ...table,

@@ -16,6 +16,7 @@ import { DataPools } from "./pools.ts";
 import { snapshotAllowed, snapshotCatalog, type ResolvedSource } from "./schemaCatalog.ts";
 import { targetKey, targetOf } from "./approvalStore.ts";
 import { keyedSnapshotGate } from "./schemaLocks.ts";
+import { outsideMatches } from "./outside.ts";
 import { knownSchemaCommand } from "./schemaCommands.ts";
 import { migrationCheckout, migrationChanged } from "./schemaMigrations.ts";
 import type { CatalogSnapshot } from "./schemaCompare.ts";
@@ -104,17 +105,23 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
         existing.target === targetKey(targetOf(resolved.source))
       ) {
         yield* capture(resolved).pipe(
-          Effect.flatMap((before) =>
-            save({
+          Effect.flatMap((before) => {
+            const next = {
               ...existing,
               used: existing.used || used,
               before,
-              baseline: "first-use",
+              baseline: "first-use" as const,
               capturedLate: before.at > turn.startedAt,
               failed: false,
-            })
-          ),
-          Effect.ignore
+            };
+
+            delete next.errorCode;
+
+            return save(next);
+          }),
+          Effect.catch((error) =>
+            save({ ...existing, used: existing.used || used, failed: true, errorCode: error.code })
+          )
         );
       }
 
@@ -321,6 +328,12 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
 
     for (const source of found) {
       const resolved = yield* sources.resolve({ sessionId, source: source.id });
+
+      const baseline = records
+        .records(sessionId, turnId)
+        .some((row) => row.source.id === source.id);
+
+      if (!baseline && !outsideMatches(command, resolved.source, resolved.matchUrl)) continue;
 
       records.activity(targetKey(targetOf(resolved.source)), sessionId, turnId);
       yield* beginSource(current, source.id, "first-use", true);

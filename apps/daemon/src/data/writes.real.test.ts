@@ -2,9 +2,10 @@
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
 import { ApprovalDecision, DataSource, Unsupported } from "@polaris/protocol";
-import { Effect, Layer, Predicate, Redacted, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Predicate, Redacted, Stream } from "effect";
 import { DataQueries, DataSources } from "./index.ts";
 import { DataApprovals } from "./approvals.ts";
+import { targetKey, targetOf } from "./approvalStore.ts";
 import { QueryLog } from "./queryLog.ts";
 import { approvalLayer, seedDataSession, started } from "./approvals.testing.ts";
 import { parseConnection } from "./connection.ts";
@@ -148,7 +149,22 @@ for (const engine of ["postgres", "mysql"] as const) {
                 value: yield* value(),
                 phase: "approved",
               });
-              const first = yield* queries.execute(input);
+              const log = yield* QueryLog;
+              const entered = yield* Deferred.make<void>();
+              const release = yield* Deferred.make<void>();
+              yield* log.registerBeforeWrite((entry) =>
+                Effect.gen(function* () {
+                  if (entry.author.kind !== "agent") return;
+                  expect(entry.target).toBe(targetKey(targetOf(source)));
+                  yield* Deferred.succeed(entered, undefined);
+                  yield* Deferred.await(release);
+                })
+              );
+              const executing = yield* queries.execute(input).pipe(Effect.forkScoped);
+              yield* Deferred.await(entered).pipe(Effect.timeout(3000));
+              expect(yield* value()).toBe(0);
+              yield* Deferred.succeed(release, undefined);
+              const first = yield* Fiber.join(executing);
               steps.push({
                 action: "execute",
                 affected: first.affected,
@@ -196,10 +212,45 @@ for (const engine of ["postgres", "mysql"] as const) {
               expect(completed).toHaveLength(1);
               expect(completed[0]).toMatchObject({
                 author: { kind: "agent" },
+                target: targetKey(targetOf(source)),
                 rows: 1,
                 affected: [{ table: name, rows: 1 }],
               });
               expect(page.entries.filter((entry) => entry.state === "dry-run")).toHaveLength(2);
+              const gridEntered = yield* Deferred.make<void>();
+              const gridRelease = yield* Deferred.make<void>();
+              yield* log.registerBeforeWrite((entry) =>
+                Effect.gen(function* () {
+                  if (entry.author.kind !== "user") return;
+                  expect(entry.target).toBe(targetKey(targetOf(source)));
+                  yield* Deferred.succeed(gridEntered, undefined);
+                  yield* Deferred.await(gridRelease);
+                })
+              );
+
+              const grid = yield* queries
+                .commitEdits({
+                  sessionId: input.sessionId,
+                  source: name,
+                  table: { schema: engine === "postgres" ? "public" : connection.database, name },
+                  primaryKey: ["id"],
+                  edits: [{ key: [1], column: "v", value: 2 }],
+                })
+                .pipe(Effect.forkScoped);
+
+              yield* Deferred.await(gridEntered).pipe(Effect.timeout(3000));
+              expect(yield* value()).toBe(1);
+              yield* Deferred.succeed(gridRelease, undefined);
+              expect((yield* Fiber.join(grid)).affected).toBe(1);
+              expect(yield* value()).toBe(2);
+              expect(
+                (yield* queries.pageLog({ sessionId: input.sessionId })).entries.find(
+                  (entry) => entry.author.kind === "user" && entry.state === "completed"
+                )
+              ).toMatchObject({
+                target: targetKey(targetOf(source)),
+                affected: [{ table: name, rows: 1 }],
+              });
               yield* store.commit({
                 commandId: null,
                 decide: (model) =>
@@ -215,7 +266,7 @@ for (const engine of ["postgres", "mysql"] as const) {
                   ),
               });
               expect(yield* queries.execute(input)).toEqual(first);
-              expect(yield* value()).toBe(1);
+              expect(yield* value()).toBe(2);
             })
           ).pipe(Effect.provide(layer))
         );
