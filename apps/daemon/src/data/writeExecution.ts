@@ -1,12 +1,6 @@
 /** Rollback previews and guarded commits share the Query pool's cancellation and timeout boundary. */
 import type { TransactionSQL } from "bun";
-import {
-  DataError,
-  dataJsonBytes,
-  scrubCredentials,
-  scrubDataValue,
-  type DataValue,
-} from "@polaris/protocol";
+import { DataError, type DataValue } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import {
   bindValues,
@@ -26,6 +20,8 @@ import { writeTable, type WriteTable } from "./writeTable.ts";
 import { editStatements, type EditInput } from "./writeEdits.ts";
 import { checkEdits, readWritten, refuseFloatKeys } from "./writeEditCheck.ts";
 import type { LexicalMode } from "./guard.ts";
+import { cappedPreview } from "./writeDisplay.ts";
+import { writeParams, credentialColumn } from "./writeRedaction.ts";
 import { writePreflight } from "./writePreflight.ts";
 import {
   identityRows,
@@ -52,6 +48,10 @@ export interface WritePreview {
   before: DataValue[][];
   after: DataValue[][];
   note: string;
+  params?: DataValue[];
+  redactedCells?: Array<{ row: number; column: number; changed: boolean }>;
+  databaseFilledColumns?: string[];
+  previewFacts?: { capped: boolean; truncated: boolean; readByKey: boolean; sequences: boolean };
   target?: { schema: string; table: string };
 }
 
@@ -77,6 +77,16 @@ async function rawRead(
 
   if (input.source.engine === "postgres") raw = await cursorRead(tx, active, sql, params, 20);
   else raw = await mysqlRead(tx, active, sql, params, 20);
+
+  for (const key of raw.clipped?.keys() ?? []) {
+    const column = Number(key.split(":")[1]);
+
+    if (credentialColumn(raw.columns[column]?.name ?? ""))
+      throw writeError(
+        "A credential column was clipped before its change could be compared.",
+        "Narrow the preview or use your project's migration tool."
+      );
+  }
 
   return { ...decodeResult(raw, input.source.engine, knownCredentials(input.connection)), raw };
 }
@@ -142,6 +152,7 @@ async function afterRows(
 ) {
   const rows: DataValue[][] = [];
   let truncated = false;
+  const changes: boolean[][] = [];
 
   for (const row of before.raw ?? []) {
     const params = table.primaryKey.map((key) => {
@@ -179,11 +190,14 @@ async function afterRows(
         "An updated row could not be read by its original primary key.",
         "Change primary keys through a migration or the app's own code, not execute."
       );
+    changes.push(
+      result.raw.columns.map((_, i) => rawIdentity(row, [i]) !== rawIdentity(result.raw[0]!, [i]))
+    );
     rows.push(...result.rows);
     truncated ||= result.raw.truncated === true;
   }
 
-  return { rows, truncated };
+  return { rows, truncated, changes };
 }
 
 export function checkPreviewKeys(raw: PreviewRaw | undefined, primaryKey: ReadonlyArray<string>) {
@@ -203,44 +217,7 @@ export function checkPreviewKeys(raw: PreviewRaw | undefined, primaryKey: Readon
   }
 }
 
-export function cappedPreview(
-  before: { columns: ReadonlyArray<Column>; rows: DataValue[][]; raw?: RawResult | undefined },
-  after: DataValue[][],
-  input: WriteInput
-) {
-  const columns = before.columns
-    .slice(0, 256)
-    .map((c) => scrubCredentials(c.name, knownCredentials(input.connection)).slice(0, 256));
-
-  const previewBefore: DataValue[][] = [];
-  const previewAfter: DataValue[][] = [];
-  let bytes = dataJsonBytes(columns);
-
-  const scrub = (row: DataValue[]) =>
-    row
-      .slice(0, 256)
-      .map((value, i) =>
-        /password|passwd|secret|token|api[_-]?key|private[_-]?key|credential/i.test(
-          before.columns[i]?.name ?? ""
-        )
-          ? "[redacted]"
-          : scrubDataValue(value, knownCredentials(input.connection))
-      );
-
-  for (let i = 0; i < Math.max(before.rows.length, after.length); i++) {
-    const left = before.rows[i] ? scrub(before.rows[i]!) : undefined;
-    const right = after[i] ? scrub(after[i]!) : undefined;
-    bytes += dataJsonBytes(left ?? []) + dataJsonBytes(right ?? []);
-
-    if (bytes > 16000) break;
-
-    if (left) previewBefore.push(left);
-
-    if (right) previewAfter.push(right);
-  }
-
-  return { columns, before: previewBefore, after: previewAfter };
-}
+export { cappedPreview } from "./writeDisplay.ts";
 
 function checkUpdatedKey(
   input: WriteInput,
@@ -303,7 +280,20 @@ async function insertEvidence(
       : []
   );
 
-  return { raw, identity: identityHash(raw, indexes) };
+  const databaseFilledColumns = raw.columns
+    .filter((_, i) => !indexes.includes(i))
+    .map((column) => column.name);
+
+  const sequenceRows: unknown =
+    input.source.engine === "postgres"
+      ? await tx`SELECT a.attname::text AS name FROM pg_attribute a WHERE a.attrelid=to_regclass(${table.sql}) AND a.attnum>0 AND NOT a.attisdropped AND pg_get_serial_sequence(${table.sql},a.attname) IS NOT NULL`
+      : await tx`SELECT CAST(COLUMN_NAME AS CHAR) AS name FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=${table.schema} AND TABLE_NAME=${table.table} AND EXTRA LIKE '%auto_increment%'`;
+
+  const sequences = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(
+    sequenceRows
+  ).some((column) => databaseFilledColumns.includes(column.name));
+
+  return { raw, identity: identityHash(raw, indexes), databaseFilledColumns, sequences };
 }
 
 function checkDrift(input: WriteInput, affected: number, identity: string | undefined) {
@@ -320,37 +310,41 @@ function checkDrift(input: WriteInput, affected: number, identity: string | unde
     );
 }
 
-function writePreview(
+export function writePreview(
   input: WriteInput,
   affected: number,
   triggers: boolean,
   identity: string | undefined,
   table: WriteTable | undefined,
-  before: Awaited<ReturnType<typeof beforeRows>>,
-  after: { rows: DataValue[][]; truncated: boolean },
-  insert: RawResult | undefined
+  before: { columns: ReadonlyArray<Column>; rows: DataValue[][]; raw?: PreviewRaw | undefined },
+  after: { rows: DataValue[][]; truncated: boolean; changes?: boolean[][] },
+  insert: Awaited<ReturnType<typeof insertEvidence>> | undefined,
+  params: DataValue[]
 ) {
-  const inserted = insert ? insertedPreview(insert, input) : undefined;
+  const inserted = insert ? insertedPreview(insert.raw, input) : undefined;
 
   const preview = inserted
     ? cappedPreview({ ...inserted, rows: [] }, inserted.rows, input)
-    : cappedPreview(before, after.rows, input);
-
-  const clipped =
-    before.raw?.truncated || after.truncated
-      ? " Some rows or columns were omitted by the result budget."
-      : "";
+    : cappedPreview(before, after.rows, input, after.changes);
 
   return {
     affected,
     previewed: !triggers,
     ...(identity === undefined ? undefined : { identity }),
     ...preview,
-    note:
-      (table?.primaryKey.length
-        ? "Up to 20 rows, read by primary key; preview capped at 16,000 bytes. Sequence values used by the preview aren't reused."
-        : "Rows aren't shown: no primary key or this statement has no row preview. Sequence values used by the preview aren't reused.") +
-      clipped,
+    params,
+    databaseFilledColumns: preview.columns.filter((_, i) =>
+      insert?.databaseFilledColumns.includes(insert.raw.columns[i]?.name ?? "")
+    ),
+    previewFacts: {
+      capped:
+        affected > Math.max(preview.before.length, preview.after.length) &&
+        (before.columns.length > 0 || inserted !== undefined),
+      truncated: before.raw?.truncated === true || after.truncated || preview.truncated,
+      readByKey: !insert && (table?.primaryKey.length ?? 0) > 0,
+      sequences: insert?.sequences ?? false,
+    },
+    note: "",
     ...(table ? { target: { schema: table.schema, table: table.table } } : undefined),
   };
 }
@@ -396,6 +390,7 @@ async function write(tx: TransactionSQL, active: Active, input: WriteInput): Pro
   const triggers = await writePreflight(tx, input.source, table, plan.sql, mode);
 
   const noPreview = notPreviewedNote(plan.ddl, triggers);
+  const params = writeParams(plan, mode, input.params ?? [], knownCredentials(input.connection));
 
   if (noPreview && input.dryRun)
     return {
@@ -405,6 +400,7 @@ async function write(tx: TransactionSQL, active: Active, input: WriteInput): Pro
       after: [],
       previewed: false,
       note: noPreview,
+      params,
     };
 
   if (triggers && input.previewed !== false && input.expected !== undefined)
@@ -449,7 +445,7 @@ async function write(tx: TransactionSQL, active: Active, input: WriteInput): Pro
       ? await afterRows(tx, active, input, table, before)
       : { rows: [], truncated: false };
 
-  return writePreview(input, affected, triggers, identity, table, before, after, insert?.raw);
+  return writePreview(input, affected, triggers, identity, table, before, after, insert, params);
 }
 
 export async function executeWrite(pools: DataPools, input: WriteInput, signal: AbortSignal) {

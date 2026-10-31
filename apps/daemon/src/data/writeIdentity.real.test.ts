@@ -17,6 +17,23 @@ for (const engine of ["postgres", "mysql"] as const)
         await admin.unsafe(
           `INSERT INTO ${t} VALUES(1,1,'tok_live_secret'),(2,1,'secret'),(3,0,'other')`
         );
+
+        const changed = await write(`UPDATE ${t} SET api_token=${param} WHERE id=1`, {}, [
+          "new-private-token",
+        ]);
+
+        expect(changed.redactedCells).toEqual([{ row: 0, column: 2, changed: true }]);
+        expect(changed.before[0]?.[2]).toBe("[redacted]");
+        expect(changed.after[0]?.[2]).toBe("[redacted]");
+        expect(changed.params).toEqual(["[redacted]"]);
+        expect(changed.previewFacts).toEqual({
+          capped: false,
+          truncated: false,
+          readByKey: true,
+          sequences: false,
+        });
+        const unchanged = await write(`UPDATE ${t} SET api_token=api_token WHERE id=1`);
+        expect(unchanged.redactedCells).toEqual([{ row: 0, column: 2, changed: false }]);
         const preview = await write(`DELETE FROM ${t} WHERE v=1`);
         expect(preview.before).toEqual([
           [1, 1, "[redacted]"],
@@ -58,6 +75,9 @@ for (const engine of ["postgres", "mysql"] as const)
         );
         const generated = await write(`INSERT INTO ${t}_generated(v) VALUES(7)`);
         expect(generated.after[0]?.[1]).toBe(7);
+        expect(generated.databaseFilledColumns).toEqual(["id", "created_at"]);
+        expect(generated.previewFacts).toMatchObject({ sequences: true, readByKey: false });
+        expect(generated.note).toBe("");
         await write(`INSERT INTO ${t}_generated(v) VALUES(7)`, {
           dryRun: false,
           expected: generated.affected,
@@ -89,6 +109,8 @@ for (const engine of ["postgres", "mysql"] as const)
             )
           ).rejects.toMatchObject({ code: "E-DATA-SQL" })
         );
+        const capped = await write(`UPDATE ${t} SET v=0`);
+        expect(capped.previewFacts).toMatchObject({ capped: true, sequences: false });
         await admin.unsafe(
           `CREATE TABLE ${t}_binary(id ${engine === "postgres" ? "bytea" : "BINARY(2)"} PRIMARY KEY,v int)`
         );

@@ -135,7 +135,7 @@ test("F9: preview persistence redacts credential columns, values and independent
     { source: source(), connection, sql: "", dryRun: true }
   );
 
-  expect(result).toEqual({
+  expect(result).toMatchObject({
     columns: ["api_token", "v"],
     before: [],
     after: [

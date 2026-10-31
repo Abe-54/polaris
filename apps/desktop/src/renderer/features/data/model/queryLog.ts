@@ -91,6 +91,7 @@ const STATES: Record<QueryLogEntry["state"], LogState> = {
   unknown: "unknown",
   "dry-run": "done",
   cancelled: "done",
+  expired: "done",
 };
 
 const stateOf = (entry: QueryLogEntry): LogState =>

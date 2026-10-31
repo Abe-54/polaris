@@ -3,6 +3,7 @@
  */
 import { Effect, Schema } from "effect";
 import { ScrubbedDataValue, ScrubbedText } from "./dataValues.ts";
+import { DataWritePreviewFacts } from "./data.ts";
 import { CelestialBody } from "./celestial.ts";
 import { HarnessKind } from "./harnesses.ts";
 import {
@@ -613,6 +614,7 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
       requestHash: Schema.optionalKey(Schema.String),
       params: Schema.optionalKey(Schema.Array(ScrubbedDataValue)),
       previewed: Schema.optionalKey(Schema.Boolean),
+      ...DataWritePreviewFacts,
       identity: Schema.optionalKey(Schema.String),
       queryId: Schema.String,
       sql: ScrubbedText,

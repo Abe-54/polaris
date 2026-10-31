@@ -4,7 +4,6 @@ import {
   DataWriteResult,
   QueryLogEntry,
   scrubCredentials,
-  scrubDataValue,
   type SessionId,
   type ExecuteDataInput,
   type CommitDataEdits,
@@ -24,7 +23,7 @@ import { DataApprovalRequired, type DataAgentContext } from "./approvalRequired.
 import { knownCredentials } from "./execution.ts";
 import { editStatements } from "./writeEdits.ts";
 import { queryError } from "./execution.ts";
-import { writeEffect, editsEffect } from "./writeExecution.ts";
+import { writeEffect, editsEffect, type WritePreview } from "./writeExecution.ts";
 
 type Context = (
   id: SessionId,
@@ -39,6 +38,14 @@ const fields = Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields));
 
 const denied = (message: string, fix = "Don't retry; ask the user.") =>
   new DataError({ code: "E-DATA-DENIED", message, fix });
+
+const previewFacts = (preview: WritePreview) => ({
+  ...(preview.redactedCells === undefined ? undefined : { redactedCells: preview.redactedCells }),
+  ...(preview.databaseFilledColumns === undefined
+    ? undefined
+    : { databaseFilledColumns: preview.databaseFilledColumns }),
+  ...(preview.previewFacts === undefined ? undefined : { previewFacts: preview.previewFacts }),
+});
 
 export const writeQueries = Effect.fnUntraced(function* (
   sources: DataSources["Service"],
@@ -164,7 +171,16 @@ export const writeQueries = Effect.fnUntraced(function* (
     if (previous?.result) return previous.result;
 
     if (previous?.status === "denied")
-      return yield* denied(previous.reason || "The user denied this write.");
+      return yield* denied(
+        previous.reason || "The user denied this write.",
+        "Read the user's reason; try another way with a new preview, or ask the user."
+      );
+
+    if (previous?.status === "expired")
+      return yield* denied(
+        previous.reason || "The write approval expired.",
+        "Request a new preview in the current turn."
+      );
 
     if (previous?.status === "started" || previous?.status === "unknown")
       return yield* outcomeUnknown();
@@ -226,13 +242,14 @@ export const writeQueries = Effect.fnUntraced(function* (
             queryId: initial.id,
             sql: scrubCredentials(input.sql, known).slice(0, 32000),
             reason: scrubCredentials(input.reason, known).slice(0, 4000),
-            params: (input.params ?? []).map((value) => scrubDataValue(value, known)),
+            params: preview.params ?? [],
             previewed: preview.previewed !== false,
             ...(preview.identity === undefined ? undefined : { identity: preview.identity }),
             affected: preview.affected,
             columns: preview.columns,
             before: preview.before,
             after: preview.after,
+            ...previewFacts(preview),
             note: preview.note,
           });
 

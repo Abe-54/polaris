@@ -16,6 +16,7 @@ import {
   replayDataWrite,
 } from "../../../../packages/spec/scripts/data-write-replay/index.ts";
 import { observeWrite } from "./writeTrace.testing.ts";
+import { writeRequestKey } from "./writeIdentity.ts";
 import { decideSession } from "../engine/session.ts";
 
 for (const engine of ["postgres", "mysql"] as const) {
@@ -82,8 +83,10 @@ for (const engine of ["postgres", "mysql"] as const) {
       const steps: Array<(typeof DataWriteTrace.Type.steps)[number]> = [];
 
       try {
-        await admin.unsafe(`CREATE TABLE ${name} (id INT PRIMARY KEY,v INT NOT NULL)`);
-        await admin.unsafe(`INSERT INTO ${name} VALUES (1,0)`);
+        await admin.unsafe(
+          `CREATE TABLE ${name} (id INT PRIMARY KEY,v INT NOT NULL,password_hash VARCHAR(100))`
+        );
+        await admin.unsafe(`INSERT INTO ${name} VALUES (1,0,'old-private-hash')`);
 
         const value = () =>
           Effect.promise(
@@ -104,7 +107,8 @@ for (const engine of ["postgres", "mysql"] as const) {
                 turn: started.turns[0]!.id,
                 tool: "execute" as const,
                 source: name,
-                sql: `UPDATE ${name} SET v=v+1 WHERE id=1`,
+                sql: `UPDATE ${name} SET v=v+1,password_hash=${engine === "postgres" ? "$1" : "?"} WHERE id=1`,
+                params: ["new-private-hash"],
                 reason: "Increment once",
                 requestId: "increment-once",
               };
@@ -114,6 +118,20 @@ for (const engine of ["postgres", "mysql"] as const) {
               if (!Predicate.isTagged(required, "DataApprovalRequired"))
                 throw new Error(required.message);
               expect(yield* value()).toBe(0);
+
+              const persisted = (yield* store.readEvents({
+                after: 0,
+                upTo: Number.MAX_SAFE_INTEGER,
+                sessionId: input.sessionId,
+              })).filter(({ event }) => Predicate.isTagged(event, "ApprovalRequested"));
+
+              expect(JSON.stringify(persisted)).not.toContain("new-private-hash");
+              expect(
+                (yield* approvals.writes.lookup(writeRequestKey(input)!))?.request.dataWrite
+              ).toMatchObject({
+                params: ["[redacted]"],
+                redactedCells: [{ row: 0, column: 2, changed: true }],
+              });
               steps.push(yield* observeWrite(input, { affected: 1, value: yield* value() }));
               const again = yield* Effect.flip(queries.execute(input));
               expect(again).toEqual(required);
