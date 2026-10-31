@@ -1,6 +1,6 @@
 /**
  * Traces (⌘5; DESIGN.md, Traces; ADR 0094): the layout and its slots, the hooks over the Traces
- * IPC contract, and the fixture layer. The interface for the shell and other features.
+ * IPC contract (traces and Profiles), and the fixture layer. The interface for the shell and other features.
  */
 export { TracesMode } from "./ui/LazyTracesMode.tsx";
 
@@ -26,3 +26,11 @@ export {
 } from "./data/hooks.tsx";
 
 export { liveTracesApi, type TracesApi } from "./data/api.ts";
+
+export { ProfilesLayer, useProfile, useProfiles, useProfilesApi } from "./data/profiles.tsx";
+
+export { liveProfilesApi, type ProfilesApi } from "./data/profilesApi.ts";
+
+export { profilesUnavailable, useProfilesUnavailable } from "./model/availability.ts";
+
+export { selectProfile, useProfileSelection } from "./model/profile/store.ts";

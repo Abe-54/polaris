@@ -284,7 +284,7 @@ const backfillCalls: ReadonlyArray<CallSpec> = [
 
 export const LARGE_PROFILE_NODES = 50_000;
 
-/** A deep recursive render over 2,000 ms: 50,000 nodes, 24 levels, nothing repeated in a row. */
+/** A deep recursive render: 24 levels, three calls every fourth level, 50,000 nodes over ~2 s. */
 const largeCalls = (): ReadonlyArray<CallSpec> => {
   let left = LARGE_PROFILE_NODES;
   let seq = 0;
@@ -292,19 +292,19 @@ const largeCalls = (): ReadonlyArray<CallSpec> => {
   const tree = (depth: number, at: number, ms: number): CallSpec => {
     left--;
     seq++;
-    const width = depth < 3 ? 6 : depth < 20 ? 2 : 1;
+    const width = depth % 4 === 0 ? 3 : 1;
     const calls: Array<CallSpec> = [];
-    const share = ms / (width + 1);
+    const share = ms / width;
 
-    for (let i = 0; i < width && left > 0 && depth < 23 && share > 0.002; i++)
-      calls.push(tree(depth + 1, share * i + share / 2, share * 0.9));
+    for (let i = 0; i < width && left > 0 && depth < 23; i++)
+      calls.push(tree(depth + 1, share * i + share * 0.04, share * 0.92));
 
     return { fn: `render${depth}_${seq % 97}`, at, ms, calls };
   };
 
   const roots: Array<CallSpec> = [];
 
-  for (let at = 0; left > 0; at += 10) roots.push(tree(0, at, 9.5));
+  for (let at = 0; left > 0; at += 100) roots.push(tree(0, at, 95));
 
   return roots;
 };
