@@ -1,0 +1,19 @@
+/** RX probe: peak RSS of one read. Usage: bun rx.memory.probe.ts <engine> <limit> <sql>. Not committed. */
+import { setup } from "./rx.probe.setup.ts";
+import { resultChunks } from "./chunks.ts";
+const [engine, limit, sql] = [Bun.argv[2] as "postgres" | "mysql", Number(Bun.argv[3]), Bun.argv[4]!];
+const { pools, run, admin } = setup(engine);
+let peak = 0;
+const tick = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 5);
+const base = process.memoryUsage().rss;
+const t = performance.now();
+try {
+  const r = await run(sql, { limit });
+  const items = resultChunks({ queryId: "q", columns: r.columns, rows: r.rows, truncated: r.truncated, elapsedMs: 0 });
+  const wire = items.reduce((n, i) => n + JSON.stringify(i).length, 0);
+  peak = Math.max(peak, process.memoryUsage().rss);
+  console.log(`${engine} limit=${limit} rows=${r.rows.length} truncated=${r.truncated} chunks=${items.length} wireBytes=${wire} firstCell=${JSON.stringify(r.rows[0]?.[0]).slice(0, 60)}`);
+} catch (e) { console.log(`${engine} error ${(e as { code?: string }).code}: ${String((e as Error).message).slice(0, 120)}`); }
+clearInterval(tick);
+console.log(`  ${Math.round(performance.now() - t)}ms baseRSS=${(base / 2 ** 20).toFixed(0)}MiB peakRSS=${(peak / 2 ** 20).toFixed(0)}MiB delta=${((peak - base) / 2 ** 20).toFixed(0)}MiB`);
+await pools.close(); await admin.close({ timeout: 0 });
