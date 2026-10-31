@@ -104,6 +104,8 @@ const resultOf = (entry: QueryLogEntry, state: LogState) => {
 
   if (entry.state === "cancelled") return "cancelled";
 
+  if (entry.state === "expired" || entry.approval?.status === "expired") return "expired";
+
   if (entry.state === "dry-run") return "dry run";
 
   if (entry.rows === undefined) return "";

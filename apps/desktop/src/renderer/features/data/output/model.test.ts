@@ -106,6 +106,19 @@ describe("the Data tab groups one Turn's data", () => {
     expect(writeStatus(alone!)).toEqual({ kind: "denied", line: "Denied: Use EUR for 2025" });
   });
 
+  test("after a reload, a write that expired unanswered says why, never Denied (F6)", () => {
+    const expired = fixtureWriteEntry(write, "expired", {
+      approval: { id: RequestId.make("r-stop"), status: "expired", reason: "Interrupted" },
+    });
+
+    const [alone] = turnData(input({ turnIds: new Set(["turn-5"]), entries: [expired] })).writes;
+
+    expect(writeStatus(alone!)).toEqual({
+      kind: "cancelled",
+      line: "Expired: the turn was stopped before you answered",
+    });
+  });
+
   test("schema changes count, and a source with none doesn't", () => {
     expect(turnData(input({ schema: [schemaSource(2), schemaSource(0)] })).schema).toHaveLength(1);
     expect(turnData(input({ schema: [schemaSource(0, "pending")] })).schema).toHaveLength(1);

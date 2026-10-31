@@ -30,7 +30,7 @@ import {
   type DataWrite,
   denyDecision,
   dryRunKicker,
-  noteLine,
+  noteLines,
   notPreviewed,
   notPreviewedWarning,
   paramsLine,
@@ -275,7 +275,7 @@ export const WriteApprovalCard = ({
   const bar = topBarColour(source);
   const params = paramsLine(write);
   const showing = showingLine(write);
-  const note = noteLine(write);
+  const notes = noteLines(write);
   const unpreviewed = notPreviewed(write);
 
   return (
@@ -315,10 +315,15 @@ export const WriteApprovalCard = ({
           <Kicker write={write} showing={showing} />
         </div>
         {unpreviewed ? null : <BeforeAfter write={write} />}
-        {note === null ? null : (
-          <p className="text-caption text-text-subtle" data-testid="data-write-note">
-            {note}
-          </p>
+        {notes.length === 0 ? null : (
+          <div
+            className="text-caption text-text-subtle flex flex-col"
+            data-testid="data-write-note"
+          >
+            {notes.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
         )}
         <div className="flex flex-col gap-1">
           <span className={cn(KICKER, "text-text-faint")}>Why</span>

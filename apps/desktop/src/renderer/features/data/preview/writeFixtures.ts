@@ -65,6 +65,7 @@ export const fixtureWrite = (change: Partial<DataWrite> = {}): DataWrite => ({
   before: Array.from({ length: 20 }, (_, n) => invoice(n, null)),
   after: Array.from({ length: 20 }, (_, n) => invoice(n, "USD")),
   note: "",
+  previewFacts: { capped: true, truncated: false, readByKey: true, sequences: false },
   ...change,
 });
 
@@ -111,23 +112,35 @@ export const notPreviewedWrite = (
     params: ["inv_04810"],
   });
 
-/** The Daemon's note on a previewed write: its limits, and that previews consume sequences. */
-export const PREVIEW_NOTE =
-  "Up to 20 rows, read by primary key; preview capped at 16,000 bytes. Sequence values used by the preview aren't reused.";
-
-/** An insert: no before, three new rows. */
+/** An insert: no before, three new rows, their serial `id` filled by the database. */
 export const insertWrite = (): DataWrite =>
   fixtureWrite({
     sql: "insert into currencies (code, minor_units, name) values ('CHF', 2, 'Swiss franc'), ('JPY', 0, 'Yen'), ('KWD', 3, 'Kuwaiti dinar')",
     affected: 3,
-    columns: ["code", "minor_units", "name"],
+    columns: ["id", "code", "minor_units", "name"],
     before: [],
     after: [
-      ["CHF", 2, "Swiss franc"],
-      ["JPY", 0, "Yen"],
-      ["KWD", 3, "Kuwaiti dinar"],
+      [41, "CHF", 2, "Swiss franc"],
+      [42, "JPY", 0, "Yen"],
+      [43, "KWD", 3, "Kuwaiti dinar"],
     ],
-    note: PREVIEW_NOTE,
+    databaseFilledColumns: ["id"],
+    previewFacts: { capped: false, truncated: false, readByKey: false, sequences: true },
+  });
+
+/** A password reset: the credential column redacted on both sides, marked changed. */
+export const credentialWrite = (): DataWrite =>
+  fixtureWrite({
+    queryId: "q-password",
+    sql: "update users set password_hash = $1, updated_at = now() where id = $2",
+    reason: "Reset the support account's password after the leak, as the incident runbook says.",
+    affected: 1,
+    columns: ["id", "email", "password_hash", "updated_at"],
+    before: [[42, "support@ledger.dev", "[redacted]", "2026-08-01 09:30:00+00"]],
+    after: [[42, "support@ledger.dev", "[redacted]", "2026-10-31 01:12:00+00"]],
+    params: ["[redacted]", 42],
+    redactedCells: [{ row: 0, column: 2, changed: true }],
+    previewFacts: { capped: false, truncated: false, readByKey: true, sequences: false },
   });
 
 const HUGE = "x".repeat(4000);
@@ -170,7 +183,7 @@ export const worstWrite = (): DataWrite => {
     columns,
     before: Array.from({ length: 20 }, (_, n) => row(n, false)),
     after: Array.from({ length: 20 }, (_, n) => row(n, true)),
-    note: "Rollback doesn't undo sequence values the dry run allocated.",
+    previewFacts: { capped: true, truncated: true, readByKey: false, sequences: false },
   });
 };
 

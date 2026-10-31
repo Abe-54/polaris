@@ -9,6 +9,7 @@ import { standInBridge } from "../../bridge.ts";
 import { approve, deny } from "../../needs-you/respond.ts";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
 import {
+  credentialWrite,
   fixtureWrite,
   fixtureWriteApproval,
   fixtureWriteEntry,
@@ -125,16 +126,30 @@ test("a schema change the Daemon didn't preview says so once, shows no rows and 
   expect(screen.getByTestId("data-write-run").textContent).toContain("Run without preview");
 });
 
-test("an insert shows its new rows with nothing before, and says previews consume sequences", () => {
+test("an insert shows its new rows, the serial id as assigned on run, and that IDs are skipped (F8, F9)", () => {
   render(card(fixtureWriteApproval(insertWrite())));
 
   const rows = screen.getByTestId("data-write-rows");
 
   expect(rows.querySelectorAll('tr[data-side="after"]')).toHaveLength(3);
   expect(rows.querySelectorAll('tr[data-side="before"]')).toHaveLength(0);
-  expect(screen.getByTestId("data-write-note").textContent).toContain(
-    "Sequence values used by the preview aren't reused."
+  expect(
+    [...rows.querySelectorAll('tr[data-side="after"] td:nth-child(2)')].map((td) => td.textContent)
+  ).toEqual(["assigned on run", "assigned on run", "assigned on run"]);
+  expect(screen.getByTestId("data-write-note").textContent).toBe(
+    "IDs the preview used are skipped; the run gets new ones."
   );
+});
+
+test("a password reset shows the credential as redacted and changed, never as unchanged (F3)", () => {
+  render(card(fixtureWriteApproval(credentialWrite())));
+
+  const cells = [...screen.getByTestId("data-write-rows").querySelectorAll("[data-stand-in]")];
+
+  expect(cells.map((td) => [td.textContent, td.getAttribute("data-change")])).toEqual([
+    ["redacted", "changed"],
+    ["redacted · changed", "changed"],
+  ]);
 });
 
 test("the worst case shows the changed columns, 20 of the rows, and offers the rest", () => {
