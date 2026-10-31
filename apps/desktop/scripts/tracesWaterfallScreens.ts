@@ -9,8 +9,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import { type Page } from "playwright-core";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { seenUserData } from "./lib/userData.ts";
 
 const out = process.argv[2] ?? join(tmpdir(), "polaris-traces-waterfall");
@@ -102,6 +107,12 @@ const screens = async (page: Page) => {
     await page.getByTestId("waterfall-errors-only").click();
     await openTrace(page, "POST /invoices/import");
     await shoot(page, `partial-${look.name}-calm`);
+    await openTrace(page, "test overdue-totals");
+    await shoot(page, `error-rows-${look.name}-calm`);
+    await openTrace(page, "POST /invoices/overdue");
+    await page.getByRole("button", { name: "List each of the 214 calls" }).first().click();
+    await shoot(page, `listed-fold-${look.name}-calm`);
+    await page.getByRole("button", { name: "Fold the 214 calls" }).first().click();
   }
 };
 

@@ -14,6 +14,8 @@ import { dataSessionKey, dataTabsStore } from "../../data/model/store.ts";
 import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import type { TracesApi } from "../data/api.ts";
 import { TracesLayer } from "../data/hooks.tsx";
+import { publishOpenTrace } from "../model/openTrace.ts";
+import { FIXTURE_DETAILS } from "../preview/fixtures.ts";
 import { selectSpan, selectTrace, tracesSelection } from "../model/store.ts";
 import { fixtureTracesApi } from "../preview/fixtureApi.ts";
 import { BIG_TRACE, ERROR_TRACE, FIXTURE_SESSION } from "../preview/fixtures.ts";
@@ -27,10 +29,20 @@ const UPDATE = "a91f5d6e7b8c03c2";
 
 const TEST_ROOT = "3c5d7e9f1a2b4c6d";
 
-const mount = (traceId: string, spanId: string, api: TracesApi = fixtureTracesApi()) => {
+const mount = (
+  traceId: string,
+  spanId: string,
+  api: TracesApi = fixtureTracesApi(),
+  withHistory = true
+) => {
   const at = { hostKey: `h-span-${++hosts}`, sessionId: FIXTURE_SESSION };
   const store = createStore<AppState>(() => ({ ...initialState, density: "calm" }));
   const navigation = createNavigation({ app: store, storage: null });
+
+  const trace = FIXTURE_DETAILS.find((d) => d.summary.id === traceId);
+
+  if (trace !== undefined)
+    publishOpenTrace(at, withHistory ? trace : { summary: trace.summary, spans: trace.spans });
 
   selectTrace(at, traceId);
   selectSpan(at, spanId);
@@ -144,4 +156,17 @@ test("closing the panel clears the span but keeps the trace open", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Close span" }));
 
   expect(tracesSelection(at)).toEqual({ traceId: BIG_TRACE.id, spanId: null });
+});
+
+test("the panel explains a slow span against this checkout's history", async () => {
+  mount(BIG_TRACE.id, UPDATE);
+  expect((await screen.findByTestId("span-usual")).textContent).toBe(
+    "Slow: usually 9 ms in this checkout"
+  );
+});
+
+test("the panel omits usual duration on an old Daemon without history", async () => {
+  mount(BIG_TRACE.id, UPDATE, fixtureTracesApi(), false);
+  await screen.findByTestId("span-name");
+  expect(screen.queryByTestId("span-usual")).toBeNull();
 });

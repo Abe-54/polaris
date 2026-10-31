@@ -8,6 +8,7 @@ import { EmptyState, PixelAlertIcon, PixelHourglassIcon } from "@polaris/ui";
 import { useCallback, useEffect } from "react";
 import { useTrace, useTraces } from "../data/hooks.tsx";
 import { type MainView, setMainView, useMainView } from "../model/mainView.ts";
+import { useListedVersion } from "../model/listed.ts";
 import { publishOpenTrace } from "../model/openTrace.ts";
 import type { TracesSessionKey } from "../model/session.ts";
 import { selectSpan } from "../model/store.ts";
@@ -78,7 +79,7 @@ const Open = ({
   readonly view: MainView;
   readonly onView: (view: MainView) => void;
 }) => {
-  const loaded = useTrace(at, traceId);
+  const loaded = useTrace(at, traceId, useListedVersion(at, traceId));
   const detail = loaded.status === "ready" ? loaded.value : null;
 
   const { hostKey, sessionId } = at;

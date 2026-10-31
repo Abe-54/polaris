@@ -27,6 +27,7 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
   },
   List: { ...OnCheckout, filter: TraceFilter },
   Get: { ...OnCheckout, traceId: TraceIdPrefix },
+  History: { ...OnCheckout, traceId: TraceIdPrefix, includeSpans: Schema.Boolean },
   Span: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
   Link: { ...OnCheckout, traceId: TraceIdPrefix },
   Flush: {},
@@ -42,12 +43,21 @@ export const TracePageSchema = Schema.Struct({
   total: Schema.Number,
 });
 
+export const TraceHistory = Schema.Struct({
+  root: Schema.NullOr(Schema.Number),
+  spans: Schema.Record(Schema.String, Schema.Number),
+  samples: Schema.Record(Schema.String, Schema.Number),
+});
+
+export type TraceHistory = typeof TraceHistory.Type;
+
 export const TraceWorkerValue = Schema.Union([
   Schema.Null,
   Schema.Number,
   TracePageSchema,
   TraceDetail,
   SpanDetail,
+  TraceHistory,
 ]);
 
 export type TraceWorkerValue = typeof TraceWorkerValue.Type;

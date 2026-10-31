@@ -38,7 +38,9 @@ export const useTraceView = (detail: TraceDetail) => {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [focus, setFocus] = useState<Focus>(NO_FOCUS);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [range, setRange] = useState<TimeWindow>(full);
+  // Null follows the whole trace, so a trace that grows while open stays in view.
+  const [zoom, setZoom] = useState<TimeWindow | null>(null);
+  const range = zoom ?? full;
   const [sort, setSort] = useState<TableSort>(DEFAULT_SORT);
   const shownFocus = useDeferredValue(focus);
 
@@ -61,6 +63,7 @@ export const useTraceView = (detail: TraceDetail) => {
 
   return {
     times,
+    usual: detail.usual,
     roots,
     rows,
     table,
@@ -69,10 +72,7 @@ export const useTraceView = (detail: TraceDetail) => {
     hovered,
     setHovered,
     range,
-    setRange: useCallback(
-      (next: TimeWindow | null) => setRange(next === null ? full : next),
-      [full]
-    ),
+    setRange: setZoom,
     full,
     sort,
     setSort,
@@ -84,10 +84,11 @@ export const useTraceView = (detail: TraceDetail) => {
         setCollapsed((c) => (c.has(key) === closed ? c : toggled(c, key))),
       []
     ),
-    toggleAll: useCallback(
-      () => setCollapsed(allCollapsed ? new Set() : parents),
-      [allCollapsed, parents]
-    ),
+    // Collapsing all also folds every listed ×n again.
+    toggleAll: useCallback(() => {
+      if (!allCollapsed) setExpanded(new Set());
+      setCollapsed(allCollapsed ? new Set() : parents);
+    }, [allCollapsed, parents]),
     toggleFold: useCallback((key: string) => setExpanded((e) => toggled(e, key)), []),
   };
 };

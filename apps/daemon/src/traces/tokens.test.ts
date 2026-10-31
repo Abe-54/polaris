@@ -35,3 +35,22 @@ test("saved token hashes survive reload; session revocation does not revoke Work
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("deleting the private seed invalidates every endpoint on restart", () => {
+  const root = mkdtempSync("/tmp/tf1-token-");
+  const filename = join(root, "tokens.json");
+
+  try {
+    const binding = TraceBinding.make({ sessionId, workspaceId, checkout: "/one" });
+    const first = new TraceTokenVault(filename).issue(binding);
+    expect(statSync(`${filename}.seed`).mode & 0o777).toBe(0o600);
+    rmSync(`${filename}.seed`);
+    const replacement = new TraceTokenVault(filename);
+    expect(replacement.authenticate(first)).toBeNull();
+    const next = replacement.issue(binding);
+    expect(next).not.toBe(first);
+    expect(new TraceTokenVault(filename).authenticate(next)).toEqual(binding);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

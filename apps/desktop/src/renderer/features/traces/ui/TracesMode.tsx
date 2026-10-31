@@ -26,16 +26,19 @@ import { TracesSetup } from "./setup/TracesSetup.tsx";
 /** One trace is enough to know the checkout has some; the sidebar reads the list. */
 const PROBE = { limit: 1 } as const;
 
-/** What Traces shows in place of a trace: none once the checkout has traces. */
+/** What Traces shows in place of a trace (none once the checkout has traces), and the receiver. */
 const useSetup = (at: TracesSessionKey) => {
   const snapshot = useTraces(at, PROBE);
   const label = useApp((s) => s.hosts.find((h) => h.key === at.hostKey)?.label);
   const state = useApp((s) => s.hosts.find((h) => h.key === at.hostKey)?.status.state);
 
-  return setupState(
-    snapshot,
-    label === undefined || state === undefined ? undefined : { label, state }
-  );
+  return {
+    setup: setupState(
+      snapshot,
+      label === undefined || state === undefined ? undefined : { label, state }
+    ),
+    receiver: snapshot.status === "ready" ? snapshot.value : null,
+  };
 };
 
 const Centered = ({
@@ -57,7 +60,7 @@ const Centered = ({
 const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId"> }) => {
   const selection = useTracesSelection(slot.at);
   const props = { ...slot, ...selection };
-  const setup = useSetup(slot.at);
+  const { setup, receiver } = useSetup(slot.at);
   // The service map brings its own panel; the span panel waits for Waterfall or Table.
   const map = useMainView(slot.at) === "map";
 
@@ -65,7 +68,7 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
     <div className="flex min-h-0 flex-1 gap-1.5 pr-1.5 pb-1.5" data-testid="traces-mode">
       <div className="relative isolate flex min-h-0 shrink-0 flex-col">
         <TracesSidebar {...props} />
-        <Horizon />
+        <Horizon moon={false} />
       </div>
       <section className="border-hairline bg-panel shadow-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border">
         {setup === null ? (
@@ -82,7 +85,7 @@ const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId">
         ) : (
           <TracesSetup state={setup} />
         )}
-        <TracesStatusBar {...props} />
+        <TracesStatusBar {...props} receiver={receiver} />
       </section>
     </div>
   );

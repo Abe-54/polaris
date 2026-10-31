@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { TurnId } from "@polaris/protocol";
-import { findTrace, fixtureSnapshot } from "./fixtureApi.ts";
+import { TraceCompareSelector, TurnId } from "@polaris/protocol";
+import { findTrace, fixtureComparison, fixtureSnapshot, nearestRank } from "./fixtureApi.ts";
 import { BIG_TRACE, FIXTURE_DETAILS } from "./fixtures.ts";
 
 const roots = (filter: Parameters<typeof fixtureSnapshot>[1]) =>
@@ -45,5 +45,46 @@ describe("the fixture traces.get", () => {
 
     expect(found.ok ? found.value.summary.id : null).toBe(BIG_TRACE.id);
     expect(missing.ok ? null : missing.error.code).toBe("E-TRACE-NOT-FOUND");
+  });
+});
+
+describe("the fixture traces.compare", () => {
+  const turn = (n: 10 | 11 | 12) =>
+    TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make(`t-overdue-${n}`) });
+
+  test("each service and root on either side, before against after, missing sides empty", () => {
+    const result = fixtureComparison("traces", turn(11), turn(12));
+
+    if (!result.ok) throw new Error(result.error.message);
+    expect(
+      result.value.routes.map((r) => [r.service, r.route, r.before.p50Ms, r.after.p50Ms])
+    ).toEqual([
+      ["ledger-api", "GET /customers/:id", null, 38],
+      ["ledger-api", "GET /invoices?status=overdue", null, 212],
+      ["ledger-api", "POST /invoices/overdue", 122, 840],
+      ["ledger-tests", "test overdue-totals", 1400, 3100],
+      ["settle-job", "settlements.run", 1240, null],
+    ]);
+    expect(result.value.routes[0]?.before).toEqual({ p50Ms: null, p95Ms: null, count: 0 });
+  });
+
+  test("an unknown Turn fails as the Daemon would, rather than comparing nothing", () => {
+    const result = fixtureComparison(
+      "traces",
+      TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("t-x") }),
+      turn(12)
+    );
+
+    expect(result.ok ? null : result.error.code).toBe("E-TRACE-NOT-FOUND");
+  });
+
+  test.each([
+    [[], 50, null],
+    [[40], 50, 40],
+    [[30, 10, 20, 40], 50, 20],
+    [[30, 10, 20, 40], 95, 40],
+    [[5, 1, 4, 2, 3], 50, 3],
+  ])("nearest rank of %j at p%d is %p", (values, p, expected) => {
+    expect(nearestRank(values, p)).toBe(expected);
   });
 });

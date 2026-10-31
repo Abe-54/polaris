@@ -7,9 +7,14 @@
  */
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary, sizeWindow } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  electronBinary,
+  sizeWindow,
+} from "./lib/electron.ts";
 import { seenUserData } from "./lib/userData.ts";
 
 const args = process.argv.slice(2);
@@ -52,6 +57,17 @@ const SHOTS: ReadonlyArray<Shot> = [
     name: "reconnecting",
     hash: "#traces/traces?view=reconnecting",
     ready: "traces-setup-reconnecting",
+  },
+  { name: "offline", hash: "#traces/traces?view=offline", ready: "traces-setup-offline" },
+  {
+    name: "needs-attention",
+    hash: "#traces/traces?view=needs-attention",
+    ready: "traces-setup-needs-attention",
+  },
+  {
+    name: "unavailable-stored",
+    hash: "#traces/unavailableStored?view=span-error",
+    ready: "traces-receiver",
   },
   { name: "output", hash: "#preview/traces-output", ready: "traces-output" },
 ];

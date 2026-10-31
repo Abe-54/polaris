@@ -39,6 +39,9 @@ export const WORKER_TOOL_NAMES = [
   "describe",
   "query",
   "execute",
+  "traces",
+  "trace",
+  "span",
   "visualize",
 ];
 
@@ -61,6 +64,9 @@ export const LEAD_TOOL_NAMES = [
   "describe",
   "query",
   "execute",
+  "traces",
+  "trace",
+  "span",
   "visualize",
 ];
 

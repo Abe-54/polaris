@@ -8,10 +8,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron } from "playwright-core";
 import type { PolarisApi } from "../src/shared/api.ts";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR } from "./lib/electron.ts";
+import { scriptedElectron as electron, APP_DIR } from "./lib/electron.ts";
 
 declare const window: { readonly polaris: PolarisApi };
 

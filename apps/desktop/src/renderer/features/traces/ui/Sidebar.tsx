@@ -5,9 +5,10 @@
  */
 import type { TraceFilter } from "@polaris/protocol";
 import { cn } from "@polaris/ui";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
+import { publishListed } from "../model/listed.ts";
 import { selectTrace } from "../model/store.ts";
 import { AgentsHere } from "./sidebar/AgentsHere.tsx";
 import { FilterWell } from "./sidebar/FilterWell.tsx";
@@ -36,6 +37,15 @@ const Body = ({
   if (answer.status !== "loading") last.current = answer;
   const snapshot = last.current;
 
+  const listed = snapshot.status === "ready" ? snapshot.value.traces : null;
+  const { hostKey, sessionId } = at;
+
+  useEffect(() => {
+    publishListed({ hostKey, sessionId }, listed);
+
+    return () => publishListed({ hostKey, sessionId }, null);
+  }, [hostKey, sessionId, listed]);
+
   const latestTurn = useApp(
     (s) => s.hostModels[at.hostKey]?.sessions.get(at.sessionId)?.session.turnCount ?? null
   );
@@ -51,6 +61,7 @@ const Body = ({
   return (
     <>
       <TraceList
+        at={at}
         traces={traces}
         openId={traceId}
         latestTurn={latestTurn}

@@ -12,7 +12,7 @@ export const traceEndpointEnvironment = (source: TraceEnvironment) => {
   return result;
 };
 
-/** Harness scope owns revocation. Missing tracing services and unavailable storage never prevent a session. */
+/** Harness retirement is not session revocation; unavailable tracing never prevents a session. */
 export const sessionTraceEnvironment = Effect.fnUntraced(function* (
   sessionId: SessionId,
   source: TraceEnvironment
@@ -24,8 +24,6 @@ export const sessionTraceEnvironment = Effect.fnUntraced(function* (
   const env = yield* runtime.value
     .environment(sessionId, source)
     .pipe(Effect.orElseSucceed(() => ({})));
-
-  yield* Effect.addFinalizer(() => runtime.value.revokeSession(sessionId));
 
   return env;
 });

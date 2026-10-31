@@ -36,3 +36,21 @@ export class IngestError extends Error {
     super(message);
   }
 }
+
+export interface DecodedBatch extends TraceBatch {
+  readonly bytes: number;
+}
+
+const serialized = new WeakMap<Span | LogRecord, { json: string; bytes: number }>();
+
+/** Decoder admission, queue accounting and SQLite share exactly one serialization per record. */
+export const serializeRecord = (record: Span | LogRecord) => {
+  const existing = serialized.get(record);
+
+  if (existing !== undefined) return existing;
+  const json = JSON.stringify(record);
+  const value = { json, bytes: Buffer.byteLength(json) };
+  serialized.set(record, value);
+
+  return value;
+};

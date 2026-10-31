@@ -171,6 +171,40 @@ unread body could cause the next keep-alive request to return 400. Draining boun
 returning early made the `415` followed by `404` check pass. T1 should preserve that regression
 coverage when it implements rejection paths.
 
+## Senders set up by the skill (ENG-658)
+
+The `polaris-tracing` skill ([skills/polaris-tracing](../../skills/polaris-tracing/SKILL.md)) was
+followed in scratch apps against T1's real receiver (the worktree Daemon at `08798fa8`, a throwaway
+`POLARIS_HOME`, a scripted Agent Session and its injected endpoint) on 2026-10-31, with Node 24.22.1
+and Bun 1.4.4. What it learned, beyond the spike above:
+
+- **OpenTelemetry JS 3.0 changed the setup.** `sdk-node@0.300`, `sdk-logs@3` and `sdk-trace@3`
+  processors take `{ exporter }`; passing the exporter itself fails only at `shutdown()`
+  (`Cannot read properties of undefined (reading 'shutdown')`), losing the batch. The logs API moved
+  into `@opentelemetry/api@1.10`; a logger from `@opentelemetry/api-logs@0.223` reads a different
+  global and drops every record without an error. `sdk-trace-base` is deprecated for `sdk-trace`.
+- **`@vercel/otel@2.2.0` pins the 2.x line** (`resources` < 3, `sdk-logs` < 0.300), so its projects
+  keep `0.2xx` exporters. With only `OTEL_EXPORTER_OTLP_ENDPOINT` set (no protocol variable), an
+  explicit vendor `traceExporter` plus the default processors sent one copy to the vendor and one to
+  the receiver. Its source adds the environment exporter only in the `"auto"` processor branch, and
+  not when `VERCEL_OTEL_ENDPOINTS` is set.
+- **ESM needs the loader hook.** Under `node --import ./instrumentation.ts`, `node:http` produced no
+  server span until `module.register("@opentelemetry/instrumentation/hook.mjs")` ran first.
+- **`NodeSDK` exports metrics by default** to `/v1/metrics`, which the receiver doesn't serve;
+  the skill sets `metricReaders: []`.
+- **Bun drops tail-call frames.** A `code.*` location read from the stack points at the caller's
+  caller for `return traced(…)` or `=> traced(…)` on Bun, never on Node; `await traced(…)` keeps it.
+- **The fixed-exporter line** sent to the vendor URL without the variable and to
+  `/otlp/<token>/v1/traces` with it, carrying the app's headers either way.
+- **Redaction (RT1 P1).** Every exception stack containing a `file://` frame (all Node ESM stacks)
+  was stored as `"[redacted]"`, because a credential-free URL redacts the whole value. Bun stacks,
+  which carry plain paths, survived.
+
+The Node app (`NodeSDK`, auto-instrumentations, ESM TypeScript) and the `Bun.serve` app (manual
+`TracerProvider` and `LoggerProvider`) each stored a server span with a child carrying `code.*`,
+an ERROR child with its exception event, and log records correlated to their spans, read back
+through `traces.watch`, `traces.get` and `traces.span`.
+
 ## Reproduce
 
 Prerequisites: Bun (tested 1.3.13 and 1.4.4; product minimum remains 1.3.9), Node ≥22.18 with TypeScript stripping,

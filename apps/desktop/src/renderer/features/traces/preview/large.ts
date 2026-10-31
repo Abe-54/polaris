@@ -227,5 +227,6 @@ export const withLargeTrace = (hash: string, api: TracesApi): TracesApi => {
         ? Promise.resolve({ ok: true, value: { span, logs: [], logCount: 0 } })
         : api.span(at, traceId, spanId);
     },
+    compare: api.compare,
   };
 };
