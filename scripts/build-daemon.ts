@@ -44,6 +44,7 @@ import { Option, Schema } from "effect";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
 import { BETTERLEAKS_VERSION, betterleaksAsset } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { buildVersion } from "./buildVersion.ts";
+import { instrumentationPlugin } from "../apps/daemon/src/traces/instrumentation/build.ts";
 
 const root = join(import.meta.dir, "..");
 
@@ -257,23 +258,33 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
   mkdirSync(outDir, { recursive: true });
   const name = binaryName(platform);
   const binary = join(outDir, name);
-  await run([
-    process.execPath,
-    "build",
-    join(daemonDir, "src", "main.ts"),
-    // The fff worker (apps/daemon/src/files/search/fff.ts) is its own entrypoint.
-    join(daemonDir, "src", "files", "search", "fffWorker.ts"),
-    join(daemonDir, "src", "traces", "worker.ts"),
-    "--compile",
-    `--target=${target}`,
-    "--minify",
+
+  const result = await Bun.build({
+    entrypoints: [
+      join(daemonDir, "src", "main.ts"),
+      // The fff worker (apps/daemon/src/files/search/fff.ts) is its own entrypoint.
+      join(daemonDir, "src", "files", "search", "fffWorker.ts"),
+      join(daemonDir, "src", "traces", "worker.ts"),
+    ],
+    compile: { target, outfile: binary },
+    minify: true,
     // Lazily imported commands and Harness drivers become separate chunks, parsed only
     // when imported: `serve` never parses the Claude Agent SDK, `bridge` not the Daemon.
-    "--splitting",
-    ...define.map((value) => `--define=${value}`),
-    `--define=process.env.POLARIS_BUILD_VERSION=${JSON.stringify(version)}`,
-    `--outfile=${binary}`,
-  ]);
+    splitting: true,
+    define: {
+      ...Object.fromEntries(
+        define.map((value) => {
+          const index = value.indexOf("=");
+
+          return [value.slice(0, index), value.slice(index + 1)];
+        })
+      ),
+      "process.env.POLARIS_BUILD_VERSION": JSON.stringify(version),
+    },
+    plugins: [await instrumentationPlugin()],
+  });
+
+  if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
 
   if (platform.startsWith("darwin")) await signAdHoc(binary);
   const betterleaks = await bundleBetterleaks(platform, outDir);
