@@ -1,6 +1,12 @@
 /** Rollback previews and guarded commits share the Query pool's cancellation and timeout boundary. */
 import type { TransactionSQL } from "bun";
-import { DataError, dataJsonBytes, scrubCredentials, type DataValue } from "@polaris/protocol";
+import {
+  DataError,
+  dataJsonBytes,
+  scrubCredentials,
+  scrubDataValue,
+  type DataValue,
+} from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import {
   bindValues,
@@ -14,20 +20,33 @@ import {
   type ReadInput,
 } from "./execution.ts";
 import type { DataPools } from "./pools.ts";
-import { decodeResult, mysqlValue, type RawResult } from "./values.ts";
+import { decodeResult, mysqlValue, type RawResult, type Column } from "./values.ts";
 import { writePlan, sqlTokens, identifier, writeError, updatedColumns } from "./writeSql.ts";
 import { writeTable, type WriteTable } from "./writeTable.ts";
 import { editStatements, type EditInput } from "./writeEdits.ts";
 import type { LexicalMode } from "./guard.ts";
-import { guardFunctions } from "./functionGuard.ts";
+import { writePreflight } from "./writePreflight.ts";
+import {
+  identityRows,
+  identityHash,
+  insertedRows,
+  explicitInsertColumns,
+  insertedPreview,
+  rawIdentity,
+} from "./writeRows.ts";
 
 export interface WriteInput extends Omit<ReadInput, "limit" | "catalogText"> {
   dryRun: boolean;
+  signal?: AbortSignal;
   expected?: number;
+  expectedIdentity?: string | undefined;
+  previewed?: boolean | undefined;
 }
 
 export interface WritePreview {
   affected: number;
+  previewed?: boolean | undefined;
+  identity?: string;
   columns: string[];
   before: DataValue[][];
   after: DataValue[][];
@@ -183,8 +202,8 @@ export function checkPreviewKeys(raw: PreviewRaw | undefined, primaryKey: Readon
   }
 }
 
-function cappedPreview(
-  before: Awaited<ReturnType<typeof beforeRows>>,
+export function cappedPreview(
+  before: { columns: ReadonlyArray<Column>; rows: DataValue[][]; raw?: RawResult | undefined },
   after: DataValue[][],
   input: WriteInput
 ) {
@@ -196,13 +215,25 @@ function cappedPreview(
   const previewAfter: DataValue[][] = [];
   let bytes = dataJsonBytes(columns);
 
-  for (let i = 0; i < before.rows.length; i++) {
-    const left = before.rows[i]!.slice(0, 256);
-    const right = after[i]?.slice(0, 256);
-    bytes += dataJsonBytes(left) + dataJsonBytes(right ?? []);
+  const scrub = (row: DataValue[]) =>
+    row
+      .slice(0, 256)
+      .map((value, i) =>
+        /password|passwd|secret|token|api[_-]?key|private[_-]?key|credential/i.test(
+          before.columns[i]?.name ?? ""
+        )
+          ? "[redacted]"
+          : scrubDataValue(value, knownCredentials(input.connection))
+      );
+
+  for (let i = 0; i < Math.max(before.rows.length, after.length); i++) {
+    const left = before.rows[i] ? scrub(before.rows[i]!) : undefined;
+    const right = after[i] ? scrub(after[i]!) : undefined;
+    bytes += dataJsonBytes(left ?? []) + dataJsonBytes(right ?? []);
 
     if (bytes > 16000) break;
-    previewBefore.push(left);
+
+    if (left) previewBefore.push(left);
 
     if (right) previewAfter.push(right);
   }
@@ -210,27 +241,182 @@ function cappedPreview(
   return { columns, before: previewBefore, after: previewAfter };
 }
 
-async function write(tx: TransactionSQL, active: Active, input: WriteInput): Promise<WritePreview> {
-  const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
-  const plan = writePlan(input.sql, input.source, mode);
-  await guardFunctions(tx, plan.sql, mode);
-  const table = plan.target ? await writeTable(tx, input.source, plan.target) : undefined;
+function checkUpdatedKey(
+  input: WriteInput,
+  plan: ReturnType<typeof writePlan>,
+  table: WriteTable | undefined,
+  mode: LexicalMode
+) {
+  if (!table) return;
 
   if (
-    table &&
     plan.keyword === "UPDATE" &&
-    updatedColumns(plan.sql, mode).some((column) => table.primaryKey.includes(column))
+    updatedColumns(plan.sql, mode).some((column) =>
+      table.primaryKey.some((key) =>
+        input.source.engine === "mysql"
+          ? key.toLowerCase() === column.toLowerCase()
+          : key === column
+      )
+    )
   )
     throw writeError(
       "Changing primary keys cannot be previewed by the original key.",
       "Change primary keys through a migration or the app's own code, not execute."
     );
+}
+
+async function insertEvidence(
+  tx: TransactionSQL,
+  active: Active,
+  input: WriteInput,
+  table: WriteTable,
+  plan: ReturnType<typeof writePlan>,
+  mode: LexicalMode,
+  identities: RawResult,
+  affected: number
+) {
+  const raw = insertedRows(
+    identities,
+    await identityRows(tx, active, input, table, { sql: "", params: [] }, true),
+    table
+  );
+
+  if (raw.length !== affected)
+    throw writeError(
+      "The inserted rows changed during the write. The transaction was rolled back."
+    );
+
+  const explicit = explicitInsertColumns(
+    plan,
+    mode,
+    raw.columns.map((c) => c.name)
+  );
+
+  const indexes = raw.columns.flatMap((col, i) =>
+    explicit.some((name) =>
+      input.source.engine === "mysql"
+        ? name.toLowerCase() === col.name.toLowerCase()
+        : name === col.name
+    )
+      ? [i]
+      : []
+  );
+
+  return { raw, identity: identityHash(raw, indexes) };
+}
+
+function checkDrift(input: WriteInput, affected: number, identity: string | undefined) {
+  if (input.expected !== undefined && input.expected !== affected)
+    throw writeError(
+      `The write affected ${affected} rows; the dry run affected ${input.expected}. The transaction was rolled back.`,
+      "Preview the changed data and request approval again."
+    );
+
+  if (input.expectedIdentity !== undefined && identity !== input.expectedIdentity)
+    throw writeError(
+      "The affected row identities changed after the preview. The transaction was rolled back.",
+      "Preview the changed data and request approval again."
+    );
+}
+
+function writePreview(
+  input: WriteInput,
+  affected: number,
+  triggers: boolean,
+  identity: string | undefined,
+  table: WriteTable | undefined,
+  before: Awaited<ReturnType<typeof beforeRows>>,
+  after: { rows: DataValue[][]; truncated: boolean },
+  insert: RawResult | undefined
+) {
+  const inserted = insert ? insertedPreview(insert, input) : undefined;
+
+  const preview = inserted
+    ? cappedPreview({ ...inserted, rows: [] }, inserted.rows, input)
+    : cappedPreview(before, after.rows, input);
+
+  const clipped =
+    before.raw?.truncated || after.truncated
+      ? " Some rows or columns were omitted by the result budget."
+      : "";
+
+  return {
+    affected,
+    previewed: !triggers,
+    ...(identity === undefined ? undefined : { identity }),
+    ...preview,
+    note:
+      (table?.primaryKey.length
+        ? "Up to 20 rows, read by primary key; preview capped at 16,000 bytes. Sequence values used by the preview aren't reused."
+        : "Rows aren't shown: no primary key or this statement has no row preview. Sequence values used by the preview aren't reused.") +
+      clipped,
+    ...(table ? { target: { schema: table.schema, table: table.table } } : undefined),
+  };
+}
+
+async function readIdentities(
+  tx: TransactionSQL,
+  active: Active,
+  input: WriteInput,
+  table: WriteTable | undefined,
+  plan: ReturnType<typeof writePlan>,
+  mode: LexicalMode,
+  triggers: boolean
+) {
+  if (!table || triggers) return undefined;
+
+  return identityRows(
+    tx,
+    active,
+    input,
+    table,
+    plan.keyword === "INSERT"
+      ? { sql: "", params: [] }
+      : whereParams(plan, mode, input.params ?? []),
+    plan.keyword === "INSERT"
+  );
+}
+
+function notPreviewedNote(ddl: boolean, triggers: boolean) {
+  if (ddl) return "Not previewed: this statement changes the schema";
+
+  if (triggers) return "Not previewed: this table has triggers";
+
+  return undefined;
+}
+
+async function write(tx: TransactionSQL, active: Active, input: WriteInput): Promise<WritePreview> {
+  const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
+  const plan = writePlan(input.sql, input.source, mode);
+  const table = plan.target ? await writeTable(tx, input.source, plan.target) : undefined;
+
+  checkUpdatedKey(input, plan, table, mode);
+
+  const triggers = await writePreflight(tx, input.source, table, plan.sql, mode);
+
+  const noPreview = notPreviewedNote(plan.ddl, triggers);
+
+  if (noPreview && input.dryRun)
+    return {
+      affected: 0,
+      columns: [],
+      before: [],
+      after: [],
+      previewed: false,
+      note: noPreview,
+    };
+
+  if (triggers && input.previewed !== false && input.expected !== undefined)
+    throw writeError("This table now has triggers. Request approval to run without preview.");
 
   const before = table
     ? await beforeRows(tx, active, input, plan, table, mode)
     : { columns: [], rows: [], raw: undefined };
 
   if (table) checkPreviewKeys(before.raw, table.primaryKey);
+
+  const identities = await readIdentities(tx, active, input, table, plan, mode, triggers);
+  let identity = identities ? identityHash(identities) : undefined;
 
   if (active.stopped) throw writeError("The write was cancelled.");
 
@@ -249,34 +435,20 @@ async function write(tx: TransactionSQL, active: Active, input: WriteInput): Pro
     result.count ?? 0
   );
 
-  if (input.expected !== undefined && input.expected !== affected)
-    throw writeError(
-      `The write affected ${affected} rows; the dry run affected ${input.expected}. The transaction was rolled back.`,
-      "Preview the changed data and request approval again."
-    );
+  const insert =
+    table && identities && plan.keyword === "INSERT"
+      ? await insertEvidence(tx, active, input, table, plan, mode, identities, affected)
+      : undefined;
+
+  if (insert) identity = insert.identity;
+  checkDrift(input, affected, identity);
 
   const after =
     table && plan.keyword === "UPDATE"
       ? await afterRows(tx, active, input, table, before)
       : { rows: [], truncated: false };
 
-  const preview = cappedPreview(before, after.rows, input);
-
-  const clipped =
-    before.raw?.truncated || after.truncated
-      ? " Some rows or columns were omitted by the result budget."
-      : "";
-
-  return {
-    affected,
-    ...preview,
-    note:
-      (table?.primaryKey.length
-        ? "Up to 20 rows, read by primary key; preview capped at 16,000 bytes. Sequence and external side effects may survive rollback."
-        : "Rows aren't shown: no primary key or this statement has no row preview. Sequence and external side effects may survive rollback.") +
-      clipped,
-    ...(table ? { target: { schema: table.schema, table: table.table } } : undefined),
-  };
+  return writePreview(input, affected, triggers, identity, table, before, after, insert?.raw);
 }
 
 export async function executeWrite(pools: DataPools, input: WriteInput, signal: AbortSignal) {
@@ -310,7 +482,12 @@ export function writeEffect(pools: DataPools, input: WriteInput) {
   let running: ReturnType<typeof executeWrite> | undefined;
 
   return Effect.tryPromise({
-    try: (signal) => (running = executeWrite(pools, input, signal)),
+    try: (signal) =>
+      (running = executeWrite(
+        pools,
+        input,
+        input.signal ? AbortSignal.any([signal, input.signal]) : signal
+      )),
     catch: (error) => queryError(error, knownCredentials(input.connection)),
   }).pipe(
     Effect.onInterrupt(() =>
@@ -327,7 +504,7 @@ export async function executeEdits(
   signal: AbortSignal
 ) {
   return executeTransaction(pools, input, signal, "", async (tx, active) => {
-    await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
+    const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
     const requested = input.edits;
 
     const table = await writeTable(tx, input.source, {
@@ -344,9 +521,28 @@ export async function executeEdits(
         "Reload the table before editing it."
       );
     const statements = editStatements(requested, input.source.engine);
+    const matched = new Set<string>();
 
     for (const statement of statements) {
       if (active.stopped) throw writeError("The commit was cancelled.");
+
+      const plan = writePlan(statement.sql, input.source, mode);
+      await writePreflight(tx, input.source, table, plan.sql, mode);
+
+      const keys = await identityRows(
+        tx,
+        active,
+        { ...input, sql: statement.sql, dryRun: false },
+        table,
+        whereParams(plan, mode, statement.params)
+      );
+
+      if (keys.length !== 1 || matched.has(rawIdentity(keys[0]!)))
+        throw writeError(
+          "These edits contain a missing or repeated database row.",
+          "Reload the table and stage each row once."
+        );
+      matched.add(rawIdentity(keys[0]!));
 
       const query = tx<
         Array<never> & { count: number }
@@ -373,7 +569,12 @@ export function editsEffect(pools: DataPools, input: Parameters<typeof executeEd
   let running: ReturnType<typeof executeEdits> | undefined;
 
   return Effect.tryPromise({
-    try: (signal) => (running = executeEdits(pools, input, signal)),
+    try: (signal) =>
+      (running = executeEdits(
+        pools,
+        input,
+        input.signal ? AbortSignal.any([signal, input.signal]) : signal
+      )),
     catch: (error) => queryError(error, knownCredentials(input.connection)),
   }).pipe(
     Effect.onInterrupt(() =>

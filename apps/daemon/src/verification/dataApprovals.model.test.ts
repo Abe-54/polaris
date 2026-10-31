@@ -58,6 +58,7 @@ test("approval target, server, denial and revocation sequences agree with an ind
             "local",
             "remote",
             "writes",
+            "writes-ask",
             "end"
           ),
         }),
@@ -88,7 +89,7 @@ test("approval target, server, denial and revocation sequences agree with an ind
         let sequence = 0;
         const exact = new Map<number, "approved" | "denied">();
         const local = new Set<number>();
-        const writes = new Map<number, "ask" | "off">();
+        const writes = new Map<number, { local: boolean; policy: "ask" | "off" }>();
         const servers = new Set<string>();
 
         const apply = (events: ReadonlyArray<DomainEvent>) => {
@@ -132,7 +133,7 @@ test("approval target, server, denial and revocation sequences agree with an ind
                 apply,
                 repository
               );
-              updateModelDecision(step.action, step.target, key, exact, servers, writes);
+              updateModelDecision(step.action, step.target, key, exact, servers);
             }
 
             checkPolicy(repository, exact, servers, local, writes);
@@ -247,7 +248,7 @@ function checkPolicy(
   exact: Map<number, "approved" | "denied">,
   servers: Set<string>,
   local: Set<number>,
-  writes: Map<number, "ask" | "off">
+  writes: Map<number, { local: boolean; policy: "ask" | "off" }>
 ) {
   for (let target = 0; target < 4; target++) {
     const expected =
@@ -260,7 +261,12 @@ function checkPolicy(
 
     expect(repository.read(source(target, local.has(target)))).toEqual({
       access: expected,
-      writes: writes.get(target) ?? (local.has(target) ? "ask" : "off"),
+      writes:
+        writes.get(target)?.local === local.has(target)
+          ? writes.get(target)!.policy
+          : local.has(target)
+            ? "ask"
+            : "off",
     });
   }
 }
@@ -270,14 +276,11 @@ function updateModelDecision(
   target: number,
   key: string,
   exact: Map<number, "approved" | "denied">,
-  servers: Set<string>,
-  writes: Map<number, "ask" | "off">
+  servers: Set<string>
 ) {
   if (action === "server") servers.add(key);
   else if (action === "allow" || action === "deny") {
     exact.set(target, action === "deny" ? "denied" : "approved");
-
-    if (!writes.has(target)) writes.set(target, "off");
   }
 }
 
@@ -290,14 +293,14 @@ function applyPolicy(
   exact: Map<number, "approved" | "denied">,
   servers: Set<string>,
   local: Set<number>,
-  writes: Map<number, "ask" | "off">
+  writes: Map<number, { local: boolean; policy: "ask" | "off" }>
 ) {
   switch (action) {
     case "revoke":
       repository.change(target, undefined, true);
       exact.delete(index);
       servers.delete(key);
-      writes.set(index, writes.get(index) ?? (local.has(index) ? "ask" : "off"));
+      writes.delete(index);
 
       return true;
     case "local":
@@ -309,8 +312,9 @@ function applyPolicy(
 
       return true;
     case "writes":
-      repository.change(target, "off");
-      writes.set(index, "off");
+    case "writes-ask":
+      repository.change(target, action === "writes" ? "off" : "ask");
+      writes.set(index, { local: local.has(index), policy: action === "writes" ? "off" : "ask" });
 
       return true;
     default:

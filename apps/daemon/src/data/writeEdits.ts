@@ -1,5 +1,6 @@
 /** Grid cells are grouped by primary key so each row is updated and counted once. */
 import type { CommitDataEdits, DataSource, DataValue } from "@polaris/protocol";
+import { rowKey } from "./dataKey.ts";
 import { identifier, writeError } from "./writeSql.ts";
 
 export type EditInput = typeof CommitDataEdits.payloadSchema.Type;
@@ -11,9 +12,14 @@ export function editStatements(input: EditInput, engine: DataSource["engine"]) {
   >();
 
   for (const edit of input.edits) {
-    if (edit.key.length !== input.primaryKey.length || input.primaryKey.includes(edit.column))
+    if (
+      edit.key.length !== input.primaryKey.length ||
+      input.primaryKey.some((key) =>
+        engine === "mysql" ? key.toLowerCase() === edit.column.toLowerCase() : key === edit.column
+      )
+    )
       throw writeError("Edits require a complete primary key and cannot change key columns.");
-    const identity = JSON.stringify(edit.key);
+    const identity = rowKey(edit.key);
     let group = groups.get(identity);
 
     if (!group) {
@@ -21,12 +27,14 @@ export function editStatements(input: EditInput, engine: DataSource["engine"]) {
       groups.set(identity, group);
     }
 
-    if (group.changes.has(edit.column))
+    const column = engine === "mysql" ? edit.column.toLowerCase() : edit.column;
+
+    if (group.changes.has(column))
       throw writeError(
         "The same cell appears more than once in these edits.",
         "Reload the table and stage each cell once."
       );
-    group.changes.set(edit.column, edit.value);
+    group.changes.set(column, edit.value);
   }
 
   const table = `${identifier(input.table.schema, engine)}.${identifier(input.table.name, engine)}`;

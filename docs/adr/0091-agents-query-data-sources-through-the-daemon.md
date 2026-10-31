@@ -43,9 +43,9 @@ never sees a URL or a password, and the database itself enforces read-only.**
   closed, so tunnels and unknown owners are Remote. A Remote one needs a Data Source Approval: per
   Host, for its exact server, database and user (or the whole server); a target that changes needs
   a new one.
-- **Writes.** `execute` always asks the user. Before asking, the Daemon runs the statement in a
-  transaction and rolls it back, so the approval shows the affected count and before/after rows.
-  Approved, it runs again for real. On a Remote Data Source the user must also have allowed writes.
+- **Writes.** `execute` always asks the user. Eligible statements are previewed in a transaction
+  that rolls back; tables with triggers require approval without a preview. The card shows SQL,
+  parameters and any preview rows. Writes off applies to Local and Remote sources.
 - **Record.** Every Query, the user's and the agents', goes into the Query Log with its Agent
   Session and Turn. `psql` and `mysql` Tool Calls are matched and logged as "outside Polaris": we
   can't stop an agent with a shell from connecting itself, but we can make it visible.
@@ -54,13 +54,10 @@ never sees a URL or a password, and the database itself enforces read-only.**
 
 - An agent that reads `.env` itself can still connect directly; the Query Log marks it and the
   tools make the direct route unnecessary, but this is not a sandbox.
-- A dry run protects transactional rows, not every side effect. Sequence allocation (`nextval`
-  and auto-increment) can survive rollback, as can independent transactions or external calls
-  hidden in user functions/triggers. MySQL row writes therefore require InnoDB, and MySQL DDL
-  is refused because it commits implicitly. Local Postgres transactional DDL is supported;
-  remote DDL is refused. Direct dblink, signal and lock functions use the shared guard;
-  restricted database roles remain the boundary for wrappers. PostgreSQL NOTIFY is transactional
-  and is not delivered on rollback ([PostgreSQL 16 documentation](https://www.postgresql.org/docs/16/sql-notify.html)).
+- Preview preflight refuses non-built-in functions and unsafe table expressions; triggers never
+  run without approval. MySQL dependencies must all use InnoDB. Sequence allocation is the
+  disclosed exception: sequence values used by the preview aren't reused. Restricted database
+  roles remain necessary for effects of approved writes. See the RW fixes below.
 - Remote execute requires remembered read access and writes allowed, plus one per-statement
   write approval. A one-request read grant does not authorize a dry run. Consumed write authority
   is never replayed automatically after an uncertain external commit; this prevents duplicate
@@ -109,3 +106,23 @@ card per target across sessions. `remember:false` authorizes only the joined que
 request, consumed once for its session and active Turn; it never authorizes a write dry run.
 Remote execute still requires remembered read approval, writes enabled and a separate approval
 for each statement.
+
+
+## RW write fixes (ENG-645)
+
+Implementation and limits: [Data README, Writes](../../apps/daemon/src/data/README.md#writes-eng-645).
+
+- F1: only side-effect-free statements get previews; triggers and all Local Postgres DDL require "Run without preview", and sequence values used by the preview aren't reused.
+- F2: writes off refuses execute and grid commits on every source before inspection or approval.
+- F3: COMMIT confirmation has a five-second cancellation shield; lost confirmation is E-DATA-OUTCOME-UNKNOWN and Query Log unknown.
+- F4: approval payloads include scrubbed parameters; INSERT previews show inserted rows in after.
+- F5: revocation removes rules; Local write policy never supplies Remote defaults.
+- F6: complete key or row-image hashes bind drift independently of display caps; INSERT excludes database-filled columns and retains explicit values.
+- F7: upserts join ENG-669's refused forms; primary-key assignments are checked over the statement and case-insensitively on MySQL.
+- F8: MySQL statements and trigger dependencies stay within the approved database; PostgreSQL schema qualification remains allowed.
+- F9: credential columns and shared-scrubber values are redacted before capped rows reach events or Clients.
+- F10: the spec models preflight, not-previewed triggers, identity drift and unknown; replay checks recorded events, projection, Query Log and database observations.
+- F11: grid grouping uses typed keys and actual matched identities to reject coercion duplicates.
+- F12: complete Bytes keys bind as bytes; unsupported or display-only keys fail with a reason.
+- F13: write semaphores are per target and retain no idle entries.
+- F14: recovery marks running writes unknown; default denial names the write.

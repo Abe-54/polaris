@@ -60,8 +60,11 @@ export const writeApprovalMethods = (
               turnId,
               kind: "tool",
               dataWrite,
-              title: `Run ${dataWrite.affected}-row write`,
-              detail: `Dry run · rolled back · ${dataWrite.affected} rows\n${dataWrite.sql}\n${dataWrite.reason}`,
+              title:
+                dataWrite.previewed === false
+                  ? "Run without preview"
+                  : `Run ${dataWrite.affected}-row write`,
+              detail: `${dataWrite.previewed === false ? dataWrite.note : `Dry run · rolled back · ${dataWrite.affected} rows`}\n${dataWrite.sql}\n${dataWrite.reason}`,
               options: [],
               questions: [],
               openedAt: new Date().toISOString(),
@@ -92,6 +95,8 @@ export const writeApprovalMethods = (
 
       return yield* Effect.try({ try: () => repository.claim(id), catch: storageError });
     }),
+    fail: (id: RequestId, error: DataError) =>
+      Effect.try({ try: () => repository.fail(id, error), catch: storageError }),
     finish: (id: RequestId, result: DataWriteResult) =>
       Effect.try({ try: () => repository.finish(id, result), catch: storageError }),
   };

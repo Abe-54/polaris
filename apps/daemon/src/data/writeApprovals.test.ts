@@ -202,3 +202,35 @@ test("a Harness cannot forge a write card and Answer cannot approve one", () =>
       expect(yield* approvals.writes.claim(id)).toBe(false);
     })
   ));
+
+test("F4/F14: not-previewed cards persist params and denial names the write", () =>
+  run(
+    Effect.gen(function* () {
+      yield* seedDataSession;
+      const approvals = yield* DataApprovals;
+
+      const id = yield* approvals.writes.open(started.session.id, started.turns[0]!.id, {
+        ...writeCard("trigger"),
+        previewed: false,
+        params: [7, "user@example.test"],
+        before: [],
+        after: [],
+        note: "Not previewed: this table has triggers",
+      });
+
+      const persisted = (yield* approvals.writes.lookup("trigger"))!.request;
+      expect(persisted.title).toBe("Run without preview");
+      expect(persisted.detail).toContain("Not previewed: this table has triggers");
+      expect(persisted.dataWrite?.params).toEqual([7, "user@example.test"]);
+      yield* decide({
+        type: "approval.respond",
+        requestId: id,
+        decision: ApprovalDecision.cases.Deny.make({ reason: null }),
+        resolvedBy: "test",
+      });
+      expect(yield* approvals.awaitApproval(id, 100)).toEqual({
+        status: "denied",
+        reason: "The user denied this write.",
+      });
+    })
+  ));

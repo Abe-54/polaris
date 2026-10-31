@@ -248,3 +248,24 @@ describe("only a lone plain SELECT that calls no function re-runs on open (F10)"
     expect(runsOnOpen(sql)).toBe(runs);
   });
 });
+
+test("unknown write outcomes are distinct from failure and completion", () => {
+  const [row] = logRows(
+    [
+      new QueryLogEntry({
+        id: "unknown",
+        checkout: "/repo",
+        source: { id: "db", name: "db" },
+        sql: "UPDATE items SET v=1",
+        state: "unknown",
+        author: { kind: "user" },
+        at: "2026-10-30T00:00:00Z",
+      }),
+    ],
+    lookups
+  );
+
+  expect(row!.state).toBe("unknown");
+  expect(row!.result).toContain("check the rows before retrying");
+  expect(resultText(row!)).toBe("outcome unknown");
+});

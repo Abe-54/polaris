@@ -55,7 +55,8 @@ const numeric = (value: string) => DataValueTags.cases.Numeric.make({ value });
 
 const bigint = (value: string) => DataValueTags.cases.BigInt.make({ value });
 
-const bytes = (length: number) => DataValueTags.cases.Bytes.make({ length });
+const bytes = (buffer: Buffer) =>
+  DataValueTags.cases.Bytes.make({ length: buffer.length, base64: buffer.toString("base64") });
 
 const json = (text: string) => DataValueTags.cases.Json.make({ text: compactJson(text) });
 
@@ -112,11 +113,9 @@ export function mysqlValue(buffer: Buffer, column: Column, catalogText: boolean)
     case 245:
       return json(buffer.toString());
     case 16:
-      return bytes(buffer.length);
+      return bytes(buffer);
     default:
-      return !catalogText && ((column.flags ?? 0) & 128) !== 0
-        ? bytes(buffer.length)
-        : buffer.toString();
+      return !catalogText && ((column.flags ?? 0) & 128) !== 0 ? bytes(buffer) : buffer.toString();
   }
 }
 
@@ -142,7 +141,7 @@ function postgresValue(buffer: Buffer, column: Column): DataValue {
     case 3802:
       return json(text);
     case 17:
-      return bytes(text.startsWith("\\x") ? (text.length - 2) / 2 : buffer.length);
+      return bytes(text.startsWith("\\x") ? Buffer.from(text.slice(2), "hex") : buffer);
     case 1184:
       return timestamp(text.replace(" ", "T").replace(/([+-]\d\d)$/, "$1:00"));
     default:

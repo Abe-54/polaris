@@ -876,36 +876,37 @@ MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but 
 
 ## Data write approvals (ENG-645)
 
-`data_writes` in `polaris.qnt` models the rolled-back preview, pending/approved/denied authority,
-one durable consumption, count-checked execution and retries. Turn end/recovery deny pending
-cards and prevent starting a write. The safety checks constrain observed write effects and
-consumption, including count-drift rollback; eight scenarios and 3,000 safety traces run in
-`bun run spec`.
+`data_writes` in `polaris.qnt` models write policy, the side-effect-free precondition,
+not-previewed triggers and Local DDL, one-shot approval, identity drift, cancellation at the COMMIT boundary,
+unknown outcomes and recovery. The Session machine remains the approval authority.
 
 | Model | Runtime mapping |
 | --- | --- |
-| `dryRun`, `request` | `data/writeExecution.ts` rolls back before `writeApprovals.open` invokes `decideSession(data.approvalRequested)`; the card contains the affected count and bounded rows. |
-| `allow`, `deny`, `endTurn`, `restart` | Existing `RespondToApproval`, Session machine withdrawal events, and `ApprovalStore` projection into `WriteApprovalStore`; `data/writeApprovals.test.ts` exercises decisions and all ending paths. |
-| `claim`, `retry` | `WriteApprovalStore.claim` uses a durable SQLite compare-and-set; `verification/dataWrites.model.test.ts` compares random real machine/projection sequences and repository reopen with an independent reference. |
-| `execute` | Shared `executeTransaction` runs the statement with exact affected-count equality, or rolls back. `duringWriteTurn` interrupts the scoped operation when its Turn ends. |
+| `policy`, `inspect` | `writeQueries.resolve`, `approvalStore`, `writePreflight` and the extended function guard reject writes off, Remote defaults, unsafe functions and non-InnoDB dependencies before preview. |
+| `dryRun`, `notPreviewed`, `request` | `writeExecution` rolls back eligible previews; triggers skip execution and `writeApprovals.open` commits the card through the Session machine. |
+| `allow`, `deny`, `endTurn` | ApprovalResolved/Withdrawn events projected into WriteApprovalStore; Turn end denies pending authority but does not invent a definite outcome for a started write. |
+| `rows`, `execute` | Complete affected-key/full-row identity plus count checked before commit; INSERT excludes database-filled columns. |
+| `claim`, `retry` | Durable SQLite compare-and-set and immutable request arguments; completed receipts do not reopen a source. |
+| `sendCommit`, `confirm`, `unknown` | `writeCommit` shields confirmation for five seconds; `settleWrite` persists the result even under interruption. Lost confirmation has a distinct DataError and Query Log state. |
+| `restart` | Pending cards are denied; started requests and running Query Log writes become unknown. |
 
-The native `data/writes.real.test.ts` drives DataQueries, the real Session machine/SQLite stores
-and Postgres 16 or MySQL 8.4. It records the preview, approval, execution and retry with actual
-database values, and replays them through `scripts/data-write-replay`. The adapter's regression
-test rejects an unapproved execution and a retry that changes the database again. Discovery is
-injected at the connection boundary; these are not live Harness/UI tests. The driver suite also
-covers before/after rows, denied storage engines, DDL, affected-count drift, key validation and
-whole-grid rollback. Run/replay commands are in `apps/daemon/src/data/README.md`.
+`dataWrites.model.test.ts` drives the real machine/projection and independent lifecycle model,
+including recovery from started. Policy, actual effects, identity and wire values are exercised
+by the Data unit and opt-in native regression suites. `bun run spec` runs 17 write scenarios
+and 3,000 safety traces. The model treats sequence allocation as an explicit exception to
+rollback, not a transactional row effect; it does not promise distributed exactly-once commit.
 
-Explicit `execute.requestId` keys are scoped to the Agent Session, with a durable argument hash.
-Completed receipts can be retrieved after Turn end or restart without opening a data source;
-changed arguments under the same key are refused. `writeRequests.test.ts` checks the real
-service and SQLite projection; `completedRetryAfterEndTest` models the effect-free receipt retry.
+Version 2 `scripts/data-write-replay` accepts persisted ApprovalRequests, committed events,
+WriteApprovalStore status, Query Log entries, and observed database values/identity hashes.
+It derives transitions from that evidence; a test cannot supply a phase label. Native
+`writes.real` records the normal path; `writeReplay.real` records denied, identity drift,
+not-previewed and unknown paths. The replay tests reject missing approval events, status/log
+mismatches, identity drift reported as success, unapproved external effects and retries that
+change data again. Commands and bounded identity limits are in the Data README.
 
-The finite model does not claim distributed exactly-once commit across SQLite and an external
-SQL server. A consumed operation with an unknown outcome cannot be automatically replayed.
-Sequence allocation, external user-function effects, and driver receive-before-clip memory are
-outside its transactional-row model and are documented in ADR 0091.
+Engine trace validation remains `POLARIS_TRACE_DIR=/tmp/wf-engine-traces bun test
+apps/daemon/src/verification/engine.model.test.ts`, then `cd packages/spec && bun scripts/replay.ts
+/tmp/wf-engine-traces`. Approval events use the existing Session machine transitions.
 
 ### Schema Diff observation (ENG-645)
 

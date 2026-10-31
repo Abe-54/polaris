@@ -165,6 +165,7 @@ export class QueryLogEntry extends Schema.Class<QueryLogEntry>("QueryLogEntry")(
     "completed",
     "failed",
     "dry-run",
+    "unknown",
     "cancelled",
   ]),
   author: Schema.Union([
@@ -202,6 +203,7 @@ export const DataErrorCode = Schema.Literals([
   "E-DATA-TIMEOUT",
   "E-DATA-SQL",
   "E-DATA-CANCELLED",
+  "E-DATA-OUTCOME-UNKNOWN",
 ]);
 
 export class DataError extends Schema.TaggedError<DataError>()("DataError", {

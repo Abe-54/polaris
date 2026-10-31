@@ -1,6 +1,6 @@
-/** Subscribe before checking the Turn so a stop interrupts the active transaction and awaits rollback. */
+/** Turn end cancels the statement; settlement still records a COMMIT already in flight. */
 import { DataError, type SessionId, type TurnId } from "@polaris/protocol";
-import { Effect, Stream } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import { EventStore } from "../store/EventStore.ts";
 import { workingTurn } from "../store/model.ts";
 
@@ -11,11 +11,28 @@ const ended = () =>
     fix: "Inspect the Query Log before requesting the write in another turn.",
   });
 
+export const settleWrite = <A, E>(work: (signal: AbortSignal) => Effect.Effect<A, E>) =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const controller = new AbortController();
+      const fiber = yield* work(controller.signal).pipe(Effect.uninterruptible, Effect.forkChild);
+
+      return yield* restore(Fiber.join(fiber)).pipe(
+        Effect.onInterrupt(() =>
+          Effect.gen(function* () {
+            controller.abort();
+            yield* Fiber.await(fiber);
+          })
+        )
+      );
+    })
+  );
+
 export const duringWriteTurn = <A, E>(
   store: EventStore["Service"],
   sessionId: SessionId,
   turnId: TurnId,
-  work: Effect.Effect<A, E>
+  work: (signal: AbortSignal) => Effect.Effect<A, E>
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -28,14 +45,15 @@ export const duringWriteTurn = <A, E>(
       });
 
       if (!(yield* active)) return yield* ended();
-
-      const stopped = commits.pipe(
+      const controller = new AbortController();
+      yield* commits.pipe(
         Stream.mapEffect(() => active),
         Stream.filter((value) => !value),
         Stream.runHead,
-        Effect.flatMap(() => Effect.fail(ended()))
+        Effect.tap(() => Effect.sync(() => controller.abort())),
+        Effect.forkScoped
       );
 
-      return yield* Effect.raceFirst(work, stopped);
+      return yield* settleWrite((signal) => work(AbortSignal.any([signal, controller.signal])));
     })
   );
