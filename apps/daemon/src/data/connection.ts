@@ -19,6 +19,8 @@ export interface DataConnection {
   readonly path?: string;
 }
 
+const hasControl = (value: string) => Array.from(value).some((char) => char.charCodeAt(0) < 32);
+
 /** Resolve a URL once; X must pass these explicit options, never the URL, to Bun.SQL. */
 export const parseConnection = (
   candidate: Candidate
@@ -60,6 +62,21 @@ export const parseConnection = (
     const password = pg("password") || decodeURIComponent(url.password);
     const tls = tlsMode(query("sslmode") || query("ssl-mode") || query("tls") || query("ssl"));
     const path = query("path") || query("socket");
+
+    const safeName = (value: string) =>
+      !/[@/:\\]/.test(value) && !hasControl(value) && !/\$(?:\{|[A-Za-z_])/.test(value);
+
+    const safePath = (value: string) =>
+      value.startsWith("/") &&
+      !/[@:\\]/.test(value) &&
+      !hasControl(value) &&
+      !/\$(?:\{|[A-Za-z_])/.test(value);
+
+    const safeHost = safePath(hostname) || isIP(hostname) === 6 || safeName(hostname);
+
+    if (!safeHost || !safeName(username) || !safeName(database)) return undefined;
+
+    if (path && !safePath(path)) return undefined;
 
     const connection: DataConnection = {
       hostname,
@@ -140,7 +157,11 @@ export const defaultLabel = (
 };
 
 /** Only these selected URL fields leave discovery; parser errors never include their input. */
-export const metadata = (checkout: string, candidate: Candidate): DataSource | undefined => {
+export const metadata = (
+  checkout: string,
+  candidate: Candidate,
+  locality: DataSource["locality"] = "remote"
+): DataSource | undefined => {
   try {
     const parsed = parseConnection(candidate);
 
@@ -148,7 +169,6 @@ export const metadata = (checkout: string, candidate: Candidate): DataSource | u
     const { engine, connection } = parsed;
     const host = connection.path || connection.hostname;
     const { database, username: user, port } = connection;
-    const locality = localHost(host) ? "local" : "remote";
     const branch = branchOf(connection.hostname, user);
 
     const details = {
@@ -164,7 +184,6 @@ export const metadata = (checkout: string, candidate: Candidate): DataSource | u
       label: defaultLabel(locality, branch),
       access: locality === "local" ? "read" : "needs-approval",
       writes: "ask",
-      reachable: false,
     } as const;
 
     if (branch) return new DataSource({ ...details, branch });
@@ -197,7 +216,18 @@ export const connectionUrl = (
   url.username = input.user;
   url.password = password;
 
-  if (input.host.startsWith("/")) url.searchParams.set("host", input.host);
+  if (input.host.startsWith("/"))
+    url.searchParams.set(input.engine === "mysql" ? "socket" : "host", input.host);
 
   return Redacted.make(url.href);
 };
+
+/** Labels are scoped to the selected driver target, independently of the display name. */
+export const targetFingerprint = (
+  source: Pick<DataSource, "engine" | "host" | "port" | "database" | "user">
+) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify([source.engine, source.host, source.port, source.database, source.user ?? ""])
+    )
+    .digest("hex");

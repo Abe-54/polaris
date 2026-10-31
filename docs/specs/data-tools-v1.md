@@ -40,7 +40,10 @@ phase 2 (ENG-645) adds `execute`.
 
 ## `data_sources {}`
 
-Lists the Data Sources of the caller's checkout, discovered fresh (cached ≤ 10 s).
+Lists the Data Sources of the caller's checkout, discovered fresh. `reachable` is absent until
+connection has been tried; false means unreachable and true means reachable. Loopback addresses
+and Unix sockets require a database-server owner or a verified compose database proxy from this
+checkout to count as local; tunnels and unknown owners need approval.
 
 ```
 3 data sources in ~/code/ledger.worktrees/overdue-totals
@@ -49,7 +52,7 @@ analytics  mysql 8.4      remote  db.internal:3306/analytics      added by you  
 branch     postgres 16    remote  (PlanetScale branch overdue-totals)  from .env (DIRECT_URL)    approved · read only
 ```
 
-`structuredContent`: `{ sources: [{ name, engine, version?, locality: "local"|"remote", branch?: {provider, name}, host, port, database, foundIn, access: "read"|"needs-approval"|"denied"|"approved", writes: "ask"|"off", reachable: boolean, error? }] }`.
+`structuredContent`: `{ sources: [{ name, engine, version?, locality: "local"|"remote", branch?: {provider, name}, host, port, database, foundIn, access: "read"|"needs-approval"|"denied"|"approved", writes: "ask"|"off", reachable?: boolean, error? }] }`.
 
 ## `describe {source, table?, sample?}`
 

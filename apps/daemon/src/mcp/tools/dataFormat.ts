@@ -172,8 +172,9 @@ export const sourcesView = (
       foundIn: source.foundIn,
       access: source.access,
       writes: source.writes,
-      reachable: source.reachable,
     };
+
+    if (source.reachable !== undefined) Object.assign(item, { reachable: source.reachable });
 
     return Object.assign(
       item,

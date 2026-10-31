@@ -99,6 +99,7 @@ for (const binding of bindings)
                 DataSources,
                 DataSources.of({
                   list: () => Effect.succeed([source]),
+                  refresh: () => Effect.succeed([source]),
                   resolve: () =>
                     Effect.succeed({
                       source,
@@ -110,7 +111,7 @@ for (const binding of bindings)
                         password: Redacted.make("private"),
                         tls: false,
                       },
-                      url: Redacted.make("postgres://user:private@localhost/db"),
+                      matchUrl: Redacted.make("postgres://user:private@localhost/db"),
                     }),
                   watch: () => Stream.succeed([source]),
                   save: () => Effect.succeed(source),

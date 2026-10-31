@@ -46,11 +46,11 @@ DIRECT_URL='postgres://u:pa@ss@localhost/fresh'
 
   const sources = await inspect(root);
   expect(sources.map((s) => [s.name, s.database, s.locality])).toEqual([
-    ["app", "dev", "local"],
-    ["postgres_url_non_pooling", "ipv6", "local"],
-    ["mysql_url", "app", "local"],
-    ["socket_database_url", "db", "local"],
-    ["direct_url", "fresh", "local"],
+    ["app", "dev", "remote"],
+    ["postgres_url_non_pooling", "ipv6", "remote"],
+    ["mysql_url", "app", "remote"],
+    ["socket_database_url", "db", "remote"],
+    ["direct_url", "fresh", "remote"],
   ]);
   expect(JSON.stringify(sources)).not.toMatch(/postgres:\/\/|mysql:\/\/|pa@ss|private|override/);
   expect(
@@ -163,8 +163,8 @@ test("compose published ports, environment maps/lists and interpolation connect 
 
   expect((await inspect(root)).map((s) => [s.name, s.engine, s.port, s.locality, s.label])).toEqual(
     [
-      ["postgres", "postgres", 5544, "local", { text: "LOCAL", colour: "none" }],
-      ["mysql", "mysql", 3307, "local", { text: "LOCAL", colour: "none" }],
+      ["postgres", "postgres", 5544, "remote", { text: "REMOTE", colour: "red" }],
+      ["mysql", "mysql", 3307, "remote", { text: "REMOTE", colour: "red" }],
     ]
   );
 });
@@ -202,7 +202,7 @@ test("a compose service URL resolves to its published Host port, preserving cred
   expect(metadata(root, candidate)).toMatchObject({
     host: "localhost",
     port: 5543,
-    locality: "local",
+    locality: "remote",
   });
   expect(new URL(Redacted.value(candidate.url)).password).toBe("p%40ss");
 });
@@ -237,7 +237,7 @@ MYSQL_URL=mysql://u:p@remote.test/db?host=localhost`,
     ])
   ).toEqual([
     ["remote.test", 5438, "reader", "production", "remote", { text: "REMOTE", colour: "red" }],
-    ["/tmp/pg-socket", 5432, "u", "db", "local", { text: "BRANCH", colour: "none" }],
+    ["/tmp/pg-socket", 5432, "u", "db", "remote", { text: "BRANCH", colour: "tan" }],
     ["remote.test", 3306, "u", "db", "remote", { text: "REMOTE", colour: "red" }],
   ]);
 });
