@@ -5,13 +5,14 @@
  */
 import type { DataSource } from "@polaris/protocol";
 import { cn, Popover, PopoverTrigger } from "@polaris/ui";
-import { useState } from "react";
+import { useEffect } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { useDataSources } from "../data/hooks.tsx";
 import { refreshSources } from "../model/refresh.ts";
 import { accessShort, accessText, barParts, kickerText, LABEL_TONES } from "../model/source.ts";
 import type { DataTab } from "../model/tabs.ts";
 import { useSqlSource } from "../sql/state.ts";
+import { setConnectionCard, useConnectionCard } from "./connection/cardStore.ts";
 import { ConnectionCard } from "./connection/ConnectionCard.tsx";
 import type { DataSlotProps } from "./slots.ts";
 
@@ -86,7 +87,15 @@ const GoneBar = ({ name, active }: { readonly name: string; readonly active: Dat
 export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
   const sources = useDataSources(at);
   const sqlSource = useSqlSource(at, active);
-  const [open, setOpen] = useState(false);
+  const open = useConnectionCard();
+  const { hostKey: atHost, sessionId } = at;
+
+  // Opening the card re-lists, so an approval in it targets what the checkout holds now.
+  useEffect(() => {
+    if (open) refreshSources({ hostKey: atHost, sessionId });
+  }, [open, atHost, sessionId]);
+
+  useEffect(() => () => setConnectionCard(false), []);
 
   const connected = useApp(
     (s) => s.hosts.find((h) => h.key === hostKey)?.status.state === "connected"
@@ -105,15 +114,7 @@ export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
   const kicker = kickerText(source);
 
   return (
-    // Opening the card re-lists, so an approval in it targets what the checkout holds now.
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-
-        if (next) refreshSources(at);
-      }}
-    >
+    <Popover open={open} onOpenChange={setConnectionCard}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -164,7 +165,7 @@ export const ConnectionBar = ({ at, hostKey, active }: DataSlotProps) => {
         at={at}
         source={source}
         canEdit={connected}
-        onRemoved={() => setOpen(false)}
+        onRemoved={() => setConnectionCard(false)}
       />
     </Popover>
   );

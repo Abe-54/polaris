@@ -1,9 +1,10 @@
 /**
  * The Table tab (DESIGN.md, Data: Table tab; Paper D1): the filter well and the Data / Structure
  * toggle, then the grid of the table's rows (paged to the cap) or its structure. A foreign key
- * opens the table it points at, filtered to the row; Back restores the filter it replaced.
+ * opens the table it points at, filtered to the row; Back restores the filter it replaced. Cells edit
+ * in place and stage until Commit ⌘S (table/edits).
  */
-import { TableDetail } from "@polaris/protocol";
+import { type DataSource, TableDetail } from "@polaris/protocol";
 import {
   Button,
   ChevronLeftIcon,
@@ -12,7 +13,7 @@ import {
   SegmentedControl,
   showToast,
 } from "@polaris/ui";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDataSources, useDescribe } from "../data/hooks.tsx";
 import type { GridColumn } from "../grid/columns.ts";
 import { emptySelection } from "../grid/selection.ts";
@@ -38,6 +39,8 @@ import {
 } from "./table/state.ts";
 import { Structure } from "./table/Structure.tsx";
 import { TableData } from "./table/TableData.tsx";
+import { forgetWritten } from "./table/edits/store.ts";
+import { useTableEdits } from "./table/edits/useTableEdits.ts";
 import { usePages } from "./table/usePages.ts";
 
 type TableTab = Extract<DataTab, { kind: "table" }>;
@@ -63,16 +66,24 @@ const Failed = ({ title, fact }: { readonly title: string; readonly fact: string
 export const describeName = (engine: Engine, ref: TableRef) =>
   engine === "mysql" ? ref.name : qualifiedName(engine, ref);
 
-/** The engine once the sources are read, so the table is described once, in its own quoting. */
-const useEngine = (at: DataTabProps<TableTab>["at"], source: string): Engine | null => {
+/**
+ * The source and its engine once the sources are read, so the table is described once, in its
+ * own quoting. The engine defaults to Postgres when the source isn't listed.
+ */
+interface ShownSource {
+  readonly engine: Engine | null;
+  readonly source: DataSource | null;
+}
+
+const useSource = (at: DataTabProps<TableTab>["at"], name: string): ShownSource => {
   const sources = useDataSources(at);
 
-  if (sources.status === "loading") return null;
+  if (sources.status === "loading") return { engine: null, source: null };
 
-  return (
-    (sources.status === "ready" ? sources.value.find((s) => s.name === source)?.engine : null) ??
-    "postgres"
-  );
+  const source =
+    sources.status === "ready" ? sources.value.find((s) => s.name === name) : undefined;
+
+  return { engine: source?.engine ?? "postgres", source: source ?? null };
 };
 
 /** Why a foreign key wasn't followed, said where the user is looking. */
@@ -86,7 +97,7 @@ const cantFollow = (reason: string) =>
 
 export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
   const { filter, view, back } = useTableView(at, tab.id);
-  const known = useEngine(at, tab.sourceId);
+  const { engine: known, source } = useSource(at, tab.sourceId);
   const engine = known ?? "postgres";
 
   const described = useDescribe(
@@ -117,6 +128,11 @@ export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
   const [selection, setSelection] = useState({ key, value: emptySelection });
   const current = selection.key === key ? selection.value : emptySelection;
 
+  // Rows read again hold what a commit wrote; the written overlay only bridges until then.
+  const { hostKey, sessionId } = at;
+
+  useEffect(() => forgetWritten({ hostKey, sessionId }, tab.id), [hostKey, sessionId, tab.id, key]);
+
   const columns = useMemo((): ReadonlyArray<GridColumn> => {
     const typed = detail?.columns ?? [];
     const shown = pages.columns ?? typed;
@@ -127,6 +143,18 @@ export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
       return { name, type, fk };
     });
   }, [detail, pages.columns]);
+
+  const names = useMemo(() => columns.map((c) => c.name), [columns]);
+
+  const edit = useTableEdits({
+    at,
+    tabId: tab.id,
+    table: tab.ref,
+    detail,
+    source,
+    columns: names,
+    rows: pages.rows,
+  });
 
   /** Another schema's table keeps its schema in the title; so does every table where this one does. */
   const titleOf = (ref: TableRef) =>
@@ -167,6 +195,7 @@ export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
         from={where === "" ? tab.table : `${tab.table} where ${where}`}
         columns={columns}
         pages={pages}
+        edit={edit}
         selection={current}
         onSelectionChange={(value) => setSelection({ key, value })}
         onMore={more}

@@ -1,6 +1,6 @@
 /**
  * The connection bar's instrument card (Paper D3): label colour and text, then server, driver,
- * database, where it was found and agent access. Label edits post `data.source.label`; a source
+ * database, where it was found, agent access and writes. Label edits post `data.source.label`; a source
  * the user added can be edited or removed.
  */
 import type { DataSource, DataSourceLabel } from "@polaris/protocol";
@@ -12,6 +12,7 @@ import { openSourceForm } from "../../model/sidebar.ts";
 import { accessLine, driverText, foundText, kickerText, statusText } from "../../model/source.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { LabelSwatches } from "./LabelSwatches.tsx";
+import { WritesChoice } from "./WritesChoice.tsx";
 
 const Line = ({ label, value }: { readonly label: string; readonly value: string }) => (
   <div className="text-caption flex min-w-0 gap-3 font-mono">
@@ -220,6 +221,7 @@ const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
         </p>
       ) : null}
       <PendingDataApproval hostKey={at.hostKey} source={source} />
+      <WritesChoice at={at} source={source} canEdit={canEdit} />
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't save the label · {error}
