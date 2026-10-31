@@ -10,6 +10,7 @@ export class DataApprovalRequired extends Schema.TaggedError<DataApprovalRequire
 export type DataApprovalOutcome =
   | { readonly status: "approved" }
   | { readonly status: "denied"; readonly reason: string }
+  | { readonly status: "expired"; readonly reason: string }
   | { readonly status: "pending" };
 
 export interface DataAgentContext {
