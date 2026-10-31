@@ -72,3 +72,56 @@ over earlier retained traces; fewer than five samples produce no baseline. The r
 runs inside the existing worker. SLOW requires over 20 ms and over three times the median.
 The MCP summary retains error paths before the critical path, collapses repeated siblings, and
 counts omitted Spans under the text cap. Its full contract is `docs/specs/traces-tools-v1.md`.
+
+## Phase 2 contracts (ENG-657)
+
+`packages/protocol/src/traces.ts` owns these additive contracts. The phase 1
+shapes and `traces` capability are unchanged. New RPCs currently return
+`Unsupported`; none of the three new capabilities is advertised. Each owner
+replaces its handlers and advertises its capability when the implementation lands.
+All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
+The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
+merged into `DaemonRpcs` alongside the unchanged phase 1 `TracesRpcs` group.
+
+| Capability | RPC payload | Result | Owner |
+| --- | --- | --- | --- |
+| `traces.settings` | `traces.settings {workspaceId}` | `WorkspaceTracesSettings` | P1/P3 |
+| `traces.settings` | `traces.setSettings {workspaceId, settings}` | Complete settings after patch | P1/P3 |
+| `traces.profiles` | `profiles.watch {sessionId}` | Replacement `ProfilesSnapshot {profiles}` stream | P4 |
+| `traces.profiles` | `profiles.get {sessionId, profileId}` | `ProfileDetail` | P4 |
+| `traces.profiles` | `profiles.restartWithProfiling {sessionId, pid}` | New `Profile` | P4 |
+| `traces.compare` | `traces.compare {sessionId, a, b}` | `TraceComparison` | P8 |
+
+Settings distinguish `enabled` (copy into Polaris) from `forwarding`. `forwardTo`
+is null or `{url, headerNames}`: header values have no wire field, and public URLs
+exclude userinfo, query strings and fragments. Actual credentials stay on the
+Host. Implementers must omit credential-bearing URLs rather than serialize them;
+the URL schema cannot identify a secret embedded in an otherwise ordinary path.
+Updates are patches; omitted fields stay unchanged and null clears `forwardTo`.
+`detectedExporters` is read-only evidence (`kind`, checkout-relative `file`,
+one-based `line`, nullable `runtime`, `alreadyExporting`). Kinds are `axiom`,
+`vercel`, `otlp-env`, `fixed-url`. `alreadyExporting` suppresses duplicate
+forwarding (ENG-675). `autoInstrument` is `off`, `node` or `deno`;
+`autoInstrumentOverride` bypasses Node SDK detection only. The read-only
+`autoInstrumentSkipReason` explains skipped instrumentation. Bun is never
+auto-instrumented, and an override never bypasses Workspace Trust.
+
+Profiles use a store-assigned `ProfileId`; a path in a summary is display data,
+never authority to read a file. `path` is null until a `.cpuprofile` exists.
+`status` is `recording`, `completed` or `failed`, and `turn` is a nullable
+`TraceTurn`. `ProfileDetail.hotFunctions` contains self and inclusive milliseconds
+and nullable file/line for unresolved frames. Its indices remain stable when a UI
+sorts a view by self time. `hotPath` indexes those functions from root to leaf;
+each flame chart node indexes a function and an earlier parent (null for roots),
+with start/duration in milliseconds relative to `profile.startedAt`. P4 must
+validate parsed indices and timings. Restart revalidates Polaris's process launch
+identity and checkout ownership; a caller-supplied pid alone is never authority.
+
+Compare selectors are tagged `{_tag: "Turn", turnId}` or
+`{_tag: "Trace", traceId}` (full id or unique prefix). The Daemon resolves both in
+the session's checkout. `a` is before and `b` after, without an inferred baseline.
+Routes are grouped by service and Trace root name, sorted by service then route.
+Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; no samples
+means count zero and null percentiles. A missing selector still uses `TraceError`
+rather than silently comparing another Turn or checkout. P8 owns aggregation,
+expiry/partial-data handling and selector authorization.

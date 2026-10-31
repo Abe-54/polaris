@@ -1,4 +1,4 @@
-/** Checkout-scoped Traces (ADR 0094, ENG-656). Clients call these RPCs only with capability `traces`. */
+/** Checkout-scoped Traces and Profiles (ADR 0094). Each RPC documents its required capability. */
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
 import { Unsupported } from "./errors.ts";
@@ -241,5 +241,256 @@ export const GetSpan = Rpc.make("traces.span", {
   success: SpanDetail,
   error: Errors,
 });
+
+export const TRACES_SETTINGS_CAPABILITY = "traces.settings";
+
+export const TRACES_PROFILES_CAPABILITY = "traces.profiles";
+
+export const TRACES_COMPARE_CAPABILITY = "traces.compare";
+
+/** Public collector address; credentials, query strings and fragments stay on the Host. */
+export const TraceForwardUrl = Schema.String.check(
+  Schema.isMaxLength(2048),
+  Schema.makeFilter((value) => {
+    try {
+      const url = new URL(value);
+
+      return (
+        ["http:", "https:"].includes(url.protocol) &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash
+      );
+    } catch {
+      return false;
+    }
+  })
+);
+
+/** Header names are HTTP tokens, never `name: value` pairs. Values never enter this protocol. */
+export const TraceForwardTarget = Schema.Struct({
+  url: TraceForwardUrl,
+  headerNames: Schema.Array(Schema.String.check(Schema.isPattern(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/))),
+});
+
+export type TraceForwardTarget = typeof TraceForwardTarget.Type;
+
+/** Exporter evidence uses checkout-relative paths and one-based lines; no source text or secrets. */
+export const DetectedTraceExporter = Schema.Struct({
+  kind: Schema.Literals(["axiom", "vercel", "otlp-env", "fixed-url"]),
+  file: Schema.String,
+  line: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  runtime: Schema.NullOr(Schema.Literals(["node", "bun", "deno"])),
+  /** True when the app already sends a second copy to its collector; forwarding must skip it. */
+  alreadyExporting: Schema.Boolean,
+});
+
+export type DetectedTraceExporter = typeof DetectedTraceExporter.Type;
+
+/** Requested instrumentation. Bun is never auto-instrumented, including under manual override. */
+export const TraceAutoInstrument = Schema.Literals(["off", "node", "deno"]);
+
+export type TraceAutoInstrument = typeof TraceAutoInstrument.Type;
+
+/** Workspace policy plus current detection. Secrets and header values are never returned. */
+export const WorkspaceTracesSettings = Schema.Struct({
+  /** Copy incoming Traces into Polaris for this Workspace. Independent of forwarding. */
+  enabled: Schema.Boolean,
+  forwarding: Schema.Boolean,
+  forwardTo: Schema.NullOr(TraceForwardTarget),
+  detectedExporters: Schema.Array(DetectedTraceExporter),
+  autoInstrument: TraceAutoInstrument,
+  /** Explicitly bypass SDK detection for Node; does not bypass runtime or Workspace Trust checks. */
+  autoInstrumentOverride: Schema.Boolean,
+  /** Null when instrumentation is not skipped; explains SDK detection or runtime restrictions. */
+  autoInstrumentSkipReason: Schema.NullOr(Schema.String),
+});
+
+export type WorkspaceTracesSettings = typeof WorkspaceTracesSettings.Type;
+
+/** Omitted fields stay unchanged; null forwardTo clears the target. Detection is read-only. */
+export const WorkspaceTracesSettingsUpdate = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  forwarding: Schema.optionalKey(Schema.Boolean),
+  forwardTo: Schema.optionalKey(Schema.NullOr(TraceForwardTarget)),
+  autoInstrument: Schema.optionalKey(TraceAutoInstrument),
+  autoInstrumentOverride: Schema.optionalKey(Schema.Boolean),
+});
+
+export type WorkspaceTracesSettingsUpdate = typeof WorkspaceTracesSettingsUpdate.Type;
+
+export class TraceSettingsError extends Schema.TaggedError<TraceSettingsError>()(
+  "TraceSettingsError",
+  {
+    code: Schema.Literals(["E-TRACE-SETTINGS-INVALID", "E-TRACE-SETTINGS-UNAVAILABLE"]),
+    message: Schema.String,
+    fix: Schema.String,
+  }
+) {}
+
+/** Capability `traces.settings`; the Daemon resolves the registered Workspace, never a caller path. */
+export const GetWorkspaceTracesSettings = Rpc.make("traces.settings", {
+  payload: { workspaceId: WorkspaceId },
+  success: WorkspaceTracesSettings,
+  error: Schema.Union([TraceSettingsError, Unsupported]),
+});
+
+/** Returns the complete settings after applying the patch. No credential-setting RPC is provided. */
+export const SetWorkspaceTracesSettings = Rpc.make("traces.setSettings", {
+  payload: { workspaceId: WorkspaceId, settings: WorkspaceTracesSettingsUpdate },
+  success: WorkspaceTracesSettings,
+  error: Schema.Union([TraceSettingsError, Unsupported]),
+});
+
+/** Store-assigned id, scoped to the checkout resolved from the caller's Agent Session. */
+export const ProfileId = Schema.String.pipe(Schema.brand("ProfileId"));
+
+export type ProfileId = typeof ProfileId.Type;
+
+/** One CPU recording of a process Polaris launched. Times are milliseconds, startedAt is UTC. */
+export const Profile = Schema.Struct({
+  id: ProfileId,
+  command: Schema.String,
+  runtime: Schema.Literals(["node", "bun"]),
+  pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  /** Turn that launched the recording; null when no Turn owns it. */
+  turn: Schema.NullOr(TraceTurn),
+  startedAt: Timestamp,
+  durationMs: Milliseconds,
+  /** Absolute .cpuprofile path on the Host; null until an artifact exists. Never a read authority. */
+  path: Schema.NullOr(Schema.String),
+  status: Schema.Literals(["recording", "completed", "failed"]),
+});
+
+export type Profile = typeof Profile.Type;
+
+/** Aggregated CPU time for a function. Null file/line denotes a native or unresolved frame. */
+export const ProfileFunction = Schema.Struct({
+  name: Schema.String,
+  file: Schema.NullOr(Schema.String),
+  line: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  selfMs: Milliseconds,
+  totalMs: Milliseconds,
+});
+
+export type ProfileFunction = typeof ProfileFunction.Type;
+
+/** One chronological flame chart frame; indices are zero-based, offsets relative to startedAt. */
+export const ProfileNode = Schema.Struct({
+  /** Index of an earlier node, or null for a root. Parents precede children. */
+  parent: Schema.NullOr(Count),
+  /** Index in ProfileDetail.hotFunctions. A function can appear in many frames. */
+  functionIndex: Count,
+  startMs: Milliseconds,
+  durationMs: Milliseconds,
+});
+
+export type ProfileNode = typeof ProfileNode.Type;
+
+/** Parsed recording, with both self and inclusive time, ready for text and flame chart consumers. */
+export const ProfileDetail = Schema.Struct({
+  profile: Profile,
+  /** All functions, descending totalMs then selfMs; a selfMs-sorted view must preserve original indices. */
+  hotFunctions: Schema.Array(ProfileFunction),
+  /** Root-to-leaf hottest stack as indices into hotFunctions. */
+  hotPath: Schema.Array(Count),
+  nodes: Schema.Array(ProfileNode),
+});
+
+export type ProfileDetail = typeof ProfileDetail.Type;
+
+/** A watch emits immediately, then replaces the list on changes; newest startedAt first, id breaks ties. */
+export const ProfilesSnapshot = Schema.Struct({ profiles: Schema.Array(Profile) });
+
+export type ProfilesSnapshot = typeof ProfilesSnapshot.Type;
+
+export class ProfileError extends Schema.TaggedError<ProfileError>()("ProfileError", {
+  code: Schema.Literals([
+    "E-PROFILE-NOT-FOUND",
+    "E-PROFILE-INVALID",
+    "E-PROFILE-UNAVAILABLE",
+    "E-PROFILE-PROCESS-NOT-OWNED",
+    "E-PROFILE-RESTART-REFUSED",
+  ]),
+  message: Schema.String,
+  fix: Schema.String,
+}) {}
+
+const ProfileErrors = Schema.Union([ProfileError, Unsupported]);
+
+/** Capability `traces.profiles`; every operation resolves sessionId to its checkout on the Daemon. */
+export const WatchProfiles = Rpc.make("profiles.watch", {
+  payload: { sessionId: SessionId },
+  success: ProfilesSnapshot,
+  error: ProfileErrors,
+  stream: true,
+});
+
+export const GetProfile = Rpc.make("profiles.get", {
+  payload: { sessionId: SessionId, profileId: ProfileId },
+  success: ProfileDetail,
+  error: ProfileErrors,
+});
+
+/**
+ * Restarts only a process whose launch Polaris owns in this checkout, after revalidating its identity.
+ * Never attaches an inspector or takes ownership of a user-started process from its pid alone.
+ */
+export const RestartWithProfiling = Rpc.make("profiles.restartWithProfiling", {
+  payload: { sessionId: SessionId, pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) },
+  success: Profile,
+  error: ProfileErrors,
+});
+
+/** Tagged selectors avoid confusing a Turn id with a hex Trace id. Both stay in the session's checkout. */
+export const TraceCompareSelector = Schema.TaggedUnion({
+  Turn: { turnId: TurnId },
+  Trace: { traceId: TraceIdPrefix },
+});
+
+export type TraceCompareSelector = typeof TraceCompareSelector.Type;
+
+/** Retained Trace root durations, nearest-rank percentiles. No samples means count 0 and null times. */
+export const TraceRouteStats = Schema.Struct({
+  p50Ms: Schema.NullOr(Milliseconds),
+  p95Ms: Schema.NullOr(Milliseconds),
+  count: Count,
+});
+
+export type TraceRouteStats = typeof TraceRouteStats.Type;
+
+/** Union of service/root-name pairs on either side; missing sides have empty stats, never a baseline guess. */
+export const TraceComparison = Schema.Struct({
+  a: TraceCompareSelector,
+  b: TraceCompareSelector,
+  /** Alphabetical service then route order. a is before, b is after; no implicit historical search. */
+  routes: Schema.Array(
+    Schema.Struct({
+      service: Schema.String,
+      route: Schema.String,
+      before: TraceRouteStats,
+      after: TraceRouteStats,
+    })
+  ),
+});
+
+export type TraceComparison = typeof TraceComparison.Type;
+
+/** Capability `traces.compare`; a Turn selects its attributed Traces, a Trace selects one exact/prefix match. */
+export const CompareTraces = Rpc.make("traces.compare", {
+  payload: { sessionId: SessionId, a: TraceCompareSelector, b: TraceCompareSelector },
+  success: TraceComparison,
+  error: Errors,
+});
+
+export class TracesSettingsRpcs extends RpcGroup.make(
+  GetWorkspaceTracesSettings,
+  SetWorkspaceTracesSettings
+) {}
+
+export class ProfilesRpcs extends RpcGroup.make(WatchProfiles, GetProfile, RestartWithProfiling) {}
+
+export class TraceCompareRpcs extends RpcGroup.make(CompareTraces) {}
 
 export class TracesRpcs extends RpcGroup.make(WatchTraces, GetTrace, GetSpan) {}

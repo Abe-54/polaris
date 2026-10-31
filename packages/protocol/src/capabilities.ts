@@ -25,6 +25,12 @@ export const Capability = Schema.Literals([
   "data.schemaDiff",
   /** Checkout Traces watch, trace details and Span logs (ADR 0094). */
   "traces",
+  /** Workspace Traces settings and exporter detection; advertised only when implemented. */
+  "traces.settings",
+  /** CPU Profiles watch, details and owned-process restart; advertised only when implemented. */
+  "traces.profiles",
+  /** Explicit Turn/Trace route comparison; advertised only when implemented. */
+  "traces.compare",
   /** `host.restartPreview` and `host.prepareRestart`: Restart daemon's confirm and clean stop (ADR 0087). */
   "host.restart",
   /** `remoteAccess.status`, `remoteAccess.enable` and `remoteAccess.disable` (Tailscale, ADR 0076). */
