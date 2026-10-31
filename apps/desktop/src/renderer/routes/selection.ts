@@ -28,6 +28,7 @@ export type SettingsSection =
   | "appearance"
   | "sessions"
   | "editor"
+  | "traces"
   | "harnesses"
   | "constellations"
   | "usage"
@@ -44,6 +45,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSection> = [
   "appearance",
   "sessions",
   "editor",
+  "traces",
   "harnesses",
   "constellations",
   "usage",

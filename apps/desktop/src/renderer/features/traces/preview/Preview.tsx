@@ -1,7 +1,8 @@
 /**
  * Traces on fixtures, for screenshots: `#traces/<scene>` (traces, empty, unavailable,
- * userExported; `?view=profile` and others in views.ts) renders the whole app on Traces with "Fix overdue totals" in the ledger
- * Workspace selected, its TracesApi the scene's, no Daemon involved.
+ * userExported; `?view=profile` and others in views.ts) renders the whole app on Traces with "Fix
+ * overdue totals" in the ledger Workspace selected, its TracesApi the scene's, no Daemon involved.
+ * `settings` and `page` pick the Workspace's Traces settings and open Settings → Traces (settings.ts).
  */
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
@@ -16,7 +17,9 @@ import { ProfilesLayer } from "../data/profiles.tsx";
 import { fixtureAppState, HOST, host } from "./appState.ts";
 import { fixtureTracesApi } from "./fixtureApi.ts";
 import { withLargeTrace } from "./large.ts";
+import { TracesSettingsLayer } from "../settings/hooks.tsx";
 import { FIXTURE_SESSION, FIXTURE_SNAPSHOTS, type TracesScene } from "./fixtures.ts";
+import { opensSettings, previewSettingsApi } from "./settings.ts";
 import {
   isStateView,
   openViewSpan,
@@ -64,14 +67,22 @@ export const mountTracesPreview = (
   navigation.actions.setMode("traces");
   openViewSpan({ hostKey: HOST, sessionId: FIXTURE_SESSION }, view);
 
+  if (opensSettings(hash)) navigation.actions.openSettings("traces");
+
   createRoot(root).render(
     <TracesLayer api={view !== null && isStateView(view) ? silent(api) : api}>
       <ProfilesLayer api={viewProfilesApi(view)}>
-        <DataLayer api={fixtureDataApi()}>
-          <App
-            value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
-          />
-        </DataLayer>
+        <TracesSettingsLayer api={previewSettingsApi(hash)}>
+          <DataLayer api={fixtureDataApi()}>
+            <App
+              value={{
+                connection,
+                navigation,
+                commands: createCommandRegistry({ platform: "mac" }),
+              }}
+            />
+          </DataLayer>
+        </TracesSettingsLayer>
       </ProfilesLayer>
     </TracesLayer>
   );
