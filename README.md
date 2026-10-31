@@ -64,6 +64,12 @@ Close the app, lose your connection or restart a machine: your agent sessions ar
 
 **Download.** Get the Mac app (Apple silicon) from [polaris.lux.dev](https://polaris.lux.dev) or the [latest release](https://github.com/luxdotdev/polaris/releases). It updates itself, and it brings along everything it installs on your other machines. You'll also need at least one agent, like Claude Code or Codex, installed wherever you want agents to run.
 
+**Tracing skill.** To let your agents add OpenTelemetry to a Node or Bun project so Polaris shows its traces, install the `polaris-tracing` skill for Claude Code and Codex. Installed globally, it adds no files to your repository; drop `-g` and run it from a project's root to install it into that project instead.
+
+```sh
+npx skills add luxdotdev/polaris --skill polaris-tracing -a claude-code codex -y -g
+```
+
 **Build from source.** You need [Bun](https://bun.sh) 1.3.9 or later, and git.
 
 ```sh
