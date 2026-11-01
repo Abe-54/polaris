@@ -325,6 +325,10 @@ _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
 A loopback URL opened in a Browser (`localhost`, any `*.localhost` name such as a Portless app, or a loopback IP), which always means the Agent Session's Host, never the machine the Client runs on; any other URL loads from the Client's own network.
 _Avoid_: Forwarded port, tunnel, local URL
 
+**Developer Mode**:
+The setting that shows Polaris's own internals (its Self-Traces and its Daemon Sources) for the work of building Polaris itself; it is on or off for all of the user's Hosts at once. Off by default, but always on while a development build of Polaris is connected.
+_Avoid_: Debug mode, dev mode
+
 ### Data
 
 **Data Source**:
@@ -352,6 +356,10 @@ _Avoid_: Query history (alone), audit log
 What changed in the tables, columns and indexes of a Data Source an Agent Session used, between the start and end of a Turn; Review shows it beside the code that caused it, such as a migration.
 _Avoid_: Migration diff, DDL diff
 
+**Daemon Source**:
+A Data Source over one of the Daemon's own databases on its Host, which can never be written to and exists only in Developer Mode.
+_Avoid_: Internal database, state DB
+
 ### Traces
 
 **Trace**:
@@ -365,6 +373,10 @@ _Avoid_: Event (that is the event log's)
 **Profile**:
 A CPU profile of one process Polaris launched, recorded over a stretch of time and shown as a flame chart beside the Spans it overlaps.
 _Avoid_: Flame graph (that is how a Profile is drawn), trace
+
+**Self-Trace**:
+A Trace that Polaris itself produced in the Daemon, the Desktop App or the Mobile App, sent while Developer Mode is on; it appears with the Traces of the Workspace that holds Polaris's own code, or under its own toggle when no such Workspace exists.
+_Avoid_: Internal trace, Polaris telemetry
 
 ### Language tooling
 
