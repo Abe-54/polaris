@@ -12,7 +12,7 @@ import { QueryLog, type DataActivity } from "./queryLog.ts";
 import { SchemaStore, type SnapshotRecord } from "./schemaStore.ts";
 import { DataPools } from "./pools.ts";
 import { snapshotAllowed, snapshotCatalog, type ResolvedSource } from "./schemaCatalog.ts";
-import { targetKey, targetOf } from "./approvalStore.ts";
+import { sourceKey } from "./approvalStore.ts";
 import { keyedSnapshotGate } from "./schemaLocks.ts";
 import { outsideMatches } from "./outside.ts";
 import { knownSchemaCommand } from "./schemaCommands.ts";
@@ -64,7 +64,7 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
 
   const capture = (resolved: ResolvedSource) =>
     onTarget(
-      targetKey(targetOf(resolved.source)),
+      sourceKey(resolved.source),
       captures.withPermit(
         deps.capture(resolved).pipe(
           Effect.timeout(30000),
@@ -100,7 +100,7 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
       if (
         !existing.before &&
         snapshotAllowed(resolved) &&
-        existing.target === targetKey(targetOf(resolved.source))
+        existing.target === sourceKey(resolved.source)
       ) {
         yield* capture(resolved).pipe(
           Effect.flatMap((before) => {
@@ -128,7 +128,7 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
 
     if (baseline === "turn-start" && resolved.source.locality !== "local") return;
     const previous = records.previous(turn.sessionId, resolved.source.id, turn.index);
-    const target = targetKey(targetOf(resolved.source));
+    const target = sourceKey(resolved.source);
 
     const reuse =
       resolved.source.locality === "local" &&
@@ -272,7 +272,7 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
 
       const resolved = yield* sources.resolve({ sessionId: turn.sessionId, source: row.source.id });
 
-      if (row.target !== targetKey(targetOf(resolved.source)) || !snapshotAllowed(resolved)) {
+      if (row.target !== sourceKey(resolved.source) || !snapshotAllowed(resolved)) {
         yield* save({ ...row, used, failed: true, errorCode: "E-DATA-DENIED" });
         continue;
       }
@@ -333,7 +333,7 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
 
       if (!baseline && !outsideMatches(command, resolved.source, resolved.matchUrl)) continue;
 
-      records.activity(targetKey(targetOf(resolved.source)), sessionId, turnId);
+      records.activity(sourceKey(resolved.source), sessionId, turnId);
       yield* beginSource(current, source.id, "first-use", true);
     }
   });

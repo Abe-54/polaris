@@ -11,6 +11,7 @@ const ENGINES = new Map<string, DataSource["engine"]>([
   ["postgres", "postgres"],
   ["mysql", "mysql"],
   ["mariadb", "mysql"],
+  ["sqlite", "sqlite"],
 ]);
 
 const engineOf = (system: string) => ENGINES.get(system.toLowerCase());
@@ -45,12 +46,14 @@ export const spanDataSource = (
   const host = read(attributes, "server.address", "net.peer.name");
   const port = read(attributes, "server.port", "net.peer.port");
 
-  const matches = sources.filter(
-    (s) =>
-      s.engine === engine &&
-      s.database === databaseOf(namespace) &&
-      (port === null || String(s.port) === port) &&
-      (host === null ? s.locality === "local" : sameHost(host, s.host))
+  // A SQLite Span names its file; a SQLite source's server fields are placeholders.
+  const matches = sources.filter((s) =>
+    engine === "sqlite"
+      ? s.engine === "sqlite" && s.path === namespace
+      : s.engine === engine &&
+        s.database === databaseOf(namespace) &&
+        (port === null || String(s.port) === port) &&
+        (host === null ? s.locality === "local" : sameHost(host, s.host))
   );
 
   return matches.length === 1 ? (matches[0] ?? null) : null;

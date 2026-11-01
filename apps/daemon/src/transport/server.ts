@@ -35,6 +35,7 @@ import {
 } from "effect";
 import { RpcSerialization, RpcServer, type Rpc } from "effect/rpc";
 import { type FromClientEncoded, ResponseDefectEncoded } from "effect/rpc/RpcMessage";
+import { withRequestTraceContext } from "./traceContext.ts";
 import { join } from "node:path";
 import { ExtensionConnections, grantGateFor } from "../extensions/connection.ts";
 import { type RunningGateway, startGateway } from "../gateway/index.ts";
@@ -483,7 +484,7 @@ export const startServer = <ROut = never, E = never, RIn = never>(
                         }
                       }
 
-                      return writeRequest(clientId, message);
+                      return writeRequest(clientId, withRequestTraceContext(message));
                     }),
                   {
                     discard: true,

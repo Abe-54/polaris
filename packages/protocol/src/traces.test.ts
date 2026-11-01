@@ -7,11 +7,14 @@ import { decideAccess } from "./grants.ts";
 import { PairingId, TurnId } from "./ids.ts";
 import {
   CompareTraces,
+  GetSpan,
+  GetTrace,
   Profile,
   TraceComparison,
   TraceCompareSelector,
   TraceForwardTarget,
   TraceForwardUrl,
+  WatchTraces,
 } from "./traces.ts";
 
 test("collector addresses exclude credentials and URL components that commonly carry tokens", () => {
@@ -172,4 +175,23 @@ test("a Turn range is additive: its wire form names both ends, and Turn pairs de
   expect(payload(wire('{"_tag":"Turn","turnId":"t3"}', '{"_tag":"Turn","turnId":"t4"}')).a).toEqual(
     TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("t3") })
   );
+});
+
+test("trace reads take an optional Self-Trace scope, and a payload from an older Client still decodes", () => {
+  const watch = Schema.decodeUnknownSync(WatchTraces.payloadSchema);
+  const get = Schema.decodeUnknownSync(GetTrace.payloadSchema);
+  const span = Schema.decodeUnknownSync(GetSpan.payloadSchema);
+  const trace = { sessionId: "s1", traceId: "abcd1234" };
+
+  expect(Object.keys(watch({ sessionId: "s1" }))).toEqual(["sessionId"]);
+  expect(Object.keys(get(trace))).toEqual(["sessionId", "traceId"]);
+  expect(Object.keys(span({ ...trace, spanId: "ef012345" }))).toEqual([
+    "sessionId",
+    "traceId",
+    "spanId",
+  ]);
+  expect(watch({ sessionId: "s1", scope: "self" }).scope).toBe("self");
+  expect(get({ ...trace, scope: "self" }).scope).toBe("self");
+  expect(span({ ...trace, spanId: "ef012345", scope: "self" }).scope).toBe("self");
+  expect(() => watch({ sessionId: "s1", scope: "checkout" })).toThrow();
 });

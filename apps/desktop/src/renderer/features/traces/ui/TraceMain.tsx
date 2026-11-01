@@ -13,7 +13,7 @@ import { publishOpenTrace } from "../model/openTrace.ts";
 import { openTraceNs } from "../model/profile/openTrace.ts";
 import { overlap } from "../model/profile/overlap.ts";
 import { useProfileSelection } from "../model/profile/store.ts";
-import type { TracesSessionKey } from "../model/session.ts";
+import { sessionKey, type TracesSessionKey } from "../model/session.ts";
 import { selectSpan } from "../model/store.ts";
 import { ServiceMap } from "./map/ServiceMap.tsx";
 import type { TracesSlotProps } from "./slots.ts";
@@ -36,7 +36,7 @@ const Shown = ({
   readonly onView: (view: MainView) => void;
 }) => {
   const trace = useTraceView(detail);
-  const { hostKey, sessionId } = at;
+  const { hostKey, sessionId, scope } = at;
   const { profile } = useProfileSelection(at);
 
   const mark = useMemo(() => {
@@ -47,16 +47,16 @@ const Shown = ({
   }, [profile, detail]);
 
   const onSelect = useCallback(
-    (id: string | null) => selectSpan({ hostKey, sessionId }, id),
-    [hostKey, sessionId]
+    (id: string | null) => selectSpan(sessionKey(hostKey, sessionId, scope), id),
+    [hostKey, sessionId, scope]
   );
 
   const onOpenSpan = useCallback(
     (id: string) => {
       setMainView({ hostKey, sessionId }, "waterfall");
-      selectSpan({ hostKey, sessionId }, id);
+      selectSpan(sessionKey(hostKey, sessionId, scope), id);
     },
-    [hostKey, sessionId]
+    [hostKey, sessionId, scope]
   );
 
   return (
@@ -93,13 +93,14 @@ const Open = ({
   const loaded = useTrace(at, traceId, useListedVersion(at, traceId));
   const detail = loaded.status === "ready" ? loaded.value : null;
 
-  const { hostKey, sessionId } = at;
+  const { hostKey, sessionId, scope } = at;
 
   useEffect(() => {
-    publishOpenTrace({ hostKey, sessionId }, detail);
+    const key = sessionKey(hostKey, sessionId, scope);
+    publishOpenTrace(key, detail);
 
-    return () => publishOpenTrace({ hostKey, sessionId }, null);
-  }, [hostKey, sessionId, detail]);
+    return () => publishOpenTrace(key, null);
+  }, [hostKey, sessionId, scope, detail]);
 
   if (loaded.status === "loading") return <Centered>{null}</Centered>;
 

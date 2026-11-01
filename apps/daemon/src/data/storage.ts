@@ -14,6 +14,7 @@ const Manual = Schema.Struct({
   port: DataSource.fields.port,
   database: DataSource.fields.database,
   user: Schema.optionalKey(Schema.String),
+  path: DataSource.fields.path,
 });
 
 export type ManualSource = typeof Manual.Type;

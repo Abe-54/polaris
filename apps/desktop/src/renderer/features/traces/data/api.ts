@@ -50,7 +50,10 @@ export interface TracesApi {
   ) => Promise<Result<TraceComparison>>;
 }
 
-const session = (at: TracesSessionKey) => ({ hostKey: at.hostKey, sessionId: at.sessionId });
+const session = (at: TracesSessionKey) =>
+  at.scope === undefined
+    ? { hostKey: at.hostKey, sessionId: at.sessionId }
+    : { hostKey: at.hostKey, sessionId: at.sessionId, scope: at.scope };
 
 /** Keep the first page's capability only for this watch; later pages contain no token. */
 const endpointPages = (on: Snapshots) => {

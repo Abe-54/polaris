@@ -7,6 +7,7 @@ import {
   watchDataQueryLog,
   queryData,
   getDataSchemaDiff,
+  saveDataFileSource,
 } from "./data.ts";
 
 const notCalled = () => Effect.die("Data RPC called on an older Daemon");
@@ -25,6 +26,7 @@ const session: DataSession = {
     "data.query": notCalled,
     "data.edits.commit": notCalled,
     "data.source.save": notCalled,
+    "data.source.saveFile": notCalled,
     "data.source.remove": notCalled,
     "data.source.label": notCalled,
     "data.query.stream": watchNotCalled,
@@ -59,4 +61,22 @@ test("Schema Diff separately gates older Data-capable Daemons", async () => {
       )
     )
   ).toEqual(new Unsupported({ capability: "data.schemaDiff" }));
+});
+
+test("a Data-capable Daemon without SQLite is never asked to save a file source", async () => {
+  expect(
+    await Effect.runPromise(
+      Effect.flip(
+        saveDataFileSource(
+          { ...session, capabilities: ["data"] },
+          {
+            sessionId: SessionId.make("s"),
+            name: "local",
+            path: "/work/app/dev.db",
+            label: { text: "", colour: "none" },
+          }
+        )
+      )
+    )
+  ).toEqual(new Unsupported({ capability: "data.sqlite" }));
 });

@@ -5,6 +5,8 @@ import { RpcTest } from "effect/rpc";
 import { TracesRpcsLive } from "./rpcs.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { TraceStore } from "./store.ts";
+import { TraceSessions } from "./sessions.ts";
+import { developerModeOff } from "./self/developerMode.ts";
 import {
   spanFixture,
   traceFixture,
@@ -74,7 +76,9 @@ test("traces.get exposes batched medians and actual sample counts from earlier c
         ).pipe(
           Effect.provide(TracesRpcsLive),
           Effect.provide(Layer.succeed(TraceStore, store)),
-          Effect.provide(Layer.succeed(TraceRuntime, f.runtime))
+          Effect.provide(Layer.succeed(TraceRuntime, f.runtime)),
+          Effect.provide(Layer.succeed(TraceSessions, f.sessions)),
+          Effect.provide(developerModeOff)
         )
       );
 
@@ -98,7 +102,12 @@ test("each watch sends its endpoint on the first page only", () =>
   withTraceFixture(async (f) => {
     const layer = TracesRpcsLive.pipe(
       Layer.provide(
-        Layer.mergeAll(Layer.succeed(TraceRuntime, f.runtime), Layer.succeed(TraceStore, f.store))
+        Layer.mergeAll(
+          Layer.succeed(TraceRuntime, f.runtime),
+          Layer.succeed(TraceStore, f.store),
+          Layer.succeed(TraceSessions, f.sessions),
+          developerModeOff
+        )
       )
     );
 

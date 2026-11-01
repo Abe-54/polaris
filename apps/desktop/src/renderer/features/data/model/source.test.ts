@@ -1,8 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { DataSource } from "@polaris/protocol";
+import { DATA_FILE_SERVER, DataSource } from "@polaris/protocol";
 import { Schema } from "effect";
 import { FIXTURE_SOURCES } from "../preview/fixtures.ts";
-import { accessText, barParts, formatEstimate, kickerText, statusText } from "./source.ts";
+import {
+  accessLine,
+  accessShort,
+  accessText,
+  barParts,
+  formatEstimate,
+  kickerText,
+  statusText,
+} from "./source.ts";
+import { defaultSchema } from "../output/model.ts";
 
 // SAFETY: the fixtures hold app, the ledger branch and analytics, in that order.
 const [app, branch, analytics] = FIXTURE_SOURCES as [DataSource, DataSource, DataSource];
@@ -57,5 +66,41 @@ describe("row estimates", () => {
     [2_500_000_000, "2.5B"],
   ] as const)("%p rows read %p", (n, text) => {
     expect(formatEstimate(n)).toBe(text);
+  });
+});
+
+describe("a SQLite source", () => {
+  const sqlite = (locality: DataSource["locality"]) =>
+    new DataSource({
+      ...fields(app),
+      ...DATA_FILE_SERVER,
+      engine: "sqlite",
+      version: "3.46.0",
+      path: "/work/app/prisma/dev.db",
+      locality,
+      access: locality === "local" ? "read" : "denied",
+      writes: "off",
+    });
+
+  test("the bar shows its file and never the placeholder server", () => {
+    const parts = barParts(sqlite("local"));
+
+    expect(parts).toEqual(["SQLite 3.46", "/work/app/prisma/dev.db"]);
+    expect(parts.join(" ")).not.toContain(`${DATA_FILE_SERVER.host}:${DATA_FILE_SERVER.port}`);
+  });
+
+  test("a file outside the checkout says agents can't read it, with no approval offered", () => {
+    const outside = sqlite("remote");
+
+    expect([accessText(outside), accessShort(outside), accessLine(outside)]).toEqual([
+      "Outside this checkout · agents can't read it",
+      "Outside checkout",
+      "outside this checkout · can't read it",
+    ]);
+    expect(accessText(sqlite("local"))).toBe("Agents read · writes off");
+  });
+
+  test("an unqualified table lives in main", () => {
+    expect(defaultSchema(sqlite("local"))).toBe("main");
   });
 });

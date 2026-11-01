@@ -56,6 +56,8 @@ const readOnlyReason = (
   keyNames: ReadonlyArray<string> | null,
   keyCols: ReadonlyArray<number>
 ): string | null => {
+  if (source.engine === "sqlite") return "SQLite data sources are read-only in Polaris";
+
   if (keyNames === null) return NO_KEY_ORDER;
 
   if (keyCols.length === 0) return NO_KEY;

@@ -2,10 +2,13 @@ import { Match, Schema } from "effect";
 import { TraceError } from "@polaris/protocol";
 import { isEmbeddedPath } from "../platform/detect.ts";
 import { TraceWorkerReply, TraceWorkerRequest, type TraceWorkerValue } from "./workerProtocol.ts";
+import { SELF_RETENTION } from "./self/scope.ts";
 
 export interface TraceWorkerOptions {
   readonly maxBytes?: number;
   readonly maxAgeMs?: number;
+  /** The Self-Trace byte budget; tests lower it. Its 24 h age limit is fixed. */
+  readonly selfMaxBytes?: number;
   readonly flushMs?: number;
   readonly quietMs?: number;
 }
@@ -148,6 +151,7 @@ export class TraceWorkerClient {
         maxBytes: this.options.maxBytes ?? 200 * 1024 * 1024,
         maxAgeMs: this.options.maxAgeMs ?? 7 * 86400_000,
         flushMs: this.options.flushMs ?? 25,
+        selfMaxBytes: this.options.selfMaxBytes ?? SELF_RETENTION.maxBytes,
       })
     ).then(() => {});
 

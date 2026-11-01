@@ -119,7 +119,7 @@ export const useTraces = (at: TracesSessionKey, filter?: TraceFilter): Loaded<Tr
   away.current = !connected;
 
   return useLoaded(
-    keyOf(at.hostKey, at.sessionId, filter ?? null),
+    keyOf(at.hostKey, at.sessionId, at.scope ?? null, filter ?? null),
     (api, set) =>
       api.watch(at, filter, {
         next: (value) => set({ status: "ready", value }),
@@ -141,7 +141,7 @@ export const useTrace = (
   version: string | null = null
 ): Loaded<TraceDetail> =>
   useLoaded(
-    traceId === null ? null : keyOf(at.hostKey, at.sessionId, traceId),
+    traceId === null ? null : keyOf(at.hostKey, at.sessionId, at.scope ?? null, traceId),
     settle((api) => api.get(at, traceId ?? "")),
     useGrowth(traceId, version)
   );
@@ -153,6 +153,8 @@ export const useSpan = (
   spanId: string | null
 ): Loaded<SpanDetail> =>
   useLoaded(
-    traceId === null || spanId === null ? null : keyOf(at.hostKey, at.sessionId, traceId, spanId),
+    traceId === null || spanId === null
+      ? null
+      : keyOf(at.hostKey, at.sessionId, at.scope ?? null, traceId, spanId),
     settle((api) => api.span(at, traceId ?? "", spanId ?? ""))
   );

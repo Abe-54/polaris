@@ -10,6 +10,7 @@ import type { CatalogSnapshot, SnapshotTable } from "./schemaCompare.ts";
 import { fingerprint, scrubCatalogText } from "./schemaScrub.ts";
 import { MYSQL_SNAPSHOT_TABLES, snapshotSql } from "./schemaCatalogSql.ts";
 import { serverEngine } from "./engine.ts";
+import { sqliteSnapshot } from "./sqlite/catalog.ts";
 
 export type ResolvedSource = Effect.Success<ReturnType<DataSources["Service"]["resolve"]>>;
 
@@ -26,6 +27,14 @@ const ForeignKey = Schema.NullOr(
 export const makeSnapshotCatalog = (read: typeof readEffect) =>
   Effect.fnUntraced(
     function* (pools: DataPools, resolved: ResolvedSource) {
+      if (resolved.source.engine === "sqlite") {
+        const file = resolved.connection.file;
+
+        if (file === undefined) return yield* catalogError("sqlite", "path");
+
+        return yield* sqliteSnapshot(file);
+      }
+
       const at = new Date().toISOString();
       const engine = serverEngine(resolved.source.engine);
       const sql = snapshotSql[engine];

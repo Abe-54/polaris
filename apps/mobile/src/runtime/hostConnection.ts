@@ -22,6 +22,7 @@ import {
   type TransportError,
 } from "@polaris/protocol";
 import { Cause, Effect, Exit, Fiber, type Scope } from "effect";
+import { selfTracer } from "../selfTraces/index.ts";
 import { MOBILE_CAPABILITIES } from "./capabilities.ts";
 
 /** How the bytes reach the Host: the development bridge, or the Polaris Relay. */
@@ -174,48 +175,62 @@ export const openHostConnection = (options: HostConnectionOptions): HostConnecti
     for (const listener of listeners) listener();
   };
 
+  /** Opens the transport and says hello: the `mobile.connect` Span while tracing. */
+  const connect = (epoch: number) =>
+    Effect.gen(function* () {
+      const transport = yield* options.transport.open.pipe(
+        Effect.mapError((error) =>
+          error instanceof ConnectFailure ? error : transient("unreachable", error.message)
+        )
+      );
+
+      const connection = yield* connectRpc(transport, {
+        keepAliveStreams: true,
+        pingIntervalMs: options.pingIntervalMs ?? PING_INTERVAL_MS,
+      });
+
+      const lost = connection.lost.pipe(
+        Effect.mapError((error) => transient("connection-lost", error.message))
+      );
+      // A connection that drops before hello is sent never fails the request: race it.
+
+      const hello = yield* connection.client
+        .hello({
+          clientName: CLIENT_NAME,
+          clientVersion: CLIENT_VERSION,
+          deviceLabel: options.deviceLabel ?? "iPhone",
+          capabilities: MOBILE_CAPABILITIES,
+        })
+        .pipe(
+          Effect.mapError((error) => transient("unreachable", error.message)),
+          Effect.raceFirst(lost),
+          Effect.timeoutOrElse({
+            duration: policy.helloTimeoutMs,
+            orElse: () => Effect.fail(transient("timeout", "the Daemon did not answer hello")),
+          })
+        );
+
+      if (hello.protocolVersion !== PROTOCOL_VERSION)
+        return yield* new ConnectFailure({
+          kind: "needs-attention",
+          reason: "protocol-mismatch",
+          detail: `the Daemon speaks protocol ${hello.protocolVersion}, this app ${PROTOCOL_VERSION}`,
+          older: olderSide(hello.protocolVersion, PROTOCOL_VERSION),
+        });
+
+      return { connection, hello, lost };
+    }).pipe((connecting) =>
+      selfTracer.traced(
+        "mobile.connect",
+        { "polaris.host.route": options.transport.route, "polaris.connection.epoch": epoch },
+        connecting
+      )
+    );
+
   const attempt = (epoch: number) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const transport = yield* options.transport.open.pipe(
-          Effect.mapError((error) =>
-            error instanceof ConnectFailure ? error : transient("unreachable", error.message)
-          )
-        );
-
-        const connection = yield* connectRpc(transport, {
-          keepAliveStreams: true,
-          pingIntervalMs: options.pingIntervalMs ?? PING_INTERVAL_MS,
-        });
-
-        const lost = connection.lost.pipe(
-          Effect.mapError((error) => transient("connection-lost", error.message))
-        );
-        // A connection that drops before hello is sent never fails the request: race it.
-
-        const hello = yield* connection.client
-          .hello({
-            clientName: CLIENT_NAME,
-            clientVersion: CLIENT_VERSION,
-            deviceLabel: options.deviceLabel ?? "iPhone",
-            capabilities: MOBILE_CAPABILITIES,
-          })
-          .pipe(
-            Effect.mapError((error) => transient("unreachable", error.message)),
-            Effect.raceFirst(lost),
-            Effect.timeoutOrElse({
-              duration: policy.helloTimeoutMs,
-              orElse: () => Effect.fail(transient("timeout", "the Daemon did not answer hello")),
-            })
-          );
-
-        if (hello.protocolVersion !== PROTOCOL_VERSION)
-          return yield* new ConnectFailure({
-            kind: "needs-attention",
-            reason: "protocol-mismatch",
-            detail: `the Daemon speaks protocol ${hello.protocolVersion}, this app ${PROTOCOL_VERSION}`,
-            older: olderSide(hello.protocolVersion, PROTOCOL_VERSION),
-          });
+        const { connection, hello, lost } = yield* connect(epoch);
 
         snapshot = connectionMachine.transition(snapshot, { type: "connected", epoch })[0];
         host = hello.host;

@@ -4,6 +4,7 @@
  */
 import { Effect, Match } from "effect";
 import type { HostConnection } from "../runtime/hostConnection.ts";
+import { tracedDispatch } from "../selfTraces/index.ts";
 import type { Answer } from "./answer.ts";
 
 /** Within iOS's ~30 s of background time for a notification action. */
@@ -25,7 +26,10 @@ export const answerHost = (host: HostConnection): AnswerHost => ({
   isLive: () => host.live() !== null,
   subscribe: host.subscribe,
   retryNow: host.retryNow,
-  dispatch: (payload) => host.run((client) => Effect.asVoid(client.dispatch(payload))),
+  dispatch: (payload) =>
+    host.run((client) =>
+      tracedDispatch(payload.command, payload.commandId, Effect.asVoid(client.dispatch(payload)))
+    ),
 });
 
 /** Resolves true once `host` is live, false after `timeoutMs`. */
