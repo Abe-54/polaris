@@ -93,6 +93,8 @@ export interface RequestContext {
   readonly needsYou: (summary: NeedsYouSummary) => void;
   /** Agent Sessions' Browsers; absent where there are no windows (tests). */
   readonly browser?: Browsers;
+  /** Whether Self-Traces are on (ADR 0095); off when absent. */
+  readonly selfTracesEnabled?: () => boolean;
 }
 
 export type Handler<M extends RequestMethod> = (
@@ -530,6 +532,8 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
     Effect.sync(() => publishDirty(0, files)).pipe(Effect.as(null)),
   "editor.savedAll": ({ ok }) => Effect.sync(() => savedAll(ok)).pipe(Effect.as(null)),
   "needsYou.publish": (summary) => Effect.sync(() => ctx.needsYou(summary)).pipe(Effect.as(null)),
+  "selfTraces.state": () =>
+    Effect.sync(() => ({ enabled: ctx.selfTracesEnabled?.() === true, version: ctx.appVersion })),
   "dev.proofWorkspace": () =>
     Effect.suspend(() => {
       const path = ctx.proofWorkspace();

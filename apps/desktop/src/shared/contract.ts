@@ -4,6 +4,7 @@
  * The renderer imports this file for types only (`import type`), so no Schema
  * code reaches its bundle.
  */
+import { TraceContext } from "@polaris/protocol";
 import { DataRequestInputs, DataSubscriptionInputs } from "./dataContract.ts";
 import { TracesRequestInputs, TracesSubscriptionInputs } from "./tracesContract.ts";
 import { PredictionPlacementInputs } from "./predictionPlacement.ts";
@@ -584,6 +585,8 @@ export const RequestInputs = {
   }),
   /** Dev only: a fresh temporary directory on the dev Daemon's Host for the proof session. */
   "dev.proofWorkspace": Schema.Struct({}),
+  /** Whether Self-Traces are on now; later changes arrive as `self-traces` App events. */
+  "selfTraces.state": Schema.Struct({}),
   ...GitHubRequestInputs,
   ...GitRequestInputs,
   ...ConstellationRequestInputs,
@@ -604,7 +607,12 @@ export type RequestMethod = keyof typeof RequestInputs;
 export type RequestInput<M extends RequestMethod> = (typeof RequestInputs)[M]["Type"];
 
 /** What `request` sends: the method, and its input, decoded against `RequestInputs[method]`. */
-export const RequestEnvelope = Schema.Struct({ method: Schema.String, input: Schema.Unknown });
+export const RequestEnvelope = Schema.Struct({
+  method: Schema.String,
+  input: Schema.Unknown,
+  /** The renderer Span that sent it, only while Self-Traces are on (ADR 0095). */
+  trace: Schema.optionalKey(TraceContext),
+});
 
 export type RequestEnvelope = typeof RequestEnvelope.Type;
 

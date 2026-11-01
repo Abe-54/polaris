@@ -51,7 +51,12 @@ function exposePolarisApi() {
     platform: platformFromArgv(process.argv, process.platform),
     languages: createLanguageApi(),
     notify: (method, input) => ipcRenderer.send(method, input),
-    request: (method, input) => ipcRenderer.invoke(CHANNELS.request, { method, input }),
+    request: (method, input, options) =>
+      ipcRenderer.invoke(
+        CHANNELS.request,
+        options?.trace === undefined ? { method, input } : { method, input, trace: options.trace }
+      ),
+    selfSpans: (spans) => ipcRenderer.send(CHANNELS.selfSpans, spans),
     subscribe: (kind, input, listener) => {
       const id = nextId++;
 

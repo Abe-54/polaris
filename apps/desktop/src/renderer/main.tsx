@@ -21,6 +21,7 @@ import { shellCommands, shellContext } from "./shell/commands.ts";
 import { workspaceCommands } from "./shell/visibility.ts";
 import { send } from "./features/session/dispatch.ts";
 import { connect } from "./store/store.ts";
+import { connectSelfTraces } from "./features/selfTraces/index.ts";
 
 const connection = connect(window.polaris);
 
@@ -145,6 +146,8 @@ settingsStore.subscribe((state, prev) => {
 connectSettings(window.polaris);
 
 connectUpdates(window.polaris);
+
+connectSelfTraces(window.polaris);
 
 window.polaris.onAppEvent((event) => {
   if (event.kind === "command") commands.run(event.id);

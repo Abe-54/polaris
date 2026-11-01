@@ -16,12 +16,15 @@ import {
 } from "./requests.ts";
 import { windowSubscriptions, type WindowSubscriptions } from "./subscriptions.ts";
 import { PredictionNotifications } from "../../shared/predictionOutcomes.ts";
+import { decodeRendererSpans, type DesktopSelfTraces } from "../selfTraces/index.ts";
 
 export interface IpcInput {
   readonly runtime: ClientRuntime;
   readonly context: RequestContext;
   /** Whether a frame's URL belongs to the app (the `app://` origin, or the dev server). */
   readonly trusted: (url: string) => boolean;
+  /** Self-Traces (ADR 0095): the renderer's Spans and the Trace a request runs in. */
+  readonly selfTraces?: Pick<DesktopSelfTraces, "ingestRenderer" | "withRendererTrace">;
 }
 
 const decodeRequest = flow(
@@ -41,7 +44,7 @@ const rejected = (message: string): Result<never> => ({
 const senderTrusted = (frame: WebFrameMain | null, trusted: IpcInput["trusted"]) =>
   frame !== null && trusted(frame.url);
 
-export const registerIpc = ({ runtime, context, trusted }: IpcInput) => {
+export const registerIpc = ({ runtime, context, trusted, selfTraces }: IpcInput) => {
   const handlers = requestHandlers(context);
   const windows = new Map<number, WindowSubscriptions>();
 
@@ -93,11 +96,13 @@ export const registerIpc = ({ runtime, context, trusted }: IpcInput) => {
     if (!senderTrusted(event.senderFrame, trusted)) return rejected("untrusted sender");
 
     const exit = await runtime.runPromiseExit(
-      Effect.flatMap(decodeRequest(message), ({ method, input }) =>
-        isRequestMethod(method)
+      Effect.flatMap(decodeRequest(message), ({ method, input, trace }) => {
+        const run = isRequestMethod(method)
           ? requestRunner(handlers, method)(input)
-          : Effect.fail<IpcError>({ code: "UnknownMethod", message: `no method "${method}"` })
-      )
+          : Effect.fail<IpcError>({ code: "UnknownMethod", message: `no method "${method}"` });
+
+        return selfTraces === undefined ? run : selfTraces.withRendererTrace(trace, method, run);
+      })
     );
 
     return Exit.match(exit, {
@@ -110,6 +115,11 @@ export const registerIpc = ({ runtime, context, trusted }: IpcInput) => {
         })),
       }),
     });
+  });
+
+  ipcMain.on(CHANNELS.selfSpans, (event, message) => {
+    if (!senderTrusted(event.senderFrame, trusted)) return;
+    Option.map(decodeRendererSpans(message), (spans) => selfTraces?.ingestRenderer(spans));
   });
 
   ipcMain.on(CHANNELS.subscribe, (event, message) => {
@@ -134,6 +144,7 @@ export const registerIpc = ({ runtime, context, trusted }: IpcInput) => {
       ipcMain.removeAllListeners(CHANNELS.unsubscribe);
       ipcMain.removeAllListeners(CHANNELS.predictionOutcome);
       ipcMain.removeAllListeners(CHANNELS.predictionKeystrokes);
+      ipcMain.removeAllListeners(CHANNELS.selfSpans);
     },
   };
 };
