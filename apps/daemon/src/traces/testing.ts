@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
@@ -120,7 +121,7 @@ export const withTraceFixture = async (
   run: (fixture: TraceFixture) => Promise<void>,
   options: FixtureOptions = {}
 ) => {
-  const root = await mkdtemp("/tmp/t1-tr-");
+  const root = await mkdtemp(shortTemp("t1-tr-"));
 
   const probe =
     options.port === undefined

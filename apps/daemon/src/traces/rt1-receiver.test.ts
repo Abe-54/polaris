@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 // RT1 repros (ENG-656) for the receiver and token lifetime. Expected to FAIL on 08798fa8f.
 import { expect, test } from "bun:test";
 import { connect, type Socket } from "node:net";
@@ -80,7 +81,7 @@ test("a storage failure answers a retryable status, not 400", () =>
   }));
 
 test("trace-tokens.json does not gain a hash per Daemon restart for the same binding", async () => {
-  const filename = `/tmp/rt1-vault-${crypto.randomUUID()}.json`;
+  const filename = shortTemp(`rt1-vault-${crypto.randomUUID()}.json`);
   const binding = { checkout: "/repo", workspaceId: TEST_WORKSPACE, sessionId: null };
 
   const first = new TraceTokenVault(filename).issue(binding);

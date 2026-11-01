@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
 import { withTraceFixture } from "./testing.ts";
@@ -14,7 +15,7 @@ const runSender = async (mode: "manual" | "vercel", endpoint: string) => {
   for (const key of Object.keys(env)) if (key.startsWith("OTEL_")) delete env[key];
 
   const child = Bun.spawn(
-    ["node", new URL("./fixtures/sender.mjs", import.meta.url).pathname, mode],
+    ["node", fileURLToPath(new URL("./fixtures/sender.mjs", import.meta.url)), mode],
     {
       env: {
         ...env,

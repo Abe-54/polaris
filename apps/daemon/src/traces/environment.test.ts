@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { Effect, Stream } from "effect";
 import { TraceTurn, TurnId } from "@polaris/protocol";
@@ -5,7 +7,7 @@ import { makeClaudeDriver } from "../harness/claude/ClaudeDriver.ts";
 import { FakeClaude } from "../harness/claude/fakeClaude.ts";
 import { makeCodexDriver } from "../harness/codex/CodexDriver.ts";
 import { cleanup, scripted, sessionWith } from "../harness/codex/testing/session.ts";
-import { Terminals, TerminalsLive, TerminalItem } from "../terminal/Terminals.ts";
+import { Terminals, TerminalsLive } from "../terminal/Terminals.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { postTraces, TEST_SESSION, TRACE_ID, withTraceFixture } from "./testing.ts";
 
@@ -109,20 +111,22 @@ test("terminals use a Workspace endpoint in both ordinary and repository environ
           const terminals = yield* Terminals;
 
           for (const environment of ["user", "repository"] as const) {
+            const captured = join(f.root, `terminal-${environment}.txt`);
+
             const terminal = yield* terminals.open({
               cwd: f.root,
               cols: 80,
               rows: 24,
-              argv: ["/bin/sh", "-c", 'printf "%s" "$OTEL_EXPORTER_OTLP_ENDPOINT"'],
+              argv: [
+                process.execPath,
+                "-e",
+                `require("node:fs").writeFileSync(${JSON.stringify(captured)}, process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "")`,
+              ],
               environment,
             });
 
-            const items = yield* terminals.attach(terminal).pipe(Stream.runCollect);
-
-            const endpoint = items
-              .filter(TerminalItem.guards.Output)
-              .map((i) => new TextDecoder().decode(i.data))
-              .join("");
+            yield* terminals.attach(terminal).pipe(Stream.runDrain);
+            const endpoint = yield* Effect.promise(() => readFile(captured, "utf8"));
 
             expect(endpoint).toMatch(
               new RegExp(`^http://127.0.0.1:${f.port}/otlp/[a-f0-9]{64}\\.`)

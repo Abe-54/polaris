@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { compareTraces } from "./compareQuery.ts";
 import { baseline, turnSelector } from "./compare.testing.ts";
 
 test("compare yields to reads and commits while preserving its original snapshot", async () => {
-  const root = await mkdtemp("/tmp/compare-concurrency-");
+  const root = await mkdtemp(shortTemp("compare-concurrency-"));
   const db = openTraceDatabase(join(root, "traces.sqlite"));
   const start = sortableTime("1800000000000000000");
 

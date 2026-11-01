@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ const sessionId = SessionId.make("one");
 const workspaceId = WorkspaceId.make("workspace");
 
 test("saved token hashes survive reload; session revocation does not revoke Workspace authority", () => {
-  const root = mkdtempSync("/tmp/t1-token-");
+  const root = mkdtempSync(shortTemp("t1-token-"));
   const filename = join(root, "tokens.json");
 
   try {
@@ -37,13 +38,14 @@ test("saved token hashes survive reload; session revocation does not revoke Work
 });
 
 test("deleting the private seed invalidates every endpoint on restart", () => {
-  const root = mkdtempSync("/tmp/tf1-token-");
+  const root = mkdtempSync(shortTemp("tf1-token-"));
   const filename = join(root, "tokens.json");
 
   try {
     const binding = TraceBinding.make({ sessionId, workspaceId, checkout: "/one" });
     const first = new TraceTokenVault(filename).issue(binding);
-    expect(statSync(`${filename}.seed`).mode & 0o777).toBe(0o600);
+
+    if (process.platform !== "win32") expect(statSync(`${filename}.seed`).mode & 0o777).toBe(0o600);
     rmSync(`${filename}.seed`);
     const replacement = new TraceTokenVault(filename);
     expect(replacement.authenticate(first)).toBeNull();
@@ -56,7 +58,7 @@ test("deleting the private seed invalidates every endpoint on restart", () => {
 });
 
 test("launch endpoints survive reload, reject forged Turns and inherit parent revocation", () => {
-  const root = mkdtempSync("/tmp/p2-token-");
+  const root = mkdtempSync(shortTemp("p2-token-"));
   const filename = join(root, "tokens.json");
 
   try {

@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer, ManagedRuntime } from "effect";
@@ -15,7 +16,7 @@ export const withInstrumentation = async <A>(
   run: (fixture: InstrumentationFixture) => Promise<A>,
   targets?: TargetRegistry
 ) => {
-  const root = await realpath(await mkdtemp("/tmp/p3-runtime-"));
+  const root = await realpath(await mkdtemp(shortTemp("p3-runtime-")));
   const checkout = join(root, "app");
   const home = join(root, "home");
   await mkdir(join(checkout, "package"), { recursive: true });

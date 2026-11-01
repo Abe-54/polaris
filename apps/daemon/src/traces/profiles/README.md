@@ -23,14 +23,21 @@ this service in the same checkout. A restart rebuilds the tracing overlay from t
 and the restart invocation's verified Turn (P2's optional third environment argument),
 so it does not reuse a signed endpoint claiming the original launch Turn.
 The Daemon rechecks policy and identity before
-signalling its process group and reserves the replacement's live-capture slot
-before stopping it. Concurrent restarts are refused. Nothing adopts an external
+stopping its owned process tree and reserves the replacement's live-capture slot
+before stopping it. POSIX uses SIGINT so the owned preload exits normally and flushes
+its profile. Windows uses a private IPC startup gate and exit request; before the
+gate opens, the Daemon encloses the process in a kill-on-close Job Object. Closing
+the job after normal exit also retires descendants, including detached children. Concurrent restarts are refused. Nothing adopts an external
 PID. Shutdown drains completion jobs before closing the worker queue. List/get
 recover flushed artifacts from orphan recordings left by an earlier Daemon.
 P2/P9 can replace this local launch seam with their authenticated launch authority.
 
-The worker validates CPU graph ids, parents, cycles/depth, finite nonnegative
-sample deltas and timing bounds. Validation keeps parent/depth maps, never a stack
+The worker validates CPU graph ids, parents, cycles/depth, finite sample deltas
+and timing bounds. Node can emit samples out of timestamp order on Windows, including
+negative deltas; these become cumulative timestamps, sorted with their sample IDs
+in place, before weights are calculated. Timestamps outside the capture remain invalid.
+Both ordered and out-of-order maximum-size profiles retain the 700 MiB RSS gate.
+Validation keeps parent/depth maps, never a stack
 copy for every node; only the current sampled stack is materialised. Consecutive
 samples of the same stack coalesce, and existing frame durations update in place.
 Weights produce self and inclusive time; recursive

@@ -1,7 +1,8 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Schema } from "effect";
 import { bundledRegisterPath } from "./assets.ts";
 import { prepareAutoInstrumentation } from "./index.ts";
@@ -105,7 +106,7 @@ let scratch: string;
 beforeAll(async () => {
   polaris = counter();
   vendor = counter();
-  scratch = await mkdtemp("/tmp/rp1-p3-");
+  scratch = await mkdtemp(shortTemp("rp1-p3-"));
 });
 
 afterAll(async () => {
@@ -256,7 +257,7 @@ test("finding P3-3: an inherited preload from another Daemon build exports each 
   expect(register).toBeString();
   // The same assets under an older build's digest, as a terminal opened before an upgrade inherits.
   const older = join(home, "node-instrumentation", "older-build");
-  await cp(dirname(new URL(register).pathname), older, { recursive: true });
+  await cp(dirname(fileURLToPath(register)), older, { recursive: true });
   const inherited = `--import ${JSON.stringify(pathToFileURL(join(older, "register.mjs")).href)}`;
   const source = { ...endpoint, NODE_OPTIONS: inherited };
 
@@ -318,7 +319,13 @@ test("two direct register imports and two SDK copies still install just one inst
   const before = polaris.names.length;
 
   const run = await node(
-    ["--import", register, "--import", join(older, "register.mjs"), "app.mjs"],
+    [
+      "--import",
+      pathToFileURL(register).href,
+      "--import",
+      pathToFileURL(join(older, "register.mjs")).href,
+      "app.mjs",
+    ],
     checkout,
     { POLARIS_OTEL_ENDPOINT: polaris.url }
   );
@@ -332,7 +339,7 @@ test("no endpoint loads neither the ESM hook nor the SDK", async () => {
   const register = await bundledRegisterPath(home);
   await writeFile(join(dirname(register), "hook.mjs"), "throw Error('hook loaded');");
   await writeFile(join(dirname(register), "sdk.cjs"), "process.exit(43);");
-  const run = await node(["--import", register, "-e", "0"], scratch, {});
+  const run = await node(["--import", pathToFileURL(register).href, "-e", "0"], scratch, {});
   expect(run).toEqual({ code: 0, stderr: "" });
 });
 

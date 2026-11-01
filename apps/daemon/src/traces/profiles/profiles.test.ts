@@ -55,7 +55,9 @@ for (const binary of ["node", "bun"])
             Schema.fromJsonString(Schema.Struct({ samples: Schema.Array(Schema.Number) }))
           )(await readFile(profile.path!, "utf8")).samples.length
         ).toBeGreaterThan(0);
-        expect((await stat(profile.path!)).mode & 0o777).toBe(0o600);
+
+        if (process.platform !== "win32")
+          expect((await stat(profile.path!)).mode & 0o777).toBe(0o600);
         const hot = detail.hotFunctions.find((f) => f.name === "polarisBurn")!;
         expect(hot.selfMs).toBeGreaterThan(0);
         expect(hot.totalMs).toBeGreaterThanOrEqual(hot.selfMs);
@@ -399,7 +401,7 @@ test(
       expect(profile.cwd).toBe(expectedCwd);
       expect(await readFile(join(directory, "relative.out"), "utf8")).toBe(expectedCwd);
       expect(detail.hotFunctions.find((f) => f.name === "polarisBurn")?.file).toBe(
-        "package/relative.js"
+        join("package", "relative.js")
       );
     }),
   30000
@@ -412,7 +414,11 @@ test(
       const directory = join(root, "package");
       const outside = `${root}-outside`;
       await mkdir(outside);
-      await writeFile(join(directory, "server.js"), "setInterval(()=>{},1000)");
+      const ready = join(root, "ready");
+      await writeFile(
+        join(directory, "server.js"),
+        `process.chdir(${JSON.stringify(root)}); require("node:fs").writeFileSync(${JSON.stringify(ready)}, ""); setInterval(()=>{},1000);`
+      );
       const profiles = await runtime.runPromise(Profiles);
       const caller = await addSession("restart-from-root", { cwd: root });
 
@@ -423,6 +429,11 @@ test(
       expect(isRunning(profile.pid)).toBe(true);
 
       try {
+        // Windows holds a process's cwd open; the child leaves it before this path attack.
+        const deadline = Date.now() + 5000;
+
+        while (!(await Bun.file(ready).exists()) && Date.now() < deadline) await Bun.sleep(10);
+        expect(await Bun.file(ready).exists()).toBe(true);
         await rename(directory, join(outside, "moved"));
         await symlink(join(outside, "moved"), directory);
 

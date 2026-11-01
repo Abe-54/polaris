@@ -26,8 +26,8 @@ const CpuProfile = Schema.Struct({
   startTime: Nonnegative,
   endTime: Nonnegative,
   nodes: Schema.Array(CpuNode).check(Schema.isMaxLength(200_000)),
-  samples: Schema.Array(Schema.Int).check(Schema.isMaxLength(2_000_000)),
-  timeDeltas: Schema.Array(Nonnegative).check(Schema.isMaxLength(2_000_000)),
+  samples: Schema.mutable(Schema.Array(Schema.Int).check(Schema.isMaxLength(2_000_000))),
+  timeDeltas: Schema.mutable(Schema.Array(Schema.Finite).check(Schema.isMaxLength(2_000_000))),
 });
 
 export const invalidProfile = () =>
@@ -75,22 +75,23 @@ export const parseProfile = (
   if (cpu.endTime < cpu.startTime || cpu.samples.length !== cpu.timeDeltas.length)
     throw invalidProfile();
   const parents = profileParents(cpu.nodes);
-  const { functions, functionOf } = profileFunctions(cpu.nodes, checkout);
   validateDepths(cpu.nodes, parents);
+  const { functions, functionOf } = profileFunctions(cpu.nodes, checkout);
 
   const durationMs = (cpu.endTime - cpu.startTime) / 1000;
+  const { samples, timeDeltas } = chronologicalSamples(cpu);
   const nodes: MutableNode[] = [];
   const stackWeights = new Map<number, number>();
   let active: number[] = [];
   let elapsed = 0;
 
-  for (let i = 0; i < cpu.samples.length; i++) {
-    const sample = cpu.samples[i]!;
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i]!;
     const stack = stackFor(sample, parents, functionOf);
-    let micros = cpu.timeDeltas[i]!;
+    let micros = timeDeltas[i]!;
 
-    while (i + 1 < cpu.samples.length && cpu.samples[i + 1] === sample) {
-      micros += cpu.timeDeltas[++i]!;
+    while (i + 1 < samples.length && samples[i + 1] === sample) {
+      micros += timeDeltas[++i]!;
     }
 
     const ms = micros / 1000;
@@ -116,14 +117,16 @@ export const parseProfile = (
         a - b
     );
 
-  const remap = new Map(order.map((old, index) => [old, index]));
+  const remap = new Uint32Array(order.length);
+
+  for (let index = 0; index < order.length; index++) remap[order[index]!] = index;
   const hotFunctions = order.map((i) => functions[i]!);
   const hottest = [...stackWeights].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0];
 
   const hotPath =
-    hottest === undefined ? [] : stackFor(hottest, parents, functionOf).map((i) => remap.get(i)!);
+    hottest === undefined ? [] : stackFor(hottest, parents, functionOf).map((i) => remap[i]!);
 
-  for (const node of nodes) node.functionIndex = remap.get(node.functionIndex)!;
+  for (const node of nodes) node.functionIndex = remap[node.functionIndex]!;
 
   return {
     durationMs,
@@ -132,6 +135,56 @@ export const parseProfile = (
     hotPath,
     nodes,
   };
+};
+
+const chronologicalSamples = (cpu: typeof CpuProfile.Type) => {
+  if (!cpu.timeDeltas.some((delta) => delta < 0)) return cpu;
+  let time = 0;
+  const order = new Uint32Array(cpu.timeDeltas.length);
+
+  for (let index = 0; index < order.length; index++) {
+    time += cpu.timeDeltas[index]!;
+
+    if (!Number.isFinite(time) || time < 0 || time > cpu.endTime - cpu.startTime + 1000)
+      throw invalidProfile();
+
+    cpu.timeDeltas[index] = time;
+    order[index] = index;
+  }
+
+  order.sort((a, b) => cpu.timeDeltas[a]! - cpu.timeDeltas[b]!);
+  reorderSamples(cpu, order);
+  time = 0;
+
+  for (let index = 0; index < order.length; index++) {
+    const next = cpu.timeDeltas[index]!;
+    cpu.timeDeltas[index] = next - time;
+    time = next;
+  }
+
+  return cpu;
+};
+
+const reorderSamples = (cpu: typeof CpuProfile.Type, order: Uint32Array) => {
+  // The worker owns this JSON-parsed buffer; move paired timestamps and IDs in place.
+  for (let index = 0; index < order.length; index++) {
+    if (order[index] === index) continue;
+    const sample = cpu.samples[index]!;
+    const time = cpu.timeDeltas[index]!;
+    let destination = index;
+
+    while (order[destination] !== index) {
+      const source = order[destination]!;
+      cpu.samples[destination] = cpu.samples[source]!;
+      cpu.timeDeltas[destination] = cpu.timeDeltas[source]!;
+      order[destination] = destination;
+      destination = source;
+    }
+
+    cpu.samples[destination] = sample;
+    cpu.timeDeltas[destination] = time;
+    order[destination] = destination;
+  }
 };
 
 type MutableNode = { -readonly [K in keyof ProfileNode]: ProfileNode[K] };
@@ -171,7 +224,9 @@ const appendFrames = (
 type MutableFunction = { -readonly [K in keyof ProfileFunction]: ProfileFunction[K] };
 
 const profileParents = (cpuNodes: ReadonlyArray<typeof CpuNode.Type>) => {
-  const byId = new Map(cpuNodes.map((node) => [node.id, node]));
+  const byId = new Set<number>();
+
+  for (const node of cpuNodes) byId.add(node.id);
 
   if (byId.size !== cpuNodes.length) throw invalidProfile();
   const parents = new Map<number, number>();
@@ -224,24 +279,32 @@ const validateDepths = (
   parents: Map<number, number>
 ) => {
   const depths = new Map<number, number>();
+  const path: number[] = [];
 
   for (const node of cpuNodes) {
-    const path = new Set<number>();
     let id: number | undefined = node.id;
 
     while (id !== undefined && !depths.has(id)) {
-      if (path.has(id) || path.size >= 256) throw invalidProfile();
-      path.add(id);
+      if (path.length >= 256) throw invalidProfile();
+      path.push(id);
+      // Zero marks the current ancestry walk, so revisiting it detects a cycle.
+      depths.set(id, 0);
       id = parents.get(id);
     }
 
-    let depth = id === undefined ? 0 : depths.get(id)!;
+    const depth = id === undefined ? 0 : depths.get(id)!;
 
-    for (const ancestor of [...path].reverse()) {
-      if (++depth > 256) throw invalidProfile();
-      depths.set(ancestor, depth);
-    }
+    if (id !== undefined && depth === 0) throw invalidProfile();
+    recordDepths(path, depths, depth);
   }
+};
+
+const recordDepths = (path: number[], depths: Map<number, number>, ancestorDepth: number) => {
+  let depth = ancestorDepth;
+
+  if (depth + path.length > 256) throw invalidProfile();
+
+  while (path.length > 0) depths.set(path.pop()!, ++depth);
 };
 
 const stackFor = (id: number, parents: Map<number, number>, functionOf: Map<number, number>) => {
