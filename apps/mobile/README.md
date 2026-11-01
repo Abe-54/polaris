@@ -129,7 +129,8 @@ devDependency, its config plugin only) adds to the Xcode project at prebuild.
   can't drift from the TypeScript (skipped where there is no `swiftc`).
   `scripts/widgets.render.test.ts` draws W2 on macOS through `scripts/widgetsDriver/render.swift`
   and checks it takes each theme's colours; `render.swift <midnight|moonlit> <out.png>` saves a
-  render to look at.
+  render to look at. That one, `widgets.live.test.ts` and `widgets.theme.test.ts`'s Swift run need
+  Apple's frameworks (SwiftUI, CryptoKit, `os`), so they run only on macOS; Linux CI runs the rest.
 
 ## The Live Activity and Dynamic Island
 
