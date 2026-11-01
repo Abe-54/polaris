@@ -125,7 +125,7 @@ Run `bun test apps/daemon/src/traces` with native loopback/PTY access. The
 `packages/bench` `traces` scenario drives 200k Spans through the real Daemon,
 measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 ENG-673's default-timeout checks, negative control and raw paired measurements
-are in [launch-bench/README.md](./launch-bench/README.md).
+are in [launch measurements](../../../../packages/bench/measurements/eng-657/launch/README.md).
 
 MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians

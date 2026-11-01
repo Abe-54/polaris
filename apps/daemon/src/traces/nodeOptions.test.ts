@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { appendNodeImport } from "./nodeOptions.ts";
+import {
+  appendNodeImport,
+  instrumentationImport,
+  stripNodeInstrumentation,
+} from "./nodeOptions.ts";
 
 test("Node imports compose with flags and a preceding bootstrap without changing their bytes", () => {
   const previous = '--no-warnings --import="file:///tmp/inspector.mjs"';
@@ -26,3 +30,23 @@ test("an unrelated option value is not mistaken for an import", () => {
     '--title="/tmp/register.mjs" --import "file:///tmp/register.mjs"'
   );
 });
+
+for (const old of [
+  '--import="file:///tmp/node-instrumentation/old/register.mjs"',
+  '--import "/tmp/node-instrumentation/old/register.mjs"',
+  '--import "C:\\\\Users\\\\me\\\\node-instrumentation\\\\old\\\\register.mjs"',
+  `--import ${JSON.stringify(instrumentationImport("/tmp/node-instrumentation/old/register.mjs"))}`,
+]) {
+  test(`replaces an inherited Polaris import and keeps the inspector: ${old}`, () => {
+    const inspector = '--import="file:///tmp/inspector.mjs" --no-warnings';
+
+    const result = appendNodeImport(
+      `${old} ${inspector}`,
+      instrumentationImport("/tmp/node-instrumentation/new/register.mjs")
+    );
+
+    expect(result).not.toContain("old");
+    expect(result).toContain(inspector);
+    expect(stripNodeInstrumentation(result)).toBe(inspector);
+  });
+}

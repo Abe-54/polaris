@@ -23,7 +23,7 @@ export const packagedInstrumentationSmoke = async (binary: string) => {
     `import http from 'node:http';
     import {writeFile} from 'node:fs/promises'; import {fileURLToPath} from 'node:url';
     const imported = JSON.parse(process.env.NODE_OPTIONS.match(/--import ("[^"\\n]+")/)[1]);
-    await writeFile('register-path.txt', fileURLToPath(imported));
+    await writeFile('register-path.txt', fileURLToPath(decodeURIComponent(imported.split('#polaris-instrumentation=')[1])));
     const server=http.createServer((_req,res)=>res.end('packaged-ok'));
     server.listen(0,'127.0.0.1',async()=>{
       console.log(await (await fetch('http://127.0.0.1:'+server.address().port+'/packaged')).text());
@@ -111,20 +111,20 @@ export const packagedInstrumentationSmoke = async (binary: string) => {
 
           if (Option.isNone(page) || page.value.traces.length === 0)
             throw new Error("No packaged app spans stored");
+
           const detail = yield* rpc["traces.get"]({ sessionId, traceId: page.value.traces[0]!.id });
+          const spans = detail.spans;
 
           if (
-            !detail.spans.some((span) => span.kind === "server") ||
-            !detail.spans.some(
-              (span) => span.scope.name === "@opentelemetry/instrumentation-undici"
-            ) ||
-            !detail.spans.every((span) => span.resource["service.name"] === "packaged-node-app")
+            !spans.some((span) => span.kind === "server") ||
+            !spans.some((span) => span.scope.name === "@opentelemetry/instrumentation-undici") ||
+            !spans.every((span) => span.resource["service.name"] === "packaged-node-app")
           )
             throw new Error(
               "Packaged instrumentation did not preserve HTTP/fetch and service attribution"
             );
 
-          return { spans: detail.spans.length, service: detail.spans[0]!.resource["service.name"] };
+          return { spans: spans.length, service: spans[0]!.resource["service.name"] };
         })
       )
     );

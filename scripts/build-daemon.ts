@@ -259,6 +259,8 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
   const name = binaryName(platform);
   const binary = join(outDir, name);
 
+  const instrumentation = await instrumentationPlugin();
+
   const result = await Bun.build({
     entrypoints: [
       join(daemonDir, "src", "main.ts"),
@@ -283,10 +285,11 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
       ),
       "process.env.POLARIS_BUILD_VERSION": JSON.stringify(version),
     },
-    plugins: [await instrumentationPlugin()],
+    plugins: [instrumentation],
   });
 
   if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
+  instrumentation.assertEmbedded();
 
   if (platform.startsWith("darwin")) await signAdHoc(binary);
   const betterleaks = await bundleBetterleaks(platform, outDir);
