@@ -1,6 +1,6 @@
 /** The shape of benchmark results, shared by scenarios, reports and comparisons. */
 import { type Effect, Schema, type Scope } from "effect";
-import type { Daemon, LaunchOptions, TransportKind } from "./daemon.ts";
+import type { Daemon, DeveloperModeSetting, LaunchOptions, TransportKind } from "./daemon.ts";
 import type { Sampler } from "./sampler.ts";
 
 /**
@@ -54,6 +54,8 @@ export interface Environment {
   readonly daemon: "source" | "compiled";
   readonly daemonBinary: string | null;
   readonly transport: TransportKind;
+  /** POLARIS_DEVELOPER_MODE the Daemons ran with; absent in results recorded before it existed (off). */
+  readonly developerMode?: DeveloperModeSetting;
   readonly sampler: string;
   readonly date: string;
   /**
@@ -70,6 +72,8 @@ export interface BenchResult {
     readonly quick: boolean;
     readonly runs: number;
     readonly profile: boolean;
+    /** Absent in results recorded before it existed (false). */
+    readonly clientSelfTraces?: boolean;
     readonly scenarios: ReadonlyArray<string>;
   };
   readonly scenarios: Record<string, ScenarioResult>;
@@ -78,6 +82,8 @@ export interface BenchResult {
 export interface ScenarioContext {
   readonly quick: boolean;
   readonly transport: TransportKind;
+  /** Each Client sends Self-Traces under load (`--client-self-traces`, needs Developer Mode on). */
+  readonly clientSelfTraces: boolean;
   /** Where profiles and heap snapshots go for this run; null without --profile. */
   readonly profileDir: string | null;
   readonly log: (message: string) => void;
@@ -135,6 +141,7 @@ const EnvironmentSchema = Schema.Struct({
   daemon: Schema.Literals(["source", "compiled"]),
   daemonBinary: Schema.NullOr(Schema.String),
   transport: Schema.Literals(["bridge", "socket"]),
+  developerMode: Schema.optionalKey(Schema.Literals(["off", "on"])),
   sampler: Schema.String,
   date: Schema.String,
   backgroundCores: Schema.optionalKey(Schema.Number),
@@ -147,6 +154,7 @@ const BenchResultSchema = Schema.Struct({
     quick: Schema.Boolean,
     runs: Schema.Number,
     profile: Schema.Boolean,
+    clientSelfTraces: Schema.optionalKey(Schema.Boolean),
     scenarios: Schema.Array(Schema.String),
   }),
   scenarios: Schema.Record(Schema.String, ScenarioResultSchema),

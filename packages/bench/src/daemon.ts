@@ -28,8 +28,12 @@ export interface LaunchOptions {
   readonly home?: string | null;
   /** Write a CPU profile (on exit) and allow heap snapshots into this directory. */
   readonly profileDir?: string | null;
+  /** POLARIS_DEVELOPER_MODE for the Daemon (default off: the untraced path). */
+  readonly developerMode?: DeveloperModeSetting;
   readonly env?: Record<string, string>;
 }
+
+export type DeveloperModeSetting = "off" | "on";
 
 export interface Daemon {
   readonly pid: number;
@@ -78,8 +82,8 @@ export const launchDaemon = async (options: LaunchOptions): Promise<Daemon> => {
   // The gateway on an ephemeral port: the same listener, without taking 7477 from a real Daemon.
   env.POLARIS_GATEWAY_PORT = "0";
 
-  // From source counts as Developer Mode; off, so the scenarios measure the untraced path (ENG-709).
-  env.POLARIS_DEVELOPER_MODE = "off";
+  // From source counts as Developer Mode; off unless asked, so scenarios measure the untraced path (ENG-709).
+  env.POLARIS_DEVELOPER_MODE = options.developerMode ?? "off";
 
   if (profileDir) env.POLARIS_DEBUG_DIR = profileDir;
   Object.assign(env, options.env);

@@ -5,6 +5,7 @@
  *   bun run bench [scenario...] [--quick] [--runs N] [--json out.json]
  *                 [--compare baseline.json] [--fail-on kinds] [--save-baseline]
  *                 [--markdown out.md] [--profile] [--binary path] [--transport bridge|socket]
+ *                 [--developer-mode off|on] [--client-self-traces]
  *                 [--list]
  *
  * Relative paths are resolved against the repository root.
@@ -18,7 +19,7 @@ import {
   gatingKinds,
   memoryClass,
 } from "./compare.ts";
-import { REPO_ROOT, type TransportKind } from "./daemon.ts";
+import { type DeveloperModeSetting, REPO_ROOT, type TransportKind } from "./daemon.ts";
 import { environment, measureBackgroundCores } from "./env.ts";
 import { renderComparison, renderMarkdown, renderResult } from "./report.ts";
 import { runScenario } from "./runner.ts";
@@ -65,6 +66,8 @@ scenarios: ${SCENARIOS.map((s) => s.name).join(", ")} (default: all)
   --profile             CPU profile + heap snapshot at peak for each scenario run
   --binary PATH         bench a compiled polaris binary instead of the source
   --transport KIND      bridge (default: polaris bridge, like ssh) or socket (direct)
+  --developer-mode M    off (default: the untraced path) or on (Self-Traces recorded)
+  --client-self-traces  with Developer Mode on, sessions' Clients also send Self-Traces
   --list                list scenarios and exit`;
 
 interface Args {
@@ -80,6 +83,8 @@ interface Args {
   profile: boolean;
   binary: string | null;
   transport: TransportKind;
+  developerMode: DeveloperModeSetting;
+  clientSelfTraces: boolean;
   list: boolean;
 }
 
@@ -110,6 +115,12 @@ const parseTransport = (value: string): TransportKind => {
   return value;
 };
 
+const parseDeveloperMode = (value: string): DeveloperModeSetting => {
+  if (value !== "off" && value !== "on") throw new Error(`unknown developer mode ${value}`);
+
+  return value;
+};
+
 const fromRoot = (path: string) => (isAbsolute(path) ? path : join(REPO_ROOT, path));
 
 const parseArgs = (argv: ReadonlyArray<string>): Args => {
@@ -126,6 +137,8 @@ const parseArgs = (argv: ReadonlyArray<string>): Args => {
     profile: false,
     binary: null,
     transport: "bridge",
+    developerMode: "off",
+    clientSelfTraces: false,
     list: false,
   };
 
@@ -175,6 +188,12 @@ const parseArgs = (argv: ReadonlyArray<string>): Args => {
       case "--transport":
         args.transport = parseTransport(value());
         break;
+      case "--developer-mode":
+        args.developerMode = parseDeveloperMode(value());
+        break;
+      case "--client-self-traces":
+        args.clientSelfTraces = true;
+        break;
 
       case "--list":
         args.list = true;
@@ -190,7 +209,18 @@ const parseArgs = (argv: ReadonlyArray<string>): Args => {
     }
   }
 
+  // The Daemon refuses `traces.ingestSelf` while Developer Mode is off.
+  if (args.clientSelfTraces && args.developerMode !== "on")
+    throw new Error("--client-self-traces needs --developer-mode on");
+
   return args;
+};
+
+/** Developer Mode runs keep their own baselines beside the off path's. */
+const baselineSuffix = (args: Args) => {
+  if (args.developerMode === "off") return "";
+
+  return args.clientSelfTraces ? "-developer-mode-clients" : "-developer-mode";
 };
 
 /** Writes `result.json` and `summary.txt` under `runDir`, plus `--json` and `--save-baseline`. */
@@ -207,7 +237,7 @@ const writeResult = (result: BenchResult, args: Args, runDir: string, log: (m: s
     const baselinePath = join(
       BENCH_DIR,
       "baselines",
-      `${result.env.machineSlug}${args.quick ? "-quick" : ""}.json`
+      `${result.env.machineSlug}${args.quick ? "-quick" : ""}${baselineSuffix(args)}.json`
     );
 
     copyFileSync(resultPath, baselinePath);
@@ -300,7 +330,11 @@ const main = async () => {
     );
 
   const env = {
-    ...environment({ binary: args.binary, transport: args.transport }),
+    ...environment({
+      binary: args.binary,
+      transport: args.transport,
+      developerMode: args.developerMode,
+    }),
     backgroundCores: await measureBackgroundCores(),
   };
 
@@ -320,6 +354,8 @@ const main = async () => {
       runs: args.runs,
       binary: args.binary,
       transport: args.transport,
+      developerMode: args.developerMode,
+      clientSelfTraces: args.clientSelfTraces,
       profileRoot: args.profile ? runDir : null,
       log,
     });
@@ -332,6 +368,7 @@ const main = async () => {
       quick: args.quick,
       runs: args.runs,
       profile: args.profile,
+      clientSelfTraces: args.clientSelfTraces,
       scenarios: selected.map((s) => s.name),
     },
     scenarios,

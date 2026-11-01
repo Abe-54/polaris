@@ -72,6 +72,8 @@ test("a zero-process Daemon report fails the scenario visibly", async () => {
       runs: 1,
       binary: null,
       transport: "socket",
+      developerMode: "off",
+      clientSelfTraces: false,
       profileRoot: null,
       log: (message) => logs.push(message),
     }

@@ -1,7 +1,7 @@
 /** The environment block stored with every result, and the machine slug baselines are named by. */
 import { readFileSync } from "node:fs";
 import { arch, cpus, release, totalmem, type } from "node:os";
-import { REPO_ROOT, type TransportKind } from "./daemon.ts";
+import { type DeveloperModeSetting, REPO_ROOT, type TransportKind } from "./daemon.ts";
 import { procReader } from "./proc.ts";
 import type { Environment } from "./types.ts";
 
@@ -83,6 +83,7 @@ export const measureBackgroundCores = async (ms = 1000): Promise<number> => {
 export const environment = (options: {
   readonly binary: string | null;
   readonly transport: TransportKind;
+  readonly developerMode: DeveloperModeSetting;
 }): Environment => {
   const info = machineInfo();
   const cores = cpus().length;
@@ -103,6 +104,7 @@ export const environment = (options: {
     daemon: options.binary ? "compiled" : "source",
     daemonBinary: options.binary,
     transport: options.transport,
+    developerMode: options.developerMode,
     sampler: procReader().backend,
     date: new Date().toISOString(),
   };

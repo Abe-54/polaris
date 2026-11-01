@@ -36,6 +36,7 @@ import {
   watchSession,
 } from "../drive.ts";
 import type { Sampler } from "../sampler.ts";
+import { SELF_SPANS_PER_BATCH, type SelfTraceTally, sendSelfTraces } from "../selfTraces.ts";
 import { summarize } from "../stats.ts";
 import {
   cpu,
@@ -81,20 +82,36 @@ const phasesFor = (quick: boolean): ReadonlyArray<Phase> =>
 
 let sessionCounter = 0;
 
+/** A Client for the scenario; with `--client-self-traces` it flushes Self-Traces every second. */
+const connectClient = (
+  ctx: ScenarioContext,
+  daemon: Daemon,
+  label: string,
+  tally: SelfTraceTally
+) =>
+  Effect.gen(function* () {
+    const client = yield* connect(daemon, ctx.transport, label);
+
+    if (ctx.clientSelfTraces) yield* sendSelfTraces(client, tally);
+
+    return client;
+  });
+
 const runPhase = (
   ctx: ScenarioContext,
   daemon: Daemon,
   sampler: Sampler,
   primary: Client,
   workspaceId: WorkspaceId,
-  phase: Phase
+  phase: Phase,
+  tally: SelfTraceTally
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
       const extra: Array<Client> = [];
 
       for (let c = 1; c < phase.clients; c++) {
-        extra.push(yield* connect(daemon, ctx.transport, `bench-${c}`));
+        extra.push(yield* connectClient(ctx, daemon, `bench-${c}`, tally));
       }
 
       const clients = [primary, ...extra];
@@ -258,16 +275,25 @@ export const sessions: Scenario = {
       );
 
       mkdirSync(join(repo, "src"), { recursive: true });
-      const primary = yield* connect(daemon, ctx.transport, "bench-0");
+      const tally: SelfTraceTally = { accepted: 0, failed: 0 };
+      const primary = yield* connectClient(ctx, daemon, "bench-0", tally);
       const workspaceId = yield* registerWorkspace(primary, repo, "sessions");
       // A warm-up Turn, so `before` is taken after the Daemon's quiet release, as `after` is.
-      yield* runPhase(ctx, daemon, sampler, primary, workspaceId, {
-        name: "warmup",
-        sessions: 1,
-        clients: 1,
-        turns: 1,
-        script: realistic(ctx.quick),
-      });
+      yield* runPhase(
+        ctx,
+        daemon,
+        sampler,
+        primary,
+        workspaceId,
+        {
+          name: "warmup",
+          sessions: 1,
+          clients: 1,
+          turns: 1,
+          script: realistic(ctx.quick),
+        },
+        tally
+      );
       yield* settle(3000);
       const before = sampler.sample();
 
@@ -276,7 +302,10 @@ export const sessions: Scenario = {
       const phases = phasesFor(ctx.quick);
 
       for (const phase of phases) {
-        Object.assign(metrics, yield* runPhase(ctx, daemon, sampler, primary, workspaceId, phase));
+        Object.assign(
+          metrics,
+          yield* runPhase(ctx, daemon, sampler, primary, workspaceId, phase, tally)
+        );
       }
 
       Object.assign(metrics, yield* runBurst(ctx, sampler, primary, workspaceId));
@@ -290,7 +319,15 @@ export const sessions: Scenario = {
           p.sessions === Math.max(...phases.filter((q) => q.clients === 1).map((q) => q.sessions))
       )!;
 
-      yield* runPhase(ctx, daemon, sampler, primary, workspaceId, { ...repeatOf, name: "repeat" });
+      yield* runPhase(
+        ctx,
+        daemon,
+        sampler,
+        primary,
+        workspaceId,
+        { ...repeatOf, name: "repeat" },
+        tally
+      );
       yield* settle(3000);
       const afterRepeat = sampler.sample();
       // Last, so the snapshot's own allocation does not skew the numbers above.
@@ -309,6 +346,12 @@ export const sessions: Scenario = {
       const notes = [
         `phases: ${phases.map((p) => `${p.name} (${p.sessions} sessions × ${p.turns} Turns, ${p.clients} Client(s))`).join(", ")}, then burst and repeat (${repeatOf.name} again)`,
       ];
+
+      if (ctx.clientSelfTraces) {
+        notes.push(
+          `each Client sent ${SELF_SPANS_PER_BATCH} Self-Trace Spans a second: ${tally.accepted} accepted, ${tally.failed} batches failed`
+        );
+      }
 
       const repeatGrowth = (afterRepeat.rssBytes - after.rssBytes) / 1024 / 1024;
 
