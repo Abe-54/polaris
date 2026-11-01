@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "env": {
+    "machine": "Mac14,13",
+    "machineSlug": "mac14-13-apple-m2-max-12c",
+    "cpu": "Apple M2 Max",
+    "cores": 12,
+    "memoryGiB": 32,
+    "os": "macOS 27.0 (Darwin 27.0.0)",
+    "arch": "arm64",
+    "bun": "1.4.4",
+    "gitSha": "",
+    "gitDirty": false,
+    "daemon": "source",
+    "daemonBinary": null,
+    "transport": "bridge",
+    "sampler": "darwin-libproc",
+    "date": "2026-11-01T07:25:13.398Z",
+    "backgroundCores": 3.3
+  },
+  "options": {
+    "quick": true,
+    "runs": 3,
+    "profile": false,
+    "scenarios": ["terminal"]
+  },
+  "scenarios": {
+    "terminal": {
+      "metrics": {
+        "mb_per_s": {
+          "value": 17.09321940581028,
+          "unit": "MB/s",
+          "kind": "throughput",
+          "better": "higher",
+          "runs": [16.766920912134527, 17.153092906192885, 17.09321940581028],
+          "min": 16.766920912134527,
+          "max": 17.153092906192885
+        },
+        "stream_ms": {
+          "value": 600.8388329999998,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "info": true,
+          "runs": [612.5316659999999, 598.741583, 600.8388329999998],
+          "min": 598.741583,
+          "max": 612.5316659999999
+        },
+        "cpu_avg_pct": {
+          "value": 115.86338634287708,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "runs": [120.84022835148498, 115.86338634287708, 108.81942674018545],
+          "min": 108.81942674018545,
+          "max": 120.84022835148498
+        },
+        "rss_peak_over_base_mib": {
+          "value": 38.28125,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [39.09375, 37.796875, 38.28125],
+          "min": 37.796875,
+          "max": 39.09375
+        },
+        "footprint_peak_over_base_mib": {
+          "value": 36.4385986328125,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [33.81336975097656, 36.4385986328125, 36.9542236328125],
+          "min": 33.81336975097656,
+          "max": 36.9542236328125
+        },
+        "rss_after_close_mib": {
+          "value": 139.25,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [139.78125, 136.890625, 139.25],
+          "min": 136.890625,
+          "max": 139.78125
+        }
+      },
+      "notes": ["10 MB of output via `yes | head -c`; the PTY turns \\n into \\r\\n"],
+      "durationMs": 11063.576417
+    }
+  }
+}

@@ -13,12 +13,12 @@ import {
   toBase64Url,
 } from "@polaris/protocol/relay";
 import { Option } from "effect";
-import { pushSuite } from "./seal.ts";
 
 const info = new TextEncoder().encode(LIVE_HPKE_INFO);
 
 /** `slice`, fitted, sealed to `pushKey` (uncompressed P-256, base64url). */
 export const sealSlice = async (pushKey: string, slice: HostSlice): Promise<string> => {
+  const { pushSuite } = await import("./seal.ts");
   const key = Option.getOrThrow(fromBase64Url(pushKey));
   const recipientPublicKey = await pushSuite.kem.deserializePublicKey(new Uint8Array(key));
   const sender = await pushSuite.createSenderContext({ recipientPublicKey, info });

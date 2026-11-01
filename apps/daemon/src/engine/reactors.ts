@@ -15,8 +15,8 @@ import {
   type Turn,
 } from "@polaris/protocol";
 import { Context, Effect, Inspectable, Layer, Predicate, Option } from "effect";
-import { DataSources, DataQueries } from "../data/index.ts";
-import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
+import { DataSources, DataQueries } from "../data/services.ts";
+import { SchemaSnapshots } from "../data/schemaSnapshotService.ts";
 import { watchOutsideCommands } from "../data/outsideSubscriber.ts";
 import { revertAfterAccept } from "../accept/reactor.ts";
 import { sessionRestartNote } from "../constellation/restartNote.ts";

@@ -1,12 +1,10 @@
+import { SchemaSnapshots } from "./schemaSnapshotService.ts";
+
+export { SchemaSnapshots } from "./schemaSnapshotService.ts";
+
 /** Event-driven Schema Diff worker; catalog I/O never joins decide/ack or opens approvals. */
 import { Context, Effect, Layer, Predicate, Semaphore, Stream } from "effect";
-import {
-  DataError,
-  type DataSchemaDiff,
-  type SessionId,
-  type Turn,
-  type TurnId,
-} from "@polaris/protocol";
+import { DataError, type SessionId, type Turn, type TurnId } from "@polaris/protocol";
 import { EventStore } from "../store/EventStore.ts";
 import { DataSources } from "./index.ts";
 import { DataDatabase, storageError } from "./database.ts";
@@ -438,46 +436,48 @@ export class SchemaSnapshotWorker extends Context.Service<
     Layer.effect(SchemaSnapshotWorker, makeSchemaSnapshots(deps));
 }
 
-export class SchemaSnapshots extends Context.Service<
+export const schemaSnapshotsLayer = Layer.effect(
   SchemaSnapshots,
-  {
-    readonly get: (input: {
-      sessionId: SessionId;
-      turn?: TurnId;
-    }) => Effect.Effect<DataSchemaDiff, DataError>;
-    readonly remove: (sessionId: SessionId) => Effect.Effect<void, DataError>;
-  }
->()("polaris/data/SchemaSnapshots") {
-  static readonly layer = Layer.effect(
-    SchemaSnapshots,
-    Effect.gen(function* () {
-      const { db } = yield* DataDatabase;
-      const sources = yield* DataSources;
-      const store = yield* EventStore;
-      const log = yield* QueryLog;
-      const pools = new DataPools();
-      yield* Effect.addFinalizer(() => Effect.promise(() => pools.close()));
-      const records = yield* Effect.try({ try: () => new SchemaStore(db), catch: storageError });
-      // Archived sessions and removed Workspaces cannot retain orphaned catalogs after a restart.
-      const live = yield* store.model;
+  Effect.gen(function* () {
+    const { db } = yield* DataDatabase;
+    const sources = yield* DataSources;
+    const store = yield* EventStore;
+    const log = yield* QueryLog;
+    const pools = new DataPools();
+    yield* Effect.addFinalizer(() => Effect.promise(() => pools.close()));
+    const records = yield* Effect.try({ try: () => new SchemaStore(db), catch: storageError });
+    // Archived sessions and removed Workspaces cannot retain orphaned catalogs after a restart.
+    const live = yield* store.model;
 
-      for (const row of db
-        .query<{ session: string }, []>("SELECT DISTINCT session FROM data_schema_snapshots")
-        .all()) {
-        const session = [...live.sessions.values()].find((x) => x.session.id === row.session);
+    for (const row of db
+      .query<{ session: string }, []>("SELECT DISTINCT session FROM data_schema_snapshots")
+      .all()) {
+      const session = [...live.sessions.values()].find((x) => x.session.id === row.session);
 
-        if (!session || session.session.state === "archived") records.remove(row.session);
-      }
+      if (!session || session.session.state === "archived") records.remove(row.session);
+    }
 
-      return yield* makeSchemaSnapshots({
-        sources,
-        store,
-        log,
-        records,
-        capture: (resolved) => snapshotCatalog(pools, resolved),
-        migrationCheckout,
-        migrationChanged,
-      });
-    })
-  );
-}
+    const worker = yield* makeSchemaSnapshots({
+      sources,
+      store,
+      log,
+      records,
+      capture: (resolved) => snapshotCatalog(pools, resolved),
+      migrationCheckout,
+      migrationChanged,
+    });
+
+    return {
+      ...worker,
+      begin: Effect.fnUntraced(function* (turn: Turn) {
+        yield* worker.begin(turn);
+
+        const current = (yield* store.model).sessions
+          .get(turn.sessionId)
+          ?.turns.find((item) => item.id === turn.id);
+
+        if (current !== undefined && current.status !== "working") yield* worker.end(current);
+      }),
+    };
+  })
+);

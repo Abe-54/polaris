@@ -1,0 +1,346 @@
+{
+  "schema": 1,
+  "env": {
+    "machine": "Mac14,13",
+    "machineSlug": "mac14-13-apple-m2-max-12c",
+    "cpu": "Apple M2 Max",
+    "cores": 12,
+    "memoryGiB": 32,
+    "os": "macOS 27.0 (Darwin 27.0.0)",
+    "arch": "arm64",
+    "bun": "1.4.4",
+    "gitSha": "92f1ecfed272",
+    "gitDirty": false,
+    "daemon": "source",
+    "daemonBinary": null,
+    "transport": "bridge",
+    "sampler": "darwin-libproc",
+    "date": "2026-11-01T06:51:05.991Z",
+    "backgroundCores": 7.5
+  },
+  "options": {
+    "quick": true,
+    "runs": 1,
+    "profile": false,
+    "scenarios": ["cold-start", "idle", "terminal"]
+  },
+  "scenarios": {
+    "cold-start": {
+      "metrics": {
+        "hello_ms": {
+          "value": 192.05924999999934,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "runs": [192.05924999999934],
+          "min": 192.05924999999934,
+          "max": 192.05924999999934
+        },
+        "hello_max_ms": {
+          "value": 222.63199999999983,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "info": true,
+          "runs": [222.63199999999983],
+          "min": 222.63199999999983,
+          "max": 222.63199999999983
+        },
+        "rss_settled_mib": {
+          "value": 88.890625,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [88.890625],
+          "min": 88.890625,
+          "max": 88.890625
+        },
+        "footprint_settled_mib": {
+          "value": 53.282005310058594,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [53.282005310058594],
+          "min": 53.282005310058594,
+          "max": 53.282005310058594
+        },
+        "startup_modules": {
+          "value": 603,
+          "unit": "modules",
+          "kind": "count",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.03,
+            "absolute": 5
+          },
+          "runs": [603],
+          "min": 603,
+          "max": 603
+        },
+        "startup_polaris_modules": {
+          "value": 314,
+          "unit": "modules",
+          "kind": "count",
+          "better": "lower",
+          "info": true,
+          "runs": [314],
+          "min": 314,
+          "max": 314
+        },
+        "bridge_connect_ms": {
+          "value": 88.22483400000056,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "runs": [88.22483400000056],
+          "min": 88.22483400000056,
+          "max": 88.22483400000056
+        },
+        "settle_cpu_pct": {
+          "value": 0.7111092229399706,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "info": true,
+          "runs": [0.7111092229399706],
+          "min": 0.7111092229399706,
+          "max": 0.7111092229399706
+        }
+      },
+      "notes": ["3 spawns per run; hello polled every 2 ms over the Unix socket"],
+      "durationMs": 6923.770292
+    },
+    "idle": {
+      "metrics": {
+        "client_cpu_avg_pct": {
+          "value": 0.5861841066497768,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 0.5
+          },
+          "runs": [0.5861841066497768],
+          "min": 0.5861841066497768,
+          "max": 0.5861841066497768
+        },
+        "client_cpu_max_pct": {
+          "value": 6.5988183183071065,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "info": true,
+          "runs": [6.5988183183071065],
+          "min": 6.5988183183071065,
+          "max": 6.5988183183071065
+        },
+        "client_rss_mib": {
+          "value": 95.7890625,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [95.7890625],
+          "min": 95.7890625,
+          "max": 95.7890625
+        },
+        "client_footprint_mib": {
+          "value": 56.25077819824219,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [56.25077819824219],
+          "min": 56.25077819824219,
+          "max": 56.25077819824219
+        },
+        "client_wakeups_per_s": {
+          "value": 11.099131030163127,
+          "unit": "/s",
+          "kind": "count",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 5
+          },
+          "runs": [11.099131030163127],
+          "min": 11.099131030163127,
+          "max": 11.099131030163127
+        },
+        "bare_bun_cpu_avg_pct": {
+          "value": 0.019502774434490677,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "info": true,
+          "runs": [0.019502774434490677],
+          "min": 0.019502774434490677,
+          "max": 0.019502774434490677
+        },
+        "bare_bun_rss_mib": {
+          "value": 10.609375,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "info": true,
+          "runs": [10.609375],
+          "min": 10.609375,
+          "max": 10.609375
+        },
+        "bare_bun_wakeups_per_s": {
+          "value": 0.9997364028018034,
+          "unit": "/s",
+          "kind": "count",
+          "better": "lower",
+          "info": true,
+          "runs": [0.9997364028018034],
+          "min": 0.9997364028018034,
+          "max": 0.9997364028018034
+        },
+        "noclient_cpu_avg_pct": {
+          "value": 0.2229189105123306,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 0.5
+          },
+          "runs": [0.2229189105123306],
+          "min": 0.2229189105123306,
+          "max": 0.2229189105123306
+        },
+        "noclient_rss_mib": {
+          "value": 95.96875,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [95.96875],
+          "min": 95.96875,
+          "max": 95.96875
+        },
+        "noclient_footprint_mib": {
+          "value": 56.09452819824219,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [56.09452819824219],
+          "min": 56.09452819824219,
+          "max": 56.09452819824219
+        },
+        "noclient_wakeups_per_s": {
+          "value": 7.898145581761827,
+          "unit": "/s",
+          "kind": "count",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 5
+          },
+          "runs": [7.898145581761827],
+          "min": 7.898145581761827,
+          "max": 7.898145581761827
+        },
+        "processes": {
+          "value": 1,
+          "unit": "",
+          "kind": "count",
+          "better": "lower",
+          "runs": [1],
+          "min": 1,
+          "max": 1
+        },
+        "noclient_cpu_over_bare_pct": {
+          "value": 0.20341613607783993,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 0.3
+          },
+          "runs": [0.20341613607783993],
+          "min": 0.20341613607783993,
+          "max": 0.20341613607783993
+        }
+      },
+      "notes": [
+        "7.9 wakeups/s idle with no Client, 6.9/s above a bare Bun process: timers or polling",
+        "3 Workspaces, 6 Dormant sessions; 10 s windows after a settle; wakeups are idle + interrupt wakeups (proc_pid_rusage)"
+      ],
+      "durationMs": 29153.009332999998
+    },
+    "terminal": {
+      "metrics": {
+        "mb_per_s": {
+          "value": 14.837478248966024,
+          "unit": "MB/s",
+          "kind": "throughput",
+          "better": "higher",
+          "runs": [14.837478248966024],
+          "min": 14.837478248966024,
+          "max": 14.837478248966024
+        },
+        "stream_ms": {
+          "value": 692.1843339999978,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "info": true,
+          "runs": [692.1843339999978],
+          "min": 692.1843339999978,
+          "max": 692.1843339999978
+        },
+        "cpu_avg_pct": {
+          "value": 122.63931520199324,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "runs": [122.63931520199324],
+          "min": 122.63931520199324,
+          "max": 122.63931520199324
+        },
+        "rss_peak_over_base_mib": {
+          "value": 32.25,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [32.25],
+          "min": 32.25,
+          "max": 32.25
+        },
+        "footprint_peak_over_base_mib": {
+          "value": 25.485244750976562,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [25.485244750976562],
+          "min": 25.485244750976562,
+          "max": 25.485244750976562
+        },
+        "rss_after_close_mib": {
+          "value": 117.375,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [117.375],
+          "min": 117.375,
+          "max": 117.375
+        }
+      },
+      "notes": ["10 MB of output via `yes | head -c`; the PTY turns \\n into \\r\\n"],
+      "durationMs": 3581.176833000005
+    }
+  }
+}
