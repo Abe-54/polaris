@@ -1,0 +1,51 @@
+{
+  "head": "be0f03f3ef95",
+  "spans": 181800,
+  "earlierTraces": 3000,
+  "targetTraces": 30,
+  "spansPerTrace": 60,
+  "modes": {
+    "memory": {
+      "beforeMs": [
+        215,
+        211,
+        212
+      ],
+      "afterMs": [
+        25,
+        19,
+        18
+      ],
+      "noEarlierMs": 11,
+      "heartbeatGapsMs": [
+        4.1,
+        4.6,
+        4.5,
+        4.6
+      ],
+      "beforeOutput": "filled 181800 spans in 965 ms\nbaseline compare 215 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nbaseline compare 211 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nbaseline compare 212 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\n[\n  {\n    id: 3,\n    parent: 0,\n    notused: 62,\n    detail: \"SEARCH summaries USING INDEX summaries_history (checkout=?)\",\n  }\n]\nold signatures via json_extract + parent self-join 236 ms 13\nold signatures via name/parent_name columns 101 ms 13\n",
+      "afterOutput": "filled 181800 spans in 976 ms\nworker availability: 6 heartbeat ticks, max gap 4.1 ms\nbaseline compare 25 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nworker availability: 4 heartbeat ticks, max gap 4.6 ms\nbaseline compare 19 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nworker availability: 4 heartbeat ticks, max gap 4.5 ms\nbaseline compare 18 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nworker availability: 2 heartbeat ticks, max gap 4.6 ms\nno-earlier-samples compare 11 ms {\"p50Ms\":null,\"p95Ms\":null,\"count\":0} {\"name\":\"db.query 11\",\"service\":\"ledger-api\",\"durationMs\":64,\"traceId\":\"00000000000000000000000000989680\",\"spanId\":\"000000000000003c\"}\n[\n  {\n    id: 2,\n    parent: 0,\n    notused: 54,\n    detail: \"SEARCH summaries USING COVERING INDEX summaries_turn (checkout=? AND turn_id=?)\",\n  }\n]\nold signatures via json_extract + parent self-join 251 ms 13\nold signatures via name/parent_name columns 117 ms 13\nparentless root lookup [\n  {\n    id: 5,\n    parent: 0,\n    notused: 61,\n    detail: \"SEARCH spans USING INDEX spans_parentless (checkout=? AND trace_id=?)\",\n  }\n]\n"
+    },
+    "file": {
+      "beforeMs": [
+        278,
+        272,
+        271
+      ],
+      "afterMs": [
+        34,
+        26,
+        25
+      ],
+      "noEarlierMs": 17,
+      "heartbeatGapsMs": [
+        5.2,
+        4.8,
+        4.6,
+        4.9
+      ],
+      "beforeOutput": "filled 181800 spans in 1404 ms\nbaseline compare 278 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nbaseline compare 272 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nbaseline compare 271 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\n[\n  {\n    id: 3,\n    parent: 0,\n    notused: 62,\n    detail: \"SEARCH summaries USING INDEX summaries_history (checkout=?)\",\n  }\n]\nold signatures via json_extract + parent self-join 301 ms 13\nold signatures via name/parent_name columns 134 ms 13\n",
+      "afterOutput": "filled 181800 spans in 2549 ms\nworker availability: 7 heartbeat ticks, max gap 5.2 ms\nbaseline compare 34 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nworker availability: 6 heartbeat ticks, max gap 4.8 ms\nbaseline compare 26 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nworker availability: 5 heartbeat ticks, max gap 4.6 ms\nbaseline compare 25 ms {\"p50Ms\":124,\"p95Ms\":147,\"count\":3000} null\nworker availability: 3 heartbeat ticks, max gap 4.9 ms\nno-earlier-samples compare 17 ms {\"p50Ms\":null,\"p95Ms\":null,\"count\":0} {\"name\":\"db.query 11\",\"service\":\"ledger-api\",\"durationMs\":64,\"traceId\":\"00000000000000000000000000989680\",\"spanId\":\"000000000000003c\"}\n[\n  {\n    id: 2,\n    parent: 0,\n    notused: 54,\n    detail: \"SEARCH summaries USING COVERING INDEX summaries_turn (checkout=? AND turn_id=?)\",\n  }\n]\nold signatures via json_extract + parent self-join 312 ms 13\nold signatures via name/parent_name columns 175 ms 13\nparentless root lookup [\n  {\n    id: 5,\n    parent: 0,\n    notused: 61,\n    detail: \"SEARCH spans USING INDEX spans_parentless (checkout=? AND trace_id=?)\",\n  }\n]\n"
+    }
+  }
+}

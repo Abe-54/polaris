@@ -1,4 +1,4 @@
-import type { Database, SQLQueryBindings } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import { Schema } from "effect";
 import {
   TraceCompareSelector,
@@ -9,6 +9,8 @@ import {
 import { sortableTime, decodeValueRows } from "./database.ts";
 import { notFound } from "./queries.ts";
 import { compareInputError } from "./compare.ts";
+import { newSpans } from "./compareSpans.ts";
+import { compareYield } from "./compareYield.ts";
 
 const summaryRows = Schema.decodeUnknownSync(
   Schema.Array(
@@ -17,20 +19,7 @@ const summaryRows = Schema.decodeUnknownSync(
       route: Schema.String,
       duration: Schema.Number,
       partial: Schema.Number,
-    })
-  )
-);
-
-const newRows = Schema.decodeUnknownSync(
-  Schema.Array(
-    Schema.Struct({
-      routeService: Schema.String,
-      route: Schema.String,
-      name: Schema.String,
-      service: Schema.String,
-      durationMs: Schema.Number,
       traceId: Schema.String,
-      spanId: Schema.String,
     })
   )
 );
@@ -61,7 +50,11 @@ const selection = (
   if (TraceCompareSelector.guards.Turn(selector) || TraceCompareSelector.guards.Turns(selector)) {
     const ids = turnsOf(selector, resolved);
 
-    return { sql: `checkout=? AND turn_id IN (${inList(ids)})`, bindings: [checkout, ...ids] };
+    return {
+      sql: `s.checkout=? AND s.turn_id IN (${inList(ids)})`,
+      bindings: [checkout, ...ids],
+      index: ids.length === 1 ? "summaries_turn" : "sqlite_autoindex_summaries_1",
+    };
   }
 
   if (!TraceCompareSelector.guards.Trace(selector)) throw compareInputError();
@@ -81,7 +74,11 @@ const selection = (
       fix: "Use a longer prefix or the full trace id.",
     });
 
-  return { sql: "checkout=? AND trace_id=?", bindings: [checkout, rows[0]!.value] };
+  return {
+    sql: "s.checkout=? AND s.trace_id=?",
+    bindings: [checkout, rows[0]!.value],
+    index: "sqlite_autoindex_summaries_1",
+  };
 };
 
 const stats = (values: number[], enough: boolean): TraceRouteStats => {
@@ -96,14 +93,63 @@ const stats = (values: number[], enough: boolean): TraceRouteStats => {
 
 const key = (service: string, route: string) => JSON.stringify([service, route]);
 
-/** One worker snapshot, projected summary rows and one batched semantic Span difference. */
-export const compareTraces = (
+interface Group {
+  service: string;
+  route: string;
+  before: number[];
+  after: number[];
+  partial: { before: number; after: number };
+}
+
+const groupsFor = async (
+  read: (side: "a" | "b", cursor: string) => ReturnType<typeof summaryRows>
+) => {
+  const groups = new Map<string, Group>();
+
+  for (const [side, table] of [
+    ["before", "a"],
+    ["after", "b"],
+  ] as const) {
+    let cursor = "";
+    let rows = read(table, cursor);
+
+    while (rows.length > 0) {
+      for (const row of rows) {
+        const id = key(row.service, row.route);
+        let group = groups.get(id);
+
+        if (group === undefined) {
+          group = {
+            service: row.service,
+            route: row.route,
+            before: [],
+            after: [],
+            partial: { before: 0, after: 0 },
+          };
+          groups.set(id, group);
+        }
+
+        if (row.partial) group.partial[side]++;
+        else group[side].push(row.duration);
+      }
+
+      cursor = rows[rows.length - 1]!.traceId;
+      await compareYield();
+      rows = read(table, cursor);
+    }
+  }
+
+  return groups;
+};
+
+/** Materialize each side once; probe only the after side's semantic Span signatures. */
+const compareSnapshot = async (
   db: Database,
   checkout: string,
   a: TraceCompareSelector,
   b: TraceCompareSelector,
   turns: CompareTurns = {}
-): TraceComparison => {
+): Promise<TraceComparison> => {
   const { baselineStart } = turns;
   const after = selection(db, checkout, b, turns.b);
   const baseline = TraceCompareSelector.guards.Baseline(a);
@@ -114,88 +160,74 @@ export const compareTraces = (
 
   const before = baseline
     ? {
-        sql: `checkout=? AND start<? AND turn_id IS NOT NULL AND turn_id NOT IN (${inList(target)})
-      AND EXISTS (SELECT 1 FROM b WHERE b.root=summaries.root
-        AND b.routeService=json_extract(summaries.value,'$.service'))`,
+        sql: `s.checkout=? AND r.start<? AND s.turn_id IS NOT NULL AND s.turn_id NOT IN (${inList(target)})
+      AND s.root IN (SELECT root FROM compare_b)
+      AND EXISTS (SELECT 1 FROM compare_b b WHERE b.root=s.root
+        AND b.routeService=json_extract(s.value,'$.service'))`,
         bindings: [checkout, sortableTime(baselineStart!), ...target],
+        index: "sqlite_autoindex_summaries_1",
       }
     : selection(db, checkout, a, turns.a);
 
-  const columns =
-    "checkout,trace_id,root,duration,partial,json_extract(value,'$.service') AS routeService";
+  const columns = `s.checkout,s.trace_id,s.root,s.duration,
+    (s.partial OR NOT (r.parent IS NULL OR (json_extract(r.value,'$.kind') IN ('server','consumer')
+      AND NOT EXISTS (SELECT 1 FROM spans p WHERE p.checkout=r.checkout
+        AND p.trace_id=r.trace_id AND p.id=r.parent)))) AS partial,
+    json_extract(s.value,'$.service') AS routeService`;
 
-  const cte = `WITH b AS MATERIALIZED (SELECT ${columns} FROM summaries WHERE ${after.sql}),
-    a AS MATERIALIZED (SELECT ${columns} FROM summaries WHERE ${before.sql})`;
+  const materialize = async (side: "a" | "b", selected: ReturnType<typeof selection>) => {
+    db.exec(`CREATE TEMP TABLE compare_${side} AS SELECT ${columns} FROM summaries s INDEXED BY sqlite_autoindex_summaries_1
+      JOIN spans r ON r.checkout=s.checkout AND r.trace_id=s.trace_id
+        AND r.id=json_extract(s.value,'$.rootSpanId') WHERE 0;
+      CREATE INDEX compare_${side}_trace ON compare_${side}(trace_id);
+      CREATE INDEX compare_${side}_route ON compare_${side}(root,routeService)`);
 
-  const bindings: SQLQueryBindings[] = [...after.bindings, ...before.bindings];
+    if (baseline && side === "a" && db.query("SELECT 1 FROM compare_b LIMIT 1").get() === null)
+      return;
 
-  const read = (side: "a" | "b") =>
+    const scan =
+      baseline && side === "a" ? { sql: "s.checkout=?", bindings: [checkout] } : selected;
+
+    const page = `SELECT * FROM summaries s INDEXED BY ${selected.index}
+      WHERE ${scan.sql} AND s.trace_id>? ORDER BY s.trace_id LIMIT 32`;
+
+    const next = db.query(`SELECT trace_id AS value FROM (${page})`);
+
+    const filter = baseline && side === "a" ? selected : { sql: "1", bindings: [] };
+
+    const insert = db.query(`WITH page AS MATERIALIZED (${page})
+      INSERT INTO compare_${side} SELECT ${columns} FROM page s
+      JOIN spans r ON r.checkout=s.checkout AND r.trace_id=s.trace_id
+        AND r.id=json_extract(s.value,'$.rootSpanId') WHERE ${filter.sql}`);
+
+    let cursor = "";
+    let ids = decodeValueRows(next.all(...scan.bindings, cursor));
+
+    while (ids.length > 0) {
+      insert.run(...scan.bindings, cursor, ...filter.bindings);
+      cursor = ids[ids.length - 1]!.value;
+      await compareYield();
+      ids = decodeValueRows(next.all(...scan.bindings, cursor));
+    }
+  };
+
+  await materialize("b", after);
+  await compareYield(true);
+  await materialize("a", before);
+
+  const read = (side: "a" | "b", cursor: string) =>
     summaryRows(
       db
-        .query(`${cte}
-    SELECT routeService AS service,root AS route,duration,partial FROM ${side}`)
-        .all(...bindings)
+        .query(
+          `SELECT trace_id AS traceId,routeService AS service,root AS route,duration,partial
+      FROM compare_${side} WHERE trace_id>? ORDER BY trace_id LIMIT 32`
+        )
+        .all(cursor)
     );
 
-  const groups = new Map<
-    string,
-    {
-      service: string;
-      route: string;
-      before: number[];
-      after: number[];
-      partial: { before: number; after: number };
-    }
-  >();
+  const groups = await groupsFor(read);
 
-  for (const [side, rows] of [
-    ["before", read("a")],
-    ["after", read("b")],
-  ] as const) {
-    for (const row of rows) {
-      const id = key(row.service, row.route);
-      let group = groups.get(id);
-
-      if (group === undefined) {
-        group = {
-          service: row.service,
-          route: row.route,
-          before: [],
-          after: [],
-          partial: { before: 0, after: 0 },
-        };
-        groups.set(id, group);
-      }
-
-      if (row.partial) group.partial[side]++;
-      else group[side].push(row.duration);
-    }
-  }
-
-  const spans = (side: "a" | "b") => `SELECT s.routeService,
-    s.root AS route,p.service,json_extract(p.value,'$.name') AS name,
-    json_extract(parent.value,'$.name') AS parentName,
-    json_extract(p.value,'$.durationMs') AS durationMs,p.trace_id AS traceId,p.id AS spanId
-    FROM ${side} s JOIN spans p ON p.checkout=s.checkout AND p.trace_id=s.trace_id
-    LEFT JOIN spans parent ON parent.checkout=p.checkout AND parent.trace_id=p.trace_id AND parent.id=p.parent
-    WHERE s.partial=0`;
-
-  const newest = newRows(
-    db
-      .query(`${cte},
-    old AS MATERIALIZED (SELECT DISTINCT routeService,route,service,name,parentName FROM (${spans("a")})),
-    ranked AS (SELECT n.*,row_number() OVER (
-      PARTITION BY routeService,route ORDER BY durationMs DESC,traceId,spanId) AS rank
-      FROM (${spans("b")}) n WHERE NOT EXISTS (SELECT 1 FROM old o
-        WHERE o.routeService=n.routeService AND o.route=n.route AND o.service=n.service
-          AND o.name=n.name AND o.parentName IS n.parentName))
-    SELECT routeService,route,name,service,durationMs,traceId,spanId FROM ranked WHERE rank=1`)
-      .all(...bindings)
-  );
-
-  const newByRoute = new Map(
-    newest.map(({ routeService, route, ...span }) => [key(routeService, route), span])
-  );
+  const newByRoute = await newSpans(db, checkout);
 
   return TraceComparison.make({
     a,
@@ -228,4 +260,28 @@ export const compareTraces = (
         };
       }),
   });
+};
+
+/** A read snapshot in WAL lets ingest and other trace reads run between bounded chunks. */
+export const compareTraces = async (
+  db: Database,
+  checkout: string,
+  a: TraceCompareSelector,
+  b: TraceCompareSelector,
+  turns: CompareTurns = {}
+): Promise<TraceComparison> => {
+  const memory = db.filename === ":memory:";
+  const snapshot = memory ? db : new Database(db.filename, { readonly: true });
+
+  try {
+    snapshot.exec("BEGIN");
+
+    return await compareSnapshot(snapshot, checkout, a, b, turns);
+  } finally {
+    try {
+      if (snapshot.inTransaction) snapshot.exec("ROLLBACK");
+    } finally {
+      if (!memory) snapshot.close();
+    }
+  }
 };

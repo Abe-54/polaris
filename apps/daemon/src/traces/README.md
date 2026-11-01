@@ -189,8 +189,8 @@ Compare selectors are tagged `{_tag: "Turn", turnId}` or
 the session's checkout. `a` is before and `b` after. Additive `{_tag: "Baseline"}`
 is valid only as `a`,
 against a Turn `b`; it explicitly selects that route's earlier attributed traces
-in the checkout, before the target Turn's start and within retention. Omitted
-MCP `a` means Baseline; equal explicit selectors compare with themselves. Turn
+within retention in this checkout. A trace belongs to Baseline only when its
+root Span starts before the target Turn's start. Omitted MCP `a` means Baseline; equal explicit selectors compare with themselves. Turn
 selectors resolve in the caller's Agent Session; Trace selectors resolve in its
 checkout. Additive `{_tag: "Turns", firstTurnId, lastTurnId}` selects every Turn
 from the first through the last in session order (a user Turn and its
@@ -204,11 +204,18 @@ Each side has retained Trace count and nearest-rank `p50Ms`/`p95Ms`; fewer than
 three complete retained samples on either side means "no baseline":
 both sides retain their counts with null percentiles. A missing route side has
 count zero. Partial traces are excluded and reported in optional per-route
-`partial:{before,after}` counts. Optional `slowestNew:{name,service,durationMs,traceId,spanId}`
+`partial:{before,after}` counts. A missing local root counts as partial for
+comparison. Prefer the earliest parentless root, then a server/consumer Span
+whose parent is not retained locally, then the earliest Span for attribution.
+Optional `slowestNew:{name,service,durationMs,traceId,spanId}`
 identifies the longest after Span whose service/name/parent-name is absent from
 the same before root route. RPC and MCP return these same facts. The separate
 `compareQuery.ts` runs only on demand inside the existing SQLite worker, after
 retention, without pins, timers or the history helper's five-sample SLOW rule.
+Each comparison holds a private WAL read snapshot and yields between bounded
+candidate pages and signature-cursor batches, so ingest and other reads can
+progress. Signature lookup reuses the indexed name/parent-name history columns;
+a small partial index handles the parentless-root ingest path.
 A missing selector still uses `TraceError`
 rather than silently comparing another Turn or checkout. P8 owns aggregation,
 expiry/partial-data handling and selector authorization.

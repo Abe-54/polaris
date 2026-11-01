@@ -22,7 +22,7 @@ const fill = (turn: string, count: number, offset: bigint, first: number) => db.
       const value = JSON.stringify({ name, durationMs: 5 + s, service: "ledger-api", attributes: { pad } });
       insertSpan.run(checkout, traceId, id, parent, sortableTime(start.toString()), sortableTime((start + 5_000_000n).toString()), "ledger-api", "ok", Number(start / 1_000_000n), value.length + 256, value, name, 5 + s, s === 0 ? null : "POST /invoices", sortableTime(start.toString()));
     }
-    insertSummary.run(checkout, traceId, sortableTime(start.toString()), "POST /invoices", 100 + (t % 50), 0, turn, 0, JSON.stringify({ service: "ledger-api", id: traceId }));
+    insertSummary.run(checkout, traceId, sortableTime(start.toString()), "POST /invoices", 100 + (t % 50), 0, turn, 0, JSON.stringify({ service: "ledger-api", id: traceId, rootSpanId: "0000000000000001" }));
   }
 })();
 fill("turn-early", TRACES, 0n, 1);
@@ -31,10 +31,23 @@ fill("turn-target", 30, 10_000_000_000_001n, 10_000_000);
 console.log(`filled ${TRACES * SPANS + 30 * SPANS} spans in ${(performance.now() - t0).toFixed(0)} ms`);
 const baseline = TraceCompareSelector.cases.Baseline.make({});
 const target = TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make("turn-target") });
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 4; i++) {
+  let last = performance.now();
+  let maxGap = 0;
+  let ticks = 0;
+  const heartbeat = setInterval(() => {
+    const now = performance.now();
+    maxGap = Math.max(maxGap, now - last);
+    last = now;
+    ticks++;
+  }, 1);
   t0 = performance.now();
-  const result = compareTraces(db, checkout, baseline, target, { b: ["turn-target"], baselineStart: targetStart.toString() });
-  console.log(`baseline compare ${(performance.now() - t0).toFixed(0)} ms`, JSON.stringify(result.routes[0]?.before), JSON.stringify(result.routes[0]?.slowestNew ?? null));
+  const result = await compareTraces(db, checkout, baseline, target, { b: ["turn-target"], baselineStart: (i === 3 ? base : targetStart).toString() });
+  const elapsed = performance.now() - t0;
+  maxGap = Math.max(maxGap, performance.now() - last);
+  clearInterval(heartbeat);
+  console.log(`worker availability: ${ticks} heartbeat ticks, max gap ${maxGap.toFixed(1)} ms`);
+  console.log(`${i === 3 ? "no-earlier-samples" : "baseline"} compare ${elapsed.toFixed(0)} ms`, JSON.stringify(result.routes[0]?.before), JSON.stringify(result.routes[0]?.slowestNew ?? null));
 }
 console.log(db.query("EXPLAIN QUERY PLAN SELECT trace_id FROM summaries WHERE checkout=? AND turn_id IN (?)").all(checkout, "turn-target"));
 
@@ -46,3 +59,5 @@ const time = (label: string, sql: string, ...args: (string | number)[]) => {
 };
 time("old signatures via json_extract + parent self-join", `SELECT DISTINCT p.service,json_extract(p.value,'$.name'),json_extract(parent.value,'$.name') FROM summaries s JOIN spans p ON p.checkout=s.checkout AND p.trace_id=s.trace_id LEFT JOIN spans parent ON parent.checkout=p.checkout AND parent.trace_id=p.trace_id AND parent.id=p.parent WHERE s.checkout=? AND s.turn_id='turn-early'`, checkout);
 time("old signatures via name/parent_name columns", `SELECT DISTINCT p.service,p.name,p.parent_name FROM summaries s JOIN spans p ON p.checkout=s.checkout AND p.trace_id=s.trace_id WHERE s.checkout=? AND s.turn_id='turn-early'`, checkout);
+
+console.log("parentless root lookup", db.query("EXPLAIN QUERY PLAN SELECT value FROM spans WHERE checkout=? AND trace_id=? AND parent IS NULL ORDER BY start,id LIMIT 1").all(checkout, "00000000000000000000000000000001"));
