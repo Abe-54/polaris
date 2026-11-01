@@ -1,3 +1,4 @@
+import { system32 } from "../../platform/processes.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -6,10 +7,14 @@ import { join } from "node:path";
 import type { PinnedFile } from "../../prediction/managed/catalog.ts";
 import { installAgentBrowser, installedOnDisk, NoAgentBrowserBuild } from "./install.ts";
 
-const SCRIPT = new TextEncoder().encode("#!/bin/sh\necho agent-browser 9.9.9\n");
+const SCRIPT = new TextEncoder().encode(
+  process.platform === "win32"
+    ? "@echo agent-browser 9.9.9\r\n"
+    : "#!/bin/sh\necho agent-browser 9.9.9\n"
+);
 
 const pin = (bytes: Uint8Array): PinnedFile => ({
-  name: "agent-browser-test",
+  name: process.platform === "win32" ? "agent-browser-test.cmd" : "agent-browser-test",
   url: "https://example.invalid/agent-browser-test",
   sizeBytes: bytes.length,
   sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -49,8 +54,13 @@ describe("installAgentBrowser", () => {
     mkdirSync(join(t.root, "0.1.0"));
 
     const { binary } = await installAgentBrowser(t.options);
-    const run = Bun.spawnSync([binary]);
-    expect(run.stdout.toString()).toBe("agent-browser 9.9.9\n");
+
+    const run = Bun.spawnSync(
+      process.platform === "win32" ? [system32("cmd.exe"), "/d", "/c", binary] : [binary]
+    );
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout.toString().trim()).toBe("agent-browser 9.9.9");
     expect(readdirSync(t.root)).toEqual(["9.9.9"]);
 
     await installAgentBrowser(t.options);
@@ -64,7 +74,7 @@ describe("installAgentBrowser", () => {
     await Promise.resolve(
       expect(installAgentBrowser(t.options)).rejects.toThrow("didn't match its published checksum")
     );
-    expect(existsSync(join(t.root, "9.9.9", "agent-browser-test"))).toBe(false);
+    expect(existsSync(join(t.root, "9.9.9", pin(SCRIPT).name))).toBe(false);
   });
 
   test("a platform without a build is refused before any download", async () => {

@@ -148,6 +148,7 @@ export const daemon = (
 
 export const CLIENT_CAPABILITIES: ReadonlyArray<Capability> = [
   "blobs",
+  "host.any-platform",
   "host-address",
   "browser.host",
 ];

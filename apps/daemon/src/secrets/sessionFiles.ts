@@ -1,11 +1,16 @@
 /**
  * The files a Secret Request's value lands in (ADR 0089): one per secret under
- * `<root>/<sessionId>/`, mode 0600 in 0700 directories, deleted after `ttlMs` by
- * one timer per live secret (and a sweep on start), so an idle Daemon never wakes.
+ * `<root>/<sessionId>/`, private by POSIX modes or Windows DACLs, deleted after `ttlMs`
+ * by one timer per live secret (and a sweep on start), so an idle Daemon never wakes.
  */
 import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  createPrivateDirectory,
+  setPrivateDacl,
+  writePrivateFile,
+} from "../platform/windowsNative.ts";
 import { SECRET_TTL_MS, SessionId, TurnItem } from "@polaris/protocol";
 import { Duration, Effect, Redacted, Schema } from "effect";
 
@@ -145,6 +150,21 @@ export const sessionSecretFiles = Effect.fn("sessionSecretFiles")(function* (
       Effect.tryPromise({
         try: async () => {
           const dir = join(root, segmentOf(sessionId));
+
+          if (process.platform === "win32") {
+            await mkdir(root, { recursive: true, mode: 0o700 });
+
+            if (!setPrivateDacl(root, "directory"))
+              throw new Error("could not protect secret root");
+
+            if (!createPrivateDirectory(dir) && !setPrivateDacl(dir, "directory"))
+              throw new Error("could not protect secret directory");
+
+            writePrivateFile(path, Redacted.value(value));
+
+            return;
+          }
+
           await mkdir(dir, { recursive: true, mode: 0o700 });
           await chmod(root, 0o700);
           await chmod(dir, 0o700);

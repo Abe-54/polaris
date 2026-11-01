@@ -303,6 +303,8 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
           body: "Run bun test\nbun test apps/daemon",
         });
 
+        yield* Effect.promise(() => relay.waitForLog('"outcome":"sent"'));
+
         // Neither the relay's log nor the push service's holds the content or the token.
         for (const log of [relay.log(), pushService.log()]) {
           expect(log).not.toContain("Run bun test");

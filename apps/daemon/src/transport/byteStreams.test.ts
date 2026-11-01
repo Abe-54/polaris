@@ -416,7 +416,10 @@ describe("Browser hosting", () => {
       Effect.gen(function* () {
         const { hosting } = yield* daemon();
         const none = yield* hosting.open(s1, "cdp").pipe(Effect.flip);
-        const plain = yield* client("socket", { capabilities: ["blobs", "host-address"] });
+
+        const plain = yield* client("socket", {
+          capabilities: ["blobs", "host.any-platform", "host-address"],
+        });
 
         const unsupported = yield* plain.client["browser.host"]({}).pipe(
           Stream.runDrain,
@@ -473,14 +476,18 @@ describe("Browser hosting", () => {
       Effect.gen(function* () {
         const { hosting } = yield* daemon();
         const mac = yield* desktop(yield* client("socket", { key: "mac" }));
+        yield* mac.host.claim(s1);
         const laptopSession = yield* client("socket", { key: "laptop" });
         const laptop = yield* desktop(laptopSession);
+
+        // A completed claim fences browser.host registration; release leaves s2 unclaimed.
+        yield* laptop.host.claim(s2);
+        yield* laptop.host.release(s2);
 
         // No claim: the host where the user was present last.
         yield* laptopSession.client["presence.report"]({ presence: "present" });
         const unclaimed = yield* hosting.current(s2);
 
-        yield* mac.host.claim(s1);
         const first = yield* hosting.open(s1, "cdp");
         const macSide = yield* Queue.take(mac.accepted);
         const macIncoming = yield* Effect.forkChild(collectAll(macSide.incoming).pipe(Effect.exit));
