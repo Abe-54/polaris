@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { parseConnection } from "./connection.ts";
 import { discover } from "./discovery.ts";
 
 test("unchanged checkouts reuse discovery, while env and compose changes invalidate it", async () => {
-  const root = await mkdtemp("/tmp/polaris-discovery-cache-");
+  const root = await mkdtemp(shortTemp("polaris-discovery-cache-"));
   let reads = 0;
 
   const cached = cachedDiscovery(async (checkout, signal) => {

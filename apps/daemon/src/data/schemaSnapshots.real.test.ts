@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 /** Run only against disposable operator-provided Postgres16/MySQL8.4 databases. */
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
@@ -49,7 +50,7 @@ for (const engine of ["postgres", "mysql"] as const) {
       const before = `${prefix}_old`;
       const after = `${prefix}_new`;
       const index = `${prefix}_idx`;
-      const root = mkdtempSync("/tmp/polaris-schema-");
+      const root = mkdtempSync(shortTemp("polaris-schema-"));
 
       try {
         expect((await runGitRaw(root, ["init"])).code).toBe(0);
