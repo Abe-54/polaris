@@ -1,3 +1,4 @@
+import { profileAttach } from "./profileAttachScene.ts";
 /**
  * The session view on fixtures, for screenshots against Paper
  * (`scripts/sessionScreens.ts`): `#preview/<scene>` renders the shell with one
@@ -159,6 +160,7 @@ const SCENES = {
   question,
   secret,
   "data-approval": dataApproval,
+  "profile-attach": profileAttach,
   "data-write": dataWrite,
   "data-write-worst": dataWriteWorst,
   interrupted,
@@ -184,6 +186,7 @@ const SCENE_NAMES = [
   "question",
   "secret",
   "data-approval",
+  "profile-attach",
   "data-write",
   "data-write-worst",
   "interrupted",

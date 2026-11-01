@@ -116,6 +116,7 @@ export const DEVICE_RPCS = {
   "traces.setSettings": "local",
   "profiles.watch": "local",
   "profiles.get": "local",
+  "profiles.attach": "local",
   "profiles.restartWithProfiling": "local",
   "traces.compare": "local",
   "data.schemaDiff": "local",

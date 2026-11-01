@@ -18,6 +18,12 @@ export interface ProfilesApi {
   readonly watch: (at: TracesSessionKey, on: ProfileSnapshots) => () => void;
   /** One recording parsed: its functions and flame chart nodes. */
   readonly get: (at: TracesSessionKey, profileId: ProfileId) => Promise<Result<ProfileDetail>>;
+  /** Requests a fresh user approval before profiling a registered Node process. */
+  readonly attach?: (
+    at: TracesSessionKey,
+    pid: number,
+    seconds: number
+  ) => Promise<Result<Profile>>;
   /** Restarts a process Polaris launched with profiling on; the Daemon refuses any other. */
   readonly restart: (at: TracesSessionKey, pid: number) => Promise<Result<Profile>>;
 }
@@ -35,5 +41,7 @@ export const liveProfilesApi: ProfilesApi = {
       end: (error) => on.end?.(error),
     }),
   get: (at, profileId) => polaris().request("profiles.get", { ...session(at), profileId }),
+  attach: (at, pid, seconds) =>
+    polaris().request("profiles.attach", { ...session(at), pid, seconds }),
   restart: (at, pid) => polaris().request("profiles.restartWithProfiling", { ...session(at), pid }),
 };

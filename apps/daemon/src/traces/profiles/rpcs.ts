@@ -8,6 +8,7 @@ export const ProfilesRpcsLive = ProfilesRpcs.toLayer(
 
     return {
       "profiles.watch": ({ sessionId }) => profiles.watch(sessionId),
+      "profiles.attach": ({ sessionId, pid, seconds }) => profiles.attach(sessionId, pid, seconds),
       "profiles.get": ({ sessionId, profileId }) => profiles.get(sessionId, profileId),
       "profiles.restartWithProfiling": ({ sessionId, pid }) => profiles.restart(sessionId, pid),
     };

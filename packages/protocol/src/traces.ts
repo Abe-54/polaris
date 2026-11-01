@@ -432,6 +432,8 @@ export class ProfileError extends Schema.TaggedError<ProfileError>()("ProfileErr
     "E-PROFILE-UNAVAILABLE",
     "E-PROFILE-PROCESS-NOT-OWNED",
     "E-PROFILE-RESTART-REFUSED",
+    "E-PROFILE-ATTACH-REFUSED",
+    "E-PROFILE-ATTACH-DENIED",
   ]),
   message: Schema.String,
   fix: Schema.String,
@@ -459,6 +461,17 @@ export const GetProfile = Rpc.make("profiles.get", {
  */
 export const RestartWithProfiling = Rpc.make("profiles.restartWithProfiling", {
   payload: { sessionId: SessionId, pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) },
+  success: Profile,
+  error: ProfileErrors,
+});
+
+/** Cooperative Node capture, after a fresh Pending Approval for this process and duration. */
+export const AttachProfile = Rpc.make("profiles.attach", {
+  payload: {
+    sessionId: SessionId,
+    pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    seconds: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+  },
   success: Profile,
   error: ProfileErrors,
 });
@@ -527,7 +540,12 @@ export class TracesSettingsRpcs extends RpcGroup.make(
   SetWorkspaceTracesSettings
 ) {}
 
-export class ProfilesRpcs extends RpcGroup.make(WatchProfiles, GetProfile, RestartWithProfiling) {}
+export class ProfilesRpcs extends RpcGroup.make(
+  WatchProfiles,
+  GetProfile,
+  RestartWithProfiling,
+  AttachProfile
+) {}
 
 export class TraceCompareRpcs extends RpcGroup.make(CompareTraces) {}
 

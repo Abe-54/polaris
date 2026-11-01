@@ -1,3 +1,4 @@
+import { AttachButton } from "./AttachButton.tsx";
 /**
  * "Restart ‹service› with profiling" (DESIGN.md, Traces → Sidebar; Paper T2): restarts the open
  * (else newest) trace's root service with profiling on. The Daemon decides whether Polaris started
@@ -59,6 +60,7 @@ export const RestartButton = ({
 
   return (
     <div className="flex flex-col gap-1">
+      <AttachButton at={at} pid={target.pid} service={target.service} />
       <button
         type="button"
         onClick={restart}

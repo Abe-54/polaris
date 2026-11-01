@@ -29,6 +29,7 @@ export const Capability = Schema.Literals([
   "traces.settings",
   /** CPU Profiles watch, details and owned-process restart; advertised only when implemented. */
   "traces.profiles",
+  "traces.profiles.attach",
   /** Explicit Turn/Trace route comparison; advertised only when implemented. */
   "traces.compare",
   /** `host.restartPreview` and `host.prepareRestart`: Restart daemon's confirm and clean stop (ADR 0087). */

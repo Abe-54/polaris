@@ -26,6 +26,7 @@ const TRACES_UPGRADE = "Traces need a newer daemon on this host";
 const UPGRADE = new Map<string, string>([
   [TRACES_SETTINGS_CAPABILITY, "Traces settings need a newer daemon on this host"],
   [TRACES_COMPARE_CAPABILITY, "Comparing traces needs a newer daemon on this host"],
+  ["traces.profiles.attach", "Inspector profiling needs a newer daemon on this host"],
   [TRACES_PROFILES_CAPABILITY, "Profiles need a newer daemon on this host"],
 ]);
 
@@ -96,6 +97,10 @@ export const tracesHandlers = {
   "traces.compare": ({ hostKey, ...input }: RequestInput<"traces.compare">) =>
     onHost(hostKey, TRACES_COMPARE_CAPABILITY, (session) =>
       session.client["traces.compare"](input)
+    ),
+  "profiles.attach": ({ hostKey, ...input }: RequestInput<"profiles.attach">) =>
+    onHost(hostKey, "traces.profiles.attach", (session) =>
+      session.client["profiles.attach"](input)
     ),
   "profiles.get": ({ hostKey, ...input }: RequestInput<"profiles.get">) =>
     onHost(hostKey, TRACES_PROFILES_CAPABILITY, (session) => session.client["profiles.get"](input)),
