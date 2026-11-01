@@ -64,3 +64,20 @@ export const motionLine = (motion: MotionPreference): string =>
     Match.when("full", () => "Full, even with Reduce Motion on"),
     Match.exhaustive
   );
+
+/** What each connected Host says of Developer Mode, for the read-only row. */
+export interface HostDeveloperMode {
+  readonly stored: boolean;
+  readonly effective: boolean;
+}
+
+/** Developer Mode as the Hosts store it; the phone only shows it (ENG-709). */
+export const developerModeLine = (modes: ReadonlyArray<HostDeveloperMode>): string => {
+  if (modes.length === 0) return "Set in Polaris on your computer";
+
+  if (modes.some((mode) => mode.stored)) return "On · set in Polaris on your computer";
+
+  const tracing = modes.filter((mode) => mode.effective).length;
+
+  return tracing === 0 ? "Off" : `Off · on for now on ${tracing} of ${modes.length} hosts`;
+};

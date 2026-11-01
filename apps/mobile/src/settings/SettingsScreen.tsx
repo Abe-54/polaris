@@ -17,8 +17,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFollowedHosts } from "../home/feed/useFollowedHosts.ts";
 import { HORIZON_INSET } from "../horizon";
 import { useMotionPreference, useTheme } from "../theme";
-import { Chevron, HostsGlyph, MotionGlyph, NotificationsGlyph } from "./icons.tsx";
-import { hostsLine, MOTION_CHOICES, motionLine, THEME_CARDS } from "./model.ts";
+import {
+  Chevron,
+  DeveloperModeGlyph,
+  HostsGlyph,
+  MotionGlyph,
+  NotificationsGlyph,
+} from "./icons.tsx";
+import { developerModeLine, hostsLine, MOTION_CHOICES, motionLine, THEME_CARDS } from "./model.ts";
+import { useDeveloperMode } from "./useDeveloperMode.ts";
 import { ThemeCard } from "./ThemeCard.tsx";
 import { ACCESSIBILITY_SCALE, CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { InboxBadge } from "../inbox/index.ts";
@@ -38,7 +45,8 @@ const Row = ({
   readonly more?: string | null;
   readonly note?: string | null;
   readonly last?: boolean;
-  readonly onPress: () => void;
+  /** Absent for a row that only shows a value: no chevron, nothing to press. */
+  readonly onPress?: () => void;
 }) => {
   const { colours } = useTheme();
   // At accessibility sizes the line wraps; below them the names truncate and the note stays.
@@ -48,7 +56,8 @@ const Row = ({
 
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={onPress === undefined ? "text" : "button"}
+      disabled={onPress === undefined}
       accessibilityLabel={[title, line, more, note].filter((part) => part !== null).join(", ")}
       onPress={onPress}
       style={[
@@ -88,7 +97,7 @@ const Row = ({
           )}
         </View>
       </View>
-      <Chevron color={colours.textFaint} />
+      {onPress === undefined ? null : <Chevron color={colours.textFaint} />}
     </Pressable>
   );
 };
@@ -118,8 +127,11 @@ export const SettingsScreen = ({
   const { colours } = useTheme();
   const { motion, setMotion } = useMotionPreference();
 
+  const followed = useFollowedHosts();
+  const developerMode = developerModeLine(useDeveloperMode(followed));
+
   const hosts = hostsLine(
-    useFollowedHosts().map(({ connection, status }) => ({
+    followed.map(({ connection, status }) => ({
       name: status.host?.hostname ?? connection.name,
       state: status.state,
     }))
@@ -180,9 +192,9 @@ export const SettingsScreen = ({
             Glyph={MotionGlyph}
             title="Motion"
             line={motionLine(motion)}
-            last
             onPress={() => chooseMotion(setMotion)}
           />
+          <Row Glyph={DeveloperModeGlyph} title="Developer mode" line={developerMode} last />
         </View>
       </View>
     </ScrollView>

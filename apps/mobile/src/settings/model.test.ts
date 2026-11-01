@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hostsLine } from "./model.ts";
+import { developerModeLine, hostsLine } from "./model.ts";
 
 const host = (name: string, state: "connected" | "reconnecting" | "offline" | "needs-attention") =>
   ({ name, state }) as const;
@@ -41,5 +41,24 @@ describe("the Hosts row's line", () => {
 
   test("no Hosts says so", () => {
     expect(hostsLine([]).names).toBe("No hosts yet");
+  });
+});
+
+describe("the Developer Mode row's line", () => {
+  test("shows the stored setting, with no host yet saying where it is set", () => {
+    expect(developerModeLine([])).toBe("Set in Polaris on your computer");
+    expect(developerModeLine([{ stored: true, effective: true }])).toBe(
+      "On · set in Polaris on your computer"
+    );
+  });
+
+  test("a host on only through Polaris Dev's lease still reads as off, saying it is on for now", () => {
+    expect(
+      developerModeLine([
+        { stored: false, effective: true },
+        { stored: false, effective: false },
+      ])
+    ).toBe("Off · on for now on 1 of 2 hosts");
+    expect(developerModeLine([{ stored: false, effective: false }])).toBe("Off");
   });
 });

@@ -32,6 +32,20 @@ export const MotionGlyph: Glyph = ({ color }) => (
   </Svg>
 );
 
+/** Angle brackets: Polaris's own code. */
+export const DeveloperModeGlyph: Glyph = ({ color }) => (
+  <Svg width={16} height={16} viewBox="0 0 16 16">
+    <Path
+      d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
 export const Chevron = ({ color }: { readonly color: string }) => (
   <Svg width={8} height={13} viewBox="0 0 8 13">
     <Path
