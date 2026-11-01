@@ -1,21 +1,5 @@
-import { InspectorTargets } from "../traces/attach/registry.ts";
-import { Profiles } from "../traces/profiles/index.ts";
-import { ProfilesRpcsLive } from "../traces/profiles/rpcs.ts";
-import { DataDatabase } from "../data/database.ts";
-import {
-  TraceReceiverLive,
-  TraceRuntime,
-  TraceSessions,
-  TraceStore,
-  TracesRpcsLive,
-  TracesSettingsRpcsLive,
-  TraceSettings,
-  TraceCompareRpcsLive,
-} from "../traces/index.ts";
-import { DataApprovals } from "../data/approvals.ts";
-import { SchemaSnapshots } from "../data/schemaSnapshots.ts";
-import { QueryLog } from "../data/queryLog.ts";
-import { DataRpcsLive, DataSources, DataSourceAccess, DataQueries } from "../data/index.ts";
+import { lazyData, lazyDataHandlers } from "./lazyData.ts";
+import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
 import { PredictionServerLive } from "../prediction/server.ts";
 /**
@@ -138,29 +122,15 @@ const harnesses = HarnessRegistryLive.pipe(
  * a Review Checkout), the Rules and the Reviewer (whose sessions' approvals the
  * engine asks its policy about), and giving memory back once work settles.
  */
-export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer).pipe(
-  Layer.provideMerge(DataSources.layer),
-  Layer.provideMerge(DataSourceAccess.live),
-  Layer.provideMerge(QueryLog.layer),
-  Layer.provideMerge(DataApprovals.layer),
-  Layer.provideMerge(DataDatabase.layer),
-  Layer.provideMerge(HostSecrets.layer)
-);
+export const dataServices = lazyData;
 
 const traceWorkspaceTrust = Layer.suspend(() => workspaceTrustLayer(paths().root));
 
-/** One receiver, one token authority and one lazy trace worker per Host. */
-export const traceServices = TraceReceiverLive.pipe(
-  Layer.provideMerge(
-    TraceRuntime.layer.pipe(Layer.provide(Layer.merge(ReviewerPolicyLive, traceWorkspaceTrust)))
-  ),
-  Layer.provideMerge(TraceSettings.layer),
-  Layer.provideMerge(InspectorTargets.layer),
-  Layer.provideMerge(TraceSessions.layer),
-  Layer.provideMerge(TraceStore.layer)
+export const traceServices = lazyTraces.pipe(
+  Layer.provide(Layer.merge(ReviewerPolicyLive, traceWorkspaceTrust))
 );
 
-export const engineServices = Layer.mergeAll(Engine.layer, Profiles.layer, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,
@@ -198,11 +168,8 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
 
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
-  DataRpcsLive,
-  TracesRpcsLive,
-  TracesSettingsRpcsLive,
-  TraceCompareRpcsLive,
-  ProfilesRpcsLive,
+  lazyDataHandlers,
+  lazyTraceHandlers,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,

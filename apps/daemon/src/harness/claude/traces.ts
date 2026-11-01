@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Option, Schema, type Scope } from "effect";
-import { TraceRuntime, type TraceEnvironment } from "../../traces/runtime.ts";
+import { TraceRuntime, type TraceEnvironment } from "../../traces/runtimeService.ts";
 import type { OpenOptions } from "../HarnessDriver.ts";
 
 const Bash = Schema.StructWithRest(Schema.Struct({ command: Schema.String }), [

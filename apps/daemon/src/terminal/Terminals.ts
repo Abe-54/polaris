@@ -19,7 +19,7 @@
  *   a new terminal in the same `cwd`.
  */
 import { childEnv, repositoryEnv } from "../service/childEnv.ts";
-import { TraceRuntime } from "../traces/runtime.ts";
+import { TraceRuntime } from "../traces/runtimeService.ts";
 import { traceEndpointEnvironment } from "../traces/environment.ts";
 import { randomUUID } from "node:crypto";
 import {

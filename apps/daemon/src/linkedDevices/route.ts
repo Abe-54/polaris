@@ -29,14 +29,12 @@ import {
   verifyPushTicket,
   type WakeOutcome,
 } from "@polaris/protocol/relay";
-import { linkIdentity, linkProof, sameProof } from "@polaris/protocol/relay/party";
 import { Context, Deferred, Effect, Layer, Option, Queue, Semaphore, Stream } from "effect";
 import { HostSecrets } from "../secrets/index.ts";
-import { type HostRelayKeys, loadHostRelayKeys } from "./keys.ts";
-import { type Admission, RelayLink } from "./link.ts";
+import type { HostRelayKeys } from "./keys.ts";
+import type { Admission, RelayLink } from "./link.ts";
 import type { DeviceSession } from "./session.ts";
 import { isRelayUrl, readSetting, writeSetting } from "./settings.ts";
-import { pushSuite, sealPush } from "../push/seal.ts";
 import { LinkedDevices, type LiveTarget, type PushTarget } from "./store.ts";
 
 /** How long a self-unlinking device's session outlives the answer to it. */
@@ -55,6 +53,11 @@ export interface LinkTiming {
 interface OpenLink {
   readonly id: string;
   readonly secret: Uint8Array;
+  readonly verifyProof: (
+    proof: Uint8Array,
+    deviceKey: Uint8Array,
+    address: RelayAddress
+  ) => boolean;
   /** The throwaway relay address the device dials with while linking. */
   readonly address: RelayAddress;
   readonly expiresAt: number;
@@ -218,14 +221,20 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
 
   const validPushKey = (pushKey: string) =>
     Effect.tryPromise({
-      try: () =>
-        pushSuite.kem.deserializePublicKey(new Uint8Array(Buffer.from(pushKey, "base64url"))),
+      try: async () => {
+        const { pushSuite } = await import("../push/seal.ts");
+
+        return pushSuite.kem.deserializePublicKey(
+          new Uint8Array(Buffer.from(pushKey, "base64url"))
+        );
+      },
       catch: () => refusePush("The push key is not a P-256 public key"),
     });
 
   const keys = Effect.suspend(() =>
     cachedKeys === null
-      ? loadHostRelayKeys.pipe(
+      ? Effect.promise(() => import("./keys.ts")).pipe(
+          Effect.flatMap((module) => module.loadHostRelayKeys),
           Effect.provideService(HostSecrets, secrets),
           Effect.tap((loaded) => Effect.sync(() => (cachedKeys = loaded))),
           Effect.mapError((error) =>
@@ -273,8 +282,7 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
     if (request === null || open.used) return null;
     const proof = Buffer.from(request.proof, "base64url");
 
-    if (!sameProof(new Uint8Array(proof), linkProof(open.secret, deviceKey, request.address)))
-      return null;
+    if (!open.verifyProof(new Uint8Array(proof), deviceKey, request.address)) return null;
 
     open.used = true;
 
@@ -333,6 +341,7 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
 
     if (!setting.enabled || setting.url === null) return;
     const loaded = yield* keys;
+    const { RelayLink } = yield* Effect.promise(() => import("./link.ts"));
 
     link = new RelayLink({
       url: setting.url,
@@ -418,13 +427,28 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
       // A new link replaces any still unused, so a reopened panel leaves one live secret.
       const unused = [...links.values()].filter((open) => !open.used);
       yield* Effect.forEach(unused, (open) => closeLink(open.id), { discard: true });
+
+      const { linkIdentity, linkProof, sameProof } = yield* Effect.promise(
+        () => import("@polaris/protocol/relay/party")
+      );
+
       const secret = new Uint8Array(randomBytes(32));
       const address = yield* Effect.promise(() => relayAddress(linkIdentity(secret).publicKey));
       const id = `link_${crypto.randomUUID()}`;
       const expiresAt = Date.now() + ttlMs;
       const done = yield* Deferred.make<LinkedDevice, NotFound>();
       const timer = setTimeout(() => runFork(closeLink(id)), ttlMs);
-      links.set(id, { id, secret, address, expiresAt, done, used: false, listed: true, timer });
+      links.set(id, {
+        id,
+        secret,
+        address,
+        expiresAt,
+        done,
+        used: false,
+        listed: true,
+        timer,
+        verifyProof: (proof, key, address) => sameProof(proof, linkProof(secret, key, address)),
+      });
       link?.peersChanged();
       const expires = new Date(expiresAt).toISOString();
 
@@ -579,7 +603,12 @@ const makeRelayRoute = Effect.fn("makeRelayRoute")(function* (options: {
         const current = link;
 
         if (current === null) return "unavailable" as const;
-        const payload = yield* Effect.promise(() => sealPush(registration.pushKey, message));
+
+        const payload = yield* Effect.promise(async () => {
+          const { sealPush } = await import("../push/seal.ts");
+
+          return sealPush(registration.pushKey, message);
+        });
 
         // The relay closes the Host's socket on an oversized wake, ending every session (RV3).
         if (payload.length > MAX_WAKE_PAYLOAD_CHARS) return "refused" as const;

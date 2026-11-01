@@ -1,4 +1,4 @@
-import { Profiles } from "../traces/profiles/index.ts";
+import { Profiles } from "../traces/profiles/service.ts";
 import { sessionProfileTools } from "./sessions/profiles.ts";
 import { Effect, Option, Schema } from "effect";
 import type { McpBinding } from "./binding.ts";
@@ -12,8 +12,10 @@ import {
   attachVisualizations,
   constellationTools,
 } from "./tools.ts";
-import { DataSources, DataQueries } from "../data/index.ts";
-import { TraceStore, TraceRuntime, TraceSessions } from "../traces/index.ts";
+import { DataSources, DataQueries } from "../data/services.ts";
+import { TraceStore } from "../traces/storeService.ts";
+import { TraceRuntime } from "../traces/runtimeService.ts";
+import { TraceSessions } from "../traces/sessionsService.ts";
 import { sessionTraceTools } from "./sessions/traces.ts";
 import { sessionDataTools } from "./sessions/data.ts";
 import { McpTokens } from "./tokens.ts";
