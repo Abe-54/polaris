@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { type HostStreamItem, SessionId, TurnId, TurnItem } from "@polaris/protocol";
+import {
+  ApprovalRequest,
+  type HostStreamItem,
+  SessionId,
+  TurnId,
+  TurnItem,
+} from "@polaris/protocol";
 import { decodeHostSlice, type HostSlice, MAX_LIVE_PLAINTEXT_BYTES } from "@polaris/protocol/relay";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { applyHostItem, emptyHostFeed } from "../home/feed/fold.ts";
 import {
   commandApproval,
@@ -201,4 +207,21 @@ test.each([
   [true, false, IDLE_END_MS, "end"],
 ] as const)("running %p, busy %p, idle for %p: %p", (running, busy, idleFor, action) => {
   expect(liveAction(running, busy, idleFor === null ? null : NOW - idleFor, NOW)).toBe(action);
+});
+
+test("P9-10: attach takeover opens the app without remembered approval actions", () => {
+  const request = Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(
+      commandApproval("s1", "attach", "Profile Node", minutesAgo(1))
+    ),
+    profileAttach: { pid: 42, command: "node app", runtime: "node", seconds: 5 },
+  });
+
+  const [slice] = slicesOf([
+    host("a", [
+      snapshot({ sessions: [summary(session({ id: "s1", state: "needs-you" }), [request])] }),
+    ]),
+  ]);
+
+  expect(slice?.need).toMatchObject({ requestId: "attach", kind: "question" });
 });

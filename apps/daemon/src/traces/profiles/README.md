@@ -11,21 +11,29 @@ verified Agent Session cwd; binding and storage stay at the canonical checkout r
 containment before stopping and relaunching. `--cpu-prof` comes from `NODE_OPTIONS` or `BUN_OPTIONS`;
 `--cpu-prof-dir` is a single argv entry because Bun retains quotes in BUN_OPTIONS.
 Output is discarded rather than retained without bounds. The wait defaults to 30
-seconds; it does not stop a long-running command. Native process exit flushes the
-artifact. Profiles from child processes are not aggregated into the main recording.
+seconds; it does not stop a long-running command. A private per-recording preload
+turns SIGINT into a normal exit so Node and Bun flush `--cpu-prof`. Restart and
+Daemon shutdown send SIGINT, allow five seconds for exit/write, then SIGTERM for
+five seconds, then SIGKILL. A process that blocks or replaces the handler can still
+require escalation and lose its profile. Profiles from child processes are not
+aggregated into the main recording.
 
 `restart(sessionId,pid)` only accepts a live retained Bun subprocess handle from
 this service in the same checkout. A restart rebuilds the tracing overlay from the original upstream source environment
 and the restart invocation's verified Turn (P2's optional third environment argument),
 so it does not reuse a signed endpoint claiming the original launch Turn.
 The Daemon rechecks policy and identity before
-signalling its process group. Concurrent restarts are refused; a process that does
-not stop within five seconds stays owned until exit/shutdown. Nothing adopts an
-external PID. After a Daemon restart, previous in-flight summaries show failed.
+signalling its process group and reserves the replacement's live-capture slot
+before stopping it. Concurrent restarts are refused. Nothing adopts an external
+PID. Shutdown drains completion jobs before closing the worker queue. List/get
+recover flushed artifacts from orphan recordings left by an earlier Daemon.
 P2/P9 can replace this local launch seam with their authenticated launch authority.
 
 The worker validates CPU graph ids, parents, cycles/depth, finite nonnegative
-sample deltas and timing bounds. Weights produce self and inclusive time; recursive
+sample deltas and timing bounds. Validation keeps parent/depth maps, never a stack
+copy for every node; only the current sampled stack is materialised. Consecutive
+samples of the same stack coalesce, and existing frame durations update in place.
+Weights produce self and inclusive time; recursive
 appearances count inclusive time once per sample. Adjacent matching stack frames
 merge into chronological nodes. Functions sort by total time then self time; nodes
 and the hottest stack use the remapped stable table. Paths become checkout-relative
@@ -38,8 +46,10 @@ POLARIS_HOME. Metadata, raw artifact and cached detail stay together. Reads reso
 ids in that checkout, never a returned path. Missing detail caches rebuild from the
 raw artifact. Symlink/hardlink/oversized artifacts are refused before read or chmod. Retention
 prunes on access/completion: seven days, 200 MiB per checkout including artifacts and
-cached detail, and at most 200 recordings; reads do not pin. No idle sweep runs.
-One active profile worker job runs at a time with at most 32 queued jobs, four live
+cached detail, and at most 200 finished recordings; active recordings do not consume
+that budget. Reads do not pin. No idle sweep runs. One profile worker job runs at a
+time with at most 32 queued jobs; completions and discards wait for queue space.
+Parsing does not consume the limit of four live
 captures, command labels capped at 4096 characters (exact argv stays private for restart),
 64 MiB per artifact, 200k CPU nodes, 2m samples and 500k flame frames.
 
@@ -48,7 +58,11 @@ The one-shot worker is an explicit compiled entrypoint in scripts/build-daemon.t
 rebuilds a small real Node artifact through profiles.get, then a synthetic 50 MB
 recording with one million samples while measuring concurrent files.stat RPCs.
 It never installs a build.
-The MCP text and error contract is docs/specs/traces-tools-v1.md. Span-level trace
+MCP text stays within 16,000 characters and structuredContent within 16,000 UTF-8
+JSON bytes: clipped metadata, top self/total frames, hot-path frames, overlap and
+original counts. Each frame includes its full-detail table index. The separate
+`profiles.get` RPC retains full function and chronological-node tables; open the
+recording in Traces for the full view. Span-level trace
 overlap queries run in the existing trace worker, capped at 200 with a match count.
 
 ## P9 scoped recording seam
@@ -63,60 +77,43 @@ checkout authority, Trust and session policy. It never adopts the supplied PID,
 registers a launch handle, restarts or signals a process. P9 owns inspector access
 and any stronger live-target identity checks. The public attach path is described below.
 
-## Approved cooperative inspector capture (P9 / ENG-659)
+## Cooperative CPU capture (P9 / ENG-659)
 
-`attach(sessionId, pid, seconds)` and `profiles.attach` request a new Pending
-Approval for every capture (1–30 seconds, default 5). The card names the Node
-command, pid and duration and says **while attached, any local process can run
-code in it**. Only Allow once authorizes capture. Remembered Allow, Answer,
+Agent `attach(sessionId, pid, seconds)` requests a fresh Pending Approval for
+1–30 seconds (default 5). Only Allow once authorizes it. Remembered Allow, Answer,
 read-only, Reviewer, untrusted Workspace and a completed Turn are refused.
-Approval requests/responses/withdrawals go through the existing Session machine;
-the Engine never forwards these responses to a Harness. Cancellation and Turn
-end withdraw pending requests or close a running capture.
+The Session machine owns approval and preserves In Terminal. Upgrade withdraws
+orphaned inspector approvals. Cancellation and Turn end cancel agent captures.
 
-This is deliberately **cooperative-only**. There is no SIGUSR1 or arbitrary-PID
-path. An unregistered process is refused with "Restart with profiling instead."
-Arbitrary Node apps can change `process.debugPort` or bind an inspector publicly;
-SIGUSR1 cannot guarantee that Polaris can discover and close that listener.
-Only the owner can accept those residual risks; arbitrary-PID attach is deferred.
-Windows is refused. Node must expose `process.getBuiltinModule`; older runtimes
-do not register. Bun never receives a signal or a Node inspector request.
-A process that opts out with `--disable-sigusr1` is refused even though this path
-uses no signals.
+The sidebar uses `profiles.attach` → `attachUser`: its inline disclosure and click
+are consent. It works while idle, creates no Pending Approval, and survives Turn
+end. It requires the same Client trust and approve Grant as RespondToApproval.
+Same-user local callers can already answer approvals over the bare socket;
+ENG-700 owns that authorization decision and is outside this change.
 
-The same `TraceRuntime.environment` conditions that inject the OTLP endpoint
-(Listening, no user-exported endpoint, active session) inject a small Node
-bootstrap only for writable, non-Reviewer sessions. Terminal environments do
-not inject it. `traces/nodeOptions.ts`'s `appendNodeImport(options, path)` is the
-shared P3/P9 composition seam: preserve existing NODE_OPTIONS and append a quoted
-`--import` path. The bootstrap runs silently if the control socket is absent or
-registration fails. A content-addressed private file survives Daemon shutdown so
-children retaining NODE_OPTIONS can still start. No inspector, watchdog worker
-or timer starts at registration; the control socket is unreferenced in Node.
+Only cooperative Node processes register. No SIGUSR1 or arbitrary-PID path exists.
+Windows, Bun, older Node without getBuiltinModule, and --disable-sigusr1 or
+permission-restricted processes are refused. Existing inspectors are left alone.
+TraceRuntime injects the bootstrap only for active writable non-Reviewer sessions,
+without a user-exported endpoint. NODE_OPTIONS imports are preserved; terminal
+environments do not inject it. The private content-addressed preload survives
+Daemon shutdown. Registration creates no Worker or timer in the target.
 
-A private Unix socket and a random per-launch capability bind registration to
-its Agent Session. The Daemon corroborates pid, OS-user, executable and launch
-identity and the launch capability from kernel process information, before approval and again before
-capture. This version accepts only the Node executable currently resolved on
-the Host's PATH; other Node installations are refused. Capabilities and sockets
-are bounded and are not persisted across Daemon restarts.
+The private Unix socket verifies LOCAL_PEERPID on macOS or SO_PEERCRED on Linux
+for both registration and capture. Identity uses pid, start time, executable
+inode/device, OS user and the launch token; argv is display-only. Tokens
+expire with their Agent Session, not after a launch count. The registry caps
+registration sockets at 256 and watchdog sockets at one, reserving the watchdog
+lane by kernel peer PID. Unclassified sockets expire after two seconds. No capabilities persist on restart.
 
-After Allow once, an in-target Worker opens an inspector with
-`inspector.open(0, '127.0.0.1')`, then reports `inspector.url()` over its authenticated
-control connection. An existing inspector is refused and left untouched.
-Port 9229 is never required or signalled. The Daemon checks the returned endpoint
-and CDP process identity and records a bounded CDP Profiler window. The Worker
-owns inspector shutdown, independently of the application's main event loop:
-control disconnection, missed active-capture heartbeats (1.5 s), a capture deadline
-or an explicit close all deactivate the inspector. The Daemon closes on CDP
-failure and cancellation. The approval's local-code-execution risk still applies
-while that port is open; loopback is not an authorization boundary.
+A Worker marked by the launch token connects an in-process inspector.Session to
+the main thread and runs Profiler.enable/start/stop. No TCP inspector opens, no
+endpoint exists to discover, and nothing is written to target stderr. Profile
+chunks cross the private socket with a 64 MiB total bound and socket backpressure.
+The Worker disconnects on control loss or a missed 1.5 s heartbeat; the registry
+bounds capture duration plus five seconds. A main thread blocked in native code
+may delay completion, in which case capture fails cleanly without network exposure.
 
-Capture artifacts use `Profiles.record`, its one parser worker, checkout storage,
-retention and `origin: "attach"`. P5's existing Profiles list and flame chart render
-them. The sidebar's "Profile ‹service› for 5 s…" action only requests approval;
-it cannot authorize attach itself. `profile {attach: pid, seconds?: n}` is the
-agent equivalent. No registration creates restart or signal authority.
-
-`bun apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/attach/startup.ts`
-measures the startup budget with 20 alternating `node -e 0` starts per condition.
+Artifacts use Profiles.record, its parser worker, checkout storage, retention and
+origin: attach. No registration grants restart or signal authority. Startup cost:
+`bun --no-env-file --config=./scripts/daemon-dev.toml apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/attach/startup.ts`.

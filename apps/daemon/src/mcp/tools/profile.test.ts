@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { Profile, ProfileDetail, ProfileId, Timestamp } from "@polaris/protocol";
+import { Profile, ProfileId, Timestamp } from "@polaris/protocol";
 import { Profiles } from "../../traces/profiles/index.ts";
 import { cpuWork, withProfiles } from "../../traces/profiles/testing.ts";
 import { TEST_SESSION, TRACE_ID, traceFixture, spanFixture } from "../../traces/testing.ts";
@@ -64,7 +64,8 @@ test(
 
       const tool = profileTool(TEST_SESSION, sessions);
       const captured = await tool.call({ command: ["bun", "-e", cpuWork] });
-      const detail = Schema.decodeUnknownSync(ProfileDetail)(captured.structuredContent);
+      const profile = Schema.decodeUnknownSync(Profile)(captured.structuredContent?.profile);
+      const detail = await runtime.runPromise(services.profiles.get(TEST_SESSION, profile.id));
       expect(detail.profile.status).toBe("completed");
       expect(text(captured)).toContain("Hot functions · self time");
       expect(text(captured)).toContain("Hot functions · total time");
@@ -164,4 +165,65 @@ test("profile text ranks project locations first in each view, preserves functio
   expect(output).toContain("Hot functions · total time");
   expect(output).toContain("Overlapping traces");
   expect(JSON.stringify(detail)).toBe(before);
+});
+
+test("P4-5: MCP profile summaries bound UTF-8 JSON, retain top frames and leave full detail on profiles.get", async () => {
+  const profile = Profile.make({
+    id: ProfileId.make("large"),
+    command: "node server",
+    runtime: "node",
+    pid: 123,
+    turn: null,
+    startedAt: Timestamp.make(new Date().toISOString()),
+    durationMs: 100,
+    path: "/profiles/large.cpuprofile",
+    status: "completed",
+  });
+
+  const hotFunctions = Array.from({ length: 200_000 }, (_, i) => ({
+    name: `frame ${i} ${'😀\\"'.repeat(100)}`,
+    file: "src/work.ts",
+    line: i + 1,
+    selfMs: 200_000 - i,
+    totalMs: 200_000 - i,
+  }));
+
+  const detail = {
+    profile,
+    hotFunctions,
+    hotPath: Array.from({ length: 256 }, (_, i) => i),
+    nodes: Array.from({ length: 500_000 }, () => ({
+      parent: null,
+      functionIndex: 0,
+      startMs: 0,
+      durationMs: 1,
+    })),
+  };
+
+  const tool = profileTool(TEST_SESSION, {
+    ...unavailableSessions,
+    profiles: {
+      capture: () => Effect.succeed(profile),
+      restart: () => Effect.succeed(profile),
+      get: () => Effect.succeed(detail),
+      overlapping: () => Effect.succeed({ traces: [], total: 0 }),
+    },
+  });
+
+  for (const selector of [{ id: profile.id }, { command: ["node", "server"] }]) {
+    const result = await tool.call(selector);
+    expect(Buffer.byteLength(JSON.stringify(result.structuredContent))).toBeLessThanOrEqual(16_000);
+    expect(result.structuredContent).toMatchObject({
+      functionCount: 200_000,
+      nodeCount: 500_000,
+    });
+
+    const frames = Schema.decodeUnknownSync(
+      Schema.Array(Schema.Struct({ index: Schema.Number, selfMs: Schema.Number }))
+    )(result.structuredContent?.hotFunctions);
+
+    expect(frames[0]).toEqual({ index: 0, selfMs: 200_000 });
+    expect(result.structuredContent).not.toHaveProperty("nodes");
+    expect(text(result)).toContain("Traces (⌘5)");
+  }
 });

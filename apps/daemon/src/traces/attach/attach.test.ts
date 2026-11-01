@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect";
 import {
   ApprovalDecision,
   ApprovalRequest,
-  ProfileDetail,
+  Profile,
   DomainEvent,
   TraceAvailability,
 } from "@polaris/protocol";
@@ -18,7 +18,6 @@ import { commit, turn } from "../authority.testing.ts";
 import { patchTurn } from "../../store/model.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { decideSession } from "../../engine/session.ts";
-import { ProfileConnection } from "./cdp.ts";
 import { TraceSessions, TraceStore } from "../index.ts";
 import { sessionProfileTools } from "../../mcp/sessions/profiles.ts";
 import { unavailableSessions } from "../../mcp/sessions/index.ts";
@@ -80,9 +79,7 @@ native(
 
         const running = profileTool(TEST_SESSION, { ...unavailableSessions, profiles: tools })
           .call({ attach: child.pid, seconds: 1 })
-          .then(
-            (result) => Schema.decodeUnknownSync(ProfileDetail)(result.structuredContent).profile
-          );
+          .then((result) => Schema.decodeUnknownSync(Profile)(result.structuredContent?.profile));
 
         const request = await eventually(
           () =>
@@ -97,7 +94,7 @@ native(
           (v) => v !== undefined
         );
 
-        expect(request!.detail).toContain("while attached, any local process can run code in it");
+        expect(request!.detail).toContain("without opening a network port");
         expect(request!.profileAttach?.pid).toBe(child.pid);
         expect(decodeState(await readFile(state, "utf8")).url).toBeNull();
         await runtime.runPromise(
@@ -227,89 +224,8 @@ native(
   15000
 );
 
-native.each([false, true])(
-  "the watchdog closes the inspector after Daemon loss with main thread blocked=%s",
-  (blocked) =>
-    withProfiles(async ({ root, targets }) => {
-      const script = join(root, "target.cjs");
-      const state = join(root, "state.json");
-      await writeFile(
-        script,
-        program +
-          (blocked
-            ? `
-setInterval(() => { if (fs.existsSync(process.argv[2]+'.block')) {
-fs.writeFileSync(process.argv[2]+'.busy','1'); while(true) Math.sqrt(Math.random());
-}},20);`
-            : "")
-      );
-
-      const child = Bun.spawn([Bun.which("node")!, script, state], {
-        env: { ...process.env, ...(await targets.environment(TEST_SESSION)) },
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-
-      try {
-        const target = await eventually(
-          async () => {
-            try {
-              return targets.get(TEST_SESSION, child.pid);
-            } catch {
-              return null;
-            }
-          },
-          (v) => v !== null
-        );
-
-        const handle = await targets.open(target!, 5);
-        const cdp = new ProfileConnection(handle.url);
-        await cdp.start(child.pid);
-
-        if (blocked) {
-          await writeFile(state + ".block", "1");
-          await eventually(
-            () => Bun.file(state + ".busy").exists(),
-            (v) => v
-          );
-        }
-
-        await targets.close();
-        const endpoint = new URL(handle.url);
-        await eventually(
-          () =>
-            new Promise<boolean>((resolve) => {
-              const socket = createConnection({
-                host: endpoint.hostname,
-                port: Number(endpoint.port),
-              });
-
-              socket.once("connect", () => {
-                socket.destroy();
-                resolve(true);
-              });
-              socket.once("error", () => resolve(false));
-            }),
-          (listening) => !listening
-        );
-
-        if (!blocked)
-          await eventually(
-            async () => decodeState(await readFile(state, "utf8")).url,
-            (v) => v === null
-          );
-        cdp.close();
-        expect(child.exitCode).toBeNull();
-      } finally {
-        child.kill();
-        await child.exited;
-      }
-    }),
-  15000
-);
-
 native(
-  "a valid launch capability cannot register an unrelated Node PID",
+  "P9-9: a sibling with the same launch capability cannot forge the registering peer PID",
   () =>
     withProfiles(async ({ root, targets }) => {
       const state = join(root, "unrelated.json");
@@ -323,7 +239,7 @@ native(
           ...process.env,
           NODE_OPTIONS: "",
           POLARIS_PROFILE_SOCKET: "",
-          POLARIS_PROFILE_TOKEN: "",
+          POLARIS_PROFILE_TOKEN: registration.POLARIS_PROFILE_TOKEN!,
         },
         stdout: "ignore",
         stderr: "ignore",
@@ -564,8 +480,8 @@ native.each(["pending", "recording", "turn ended"])(
             )
           );
           await eventually(
-            async () => decodeState(await readFile(state, "utf8")).url,
-            (v) => v !== null
+            () => runtime.runPromise(Effect.flatMap(Profiles, (p) => p.list(TEST_SESSION))),
+            (profiles) => profiles.some((p) => p.status === "recording")
           );
         }
 

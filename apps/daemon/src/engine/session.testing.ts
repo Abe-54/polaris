@@ -218,7 +218,7 @@ export const attachRequest = (id: string, turnId: TurnId) =>
     kind: "tool",
     profileAttach: { pid: 42, command: "node server.mjs", runtime: "node", seconds: 5 },
     detail:
-      "node server.mjs · pid 42 · Node · profile for 5 s\nwhile attached, any local process can run code in it",
+      "node server.mjs · pid 42 · Node · profile for 5 s\nCollects CPU samples without opening a network port.",
   });
 
 const firstPending = (record: SessionRecord | undefined) => {

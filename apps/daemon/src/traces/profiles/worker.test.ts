@@ -162,3 +162,18 @@ test("filesystem failures return a storage error with an actionable permissions 
     expect(error?.code).toBe("E-PROFILE-UNAVAILABLE");
     expect(error?.fix).toContain("permissions");
   }));
+
+for (const operation of ["get", "list"] as const)
+  test(`P4-2: ${operation} recovers an orphan recording with a flushed artifact`, () =>
+    withWorker(async ({ job, profile, directory }) => {
+      await job("start", profile.id, profile);
+      await writeFile(join(directory, "cpu.cpuprofile"), JSON.stringify(sampled()));
+      const reply = await job(operation);
+      expect(
+        "profiles" in reply ? reply.profiles[0]!.status : "profile" in reply && reply.profile.status
+      ).toBe("completed");
+      const detail = await job("get");
+      expect(
+        "hotFunctions" in detail && detail.hotFunctions.find((f) => f.name === "leaf")?.selfMs
+      ).toBe(5);
+    }));

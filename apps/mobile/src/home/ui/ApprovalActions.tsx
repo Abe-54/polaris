@@ -1,3 +1,4 @@
+import { offersAlwaysAllow } from "../../thread/requests.ts";
 /**
  * An approval answered in place (Paper MX-C, MX-H): Approve / Always here / Deny under the command,
  * file change or tool; choice chips and Reply… for a question; a secret opens its agent session.
@@ -121,7 +122,9 @@ const Permission = ({ approval, enabled, onReply, onOpen }: ApprovalActionsProps
             disabled={!live}
             onPress={() => send({ kind: "approve" })}
           />
-          <Button label="Always here" disabled={!live} onPress={() => send({ kind: "always" })} />
+          {offersAlwaysAllow(approval) ? (
+            <Button label="Always here" disabled={!live} onPress={() => send({ kind: "always" })} />
+          ) : null}
           <Button
             label="Deny"
             kind="quiet"

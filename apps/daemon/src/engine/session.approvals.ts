@@ -98,3 +98,19 @@ export const canRequestDataApproval = (
     (request) => request.dataSource !== undefined && key(request.dataSource) === key(target)
   );
 };
+
+/** An upgrade leaves the terminal Harness alive, but its Daemon-owned approval waiters are gone. */
+export const withdrawDaemonApprovals = (record: SessionRecord) =>
+  [...record.pending.values()].flatMap((request) =>
+    request.profileAttach === undefined &&
+    request.dataSource === undefined &&
+    request.dataWrite === undefined
+      ? []
+      : [
+          withdrawn(record, {
+            requestId: request.id,
+            withdrawnBy: "daemon",
+            reason: "The Daemon restarted during this approval.",
+          }),
+        ]
+  );

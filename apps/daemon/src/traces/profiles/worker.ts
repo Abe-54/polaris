@@ -141,8 +141,9 @@ const prune = (directory: string, job: ProfileJob) => {
     changed = true;
   }
 
-  let bytes = entries.reduce((total, e) => total + e.bytes, 0);
-  let count = entries.length;
+  const finished = entries.filter((e) => !job.active.includes(e.profile.id));
+  let bytes = finished.reduce((total, e) => total + e.bytes, 0);
+  let count = finished.length;
 
   for (const entry of entries) {
     if (job.active.includes(entry.profile.id)) continue;
@@ -211,6 +212,11 @@ const complete = (directory: string, profile: Profile, checkout: string): Profil
   }
 };
 
+const recover = (directory: string, profile: Profile, job: ProfileJob) =>
+  profile.status === "recording" && !job.active.includes(profile.id)
+    ? complete(join(directory, profile.id), profile, job.checkout)
+    : profile;
+
 const retainedStatus = (profile: Profile, active: ReadonlyArray<string>) =>
   active.includes(profile.id) || profile.status !== "recording"
     ? profile
@@ -225,7 +231,7 @@ const run = (job: ProfileJob): ProfileReply => {
   if (job.operation === "list") {
     return {
       profiles: profilesAt(directory)
-        .map(({ profile }) => retainedStatus(profile, job.active))
+        .map(({ profile }) => recover(directory, profile, job))
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt) || a.id.localeCompare(b.id)),
     };
   }
@@ -259,7 +265,7 @@ const run = (job: ProfileJob): ProfileReply => {
 
 const readRecording = (recording: string, directory: string, job: ProfileJob): ProfileReply => {
   try {
-    const profile = Schema.decodeUnknownSync(Schema.fromJsonString(Profile))(
+    let profile = Schema.decodeUnknownSync(Schema.fromJsonString(Profile))(
       read(join(recording, "profile.json"))
     );
 
@@ -269,6 +275,8 @@ const readRecording = (recording: string, directory: string, job: ProfileJob): P
 
       return { profile: finished };
     }
+
+    profile = recover(directory, profile, job);
 
     if (profile.status !== "completed")
       return {

@@ -31,6 +31,7 @@ import {
   backToWork,
   decisionRefusal,
   withdrawn,
+  withdrawDaemonApprovals,
   canRequestDataApproval,
 } from "./session.approvals.ts";
 import {
@@ -688,6 +689,10 @@ export const sessionMachine = createMachine({
         "model.set": (_, enq) => reject(enq, "the session is In Terminal; return it first"),
         "turns.accept": (_, enq) => reject(enq, "the session is In Terminal; return it first"),
         // Polaris follows along without changing the state.
+        "inspector.approvalRequested": ({ context, event }, enq) =>
+          approvalRequested(need(context), event, enq),
+        "data.approvalRequested": ({ context, event }, enq) =>
+          approvalRequested(need(context), event, enq),
         "harness.approvalRequested": ({ context, event }, enq) =>
           approvalRequested(need(context), event, enq),
         "harness.turnEnded": ({ context, event }, enq) =>
@@ -695,7 +700,9 @@ export const sessionMachine = createMachine({
         "harness.exited": ({ context, event }, enq) => exited(need(context), event, enq, false),
         "daemon.recover": ({ context, event }, enq) =>
           // An upgrade leaves a terminal UI alone; a restart recovers it like any live session.
-          event.cause === "upgrade" ? HANDLED : recover(need(context), event, enq),
+          event.cause === "upgrade"
+            ? settle(enq, need(context), withdrawDaemonApprovals(need(context)))
+            : recover(need(context), event, enq),
       },
     },
     /** No Harness process; resumes from the cursor on the next Turn. */

@@ -2,20 +2,21 @@ import { createServer, type Socket } from "node:net";
 import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, createHash } from "node:crypto";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, Option, Stream, Predicate } from "effect";
 import type { SessionId } from "@polaris/protocol";
+import { EventStore } from "../../store/EventStore.ts";
 import bootstrap from "./bootstrap.mjs.txt" with { type: "text" };
 import { polarisHome } from "../../paths.ts";
 import { appendNodeImport } from "../nodeOptions.ts";
-import { attachError, inspectTarget, recheckTarget, type AttachTarget } from "./target.ts";
+import { attachError, inspectTarget, recheckTarget, peerPid, type AttachTarget } from "./target.ts";
 
 const Message = Schema.Struct({
-  kind: Schema.Literals(["register", "watchdog", "opened", "refused"]),
+  kind: Schema.Literals(["register", "watchdog", "opened", "refused", "chunk", "completed"]),
   token: Schema.optionalKey(Schema.String),
   nonce: Schema.optionalKey(Schema.String),
   pid: Schema.Int,
   runtime: Schema.optionalKey(Schema.Literal("node")),
-  url: Schema.optionalKey(Schema.String),
+  data: Schema.optionalKey(Schema.String),
 });
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Message));
@@ -26,10 +27,22 @@ export interface RegisteredTarget extends AttachTarget {
   readonly token: string;
 }
 
+export interface CaptureHandle {
+  /** Bounded raw JSON; parsing remains on the profiles worker. */
+  readonly profile: Promise<string>;
+  readonly close: () => Promise<void>;
+}
+
 interface Capture {
   readonly target: RegisteredTarget;
   readonly seconds: number;
-  readonly resolve: (value: { url: string; close: () => Promise<void> }) => void;
+  readonly resolve: (value: CaptureHandle) => void;
+  readonly result: Promise<string>;
+  readonly complete: (value: string) => void;
+  readonly fail: (error: Error) => void;
+  readonly chunks: string[];
+  bytes: number;
+  opened: boolean;
   readonly reject: (error: Error) => void;
   socket?: Socket;
   heartbeat?: ReturnType<typeof setInterval>;
@@ -42,6 +55,8 @@ export class TargetRegistry {
   private readonly targets = new Map<number, RegisteredTarget>();
   private readonly captures = new Map<string, Capture>();
   private readonly sockets = new Set<Socket>();
+  private readonly registrations = new Set<Socket>();
+  private readonly watchdogs = new Set<Socket>();
   private readonly server = createServer((socket) => this.accept(socket));
   private ready?: Promise<{ root: string; path: string; module: string }>;
   private closed = false;
@@ -85,7 +100,6 @@ export class TargetRegistry {
 
     if (this.closed) return {};
 
-    if (this.tokens.size >= 1024) this.tokens.delete(this.tokens.keys().next().value!);
     const token = randomBytes(32).toString("hex");
     this.tokens.set(token, sessionId);
 
@@ -108,13 +122,35 @@ export class TargetRegistry {
     return target;
   }
 
+  private admit(socket: Socket) {
+    if (this.closed) return false;
+
+    try {
+      const pid = peerPid(socket);
+      const capturing = [...this.captures.values()].some((capture) => capture.target.pid === pid);
+      const pool = capturing ? this.watchdogs : this.registrations;
+      const limit = capturing ? 1 : 256;
+
+      if (pool.size >= limit) return false;
+      pool.add(socket);
+      socket.once("close", () => pool.delete(socket));
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private accept(socket: Socket) {
-    if (this.closed || this.sockets.size >= 256) return socket.destroy();
+    if (!this.admit(socket)) return socket.destroy();
     this.sockets.add(socket);
+    socket.setEncoding("utf8");
     let buffer = "";
     let registered = false;
+    const handshake = setTimeout(() => socket.destroy(), 2000);
     socket.on("error", () => socket.destroy());
     socket.on("close", () => {
+      clearTimeout(handshake);
       this.sockets.delete(socket);
 
       for (const [pid, target] of this.targets)
@@ -123,10 +159,10 @@ export class TargetRegistry {
     socket.on("data", (chunk) => {
       buffer += chunk.toString();
 
-      if (buffer.length > 16384) return socket.destroy();
       let end: number;
 
       while ((end = buffer.indexOf("\n")) >= 0) {
+        if (end > 64 * 1024) return socket.destroy();
         const line = buffer.slice(0, end);
         buffer = buffer.slice(end + 1);
 
@@ -134,6 +170,7 @@ export class TargetRegistry {
           const message = decode(line);
 
           if (!registered) {
+            clearTimeout(handshake);
             registered = true;
             this.register(socket, message);
           } else this.received(socket, message);
@@ -141,16 +178,18 @@ export class TargetRegistry {
           socket.destroy();
         }
       }
+
+      if (buffer.length > 64 * 1024) socket.destroy();
     });
   }
 
   private register(socket: Socket, message: typeof Message.Type) {
+    if (peerPid(socket) !== message.pid) return socket.destroy();
     const sessionId = message.token && this.tokens.get(message.token);
 
-    if (!sessionId) return socket.destroy();
-
     if (message.kind === "register" && message.runtime === "node") {
-      if (this.targets.has(message.pid)) return socket.destroy();
+      if (!sessionId || this.targets.size >= 256 || this.targets.has(message.pid))
+        return socket.destroy();
       this.targets.set(message.pid, {
         ...inspectTarget(message.pid, message.token),
         sessionId,
@@ -186,47 +225,42 @@ export class TargetRegistry {
     if (!entry) return socket.destroy();
     const [, capture] = entry;
 
-    if (message.kind !== "opened" || !message.url) {
-      capture.reject(attachError("The target already has an inspector or refused profiling."));
-      socket.write('{"kind":"close"}\n');
+    if (message.kind === "opened") {
+      if (capture.opened) return socket.destroy();
+      capture.opened = true;
+      capture.resolve({
+        profile: capture.result,
+        close: async () => {
+          socket.write('{"kind":"close"}\n');
+          socket.destroy();
+          this.finish(entry[0]);
+        },
+      });
 
       return;
     }
 
-    const url = new URL(message.url);
+    if (!capture.opened) return socket.destroy();
 
-    if (
-      url.protocol !== "ws:" ||
-      url.hostname !== "127.0.0.1" ||
-      !url.port ||
-      url.username ||
-      url.password ||
-      !/^\/[a-f0-9-]+$/.test(url.pathname)
-    )
-      throw attachError("The target returned an unsafe inspector endpoint.");
-    clearTimeout(capture.timeout);
-    capture.resolve({
-      url: url.href,
-      close: () =>
-        new Promise<void>((resolve, reject) => {
-          if (socket.destroyed) {
-            resolve();
+    if (message.kind === "chunk" && message.data !== undefined) {
+      capture.bytes += Buffer.byteLength(message.data);
 
-            return;
-          }
+      if (capture.bytes > 64 * 1024 * 1024) return socket.destroy();
+      capture.chunks.push(message.data);
 
-          const timeout = setTimeout(() => {
-            socket.destroy();
-            reject(attachError("The target did not confirm inspector shutdown."));
-          }, 2500);
+      return;
+    }
 
-          socket.once("close", () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-          socket.write('{"kind":"close"}\n');
-        }),
-    });
+    if (message.kind === "completed") {
+      const profile = capture.chunks.join("");
+      capture.chunks.length = 0;
+      capture.complete(profile);
+      clearTimeout(capture.timeout);
+
+      return;
+    }
+
+    socket.destroy();
   }
 
   open(target: RegisteredTarget, seconds: number) {
@@ -238,12 +272,30 @@ export class TargetRegistry {
       return Promise.reject(attachError("Another capture is active or the target changed."));
     const nonce = randomBytes(32).toString("hex");
 
-    return new Promise<{ url: string; close: () => Promise<void> }>((resolve, reject) => {
-      const capture: Capture = { target, seconds, resolve, reject };
-      capture.timeout = setTimeout(() => {
-        capture.socket?.destroy();
-        this.finish(nonce);
-      }, 5000);
+    return new Promise<CaptureHandle>((resolve, reject) => {
+      const result = Promise.withResolvers<string>();
+      void result.promise.catch(() => {});
+
+      const capture: Capture = {
+        target,
+        seconds,
+        resolve,
+        reject,
+        result: result.promise,
+        complete: result.resolve,
+        fail: result.reject,
+        chunks: [],
+        bytes: 0,
+        opened: false,
+      };
+
+      capture.timeout = setTimeout(
+        () => {
+          capture.socket?.destroy();
+          this.finish(nonce);
+        },
+        seconds * 1000 + 5000
+      );
       this.captures.set(nonce, capture);
       target.socket.write(JSON.stringify({ kind: "capture", nonce, seconds }) + "\n");
     });
@@ -256,7 +308,26 @@ export class TargetRegistry {
     clearInterval(capture.heartbeat);
     clearTimeout(capture.timeout);
     this.captures.delete(nonce);
-    capture.reject(attachError("The target disconnected or the capture expired."));
+    const error = attachError("The target disconnected or the capture expired.");
+    capture.reject(error);
+    capture.fail(error);
+  }
+
+  revokeSession(id: SessionId) {
+    for (const [token, sessionId] of this.tokens) if (sessionId === id) this.tokens.delete(token);
+
+    for (const target of this.targets.values())
+      if (target.sessionId === id) target.socket.destroy();
+
+    for (const [nonce, capture] of this.captures)
+      if (capture.target.sessionId === id) {
+        capture.socket?.destroy();
+        this.finish(nonce);
+      }
+  }
+
+  prune(active: (id: SessionId) => boolean) {
+    for (const id of new Set(this.tokens.values())) if (!active(id)) this.revokeSession(id);
   }
 
   async close() {
@@ -278,11 +349,57 @@ export class TargetRegistry {
 export class InspectorTargets extends Context.Service<InspectorTargets, TargetRegistry>()(
   "polaris/traces/InspectorTargets"
 ) {
-  static readonly layer = Layer.effect(
-    InspectorTargets,
-    Effect.acquireRelease(
-      Effect.sync(() => new TargetRegistry()),
-      (registry) => Effect.promise(() => registry.close())
-    )
-  );
+  static layerAt = (moduleRoot?: string) =>
+    Layer.effect(
+      InspectorTargets,
+      Effect.gen(function* () {
+        const registry = yield* Effect.acquireRelease(
+          Effect.sync(() => new TargetRegistry(moduleRoot)),
+          (value) => Effect.promise(() => value.close())
+        );
+
+        const events = yield* Effect.serviceOption(EventStore);
+
+        if (Option.isSome(events)) {
+          const store = events.value;
+
+          const changes = yield* store.subscribe({
+            filter: (item) =>
+              Predicate.isTagged(item, "Event") &&
+              (Predicate.isTagged(item.envelope.event, "SessionStateChanged") ||
+                Predicate.isTagged(item.envelope.event, "WorkspaceRemoved")),
+          });
+
+          yield* changes.pipe(
+            Stream.runForEach((item) =>
+              Effect.gen(function* () {
+                if (!Predicate.isTagged(item, "Event")) return;
+                const event = item.envelope.event;
+
+                if (
+                  Predicate.isTagged(event, "SessionStateChanged") &&
+                  (event.state === "archived" || event.state === "failed")
+                )
+                  registry.revokeSession(event.sessionId);
+                const model = yield* store.model;
+                registry.prune((id) => {
+                  const session = model.sessions.get(id)?.session;
+
+                  return (
+                    session !== undefined &&
+                    session.state !== "archived" &&
+                    session.state !== "failed" &&
+                    model.workspaces.has(session.workspaceId)
+                  );
+                });
+              })
+            ),
+            Effect.forkScoped
+          );
+        }
+
+        return registry;
+      })
+    );
+  static readonly layer = InspectorTargets.layerAt();
 }

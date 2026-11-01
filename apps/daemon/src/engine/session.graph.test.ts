@@ -434,3 +434,17 @@ for (const options of suites) {
     }, 300_000);
   });
 }
+
+test("inspector approval preserves terminal control through Allow and return", async () => {
+  await Effect.runPromise(
+    replay({ harness: "codex", liveCoAttach: true, switchModel: true }, [
+      { type: "start" },
+      { type: "complete" },
+      { type: "openTerminal" },
+      { type: "terminalTurn" },
+      { type: "requestAttach" },
+      { type: "approve" },
+      { type: "returnTerminal" },
+    ])
+  );
+}, 30000);

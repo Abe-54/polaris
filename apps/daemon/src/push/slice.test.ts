@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   AgentSession,
+  ApprovalRequest,
+  ApprovalDecision,
   DomainEvent,
   HostStreamItem,
   RequestId,
@@ -159,4 +161,26 @@ test("a step and a need name their session's Harness; the newest working session
   expect(slice.need?.harness).toBe("Claude Code");
   expect(slice.step?.harness).toBe("Claude Code");
   expect(slice.celestials).toEqual(["claude/giant", "opencode/storm", "codex/twin-ring"]);
+});
+
+test("P9-10: attach Live Activity opens the app instead of offering Always here", () => {
+  const request = Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(approval("attach")),
+    profileAttach: { pid: 42, command: "node app", runtime: "node", seconds: 5 },
+  });
+
+  const state = fold([
+    snapshotWith(),
+    event(
+      DomainEvent.cases.ApprovalResolved.make({
+        sessionId: SESSION_ID,
+        requestId: RequestId.make("r0"),
+        decision: ApprovalDecision.cases.Deny.make({ reason: null }),
+        resolvedBy: "test",
+      })
+    ),
+    event(DomainEvent.cases.ApprovalRequested.make({ request })),
+  ]);
+
+  expect(renderSlice(state, host).need?.kind).toBe("question");
 });

@@ -1,6 +1,6 @@
 import { InspectorTargets } from "../attach/registry.ts";
 import { captureAttached } from "../attach/capture.ts";
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve, relative, isAbsolute } from "node:path";
 import { Context, Effect, Exit, Layer, Option, PubSub, Stream, type Scope } from "effect";
 import {
@@ -16,7 +16,7 @@ import {
 import { EventStore } from "../../store/EventStore.ts";
 import { WorkspaceTrust, ApprovalPolicy } from "../../services.ts";
 import { polarisHome } from "../../paths.ts";
-import { ownProcessGroup, killTree } from "../../platform/processes.ts";
+import { ownProcessGroup } from "../../platform/processes.ts";
 import { repositoryEnv } from "../../service/childEnv.ts";
 import { executableOf } from "../../platform/executable.ts";
 import { redactText } from "../redact.ts";
@@ -26,12 +26,20 @@ import { TraceRuntime } from "../runtime.ts";
 import { traceEndpointEnvironment } from "../environment.ts";
 import { profileDirectory, profileJob } from "./workerClient.ts";
 import type { ProfileJob, ProfileReply } from "./workerProtocol.ts";
+import { stopOwned } from "./stop.ts";
 
 const unavailable = () =>
   new ProfileError({
     code: "E-PROFILE-UNAVAILABLE",
     message: "CPU profiling is unavailable.",
     fix: "Check the Node or Bun installation and the Daemon's storage, then retry.",
+  });
+
+const captureLimit = () =>
+  new ProfileError({
+    code: "E-PROFILE-UNAVAILABLE",
+    message: "The limit of four active recordings on this host has been reached.",
+    fix: "Wait for a recording to finish, or stop an owned command before starting another.",
   });
 
 const refused = () =>
@@ -70,6 +78,11 @@ export type ProfileRecordingMeta = Pick<Profile, "command" | "runtime" | "pid" |
 export class Profiles extends Context.Service<
   Profiles,
   {
+    readonly attachUser: (
+      sessionId: SessionId,
+      pid: number,
+      seconds?: number
+    ) => Effect.Effect<Profile, ProfileError>;
     readonly attach: (
       sessionId: SessionId,
       pid: number,
@@ -153,17 +166,18 @@ export class Profiles extends Context.Service<
           id = "",
           profile?: Profile
         ): Promise<ProfileReply> => {
-          if (operation === "discard" && queued >= 32)
+          const completion = operation === "discard" || operation === "complete";
+
+          if (completion && queued >= 32)
             return tail.catch(() => {}).then(() => job(checkout, operation, id, profile));
 
-          if (queued >= 32 || (closed && operation !== "discard"))
-            return Promise.reject(unavailable());
+          if (queued >= 32 || (closed && !completion)) return Promise.reject(unavailable());
           queued++;
 
           const run = tail
             .catch(() => {})
             .then(() => {
-              if (closed && operation !== "discard") throw unavailable();
+              if (closed && !completion) throw unavailable();
 
               return (options.worker ?? profileJob)(
                 {
@@ -318,6 +332,11 @@ export class Profiles extends Context.Service<
 
           if (program === null) throw unavailable();
           await mkdir(directory, { recursive: true, mode: 0o700 });
+          const preload = join(directory, "exit.cjs");
+          await writeFile(preload, 'process.once("SIGINT", () => process.exit(0));\n', {
+            mode: 0o600,
+            flag: "wx",
+          });
           await Effect.runPromise(authorize(sessionId));
           const latest = await Effect.runPromise(context(sessionId));
 
@@ -330,7 +349,13 @@ export class Profiles extends Context.Service<
           const startedAt = Timestamp.make(new Date().toISOString());
 
           const child = Bun.spawn(
-            [executableOf(program), `--cpu-prof-dir=${directory}`, ...argv.slice(1)],
+            [
+              executableOf(program),
+              `--cpu-prof-dir=${directory}`,
+              runtimeName === "node" ? "--require" : "--preload",
+              preload,
+              ...argv.slice(1),
+            ],
             {
               cwd: launchCwd,
               detached: ownProcessGroup(),
@@ -380,7 +405,6 @@ export class Profiles extends Context.Service<
           const done = child.exited
             .then(async () => {
               parsing.add(profile.id);
-              launches.delete(child.pid);
               const result = await job(checkout, "complete", id);
 
               if (!("profile" in result)) throw unavailable();
@@ -392,7 +416,10 @@ export class Profiles extends Context.Service<
 
               return Profile.make({ ...profile, status: "failed" });
             })
-            .finally(() => parsing.delete(profile.id));
+            .finally(() => {
+              launches.delete(child.pid);
+              parsing.delete(profile.id);
+            });
 
           const owned: Launch = {
             checkout,
@@ -411,10 +438,23 @@ export class Profiles extends Context.Service<
           return owned;
         };
 
-        const launch = async (...args: Parameters<typeof startOwned>) => {
-          if (closed || launches.size + recordings.size + parsing.size + starting >= 4)
-            throw unavailable();
+        const reserve = (replacing?: number) => {
+          if (closed) throw unavailable();
+
+          const live = [...launches.values()].filter(
+            ({ child }) =>
+              child.pid !== replacing &&
+              !restarting.has(child.pid) &&
+              child.exitCode === null &&
+              child.signalCode === null
+          ).length;
+
+          if (live + recordings.size + starting >= 4) throw captureLimit();
           starting++;
+        };
+
+        const launch = async (...args: Parameters<typeof startOwned>) => {
+          reserve();
 
           try {
             return await startOwned(...args);
@@ -431,9 +471,8 @@ export class Profiles extends Context.Service<
           const ctx = yield* context(id);
 
           return yield* attempt(async () => {
-            if (closed || launches.size + recordings.size + parsing.size + starting >= 4)
-              throw unavailable();
-            starting++;
+            reserve();
+            let pending = true;
 
             try {
               const verifiedCwd =
@@ -456,6 +495,8 @@ export class Profiles extends Context.Service<
               });
 
               recordings.set(profile.id, ctx.checkout);
+              starting--;
+              pending = false;
 
               try {
                 await job(ctx.checkout, "start", profile.id, profile);
@@ -490,7 +531,7 @@ export class Profiles extends Context.Service<
 
               return { profile, directory, finish, checkout: ctx.checkout };
             } finally {
-              starting--;
+              if (pending) starting--;
             }
           });
         });
@@ -509,12 +550,14 @@ export class Profiles extends Context.Service<
           Effect.promise(async () => {
             closed = true;
 
+            const stopping = [...launches.values()];
             await Promise.allSettled(
-              [...launches.values()]
+              stopping
                 .map((l) => l.child)
                 .concat([...startingChildren])
                 .map(stopOwned)
             );
+            await Promise.allSettled(stopping.map((l) => l.done));
             launches.clear();
             startingChildren.clear();
             await tail.catch(() => {});
@@ -538,6 +581,24 @@ export class Profiles extends Context.Service<
                   record,
                   targets.value,
                   authorize(id)
+                ).pipe(Effect.provideService(EventStore, eventStore));
+              })
+            ),
+          attachUser: (id, pid, seconds = 5) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                yield* authorize(id);
+
+                if (Option.isNone(targets)) return yield* unavailable();
+
+                return yield* captureAttached(
+                  id,
+                  pid,
+                  seconds,
+                  record,
+                  targets.value,
+                  authorize(id),
+                  "user"
                 ).pipe(Effect.provideService(EventStore, eventStore));
               })
             ),
@@ -610,46 +671,29 @@ export class Profiles extends Context.Service<
                   message: "This process is already restarting.",
                   fix: "Wait for the new recording in Traces (⌘5).",
                 });
+              reserve(pid);
               restarting.add(pid);
-              await killTree(pid, "SIGTERM");
-              let timer: ReturnType<typeof setTimeout> | undefined;
 
               try {
-                await Promise.race([
-                  owned.child.exited,
-                  new Promise<never>((_, reject) => {
-                    timer = setTimeout(
-                      () =>
-                        reject(
-                          new ProfileError({
-                            code: "E-PROFILE-RESTART-REFUSED",
-                            message: "The process didn't stop within five seconds.",
-                            fix: "Ask the user to stop it, then launch a new profile command.",
-                          })
-                        ),
-                      5000
-                    );
-                  }),
-                ]);
+                await stopOwned(owned.child);
+                await owned.done;
+
+                return (
+                  await startOwned(
+                    id,
+                    owned.checkout,
+                    owned.cwd,
+                    owned.argv,
+                    env,
+                    owned.source,
+                    turn,
+                    "restart"
+                  )
+                ).profile;
               } finally {
-                clearTimeout(timer);
+                starting--;
                 restarting.delete(pid);
               }
-
-              await owned.done;
-
-              return (
-                await launch(
-                  id,
-                  owned.checkout,
-                  owned.cwd,
-                  owned.argv,
-                  env,
-                  owned.source,
-                  turn,
-                  "restart"
-                )
-              ).profile;
             });
           }),
           get: Effect.fnUntraced(function* (id, profileId) {
@@ -682,23 +726,3 @@ export class Profiles extends Context.Service<
     );
   static readonly layer = Layer.suspend(() => Profiles.layerAt(join(polarisHome(), "profiles")));
 }
-
-const stopOwned = async (child: Launch["child"]) => {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  await killTree(child.pid, "SIGTERM");
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    await Promise.race([
-      child.exited,
-      new Promise<void>((resolve) => {
-        timer = setTimeout(() => {
-          if (child.exitCode !== null || child.signalCode !== null) resolve();
-          else void killTree(child.pid, "SIGKILL").then(resolve);
-        }, 5000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-};

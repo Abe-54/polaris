@@ -6,7 +6,7 @@ import { HostDropdown, hostFilterOf } from "./components/HostDropdown.tsx";
 import { attempt } from "./components/toast.ts";
 import { sessionLink } from "./lib/links.ts";
 import { fence, plain } from "./lib/markdown.ts";
-import { type ApprovalRow, approvalRows } from "./lib/rows.ts";
+import { type ApprovalRow, approvalRows, offersAlwaysAllow } from "./lib/rows.ts";
 import { usePolaris, withPolaris } from "./polaris.tsx";
 
 const KIND_LABEL = {
@@ -76,12 +76,14 @@ const Actions = (props: { readonly row: ApprovalRow }) => {
             shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
             onAction={() => void respond({ kind: "deny" })}
           />
-          <Action
-            title="Always Approve"
-            icon={Icon.CheckCircle}
-            shortcut={{ modifiers: ["cmd", "shift", "opt"], key: "a" }}
-            onAction={() => void respond({ kind: "allow", remember: true })}
-          />
+          {offersAlwaysAllow(approval) ? (
+            <Action
+              title="Always Approve"
+              icon={Icon.CheckCircle}
+              shortcut={{ modifiers: ["cmd", "shift", "opt"], key: "a" }}
+              onAction={() => void respond({ kind: "allow", remember: true })}
+            />
+          ) : null}
         </>
       )}
       <Action.CopyToClipboard title="Copy Session ID" content={sessionId} />

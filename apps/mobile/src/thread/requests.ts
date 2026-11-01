@@ -86,3 +86,5 @@ export const answersDecision = (approval: ApprovalRequest, picks: Picks): Approv
 
   return ApprovalDecision.cases.Answer.make({ text, answers });
 };
+
+export const offersAlwaysAllow = (request: ApprovalRequest) => request.profileAttach === undefined;

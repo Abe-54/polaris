@@ -46,6 +46,10 @@ export const PUSH_CATEGORIES: ReadonlyArray<{
       action(PushAction.deny, "Deny", true),
     ],
   },
+  {
+    identifier: "approval-once",
+    actions: [action(PushAction.approve, "Approve"), action(PushAction.deny, "Deny", true)],
+  },
   // A question needs its choices, so it opens the app.
   { identifier: "question", actions: [] },
 ];
@@ -79,7 +83,7 @@ const decodeTarget = Schema.decodeUnknownOption(PushTarget);
 
 export interface PushResponse {
   readonly actionIdentifier: string;
-  /** The category the extension set; only `approval` answers, so a secret's push never does. */
+  /** The category the extension set; only approval categories answer, so a secret's push never does. */
   readonly category: string | null;
   /** The notification's userInfo, as expo-notifications reports it (data, or the push payload). */
   readonly userInfo: ReadonlyArray<unknown>;
@@ -113,7 +117,14 @@ export const routeOf = (response: PushResponse): Route | null => {
 export const answerOf = (response: PushResponse): Answer | null => {
   const decision = decisionOf(response.actionIdentifier);
 
-  if (decision === null || response.category !== "approval") return null;
+  if (
+    decision === null ||
+    (response.category !== "approval" && response.category !== "approval-once")
+  )
+    return null;
+
+  if (response.category === "approval-once" && response.actionIdentifier === PushAction.always)
+    return null;
 
   const target = targetOf(response);
 
