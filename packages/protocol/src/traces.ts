@@ -467,7 +467,7 @@ export const RestartWithProfiling = Rpc.make("profiles.restartWithProfiling", {
   error: ProfileErrors,
 });
 
-/** Cooperative Node capture, after a fresh Pending Approval for this process and duration. */
+/** User-initiated cooperative Node capture. The click is consent; requires the approve Grant. */
 export const AttachProfile = Rpc.make("profiles.attach", {
   payload: {
     sessionId: SessionId,

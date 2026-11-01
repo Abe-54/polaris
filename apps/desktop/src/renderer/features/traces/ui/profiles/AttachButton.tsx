@@ -3,7 +3,7 @@ import type { TracesSessionKey } from "../../model/session.ts";
 import { useProfilesApi } from "../../data/profiles.tsx";
 import { selectProfile } from "../../model/profile/store.ts";
 
-/** A request opens the existing approval card; the button itself never authorizes attach. */
+/** The user consents here; agent-initiated captures use a Pending Approval. */
 export const AttachButton = ({
   at,
   pid,
@@ -43,14 +43,11 @@ export const AttachButton = ({
         onClick={() => void request()}
         className="text-caption text-text-default focus-visible:ring-starlight rounded-card text-left outline-none focus-visible:ring-2 disabled:opacity-(--opacity-dimmed)"
       >
-        {pending ? "Waiting for approval or recording…" : `Profile ${service} for 5 s…`}
+        {pending ? "Recording…" : `Profile ${service} for 5 s`}
       </button>
-      {pending ? (
-        <p className="text-caption text-text-subtle">
-          Approve the request in the agent session. While attached, any local process can run code
-          in it.
-        </p>
-      ) : null}
+      <p className="text-caption text-text-subtle">
+        Collects CPU samples for 5 seconds without restarting the process or opening a network port.
+      </p>
       {error ? (
         <p role="alert" className="text-caption text-text-default">
           {error}

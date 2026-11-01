@@ -33,7 +33,7 @@ function register() {
   const socket = channel((message) => {
     if (message.kind !== "capture" || worker || typeof message.nonce !== "string") return;
     worker = new Worker(new URL(import.meta.url), {
-      workerData: { nonce: message.nonce, seconds: message.seconds }, execArgv: [],
+      workerData: { [token]: true, nonce: message.nonce, seconds: message.seconds }, execArgv: [],
     });
     worker.on("error", () => {});
     worker.on("exit", () => { worker = undefined; });
@@ -47,25 +47,18 @@ function register() {
 function watchdog() {
   const session = new Session();
   let opened = false;
-  const key = JSON.stringify(`polaris.profile.${workerData.nonce}`);
   let closing = false;
   let timeout;
   let lease;
-  const send = (message) => socket.write(JSON.stringify(message) + "\n");
-  const post = (expression) => new Promise((resolve, reject) => {
-    session.post("Runtime.evaluate", { expression, returnByValue: true }, (error, result) => {
-      if (error || result.exceptionDetails) reject(error ?? new Error("Inspector refused"));
-      else resolve(result.result.value);
-    });
+  const send = (message) => socket.write(JSON.stringify({ ...message, pid: process.pid }) + "\n");
+  const post = (method, params = {}) => new Promise((resolve, reject) => {
+    session.post(method, params, (error, result) => error ? reject(error) : resolve(result));
   });
-  const close = async () => {
+  const close = () => {
     if (closing) return;
     closing = true;
     clearTimeout(timeout);
     clearTimeout(lease);
-    if (opened) {
-      try { await post(`(() => { const entry = globalThis[Symbol.for(${key})]; if (entry) { delete globalThis[Symbol.for(${key})]; entry.close(); } })()`); } catch {}
-    }
     session.disconnect();
     socket.destroy();
     parentPort.close();
@@ -74,34 +67,50 @@ function watchdog() {
     clearTimeout(lease);
     lease = setTimeout(close, 1500);
   };
+  const capture = async () => {
+    const check = await post("Runtime.evaluate", {
+      expression: "process.getBuiltinModule('node:inspector').url() ?? null", returnByValue: true,
+    });
+    if (check.exceptionDetails || check.result.value !== null) throw new Error("Existing inspector");
+    await post("Profiler.enable");
+    await post("Profiler.start");
+    if (closing) return;
+    send({ kind: "opened" });
+    await new Promise(resolve => { timeout = setTimeout(resolve, workerData.seconds * 1000); });
+    if (closing) return;
+    const { profile } = await post("Profiler.stop");
+    if (closing) return;
+    const text = JSON.stringify(profile);
+    if (Buffer.byteLength(text) > 64 * 1024 * 1024) throw new Error("Profile too large");
+    for (let offset = 0; offset < text.length; offset += 8192) {
+      if (!send({ kind: "chunk", data: text.slice(offset, offset + 8192) })) {
+        await new Promise(resolve => {
+          const settled = () => { socket.off("drain", settled); socket.off("close", settled); resolve(); };
+          socket.once("drain", settled); socket.once("close", settled);
+        });
+      }
+      if (closing) return;
+    }
+    send({ kind: "completed" });
+  };
   const socket = channel((message) => {
     if (message.kind === "ping") refresh();
-    if (message.kind === "close") void close();
+    if (message.kind === "close") close();
     if (message.kind !== "open" || opened || closing) return;
     opened = true;
-    void post(`(() => {
-      const inspector = process.getBuiltinModule('node:inspector');
-      if (inspector.url()) return null;
-      inspector.open(0, '127.0.0.1', false);
-      globalThis[Symbol.for(${key})] = { close: inspector.close };
-      return inspector.url();
-    })()`).then((url) => {
-      if (url === null) { opened = false; send({kind: "refused", pid: process.pid}); return close(); }
-      send({ kind: "opened", url, pid: process.pid });
-    }).catch(() => { send({kind: "refused", pid: process.pid}); void close(); });
-  }, () => { void close(); });
+    void capture().catch(() => { if (!closing) send({ kind: "refused" }); close(); });
+  }, close);
   session.connectToMainThread();
   socket.ref();
   socket.on("connect", () => {
-    send({kind: "watchdog", token, nonce: workerData.nonce, pid: process.pid});
+    send({kind: "watchdog", token, nonce: workerData.nonce});
     refresh();
-    timeout = setTimeout(close, Math.min(30, Math.max(1, workerData.seconds)) * 1000 + 5000);
   });
 }
 
 if (supported && address && token) {
   try {
     if (isMainThread) register();
-    else if (workerData?.nonce) watchdog();
+    else if (workerData?.[token] === true) watchdog();
   } catch {}
 }

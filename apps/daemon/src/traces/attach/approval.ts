@@ -69,7 +69,7 @@ export const approveAttach = Effect.fnUntraced(function* (
           kind: "tool",
           profileAttach: { ...target, command },
           title: `Profile Node process ${target.pid} for ${target.seconds} s`,
-          detail: `${command}\npid ${target.pid} · Node · profile for ${target.seconds} s\nwhile attached, any local process can run code in it`,
+          detail: `${command}\npid ${target.pid} · Node · profile for ${target.seconds} s\nCollects CPU samples without opening a network port.`,
           options: [],
           questions: [],
           openedAt: new Date().toISOString(),

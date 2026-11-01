@@ -33,7 +33,14 @@ import { type MobileColours, useTheme } from "../theme";
 import { CONTENT_TEXT_SCALE, CONTROL_TEXT_SCALE } from "../theme/textScale.ts";
 import { elapsed, harnessHue, harnessName } from "./labels.ts";
 import type { SecretOutcome } from "./fold.ts";
-import { answered, answersDecision, pick, type Picks, requestCard } from "./requests.ts";
+import {
+  offersAlwaysAllow,
+  answered,
+  answersDecision,
+  pick,
+  type Picks,
+  requestCard,
+} from "./requests.ts";
 import { SecretCard, SecretSettled } from "./SecretCard.tsx";
 
 export interface PendingRequestsProps {
@@ -138,7 +145,7 @@ const Permission = ({
   const buttons = (
     <>
       <Answer label="Approve" filled live={card.live} onPress={approve} />
-      {whole ? (
+      {whole && offersAlwaysAllow(card.request) ? (
         <Answer
           label="Always here"
           filled={false}

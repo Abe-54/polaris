@@ -3,30 +3,25 @@ import { exists, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import {
-  ApprovalDecision,
-  DomainEvent,
-  ProfileDetail,
-} from "../../../../packages/protocol/src/index.ts";
-import { TEST_SESSION } from "../../../../apps/daemon/src/traces/testing.ts";
-import { TargetRegistry } from "../../../../apps/daemon/src/traces/attach/registry.ts";
-import { withProfiles } from "../../../../apps/daemon/src/traces/profiles/testing.ts";
-import { Profiles } from "../../../../apps/daemon/src/traces/profiles/index.ts";
-import { TraceSessions, TraceStore } from "../../../../apps/daemon/src/traces/index.ts";
-import { commit, turn } from "../../../../apps/daemon/src/traces/authority.testing.ts";
-import { EventStore } from "../../../../apps/daemon/src/store/EventStore.ts";
-import { decideSession, stateOf } from "../../../../apps/daemon/src/engine/session.ts";
-import {
-  initialSnapshot,
-  stepModel,
-  type Step,
-} from "../../../../apps/daemon/src/engine/session.testing.ts";
-import { sessionProfileTools } from "../../../../apps/daemon/src/mcp/sessions/profiles.ts";
-import { unavailableSessions } from "../../../../apps/daemon/src/mcp/sessions/index.ts";
-import { profileTool } from "../../../../apps/daemon/src/mcp/tools/profile.ts";
+import { ApprovalDecision, DomainEvent, ProfileDetail, ProfilesRpcs } from "@polaris/protocol";
+import { TEST_SESSION } from "../testing.ts";
+import { RpcTest } from "effect/rpc";
+import { ProfilesRpcsLive } from "../profiles/rpcs.ts";
+import { TargetRegistry } from "./registry.ts";
+import { withProfiles } from "../profiles/testing.ts";
+import { Profiles } from "../profiles/index.ts";
+import { TraceSessions, TraceStore } from "../index.ts";
+import { commit, turn } from "../authority.testing.ts";
+import { EventStore } from "../../store/EventStore.ts";
+import { decideSession, stateOf } from "../../engine/session.ts";
+import { initialSnapshot, stepModel, type Step } from "../../engine/session.testing.ts";
+import { sessionProfileTools } from "../../mcp/sessions/profiles.ts";
+import { unavailableSessions } from "../../mcp/sessions/index.ts";
+import { profileTool } from "../../mcp/tools/profile.ts";
 
 // Real Node children loading the real bootstrap through a real TargetRegistry (P9's own fixtures).
 const native = test.skipIf(process.platform !== "darwin" && process.platform !== "linux");
+
 const node = Bun.which("node")!;
 
 const until = async <A>(read: () => A | Promise<A>, ms = 5000): Promise<NonNullable<A>> => {
@@ -63,63 +58,53 @@ const spawnNode = async (registry: TargetRegistry, script: string, stdout: "pipe
     stderr: "pipe",
   });
 
-native(
-  "finding P9-1: an inspector the Daemon can no longer close runs no code sent after the Daemon is gone",
-  () =>
+native.each(["busy JS", "native block"])(
+  "P9-1: cooperative capture opens no TCP listener during %s or after Daemon loss",
+  (mode) =>
     scratch(async (root, registry) => {
       const script = join(root, "target.cjs");
-      const marker = join(root, "attacker-ran");
-      // Like better-sqlite3, execSync or scryptSync: the main thread blocks in native code once.
+      const trigger = join(root, "block");
+      const active = join(root, "active");
       await writeFile(
         script,
-        `const i = require('node:inspector'), cp = require('node:child_process'); let once = false;
-setInterval(() => { if (i.url() && !once) { once = true; cp.execSync('sleep 6'); } }, 20);`
+        `const fs = require('node:fs');
+setInterval(() => { if (fs.existsSync(${JSON.stringify(trigger)})) {
+fs.unlinkSync(${JSON.stringify(trigger)}); fs.writeFileSync(${JSON.stringify(active)}, '1');
+${mode === "busy JS" ? "const end=Date.now()+4000; while(Date.now()<end) Math.sqrt(Math.random());" : "require('node:child_process').execSync('sleep 4');"}
+} }, 20);`
       );
       const child = await spawnNode(registry, script, "ignore");
 
+      const noListener = async () => {
+        const probe = Bun.spawn(
+          ["lsof", "-nP", "-a", "-p", String(child.pid), "-iTCP", "-sTCP:LISTEN"],
+          { stdout: "pipe", stderr: "pipe" }
+        );
+
+        const out = await new Response(probe.stdout).text();
+        expect(await probe.exited).toBe(1);
+        expect(out).toBe("");
+      };
+
       try {
         const target = await until(() => registry.get(TEST_SESSION, child.pid));
-        const { url } = await registry.open(target, 1);
+        await noListener();
+        const capture = await registry.open(target, 1);
+        await writeFile(trigger, "1");
+        await until(async () => ((await exists(active)) ? true : null));
+        await noListener();
 
-        await Bun.sleep(200);
-        // The Daemon disappears (crash, upgrade); the bootstrap claims a 1.5 s lease closes it.
+        if (mode === "busy JS") expect(await capture.profile).toContain('"nodes"');
         await registry.close();
-        await Bun.sleep(2500);
-
-        // Any local process, well after the lease: finds the endpoint and queues code.
-        const listed = await fetch(url.replace(/^ws:/, "http:").replace(/\/[^/]*$/, "/json/list"))
-          .then((r) => r.status)
-          .catch(() => null);
-
-        const socket = new WebSocket(url);
-        await new Promise((resolve) => {
-          socket.onopen = resolve;
-          socket.onerror = resolve;
-        });
-
-        if (socket.readyState === WebSocket.OPEN)
-          socket.send(
-            JSON.stringify({
-              id: 1,
-              method: "Runtime.evaluate",
-              params: {
-                expression: `process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(marker)}, 'x')`,
-              },
-            })
-          );
-        await Bun.sleep(5000);
-        socket.close();
-
-        expect({ listed, attackerRan: await exists(marker) }).toEqual({
-          listed: null,
-          attackerRan: false,
-        });
+        await Bun.sleep(1800);
+        await noListener();
+        expect(child.exitCode).toBeNull();
       } finally {
         child.kill();
         await child.exited;
       }
     }),
-  25000
+  15000
 );
 
 native(
@@ -143,7 +128,7 @@ native(
         try {
           registry.get(TEST_SESSION, child.pid);
         } catch (error) {
-          refusal = (error as Error).message;
+          refusal = error instanceof Error ? error.message : String(error);
         }
 
         expect(refusal).toBeNull();
@@ -257,7 +242,7 @@ test("finding P9-5: a Polaris-opened inspector approval leaves an In Terminal se
     let snapshot = initialSnapshot();
 
     for (const type of steps) {
-      const { next, rejection } = stepModel(snapshot, { type } as Step, options);
+      const { next, rejection } = stepModel(snapshot, { type }, options);
 
       if (rejection !== null) throw new Error(`${type}: ${rejection}`);
       snapshot = next;
@@ -276,7 +261,7 @@ test("finding P9-5: a Polaris-opened inspector approval leaves an In Terminal se
 });
 
 native(
-  "finding P9-6: Profile ‹service› for 5 s from the Traces sidebar opens an approval while the agent is idle",
+  "finding P9-6: a user capture completes while idle without creating a Pending Approval",
   () =>
     withProfiles(async ({ root, runtime, targets }) => {
       // The agent's last Turn ended; its dev server is still running (the usual time to profile).
@@ -308,33 +293,48 @@ native(
         stderr: "ignore",
       });
 
-      const abort = new AbortController();
-
       try {
         await until(() => targets.get(TEST_SESSION, child.pid));
 
-        // AttachButton → profiles.attach RPC → Profiles.attach(sessionId, pid, 5).
-        const running = runtime.runPromiseExit(
-          Effect.flatMap(Profiles, (p) => p.attach(TEST_SESSION, child.pid, 5)),
-          { signal: abort.signal }
+        // The production user RPC must neither open nor resolve a Pending Approval.
+        const capture = runtime.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const rpc = yield* RpcTest.makeClient(ProfilesRpcs);
+
+              return yield* rpc["profiles.attach"]({
+                sessionId: TEST_SESSION,
+                pid: child.pid,
+                seconds: 1,
+              });
+            })
+          ).pipe(Effect.provide(ProfilesRpcsLive))
         );
 
-        const outcome = await Promise.race([
-          running.then((exit) => `ended: ${JSON.stringify(exit.toJSON()).slice(0, 300)}`),
-          until(() =>
-            runtime.runPromise(
-              Effect.flatMap(EventStore, (s) =>
-                Effect.map(s.model, (m) =>
-                  m.sessions.get(TEST_SESSION)!.pending.size > 0 ? "approval opened" : null
-                )
-              )
-            )
-          ),
-        ]);
+        const profile = await capture;
+        expect(profile.status).toBe("completed");
 
-        expect(outcome).toBe("approval opened");
-        abort.abort();
-        await running;
+        const record = await runtime.runPromise(
+          Effect.flatMap(EventStore, (s) =>
+            Effect.map(s.model, (m) => m.sessions.get(TEST_SESSION)!)
+          )
+        );
+
+        expect(record.pending.size).toBe(0);
+        expect(record.session.state).toBe("idle");
+
+        const approvals = await runtime.runPromise(
+          Effect.flatMap(EventStore, (store) =>
+            store.readEvents({
+              after: 0,
+              upTo: Number.MAX_SAFE_INTEGER,
+              sessionId: TEST_SESSION,
+              eventTypes: ["ApprovalRequested"],
+            })
+          )
+        );
+
+        expect(approvals).toEqual([]);
       } finally {
         child.kill();
         await child.exited;
@@ -395,9 +395,9 @@ native(
           )
         );
         const result = await running;
-        expect(Schema.decodeUnknownSync(ProfileDetail)(result.structuredContent).profile.status).toBe(
-          "completed"
-        );
+        expect(
+          Schema.decodeUnknownSync(ProfileDetail)(result.structuredContent).profile.status
+        ).toBe("completed");
         child.kill();
         await child.exited;
 
@@ -409,4 +409,33 @@ native(
       }
     }),
   20000
+);
+
+native(
+  "P9-1: a native-blocked capture times out without stopping the application",
+  () =>
+    scratch(async (root, registry) => {
+      const script = join(root, "blocked.cjs");
+      const trigger = join(root, "trigger");
+      await writeFile(
+        script,
+        `const fs=require('node:fs'); setInterval(() => {
+if(fs.existsSync(${JSON.stringify(trigger)})) { fs.unlinkSync(${JSON.stringify(trigger)}); require('node:child_process').execSync('sleep 8'); }
+}, 10);`
+      );
+      const child = await spawnNode(registry, script, "ignore");
+
+      try {
+        const target = await until(() => registry.get(TEST_SESSION, child.pid));
+        const capture = await registry.open(target, 1);
+        await writeFile(trigger, "1");
+        await Promise.resolve(expect(capture.profile).rejects.toThrow("capture expired"));
+        expect(child.exitCode).toBeNull();
+        await capture.close();
+      } finally {
+        child.kill();
+        await child.exited;
+      }
+    }),
+  15000
 );

@@ -70,6 +70,11 @@ export type ProfileRecordingMeta = Pick<Profile, "command" | "runtime" | "pid" |
 export class Profiles extends Context.Service<
   Profiles,
   {
+    readonly attachUser: (
+      sessionId: SessionId,
+      pid: number,
+      seconds?: number
+    ) => Effect.Effect<Profile, ProfileError>;
     readonly attach: (
       sessionId: SessionId,
       pid: number,
@@ -538,6 +543,24 @@ export class Profiles extends Context.Service<
                   record,
                   targets.value,
                   authorize(id)
+                ).pipe(Effect.provideService(EventStore, eventStore));
+              })
+            ),
+          attachUser: (id, pid, seconds = 5) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                yield* authorize(id);
+
+                if (Option.isNone(targets)) return yield* unavailable();
+
+                return yield* captureAttached(
+                  id,
+                  pid,
+                  seconds,
+                  record,
+                  targets.value,
+                  authorize(id),
+                  "user"
                 ).pipe(Effect.provideService(EventStore, eventStore));
               })
             ),
