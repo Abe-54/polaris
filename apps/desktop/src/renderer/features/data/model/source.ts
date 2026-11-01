@@ -136,7 +136,10 @@ const ACCESS: Record<DataSource["access"], (source: DataSource) => string> = {
 
 /** The agents' access, at the bar's end (DESIGN.md, Data → Connection bar). */
 export const accessText = (source: DataSource): string => {
-  if (isDaemonSource(source)) return "Agents read · never written";
+  if (isDaemonSource(source))
+    return source.access === "read"
+      ? "Agents read · never written"
+      : "Only you · agents read it in the Polaris workspace";
 
   return outsideFile(source)
     ? "Outside this checkout · agents can't read it"
@@ -152,7 +155,7 @@ const SHORT: Record<DataSource["access"], (source: DataSource) => string> = {
 
 /** The same facts in a narrow bar, so the access is the last thing to go, never clipped. */
 export const accessShort = (source: DataSource): string => {
-  if (isDaemonSource(source)) return "Read only";
+  if (isDaemonSource(source)) return source.access === "read" ? "Read only" : "Only you";
 
   return outsideFile(source) ? "Outside checkout" : SHORT[source.access](source);
 };
@@ -166,7 +169,8 @@ export const accessLine = (source: DataSource): string => {
     denied: "denied",
   };
 
-  if (isDaemonSource(source)) return "read · never written";
+  if (isDaemonSource(source))
+    return source.access === "read" ? "read · never written" : "only you · never written";
 
   if (outsideFile(source)) return "outside this checkout · can't read it";
 

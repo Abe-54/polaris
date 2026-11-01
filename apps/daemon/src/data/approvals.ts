@@ -18,7 +18,7 @@ import { decideSession } from "../engine/session.ts";
 import { DataDatabase, storageError } from "./database.ts";
 import { ApprovalStore, targetKey, targetOf } from "./approvalStore.ts";
 import { writeApprovalMethods } from "./writeApprovals.ts";
-import { isDaemonSource } from "./daemonSources.ts";
+import { daemonDenied, isDaemonSource } from "./daemonSources.ts";
 import { DataApprovalRequired, type DataApprovalOutcome } from "./approvalRequired.ts";
 
 const approvalItem = (item: LiveItem, id?: RequestId) => {
@@ -101,8 +101,12 @@ export const dataApprovalsLayer = Layer.effect(
       turn?: TurnId,
       grantedId?: RequestId
     ) {
-      // Listed only while Developer Mode shows it; never through the checkout's path rule.
-      if (isDaemonSource(source)) return;
+      // Decided by kind when it was listed (Polaris Workspace checkouts only), never by path.
+      if (isDaemonSource(source)) {
+        if (source.access === "read") return;
+
+        return yield* daemonDenied();
+      }
 
       if (source.engine === "sqlite") {
         if (source.locality === "local") return;

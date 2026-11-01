@@ -199,7 +199,8 @@ export const sources = Effect.fnUntraced(function* (options: {
     const daemon = options.daemon;
 
     if (daemon === undefined) return [];
-    const items = yield* daemon.sources.candidates(yield* daemon.workspace(sessionId));
+    const { items, agents } = yield* daemon.sources.candidates(yield* daemon.workspace(sessionId));
+    const policy = daemonPolicy(agents);
 
     return items.flatMap((candidate) => {
       // Remote, so a path that skipped the Daemon Source checks would deny it rather than read it.
@@ -207,7 +208,7 @@ export const sources = Effect.fnUntraced(function* (options: {
 
       if (!source) return [];
       const encoded = Schema.encodeSync(DataSource)(source);
-      const listed = { ...encoded, ...daemonPolicy, label: DAEMON_SOURCE_LABEL };
+      const listed = { ...encoded, ...policy, label: DAEMON_SOURCE_LABEL };
 
       return [{ source: new DataSource(listed), candidate }];
     });

@@ -22,11 +22,21 @@ export const DAEMON_SOURCE_LABEL: DataSource["label"] = { text: "DAEMON", colour
 export const isDaemonSource = (source: Pick<DataSource, "foundIn">) =>
   source.foundIn.kind === "daemon";
 
-/** Agents read a Daemon Source without approval while it is listed; nothing writes to it. */
-export const daemonPolicy: Pick<DataSource, "access" | "writes"> = {
-  access: "read",
+/**
+ * Nothing writes to a Daemon Source. Agents read it without approval only in the Polaris
+ * Workspace's checkouts; elsewhere it is the user's alone, behind Data's Polaris switch.
+ */
+export const daemonPolicy = (agents: boolean): Pick<DataSource, "access" | "writes"> => ({
+  access: agents ? "read" : "denied",
   writes: "off",
-};
+});
+
+export const daemonDenied = () =>
+  new DataError({
+    code: "E-DATA-DENIED",
+    message: "Agents read Daemon Sources only in the Polaris Workspace's checkouts.",
+    fix: "Ask the user to set this Host's Polaris Workspace, or to query it in Data.",
+  });
 
 export const daemonReadOnly = () =>
   new DataError({
@@ -70,9 +80,13 @@ const candidate = (file: string): Candidate => {
   };
 };
 
-/** Shown in the Polaris Workspace's checkouts, or in every checkout when there is none. */
+/** Listed in the Polaris Workspace's checkouts, or in every checkout when there is none. */
 export const daemonSourcesShown = (mode: DeveloperMode, workspaceId: WorkspaceId | undefined) =>
   mode.effective && (mode.polarisWorkspaceId === null || mode.polarisWorkspaceId === workspaceId);
+
+/** Agents may read them only in a checkout of the Polaris Workspace itself. */
+export const daemonSourcesForAgents = (mode: DeveloperMode, workspaceId: WorkspaceId | undefined) =>
+  mode.effective && mode.polarisWorkspaceId !== null && mode.polarisWorkspaceId === workspaceId;
 
 export interface DaemonSourceOptions {
   readonly mode: Effect.Effect<DeveloperMode>;
@@ -84,10 +98,13 @@ export interface DaemonSourceOptions {
 export const daemonSources = (options: DaemonSourceOptions) => ({
   candidates: (workspaceId: WorkspaceId | undefined) =>
     Effect.gen(function* () {
-      if (!daemonSourcesShown(yield* options.mode, workspaceId)) return [];
-      const home = (options.home ?? polarisHome)();
+      const mode = yield* options.mode;
 
-      return (yield* Effect.promise(() => daemonFiles(home))).map(candidate);
+      if (!daemonSourcesShown(mode, workspaceId)) return { items: [], agents: false };
+      const home = (options.home ?? polarisHome)();
+      const items = (yield* Effect.promise(() => daemonFiles(home))).map(candidate);
+
+      return { items, agents: daemonSourcesForAgents(mode, workspaceId) };
     }),
   /** Emits once at once (DeveloperModeState's changes start with the current mode), then per change. */
   changes: options.changes.pipe(

@@ -100,7 +100,8 @@ const withDaemon = <A, E>(
     )
   );
 
-const on = developerMode({ stored: true });
+/** On, with this session's Workspace as the Polaris Workspace, so agents may read them. */
+const on = developerMode({ stored: true, polarisWorkspaceId: started.session.workspaceId });
 
 const agent = { sessionId, tool: "query", turn } as const;
 
@@ -328,5 +329,29 @@ test("a user's SQLite file outside the checkout is still denied to agents, even 
           yield* Effect.flip(queries.query({ ...agent, source, sql: "SELECT 1" }))
         ).toMatchObject({ code: "E-DATA-DENIED" });
       }
+    })
+  ));
+
+test("with no Polaris Workspace, agents can't read Daemon Sources, but the user's Data view can", () =>
+  withDaemon(({ queries, sources, set }) =>
+    Effect.gen(function* () {
+      yield* set(developerMode({ stored: true }));
+      const source = "Daemon · state";
+      const listed = (yield* sources.list({ sessionId })).find((s) => s.name === source);
+
+      expect(listed).toMatchObject({ access: "denied", writes: "off" });
+
+      for (const read of [
+        Effect.asVoid(queries.query({ ...agent, source, sql: "SELECT body FROM events" })),
+        Effect.asVoid(queries.describe({ sessionId, source, tool: "describe", turn })),
+      ])
+        expect(yield* Effect.flip(read)).toMatchObject({
+          code: "E-DATA-DENIED",
+          message: "Agents read Daemon Sources only in the Polaris Workspace's checkouts.",
+        });
+
+      const user = yield* queries.query({ sessionId, source, sql: "SELECT body FROM events" });
+
+      expect(user.rows).toEqual([["first"]]);
     })
   ));

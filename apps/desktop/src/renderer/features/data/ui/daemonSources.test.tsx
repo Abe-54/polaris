@@ -1,6 +1,7 @@
 /** Daemon Sources in Data's sidebar: where they show, the Polaris switch, and what can't change. */
 import { DataSource, WorkspaceId } from "@polaris/protocol";
 import { act, waitFor } from "@testing-library/react";
+import { Schema } from "effect";
 import { afterEach, describe, expect, test } from "bun:test";
 import { hostDeveloperModesStore } from "../../settings/hostDeveloperModes.ts";
 import { accessText, foundText } from "../model/source.ts";
@@ -24,6 +25,12 @@ const STATE = new DataSource({
   access: "read",
   writes: "off",
   label: { text: "DAEMON", colour: "grey" },
+});
+
+/** As the Daemon lists it with no Polaris Workspace: the user's alone. */
+const USER_ONLY = new DataSource({
+  ...Schema.encodeSync(DataSource)(STATE),
+  access: "denied",
 });
 
 const mode = (polarisWorkspaceId: string | null) => ({
@@ -73,5 +80,6 @@ describe("Daemon Sources", () => {
   test("they read as the daemon's own, read by agents, never outside-the-checkout", () => {
     expect(foundText(STATE)).toBe("the daemon's own database · state.sqlite");
     expect(accessText(STATE)).toBe("Agents read · never written");
+    expect(accessText(USER_ONLY)).toBe("Only you · agents read it in the Polaris workspace");
   });
 });

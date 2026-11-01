@@ -194,7 +194,10 @@ const discoveredIn = (source: DataSource) =>
   `from ${source.foundIn.file ?? source.foundIn.kind}${source.foundIn.key === undefined ? "" : ` (${source.foundIn.key})`}`;
 
 const access = (source: DataSource) => {
-  if (source.foundIn.kind === "daemon") return "read · never written";
+  if (source.foundIn.kind === "daemon")
+    return source.access === "read"
+      ? "read · never written"
+      : "denied · agents read it only in the Polaris Workspace";
 
   if (source.engine === "sqlite")
     return source.locality === "local" ? "read · read only" : "outside the checkout, denied";
