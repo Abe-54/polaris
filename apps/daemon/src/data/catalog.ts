@@ -10,6 +10,7 @@ import { Effect, Option, Schema } from "effect";
 import { readEffect, type ReadInput } from "./execution.ts";
 import { DataPools } from "./pools.ts";
 import { catalogValues, catalogError } from "./catalogValues.ts";
+import { serverEngine } from "./engine.ts";
 
 const pgVisible =
   "n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'";
@@ -87,7 +88,7 @@ export const makeCatalogReader = (read: typeof readEffect) =>
       table?: string,
       snapshotTree?: SchemaTree
     ) {
-      const engine = input.source.engine;
+      const engine = serverEngine(input.source.engine);
       const { plain, text, number, bool, json, decode } = catalogValues(engine);
 
       const rows = Effect.fnUntraced(function* (

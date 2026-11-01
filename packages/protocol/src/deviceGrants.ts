@@ -282,6 +282,13 @@ export const DEVICE_RPCS = {
   "languages.trust.inspect": "local",
   "languages.trust.set": "local",
   "languages.workspace.restart": "local",
+  "data.source.saveFile": "local",
+  "developerMode.get": "device",
+  "developerMode.set": "local",
+  "developerMode.setWorkspace": "local",
+  "developerMode.lease": "local",
+  "developerMode.watch": "device",
+  "traces.ingestSelf": "device",
 } as const satisfies Record<DaemonRpcTag, DeviceAccess>;
 
 export const DEVICE_COMMANDS = {

@@ -9,6 +9,7 @@ import { guardFunctions } from "./functionGuard.ts";
 import { commitWindow } from "./writeCommit.ts";
 import { DataPools } from "./pools.ts";
 import { decodeResult, type RawResult, typeName } from "./values.ts";
+import { serverEngine } from "./engine.ts";
 
 const DriverError = Schema.Struct({
   message: Schema.optionalKey(Schema.String),
@@ -241,7 +242,7 @@ export async function configure(tx: TransactionSQL, engine: "postgres" | "mysql"
 }
 
 async function boundedRead(tx: TransactionSQL, input: ReadInput, active: Active) {
-  const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
+  const mode = await configure(tx, serverEngine(input.source.engine), input.timeoutMs ?? 30000);
   const checked = guardSql(input.sql, mode);
   await guardFunctions(tx, checked.sql, mode);
 
@@ -365,7 +366,8 @@ export async function executeTransaction<A>(
 
     const id = Schema.decodeUnknownSync(Schema.Int)(ids[0]?.id);
     abort = () => {
-      if (!commit.sent) cancellation(active, connection, lease.control, input.source.engine, id);
+      if (!commit.sent)
+        cancellation(active, connection, lease.control, serverEngine(input.source.engine), id);
     };
 
     combined.addEventListener("abort", abort, { once: true });
@@ -422,7 +424,7 @@ export async function executeTransaction<A>(
     combined.removeEventListener("abort", abort);
     await active.kill;
 
-    await releaseConnection(reserved, input.source.engine);
+    await releaseConnection(reserved, serverEngine(input.source.engine));
 
     await lease.release();
   }
@@ -450,14 +452,14 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
 
   const decoded = decodeResult(
     raw,
-    input.source.engine,
+    serverEngine(input.source.engine),
     knownCredentials(input.connection),
     input.catalogText
   );
 
   const columns = decoded.columns.slice(0, 256).map((column) => ({
     name: scrubCredentials(column.name, knownCredentials(input.connection)).slice(0, 256),
-    type: typeName(input.source.engine, column),
+    type: typeName(serverEngine(input.source.engine), column),
   }));
 
   return {

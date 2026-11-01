@@ -50,7 +50,27 @@ const DataColumn = Schema.Struct({ name: Schema.String, type: Schema.String });
 
 const DataRow = Schema.Array(ScrubbedDataValue).check(Schema.isMaxLength(256));
 
-export const DataEngine = Schema.Literals(["postgres", "mysql"]);
+export const DataEngine = Schema.Literals(["postgres", "mysql", "sqlite"]);
+
+export type DataEngine = typeof DataEngine.Type;
+
+/** The engines reached over the network, by host and port. */
+export const ServerDataEngine = Schema.Literals(["postgres", "mysql"]);
+
+export type ServerDataEngine = typeof ServerDataEngine.Type;
+
+/** A database file on the Host (SQLite): absolute, one line, no NUL. */
+export const DataFilePath = Schema.String.check(
+  Schema.isMaxLength(4096),
+  Schema.makeFilter((path) => path.startsWith("/") || /^[a-z]:[\\/]/i.test(path)),
+  Schema.makeFilter((path) => !/[\0\r\n]/.test(path))
+);
+
+/**
+ * Placeholders a file source carries in the server fields: `localhost`, port 0, schema `main`.
+ * Internal only: readers branch on `engine` and never show or connect with them for `sqlite`.
+ */
+export const DATA_FILE_SERVER = { host: "localhost", port: 0, database: "main" } as const;
 
 export const DataSourceLabel = Schema.Struct({
   text: Schema.String,
@@ -59,7 +79,8 @@ export const DataSourceLabel = Schema.Struct({
 
 export type DataSourceLabel = typeof DataSourceLabel.Type;
 
-export class DataSource extends Schema.Class<DataSource>("DataSource")({
+/** SAFETY for readers: for `sqlite`, host/port/database are `DATA_FILE_SERVER`; use `path`. */
+const DataSourceFields = Schema.Struct({
   /** Stable hash of checkout path and source name, assigned by discovery. */
   id: Name,
   name: Name,
@@ -76,6 +97,8 @@ export class DataSource extends Schema.Class<DataSource>("DataSource")({
   port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
   database: Name,
   user: Schema.optionalKey(Schema.String),
+  /** The database file on the Host: present exactly when `engine` is `sqlite`. */
+  path: Schema.optionalKey(DataFilePath),
   foundIn: Schema.Struct({
     kind: Schema.Literals(["env", "framework", "compose", "manual"]),
     file: Schema.optionalKey(Schema.String),
@@ -87,7 +110,11 @@ export class DataSource extends Schema.Class<DataSource>("DataSource")({
   reachable: Schema.optionalKey(Schema.Boolean),
   privilegeWarnings: Schema.optionalKey(Schema.Array(ScrubbedText)),
   error: Schema.optionalKey(ScrubbedText),
-}) {}
+}).check(
+  Schema.makeFilter((source) => (source.engine === "sqlite") === (source.path !== undefined))
+);
+
+export class DataSource extends Schema.Class<DataSource>("DataSource")(DataSourceFields) {}
 
 export class QueryResult extends Schema.Class<QueryResult>("QueryResult")({
   queryId: Name,
@@ -326,7 +353,7 @@ export const SaveDataSource = Rpc.make("data.source.save", {
     name: Name,
     previousName: Schema.optionalKey(Name),
     passwordAction: Schema.optionalKey(Schema.Literals(["keep", "clear", "set"])),
-    engine: DataEngine,
+    engine: ServerDataEngine,
     host: DataHost,
     port: DataSource.fields.port,
     database: Name,
@@ -340,6 +367,19 @@ export const SaveDataSource = Rpc.make("data.source.save", {
         (passwordAction === "set" ? password !== undefined : password === undefined)
     )
   ),
+  success: DataSource,
+  error: Errors,
+});
+
+/** A manual SQLite source: a file on the Host, with no server, user or password. */
+export const SaveDataFileSource = Rpc.make("data.source.saveFile", {
+  payload: {
+    ...OnSession,
+    name: Name,
+    previousName: Schema.optionalKey(Name),
+    path: DataFilePath,
+    label: DataSourceLabel,
+  },
   success: DataSource,
   error: Errors,
 });
@@ -437,6 +477,7 @@ export class DataRpcs extends RpcGroup.make(
   QueryData,
   WatchDataQueryLog,
   SaveDataSource,
+  SaveDataFileSource,
   RemoveDataSource,
   LabelDataSource,
   QueryDataStream,

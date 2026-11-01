@@ -7,6 +7,7 @@ import { identifier, sqlTokens, writeError, type writePlan } from "./writeSql.ts
 import type { WriteInput } from "./writeExecution.ts";
 import type { WriteTable } from "./writeTable.ts";
 import type { LexicalMode } from "./guard.ts";
+import { serverEngine } from "./engine.ts";
 
 export const MAX_IDENTITIES = 10000;
 
@@ -132,7 +133,7 @@ export function insertedPreview(raw: RawResult, input: WriteInput) {
   return {
     ...decodeResult(
       Object.assign(raw.slice(0, 20), { columns: raw.columns }),
-      input.source.engine,
+      serverEngine(input.source.engine),
       knownCredentials(input.connection)
     ),
     raw,

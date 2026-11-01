@@ -20,6 +20,7 @@ test.each([
   "data.query",
   "data.queryLog.watch",
   "data.source.save",
+  "data.source.saveFile",
   "data.source.remove",
   "data.source.label",
   "data.query.stream",

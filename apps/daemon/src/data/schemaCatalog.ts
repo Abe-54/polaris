@@ -9,6 +9,7 @@ import type { DataSources } from "./index.ts";
 import type { CatalogSnapshot, SnapshotTable } from "./schemaCompare.ts";
 import { fingerprint, scrubCatalogText } from "./schemaScrub.ts";
 import { MYSQL_SNAPSHOT_TABLES, snapshotSql } from "./schemaCatalogSql.ts";
+import { serverEngine } from "./engine.ts";
 
 export type ResolvedSource = Effect.Success<ReturnType<DataSources["Service"]["resolve"]>>;
 
@@ -26,7 +27,7 @@ export const makeSnapshotCatalog = (read: typeof readEffect) =>
   Effect.fnUntraced(
     function* (pools: DataPools, resolved: ResolvedSource) {
       const at = new Date().toISOString();
-      const engine = resolved.source.engine;
+      const engine = serverEngine(resolved.source.engine);
       const sql = snapshotSql[engine];
       const { plain, text, number, bool, json, decode } = catalogValues(engine);
 

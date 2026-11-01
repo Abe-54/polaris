@@ -8,6 +8,7 @@ import type { editStatements } from "./writeEdits.ts";
 import { identifier, writeError } from "./writeSql.ts";
 import type { WriteInput } from "./writeExecution.ts";
 import type { WriteTable } from "./writeTable.ts";
+import { serverEngine } from "./engine.ts";
 
 const FLOAT_KEY = /^(?:real|float4|float8|double precision|float|double)\b/i;
 
@@ -38,7 +39,7 @@ async function readCells(
   table: WriteTable,
   statement: EditStatement
 ) {
-  const engine = input.source.engine;
+  const engine = serverEngine(input.source.engine);
   const columns = statement.before.map((cell) => identifier(cell.column, engine)).join(",");
   const sql = `SELECT ${columns} FROM ${table.sql} WHERE ${statement.where} FOR UPDATE`;
   const params = bindValues(statement.key, engine);

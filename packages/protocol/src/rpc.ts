@@ -29,6 +29,8 @@ import { AttachmentSettings, AttachmentUsage, StagedAmount } from "./attachments
 import { AutoArchiveRpcs } from "./autoArchive.ts";
 import { IdleCompactionRpcs } from "./idleCompaction.ts";
 import { VisualsRpcs } from "./visuals.ts";
+import { DeveloperModeRpcs } from "./developerMode.ts";
+import { SelfTraceRpcs } from "./selfTraces.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
@@ -779,7 +781,7 @@ export class DaemonRpcs extends RpcGroup.make(
     ProfilesRpcs,
     TraceCompareRpcs
   )
-  .merge(BrowserStackRpcs) {}
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs) {}
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with

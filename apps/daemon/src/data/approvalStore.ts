@@ -8,13 +8,14 @@ import {
   type DataSource,
 } from "@polaris/protocol";
 import { Match, Schema } from "effect";
+import { serverEngine } from "./engine.ts";
 
 export const targetOf = (source: DataSource) =>
   new DataSourceApproval({
     sourceId: source.id,
     sourceName: source.name,
     ...(source.branch === undefined ? undefined : { branch: source.branch }),
-    engine: source.engine,
+    engine: serverEngine(source.engine),
     host: source.host,
     port: source.port,
     database: source.database,

@@ -977,3 +977,12 @@ shutdown. `listening` stays false even while the main thread is blocked in nativ
 not proven by the abstract model. Existing Engine trace validation still applies:
 `POLARIS_TRACE_DIR=/tmp/p9-engine-traces bun test apps/daemon/src/verification/engine.model.test.ts`,
 then `cd packages/spec && bun scripts/replay.ts /tmp/p9-engine-traces`.
+
+## Developer Mode, Self-Traces and trace context (ENG-711)
+
+No model change. The contracts in `packages/protocol/src/developerMode.ts`, `selfTraces.ts` and `traceContext.ts` (ADR 0095) don't change how commands are decided, committed, acknowledged, streamed, resumed or recovered:
+
+- **Trace context.** `traceparent` and `tracestate` are optional RPC request headers. The Engine never reads them when it decides or commits a Command; they only parent the Daemon's Spans. A malformed value is dropped and never refuses a request. `dispatch` receipts, sequences and the resume rule are unchanged.
+- **Developer Mode.** `developerMode.set` and `setWorkspace` are Host settings, like `sessions.setVisuals`. They are not Commands and write no events. A `developerMode.lease` is a held stream whose end, including a disconnect, releases it. It is connection state, like `presence.report`, and never part of the event log or a Client's resume. If the task S implementation records Developer Mode as events, it must update this section and the model.
+- **Self-Trace ingest.** `traces.ingestSelf` writes the trace store (ADR 0094), not the event store, as the OTLP receiver does.
+- **Admission.** All of these RPCs are `client` in `RPC_GRANTS`, so Extensions are refused before `rpc-admission.qnt`'s reservations matter.

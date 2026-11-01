@@ -3,13 +3,14 @@ import { SQL } from "bun";
 import { DataError, type DataSource } from "@polaris/protocol";
 import { Redacted } from "effect";
 import type { DataConnection } from "./connection.ts";
+import { serverEngine } from "./engine.ts";
 
 export function sqlOptions(
   source: Pick<DataSource, "engine">,
   connection: DataConnection
 ): SQL.PostgresOrMySQLOptions {
   return {
-    adapter: source.engine,
+    adapter: serverEngine(source.engine),
     ...connection,
     password: Redacted.value(connection.password),
     max: 2,

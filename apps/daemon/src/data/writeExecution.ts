@@ -31,6 +31,7 @@ import {
   insertedPreview,
   rawIdentity,
 } from "./writeRows.ts";
+import { serverEngine } from "./engine.ts";
 
 export interface WriteInput extends Omit<ReadInput, "limit" | "catalogText"> {
   dryRun: boolean;
@@ -88,7 +89,10 @@ async function rawRead(
       );
   }
 
-  return { ...decodeResult(raw, input.source.engine, knownCredentials(input.connection)), raw };
+  return {
+    ...decodeResult(raw, serverEngine(input.source.engine), knownCredentials(input.connection)),
+    raw,
+  };
 }
 
 export function whereParams(
@@ -381,7 +385,7 @@ function notPreviewedNote(ddl: boolean, triggers: boolean) {
 }
 
 async function write(tx: TransactionSQL, active: Active, input: WriteInput): Promise<WritePreview> {
-  const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
+  const mode = await configure(tx, serverEngine(input.source.engine), input.timeoutMs ?? 30000);
   const plan = writePlan(input.sql, input.source, mode);
   const table = plan.target ? await writeTable(tx, input.source, plan.target) : undefined;
 
@@ -545,7 +549,7 @@ export async function executeEdits(
   signal: AbortSignal
 ) {
   return executeTransaction(pools, input, signal, "", async (tx, active) => {
-    const mode = await configure(tx, input.source.engine, input.timeoutMs ?? 30000);
+    const mode = await configure(tx, serverEngine(input.source.engine), input.timeoutMs ?? 30000);
     const requested = input.edits;
 
     const table = await writeTable(tx, input.source, {

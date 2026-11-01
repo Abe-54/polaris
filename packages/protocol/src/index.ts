@@ -8,6 +8,12 @@ export * from "./idleCompaction.ts";
 
 export * from "./visuals.ts";
 
+export * from "./developerMode.ts";
+
+export * from "./selfTraces.ts";
+
+export * from "./traceContext.ts";
+
 export * from "./availability.ts";
 
 export * from "./bridge.ts";

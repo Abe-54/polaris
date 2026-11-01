@@ -5,6 +5,7 @@ import { makeCatalogReader } from "./catalog.ts";
 import { catalogValues } from "./catalogValues.ts";
 import { DataPools } from "./pools.ts";
 import { decodeResult, type Column, type RawResult } from "./values.ts";
+import { serverEngine } from "./engine.ts";
 
 const source = new DataSource({
   id: "app",
@@ -93,7 +94,7 @@ function reader(results: readonly RawResult[]) {
 
   return makeCatalogReader((_pools, input) =>
     Effect.sync(() => ({
-      ...decodeResult(results[index++]!, input.source.engine, [], input.catalogText),
+      ...decodeResult(results[index++]!, serverEngine(input.source.engine), [], input.catalogText),
       truncated: false,
       columns: results[index - 1]!.columns.map((column) => ({ name: column.name, type: "text" })),
     }))

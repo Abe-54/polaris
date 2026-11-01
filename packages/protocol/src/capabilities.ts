@@ -30,6 +30,12 @@ export const Capability = Schema.Literals([
   /** CPU Profiles watch, details and owned-process restart; advertised only when implemented. */
   "traces.profiles",
   "traces.profiles.attach",
+  /** `developerMode.*`: the Developer Mode setting, leases and watch (ADR 0095); when implemented. */
+  "developer-mode",
+  /** `traces.ingestSelf`: Clients' Self-Trace batches (ADR 0095); advertised only when implemented. */
+  "traces.self",
+  /** `data.source.saveFile` and `sqlite` Data Sources; advertised only when implemented. */
+  "data.sqlite",
   /** Explicit Turn/Trace route comparison; advertised only when implemented. */
   "traces.compare",
   /** `host.restartPreview` and `host.prepareRestart`: Restart daemon's confirm and clean stop (ADR 0087). */

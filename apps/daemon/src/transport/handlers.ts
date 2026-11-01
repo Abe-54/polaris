@@ -29,7 +29,7 @@ import {
   PushRegistrationError,
   PresenceLease,
 } from "@polaris/protocol";
-import { Effect, Option, Stream } from "effect";
+import { Effect, Layer, Option, Stream } from "effect";
 import { ClientCapabilities, DeviceLabel } from "../engine/rpc.ts";
 import { BlobChannel } from "../services.ts";
 import { ServerRpcs } from "./rpcs.ts";
@@ -45,6 +45,7 @@ import { deviceOf } from "../linkedDevices/connection.ts";
 import { RelayRoute } from "../linkedDevices/route.ts";
 import { HostPresence } from "../presence/index.ts";
 import { browserDefaults } from "../browser/index.ts";
+import { DEVELOPER_MODE_DEFAULT_TAGS, developerModeDefaults } from "./developerModeDefaults.ts";
 
 const notADevice = () =>
   new PushRegistrationError({
@@ -70,11 +71,17 @@ const notYet = (what: string) => `${what} is not available on this Daemon yet`;
 const fileError = (path: string, what: string) =>
   new FileError({ path, code: "ENOTSUP", message: notYet(what) });
 
-export const defaultHandlers = (options: {
+type DefaultOptions = {
   readonly hostInfo: HostInfo;
   readonly capabilities: ReadonlyArray<Capability>;
-}) =>
-  ServerRpcs.toLayer({
+};
+
+export const defaultHandlers = (options: DefaultOptions) =>
+  Layer.merge(serverDefaults(options), developerModeDefaults);
+
+/** Leaves the newer groups to their own layer, keeping this object under TS's instantiation depth. */
+const serverDefaults = (options: DefaultOptions) =>
+  ServerRpcs.omit(...DEVELOPER_MODE_DEFAULT_TAGS).toLayer({
     ...languageDefaults,
     ...browserDefaults,
     "prediction.capability": () =>
