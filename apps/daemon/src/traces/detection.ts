@@ -71,6 +71,9 @@ const signalUrl = (base: string | undefined, signal: string) => {
   return parsed.href;
 };
 
+export const metricsEndpointFromEnvironment = (env: TraceEnvironment) =>
+  env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? signalUrl(env.OTEL_EXPORTER_OTLP_ENDPOINT, "metrics");
+
 const headers = (value: string | undefined) => {
   const result: Record<string, string> = {};
 
