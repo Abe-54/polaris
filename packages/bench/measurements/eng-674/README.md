@@ -1,6 +1,6 @@
 # ENG-674 forwarding measurements
 
-These native benchmark receipts accompany `apps/daemon/src/traces/BENCH.md`.
+These native benchmark receipts accompany [BENCH.md](./BENCH.md).
 They do not replace a committed baseline. `before-traces` uses the assigned
 base in a detached worktree with dependency symlinks (`gitDirty: true`); `forwarding-unconfigured` and `forwarding-down` use the P1 implementation.
 `forwarding-eight-experiment` temporarily changed only the default queue count

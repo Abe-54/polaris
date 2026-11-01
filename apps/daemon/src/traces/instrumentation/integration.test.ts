@@ -54,6 +54,7 @@ test(
             const store = yield* TraceStore;
             const page = yield* store.list(f.checkout);
             expect(page.total).toBeGreaterThan(0);
+
             const spans = (yield* store.get(f.checkout, page.traces[0]!.id)).spans;
             expect(spans.some((span) => span.kind === "server")).toBe(true);
             expect(
@@ -102,7 +103,9 @@ test(
             launched.id
           );
 
-          expect(env.NODE_OPTIONS).toMatch(/^--import .* --no-warnings --import/);
+          expect(env.NODE_OPTIONS).toMatch(
+            /^--no-warnings --import "\/tmp\/inspector.mjs" --import "data:/
+          );
           expect(env.POLARIS_OTEL_ENDPOINT).toBe(env.OTEL_EXPORTER_OTLP_ENDPOINT);
           const token = env.OTEL_EXPORTER_OTLP_ENDPOINT!.split("/").at(-1)!;
           expect((yield* runtime.authenticate(token))?.launchedTurn?.id).toBe(launched.id);

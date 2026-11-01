@@ -246,7 +246,7 @@ the initial run and 4.2 in the final run; CPU comparisons carry the same warning
 An unused forwarding queue adds no timer.
 
 Raw results are under
-[`packages/bench/measurements/eng-674`](../../../../packages/bench/measurements/eng-674).
+[`packages/bench/measurements/eng-674`](.).
 They are evidence, not new baselines. The earlier trace run interrupted during
 Host resource exhaustion and the retry that found port 4319 occupied produced no
 usable before/after comparison and are excluded. No production Pi or hosted

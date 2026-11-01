@@ -125,7 +125,7 @@ Run `bun test apps/daemon/src/traces` with native loopback/PTY access. The
 `packages/bench` `traces` scenario drives 200k Spans through the real Daemon,
 measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 ENG-673's default-timeout checks, negative control and raw paired measurements
-are in [launch-bench/README.md](./launch-bench/README.md).
+are in [launch measurements](../../../../packages/bench/measurements/eng-657/launch/README.md).
 
 MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
@@ -255,9 +255,14 @@ configuration from entering the trusted launch environment before detection. Bui
 `bun apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/compiled-environment.smoke.ts apps/daemon/dist/darwin-arm64/polaris`.
 The smoke starts that binary in a scratch directory containing both startup files, checks
 forwarding resolution and a child process environment, and rejects a preload side effect.
-Passing `dev` instead probes the source runner separately. On Bun 1.4.4 that mode still
-loads both cwd files and fails this smoke; ENG-698 tracks safe development startup. The
-compiled protection does not apply to direct `bun apps/daemon/src/main.ts` invocation.
+Passing `dev` instead runs the supported shell development launcher and must pass the
+same checks. Passing `unsafe-dev` retains the prior direct source invocation and must
+fail with the repository URL, child sentinels and preload marker visible (negative control).
+Run both probes with
+`./scripts/daemon-dev.sh lease bench -- bun --no-env-file --config=./scripts/daemon-dev.toml apps/daemon/src/traces/compiled-environment.smoke.ts dev`
+(replace `dev` with `unsafe-dev` for the negative control).
+See [Daemon development startup](../../README.md) for safe watch/package entrypoints and
+the limits of direct invocation and already contaminated parent environments.
 
 Axiom packages produce evidence; launch `AXIOM_TOKEN`/`AXIOM_DATASET` select its OTLP
 traces target. Vercel packages and exporter environment produce evidence; launch `VERCEL_OTEL_ENDPOINTS` prefills the platform's

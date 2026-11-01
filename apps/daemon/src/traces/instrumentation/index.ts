@@ -2,7 +2,7 @@ import type { WorkspaceTracesSettings } from "@polaris/protocol";
 import type { TraceEnvironment } from "../runtime.ts";
 import { bundledRegisterPath } from "./assets.ts";
 import { isNodeSdk, launchPackages } from "./package.ts";
-import { appendNodeImport } from "../nodeOptions.ts";
+import { appendNodeImport, instrumentationImport } from "../nodeOptions.ts";
 
 export interface AutoInstrumentationOptions {
   readonly checkout: string;
@@ -58,16 +58,13 @@ export const prepareAutoInstrumentation = async (
 
   try {
     const path = options.registerPath ?? (await bundledRegisterPath(options.home));
-    const appended = appendNodeImport(source.NODE_OPTIONS, path);
-    const preload = appendNodeImport(undefined, path);
+    const appended = appendNodeImport(source.NODE_OPTIONS, instrumentationImport(path));
 
     return {
       environment: {
-        NODE_OPTIONS:
-          appended === source.NODE_OPTIONS
-            ? appended
-            : `${preload}${source.NODE_OPTIONS ? ` ${source.NODE_OPTIONS}` : ""}`,
+        NODE_OPTIONS: appended,
         POLARIS_OTEL_ENDPOINT: source.OTEL_EXPORTER_OTLP_ENDPOINT,
+        POLARIS_OTEL_OVERRIDE: settings.autoInstrumentOverride ? "1" : "0",
         POLARIS_OTEL_SERVICE_NAME: packages.find((info) => info.name)?.name ?? "node-app",
       },
       skipReason: null,

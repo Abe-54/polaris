@@ -1,10 +1,17 @@
-import { register, createRequire } from "node:module";
+const guard = Symbol.for("polaris.node-instrumentation.register");
 
-// Bun must never register a Node provider, including when it inherits NODE_OPTIONS.
-if (!process.versions.bun) {
+// No loader thread, manifest reads or SDK parsing when this child has no receiver.
+if (!process.versions.bun && process.env.POLARIS_OTEL_ENDPOINT && !Reflect.has(globalThis, guard)) {
+  Reflect.set(globalThis, guard, true);
+
   try {
-    register(new URL("./hook.mjs", import.meta.url));
-    createRequire(import.meta.url)("./sdk.cjs");
+    const { appOwnsTelemetry } = await import("./ownership.mjs");
+
+    if (!appOwnsTelemetry()) {
+      const { register, createRequire } = await import("node:module");
+      register(new URL("./hook.mjs", import.meta.url));
+      createRequire(import.meta.url)("./sdk.cjs");
+    }
   } catch {
     // Optional tracing must not prevent application startup.
   }
