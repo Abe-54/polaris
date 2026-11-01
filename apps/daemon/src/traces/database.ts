@@ -74,7 +74,8 @@ const migrateHistory = (db: Database) => {
       DROP INDEX IF EXISTS spans_history;
       CREATE INDEX IF NOT EXISTS summaries_history ON summaries(checkout,root,start DESC);
       CREATE INDEX IF NOT EXISTS summaries_turn ON summaries(checkout,turn_id,trace_id);
-      CREATE INDEX IF NOT EXISTS spans_compare ON spans(checkout,name,parent_name,service,trace_id,id);
+      DROP INDEX IF EXISTS spans_compare;
+      CREATE INDEX IF NOT EXISTS spans_parentless ON spans(checkout,trace_id,start,id) WHERE parent IS NULL;
       CREATE INDEX IF NOT EXISTS spans_error ON spans(checkout,trace_id,status,start);`);
   })();
 };
@@ -111,15 +112,17 @@ export const refreshSummary = (
   traceId: string,
   partial = false
 ): void => {
-  const row = db
-    .query(
-      `SELECT c.value FROM spans c WHERE c.checkout=? AND c.trace_id=?
-        ORDER BY CASE WHEN c.parent IS NULL THEN 0
-          WHEN json_extract(c.value,'$.kind') IN ('server','consumer') AND NOT EXISTS (
-            SELECT 1 FROM spans p WHERE p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent)
-          THEN 1 ELSE 2 END,c.start,c.id LIMIT 1`
-    )
-    .get(checkout, traceId);
+  const row =
+    db
+      .query(`SELECT value FROM spans WHERE checkout=? AND trace_id=? AND parent IS NULL
+    ORDER BY start,id LIMIT 1`)
+      .get(checkout, traceId) ??
+    db
+      .query(`SELECT c.value FROM spans c WHERE c.checkout=? AND c.trace_id=?
+      ORDER BY (json_extract(c.value,'$.kind') IN ('server','consumer') AND NOT EXISTS (
+        SELECT 1 FROM spans p WHERE p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent)) DESC,
+        c.start,c.id LIMIT 1`)
+      .get(checkout, traceId);
 
   if (row === null) {
     db.query("DELETE FROM summaries WHERE checkout=? AND trace_id=?").run(checkout, traceId);

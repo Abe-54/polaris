@@ -25,13 +25,11 @@ const decodeSpans = Schema.decodeUnknownSync(
   )
 );
 
-const decodeIds = Schema.decodeUnknownSync(
-  Schema.Array(
-    Schema.Struct({
-      traceId: Schema.String,
-      spanId: Schema.String,
-    })
-  )
+const decodeSignature = Schema.decodeUnknownSync(
+  Schema.Struct({
+    traceId: Schema.String,
+    service: Schema.String,
+  })
 );
 
 type Candidate = ReturnType<typeof decodeSpans>[number];
@@ -51,27 +49,20 @@ const hasSignature = async (
   if (before.size === 0) return false;
 
   const query =
-    db.query(`SELECT trace_id AS traceId,id AS spanId FROM spans INDEXED BY spans_compare
-    WHERE checkout=? AND name=? AND parent_name IS ? AND service=? AND (trace_id,id)>(?,?)
-    ORDER BY trace_id,id LIMIT 32`);
+    db.query(`SELECT trace_id AS traceId,service FROM spans INDEXED BY spans_history_covering
+    WHERE checkout=? AND name=? AND parent_name IS ?`);
 
-  let trace = "";
-  let id = "";
+  let visited = 0;
 
-  while (true) {
-    const rows = decodeIds(
-      query.all(checkout, span.name, span.parentName, span.service, trace, id)
-    );
+  for (const value of query.iterate(checkout, span.name, span.parentName)) {
+    const row = decodeSignature(value);
 
-    if (rows.some((row) => before.has(row.traceId))) return true;
+    if (row.service === span.service && before.has(row.traceId)) return true;
 
-    if (rows.length < 32) return false;
-
-    const last = rows[rows.length - 1]!;
-    trace = last.traceId;
-    id = last.spanId;
-    await compareYield();
+    if (++visited % 32 === 0) await compareYield();
   }
+
+  return false;
 };
 
 const traces = async function* (db: Database, side: "a" | "b") {

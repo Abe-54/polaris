@@ -59,3 +59,5 @@ const time = (label: string, sql: string, ...args: (string | number)[]) => {
 };
 time("old signatures via json_extract + parent self-join", `SELECT DISTINCT p.service,json_extract(p.value,'$.name'),json_extract(parent.value,'$.name') FROM summaries s JOIN spans p ON p.checkout=s.checkout AND p.trace_id=s.trace_id LEFT JOIN spans parent ON parent.checkout=p.checkout AND parent.trace_id=p.trace_id AND parent.id=p.parent WHERE s.checkout=? AND s.turn_id='turn-early'`, checkout);
 time("old signatures via name/parent_name columns", `SELECT DISTINCT p.service,p.name,p.parent_name FROM summaries s JOIN spans p ON p.checkout=s.checkout AND p.trace_id=s.trace_id WHERE s.checkout=? AND s.turn_id='turn-early'`, checkout);
+
+console.log("parentless root lookup", db.query("EXPLAIN QUERY PLAN SELECT value FROM spans WHERE checkout=? AND trace_id=? AND parent IS NULL ORDER BY start,id LIMIT 1").all(checkout, "00000000000000000000000000000001"));
