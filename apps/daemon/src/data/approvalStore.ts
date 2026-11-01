@@ -9,6 +9,7 @@ import {
 } from "@polaris/protocol";
 import { Match, Schema } from "effect";
 import { serverEngine } from "./engine.ts";
+import { filePolicy } from "./sqlite/policy.ts";
 
 export const targetOf = (source: DataSource) =>
   new DataSourceApproval({
@@ -21,6 +22,12 @@ export const targetOf = (source: DataSource) =>
     database: source.database,
     user: source.user ?? "",
   });
+
+/** The Query Log and snapshot key for any source; SQLite is keyed by its file. */
+export const sourceKey = (source: DataSource) =>
+  source.engine === "sqlite"
+    ? JSON.stringify([source.engine, source.path ?? ""])
+    : targetKey(targetOf(source));
 
 export const serverKey = (target: DataSourceApproval) =>
   JSON.stringify([target.engine, target.host, target.port, target.user]);
@@ -128,6 +135,7 @@ export class ApprovalStore {
       .run(key, access);
   }
   read(source: DataSource): SourcePolicy {
+    if (source.engine === "sqlite") return filePolicy(source);
     const target = targetOf(source);
 
     const query = this.db.query<

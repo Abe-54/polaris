@@ -1,8 +1,8 @@
 /**
- * Add data source (DESIGN.md, Data → Sidebar): a manual source posted with `data.source.save`.
- * The password is write-only: never shown, never read back, and blank keeps the saved one.
+ * Add data source (DESIGN.md, Data → Sidebar): a server posted with `data.source.save`, a SQLite
+ * file with `data.source.saveFile`. The password is write-only: never shown, never read back.
  */
-import type { DataSourceLabel, ServerDataEngine } from "@polaris/protocol";
+import type { DataEngine, DataSourceLabel, ServerDataEngine } from "@polaris/protocol";
 import {
   Button,
   Dialog,
@@ -27,7 +27,9 @@ const PORTS: Record<ServerDataEngine, number> = { postgres: 5432, mysql: 3306 };
 /** The password isn't here: it stays in its uncontrolled field, so it never reaches the DOM's attributes. */
 export interface Draft {
   readonly name: string;
-  readonly engine: ServerDataEngine;
+  readonly engine: DataEngine;
+  /** SQLite only: the database file, an absolute path on the Host. */
+  readonly path: string;
   readonly host: string;
   readonly port: string;
   readonly database: string;
@@ -43,6 +45,7 @@ const draftOf = (form: Form): Draft =>
     ? {
         name: "",
         engine: "postgres",
+        path: "",
         host: "localhost",
         port: "",
         database: "",
@@ -52,11 +55,12 @@ const draftOf = (form: Form): Draft =>
       }
     : {
         name: form.source.name,
-        // Server sources only: no SQLite source exists until ENG-708 task SQ gives it its own form.
-        engine: form.source.engine === "sqlite" ? "postgres" : form.source.engine,
-        host: form.source.host,
-        port: String(form.source.port),
-        database: form.source.database,
+        engine: form.source.engine,
+        path: form.source.path ?? "",
+        // A SQLite source's server fields are placeholders: switching engine starts them blank.
+        host: form.source.engine === "sqlite" ? "localhost" : form.source.host,
+        port: form.source.engine === "sqlite" ? "" : String(form.source.port),
+        database: form.source.engine === "sqlite" ? "" : form.source.database,
         user: form.source.user ?? "",
         label: form.source.label,
         clearPassword: false,
@@ -70,11 +74,23 @@ export const savedName = (name: string) => name.trim().toLowerCase();
 
 export const NAME_PROBLEM = "Use only a–z, 0–9, “.”, “_” or “-”, starting with a letter or digit";
 
+/** The protocol's DataFilePath: absolute on the Host (POSIX or a Windows drive), one line. */
+const fileProblem = (path: string): string | null => {
+  if (path === "") return "Enter the database file's path";
+
+  if (!path.startsWith("/") && !/^[a-z]:[\\/]/i.test(path))
+    return "Use the file's full path on the Host, starting with /";
+
+  return /[\r\n]/.test(path) ? "The path is one line" : null;
+};
+
 /** The first thing missing or wrong, in the form's order; null when it can be saved. */
 export const problemOf = (draft: Draft): string | null => {
   if (draft.name.trim() === "") return "Name the data source";
 
   if (!NAME_RULE.test(savedName(draft.name))) return NAME_PROBLEM;
+
+  if (draft.engine === "sqlite") return fileProblem(draft.path.trim());
 
   if (draft.host.trim() === "") return "Enter the host";
   const port = draft.port === "" ? PORTS[draft.engine] : Number(draft.port);
@@ -168,6 +184,46 @@ const PasswordField = ({ draft, set, editing, password }: FieldsProps) => (
   </div>
 );
 
+const ServerFields = ({ draft, set, ...props }: FieldsProps & { engine: ServerDataEngine }) => (
+  <>
+    <div className="grid grid-cols-[1fr_96px] gap-2">
+      <Field label="Host">
+        <Input value={draft.host} onChange={(e) => set({ host: e.target.value })} />
+      </Field>
+      <Field label="Port">
+        <Input
+          inputMode="numeric"
+          value={draft.port}
+          placeholder={String(PORTS[props.engine])}
+          onChange={(e) => set({ port: e.target.value })}
+        />
+      </Field>
+    </div>
+    <div className="grid grid-cols-2 gap-2">
+      <Field label="Database">
+        <Input value={draft.database} onChange={(e) => set({ database: e.target.value })} />
+      </Field>
+      <Field label="User">
+        <Input value={draft.user} onChange={(e) => set({ user: e.target.value })} />
+      </Field>
+    </div>
+    <PasswordField draft={draft} set={set} {...props} />
+  </>
+);
+
+const FileField = ({ draft, set }: FieldsProps) => (
+  <Field label="File" hint="The database file's full path on the Host. Polaris opens it read-only.">
+    <Input
+      className="font-mono"
+      value={draft.path}
+      placeholder="/path/to/checkout/dev.db"
+      spellCheck={false}
+      data-testid="data-source-path"
+      onChange={(e) => set({ path: e.target.value })}
+    />
+  </Field>
+);
+
 interface FieldsProps {
   readonly draft: Draft;
   readonly set: (patch: Partial<Draft>) => void;
@@ -182,7 +238,7 @@ const Fields = (props: FieldsProps) => {
   return (
     <div className="flex flex-col gap-3 px-5 pb-4">
       <NameField {...props} />
-      <SegmentedControl<ServerDataEngine>
+      <SegmentedControl<DataEngine>
         aria-label="Engine"
         variant="fill"
         value={draft.engine}
@@ -190,30 +246,14 @@ const Fields = (props: FieldsProps) => {
         options={[
           { value: "postgres", label: "PostgreSQL" },
           { value: "mysql", label: "MySQL" },
+          { value: "sqlite", label: "SQLite" },
         ]}
       />
-      <div className="grid grid-cols-[1fr_96px] gap-2">
-        <Field label="Host">
-          <Input value={draft.host} onChange={(e) => set({ host: e.target.value })} />
-        </Field>
-        <Field label="Port">
-          <Input
-            inputMode="numeric"
-            value={draft.port}
-            placeholder={String(PORTS[draft.engine])}
-            onChange={(e) => set({ port: e.target.value })}
-          />
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Database">
-          <Input value={draft.database} onChange={(e) => set({ database: e.target.value })} />
-        </Field>
-        <Field label="User">
-          <Input value={draft.user} onChange={(e) => set({ user: e.target.value })} />
-        </Field>
-      </div>
-      <PasswordField {...props} />
+      {draft.engine === "sqlite" ? (
+        <FileField {...props} />
+      ) : (
+        <ServerFields {...props} engine={draft.engine} />
+      )}
       <div className="flex items-end gap-3">
         <Field label="Label">
           {/* Uppercase on screen only: rewriting the value would move the caret (F8). */}
@@ -235,8 +275,21 @@ const Fields = (props: FieldsProps) => {
   );
 };
 
+const savedLabel = (draft: Draft) => {
+  const label = draft.label ?? MANUAL_LABEL;
+
+  return { ...label, text: label.text.toUpperCase() };
+};
+
+/** What `data.source.saveFile` gets: the name, the file and the label; no server or password. */
+export const saveFileInput = (draft: Draft, previousName: string | undefined) => {
+  const input = { name: savedName(draft.name), path: draft.path.trim(), label: savedLabel(draft) };
+
+  return previousName === undefined ? input : { ...input, previousName };
+};
+
 /** What `data.source.save` gets: blank keeps the saved password, a typed one sets it. */
-const saveInput = (draft: Draft, password: string) => {
+const saveInput = (draft: Draft & { engine: ServerDataEngine }, password: string) => {
   const label = draft.label ?? MANUAL_LABEL;
 
   const input = {
@@ -269,7 +322,15 @@ const Body = ({ at, form }: { readonly at: DataSessionKey; readonly form: Form }
 
     if (problem !== null) return setError(problem);
     setSaving(true);
-    const result = await api.saveSource(at, saveInput(draft, password.current?.value ?? ""));
+    const previous = editing ? form.source.name : undefined;
+
+    const result =
+      draft.engine === "sqlite"
+        ? await api.saveFileSource(at, saveFileInput(draft, previous))
+        : await api.saveSource(
+            at,
+            saveInput({ ...draft, engine: draft.engine }, password.current?.value ?? "")
+          );
 
     setSaving(false);
 
@@ -282,7 +343,9 @@ const Body = ({ at, form }: { readonly at: DataSessionKey; readonly form: Form }
       <DialogHeader>
         <DialogTitle>{editing ? `Edit ${form.source.name}` : "Add data source"}</DialogTitle>
         <DialogDescription>
-          Agents in this checkout can query it by name. A remote one needs your approval first.
+          {draft.engine === "sqlite"
+            ? "Agents in this checkout can query a file inside it by name. SQLite is read-only."
+            : "Agents in this checkout can query it by name. A remote one needs your approval first."}
         </DialogDescription>
       </DialogHeader>
       <Fields draft={draft} set={set} editing={editing} password={password} />

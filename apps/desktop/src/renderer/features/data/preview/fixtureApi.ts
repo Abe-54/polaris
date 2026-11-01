@@ -4,6 +4,7 @@
  * staged edits commit (unless the scene fails them) without changing the rows. A scene can add tables of its own (the bench's 10,000 rows, the stress table).
  */
 import {
+  DATA_FILE_SERVER,
   type DataSchemaDiff,
   DataSource,
   DataWriteResult,
@@ -14,7 +15,14 @@ import {
 } from "@polaris/protocol";
 import { Schema } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
-import type { DataApi, QueryStream, SaveSourceInput, Snapshots, TableChange } from "../data/api.ts";
+import type {
+  DataApi,
+  QueryStream,
+  SaveFileSourceInput,
+  SaveSourceInput,
+  Snapshots,
+  TableChange,
+} from "../data/api.ts";
 import { cellOf, type DataRow } from "../grid/value.ts";
 import {
   FIXTURE_QUERY_LOG,
@@ -238,6 +246,22 @@ const savedSource = (input: SaveSourceInput) =>
     reachable: true,
   });
 
+/** A saved SQLite file is Local, as a file inside the fixture checkout would be. */
+const savedFileSource = (input: SaveFileSourceInput) =>
+  new DataSource({
+    id: `src-manual-${input.name}`,
+    name: input.name,
+    engine: "sqlite",
+    locality: "local",
+    ...DATA_FILE_SERVER,
+    path: input.path,
+    foundIn: { kind: "manual" },
+    access: "read",
+    writes: "off",
+    label: input.label,
+    reachable: true,
+  });
+
 /** Fixture snapshots arrive on the next tick, as a feed's first item would. */
 export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
   const sources = feed(data.sources ?? FIXTURE_SOURCES);
@@ -321,6 +345,14 @@ export const fixtureDataApi = (data: FixtureData = {}): DataApi => {
       const saved = savedSource(input);
 
       sources.set([...sources.get().filter((s) => s.name !== input.name), saved]);
+
+      return { ok: true, value: saved };
+    },
+    saveFileSource: async (_at, input) => {
+      const saved = savedFileSource(input);
+      const replaced = new Set([input.name, input.previousName]);
+
+      sources.set([...sources.get().filter((s) => !replaced.has(s.name)), saved]);
 
       return { ok: true, value: saved };
     },

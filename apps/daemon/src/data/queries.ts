@@ -1,4 +1,4 @@
-import { targetKey, targetOf } from "./approvalStore.ts";
+import { sourceKey } from "./approvalStore.ts";
 /** Shared agent and Client reads, attribution and bounded result streams. */
 import {
   DataError,
@@ -90,7 +90,7 @@ export const queries = Effect.gen(function* () {
       entry = new QueryLogEntry({
         ...Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields))(entry),
         source: { id: resolved.source.id, name: resolved.source.name },
-        target: targetKey(targetOf(resolved.source)),
+        target: sourceKey(resolved.source),
         sql: scrubCredentials(input.sql, known).slice(0, 32000),
       });
 
@@ -198,7 +198,7 @@ export const queries = Effect.gen(function* () {
         id: `describe:${crypto.randomUUID()}`,
         checkout: ctx.checkout,
         source: { id: resolved.source.id, name: resolved.source.name },
-        target: targetKey(targetOf(resolved.source)),
+        target: sourceKey(resolved.source),
         sql: "",
         state: "running",
         author: ctx.author,
@@ -261,7 +261,7 @@ export const queries = Effect.gen(function* () {
           id: `outside:${input.sessionId}:${input.itemId}`,
           checkout: ctx.checkout,
           source: { id: resolved.source.id, name: resolved.source.name },
-          target: targetKey(targetOf(resolved.source)),
+          target: sourceKey(resolved.source),
           sql: command,
           state: "completed",
           author: { kind: "outside", sessionId: input.sessionId, turn: input.turn, command },

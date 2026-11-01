@@ -28,13 +28,19 @@ const Details = ({ source }: { readonly source: DataSource }) => (
     className="border-hairline bg-well flex flex-col gap-1.5 rounded-[12px] border px-3 py-2.5"
     data-testid="data-connection-details"
   >
-    <Line label="Server" value={`${source.host}:${source.port}`} />
+    {source.engine === "sqlite" ? (
+      <Line label="File" value={source.path ?? ""} />
+    ) : (
+      <Line label="Server" value={`${source.host}:${source.port}`} />
+    )}
     <Line label="Driver" value={driverText(source)} />
     {source.branch === undefined ? null : <Line label="Branch" value={source.branch.name} />}
-    <Line
-      label="DB"
-      value={source.user === undefined ? source.database : `${source.database} as ${source.user}`}
-    />
+    {source.engine === "sqlite" ? null : (
+      <Line
+        label="DB"
+        value={source.user === undefined ? source.database : `${source.database} as ${source.user}`}
+      />
+    )}
     <Line label="From" value={foundText(source)} />
     <Line label="Agents" value={accessLine(source)} />
     <Line label="Status" value={statusText(source)} />

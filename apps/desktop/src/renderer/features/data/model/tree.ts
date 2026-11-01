@@ -5,7 +5,7 @@
 import type { DataSource, SchemaTree, TableSummary } from "@polaris/protocol";
 import type { TableChange } from "../data/api.ts";
 import type { TableRef } from "../ui/table/sql.ts";
-import { isLocked } from "./source.ts";
+import { isLocked, whereText } from "./source.ts";
 
 type Schema = SchemaTree["schemas"][number];
 
@@ -77,13 +77,16 @@ const isOpen = (input: TreeInput, kind: TreeRow["kind"], key: string, firstOpen:
 
 /** Why a source has no children: locked, unreachable, or its schema read failed. */
 const noteFor = (source: DataSource, load: TreeLoad | undefined): string | null => {
+  if (isLocked(source) && source.engine === "sqlite")
+    return "Agents read SQLite files inside this checkout only.";
+
   if (isLocked(source))
     return source.access === "denied"
       ? "You denied agents this data source."
       : "Agents can't reach it until you approve it.";
 
   if (source.reachable === false)
-    return `Can't reach ${source.host}:${source.port}${source.error === undefined ? "" : ` · ${source.error}`}`;
+    return `Can't reach ${whereText(source)}${source.error === undefined ? "" : ` · ${source.error}`}`;
 
   if (load?.status === "failed") return `Couldn't read its schema · ${load.message}`;
 

@@ -99,12 +99,24 @@ export const driverText = (source: DataSource): string => {
   return source.branch === undefined ? engine : `${engine} · ${PROVIDERS[source.branch.provider]}`;
 };
 
-/** The bar's mono line before the table: driver, where (a branch's name or host:port), database. */
-export const barParts = (source: DataSource): ReadonlyArray<string> => [
-  driverText(source),
-  source.branch?.name ?? `${source.host}:${source.port}`,
-  source.database,
-];
+/** Where it is: a SQLite file's path, a branch's name, or host:port. */
+export const whereText = (source: DataSource): string =>
+  source.engine === "sqlite"
+    ? (source.path ?? "")
+    : (source.branch?.name ?? `${source.host}:${source.port}`);
+
+/**
+ * The bar's mono line before the table: driver, where, database. A SQLite source's server
+ * fields are placeholders, so it shows only its file.
+ */
+export const barParts = (source: DataSource): ReadonlyArray<string> =>
+  source.engine === "sqlite"
+    ? [driverText(source), whereText(source)]
+    : [driverText(source), whereText(source), source.database];
+
+/** A SQLite file outside the checkout: agents are refused it, with no approval to ask for. */
+const outsideFile = (source: DataSource) =>
+  source.engine === "sqlite" && source.locality === "remote";
 
 /** A Remote Data Source agents can't reach until the user approves it (or after a denial). */
 export const isLocked = (source: DataSource) =>
@@ -122,7 +134,10 @@ const ACCESS: Record<DataSource["access"], (source: DataSource) => string> = {
 };
 
 /** The agents' access, at the bar's end (DESIGN.md, Data → Connection bar). */
-export const accessText = (source: DataSource): string => ACCESS[source.access](source);
+export const accessText = (source: DataSource): string =>
+  outsideFile(source)
+    ? "Outside this checkout · agents can't read it"
+    : ACCESS[source.access](source);
 
 const SHORT: Record<DataSource["access"], (source: DataSource) => string> = {
   read: (s) => (s.writes === "off" ? "Read only" : "Read · writes ask"),
@@ -132,7 +147,8 @@ const SHORT: Record<DataSource["access"], (source: DataSource) => string> = {
 };
 
 /** The same facts in a narrow bar, so the access is the last thing to go, never clipped. */
-export const accessShort = (source: DataSource): string => SHORT[source.access](source);
+export const accessShort = (source: DataSource): string =>
+  outsideFile(source) ? "Outside checkout" : SHORT[source.access](source);
 
 /** The card's AGENTS line: the same facts, lowercase. */
 export const accessLine = (source: DataSource): string => {
@@ -142,6 +158,8 @@ export const accessLine = (source: DataSource): string => {
     "needs-approval": "not approved",
     denied: "denied",
   };
+
+  if (outsideFile(source)) return "outside this checkout · can't read it";
 
   return isLocked(source)
     ? reads[source.access]

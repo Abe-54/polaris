@@ -100,6 +100,16 @@ export const dataApprovalsLayer = Layer.effect(
       turn?: TurnId,
       grantedId?: RequestId
     ) {
+      if (source.engine === "sqlite") {
+        if (source.locality === "local") return;
+
+        return yield* new DataError({
+          code: "E-DATA-DENIED",
+          message: "Agents can read SQLite files inside this checkout only.",
+          fix: "Ask the user to copy the database into the checkout, or to query it in Data.",
+        });
+      }
+
       const access = yield* read(source);
 
       if ((source.locality === "local" && access.access === "read") || access.access === "approved")
@@ -237,6 +247,12 @@ export const dataApprovalsLayer = Layer.effect(
         writes?: DataSource["writes"],
         revoke?: boolean
       ) {
+        if (source.engine === "sqlite")
+          return yield* new DataError({
+            code: "E-DATA-READ-ONLY",
+            message: "SQLite data sources are read-only, with no access to change.",
+            fix: "Query the file; SQLite writes are not available yet.",
+          });
         yield* sync;
         yield* Effect.try({
           try: () => repository.change(source, writes, revoke),

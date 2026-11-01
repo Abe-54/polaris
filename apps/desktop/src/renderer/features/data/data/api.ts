@@ -84,6 +84,16 @@ export interface SaveSourceInput {
   readonly label: DataSourceLabel;
 }
 
+/** A manual SQLite source (`data.source.saveFile`): a database file on the Host. */
+export interface SaveFileSourceInput {
+  readonly name: string;
+  /** Editing: the name it was saved under. */
+  readonly previousName?: string;
+  /** Absolute, on the Host. */
+  readonly path: string;
+  readonly label: DataSourceLabel;
+}
+
 /** The user's staged grid edits, one transaction keyed by primary key (`data.edits.commit`). */
 export interface CommitEditsInput {
   readonly source: string;
@@ -138,6 +148,10 @@ export interface DataApi {
     input: CommitEditsInput
   ) => Promise<Result<DataWriteResult>>;
   readonly saveSource: (at: DataSessionKey, input: SaveSourceInput) => Promise<Result<DataSource>>;
+  readonly saveFileSource: (
+    at: DataSessionKey,
+    input: SaveFileSourceInput
+  ) => Promise<Result<DataSource>>;
   /** Removes a source the user added (`data.source.remove`); discovered ones can't be. */
   readonly removeSource: (at: DataSessionKey, source: string) => Promise<Result<null>>;
   readonly labelSource: (
@@ -216,6 +230,8 @@ export const liveDataApi: DataApi = {
       edits: input.edits.map((e) => ({ ...e, key: [...e.key] })),
     }),
   saveSource: (at, input) => polaris().request("data.source.save", { ...session(at), ...input }),
+  saveFileSource: (at, input) =>
+    polaris().request("data.source.saveFile", { ...session(at), ...input }),
   removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
     polaris().request("data.source.label", { ...session(at), source, label }),

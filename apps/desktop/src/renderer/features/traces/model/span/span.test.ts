@@ -1,4 +1,5 @@
-import type { Span } from "@polaris/protocol";
+import { DataSource, type Span } from "@polaris/protocol";
+import { Schema } from "effect";
 import { describe, expect, test } from "bun:test";
 import { FIXTURE_SOURCES } from "../../../data/preview/fixtures.ts";
 import {
@@ -177,6 +178,25 @@ describe("Open in Data", () => {
     expect(at({ "db.namespace": "ledger_overdue|public" })).toBe("app");
     expect(at({ "db.namespace": "other" })).toBeNull();
     expect(at({ "db.system.name": "mariadb" })).toBeNull();
+  });
+
+  test("a SQLite span finds its source by file path, not by the placeholder server", () => {
+    const file = "/work/app/dev.db";
+
+    const sqlite = new DataSource({
+      ...Schema.encodeSync(DataSource)(FIXTURE_SOURCES[0]!),
+      engine: "sqlite",
+      path: file,
+      database: "main",
+    });
+
+    const at = (namespace: string) =>
+      spanDataSource({ "db.system.name": "sqlite", "db.namespace": namespace }, [
+        ...FIXTURE_SOURCES,
+        sqlite,
+      ])?.path ?? null;
+
+    expect([at(file), at("main"), at("/work/app/other.db")]).toEqual([file, null, null]);
   });
 
   test("a span that isn't a database call has no Data Source", () => {

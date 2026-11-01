@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { DataRpcs } from "@polaris/protocol";
+import { DataRpcs, Unsupported } from "@polaris/protocol";
 import { Context, Deferred, Effect, Layer, Predicate, Stream } from "effect";
 import { DataApprovals } from "../data/approvalService.ts";
 import { DataSources, DataQueries } from "../data/services.ts";
@@ -91,6 +91,12 @@ export const lazyData = Layer.fromBuild((memoMap, scope) =>
           Effect.flatMap(load, (s) => s.sources.inspect?.(source, connection) ?? Effect.void),
         watch: (input) => Stream.unwrap(Effect.map(load, (s) => s.sources.watch(input))),
         save: (input) => Effect.flatMap(load, (s) => s.sources.save(input)),
+        saveFile: (input) =>
+          Effect.flatMap(load, (s) =>
+            s.sources.saveFile
+              ? s.sources.saveFile(input)
+              : Effect.fail(new Unsupported({ capability: "data.sqlite" }))
+          ),
         remove: (input) => Effect.flatMap(load, (s) => s.sources.remove(input)),
         label: (input) => Effect.flatMap(load, (s) => s.sources.label(input)),
         access: (input) => Effect.flatMap(load, (s) => s.sources.access(input)),

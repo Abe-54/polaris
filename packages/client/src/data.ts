@@ -11,6 +11,7 @@ import {
   type QueryData,
   type CommitDataEdits,
   type SaveDataSource,
+  type SaveDataFileSource,
   type RemoveDataSource,
   type LabelDataSource,
   type QueryDataStream,
@@ -36,6 +37,7 @@ export type DataSession = Pick<LiveSession, "capabilities"> & {
     | "data.query"
     | "data.queryLog.watch"
     | "data.source.save"
+    | "data.source.saveFile"
     | "data.source.remove"
     | "data.source.label"
     | "data.query.stream"
@@ -61,6 +63,20 @@ export const queryData = (session: DataSession, input: Input<typeof QueryData>) 
 
 export const saveDataSource = (session: DataSession, input: Input<typeof SaveDataSource>) =>
   supportsData(session) ? session.client["data.source.save"](input) : unsupported();
+
+/** The capability a Daemon advertises once it serves SQLite sources and `data.source.saveFile`. */
+export const DATA_SQLITE_CAPABILITY = "data.sqlite";
+
+export const supportsSqlite = (session: Pick<LiveSession, "capabilities">): boolean =>
+  session.capabilities.includes(DATA_SQLITE_CAPABILITY);
+
+export const saveDataFileSource = (
+  session: DataSession,
+  input: Input<typeof SaveDataFileSource>
+) =>
+  supportsSqlite(session)
+    ? session.client["data.source.saveFile"](input)
+    : Effect.fail(new Unsupported({ capability: DATA_SQLITE_CAPABILITY }));
 
 export const removeDataSource = (session: DataSession, input: Input<typeof RemoveDataSource>) =>
   supportsData(session) ? session.client["data.source.remove"](input) : unsupported();

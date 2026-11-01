@@ -18,7 +18,7 @@ import type { DataSources } from "./index.ts";
 import type { DataApprovals } from "./approvals.ts";
 import type { QueryLog } from "./queryLog.ts";
 import type { DataPools } from "./pools.ts";
-import { targetKey, targetOf } from "./approvalStore.ts";
+import { sourceKey, targetKey, targetOf } from "./approvalStore.ts";
 import { DataApprovalRequired, type DataAgentContext } from "./approvalRequired.ts";
 import { knownCredentials } from "./execution.ts";
 import { editStatements } from "./writeEdits.ts";
@@ -38,6 +38,14 @@ const fields = Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields));
 
 const denied = (message: string, fix = "Don't retry; ask the user.") =>
   new DataError({ code: "E-DATA-DENIED", message, fix });
+
+/** SQLite writes and approvals are ENG-720; until then every write path refuses them. */
+export const sqliteReadOnly = () =>
+  new DataError({
+    code: "E-DATA-READ-ONLY",
+    message: "SQLite data sources are read-only in Polaris.",
+    fix: "Use query to read; make changes with your project's own tools.",
+  });
 
 const previewFacts = (preview: WritePreview) => ({
   ...(preview.redactedCells === undefined ? undefined : { redactedCells: preview.redactedCells }),
@@ -59,6 +67,8 @@ export const writeQueries = Effect.fnUntraced(function* (
 
   const resolve = Effect.fnUntraced(function* (input: { sessionId: SessionId; source: string }) {
     const resolved = yield* sources.resolve(input);
+
+    if (resolved.source.engine === "sqlite") return yield* sqliteReadOnly();
     const access = yield* approvals.read(resolved.source);
 
     if (access.writes === "off")
@@ -143,7 +153,7 @@ export const writeQueries = Effect.fnUntraced(function* (
           input.sessionId,
           turn,
           resolved.source.id,
-          targetKey(targetOf(resolved.source)),
+          sourceKey(resolved.source),
           input.sql,
           input.params ?? [],
           input.reason,
@@ -155,7 +165,7 @@ export const writeQueries = Effect.fnUntraced(function* (
 
     if (
       previous?.request.dataWrite &&
-      targetKey(previous.request.dataWrite.target) !== targetKey(targetOf(resolved.source))
+      targetKey(previous.request.dataWrite.target) !== sourceKey(resolved.source)
     )
       return yield* denied(
         "The data source target changed after approval.",
@@ -204,7 +214,7 @@ export const writeQueries = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         yield* update({
           source: { id: resolved.source.id, name: resolved.source.name },
-          target: targetKey(targetOf(resolved.source)),
+          target: sourceKey(resolved.source),
           sql: scrubCredentials(input.sql, known).slice(0, 32000),
         });
 
@@ -225,7 +235,7 @@ export const writeQueries = Effect.fnUntraced(function* (
                 ...fields(initial),
                 id: `${initial.id}:dry-run`,
                 source: { id: resolved.source.id, name: resolved.source.name },
-                target: targetKey(targetOf(resolved.source)),
+                target: sourceKey(resolved.source),
                 sql: scrubCredentials(input.sql, known).slice(0, 32000),
                 state: "dry-run",
                 rows: preview.affected,
@@ -276,7 +286,7 @@ export const writeQueries = Effect.fnUntraced(function* (
         yield* context(input.sessionId, input);
         const fresh = yield* resolve(input);
 
-        if (targetKey(targetOf(fresh.source)) !== targetKey(targetOf(resolved.source)))
+        if (sourceKey(fresh.source) !== sourceKey(resolved.source))
           return yield* denied(
             "The data source target changed after approval.",
             "Preview the write on the new target."
@@ -286,7 +296,7 @@ export const writeQueries = Effect.fnUntraced(function* (
           new QueryLogEntry({
             ...fields(initial),
             source: { id: fresh.source.id, name: fresh.source.name },
-            target: targetKey(targetOf(fresh.source)),
+            target: sourceKey(fresh.source),
           })
         );
 
@@ -351,14 +361,14 @@ export const writeQueries = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         yield* update({
           source: { id: resolved.source.id, name: resolved.source.name },
-          target: targetKey(targetOf(resolved.source)),
+          target: sourceKey(resolved.source),
         });
         const started = performance.now();
         yield* log.beforeWrite(
           new QueryLogEntry({
             ...fields(initial),
             source: { id: resolved.source.id, name: resolved.source.name },
-            target: targetKey(targetOf(resolved.source)),
+            target: sourceKey(resolved.source),
           })
         );
         const result = yield* editsEffect(pools, { ...resolved, edits: input, signal });
@@ -399,8 +409,10 @@ export const writeQueries = Effect.fnUntraced(function* (
         yield* context(input.sessionId, input);
         const resolved = yield* sources.resolve(input);
 
+        if (resolved.source.engine === "sqlite") return yield* sqliteReadOnly();
+
         return yield* withTarget(
-          targetKey(targetOf(resolved.source)),
+          sourceKey(resolved.source),
           Effect.gen(function* () {
             yield* context(input.sessionId);
             const key = writeRequestKey(input);

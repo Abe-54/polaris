@@ -21,7 +21,7 @@ const loadOf = (
 
 /** What a schema read is of: the source and where it points, so a new database is a new read. */
 export const schemaTarget = (s: DataSource) =>
-  [s.id, s.host, String(s.port), s.database, s.branch?.name ?? ""].join("\u0000");
+  [s.id, s.host, String(s.port), s.database, s.branch?.name ?? "", s.path ?? ""].join("\u0000");
 
 /** 2s, 4s, 8s, 16s: then a failed read waits for the next refresh (focus, the card opening). */
 export const retryDelay = (failures: number) => 1000 * 2 ** failures;
