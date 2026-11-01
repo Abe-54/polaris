@@ -257,6 +257,7 @@ export const startRelay = async (port = freePort(), env: Readonly<Record<string,
 
   const reader = child.stdout.getReader();
   let text = "";
+  const logListeners = new Set<() => void>();
   const deadline = Date.now() + 10_000;
 
   while (!text.includes('"relay.start"')) {
@@ -274,6 +275,8 @@ export const startRelay = async (port = freePort(), env: Readonly<Record<string,
 
       if (done) break;
       text += new TextDecoder().decode(value);
+
+      for (const listener of logListeners) listener();
     }
   })();
 
@@ -281,6 +284,24 @@ export const startRelay = async (port = freePort(), env: Readonly<Record<string,
     port,
     /** Everything the relay logged so far. */
     log: () => text,
+    /** Resolves when stdout contains the entry, within the existing ten-second wait budget. */
+    waitForLog: (entry: string) =>
+      new Promise<void>((resolve, reject) => {
+        const check = () => {
+          if (!text.includes(entry)) return;
+          clearTimeout(timer);
+          logListeners.delete(check);
+          resolve();
+        };
+
+        const timer = setTimeout(() => {
+          logListeners.delete(check);
+          reject(new Error(`timed out waiting for relay log entry ${entry}`));
+        }, 10_000);
+
+        logListeners.add(check);
+        check();
+      }),
     url: `ws://127.0.0.1:${port}/v1`,
     stop: async () => {
       child.kill("SIGTERM");
