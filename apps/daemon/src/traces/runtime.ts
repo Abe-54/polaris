@@ -16,6 +16,7 @@ import { polarisHome } from "../paths.ts";
 import { followTokenLifecycle } from "./tokenLifecycle.ts";
 import { TraceSessions } from "./sessions.ts";
 import { TraceSettings } from "./settings.ts";
+import { metricsEndpointFromEnvironment } from "./detection.ts";
 import { TraceStore } from "./store.ts";
 import { TraceTokenVault, TraceBinding } from "./tokens.ts";
 import type { IngestContext } from "./ingest.ts";
@@ -123,7 +124,7 @@ export class TraceRuntime extends Context.Service<
           if (Option.isSome(settings))
             yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
 
-          const injected = injectedEnvironment(yield* endpoint(context, launchTurn));
+          const injected = injectedEnvironment(yield* endpoint(context, launchTurn), source);
 
           const instrumentation = yield* launchInstrumentation(
             context,
@@ -200,7 +201,7 @@ export class TraceRuntime extends Context.Service<
             if (Option.isSome(settings))
               yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
 
-            const injected = injectedEnvironment(yield* endpoint(context, null));
+            const injected = injectedEnvironment(yield* endpoint(context, null), source);
 
             const instrumentation = yield* launchInstrumentation(
               context,
@@ -236,8 +237,16 @@ export class TraceRuntime extends Context.Service<
   );
 }
 
-const injectedEnvironment = (endpoint: string) => ({
-  OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/v1/traces`,
-  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: `${endpoint}/v1/logs`,
-});
+const injectedEnvironment = (endpoint: string, source: TraceEnvironment) => {
+  const metrics = metricsEndpointFromEnvironment(source);
+
+  const injected = {
+    OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/v1/traces`,
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: `${endpoint}/v1/logs`,
+  };
+
+  if (metrics === null) return injected;
+
+  return { ...injected, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: metrics };
+};
