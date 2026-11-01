@@ -1,10 +1,12 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { Effect, Predicate, Stream } from "effect";
+import { Effect, Match, Predicate, Stream } from "effect";
 import { awaitReady, connect, launchDaemon } from "../../../../packages/bench/src/daemon.ts";
 import { registerWorkspace } from "../../../../packages/bench/src/drive.ts";
 
 const sentinels = ["AXIOM_URL", "SEC1_DOTENV_SENTINEL", "SEC1_BUNFIG_SENTINEL"];
+
+const developmentLauncher = resolve(import.meta.dir, "../../../../scripts/daemon-dev.sh");
 
 /** Start the actual Daemon from a repository-like cwd without inheriting this probe's sentinels. */
 const launch = async (binary: string | null, root: string) => {
@@ -46,8 +48,8 @@ const launch = async (binary: string | null, root: string) => {
   }
 };
 
-/** Compiled smoke; `dev` observes the source runner separately and must not be mistaken for a pass. */
-export const compiledEnvironmentSmoke = async (binary: string | null) => {
+/** Probe supported startup; `unsafe-dev` retains the prior invocation as a negative control. */
+export const compiledEnvironmentSmoke = async (target: string) => {
   if (process.env.POLARIS_LEASE_HELD !== "bench")
     throw new Error("Run this smoke under lease bench");
   const root = await mkdtemp("/tmp/sec1-compiled-");
@@ -62,6 +64,13 @@ export const compiledEnvironmentSmoke = async (binary: string | null) => {
     join(root, "preload.ts"),
     'import {writeFileSync} from "node:fs"; process.env.SEC1_BUNFIG_SENTINEL="repository-preload"; writeFileSync("preload-ran", "yes");'
   );
+
+  const binary = Match.value(target).pipe(
+    Match.when("dev", () => developmentLauncher),
+    Match.when("unsafe-dev", () => null),
+    Match.orElse((path) => path)
+  );
+
   const daemon = await launch(binary, root);
 
   try {
@@ -103,9 +112,7 @@ export const compiledEnvironmentSmoke = async (binary: string | null) => {
     );
 
     const preloadRan = await readFile(join(root, "preload-ran"), "utf8").catch(() => null);
-    console.log(
-      JSON.stringify({ mode: binary === null ? "dev" : "compiled", ...observed, preloadRan })
-    );
+    console.log(JSON.stringify({ mode: target, ...observed, preloadRan }));
 
     if (
       observed.forwardTo !== "https://api.axiom.co/v1/traces" ||
@@ -124,6 +131,8 @@ if (import.meta.main) {
   const target = process.argv[2];
 
   if (target === undefined)
-    throw new Error("Pass the compiled binary path, or dev for the source probe");
-  await compiledEnvironmentSmoke(target === "dev" ? null : resolve(target));
+    throw new Error("Pass the compiled binary path, dev, or unsafe-dev for the negative control");
+  await compiledEnvironmentSmoke(
+    target === "dev" || target === "unsafe-dev" ? target : resolve(target)
+  );
 }

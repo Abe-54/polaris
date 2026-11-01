@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "bun ../../scripts/build-daemon.ts",
-    "dev": "bun --watch src/main.ts serve --foreground",
+    "dev": "sh ../../scripts/daemon-dev.sh --watch serve --foreground",
     "typecheck": "tsc -p . && tsc -p scripts",
     "test": "bun ../../tooling/test/watchdog.ts --pass-with-no-tests",
     "smoke": "bun scripts/smoke.ts",

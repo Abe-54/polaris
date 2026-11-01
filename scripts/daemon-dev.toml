@@ -1,0 +1,2 @@
+# Explicit config replaces the cwd bunfig, including its startup preloads.
+preload = []
