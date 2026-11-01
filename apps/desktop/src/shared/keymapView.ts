@@ -1,10 +1,12 @@
-/** The View menu's commands: the three views, the output rail, and word wrap; part of KEYMAP. */
+/** The View menu's commands: the five views, the output rail, and word wrap; part of KEYMAP. */
 import type { KeyBinding } from "./keymap.ts";
 
 export type ViewCommandId =
   | "view.orchestrate"
   | "view.review"
   | "view.edit"
+  | "view.data"
+  | "view.traces"
   | "view.output"
   | "view.wordWrap";
 
@@ -32,6 +34,28 @@ export const VIEW_BINDINGS: ReadonlyArray<KeyBinding> = [
     keys: ["CmdOrCtrl+3"],
     menu: "View",
     palette: { group: "app", title: "Go to Edit", keywords: ["view", "mode", "editor"] },
+  },
+  {
+    id: "view.data",
+    title: "Data",
+    keys: ["CmdOrCtrl+4"],
+    menu: "View",
+    palette: {
+      group: "app",
+      title: "Go to Data",
+      keywords: ["view", "mode", "database", "sql", "query", "table"],
+    },
+  },
+  {
+    id: "view.traces",
+    title: "Traces",
+    keys: ["CmdOrCtrl+5"],
+    menu: "View",
+    palette: {
+      group: "app",
+      title: "Go to Traces",
+      keywords: ["view", "mode", "trace", "span", "otel", "opentelemetry", "waterfall"],
+    },
   },
   {
     id: "view.output",

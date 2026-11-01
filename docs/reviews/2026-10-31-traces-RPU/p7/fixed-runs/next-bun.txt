@@ -1,0 +1,71 @@
+{
+  "case": "next-bun",
+  "command": [
+    "bun",
+    "node_modules/next/dist/bin/next",
+    "dev",
+    "--webpack",
+    "-p",
+    "63687"
+  ],
+  "exit": 0,
+  "spans": 20,
+  "logs": 4,
+  "manual": [
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.charge",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "error"
+    }
+  ],
+  "outgoingTraceparents": []
+}
+2026-10-31T23:09:41.866Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=474
+2026-10-31T23:09:45.742Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=8490
+
+▲ Next.js 16.3.8 (webpack)
+- Local:         http://localhost:63687
+- Network:       http://192.168.1.5:63687
+✓ Ready in 146ms
+✓ Running next.config took 4ms
+
+ GET / 200 in 337ms (next.js: 329ms, application-code: 9ms)
+ GET /orders/42 200 in 3ms (next.js: 1.9ms, application-code: 1.5ms)
+ GET /rates/eur 200 in 2.0ms (next.js: 0.7ms, application-code: 1.2ms)
+ GET /fail 500 in 2ms (next.js: 0.8ms, application-code: 1.4ms)
+[?25h

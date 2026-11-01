@@ -1,8 +1,11 @@
+import { Schema } from "effect";
 import { describe, expect, test } from "bun:test";
-import type { HostStreamItem } from "@polaris/protocol";
+import { ApprovalRequest, DomainEvent, type HostStreamItem } from "@polaris/protocol";
 import type { PushMessage } from "@polaris/protocol/relay";
 import { emptyPlan, nextSettle, type PlanState, planItem, planSettled, SETTLE_MS } from "./plan.ts";
 import {
+  approval,
+  event,
   approvalRequested,
   attemptStarted,
   backgroundTasks,
@@ -211,4 +214,14 @@ describe("push plan", () => {
 
     expect(sent).toEqual([]);
   });
+});
+
+test("P9-10: attach push uses a category without Always here", () => {
+  const request = Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(approval("attach")),
+    profileAttach: { pid: 42, command: "node app", runtime: "node", seconds: 5 },
+  });
+
+  const item = event(DomainEvent.cases.ApprovalRequested.make({ request }));
+  expect(run([...start, [10, item]], 10000)[0]?.category).toBe("approval-once");
 });

@@ -19,6 +19,8 @@
  *   a new terminal in the same `cwd`.
  */
 import { childEnv, repositoryEnv } from "../service/childEnv.ts";
+import { TraceRuntime } from "../traces/runtime.ts";
+import { traceEndpointEnvironment } from "../traces/environment.ts";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -438,6 +440,7 @@ const endedLive = (record: TerminalRecord): Live => ({
 
 export const makeTerminalsWith = (options: TerminalsOptions) =>
   Effect.gen(function* () {
+    const traces = yield* Effect.serviceOption(TraceRuntime);
     const terminals = new Map<string, Live>();
     const recordsFile = options.stateDir === null ? null : join(options.stateDir, "terminals.json");
 
@@ -697,6 +700,12 @@ export const makeTerminalsWith = (options: TerminalsOptions) =>
       const rows = clampSize(openOptions.rows, 24);
       const target: OutputTarget = { live: undefined };
 
+      const traceEnv = Option.isSome(traces)
+        ? yield* traces.value
+            .terminalEnvironment(cwd, process.env)
+            .pipe(Effect.orElseSucceed(() => ({})))
+        : {};
+
       const spawned = yield* Effect.try({
         try: () => {
           // Synchronous from here to findMaster: no other fd can appear in between.
@@ -704,8 +713,12 @@ export const makeTerminalsWith = (options: TerminalsOptions) =>
 
           const env =
             openOptions.environment === "repository"
-              ? repositoryEnv(process.env, colors)
-              : childEnv({ ...process.env, ...colors });
+              ? repositoryEnv(process.env, {
+                  ...colors,
+                  ...traceEndpointEnvironment(process.env),
+                  ...traceEnv,
+                })
+              : childEnv({ ...process.env, ...colors, ...traceEnv });
 
           // By its absolute path; the gate's sh would report a missing one only in the terminal.
           const program = programIn(cwd, argv[0]!, env);
@@ -780,6 +793,9 @@ export const makeTerminalsWith = (options: TerminalsOptions) =>
         // Let the PTY drain the last output before reporting the exit.
         setTimeout(() => finish(live, spawned.proc.exitCode), DRAIN_AFTER_EXIT_MS);
       });
+
+      if (Option.isSome(traces) && traces.value.launched !== undefined)
+        yield* traces.value.launched(cwd, argv).pipe(Effect.ignore);
 
       return id;
     });

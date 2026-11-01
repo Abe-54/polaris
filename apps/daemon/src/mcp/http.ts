@@ -1,3 +1,5 @@
+import { Profiles } from "../traces/profiles/index.ts";
+import { sessionProfileTools } from "./sessions/profiles.ts";
 import { Effect, Option, Schema } from "effect";
 import type { McpBinding } from "./binding.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -10,7 +12,12 @@ import {
   attachVisualizations,
   constellationTools,
 } from "./tools.ts";
+import { DataSources, DataQueries } from "../data/index.ts";
+import { TraceStore, TraceRuntime, TraceSessions } from "../traces/index.ts";
+import { sessionTraceTools } from "./sessions/traces.ts";
+import { sessionDataTools } from "./sessions/data.ts";
 import { McpTokens } from "./tokens.ts";
+import { loopbackRequest } from "../transport/loopbackHttp.ts";
 
 const Message = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
@@ -38,30 +45,13 @@ const protocolVersion = "2025-11-25";
 const rpcError = (id: string | number | null, code: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id, error: { code, message } });
 
-const safeOrigin = (request: Request) => {
-  const origin = request.headers.get("origin");
-
-  if (origin === null) return true;
-
-  try {
-    const url = new URL(origin);
-
-    return (
-      url.protocol === "http:" &&
-      url.hostname === "127.0.0.1" &&
-      url.host === new URL(request.url).host
-    );
-  } catch {
-    return false;
-  }
-};
-
 const responseFor = async (
   binding: McpBinding,
   message: typeof Message.Type,
   commands: ConstellationCommands,
   started: LeadStarted,
-  options: CatalogOptions
+  options: CatalogOptions,
+  signal?: AbortSignal
 ): Promise<Response> => {
   const id = message.id;
 
@@ -112,7 +102,7 @@ const responseFor = async (
 
       if (tool === undefined) return rpcError(id, -32602, "This binding has no such tool");
 
-      return result(await tool.call(params.value.arguments ?? {}));
+      return result(await tool.call(params.value.arguments ?? {}, signal));
     }
 
     default:
@@ -136,9 +126,50 @@ export const mcpHttp = (
     const notifications: Notifier | null = Option.isSome(store) ? notifier(store.value) : null;
 
     // The same commands reach Claude's in-process tools, so they serve the session tools too.
-    if (Option.isSome(store) && notifications !== null)
-      attachSessionTools(commands, sessionTools(store.value, notifications, requestSecret));
+    const sources = yield* Effect.serviceOption(DataSources);
+    const queries = yield* Effect.serviceOption(DataQueries);
+    const traceStore = yield* Effect.serviceOption(TraceStore);
+    const traceRuntime = yield* Effect.serviceOption(TraceRuntime);
+    const traceSessions = yield* Effect.serviceOption(TraceSessions);
+    const profiles = yield* Effect.serviceOption(Profiles);
+
+    if (Option.isSome(store) && notifications !== null) {
+      const sessions = sessionTools(store.value, notifications, requestSecret);
+
+      const data =
+        Option.isSome(sources) && Option.isSome(queries)
+          ? sessionDataTools(store.value, sources.value, queries.value)
+          : undefined;
+
+      if (
+        Option.isSome(traceStore) &&
+        Option.isSome(traceRuntime) &&
+        Option.isSome(traceSessions)
+      ) {
+        Object.assign(sessions, {
+          traces: sessionTraceTools(
+            traceStore.value,
+            traceRuntime.value,
+            traceSessions.value,
+            Option.getOrUndefined(sources)
+          ),
+        });
+      }
+
+      if (Option.isSome(profiles) && Option.isSome(traceSessions) && Option.isSome(traceStore))
+        Object.assign(sessions, {
+          profiles: sessionProfileTools(profiles.value, traceSessions.value, traceStore.value),
+        });
+
+      attachSessionTools(
+        commands,
+        Object.assign(sessions, data === undefined ? undefined : { data })
+      );
+    }
+
     attachVisualizations(commands, tokens.visualizations);
+
+    const active = new Map<string, AbortController>();
 
     const server = yield* Effect.acquireRelease(
       Effect.sync(() =>
@@ -149,8 +180,7 @@ export const mcpHttp = (
           fetch: async (request) => {
             const url = new URL(request.url);
 
-            if (url.hostname !== "127.0.0.1" || !safeOrigin(request))
-              return new Response(null, { status: 403 });
+            if (!loopbackRequest(request)) return new Response(null, { status: 403 });
             const token = /^\/mcp\/([a-f0-9]{64})$/.exec(url.pathname)?.[1];
 
             const binding =
@@ -174,10 +204,37 @@ export const mcpHttp = (
 
             if (Option.isNone(message)) return rpcError(null, -32600, "Invalid JSON-RPC message");
 
-            // The Visuals setting as the session opened: `attachConstellation` puts it in the URL.
-            return responseFor(binding, message.value, commands, started, {
-              visualize: url.searchParams.get("visuals") !== "off",
-            });
+            const key = (id: string | number) => `${token}:${JSON.stringify(id)}`;
+
+            if (message.value.method === "notifications/cancelled") {
+              const cancelled = Schema.decodeUnknownOption(
+                Schema.Struct({ requestId: Schema.Union([Schema.String, Schema.Number]) })
+              )(message.value.params);
+
+              if (Option.isSome(cancelled)) active.get(key(cancelled.value.requestId))?.abort();
+
+              return new Response(null, { status: 202 });
+            }
+
+            const controller = new AbortController();
+            const id = message.value.id;
+
+            if (id !== undefined) active.set(key(id), controller);
+
+            try {
+              return await responseFor(
+                binding,
+                message.value,
+                commands,
+                started,
+                {
+                  visualize: url.searchParams.get("visuals") !== "off",
+                },
+                AbortSignal.any([request.signal, controller.signal])
+              );
+            } finally {
+              if (id !== undefined && active.get(key(id)) === controller) active.delete(key(id));
+            }
           },
           error: () => new Response("MCP request failed", { status: 500 }),
         })

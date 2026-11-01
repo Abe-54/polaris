@@ -1,0 +1,72 @@
+/** Grid cells are grouped by primary key so each row is updated and counted once. */
+import type { CommitDataEdits, DataSource, DataValue } from "@polaris/protocol";
+import { rowKey } from "./dataKey.ts";
+import { identifier, writeError } from "./writeSql.ts";
+
+export type EditInput = typeof CommitDataEdits.payloadSchema.Type;
+
+export function editStatements(input: EditInput, engine: DataSource["engine"]) {
+  const groups = new Map<
+    string,
+    {
+      key: ReadonlyArray<DataValue>;
+      changes: Map<string, { sent: string; before: DataValue; value: DataValue }>;
+    }
+  >();
+
+  for (const edit of input.edits) {
+    if (
+      edit.key.length !== input.primaryKey.length ||
+      input.primaryKey.some((key) =>
+        engine === "mysql" ? key.toLowerCase() === edit.column.toLowerCase() : key === edit.column
+      )
+    )
+      throw writeError("Edits require a complete primary key and cannot change key columns.");
+    const identity = rowKey(edit.key);
+    let group = groups.get(identity);
+
+    if (!group) {
+      group = { key: edit.key, changes: new Map() };
+      groups.set(identity, group);
+    }
+
+    const column = engine === "mysql" ? edit.column.toLowerCase() : edit.column;
+
+    if (group.changes.has(column))
+      throw writeError(
+        "The same cell appears more than once in these edits.",
+        "Reload the table and stage each cell once."
+      );
+    group.changes.set(column, { sent: edit.column, before: edit.before, value: edit.value });
+  }
+
+  const table = `${identifier(input.table.schema, engine)}.${identifier(input.table.name, engine)}`;
+  const bind = (n: number) => (engine === "postgres" ? `$${n}` : "?");
+
+  return [...groups.values()].map((group) => {
+    const changes = [...group.changes];
+
+    const set = changes
+      .map(([column], i) => `${identifier(column, engine)}=${bind(i + 1)}`)
+      .join(", ");
+
+    const where = (offset: number) =>
+      input.primaryKey
+        .map((column, i) => `${identifier(column, engine)}=${bind(offset + i + 1)}`)
+        .join(" AND ");
+
+    return {
+      sql: `UPDATE ${table} SET ${set} WHERE ${where(changes.length)}`,
+      params: [...changes.map(([, change]) => change.value), ...group.key],
+      key: group.key,
+      /** The changed columns and the values the user staged them from. */
+      before: changes.map(([column, change]) => ({
+        column,
+        sent: change.sent,
+        value: change.before,
+      })),
+      /** The key predicate alone, its parameters numbered from one. */
+      where: where(0),
+    };
+  });
+}

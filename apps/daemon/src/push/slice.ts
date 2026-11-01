@@ -68,7 +68,10 @@ const needOf = (request: ApprovalRequest): Need => ({
   line: request.title,
   requestId: request.id,
   // A secret is typed in the app, which the question takeover opens.
-  kind: request.kind === "question" || request.kind === "secret" ? "question" : "approval",
+  kind:
+    request.kind === "question" || request.kind === "secret" || request.profileAttach !== undefined
+      ? "question"
+      : "approval",
 });
 
 /** A tool step's one line, or null for items that aren't tool steps. */

@@ -6,6 +6,7 @@ import type { ApprovalRequest } from "@polaris/protocol";
 import { CONTEXT_NEARLY_FULL } from "./meta.ts";
 import type { Outgoing } from "./outbox.ts";
 import type { TodoList } from "./todoList.ts";
+import { dataWants } from "../../data/approval/model.ts";
 
 export type Notice =
   | { readonly kind: "approval"; readonly request: ApprovalRequest }
@@ -81,7 +82,9 @@ const WANTS: Readonly<Record<ApprovalRequest["kind"], string>> = {
  * How the strip announces a request. It never decides one: the strip truncates, so Approve and
  * Deny stay on the full card in the conversation, where the whole request is shown.
  */
-export const approvalNotice = (request: ApprovalRequest) => ({
-  wants: WANTS[request.kind],
-  shown: request.kind === "command" ? request.detail : null,
-});
+export const approvalNotice = (request: ApprovalRequest) => {
+  return {
+    wants: dataWants(request) ?? WANTS[request.kind],
+    shown: request.kind === "command" ? request.detail : null,
+  };
+};

@@ -1,0 +1,9 @@
+build-main=0
+build-head=0
+main rss_kib=63776 rss_settled_kib=63812 cpu_pct=0.017 ctx_per_s=-14.33
+head rss_kib=67200 rss_settled_kib=67232 cpu_pct=0.017 ctx_per_s=-15.52
+main rss_kib=63852 rss_settled_kib=63888 cpu_pct=0.017 ctx_per_s=-14.70
+head rss_kib=67232 rss_settled_kib=67260 cpu_pct=0.017 ctx_per_s=-16.05
+main rss_kib=63836 rss_settled_kib=63848 cpu_pct=0.017 ctx_per_s=-14.72
+head rss_kib=67248 rss_settled_kib=67252 cpu_pct=0.033 ctx_per_s=-16.40
+ 19:47:24 up 18 days,  4:36, 11 users,  load average: 0.01, 0.10, 0.09

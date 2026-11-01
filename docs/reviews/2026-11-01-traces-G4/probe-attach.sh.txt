@@ -1,0 +1,12 @@
+#!/bin/sh
+# Node-only probe (no Polaris): profile a hot setInterval function from a Worker's
+# inspector.Session().connectToMainThread() (UF14's in-process approach) vs. a main-thread session.
+# Copy probe-attach-worker.cjs.txt -> target.cjs and probe-attach-main.cjs.txt -> main.cjs first.
+set -u
+node --version
+echo "--- 1. worker session (UF14 shape), function JIT-compiled before Profiler.start"; node target.cjs
+echo "--- 2. same, process also under --cpu-prof (as a Polaris profile-command launch is)"; node --cpu-prof --cpu-prof-dir=./cp target.cjs
+echo "--- 3. main-thread session, same function"; node main.cjs
+echo "--- 4. worker session, function first runs after Profiler.start"
+sed 's|^setInterval(polarisBurn, 100);|setTimeout(() => setInterval(polarisBurn, 100), 1200);|' target.cjs > late.cjs; node late.cjs
+echo "--- 5. worker session, JIT tiers off"; node --no-sparkplug --no-maglev --no-turbofan target.cjs

@@ -3,6 +3,7 @@ import type { Route } from "../../shared/api.ts";
 import { isWindows } from "../../shared/platform.ts";
 import { useRequestedCount } from "../features/pulls/store.ts";
 import { NeedsYouPopover, useNeedsYouCount } from "../features/needs-you/index.ts";
+import { useTracesUnavailable } from "../features/traces/index.ts";
 import { jumpCopy } from "../features/jump/copy.ts";
 import { useSelection, useShellActions } from "./hooks.ts";
 import { preloadEditor } from "../features/editor/preload.ts";
@@ -12,7 +13,7 @@ import { AppMenuButton, CaptionSpace } from "./windowsChrome.tsx";
 /**
  * The title bar (DESIGN.md, Titlebar; Chrome redesign): on the ground with no fill. On macOS
  * the lockup after the traffic lights; on Windows the lockup as the app menu, with the native
- * caption buttons over the right end. Then the mode pill tabs (⌘1–3), the offline indicator,
+ * caption buttons over the right end. Then the mode pill tabs (⌘1–5), the offline indicator,
  * the jump pill (K) and, outside Review, New session (⌘N) in Starlight. While Settings is open
  * no mode is selected; picking one leaves Settings for it.
  */
@@ -22,11 +23,13 @@ export const TitleBar = () => {
   const { setMode, openJump, startNewSession } = useShellActions();
   const waiting = useNeedsYouCount();
   const requested = useRequestedCount();
+  const tracesUnavailable = useTracesUnavailable(hostKey);
 
   const modes: ReadonlyArray<{
     readonly value: Route;
-    readonly label: string;
+    readonly label: React.ReactNode;
     readonly badge?: React.ReactNode;
+    readonly disabled?: boolean;
   }> = [
     {
       value: "orchestrate",
@@ -59,6 +62,13 @@ export const TitleBar = () => {
         ) : undefined,
     },
     { value: "edit", label: "Edit" },
+    { value: "data", label: "Data" },
+    {
+      value: "traces",
+      // A disabled segment still shows its title, so the reason is on hover.
+      label: <span title={tracesUnavailable ?? undefined}>Traces</span>,
+      disabled: tracesUnavailable !== null,
+    },
   ];
 
   return (

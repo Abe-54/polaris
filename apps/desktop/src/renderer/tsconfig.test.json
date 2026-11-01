@@ -1,6 +1,12 @@
 {
   "extends": "./tsconfig.app.json",
   "compilerOptions": { "types": ["bun", "vite/client"] },
-  "include": ["**/*.test.ts", "**/*.test.tsx", "**/*.testing.ts", "global.d.ts"],
+  "include": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.testing.ts",
+    "**/*.testing.tsx",
+    "global.d.ts"
+  ],
   "exclude": []
 }

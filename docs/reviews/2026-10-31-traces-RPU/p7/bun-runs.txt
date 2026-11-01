@@ -1,0 +1,78 @@
+# bun --preload ./instrumentation.ts src/server.ts, endpoint set (app has a 300 ms SIGTERM drain that exits 3)
+== app stdout
+listening 49410
+TypeError: card declined for customer 42
+GET - /fail failed
+app: SIGTERM, draining
+app exit code: 0
+== requests
+2026-10-31T22:28:44.931Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=142
+2026-10-31T22:28:44.936Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=2642
+== spans
+{"name":"GET /","kind":"server","status":"unset","statusMessage":"","trace":"23d73031","parent":null,"span":"512312","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET /orders/42","kind":"server","status":"unset","statusMessage":"","trace":"c627ac2e","parent":null,"span":"f5b10c","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET /rates/:currency","kind":"server","status":"unset","statusMessage":"","trace":"f50fdd4c","parent":null,"span":"f57400","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET /fail","kind":"server","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"b7ad6b","span":"5a850c","scope":"http","service":"rates-api","code":[null,null,null],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at <anonymous> (/private/tmp/rpu-p7/bun/src/server.ts:13:15) |     at <anonymous> (/private/tmp/rpu-p7/bun/src/tracing.ts:42:20)"}}
+{"name":"tail.call","kind":"internal","status":"unset","statusMessage":"","trace":"c627ac2e","parent":"f5b10c","span":"431995","scope":"app","service":"rates-api","code":["handle","/private/tmp/rpu-p7/bun/src/server.ts","24"]}
+{"name":"rates.load","kind":"internal","status":"unset","statusMessage":"","trace":"f50fdd4c","parent":"f57400","span":"4a1243","scope":"app","service":"rates-api","code":["rates.load","/private/tmp/rpu-p7/bun/src/server.ts","5"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"5a850c","span":"5b309b","scope":"app","service":"rates-api","code":["charge","/private/tmp/rpu-p7/bun/src/server.ts","12"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at <anonymous> (/private/tmp/rpu-p7/bun/src/server.ts:13:15) |     at <anonymous> (/private/tmp/rpu-p7/bun/src/tracing.ts:42:20)"}}
+== logs
+{"body":"loaded rate","severity":"INFO","trace":"f50fdd4c","span":"4a1243"}
+
+# same, endpoint unset
+== app stdout
+listening 54378
+TypeError: card declined for customer 42
+GET - /fail failed
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+(none)
+== spans
+(none)
+== logs
+(none)
+
+# receiver holds the token 50 ms per request
+== app stdout
+listening 43417
+TypeError: card declined for customer 42
+GET - /fail failed
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+2026-10-31T22:28:49.173Z POST /otlp/tok_review/v1/traces -> 429 (token busy)
+2026-10-31T22:28:49.225Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=142
+== spans
+(none)
+== logs
+{"body":"loaded rate","severity":"INFO","trace":"b5e7270f","span":"a48100"}
+
+# same, app has no SIGTERM handler
+== app stdout
+listening 40197
+TypeError: card declined for customer 42
+GET - /fail failed
+app exit code: 0
+== requests
+2026-10-31T22:28:51.465Z POST /otlp/tok_review/v1/traces -> 429 (token busy)
+2026-10-31T22:28:51.517Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=142
+2026-10-31T22:28:52.689Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=2732
+== spans
+{"name":"GET /","kind":"server","status":"unset","statusMessage":"","trace":"aabb6a7c","parent":null,"span":"42ef60","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET /orders/42","kind":"server","status":"unset","statusMessage":"","trace":"503357c7","parent":null,"span":"f5833e","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET /rates/:currency","kind":"server","status":"unset","statusMessage":"","trace":"bc3f1846","parent":null,"span":"dd181b","scope":"http","service":"rates-api","code":[null,null,null]}
+{"name":"GET /fail","kind":"server","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"b7ad6b","span":"993808","scope":"http","service":"rates-api","code":[null,null,null],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at <anonymous> (/private/tmp/rpu-p7/bun/src/server-nohandler.ts:13:15) |     at <anonymous> (/private/tmp/rpu-p7/bun/src/tracing.ts:42:20)"}}
+{"name":"tail.call","kind":"internal","status":"unset","statusMessage":"","trace":"503357c7","parent":"f5833e","span":"cdb5af","scope":"app","service":"rates-api","code":["handle","/private/tmp/rpu-p7/bun/src/server-nohandler.ts","24"]}
+{"name":"rates.load","kind":"internal","status":"unset","statusMessage":"","trace":"bc3f1846","parent":"dd181b","span":"549fcf","scope":"app","service":"rates-api","code":["rates.load","/private/tmp/rpu-p7/bun/src/server-nohandler.ts","5"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"993808","span":"0197c1","scope":"app","service":"rates-api","code":["charge","/private/tmp/rpu-p7/bun/src/server-nohandler.ts","12"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at <anonymous> (/private/tmp/rpu-p7/bun/src/server-nohandler.ts:13:15) |     at <anonymous> (/private/tmp/rpu-p7/bun/src/tracing.ts:42:20)"}}
+== logs
+{"body":"loaded rate","severity":"INFO","trace":"bc3f1846","span":"549fcf"}
+
+# tracedFetch pasted into src/tracing.ts as bun.md:60 says ('Add this to the tracing helper')
+59 | import { recordFailure } from "./tracing.ts";
+              ^
+error: "recordFailure" has already been declared
+    at /private/tmp/rpu-p7/bun-merged/src/tracing.ts:59:10

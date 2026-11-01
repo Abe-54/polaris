@@ -31,6 +31,8 @@ import { IdleCompactionRpcs } from "./idleCompaction.ts";
 import { VisualsRpcs } from "./visuals.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
+import { DataRpcs } from "./data.ts";
+import { ProfilesRpcs, TraceCompareRpcs, TracesRpcs, TracesSettingsRpcs } from "./traces.ts";
 import { HostStatsRpcs } from "./hostStats.ts";
 import { HostHarnesses } from "./availability.ts";
 import { PredictionRpcs } from "./predictionRpcs.ts";
@@ -768,7 +770,15 @@ export class DaemonRpcs extends RpcGroup.make(
   .merge(VisualsRpcs)
   .merge(GitWriteRpcs, GitWatchRpcs, GitLogRpcs, CommitMessageRpcs)
   .merge(ExtensionRpcs, RemoteAccessRpcs, LinkedDeviceRpcs, VoiceRpcs, RestartRpcs)
-  .merge(SecretRpcs, TerminalRpcs)
+  .merge(
+    SecretRpcs,
+    TerminalRpcs,
+    DataRpcs,
+    TracesRpcs,
+    TracesSettingsRpcs,
+    ProfilesRpcs,
+    TraceCompareRpcs
+  )
   .merge(BrowserStackRpcs) {}
 
 /**

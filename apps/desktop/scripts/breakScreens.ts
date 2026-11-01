@@ -8,8 +8,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { _electron as electron } from "playwright-core";
-import { APP_DIR, electronBinary } from "./lib/electron.ts";
+import { scriptedElectron as electron, APP_DIR, electronBinary } from "./lib/electron.ts";
 import { startDaemon } from "./lib/daemon.ts";
 
 const args = process.argv.slice(2);

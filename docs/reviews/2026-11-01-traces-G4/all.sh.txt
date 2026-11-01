@@ -1,0 +1,14 @@
+#!/bin/bash
+INT=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3
+B=packages/bench/baselines/mac14-13-apple-m2-max-12c
+cd $INT
+echo "start $(date -u +%FT%TZ) head $(git rev-parse HEAD) load $(sysctl -n vm.loadavg)"
+bun run typecheck >/tmp/g4/tc.log 2>&1; echo tc=$?
+bun run test >/tmp/g4/test.log 2>&1; echo test=$?
+bun run lint >/tmp/g4/lint.log 2>&1; echo lint=$?
+bun run licenses:check >/tmp/g4/licenses.log 2>&1; echo licenses=$?
+bun run spec >/tmp/g4/spec.log 2>&1; echo spec=$?
+bun run bench traces --runs 3 --compare $B-eng656-traces.json >/tmp/g4/bench-traces.log 2>&1; echo bench-traces=$?
+bun run bench idle --runs 3 --compare $B-m31-idle-quick.json >/tmp/g4/bench-idle.log 2>&1; echo bench-idle=$?
+/tmp/g4pi/run.sh >/tmp/g4/pi.log 2>&1; echo pi=$?
+echo "end $(date -u +%FT%TZ) load $(sysctl -n vm.loadavg)"

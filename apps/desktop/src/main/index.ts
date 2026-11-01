@@ -10,6 +10,9 @@ import { createPredictionBridge } from "./prediction/bridge.ts";
  *
  *   POLARIS_DESKTOP_USER_DATA=<dir>   settings and caches go here (tests, benchmarks)
  *   POLARIS_DESKTOP_HIDDEN=1          never show the window (smoke tests, benchmarks)
+ *   POLARIS_DESKTOP_SCRIPTED=1        no system Daemon; only explicit temporary local sockets/homes
+ *   POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL=1  install smoke only: canonical temporary home required
+ *   POLARIS_DESKTOP_SCRIPTED_VM=1     install smoke on macOS: caller attests this is a disposable VM (else CI)
  *   ELECTRON_RENDERER_URL=<url>       dev: load the renderer from the Vite server
  *   POLARIS_DESKTOP_EXTRA_HOSTS=<json> screenshots and tests: [{ key, label, socket }] as more Hosts
  *   POLARIS_DESKTOP_LOCAL_LABEL=<name> the local Host's name (default clientCopy().localHost, "This Mac")

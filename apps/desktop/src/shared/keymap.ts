@@ -7,7 +7,9 @@
  */
 import { Predicate } from "effect";
 import { acceleratorLabel, currentKeyPlatform, type KeyPlatform } from "./chord.ts";
+import { DATA_BINDINGS, type DataCommandId } from "./keymapData.ts";
 import { DIFF_BINDINGS, type DiffCommandId } from "./keymapDiff.ts";
+import { TRACES_BINDINGS, type TracesCommandId } from "./keymapTraces.ts";
 import { VIEW_BINDINGS, type ViewCommandId } from "./keymapView.ts";
 
 export type CommandId =
@@ -50,6 +52,8 @@ export type CommandId =
   | "editor.findInWorkspace"
   | "editor.inlineChat"
   | "editor.addToSession"
+  | DataCommandId
+  | TracesCommandId
   | "editor.markdownPreview"
   | "git.writeMessage"
   | "editor.save"
@@ -85,6 +89,10 @@ export type CommandGroup = "file" | "workspace" | "app";
 export const CONTEXT_KEYS = [
   /** The Edit view is showing. */
   "mode.edit",
+  /** The Data view is showing. */
+  "mode.data",
+  /** The Traces view is showing. */
+  "mode.traces",
   /** A file is open and focused in Edit. */
   "editor.file",
   "prediction.ghost",
@@ -417,6 +425,8 @@ export const KEYMAP: ReadonlyArray<KeyBinding> = [
     menu: "Session",
     palette: WORKSPACE({ keywords: ["prompt", "message"] }),
   },
+  ...DATA_BINDINGS,
+  ...TRACES_BINDINGS,
   {
     id: "session.interrupt",
     title: "Stop the turn",
@@ -720,6 +730,8 @@ export const PC_KEYS: Partial<Record<CommandId, ReadonlyArray<string>>> = {
   "view.orchestrate": ["Alt+1"],
   "view.review": ["Alt+2"],
   "view.edit": ["Alt+3"],
+  "view.data": ["Alt+4"],
+  "view.traces": ["Alt+5"],
   "view.output": ["CmdOrCtrl+Shift+B"],
   "session.next": ["CmdOrCtrl+PageDown", "Ctrl+Tab"],
   "session.previous": ["CmdOrCtrl+PageUp", "Ctrl+Shift+Tab"],

@@ -1,0 +1,15 @@
+v24.22.1
+--- 1. worker session (UF14 shape), function JIT-compiled before Profiler.start
+["(root)","processTimers","listOnTimeout","(idle)","(program)","(garbage collector)"]
+Waiting for the debugger to disconnect...
+--- 2. same, process also under --cpu-prof (as a Polaris profile-command launch is)
+["(root)","processTimers","listOnTimeout","(idle)","(program)"]
+Waiting for the debugger to disconnect...
+--- 3. main-thread session, same function
+["(root)","processTimers","listOnTimeout","(anon)","post","#onMessage","emitBeforeScript","pushAsyncContext","(idle)","(program)"]
+--- 4. worker session, function first runs after Profiler.start
+["(root)","(program)","(idle)","processTimers","listOnTimeout","polarisBurn","(garbage collector)"]
+Waiting for the debugger to disconnect...
+--- 5. worker session, JIT tiers off
+["(root)","processTimers","listOnTimeout","polarisBurn","(idle)","(program)","(garbage collector)"]
+Waiting for the debugger to disconnect...

@@ -1,0 +1,65 @@
+system daemon before: {"pid":"10276","alive":true,"current":"0.7.0"}
+daemon: {"argv":"bun --no-env-file --config=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/scripts/daemon-dev.toml /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/apps/daemon/src/main.ts serve --foreground","pid":85327,"home":"/tmp/g4h-LMBwoJ","cwd":"/tmp/g4cwd-Ofs9DS","env":[]}
+PASS hello advertises traces.profiles and traces.profiles.attach ["traces","traces.settings","traces.compare","traces.profiles","traces.profiles.attach"]
+MCP endpoint: http://127.0.0.1:59586/mcp/<token>
+MCP profile {command} result: {"text":"recording · node · profile ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68\nDirectory: /private/tmp/g4prof-o2enT5\nThe artifact finalizes on process exit. Read it with profile id.","profile":{"cwd":"/private/tmp/g4prof-o2enT5","id":"ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68","command":"node server.cjs","runtime":"node","pid":85334,"turn":null,"startedAt":"2026-11-01T04:27:25.673Z","durationMs":0,"path":null,"status":"recording","origin":"command"}}
+PASS MCP profile {command} starts a recording "recording"
+listeners of the app before attach: ["127.0.0.1:59592"]
+PASS app listens only on its own port before attach ["127.0.0.1:59592"]
+warm-up mode: none
+profiles.attach result: {"attachMs":3331,"attached":{"id":"2e6b7944-dc0b-4143-82f2-a19f97fe2d36","command":"/Users/lucasdoell/.nvm/versions/node/v24.22.1/bin/node --cpu-prof-dir=/tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68 --require /tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68/exit.cjs server.cjs","runtime":"node","pid":85334,"turn":null,"startedAt":"2026-11-01T04:27:26.869Z","durationMs":3031.667,"path":"/tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/2e6b7944-dc0b-4143-82f2-a19f97fe2d36/attach.cpuprofile","status":"completed","origin":"attach"}}
+requests served during attach: 0
+listeners seen during attach: {"samples":40,"seen":["127.0.0.1:59592"]}
+PASS during the user attach the app showed only its own listener (no inspector port) {"samples":40,"seen":["127.0.0.1:59592"]}
+PASS profiles.attach returns an attach-origin Profile {"id":"2e6b7944-dc0b-4143-82f2-a19f97fe2d36","command":"/Users/lucasdoell/.nvm/versions/node/v24.22.1/bin/node --cpu-prof-dir=/tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68 --require /tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68/exit.cjs server.cjs","runtime":"node","pid":85334,"turn":null,"startedAt":"2026-11-01T04:27:26.869Z","durationMs":3031.667,"path":"/tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/2e6b7944-dc0b-4143-82f2-a19f97fe2d36/attach.cpuprofile","status":"completed","origin":"attach"}
+attach profile detail: {"id":"2e6b7944-dc0b-4143-82f2-a19f97fe2d36","status":"completed","origin":"attach","pid":85334,"durationMs":3032,"nodes":117,"functions":6,"top":["(root)@?:? self=0","(idle)@?:? self=1796","listOnTimeout@node:internal/timers:623 self=1180","processTimers@node:internal/timers:603 self=0","(program)@?:? self=52","(garbage collector)@?:? self=1"]}
+FAIL attach capture completed with frames including the hot request handler handleOrder {"id":"2e6b7944-dc0b-4143-82f2-a19f97fe2d36","status":"completed","origin":"attach","pid":85334,"durationMs":3032,"nodes":117,"functions":6,"top":["(root)@?:? self=0","(idle)@?:? self=1796","listOnTimeout@node:internal/timers:623 self=1180","processTimers@node:internal/timers:603 self=0","(program)@?:? self=52","(garbage collector)@?:? self=1"]}
+attach: polarisBurn (an OSR-optimized setInterval loop running since start) present?: false
+PASS attach did not stop the app
+profiles.restartWithProfiling result: {"cwd":"/private/tmp/g4prof-o2enT5","id":"3a330580-d1ab-40bc-97ea-c3ea71bd5d87","command":"node server.cjs","runtime":"node","pid":85452,"turn":null,"startedAt":"2026-11-01T04:27:30.453Z","durationMs":0,"path":null,"status":"recording","origin":"restart"}
+PASS restart returns a new recording with origin restart and a new pid {"pid":85452,"status":"recording"}
+original (restarted) profile detail: {"id":"ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68","status":"completed","origin":"command","pid":85334,"durationMs":4639,"nodes":346,"functions":91,"top":["(root)@?:? self=0","(idle)@?:? self=2785","processTimers@node:internal/timers:603 self=1","listOnTimeout@node:internal/timers:623 self=3","polarisBurn@server.cjs:3 self=1753","(program)@?:? self=73","compileForInternalLoader@node:internal/bootstrap/realm:383 self=5","(anonymous)@node:internal/main/run_main_module:1 self=0"]}
+PASS UF15: restarting the never-exiting server completes its profile with frames {"id":"ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68","status":"completed","origin":"command","pid":85334,"durationMs":4639,"nodes":346,"functions":91,"top":["(root)@?:? self=0","(idle)@?:? self=2785","processTimers@node:internal/timers:603 self=1","listOnTimeout@node:internal/timers:623 self=3","polarisBurn@server.cjs:3 self=1753","(program)@?:? self=73","compileForInternalLoader@node:internal/bootstrap/realm:383 self=5","(anonymous)@node:internal/main/run_main_module:1 self=0"]}
+PASS the old process is gone, the new one serves
+PASS the restarted server answers
+profiles.watch: [{"id":"3a330580","origin":"restart","status":"recording","pid":85452},{"id":"2e6b7944","origin":"attach","status":"completed","pid":85334},{"id":"ddec4a1e","origin":"command","status":"completed","pid":85334}]
+MCP profile {id} text: completed · node · 4.6 s · profile ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68
+Directory: /private/tmp/g4prof-o2enT5
+Artifact: /tmp/g4h-LMBwoJ/profiles/e2727ee237045a179cf9a50869e5927f24f1ce70f5177a82332e51941ad78ce1/ddec4a1e-af4c-421c-b1fb-c61a6d4bbb68/CPU.20261101.002725.85334.0.001.cpuprofile
+Labels over 256 characters are clipped; open the full recording in Traces (⌘5) for full details.
+Hot functions · self time
+1.8 s self  1.8 s total  polarisBurn  server.cjs:3
+0 ms self  2.5 ms total  (anonymous)  server.cjs:6
+0 ms self  2.4 ms total  (anonymous)  server.cjs:1
+2.8 s self  2.8 s total  (idle)
+73 ms self  73 ms total  (program)
+4.9 ms self  6.1 ms total  compileForInternalLoader  node:internal/bootstrap/realm:383
+2.5 ms self  1.8 s total  listOnTimeout  node:internal/timers:623
+2.5 ms self  2.5 ms total  (garbage collector)
+2.5 ms self  2.5 ms total  end  node:_http_outgoing:1173
+1.4 ms sel
+PASS MCP profile {id} reads the completed recording
+daemon exit: 130
+PASS Daemon shutdown stopped the restarted server
+restart profile after Daemon stop: {"id":"3a330580-d1ab-40bc-97ea-c3ea71bd5d87","status":"completed","origin":"restart","pid":85452,"durationMs":670,"nodes":159,"functions":104,"top":["(root)@?:? self=0","(idle)@?:? self=403","processTimers@node:internal/timers:603 self=0","listOnTimeout@node:internal/timers:623 self=0","polarisBurn@server.cjs:3 self=236","(program)@?:? self=11","(anonymous)@node:internal/main/run_main_module:1 self=1","compileForInternalLoader@node:internal/bootstrap/realm:383 self=1"]}
+PASS the restarted recording completed with frames on Daemon shutdown {"id":"3a330580-d1ab-40bc-97ea-c3ea71bd5d87","status":"completed","origin":"restart","pid":85452,"durationMs":670,"nodes":159,"functions":104,"top":["(root)@?:? self=0","(idle)@?:? self=403","processTimers@node:internal/timers:603 self=0","listOnTimeout@node:internal/timers:623 self=0","polarisBurn@server.cjs:3 self=236","(program)@?:? self=11","(anonymous)@node:internal/main/run_main_module:1 self=1","compileForInternalLoader@node:internal/bootstrap/realm:383 self=1"]}
+system daemon after: {"pid":"10276","alive":true,"current":"0.7.0"}
+PASS system Daemon unchanged {"before":{"pid":"10276","alive":true,"current":"0.7.0"},"after":{"pid":"10276","alive":true,"current":"0.7.0"}}
+cleaned up: ["/tmp/g4h-LMBwoJ","/tmp/g4cwd-Ofs9DS","/tmp/g4prof-o2enT5"]
+SUMMARY [
+ "PASS hello advertises traces.profiles and traces.profiles.attach",
+ "PASS MCP profile {command} starts a recording",
+ "PASS app listens only on its own port before attach",
+ "PASS during the user attach the app showed only its own listener (no inspector port)",
+ "PASS profiles.attach returns an attach-origin Profile",
+ "FAIL attach capture completed with frames including the hot request handler handleOrder",
+ "PASS attach did not stop the app",
+ "PASS restart returns a new recording with origin restart and a new pid",
+ "PASS UF15: restarting the never-exiting server completes its profile with frames",
+ "PASS the old process is gone, the new one serves",
+ "PASS the restarted server answers",
+ "PASS MCP profile {id} reads the completed recording",
+ "PASS Daemon shutdown stopped the restarted server",
+ "PASS the restarted recording completed with frames on Daemon shutdown",
+ "PASS system Daemon unchanged"
+]

@@ -1,5 +1,6 @@
 import { ApprovalRequest, RequestId, SessionId, TurnId } from "@polaris/protocol";
 import { describe, expect, test } from "bun:test";
+import { FIXTURE_DATA_APPROVAL } from "../../data/preview/fixtures.ts";
 import { approvalNotice, type NoticeInput, notices } from "./notices.ts";
 import { type Outgoing, queuedOutgoing } from "./outbox.ts";
 
@@ -84,6 +85,10 @@ describe("an approval in the strip", () => {
   test("names what each kind wants", () => {
     expect(approvalNotice(asking("file-change", null)).wants).toBe("wants to change files");
     expect(approvalNotice(asking("tool", null)).wants).toBe("wants to use a tool");
+  });
+
+  test("a Data Source Approval names the source it wants to read", () => {
+    expect(approvalNotice(FIXTURE_DATA_APPROVAL).wants).toBe("wants to read analytics");
   });
 
   test("shows a command's own text, never its title in its place", () => {

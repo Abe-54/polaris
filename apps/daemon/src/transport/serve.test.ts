@@ -5,3 +5,7 @@ import { daemonCapabilities } from "./serve.ts";
 test("the Daemon announces linked-devices, so Clients offer the Relay route and Linked Devices", () => {
   expect(daemonCapabilities).toContain("linked-devices");
 });
+
+test("the mounted Data execution services advertise the Data capability", () => {
+  expect(daemonCapabilities).toContain("data");
+});

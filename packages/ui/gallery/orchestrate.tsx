@@ -159,6 +159,7 @@ const APPROVAL = {
   summary: "Codex wants to run a command · 42m",
   command: "cargo build --release -p review-spike",
   where: "Mac Studio · polaris · ⎇ spike/gpui-review",
+  onAlwaysAllow: () => undefined,
 } as const;
 
 /** Artboard 5 ("Orchestrate · Elevated · Dark") rebuilt from @polaris/ui, statically. */

@@ -11,7 +11,9 @@
  * was copied.
  */
 
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
+import { sessionTraceEnvironment } from "../../traces/environment.ts";
+import { defaultRunVersion } from "./version.ts";
 import { join } from "node:path";
 import {
   type CanUseTool,
@@ -63,6 +65,7 @@ import type { PlanLimitReporter } from "../limits/PlanLimitReporter.ts";
 import { ClaudeHookReceiver } from "./hooks.ts";
 import { contextWindowOf } from "./payloads.ts";
 import { titleHooks } from "./title.ts";
+import { applyClaudeTraceHooks } from "./traces.ts";
 import { Inbox } from "./inbox.ts";
 import { buildUserMessage, landedSteer, type SteerInput, type SteerSent } from "./input.ts";
 import { shellCommandMessage } from "./shellInput.ts";
@@ -140,20 +143,6 @@ const harnessError = (message: string, cause?: unknown) =>
 
 const unknownEffort = (effort: string) =>
   harnessError(`Claude Code has no "${effort}" effort level`);
-
-const defaultRunVersion = async (path: string) => {
-  const proc = Bun.spawn([path, "--version"], {
-    env: childEnv(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "ignore",
-    timeout: 10_000,
-  });
-
-  const stdout = await new Response(proc.stdout).text();
-
-  return { exitCode: await proc.exited, stdout };
-};
 
 /** `2.1.283 (Claude Code)` → `2.1.283`. */
 export const parseVersion = (stdout: string): string | null =>
@@ -357,6 +346,11 @@ const openSession = Effect.fnUntraced(function* (
     }
   };
 
+  const traceEnv = yield* sessionTraceEnvironment(options.sessionId, {
+    ...process.env,
+    ...options.environment,
+  });
+
   const sdkOptions: Options = {
     cwd: options.cwd,
     ...claudeExecutable(claudePath),
@@ -376,9 +370,10 @@ const openSession = Effect.fnUntraced(function* (
     systemPrompt: { type: "preset", preset: "claude_code", append: polarisInstructions(options) },
     settingSources: ["user", "project", "local"],
     additionalDirectories: [join(driver.stagingDir ?? paths().staging, options.sessionId)],
-    env: childEnv({
+    env: harnessEnv({
       ...process.env,
       ...options.environment,
+      ...traceEnv,
       CLAUDE_AGENT_SDK_CLIENT_APP: driver.clientApp ?? "polaris-daemon",
     }),
   };
@@ -411,6 +406,13 @@ const openSession = Effect.fnUntraced(function* (
     sdkOptions.cwd = confinement.root;
     sdkOptions.env = env;
   }
+
+  yield* applyClaudeTraceHooks(
+    sdkOptions,
+    options,
+    () => active?.turnId ?? null,
+    () => permissionMode
+  );
 
   if (options.model !== null) sdkOptions.model = options.model;
 

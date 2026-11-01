@@ -8,9 +8,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright-core";
+import { type ElectronApplication, type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, electronBinary } from "./lib/electron.ts";
+import { scriptedElectron as electron, APP_DIR, electronBinary } from "./lib/electron.ts";
 import { MOCK_KEYCHAIN } from "./lib/githubFlow.ts";
 
 // A short path: the Daemon's Unix socket lives under it.

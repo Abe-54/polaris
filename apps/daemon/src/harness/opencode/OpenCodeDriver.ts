@@ -4,7 +4,7 @@
  * reads, stores or forwards OpenCode's provider credentials (ADR 0001); sign-in
  * stays in OpenCode's own `opencode auth login` or its TUI's `/connect`.
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +42,7 @@ export const probeOpenCode = (opencodePath: string | null): Effect.Effect<Harnes
 
     try {
       const proc = Bun.spawn([opencodePath, "--version"], {
-        env: childEnv({ ...process.env, ...scratchXdg(scratch) }),
+        env: harnessEnv({ ...process.env, ...scratchXdg(scratch) }),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

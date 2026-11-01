@@ -7,9 +7,15 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR, REPO_ROOT, sizeWindow, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  sizeWindow,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 
 const home = realpathSync(mkdtempSync(join(tmpdir(), "polaris-python-interpreter-")));
 

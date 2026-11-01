@@ -1,0 +1,74 @@
+system daemon before: {"pid":"10276","alive":true,"current":"0.7.0"}
+daemon: {"argv":"bun --no-env-file --config=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/scripts/daemon-dev.toml /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/apps/daemon/src/main.ts serve --foreground","pid":90554,"home":"/tmp/g4h-ERXpQH","cwd":"/tmp/g4cwd-1kCWjW","env":[]}
+PASS receiver Listening with a session endpoint {"_tag":"Listening"}
+services: {"orders":60208,"inventory":60206}
+call-b: b:42
+call-b: b:42
+call-b: b:42
+traces by turn: {"turn 3":{"orders-api:GET /call-b":3,"orders-api:GET /new":4,"orders-api:GET /slow":6,"orders-api:GET /fast":6},"turn 2":{"orders-api:GET /fast":6}}
+PASS traffic attributed to two distinct Turns {"turn2":{"sessionId":"cd5d8978-2d8d-472f-8027-e92ad1512175","id":"turn_4f2bbd66-1278-4fed-8c5b-848dbff0241a","number":2},"turn3":{"sessionId":"cd5d8978-2d8d-472f-8027-e92ad1512175","id":"turn_f38409f7-695f-4b06-bcce-13d34d89a5e6","number":3}}
+traces.compare Turn 2 -> Turn 3: [{"service":"orders-api","route":"GET /call-b","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":3},"slowestNew":{"name":"GET /call-b","service":"orders-api","durationMs":55.850166,"traceId":"8903655bd5d75b7fdc7bdb0133be6274","spanId":"c7c302c5e363ba1c"}},{"service":"orders-api","route":"GET /fast","before":{"p50Ms":5.862334,"p95Ms":6.575833,"count":6},"after":{"p50Ms":5.532125,"p95Ms":6.482458,"count":6}},{"service":"orders-api","route":"GET /new","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":4},"slowestNew":{"name":"GET /new","service":"orders-api","durationMs":35.26925,"traceId":"2869d2bec15db30c27f1db9d498ab75e","spanId":"187895f46f0b28ee"}},{"service":"orders-api","route":"GET /slow","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":6},"slowestNew":{"name":"GET /slow","service":"orders-api","durationMs":66.794791,"traceId":"fd116b3d0ba07d7006c93de03688c877","spanId":"2d5ecfca4eea7fc3"}}]
+GET /fast nearest-rank percentiles from traces.watch root durations: {"before":{"p50":5.862334,"p95":6.575833},"after":{"p50":5.532125,"p95":6.482458}}
+PASS compare: GET /fast 6 -> 6 with p50/p95 equal to nearest-rank over the listed root durations {"service":"orders-api","route":"GET /fast","before":{"p50Ms":5.862334,"p95Ms":6.575833,"count":6},"after":{"p50Ms":5.532125,"p95Ms":6.482458,"count":6}}
+PASS compare: GET /slow 0 before, 6 after (no baseline: null percentiles) {"service":"orders-api","route":"GET /slow","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":6},"slowestNew":{"name":"GET /slow","service":"orders-api","durationMs":66.794791,"traceId":"fd116b3d0ba07d7006c93de03688c877","spanId":"2d5ecfca4eea7fc3"}}
+PASS compare: GET /new 0 before, 4 after {"service":"orders-api","route":"GET /new","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":4},"slowestNew":{"name":"GET /new","service":"orders-api","durationMs":35.26925,"traceId":"2869d2bec15db30c27f1db9d498ab75e","spanId":"187895f46f0b28ee"}}
+PASS compare: GET /call-b 0 before, 3 after {"service":"orders-api","route":"GET /call-b","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":3},"slowestNew":{"name":"GET /call-b","service":"orders-api","durationMs":55.850166,"traceId":"8903655bd5d75b7fdc7bdb0133be6274","spanId":"c7c302c5e363ba1c"}}
+PASS compare: inventory-api's server spans are not separate routes (they have retained parents) ["orders-api:GET /call-b","orders-api:GET /fast","orders-api:GET /new","orders-api:GET /slow"]
+PASS compare: routes sorted by service then route
+traces.compare Baseline -> Turn 3: [{"service":"orders-api","route":"GET /call-b","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":3},"slowestNew":{"name":"GET /call-b","service":"orders-api","durationMs":55.850166,"traceId":"8903655bd5d75b7fdc7bdb0133be6274","spanId":"c7c302c5e363ba1c"}},{"service":"orders-api","route":"GET /fast","before":{"p50Ms":5.862334,"p95Ms":6.575833,"count":6},"after":{"p50Ms":5.532125,"p95Ms":6.482458,"count":6}},{"service":"orders-api","route":"GET /new","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":4},"slowestNew":{"name":"GET /new","service":"orders-api","durationMs":35.26925,"traceId":"2869d2bec15db30c27f1db9d498ab75e","spanId":"187895f46f0b28ee"}},{"service":"orders-api","route":"GET /slow","before":{"p50Ms":null,"p95Ms":null,"count":0},"after":{"p50Ms":null,"p95Ms":null,"count":6},"slowestNew":{"name":"GET /slow","service":"orders-api","durationMs":66.794791,"traceId":"fd116b3d0ba07d7006c93de03688c877","spanId":"2d5ecfca4eea7fc3"}}]
+PASS compare Baseline: Turn 2's GET /fast traces are Turn 3's baseline (6 -> 6), same stats as Turn 2 vs Turn 3 {"service":"orders-api","route":"GET /fast","before":{"p50Ms":5.862334,"p95Ms":6.575833,"count":6},"after":{"p50Ms":5.532125,"p95Ms":6.482458,"count":6}}
+PASS compare Baseline: only Turn 3's routes are listed ["GET /call-b","GET /fast","GET /new","GET /slow"]
+traces.compare Turn 3 -> Turn 3 (GET /slow): {"service":"orders-api","route":"GET /slow","before":{"p50Ms":62.374875,"p95Ms":66.794791,"count":6},"after":{"p50Ms":62.374875,"p95Ms":66.794791,"count":6}}
+PASS compare: 6 vs 6 samples yields p50/p95 on both sides, p50 >= 60 ms for /slow {"service":"orders-api","route":"GET /slow","before":{"p50Ms":62.374875,"p95Ms":66.794791,"count":6},"after":{"p50Ms":62.374875,"p95Ms":66.794791,"count":6}}
+PASS compare: Baseline as b is refused with E-INPUT {"code":"E-INPUT","message":"Invalid trace comparison selectors."}
+MCP compare text: Route timings · retained traces only · 4 routes
+GET /call-b  orders-api  no baseline  runs 0 → 3
+  slowest new span: GET /call-b  orders-api  55.9 ms  trace 8903655bd5d75b7fdc7bdb0133be6274  span c7c302c5e363ba1c
+GET /fast  orders-api  p50 5.9 ms → 5.5 ms  p95 6.6 ms → 6.5 ms  runs 6 → 6
+GET /new  orders-api  no baseline  runs 0 → 4
+  slowest new span: GET /new  orders-api  35.3 ms  trace 2869d2bec15db30c27f1db9d498ab75e  span 187895f46f0b28ee
+GET /slow  orders-api  no baseline  runs 0 → 6
+  slowest new span: GET /slow  orders-api  66.8 ms  trace fd116b3d0ba07d7006c93de03688c877  span 2d5ecfca4eea7fc3
+PASS MCP compare names every route
+MCP compare (omitted a = Baseline) text: Route timings · retained traces only · 4 routes
+GET /call-b  orders-api  no baseline  runs 0 → 3
+  slowest new span: GET /call-b  orders-api  55.9 ms  trace 8903655bd5d75b7fdc7bdb0133be6274  span c7c302c5e363ba1c
+GET /fast  orders-api  p50 5.9 ms → 5.5 ms  p95 6.6 ms → 6.5 ms  runs 6 → 6
+GET /new  orders-api  no baseline  runs 0 → 4
+  slowest new span: GET /new  orders-api  35.3 ms  trace 2869d2bec15db30c27f1db9d498ab75e  span 187895f46f0b28ee
+GET /slow  orders-api  no baseline  runs 0 → 6
+  slowest new span: GET /slow  orders-api  66.8 ms  trace fd116b3d0ba07d7006c93de03688c877  span 2d5ecfca4eea7fc3
+PASS MCP compare with omitted a uses Baseline (GET /fast runs 6 -> 6) "GET /fast  orders-api  p50 5.9 ms → 5.5 ms  p95 6.6 ms → 6.5 ms  runs 6 → 6"
+traces.get /call-b spans: [{"id":"b9b6972cc0c7d0cb","parent":null,"service":"orders-api","kind":"server","name":"GET /call-b"},{"id":"41e045591508acbf","parent":"b9b6972cc0c7d0cb","service":"orders-api","kind":"client","name":"GET"},{"id":"94bc7d1729f8198e","parent":"41e045591508acbf","service":"inventory-api","kind":"server","name":"GET /stock"},{"id":"ed0d78a09dd052b2","parent":"94bc7d1729f8198e","service":"inventory-api","kind":"internal","name":"stock.lookup"}]
+PASS traces.get summary lists both services ["inventory-api","orders-api"]
+PASS inventory-api's server span's parentId is an orders-api client span (the map's edge) {"child":"94bc7d1729f8198e","parent":{"id":"41e045591508acbf","kind":"client","name":"GET"}}
+PASS both services' spans share the trace id (context propagated)
+Desktop serviceMap edges: [{"from":"orders-api","to":"inventory-api","calls":1,"protocol":"HTTP","inferred":false}]
+PASS Desktop serviceMap draws orders-api -> inventory-api from this trace [{"from":"orders-api","to":"inventory-api","calls":1,"protocol":"HTTP","inferred":false}]
+exit 60208: 0
+exit 60206: 0
+daemon exit: 130
+system daemon after: {"pid":"10276","alive":true,"current":"0.7.0"}
+PASS system Daemon unchanged {"before":{"pid":"10276","alive":true,"current":"0.7.0"},"after":{"pid":"10276","alive":true,"current":"0.7.0"}}
+cleaned up: ["/tmp/g4h-ERXpQH","/tmp/g4cwd-1kCWjW","/tmp/g4cmp-n7De7W"]
+SUMMARY [
+ "PASS receiver Listening with a session endpoint",
+ "PASS traffic attributed to two distinct Turns",
+ "PASS compare: GET /fast 6 -> 6 with p50/p95 equal to nearest-rank over the listed root durations",
+ "PASS compare: GET /slow 0 before, 6 after (no baseline: null percentiles)",
+ "PASS compare: GET /new 0 before, 4 after",
+ "PASS compare: GET /call-b 0 before, 3 after",
+ "PASS compare: inventory-api's server spans are not separate routes (they have retained parents)",
+ "PASS compare: routes sorted by service then route",
+ "PASS compare Baseline: Turn 2's GET /fast traces are Turn 3's baseline (6 -> 6), same stats as Turn 2 vs Turn 3",
+ "PASS compare Baseline: only Turn 3's routes are listed",
+ "PASS compare: 6 vs 6 samples yields p50/p95 on both sides, p50 >= 60 ms for /slow",
+ "PASS compare: Baseline as b is refused with E-INPUT",
+ "PASS MCP compare names every route",
+ "PASS MCP compare with omitted a uses Baseline (GET /fast runs 6 -> 6)",
+ "PASS traces.get summary lists both services",
+ "PASS inventory-api's server span's parentId is an orders-api client span (the map's edge)",
+ "PASS both services' spans share the trace id (context propagated)",
+ "PASS Desktop serviceMap draws orders-api -> inventory-api from this trace",
+ "PASS system Daemon unchanged"
+]

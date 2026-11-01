@@ -116,6 +116,15 @@ const completionCardPreview = location.hash.startsWith("#completion-card/");
 // `#edit-prediction/<scene>`: the Editor with an Edit Prediction drawn on fixtures (features/editor/prediction/preview).
 const editPredictionPreview = location.hash.startsWith("#edit-prediction/");
 
+// `#data/<scene>`: Data mode on fixtures, each lane's scenes (features/data/preview/scenes).
+const dataPreview = location.hash.startsWith("#data/");
+
+// `#data-sidebar/<scene>`: Data's sidebar, connection bar and status bar on worst-case fixtures (features/data/preview).
+const dataSidebarPreview = location.hash.startsWith("#data-sidebar/");
+
+// `#traces/<scene>`: Traces on fixtures (features/traces/preview).
+const tracesPreview = location.hash.startsWith("#traces/");
+
 // `#settings/<scene>`: Settings on worst-case fixtures (features/settings/preview).
 const settingsPreview = location.hash.startsWith("#settings/");
 
@@ -139,7 +148,13 @@ connectUpdates(window.polaris);
 
 window.polaris.onAppEvent((event) => {
   if (event.kind === "command") commands.run(event.id);
-  else if (event.kind === "needs-you") onNeedsYouEvent(event, navigation.actions);
+  else if (event.kind === "needs-you")
+    onNeedsYouEvent(event, navigation.actions, (hostKey, sessionId, requestId) =>
+      connection.store
+        .getState()
+        .hostModels[hostKey]?.sessions.get(sessionId)
+        ?.pendingApprovals.find((r) => r.id === requestId)
+    );
   else if (event.kind === "open-pull") onOpenPullEvent(event.pull, navigation.actions);
   else if (event.kind === "open-review") onOpenReviewEvent(event.target, navigation.actions);
   else if (event.kind === "deep-link")
@@ -196,6 +211,10 @@ if (root !== null && preview) {
   void import("./features/constellation/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountConstellationPreview(root, location.hash);
   });
+} else if (root !== null && dataSidebarPreview) {
+  void import("./features/data/preview/SidebarPreview.tsx").then((m) => {
+    setPreviewDensity = m.mountDataSidebarPreview(root, location.hash);
+  });
 } else if (root !== null && explorerPreview) {
   void import("./features/editor/explorer/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountExplorerPreview(root, location.hash);
@@ -219,6 +238,22 @@ if (root !== null && preview) {
 } else if (root !== null && settingsPreview) {
   void import("./features/settings/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountSettingsPreview(root, location.hash);
+  });
+} else if (root !== null && dataPreview) {
+  void import("./features/data/preview/Preview.tsx").then((m) => {
+    setPreviewDensity = m.mountDataPreview(
+      root,
+      location.hash,
+      settingsStore.getState().appearance
+    );
+  });
+} else if (root !== null && tracesPreview) {
+  void import("./features/traces/preview/Preview.tsx").then((m) => {
+    setPreviewDensity = m.mountTracesPreview(
+      root,
+      location.hash,
+      settingsStore.getState().appearance
+    );
   });
 } else if (root !== null && tabCompletionPreview) {
   void import("./features/settings/editor/preview/Preview.tsx").then((m) => {

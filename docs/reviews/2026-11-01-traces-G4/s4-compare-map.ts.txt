@@ -1,0 +1,180 @@
+/**
+ * G4 scenario 4: traces.compare (RPC and MCP) across real Turns, and a two-service trace for the service map.
+ * orders-api calls inventory-api over HTTP (W3C trace context propagation). Both run with the Agent
+ * Session's endpoint from traces.watch, as a Harness-launched command would; the Turns are real bench Turns.
+ */
+import { join } from "node:path";
+import {
+  REPO,
+  check,
+  connect,
+  finish,
+  firstOf,
+  get,
+  issueMcpToken,
+  longTurn,
+  makeWorkspace,
+  mcpCall,
+  mcpEndpoint,
+  note,
+  readPort,
+  registerWorkspace,
+  run,
+  startDaemon,
+  startSession,
+  systemDaemonState,
+  track,
+  until,
+  writeApp,
+  cleanEnv,
+} from "./common.ts";
+
+const before = systemDaemonState();
+note("system daemon before", before);
+const stops: Array<() => unknown> = [];
+
+try {
+  const daemon = await startDaemon();
+  stops.unshift(() => daemon.stop());
+  const c = await connect(daemon);
+  const ws = await makeWorkspace("g4cmp");
+  await writeApp(ws, { name: "orders-api" });
+  const wsId = await registerWorkspace(c, ws, "G4 compare");
+  const sessionId = await startSession(c, wsId);
+  const first: any = await firstOf(c.client["traces.watch"]({ sessionId }));
+  check("receiver Listening with a session endpoint", first.availability._tag === "Listening" && /^http:\/\/127\.0\.0\.1:4319\/otlp\//.test(first.endpoint ?? ""), first.availability);
+  const endpoint: string = first.endpoint;
+
+  const spawnService = async (service: string, downstream = "") => {
+    const portFile = join(ws, `port-${service}`);
+    const proc = track(
+      Bun.spawn(["node", "--import", "./instr.mjs", "app.cjs", service, portFile, downstream], {
+        cwd: ws,
+        env: {
+          ...cleanEnv(),
+          OTEL_SERVICE_NAME: service,
+          OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${endpoint}/v1/traces`,
+          OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: `${endpoint}/v1/logs`,
+          OTEL_BSP_SCHEDULE_DELAY: "200",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+    );
+    return { proc, port: await readPort(portFile) };
+  };
+  const inventory = await spawnService("inventory-api");
+  const orders = await spawnService("orders-api", `http://127.0.0.1:${inventory.port}`);
+  note("services", { orders: orders.port, inventory: inventory.port });
+
+  // Turn 2: the "before" traffic. Turn 3: same route again, plus a new route and the cross-service call.
+  const idle2 = await longTurn(c, sessionId, 8000);
+  for (let i = 0; i < 6; i++) await get(orders.port, "/fast");
+  await idle2();
+  const idle3 = await longTurn(c, sessionId, 8000);
+  for (let i = 0; i < 6; i++) await get(orders.port, "/fast");
+  for (let i = 0; i < 6; i++) await get(orders.port, "/slow");
+  for (let i = 0; i < 4; i++) await get(orders.port, "/new");
+  for (let i = 0; i < 3; i++) note("call-b", (await get(orders.port, "/call-b")).body);
+  await idle3();
+
+  const page: any = await until("all 25 traces stored", async () => {
+    const p: any = await firstOf(c.client["traces.watch"]({ sessionId, filter: { limit: 200 } }));
+    return p.total >= 25 ? p : null;
+  }, 20_000);
+  const byTurn: Record<string, Record<string, number>> = {};
+  for (const t of page.traces) {
+    const k = t.turn ? `turn ${t.turn.number}` : "none";
+    byTurn[k] ??= {};
+    byTurn[k][`${t.service}:${t.root}`] = (byTurn[k][`${t.service}:${t.root}`] ?? 0) + 1;
+  }
+  note("traces by turn", byTurn);
+  const turn2 = page.traces.find((t: any) => t.root === "GET /fast" && t.turn?.number === 2)?.turn;
+  const turn3 = page.traces.find((t: any) => t.root === "GET /new")?.turn;
+  check("traffic attributed to two distinct Turns", turn2?.number === 2 && turn3?.number === 3, { turn2, turn3 });
+
+  // traces.compare: Turn 2 vs Turn 3.
+  const cmp: any = await run(
+    c.client["traces.compare"]({ sessionId, a: { _tag: "Turn", turnId: turn2.id }, b: { _tag: "Turn", turnId: turn3.id } })
+  );
+  note("traces.compare Turn 2 -> Turn 3", cmp.routes);
+  const route = (r: any, name: string) => r.routes.find((x: any) => x.service === "orders-api" && x.route === name);
+  const fast = route(cmp, "GET /fast");
+  const slow = route(cmp, "GET /slow");
+  const fresh = route(cmp, "GET /new");
+  const callB = route(cmp, "GET /call-b");
+  const nearest = (xs: number[], q: number) => xs.slice().sort((a, b) => a - b)[Math.ceil(q * xs.length) - 1];
+  const fastDur = (n: number) => page.traces.filter((t: any) => t.root === "GET /fast" && t.turn?.number === n).map((t: any) => t.durationMs);
+  const expected = { before: { p50: nearest(fastDur(2), 0.5), p95: nearest(fastDur(2), 0.95) }, after: { p50: nearest(fastDur(3), 0.5), p95: nearest(fastDur(3), 0.95) } };
+  note("GET /fast nearest-rank percentiles from traces.watch root durations", expected);
+  check("compare: GET /fast 6 -> 6 with p50/p95 equal to nearest-rank over the listed root durations", fast?.before.count === 6 && fast?.after.count === 6 && Math.abs(fast.before.p50Ms - expected.before.p50) < 1e-6 && Math.abs(fast.before.p95Ms - expected.before.p95) < 1e-6 && Math.abs(fast.after.p50Ms - expected.after.p50) < 1e-6 && Math.abs(fast.after.p95Ms - expected.after.p95) < 1e-6, fast);
+  check("compare: GET /slow 0 before, 6 after (no baseline: null percentiles)", slow?.before.count === 0 && slow?.after.count === 6 && slow.after.p50Ms === null, slow);
+  check("compare: GET /new 0 before, 4 after", fresh?.before.count === 0 && fresh?.after.count === 4, fresh);
+  check("compare: GET /call-b 0 before, 3 after", callB?.before.count === 0 && callB?.after.count === 3, callB);
+  check("compare: inventory-api's server spans are not separate routes (they have retained parents)", !cmp.routes.some((r: any) => r.service === "inventory-api"), cmp.routes.map((r: any) => `${r.service}:${r.route}`));
+  check("compare: routes sorted by service then route", JSON.stringify(cmp.routes.map((r: any) => r.service + "\u0000" + r.route)) === JSON.stringify(cmp.routes.map((r: any) => r.service + "\u0000" + r.route).slice().sort()));
+
+  // A same-route comparison with enough samples on both sides: Turn 2 /fast vs Baseline.
+  const base: any = await run(c.client["traces.compare"]({ sessionId, a: { _tag: "Baseline" }, b: { _tag: "Turn", turnId: turn3.id } }));
+  note("traces.compare Baseline -> Turn 3", base.routes);
+  const baseFast = route(base, "GET /fast");
+  check("compare Baseline: Turn 2's GET /fast traces are Turn 3's baseline (6 -> 6), same stats as Turn 2 vs Turn 3", baseFast?.before.count === 6 && baseFast.after.count === 6 && baseFast.before.p50Ms === fast?.before.p50Ms, baseFast);
+  check("compare Baseline: only Turn 3's routes are listed", JSON.stringify(base.routes.map((r: any) => r.route)) === JSON.stringify(["GET /call-b", "GET /fast", "GET /new", "GET /slow"]), base.routes.map((r: any) => r.route));
+  const self: any = await run(c.client["traces.compare"]({ sessionId, a: { _tag: "Turn", turnId: turn3.id }, b: { _tag: "Turn", turnId: turn3.id } }));
+  const selfSlow = route(self, "GET /slow");
+  note("traces.compare Turn 3 -> Turn 3 (GET /slow)", selfSlow);
+  check("compare: 6 vs 6 samples yields p50/p95 on both sides, p50 >= 60 ms for /slow", selfSlow?.before.count === 6 && selfSlow.after.count === 6 && selfSlow.before.p50Ms >= 60 && selfSlow.after.p95Ms >= selfSlow.after.p50Ms, selfSlow);
+  const bad: any = await run(c.client["traces.compare"]({ sessionId, a: { _tag: "Turn", turnId: turn2.id }, b: { _tag: "Baseline" } })).catch((e: any) => e);
+  check("compare: Baseline as b is refused with E-INPUT", bad?.code === "E-INPUT", { code: bad?.code, message: bad?.message });
+
+  // The compare MCP tool, as the session's agent.
+  const token = await issueMcpToken(daemon.home, sessionId, wsId);
+  const mcp = await mcpEndpoint(c, daemon, token);
+  const tool: any = await mcpCall(mcp, "compare", { a: { _tag: "Turn", turnId: turn2.id }, b: { _tag: "Turn", turnId: turn3.id } });
+  note("MCP compare text", tool?.content?.[0]?.text);
+  const text: string = tool?.content?.[0]?.text ?? "";
+  check("MCP compare names every route", tool?.isError !== true && ["GET /fast", "GET /slow", "GET /new", "GET /call-b"].every((r) => text.includes(r)), tool?.isError);
+  const toolBase: any = await mcpCall(mcp, "compare", { b: { _tag: "Turn", turnId: turn3.id } });
+  note("MCP compare (omitted a = Baseline) text", toolBase?.content?.[0]?.text);
+  check("MCP compare with omitted a uses Baseline (GET /fast runs 6 -> 6)", toolBase?.isError !== true && /GET \/fast.*runs 6 → 6/.test(toolBase?.content?.[0]?.text ?? ""), toolBase?.content?.[0]?.text?.split("\n").find((l: string) => l.includes("GET /fast")));
+
+  // The two-service trace, as the service map reads it.
+  const callTrace = page.traces.find((t: any) => t.root === "GET /call-b");
+  const detail: any = await run(c.client["traces.get"]({ sessionId, traceId: callTrace.id }));
+  const spans = detail.spans.map((s: any) => ({ id: s.id, parent: s.parentId, service: s.service, kind: s.kind, name: s.name }));
+  note("traces.get /call-b spans", spans);
+  check("traces.get summary lists both services", JSON.stringify(detail.summary.services) === JSON.stringify(["inventory-api", "orders-api"]), detail.summary.services);
+  const byId = new Map(detail.spans.map((s: any) => [s.id, s]));
+  const crossing = detail.spans.filter((s: any) => s.service === "inventory-api" && s.kind === "server" && (byId.get(s.parentId) as any)?.service === "orders-api");
+  const parent: any = crossing[0] && byId.get(crossing[0].parentId);
+  check("inventory-api's server span's parentId is an orders-api client span (the map's edge)", crossing.length === 1 && parent?.kind === "client", { child: crossing[0]?.id, parent: parent && { id: parent.id, kind: parent.kind, name: parent.name } });
+  check("both services' spans share the trace id (context propagated)", detail.spans.every((s: any) => s.traceId === callTrace.id));
+
+  // The Desktop's own map model on this RPC result.
+  try {
+    const { traceTimes } = await import(`${REPO}/apps/desktop/src/renderer/features/traces/model/waterfall/trace.ts`);
+    const { serviceMap } = await import(`${REPO}/apps/desktop/src/renderer/features/traces/model/map/graph.ts`);
+    const map = serviceMap(traceTimes(detail));
+    const edges = map.edges.map((e: any) => ({ from: e.from, to: e.to, calls: e.calls, protocol: e.protocol, inferred: e.inferred }));
+    note("Desktop serviceMap edges", edges);
+    check("Desktop serviceMap draws orders-api -> inventory-api from this trace", edges.some((e: any) => e.from === "orders-api" && e.to === "inventory-api" && e.calls === 1 && !e.inferred), edges);
+  } catch (e) {
+    note("Desktop serviceMap import failed", String(e));
+  }
+
+  for (const s of [orders, inventory]) {
+    await get(s.port, "/shutdown").catch(() => null);
+    note(`exit ${s.port}`, await s.proc.exited);
+  }
+  await c.close();
+  note("daemon exit", await daemon.stop());
+} catch (error) {
+  console.error("ERROR", error);
+  check("script completed without exception", false, String(error));
+} finally {
+  const after = systemDaemonState();
+  note("system daemon after", after);
+  check("system Daemon unchanged", before.pid === after.pid && before.current === after.current && after.alive, { before, after });
+  await finish("/dev/null", stops);
+}

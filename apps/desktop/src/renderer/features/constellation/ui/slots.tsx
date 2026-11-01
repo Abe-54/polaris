@@ -23,6 +23,8 @@ import {
   useShownSubagent,
 } from "../../session/index.ts";
 import { browserKey, useBrowserUi } from "../../browser/index.ts";
+import { setDataOutputShown, useDataOutputShown } from "../../data/output/index.ts";
+import { uiKey as sessionUiKey } from "../../session/state.ts";
 import { useFacts, useLeadConstellation, useWorkerAttempt, type WorkerAttempt } from "../hooks.ts";
 import {
   type ConstellationRecord,
@@ -170,6 +172,7 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
   const commands = useCommands();
   const subagent = useShownSubagent(hostKey, sessionId) !== null;
   const browser = useBrowserUi(browserKey(hostKey, sessionId)).shown && !subagent;
+  const data = useDataOutputShown(sessionUiKey(hostKey, sessionId)) && ui.tab === "changes";
 
   const workspaceId = useApp(
     (s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.workspaceId
@@ -183,6 +186,7 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
   const pick = (tab: "constellation" | "changes") => {
     closeSubagent(hostKey, sessionId);
     leaveBrowser(hostKey, sessionId);
+    setDataOutputShown(sessionUiKey(hostKey, sessionId), false);
     patchLeadUi(key, () => ({ tab }));
   };
 
@@ -197,7 +201,7 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
       </OutputTab>
       <OutputTab
         id="changes"
-        on={!subagent && !browser && ui.tab === "changes"}
+        on={!subagent && !browser && !data && ui.tab === "changes"}
         onClick={() => pick("changes")}
       >
         Changes

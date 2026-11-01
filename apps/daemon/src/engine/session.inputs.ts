@@ -97,6 +97,8 @@ export const eventSchemas = {
       ...At,
     })
   ),
+  "inspector.approvalRequested": standard(Schema.Struct({ request: ApprovalRequest })),
+  "data.approvalRequested": standard(Schema.Struct({ request: ApprovalRequest })),
   "harness.approvalRequested": standard(Schema.Struct({ request: ApprovalRequest })),
   "harness.approvalWithdrawn": standard(
     Schema.Struct({

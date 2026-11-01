@@ -111,11 +111,11 @@ export const ReviewView = ({ subject, onBack }: ReviewViewProps) => {
             reviewedOpen={reviewedOpen}
             onReviewedOpen={setReviewedOpen}
             files={
-              // Stars never behind text: the list fades over the horizon; its scroller pads clear.
+              // Stars never behind text: the list is gone above the moon; its scroller pads clear.
               <div
                 ref={setFiles}
                 data-testid="review-files-slot"
-                className="-mx-gap flex min-h-[140px] flex-1 flex-col [mask-image:linear-gradient(to_bottom,black_calc(100%-96px),transparent_calc(100%-32px))]"
+                className="-mx-gap flex min-h-[140px] flex-1 flex-col [mask-image:linear-gradient(to_bottom,black_calc(100%-128px),transparent_calc(100%-72px))]"
               />
             }
           />

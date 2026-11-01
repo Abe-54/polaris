@@ -145,7 +145,7 @@ function Inbox() {
           harness="codex"
           title="Spike GPUI review screen"
           where="Mac Studio · polaris · 42m"
-          approval={{ command: "cargo build --release" }}
+          approval={{ command: "cargo build --release", onAlwaysAllow: () => undefined }}
         />
         <NeedsYouCard
           harness="claude"

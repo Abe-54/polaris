@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "env": {
+    "machine": "Mac14,13",
+    "machineSlug": "mac14-13-apple-m2-max-12c",
+    "cpu": "Apple M2 Max",
+    "cores": 12,
+    "memoryGiB": 32,
+    "os": "macOS 27.0 (Darwin 27.0.0)",
+    "arch": "arm64",
+    "bun": "1.4.4",
+    "gitSha": "c4a1ce26f2a8",
+    "gitDirty": true,
+    "daemon": "source",
+    "daemonBinary": null,
+    "transport": "bridge",
+    "sampler": "darwin-libproc",
+    "date": "2026-10-31T21:56:40.973Z",
+    "backgroundCores": 4.2
+  },
+  "options": {
+    "quick": true,
+    "runs": 3,
+    "profile": false,
+    "scenarios": ["idle"]
+  },
+  "scenarios": {
+    "idle": {
+      "metrics": {
+        "client_cpu_avg_pct": {
+          "value": 0.5783626639097129,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 0.5
+          },
+          "runs": [0.4916793860107819, 0.7171230362487462, 0.5783626639097129],
+          "min": 0.4916793860107819,
+          "max": 0.7171230362487462
+        },
+        "client_cpu_max_pct": {
+          "value": 6.047961315987571,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "info": true,
+          "runs": [4.922575773452205, 8.99287359728405, 6.047961315987571],
+          "min": 4.922575773452205,
+          "max": 8.99287359728405
+        },
+        "client_rss_mib": {
+          "value": 109.5625,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [109.5625, 109.640625, 107.5],
+          "min": 107.5,
+          "max": 109.640625
+        },
+        "client_footprint_mib": {
+          "value": 65.57890319824219,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [64.70392608642578, 65.57890319824219, 65.78986358642578],
+          "min": 64.70392608642578,
+          "max": 65.78986358642578
+        },
+        "client_wakeups_per_s": {
+          "value": 10.199124660126039,
+          "unit": "/s",
+          "kind": "count",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 5
+          },
+          "runs": [10.398101306701397, 10.199124660126039, 10.098816966007451],
+          "min": 10.098816966007451,
+          "max": 10.398101306701397
+        },
+        "bare_bun_cpu_avg_pct": {
+          "value": 0.02431706564544321,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "info": true,
+          "runs": [0.024005288362026745, 0.024765826302400647, 0.02431706564544321],
+          "min": 0.024005288362026745,
+          "max": 0.024765826302400647
+        },
+        "bare_bun_rss_mib": {
+          "value": 10.25,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "info": true,
+          "runs": [10.234375, 10.25, 10.25],
+          "min": 10.234375,
+          "max": 10.25
+        },
+        "bare_bun_wakeups_per_s": {
+          "value": 0.9997978658664686,
+          "unit": "/s",
+          "kind": "count",
+          "better": "lower",
+          "info": true,
+          "runs": [0.999803763516316, 0.9997978658664686, 0.9996738189288061],
+          "min": 0.9996738189288061,
+          "max": 0.999803763516316
+        },
+        "noclient_cpu_avg_pct": {
+          "value": 0.2522228647596182,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 0.5
+          },
+          "runs": [0.232026505024977, 0.29308251133935814, 0.2522228647596182],
+          "min": 0.232026505024977,
+          "max": 0.29308251133935814
+        },
+        "noclient_rss_mib": {
+          "value": 109.609375,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [109.640625, 109.609375, 107.5625],
+          "min": 107.5625,
+          "max": 109.640625
+        },
+        "noclient_footprint_mib": {
+          "value": 64.87577819824219,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [64.48517608642578, 64.87577819824219, 65.42267608642578],
+          "min": 64.48517608642578,
+          "max": 65.42267608642578
+        },
+        "noclient_wakeups_per_s": {
+          "value": 7.398832710579397,
+          "unit": "/s",
+          "kind": "count",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 5
+          },
+          "runs": [7.398931902028914, 7.398832710579397, 7.397872002118591],
+          "min": 7.397872002118591,
+          "max": 7.398931902028914
+        },
+        "processes": {
+          "value": 1,
+          "unit": "",
+          "kind": "count",
+          "better": "lower",
+          "runs": [1, 1, 1],
+          "min": 1,
+          "max": 1
+        },
+        "noclient_cpu_over_bare_pct": {
+          "value": 0.22790579911417497,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "tolerance": {
+            "relative": 1,
+            "absolute": 0.3
+          },
+          "runs": [0.20802121666295023, 0.2683166850369575, 0.22790579911417497],
+          "min": 0.20802121666295023,
+          "max": 0.2683166850369575
+        }
+      },
+      "notes": [
+        "7.4 wakeups/s idle with no Client, 6.4/s above a bare Bun process: timers or polling",
+        "3 Workspaces, 6 Dormant sessions; 10 s windows after a settle; wakeups are idle + interrupt wakeups (proc_pid_rusage)"
+      ],
+      "durationMs": 88109.388875
+    }
+  }
+}

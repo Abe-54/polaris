@@ -27,12 +27,15 @@ import { barHosts, barWorkspaces, type BarHost, isRegistered, topBarMode } from 
 
 export type NavStore = StoreApi<NavState>;
 
+const keepsMode = (mode: Route): Route =>
+  mode === "edit" || mode === "data" || mode === "traces" ? mode : "orchestrate";
+
 const NO_OVERLAY = { jumpOpen: false, paletteOpen: false, helpOpen: false, folder: null } as const;
 
 const STORAGE_KEY = "polaris.navigation.v1";
 
 const Persisted = Schema.Struct({
-  mode: Schema.Literals(["orchestrate", "review", "edit"]),
+  mode: Schema.Literals(["orchestrate", "review", "edit", "data", "traces"]),
   hostKey: Schema.NullOr(Schema.String),
   workspaceId: Schema.NullOr(Schema.String),
   sessionId: Schema.NullOr(Schema.String),
@@ -214,8 +217,8 @@ export const createNavigation = ({
       workspaceId,
       sessionId: null,
       pane: "session",
-      // Edit is per Workspace: choosing another one keeps the editor open on it.
-      mode: store.getState().mode === "edit" ? "edit" : "orchestrate",
+      // Edit, Data and Traces follow the Workspace: choosing another one keeps them open on it.
+      mode: keepsMode(store.getState().mode),
       settings: null,
     });
     timeSwitch(inputAt);

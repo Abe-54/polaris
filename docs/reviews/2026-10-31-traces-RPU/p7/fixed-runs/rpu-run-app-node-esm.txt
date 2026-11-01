@@ -1,0 +1,18 @@
+== app stdout
+listening 42824
+app: SIGTERM, draining
+app: drained
+app exit code: 3
+== requests
+2026-10-31T23:10:12.621Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=4177
+2026-10-31T23:10:12.630Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=887
+== spans
+{"name":"GET unmatched","kind":"server","status":"unset","statusMessage":"","trace":"68c509ea","parent":null,"span":"bb9019","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET /orders/:id","kind":"server","status":"unset","statusMessage":"","trace":"5a5be8c5","parent":null,"span":"60d78b","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET unmatched","kind":"server","status":"unset","statusMessage":"","trace":"44b1ecf3","parent":null,"span":"f676e1","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"GET unmatched","kind":"server","status":"error","statusMessage":"","trace":"0af76519","parent":"b7ad6b","span":"1bc48d","scope":"@opentelemetry/instrumentation-http","service":"orders-api","code":[null,null,null]}
+{"name":"orders.load","kind":"internal","status":"unset","statusMessage":"","trace":"5a5be8c5","parent":"60d78b","span":"1db624","scope":"app","service":"orders-api","code":["loadOrders","/private/tmp/uf7/node-esm/server.ts","7"]}
+{"name":"orders.charge","kind":"internal","status":"error","statusMessage":"card declined for customer 42","trace":"0af76519","parent":"1bc48d","span":"5e787a","scope":"app","service":"orders-api","code":["charge","/private/tmp/uf7/node-esm/server.ts","14"],"exception":{"type":"TypeError","message":"card declined for customer 42","stack":"TypeError: card declined for customer 42 |     at file:///private/tmp/uf7/node-esm/server.ts:15:11 |     at file:///private/tmp/uf7/node-esm/tracing.ts:44:20"}}
+== logs
+{"body":"loaded orders","severity":"INFO","trace":"5a5be8c5","span":"1db624"}
+/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7/docs/reviews/2026-10-31-traces-RPU/p7/run-app.sh: line 30: 53812 Terminated: 15          bun "$HERE/collector.ts" "$OUT" > "$OUT/collector.stdout" 2>&1  (wd: ~/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7)

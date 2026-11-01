@@ -1,15 +1,17 @@
-import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
-import type {
-  PredictionOutcomeOutputs,
-  PredictionNotification,
-  PredictionNotificationInput,
-} from "./predictionOutcomes.ts";
 /**
  * The typed bridge between the main process and the renderer: channel names,
  * what every request returns, what every subscription delivers, and the API
  * the preload script exposes as `window.polaris`. Types plus plain constants
  * only, so the renderer and the sandboxed preload can import it.
  */
+import type { DataRequestOutputs, DataSubscriptionItems } from "./dataContract.ts";
+import type { TracesRequestOutputs, TracesSubscriptionItems } from "./tracesContract.ts";
+import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
+import type {
+  PredictionOutcomeOutputs,
+  PredictionNotification,
+  PredictionNotificationInput,
+} from "./predictionOutcomes.ts";
 import type {
   AcceptCommitted,
   AcceptDraft,
@@ -147,6 +149,14 @@ export interface IpcError {
   /** The failure's tag, e.g. "NotConnected", "FileError", "InvalidInput". */
   readonly code: string;
   readonly message: string;
+  /** A Data failure retains its E-DATA code and suggested fix. */
+  readonly fix?: string;
+  /** One-based position in the submitted SQL, or a database-reported line. */
+  readonly position?: number;
+  readonly line?: number;
+  /** A grid commit's refused cells, and the key of the row whose update failed. */
+  readonly conflicts?: ReadonlyArray<import("@polaris/protocol").DataEditConflict>;
+  readonly row?: ReadonlyArray<import("@polaris/protocol").DataValue>;
   /** A Constellation refusal's findings, so the renderer can word each by its code. */
   readonly findings?: ReadonlyArray<IpcFinding>;
 }
@@ -431,6 +441,8 @@ export interface RequestOutputs
     LinkedDevicesRequestOutputs,
     VoiceRequestOutputs,
     SecretRequestOutputs,
+    DataRequestOutputs,
+    TracesRequestOutputs,
     PredictionPlacementOutputs,
     PredictionOutcomeOutputs {
   "constellation.stats": ConstellationStatsView;
@@ -562,7 +574,12 @@ export type TerminalItem =
   | { readonly _tag: "Exit"; readonly code: number | null };
 
 export interface SubscriptionItems
-  extends GitHubSubscriptionItems, GitSubscriptionItems, BrowserSubscriptionItems {
+  extends
+    GitHubSubscriptionItems,
+    GitSubscriptionItems,
+    BrowserSubscriptionItems,
+    DataSubscriptionItems,
+    TracesSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
   "prediction.edit": EditPredictionFeedItem;
   "prediction.managed.watch": import("@polaris/protocol").ManagedServerStatus;
@@ -602,7 +619,7 @@ export interface SubscriptionListener<A> {
 
 // ── App events ──────────────────────────────────────────────────────────────
 
-export type Route = "orchestrate" | "review" | "edit";
+export type Route = "orchestrate" | "review" | "edit" | "data" | "traces";
 
 export type AppEvent =
   | {

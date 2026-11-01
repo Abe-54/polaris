@@ -159,3 +159,13 @@ sign-in tasks are as before (the profile's own `dev.lux.polaris.<user>` unchange
 from the home, and the home is gone (`TORN DOWN: …`). The arm64 package carries no Daemon, so it
 warns that the connection went unchecked. `windows-connect.ps1` also runs alone against an
 installed app (`-Application`, `-Daemon`, and `-Scratch <dir>` for the throwaway home's parent).
+
+All Playwright launches use `scriptedElectron` from `scripts/lib/electron.ts`. Scripted mode
+omits the local Host unless given a temporary fixture socket, and disables local installation
+and upgrade by default, even with `POLARIS_DESKTOP_LOCAL_HOME`. The dedicated
+`windowsConnect.ts` and `oldDaemon.ts` install smokes require
+`POLARIS_DESKTOP_SCRIPTED_LOCAL_INSTALL=1` and a canonical temporary home; the PowerShell
+runner sets and restores that opt-in. On macOS they also require CI (`CI=1` or `true`) or
+`POLARIS_DESKTOP_SCRIPTED_VM=1`, which attests that the caller is running in a disposable VM.
+A temporary HOME moves the LaunchAgent plist but still uses the shared
+`dev.lux.polaris` launchd label and the account's real UID; these smokes refuse otherwise.

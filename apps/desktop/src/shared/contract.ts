@@ -1,11 +1,13 @@
-import { PredictionPlacementInputs } from "./predictionPlacement.ts";
-import { PredictionOutcomeInputs } from "./predictionOutcomes.ts";
 /**
  * The IPC contract's inputs as Effect Schemas: the main process decodes every
  * request and subscription from a renderer with these before acting on it.
  * The renderer imports this file for types only (`import type`), so no Schema
  * code reaches its bundle.
  */
+import { DataRequestInputs, DataSubscriptionInputs } from "./dataContract.ts";
+import { TracesRequestInputs, TracesSubscriptionInputs } from "./tracesContract.ts";
+import { PredictionPlacementInputs } from "./predictionPlacement.ts";
+import { PredictionOutcomeInputs } from "./predictionOutcomes.ts";
 import {
   AcceptBranch,
   ApprovalKind,
@@ -593,6 +595,8 @@ export const RequestInputs = {
   ...VoiceRequestInputs,
   ...BrowserRequestInputs,
   ...SecretRequestInputs,
+  ...DataRequestInputs,
+  ...TracesRequestInputs,
 } as const;
 
 export type RequestMethod = keyof typeof RequestInputs;
@@ -650,6 +654,8 @@ export const SubscriptionInputs = {
   ...GitHubSubscriptionInputs,
   ...GitSubscriptionInputs,
   ...BrowserSubscriptionInputs,
+  ...DataSubscriptionInputs,
+  ...TracesSubscriptionInputs,
   /** One Constellation's stream (`constellation.subscribe`): Snapshot, Synchronized, then events. */
   constellation: Schema.Struct({
     hostKey: HostKey,

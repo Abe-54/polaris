@@ -1,0 +1,78 @@
+system daemon before: {"pid":"10276","alive":true,"current":"0.7.0"}
+collector V (app's own vendor receiver): http://127.0.0.1:60282
+daemon: {"argv":"bun --no-env-file --config=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/scripts/daemon-dev.toml /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/apps/daemon/src/main.ts serve --foreground","pid":90824,"home":"/tmp/g4h-3ZlWZS","cwd":"/tmp/g4cwd-0tcVvy","env":[]}
+(a) app env: {"nodeOptions":"--import \"data:text/javascript,await%20import(%22file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e%2Fregister.mjs%22).catch(()%3D%3E%7B%7D)#polaris-instrumentation=file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e%2Fregister.mjs\"","polarisOtel":"set","otlpHeaders":null,"override":"0","otlpEndpoint":"http://127.0.0.1:4319/otlp/<token>"}
+PASS (a) app exited 0 {"exit":0}
+PASS (a) Polaris preload was injected (launch-time detection could not see svc/) "--import \"data:text/javascript,await%20import(%22file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e%2Fregister.mjs%22).catch(()%3D%3E%7B%7D)#polaris-instrumentation=file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e%2Fregister.mjs\""
+(a) vendor span names: ["svc-a:GET /env","svc-a:GET /manual","svc-a:GET /fast","svc-a:app-manual-span"]
+PASS (a) the app's own vendor still receives its manual span and HTTP spans ["svc-a:GET /env","svc-a:GET /manual","svc-a:GET /fast","svc-a:app-manual-span"]
+(a) Polaris stored spans: []
+PASS (a) Polaris's preload stood down in the child (no Polaris copy of the request) []
+(b) settings after enabling override: {"enabled":true,"forwarding":true,"forwardTo":null,"detectedExporters":[],"autoInstrument":"node","autoInstrumentOverride":true,"autoInstrumentSkipReason":null}
+(b) app env: {"nodeOptions":"--import \"data:text/javascript,await import(\"file:///tmp/g4h-*/node-instrumentation/7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e/register.mjs\").catch(()=>{})#polaris-instrumentation=file:///tmp/g4h-3ZlWZS/node-instrumentation/7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e/register.mjs\"","polarisOtel":"set","otlpHeaders":null,"override":"1","otlpEndpoint":"http://127.0.0.1:4319/otlp/<token>"}
+PASS (b) app exited 0 {"exit":0}
+PASS (b) Polaris preload injected under override "set"
+(b) vendor span names: ["svc-b:GET /env","svc-b:GET /manual","svc-b:GET /fast","svc-b:app-manual-span"]
+PASS (b) UF11: with Polaris's SDK loaded first, the app's vendor still receives its manual span ["svc-b:GET /env","svc-b:GET /manual","svc-b:GET /fast","svc-b:app-manual-span"]
+(b) Polaris stored spans: []
+FAIL (b) Polaris also stored its own automatic HTTP spans []
+PASS (b) the app's manual span did not get captured by Polaris's provider []
+PASS (b2) app exited 0 {"exit":0,"override":"1"}
+(b2) vendor span names: ["svc-b2:app-manual-span"]
+PASS (b2) vendor receives the manual span ["svc-b2:app-manual-span"]
+(b2) Polaris stored spans: ["svc-b2:GET","svc-b2:GET /fast","svc-b2:GET /manual","svc-b2:GET /env"]
+PASS (b2) Polaris stores its automatic HTTP spans when the app has no HTTP instrumentation ["svc-b2:GET","svc-b2:GET /fast","svc-b2:GET /manual","svc-b2:GET /env"]
+PASS (b2) and the manual span stayed with the app's provider ["svc-b2:GET","svc-b2:GET /fast","svc-b2:GET /manual","svc-b2:GET /env"]
+(c) settings: {"enabled":true,"forwarding":true,"forwardTo":null,"detectedExporters":[],"autoInstrument":"node","autoInstrumentOverride":false,"autoInstrumentSkipReason":"The project depends on @opentelemetry/sdk-node; its SDK owns instrumentation."}
+PASS (c) launch detection skipped: no preload in NODE_OPTIONS and a skip reason in settings {"nodeOptions":null,"skip":"The project depends on @opentelemetry/sdk-node; its SDK owns instrumentation."}
+PASS (control) plain app under autoInstrument=node exited 0 with the preload {"exit":0}
+(control) Polaris stored spans: ["plain-app:GET","plain-app:GET","plain-app:GET","plain-app:GET"]
+PASS (control) Polaris stored automatic HTTP server spans named by package ["plain-app:GET","plain-app:GET","plain-app:GET","plain-app:GET"]
+(d) live shell NODE_OPTIONS: --import "data:text/javascript,await import("file:///tmp/g4h-*/node-instrumentation/7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e/register.mjs").catch(()=>{})#polaris-instrumentation=file:///tmp/g4h-*/node-instrumentation/7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e/register.mjs"
+PASS (d) the shell's NODE_OPTIONS holds the fail-soft data: wrapper "--import \"data:text/javascript,await%20import(%22file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc257"
+(d) materialized preload dirs before delete: ["7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e"]
+PASS (d) preload was materialized under the throwaway home
+(d) shell transcript tail: DE_OPTIONS]"
+[?1034hsh-3.2$ echo "NO=[$NODE_OPTIONS]"
+NO=[--import "data:text/javascript,await%20import(%22file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e%2Fregister.mjs%22).catch(()%3D%3E%7B%7D)#polaris-instrumentation=file%3A%2F%2F%2Ftmp%2Fg4h-3ZlWZS%2Fnode-instrumentation%2F7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e%2Fregister.mjs"]
+sh-3.2$ node -e 'console.log("before-" + (1+1))'; echo "RC1=$?"
+before-2
+RC1=0
+sh-3.2$ node -e 'console.log("alive-" + (2+2))'; echo "RC2=$?"
+alive-4
+RC2=0
+sh-3.2$ 
+PASS (d) after deleting the preload, node in the already-open shell still runs (exit 0) "RC2=0"
+PASS (d) and prints no module-not-found error
+(d) fresh terminal output: fresh-6
+PASS (d) a new terminal after deletion runs node with exit 0 {"exit":0}
+PASS (d) and the preload was re-materialized for it ["7cbc7ef1d13ef5cd8d3dc8860ff29ade7a1365bf71984c67bc2578da0c80c75e"]
+daemon exit: 130
+system daemon after: {"pid":"10276","alive":true,"current":"0.7.0"}
+PASS system Daemon unchanged {"before":{"pid":"10276","alive":true,"current":"0.7.0"},"after":{"pid":"10276","alive":true,"current":"0.7.0"}}
+cleaned up: ["/tmp/g4h-3ZlWZS","/tmp/g4cwd-0tcVvy","/tmp/g4mono-fGAzqu","/tmp/g4ovr-1vglQf","/tmp/g4ovr2-vfoWNs","/tmp/g4skip-VowJLc","/tmp/g4gone-4YKGnl"]
+SUMMARY [
+ "PASS (a) app exited 0",
+ "PASS (a) Polaris preload was injected (launch-time detection could not see svc/)",
+ "PASS (a) the app's own vendor still receives its manual span and HTTP spans",
+ "PASS (a) Polaris's preload stood down in the child (no Polaris copy of the request)",
+ "PASS (b) app exited 0",
+ "PASS (b) Polaris preload injected under override",
+ "PASS (b) UF11: with Polaris's SDK loaded first, the app's vendor still receives its manual span",
+ "FAIL (b) Polaris also stored its own automatic HTTP spans",
+ "PASS (b) the app's manual span did not get captured by Polaris's provider",
+ "PASS (b2) app exited 0",
+ "PASS (b2) vendor receives the manual span",
+ "PASS (b2) Polaris stores its automatic HTTP spans when the app has no HTTP instrumentation",
+ "PASS (b2) and the manual span stayed with the app's provider",
+ "PASS (c) launch detection skipped: no preload in NODE_OPTIONS and a skip reason in settings",
+ "PASS (control) plain app under autoInstrument=node exited 0 with the preload",
+ "PASS (control) Polaris stored automatic HTTP server spans named by package",
+ "PASS (d) the shell's NODE_OPTIONS holds the fail-soft data: wrapper",
+ "PASS (d) preload was materialized under the throwaway home",
+ "PASS (d) after deleting the preload, node in the already-open shell still runs (exit 0)",
+ "PASS (d) and prints no module-not-found error",
+ "PASS (d) a new terminal after deletion runs node with exit 0",
+ "PASS (d) and the preload was re-materialized for it",
+ "PASS system Daemon unchanged"
+]

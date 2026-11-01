@@ -35,6 +35,15 @@ export const WORKER_TOOL_NAMES = [
   "sessions",
   "search_history",
   "read_history",
+  "data_sources",
+  "describe",
+  "query",
+  "execute",
+  "traces",
+  "trace",
+  "span",
+  "compare",
+  "profile",
   "visualize",
 ];
 
@@ -53,6 +62,15 @@ export const LEAD_TOOL_NAMES = [
   "sessions",
   "search_history",
   "read_history",
+  "data_sources",
+  "describe",
+  "query",
+  "execute",
+  "traces",
+  "trace",
+  "span",
+  "compare",
+  "profile",
   "visualize",
 ];
 

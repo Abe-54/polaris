@@ -1,4 +1,5 @@
 /** UI copy: glossary terms lowercase (DESIGN.md rule/glossary-lowercase), what happened (rule/say-what-happened). */
+import { writeWants } from "../features/data/write/model.ts";
 import type { ConnectionState, SessionState } from "@polaris/protocol";
 import { capacityReset } from "../features/constellation/model/failure.ts";
 import { waitingOn, waitingPhrase } from "../features/session/model/background.ts";
@@ -62,6 +63,8 @@ export const sessionLine = (entry: SessionEntry, activity: string | null = null)
 
   if (request !== undefined) {
     if (request.kind === "secret") return secretLine(request.title);
+
+    if (request.dataWrite !== undefined) return `W${writeWants(request.dataWrite).slice(1)}`;
 
     return request.kind === "question" ? request.title : `Wants to ${lowerFirst(request.title)}`;
   }

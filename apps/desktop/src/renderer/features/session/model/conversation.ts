@@ -16,7 +16,13 @@ import type {
   WorktreeSetupRun,
 } from "@polaris/protocol";
 import { Predicate } from "effect";
-import type { SecretOutcome, SettledSecret, TurnView } from "../../../store/sessionModel.ts";
+import type {
+  SecretOutcome,
+  SettledSecret,
+  SettledWrite,
+  TurnView,
+  WriteOutcome,
+} from "../../../store/sessionModel.ts";
 import { isWaiting, type Waiting } from "./background.ts";
 import { formatElapsed, plural } from "./format.ts";
 import { quietOpening } from "./idleCompaction.ts";
@@ -135,6 +141,8 @@ export type Row =
       readonly request: ApprovalRequest;
       /** A Secret Request that ended while shown: how, so its card says so; else null. */
       readonly settled: SecretOutcome | null;
+      /** A write approval answered or withdrawn while shown: its card collapses to a line. */
+      readonly wrote: WriteOutcome | null;
     }
   /** A steer or queued follow-up that hasn't landed yet (`outbox.ts`). */
   | { readonly kind: "outgoing"; readonly key: string; readonly entry: Outgoing }
@@ -300,6 +308,8 @@ export interface ConversationInput {
   readonly approvals: ReadonlyArray<ApprovalRequest>;
   /** Secret Requests settled while this feed was open; their cards stay where they asked. */
   readonly settledSecrets?: ReadonlyArray<SettledSecret>;
+  /** Write approvals settled while this feed was open; their cards stay, one line each. */
+  readonly settledWrites?: ReadonlyArray<SettledWrite>;
   /** Which Turns are open; default: only the last. */
   readonly folds?: Folds;
   /** Steers and follow-ups not landed yet; they close the list. */
@@ -309,11 +319,16 @@ export interface ConversationInput {
   readonly waiting?: Waiting | null;
 }
 
-const approvalRow = (request: ApprovalRequest, settled: SecretOutcome | null = null): Row => ({
+const approvalRow = (
+  request: ApprovalRequest,
+  settled: SecretOutcome | null = null,
+  wrote: WriteOutcome | null = null
+): Row => ({
   kind: "approval",
   key: `approval:${request.id}`,
   request,
   settled,
+  wrote,
 });
 
 /** Every row, in order; pending approvals follow the Turn that asked, or close the list. */
@@ -321,6 +336,7 @@ export const conversationRows = ({
   turns,
   approvals,
   settledSecrets = [],
+  settledWrites = [],
   folds = noFolds,
   outbox = [],
   setup = null,
@@ -340,6 +356,9 @@ export const conversationRows = ({
 
     for (const { request, outcome } of settledSecrets)
       if (ids.has(request.turnId)) rows.push(approvalRow(request, outcome));
+
+    for (const { request, outcome } of settledWrites)
+      if (ids.has(request.turnId)) rows.push(approvalRow(request, null, outcome));
 
     for (const request of approvals) {
       if (!ids.has(request.turnId)) continue;

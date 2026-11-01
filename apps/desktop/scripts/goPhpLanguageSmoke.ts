@@ -17,12 +17,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { _electron as electron, type Page } from "playwright-core";
+import { type Page } from "playwright-core";
 import { Schema } from "effect";
 import { startDaemon } from "./lib/daemon.ts";
 import { seenUserData } from "./lib/userData.ts";
 import { assertStatusBarShown, longFile } from "./lib/statusBar.ts";
-import { APP_DIR, REPO_ROOT, sizeWindow, stockElectronBinary } from "./lib/electron.ts";
+import {
+  scriptedElectron as electron,
+  APP_DIR,
+  REPO_ROOT,
+  sizeWindow,
+  stockElectronBinary,
+} from "./lib/electron.ts";
 
 const required = (name: string) => {
   const value = process.env[name];

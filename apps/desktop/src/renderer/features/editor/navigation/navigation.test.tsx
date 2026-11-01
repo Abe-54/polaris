@@ -65,7 +65,10 @@ describe("language commands", () => {
   });
 
   test("no key clashes with the app's shortcuts", () => {
-    const app = new Set(KEYMAP.flatMap((binding) => binding.keys));
+    // Shortcuts that live only in another mode (Data's ⌘T) don't reach the editor.
+    const app = new Set(
+      KEYMAP.filter((binding) => binding.when !== "mode.data").flatMap((binding) => binding.keys)
+    );
 
     const accelerators = new Map([
       ["Mod-t", "CmdOrCtrl+T"],

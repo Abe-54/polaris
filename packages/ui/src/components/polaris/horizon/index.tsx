@@ -120,6 +120,7 @@ const Moon = () => (
     height="72"
     viewBox="0 0 72 72"
     className="pixelated absolute top-5 left-[68px]"
+    data-slot="horizon-moon"
     style={{ opacity: "calc(1 - var(--midnight, 0))" }}
   >
     <path d={MOON_HALO} style={{ fill: night("#D9DEE833") }} />
@@ -147,8 +148,13 @@ const Birds = () => (
  * stars along the window's foot, drawn behind the panels. It takes no height: put it inside a
  * `relative isolate` container, whose in-flow content paints over it. Stars sit only where the
  * ground is bare (the sidebar's sky above its footer, the gaps); it is static, with no timers.
+ * `moon={false}` leaves out Moonlit's moon, for a sidebar whose footer text would sit over it.
  */
-export function Horizon({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function Horizon({
+  className,
+  moon = true,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { readonly moon?: boolean }) {
   return (
     <div
       aria-hidden="true"
@@ -164,7 +170,7 @@ export function Horizon({ className, ...props }: HTMLAttributes<HTMLDivElement>)
       <Dawn />
       <Stars />
       <Birds />
-      <Moon />
+      {moon ? <Moon /> : null}
       <Ridges />
     </div>
   );

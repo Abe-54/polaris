@@ -1,0 +1,215 @@
+/**
+ * G4 scenario 2 (UF11): Node auto-instrumentation through real Polaris terminals.
+ * (a) monorepo: the terminal opens at the root, the app's own SDK is only in svc/package.json;
+ * (b) override: autoInstrumentOverride with the app's own NodeSDK at the root;
+ * (c) default skip: the root manifest lists the SDK, no override;
+ * (d) the materialized preload directory is deleted under a live shell and before a new terminal.
+ * Each app's own SDK exports to its own "vendor" receiver at a fixed URL in its source.
+ */
+import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  check,
+  collector,
+  connect,
+  finish,
+  firstOf,
+  get,
+  makeWorkspace,
+  note,
+  openTerminal,
+  readPort,
+  registerWorkspace,
+  run,
+  startDaemon,
+  startSession,
+  systemDaemonState,
+  trustWorkspace,
+  until,
+  writeApp,
+  type Client,
+} from "./common.ts";
+
+const before = systemDaemonState();
+note("system daemon before", before);
+const V = collector("V (app's own vendor receiver)");
+const stops: Array<() => unknown> = [() => V.stop()];
+
+const runApp = async (c: Client, cwd: string, argv: string[], portFile: string, paths: string[]) => {
+  const term = await openTerminal(c, cwd, argv);
+  const port = await readPort(portFile).catch((e) => {
+    throw new Error(`${e}; terminal output: ${term.output()}`);
+  });
+  const env = JSON.parse((await get(port, "/env")).body);
+  for (const p of paths) await get(port, p);
+  await get(port, "/shutdown").catch(() => null);
+  await until("terminal exit", () => term.exit() !== undefined, 15_000);
+  const exit = term.exit();
+  await term.close();
+  return { env, exit, output: term.output() };
+};
+
+const polarisSpans = async (c: Client, sessionId: string) => {
+  const page: any = await firstOf(c.client["traces.watch"]({ sessionId }));
+  const spans: string[] = [];
+  for (const t of page.traces) {
+    const d: any = await run(c.client["traces.get"]({ sessionId, traceId: t.id }));
+    spans.push(...d.spans.map((s: any) => `${s.service}:${s.name}`));
+  }
+  return spans;
+};
+
+const preloadOf = (nodeOptions: string | null) =>
+  nodeOptions !== null && /node-instrumentation/.test(decodeURIComponent(nodeOptions));
+
+try {
+  const daemon = await startDaemon();
+  stops.unshift(() => daemon.stop());
+  const c = await connect(daemon);
+  const enable = (workspaceId: string, override = false) =>
+    run<any>(
+      c.client["traces.setSettings"]({
+        workspaceId,
+        settings: { autoInstrument: "node", autoInstrumentOverride: override },
+      })
+    );
+
+  // ---- (a) monorepo: SDK only in the entry package ----
+  const wsA = await makeWorkspace("g4mono");
+  await writeFile(join(wsA, "package.json"), JSON.stringify({ name: "mono-root", private: true }));
+  await writeApp(join(wsA, "svc"), { name: "svc-a", vendorUrl: `${V.origin}/v1/traces` });
+  const idA = await registerWorkspace(c, wsA, "G4 mono");
+  await trustWorkspace(c, daemon.home, idA, wsA);
+  const sA = await startSession(c, idA);
+  await enable(idA);
+  const vBeforeA = V.received.length;
+  const pfA = join(wsA, "port-a");
+  const appA = await runApp(c, wsA, ["node", "--import", "./svc/instr.mjs", "svc/app.cjs", "svc-a", pfA], pfA, ["/manual", "/fast"]);
+  note("(a) app env", appA.env);
+  check("(a) app exited 0", appA.exit === 0, { exit: appA.exit, output: appA.exit === 0 ? undefined : appA.output });
+  check("(a) Polaris preload was injected (launch-time detection could not see svc/)", preloadOf(appA.env.nodeOptions), appA.env.nodeOptions);
+  await until("(a) vendor receives", () => V.received.slice(vBeforeA).some((r) => r.spans.some((s) => s.name === "app-manual-span")), 15_000).catch(() => null);
+  const vA = V.received.slice(vBeforeA).flatMap((r) => r.spans.map((s) => `${s.service}:${s.name}`));
+  note("(a) vendor span names", vA);
+  check("(a) the app's own vendor still receives its manual span and HTTP spans", vA.includes("svc-a:app-manual-span") && vA.includes("svc-a:GET /fast"), vA);
+  await Bun.sleep(1000);
+  const pA = await polarisSpans(c, sA);
+  note("(a) Polaris stored spans", pA);
+  check("(a) Polaris's preload stood down in the child (no Polaris copy of the request)", pA.length === 0, pA);
+
+  // ---- (b) override: both SDKs run; the app keeps the global provider ----
+  const wsB = await makeWorkspace("g4ovr");
+  await writeApp(wsB, { name: "svc-b", vendorUrl: `${V.origin}/v1/traces` });
+  const idB = await registerWorkspace(c, wsB, "G4 override");
+  await trustWorkspace(c, daemon.home, idB, wsB);
+  const sB = await startSession(c, idB);
+  const setB = await enable(idB, true);
+  note("(b) settings after enabling override", setB);
+  const vBeforeB = V.received.length;
+  const pfB = join(wsB, "port-b");
+  const appB = await runApp(c, wsB, ["node", "--import", "./instr.mjs", "app.cjs", "svc-b", pfB], pfB, ["/manual", "/fast"]);
+  note("(b) app env", { ...appB.env, nodeOptions: appB.env.nodeOptions && decodeURIComponent(appB.env.nodeOptions).replace(/g4h-[^/]+/, "g4h-*") });
+  check("(b) app exited 0", appB.exit === 0, { exit: appB.exit });
+  check("(b) Polaris preload injected under override", preloadOf(appB.env.nodeOptions) && appB.env.polarisOtel === "set", appB.env.polarisOtel);
+  await until("(b) vendor receives", () => V.received.slice(vBeforeB).some((r) => r.spans.some((s) => s.name === "app-manual-span")), 15_000).catch(() => null);
+  const vB = V.received.slice(vBeforeB).flatMap((r) => r.spans.map((s) => `${s.service}:${s.name}`));
+  note("(b) vendor span names", vB);
+  check("(b) UF11: with Polaris's SDK loaded first, the app's vendor still receives its manual span", vB.includes("svc-b:app-manual-span"), vB);
+  const pB = await until("(b) Polaris stores auto spans", async () => {
+    const s = await polarisSpans(c, sB);
+    return s.length > 0 ? s : null;
+  }, 15_000).catch(() => [] as string[]);
+  note("(b) Polaris stored spans", pB);
+  check("(b) Polaris also stored its own automatic HTTP spans", pB.some((s) => /GET/.test(s)), pB);
+  check("(b) the app's manual span did not get captured by Polaris's provider", !pB.some((s) => s.endsWith("app-manual-span")), pB);
+
+  // ---- (b2) override, app SDK without its own HTTP instrumentation (the repo's preload.test.ts shape) ----
+  const wsB2 = await makeWorkspace("g4ovr2");
+  await writeApp(wsB2, { name: "svc-b2", vendorUrl: `${V.origin}/v1/traces`, ownHttp: false });
+  const idB2 = await registerWorkspace(c, wsB2, "G4 override no-http");
+  await trustWorkspace(c, daemon.home, idB2, wsB2);
+  const sB2 = await startSession(c, idB2);
+  await enable(idB2, true);
+  const vBeforeB2 = V.received.length;
+  const pfB2 = join(wsB2, "port-b2");
+  const appB2 = await runApp(c, wsB2, ["node", "--import", "./instr.mjs", "app.cjs", "svc-b2", pfB2], pfB2, ["/manual", "/fast"]);
+  check("(b2) app exited 0", appB2.exit === 0, { exit: appB2.exit, override: appB2.env.override });
+  await until("(b2) vendor receives", () => V.received.slice(vBeforeB2).some((r) => r.spans.some((s) => s.name === "app-manual-span")), 15_000).catch(() => null);
+  const vB2 = V.received.slice(vBeforeB2).flatMap((r) => r.spans.map((s) => `${s.service}:${s.name}`));
+  note("(b2) vendor span names", vB2);
+  check("(b2) vendor receives the manual span", vB2.includes("svc-b2:app-manual-span"), vB2);
+  const pB2 = await until("(b2) Polaris stores auto spans", async () => {
+    const s = await polarisSpans(c, sB2);
+    return s.length > 0 ? s : null;
+  }, 15_000).catch(() => [] as string[]);
+  note("(b2) Polaris stored spans", pB2);
+  check("(b2) Polaris stores its automatic HTTP spans when the app has no HTTP instrumentation", pB2.some((s) => /GET/.test(s)), pB2);
+  check("(b2) and the manual span stayed with the app's provider", !pB2.some((s) => s.endsWith("app-manual-span")), pB2);
+
+  // ---- (c) default: root manifest lists the SDK, no override ----
+  const wsC = await makeWorkspace("g4skip");
+  await writeApp(wsC, { name: "svc-c", vendorUrl: `${V.origin}/v1/traces` });
+  const idC = await registerWorkspace(c, wsC, "G4 skip");
+  await trustWorkspace(c, daemon.home, idC, wsC);
+  await startSession(c, idC);
+  await enable(idC);
+  const pfC = join(wsC, "port-c");
+  const appC = await runApp(c, wsC, ["node", "--import", "./instr.mjs", "app.cjs", "svc-c", pfC], pfC, ["/fast"]);
+  const setC: any = await run(c.client["traces.settings"]({ workspaceId: idC }));
+  note("(c) settings", setC);
+  check("(c) launch detection skipped: no preload in NODE_OPTIONS and a skip reason in settings", !preloadOf(appC.env.nodeOptions) && typeof setC.autoInstrumentSkipReason === "string", { nodeOptions: appC.env.nodeOptions, skip: setC.autoInstrumentSkipReason });
+
+  // ---- (d) the preload disappears ----
+  const wsD = await makeWorkspace("g4gone");
+  await writeApp(wsD, { name: "plain-app", withSdkDependency: false });
+  const idD = await registerWorkspace(c, wsD, "G4 preload gone");
+  await trustWorkspace(c, daemon.home, idD, wsD);
+  const sD = await startSession(c, idD);
+  await enable(idD);
+  // Control: a plain app with no SDK of its own gets Polaris's automatic HTTP spans.
+  const pfD = join(wsD, "port-d");
+  const appD = await runApp(c, wsD, ["node", "app.cjs", "plain-app", pfD], pfD, ["/fast", "/slow"]);
+  check("(control) plain app under autoInstrument=node exited 0 with the preload", appD.exit === 0 && preloadOf(appD.env.nodeOptions), { exit: appD.exit });
+  const pD = await until("(control) Polaris stores auto spans", async () => {
+    const s = await polarisSpans(c, sD);
+    return s.length >= 2 ? s : null;
+  }, 15_000).catch(() => [] as string[]);
+  note("(control) Polaris stored spans", pD);
+  check("(control) Polaris stored automatic HTTP server spans named by package", pD.filter((s) => s.startsWith("plain-app:GET")).length >= 2, pD);
+  const shell = await openTerminal(c, wsD, ["/bin/sh"]);
+  await shell.input(`echo "NO=[$NODE_OPTIONS]"\n`);
+  const no = await until("NODE_OPTIONS echo", () => /NO=\[(--import[^\]\n]*)\]/.exec(shell.output().replace(/\r/g, ""))?.[1] ?? null).catch(() => "");
+  note("(d) live shell NODE_OPTIONS", decodeURIComponent(no).replace(/g4h-[^/]+/g, "g4h-*"));
+  check("(d) the shell's NODE_OPTIONS holds the fail-soft data: wrapper", /--import/.test(no) && /data:/.test(no) && preloadOf(no), no.slice(0, 160));
+  await shell.input(`node -e 'console.log("before-" + (1+1))'; echo "RC1=$?"\n`);
+  await until("RC1", () => /RC1=\d+/.test(shell.output()));
+  const instDir = join(daemon.home, "node-instrumentation");
+  note("(d) materialized preload dirs before delete", existsSync(instDir) ? readdirSync(instDir) : null);
+  check("(d) preload was materialized under the throwaway home", existsSync(instDir) && readdirSync(instDir).length > 0);
+  await rm(instDir, { recursive: true, force: true });
+  await shell.input(`node -e 'console.log("alive-" + (2+2))'; echo "RC2=$?"\n`);
+  await until("RC2", () => /RC2=\d+/.test(shell.output()));
+  const out = shell.output().replace(/\r/g, "");
+  note("(d) shell transcript tail", out.slice(-600));
+  check("(d) after deleting the preload, node in the already-open shell still runs (exit 0)", /alive-4/.test(out) && /RC2=0/.test(out), /RC2=\d+/.exec(out)?.[0]);
+  check("(d) and prints no module-not-found error", !/ERR_MODULE_NOT_FOUND|Cannot find module/.test(out));
+  await shell.close();
+  const fresh = await openTerminal(c, wsD, ["node", "-e", 'console.log("fresh-" + (3+3))']);
+  await until("fresh terminal exit", () => fresh.exit() !== undefined, 15_000);
+  note("(d) fresh terminal output", fresh.output().replace(/\r/g, "").trim());
+  check("(d) a new terminal after deletion runs node with exit 0", fresh.exit() === 0 && /fresh-6/.test(fresh.output()), { exit: fresh.exit() });
+  check("(d) and the preload was re-materialized for it", existsSync(instDir) && readdirSync(instDir).length > 0, existsSync(instDir) ? readdirSync(instDir) : null);
+  await fresh.close();
+
+  await c.close();
+  note("daemon exit", await daemon.stop());
+} catch (error) {
+  console.error("ERROR", error);
+  check("script completed without exception", false, String(error));
+} finally {
+  const after = systemDaemonState();
+  note("system daemon after", after);
+  check("system Daemon unchanged", before.pid === after.pid && before.current === after.current && after.alive, { before, after });
+  await finish("/dev/null", stops);
+}

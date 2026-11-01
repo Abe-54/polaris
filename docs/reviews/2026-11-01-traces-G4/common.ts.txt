@@ -1,0 +1,498 @@
+/** G4 shared harness: a source Daemon in a throwaway /tmp home, a socket RPC client, OTLP collectors, app files. */
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile, appendFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Effect, Exit, Fiber, Option, Redacted, Schema, Scope, Stream } from "effect";
+
+export const REPO =
+  "/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3";
+export const OTEL_MODULES = "/tmp/rpu-p7/node/node_modules";
+
+const P = await import(`${REPO}/packages/protocol/src/index.ts`);
+const C = await import(`${REPO}/packages/client/src/index.ts`);
+export const {
+  Command,
+  CommandId,
+  ConstellationId,
+  DomainEvent,
+  HostStreamItem,
+  LanguageCheckout,
+  SessionId,
+  SessionPlacement,
+  TerminalId,
+} = P as any;
+const { McpTokens } = await import(`${REPO}/apps/daemon/src/mcp/tokens.ts`);
+const { McpBinding } = await import(`${REPO}/apps/daemon/src/mcp/binding.ts`);
+const Trust = await import(`${REPO}/apps/daemon/src/languages/trust/index.ts`);
+const { decodeBatch } = await import(`${REPO}/apps/daemon/src/traces/decoder.ts`);
+
+// ---------- results ----------
+export const results: Array<{ name: string; pass: boolean; detail?: unknown }> = [];
+export const check = (name: string, pass: boolean, detail?: unknown) => {
+  results.push({ name, pass, detail });
+  console.log(
+    `${pass ? "PASS" : "FAIL"} ${name}${detail === undefined ? "" : " " + JSON.stringify(detail)}`
+  );
+};
+export const note = (label: string, value: unknown) =>
+  console.log(`${label}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
+
+export const until = async <A>(
+  what: string,
+  probe: () => A | undefined | null | false | Promise<A | undefined | null | false>,
+  timeoutMs = 20_000,
+  stepMs = 100
+): Promise<A> => {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await probe();
+    if (value) return value as A;
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await Bun.sleep(stepMs);
+  }
+};
+
+// ---------- system Daemon guard ----------
+export const systemDaemonState = () => {
+  const pidFile = `${process.env.HOME}/.polaris/daemon.pid`;
+  const pid = existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : null;
+  const current = Bun.spawnSync(["readlink", `${process.env.HOME}/.polaris/bin/current`])
+    .stdout.toString()
+    .trim();
+  const alive = pid ? Bun.spawnSync(["kill", "-0", pid]).exitCode === 0 : false;
+  return { pid, alive, current };
+};
+
+/** The agent's own environment carries the system Daemon's session; a throwaway Daemon must not inherit it. */
+export const cleanEnv = (): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([k, v]) =>
+        v !== undefined &&
+        !/^(POLARIS_|OTEL_|CLAUDE_AGENT_SDK|NODE_OPTIONS$|BUN_OPTIONS$|AXIOM_|VERCEL_OTEL)/.test(k)
+    ) as Array<[string, string]>
+  );
+
+// ---------- Daemon ----------
+export interface Daemon {
+  home: string;
+  pid: number;
+  socketPath: string;
+  logs: () => string;
+  stop: () => Promise<number | null>;
+  proc: ReturnType<typeof Bun.spawn>;
+}
+
+const cleanupPaths: string[] = [];
+export const tracked = (path: string) => (cleanupPaths.push(path), path);
+const spawned: Array<ReturnType<typeof Bun.spawn>> = [];
+export const track = <T extends ReturnType<typeof Bun.spawn>>(p: T) => (spawned.push(p), p);
+
+export const startDaemon = async (env: Record<string, string> = {}): Promise<Daemon> => {
+  const home = tracked(await mkdtemp("/tmp/g4h-"));
+  const cwd = tracked(await mkdtemp("/tmp/g4cwd-"));
+  // The supported dev launcher's flags (scripts/daemon-dev.sh): no cwd .env or bunfig autoload.
+  const argv = [
+    "bun",
+    "--no-env-file",
+    `--config=${REPO}/scripts/daemon-dev.toml`,
+    `${REPO}/apps/daemon/src/main.ts`,
+    "serve",
+    "--foreground",
+  ];
+  const proc = track(
+    Bun.spawn(argv, {
+      cwd,
+      env: {
+        ...cleanEnv(),
+        POLARIS_HOME: home,
+        POLARIS_BENCH_HARNESS: "1",
+        POLARIS_GATEWAY_PORT: "0",
+        ...env,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+  );
+  let logs = "";
+  const drain = async (s: ReadableStream<Uint8Array>) => {
+    for await (const c of s) logs = (logs + new TextDecoder().decode(c)).slice(-256 * 1024);
+  };
+  void drain(proc.stdout as ReadableStream<Uint8Array>);
+  void drain(proc.stderr as ReadableStream<Uint8Array>);
+  note("daemon", { argv: argv.join(" "), pid: proc.pid, home, cwd, env: Object.keys(env) });
+  return {
+    home,
+    pid: proc.pid,
+    socketPath: join(home, "daemon.sock"),
+    logs: () => logs,
+    proc,
+    stop: async () => {
+      if (process.env.G4_DAEMON_LOG) await appendFile(process.env.G4_DAEMON_LOG, `\n=== daemon ${proc.pid} ${home}\n${logs}`);
+      if (proc.exitCode === null && proc.signalCode === null) {
+        proc.kill("SIGTERM");
+        const t = setTimeout(() => proc.kill("SIGKILL"), 20_000);
+        await proc.exited;
+        clearTimeout(t);
+      }
+      return proc.exitCode;
+    },
+  };
+};
+
+// ---------- RPC client ----------
+export const run = <A>(eff: any): Promise<A> => Effect.runPromise(eff) as Promise<A>;
+
+export const connect = async (daemon: Daemon) => {
+  const hello = await until(
+    "daemon hello",
+    async () => {
+      if (!existsSync(daemon.socketPath)) return null;
+      const scope = await run<any>(Scope.make());
+      try {
+        const conn: any = await run(
+          Scope.provide(scope)(Effect.flatMap(C.socketTransport(daemon.socketPath), C.connectRpc))
+        );
+        const h: any = await run(
+          conn.client.hello({
+            clientName: "g4-e2e",
+            clientVersion: "0",
+            deviceLabel: "g4",
+            capabilities: [],
+            languageProof: Redacted.make("f".repeat(64)),
+          })
+        );
+        return { scope, client: conn.client, hello: h };
+      } catch {
+        await run(Scope.close(scope, Exit.void));
+        return null;
+      }
+    },
+    60_000,
+    100
+  );
+  const client = hello.client;
+  const dispatch = (command: unknown) =>
+    run(client.dispatch({ commandId: CommandId.make(crypto.randomUUID()), command }));
+  const close = () => run(Scope.close(hello.scope, Exit.void));
+  return { client, hello: hello.hello, dispatch, close };
+};
+export type Client = Awaited<ReturnType<typeof connect>>;
+
+export const firstOf = <A>(stream: any): Promise<A> =>
+  run(Stream.runHead(stream)).then((o: any) => Option.getOrThrow(o) as A);
+
+/** Fork a wait for a Session State before the command that causes it. */
+export const awaitState = (c: Client, sessionId: string, state: string) => {
+  const fiber = Effect.runFork(
+    c.client.subscribeHost({ afterSequence: null }).pipe(
+      Stream.filter(
+        (item: any) =>
+          HostStreamItem.guards.Event(item) &&
+          DomainEvent.guards.SessionStateChanged(item.envelope.event) &&
+          item.envelope.event.sessionId === sessionId &&
+          item.envelope.event.state === state
+      ),
+      Stream.runHead
+    ) as any
+  );
+  return () => run(Fiber.join(fiber as any));
+};
+
+export const registerWorkspace = async (c: Client, path: string, name: string) => {
+  await c.dispatch(Command.cases.RegisterWorkspace.make({ path, name }));
+  const snapshot: any = await firstOf(
+    c.client.subscribeHost({ afterSequence: null }).pipe(Stream.filter(HostStreamItem.guards.Snapshot))
+  );
+  const ws = snapshot.workspaces.find((w: any) => w.path === path);
+  if (!ws) throw new Error(`workspace ${path} not registered`);
+  return ws.id as string;
+};
+
+export const trustWorkspace = async (c: Client, home: string, workspaceId: string, path: string) => {
+  const checkout = LanguageCheckout.cases.Workspace.make({ workspaceId, path });
+  await Trust.createExecutionTrust({
+    hostId: c.hello.host.hostId,
+    registry: async () => ({ checkout, workspacePath: path }),
+    repository: Trust.createFileTrustRepository(Trust.trustDirectory(home)),
+    authorizeGrant: async () => {},
+  }).set(checkout, true, 0);
+};
+
+/** A bench (scripted) Harness session: real Engine, store and Turns, no vendor process. */
+export const startSession = async (c: Client, workspaceId: string, prompt = 'bench:{"items":1}') => {
+  const sessionId = SessionId.make(crypto.randomUUID());
+  const idle = awaitState(c, sessionId, "idle");
+  await c.dispatch(
+    Command.cases.StartSession.make({
+      sessionId,
+      workspaceId,
+      harness: "codex",
+      placement: SessionPlacement.cases.InPlace.make({}),
+      permissionMode: "supervised",
+      model: null,
+      effort: null,
+      prompt,
+      attachments: [],
+    })
+  );
+  await idle();
+  return sessionId as string;
+};
+
+/** A Turn that streams for about `ms` (bench deltas), so app traffic lands inside it. */
+export const longTurn = async (c: Client, sessionId: string, ms: number) => {
+  const working = awaitState(c, sessionId, "working");
+  const deltas = Math.ceil(ms / 100);
+  await c.dispatch(
+    Command.cases.SendTurn.make({
+      sessionId,
+      prompt: `bench:${JSON.stringify({ items: 1, deltasPerItem: deltas, deltaIntervalMs: 100 })}`,
+      attachments: [],
+    })
+  );
+  await working();
+  return awaitState(c, sessionId, "idle");
+};
+
+// ---------- MCP ----------
+export const issueMcpToken = async (home: string, sessionId: string, workspaceId: string) =>
+  (await run(
+    Effect.scoped(
+      Effect.flatMap(McpTokens, (t: any) =>
+        t.issue(
+          McpBinding.cases.Plain.make({
+            sessionId,
+            workspaceId,
+            constellationId: ConstellationId.make(crypto.randomUUID()),
+          })
+        )
+      ).pipe(Effect.provide(McpTokens.layer(join(home, "mcp.sqlite"))))
+    )
+  )) as string;
+
+export const listeners = (pid: number) => {
+  const out = Bun.spawnSync(["lsof", "-nP", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN", "-Fn"])
+    .stdout.toString();
+  return [...out.matchAll(/n(\S+):(\d+)/g)].map((m) => `${m[1]}:${m[2]}`);
+};
+
+export const mcpEndpoint = async (c: Client, daemon: Daemon, token: string) => {
+  // Any Constellation RPC loads the lazy MCP listener.
+  await run(c.client["constellation.defaults.get"]({}).pipe(Effect.ignore));
+  return until("MCP listener", async () => {
+    for (const l of listeners(daemon.pid)) {
+      const url = `http://${l}/mcp/${token}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 0, method: "tools/list" }),
+      }).catch(() => null);
+      if (r?.ok) {
+        const body: any = await r.json().catch(() => null);
+        if (body?.result?.tools) return url;
+      }
+    }
+    return null;
+  });
+};
+
+export const mcpCall = async (url: string, name: string, args: unknown) => {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: crypto.randomUUID(),
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+  });
+  return ((await r.json()) as any).result;
+};
+
+// ---------- OTLP collector ----------
+export interface Received {
+  path: string;
+  contentType: string;
+  headers: Record<string, string>;
+  spans: Array<{ name: string; service: string }>;
+}
+
+const dummyContext = {
+  checkout: "/collector",
+  workspaceId: "collector",
+  sessionId: null,
+  turns: [],
+  launchedTurn: null,
+};
+
+/** A local OTLP/HTTP receiver that records every request's path, headers and decoded span names. */
+export const collector = (label: string) => {
+  const received: Received[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const url = new URL(req.url);
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      const contentType = (req.headers.get("content-type") ?? "").split(";")[0]!.trim();
+      const headers: Record<string, string> = {};
+      req.headers.forEach((v, k) => (headers[k] = v));
+      let spans: Received["spans"] = [];
+      if (url.pathname.endsWith("/v1/traces")) {
+        try {
+          spans = decodeBatch(bytes, "traces", contentType, dummyContext as any).spans.map(
+            (s: any) => ({ name: s.name, service: s.service })
+          );
+        } catch (e) {
+          spans = [{ name: `<undecodable ${String(e)}>`, service: "" }];
+        }
+      }
+      received.push({ path: url.pathname, contentType, headers, spans });
+      return contentType === "application/json"
+        ? Response.json({})
+        : new Response(new Uint8Array(), { headers: { "content-type": contentType } });
+    },
+  });
+  const origin = `http://127.0.0.1:${server.port}`;
+  note(`collector ${label}`, origin);
+  return {
+    origin,
+    received,
+    spanNames: () => received.flatMap((r) => r.spans.map((s) => `${s.service}:${s.name}`)),
+    stop: () => server.stop(true),
+  };
+};
+
+// ---------- app files ----------
+/** OTel NodeSDK set up as the polaris-tracing skill describes; exporter from OTEL_* env unless VENDOR is set. */
+export const instrumentationSource = (vendorUrl: string | null, ownHttp = true) => `
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { trace } from "@opentelemetry/api";
+process.env.OTEL_BSP_SCHEDULE_DELAY ??= "200";
+const service = process.env.OTEL_SERVICE_NAME ?? process.argv[2] ?? "app";
+const sdk = new NodeSDK({
+  serviceName: service,
+  traceExporter: new OTLPTraceExporter(${vendorUrl ? JSON.stringify({ url: vendorUrl }) : ""}),
+  metricReaders: [],
+  instrumentations: ${ownHttp ? '[getNodeAutoInstrumentations({ "@opentelemetry/instrumentation-fs": { enabled: false } })]' : "[]"},
+});
+sdk.start();
+globalThis.__g4 = { sdk, trace };
+`;
+
+/** CJS server: routes rename the server span; /call-b propagates context to service B; /shutdown flushes, closes, and lets Node exit naturally (beforeExit flushes a Polaris preload too; 7 means it hung). */
+export const appSource = `
+const http = require("http");
+const fs = require("fs");
+const [, , service, portFile, downstream] = process.argv;
+const { sdk, trace } = globalThis.__g4 ?? {};
+const tracer = trace?.getTracer("g4-app");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const server = http.createServer(async (req, res) => {
+  const route = req.url.split("?")[0];
+  const span = trace?.getActiveSpan();
+  if (span && route !== "/shutdown") span.updateName("GET " + route);
+  try {
+    if (route === "/fast") { await sleep(5); res.end("fast"); }
+    else if (route === "/slow") { await sleep(60); res.end("slow"); }
+    else if (route === "/new") { await tracer.startActiveSpan("inventory.reserve", async (s) => { await sleep(30); s.end(); }); res.end("new"); }
+    else if (route === "/manual") { tracer.startActiveSpan("app-manual-span", (s) => s.end()); res.end("manual"); }
+    else if (route === "/call-b") { const r = await fetch(downstream + "/stock"); res.end("b:" + (await r.text())); }
+    else if (route === "/stock") { await tracer.startActiveSpan("stock.lookup", async (s) => { await sleep(10); s.end(); }); res.end("42"); }
+    else if (route === "/env") { res.end(JSON.stringify({ nodeOptions: process.env.NODE_OPTIONS ?? null, polarisOtel: process.env.POLARIS_OTEL_ENDPOINT ? "set" : null, otlpHeaders: process.env.OTEL_EXPORTER_OTLP_HEADERS ? "set" : null, override: process.env.POLARIS_OTEL_OVERRIDE ?? null, otlpEndpoint: (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").replace(/otlp\\/[^/]+/, "otlp/<token>") })); }
+    else if (route === "/shutdown") { res.end("bye", () => { server.close(); server.closeAllConnections(); }); await sdk?.shutdown(); setTimeout(() => process.exit(7), 10000).unref(); }
+    else res.end("ok");
+  } catch (e) { res.statusCode = 500; res.end(String(e)); }
+});
+server.listen(0, "127.0.0.1", () => fs.writeFileSync(portFile, String(server.address().port)));
+`;
+
+/** Lay out an app package in dir with symlinked OTel node_modules. */
+export const writeApp = async (
+  dir: string,
+  opts: { vendorUrl?: string | null; withSdkDependency?: boolean; name?: string; ownHttp?: boolean } = {}
+) => {
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "instr.mjs"), instrumentationSource(opts.vendorUrl ?? null, opts.ownHttp ?? true));
+  await writeFile(join(dir, "app.cjs"), appSource);
+  await writeFile(
+    join(dir, "package.json"),
+    JSON.stringify(
+      {
+        name: opts.name ?? "g4-app",
+        private: true,
+        dependencies:
+          opts.withSdkDependency === false
+            ? {}
+            : {
+                "@opentelemetry/api": "^1.10.0",
+                "@opentelemetry/sdk-node": "^0.300.0",
+                "@opentelemetry/exporter-trace-otlp-proto": "^0.300.0",
+                "@opentelemetry/auto-instrumentations-node": "^0.82.0",
+              },
+      },
+      null,
+      1
+    )
+  );
+  if (!existsSync(join(dir, "node_modules"))) await symlink(OTEL_MODULES, join(dir, "node_modules"));
+};
+
+export const makeWorkspace = async (prefix: string) =>
+  realpath(tracked(await mkdtemp(`/tmp/${prefix}-`)));
+
+export const readPort = (file: string) =>
+  until(`port file ${file}`, () => (existsSync(file) ? Number(readFileSync(file, "utf8")) || null : null));
+
+export const get = async (port: number, path: string) => {
+  const r = await fetch(`http://127.0.0.1:${port}${path}`);
+  return { status: r.status, body: await r.text() };
+};
+
+// ---------- terminals ----------
+export const openTerminal = async (c: Client, cwd: string, argv: string[] | null) => {
+  const { terminalId } = await run<any>(c.client["terminal.open"]({ cwd, cols: 120, rows: 40, argv }));
+  let output = "";
+  let exit: number | null | undefined = undefined;
+  const fiber = Effect.runFork(
+    Stream.runForEach(c.client["terminal.attach"]({ terminalId }), (item: any) =>
+      Effect.sync(() => {
+        if (item._tag === "Output") output += new TextDecoder().decode(item.data);
+        else exit = item.code;
+      })
+    ) as any
+  );
+  return {
+    terminalId,
+    output: () => output,
+    exit: () => exit,
+    input: (text: string) =>
+      run(c.client["terminal.input"]({ terminalId, data: new TextEncoder().encode(text) })),
+    close: async () => {
+      await run(c.client["terminal.close"]({ terminalId }).pipe(Effect.ignore));
+      await run(Fiber.interrupt(fiber as any));
+    },
+  };
+};
+
+// ---------- teardown ----------
+export const finish = async (log: string, extra: Array<() => unknown> = []) => {
+  for (const f of extra) {
+    try {
+      await f();
+    } catch {}
+  }
+  for (const p of spawned) if (p.exitCode === null && p.signalCode === null) p.kill("SIGKILL");
+  for (const p of cleanupPaths) await rm(p, { recursive: true, force: true });
+  note("cleaned up", cleanupPaths);
+  const summary = results.map((r) => `${r.pass ? "PASS" : "FAIL"} ${r.name}`);
+  console.log("SUMMARY " + JSON.stringify(summary, null, 1));
+  await appendFile(log, "");
+  process.exit(results.length > 0 && results.every((r) => r.pass) ? 0 : 1);
+};
+
+export { Effect, Stream, Schema, Option };

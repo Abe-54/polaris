@@ -154,6 +154,8 @@ export const PullReview = ({ subject }: { readonly subject: PullSubject }) => {
         diff={diff}
         session={null}
         mergeBase={state.kind === "ready" ? state.checkout.mergeBase : null}
+        schema={null}
+        traces={null}
         pullViewed={
           scope !== null
             ? null

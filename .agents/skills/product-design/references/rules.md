@@ -19,6 +19,7 @@ the full text is in the named canonical file; do not restate it.
 | rule/low-confidence-dims | DESIGN.md, Colors, Named Rules | agent |
 | rule/syntax-is-moonlit | DESIGN.md, Colors, Named Rules | agent |
 | rule/git-is-a-letter | DESIGN.md, Colors, Named Rules | agent |
+| rule/data-source-label | DESIGN.md, Data | agent |
 | rule/sentence-case | DESIGN.md, Typography, Named Rules | agent |
 | rule/glossary-lowercase | DESIGN.md, Typography, Named Rules | agent |
 | rule/tabular-numbers | DESIGN.md, Typography, Named Rules | agent |

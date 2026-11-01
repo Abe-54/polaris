@@ -7,7 +7,7 @@
  * Each start records `{ pid, url }`, so a Daemon that crashed and left its server
  * running stops it on the next start instead of leaking it.
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Duration, Effect, Option, Schema, type Scope, Semaphore } from "effect";
@@ -147,7 +147,7 @@ export const acquireServer = (
       chmodSync(passwordFile, 0o600);
 
       const proc = Bun.spawn([opencodePath, "serve", "--hostname", "127.0.0.1", "--port", "0"], {
-        env: childEnv({ ...(options.env ?? process.env), OPENCODE_SERVER_PASSWORD: password }),
+        env: harnessEnv({ ...(options.env ?? process.env), OPENCODE_SERVER_PASSWORD: password }),
         stdin: "ignore",
         stdout: "pipe",
         stderr: Bun.file(logFile),

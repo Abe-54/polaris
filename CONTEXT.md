@@ -309,6 +309,14 @@ _Avoid_: Next edit suggestion, NES, ghost edit, autocomplete
 The searchable list of every command in the Desktop App, opened with ⌘⇧P; a surface of its own, separate from the jump menu.
 _Avoid_: Command menu, action bar
 
+**Data**:
+The view for browsing and querying the Data Sources of the selected Agent Session's checkout, and for inspecting the Queries its agents ran.
+_Avoid_: SQL client, database view, DB tab
+
+**Traces**:
+The view for inspecting the Traces that code run in the selected Agent Session's checkout sent to Polaris, by its agents or by the user, and the Turns that produced them.
+_Avoid_: Runtime view (Runtime is avoided for Harness), APM, observability tab
+
 **Browser**:
 An Agent Session's web browser in its Output, holding that session's own tabs, which the user and the session's agents (Subagents included) both use; its logins and cookies are shared across the Workspace.
 _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
@@ -316,6 +324,47 @@ _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
 **Host address**:
 A loopback URL opened in a Browser (`localhost`, any `*.localhost` name such as a Portless app, or a loopback IP), which always means the Agent Session's Host, never the machine the Client runs on; any other URL loads from the Client's own network.
 _Avoid_: Forwarded port, tunnel, local URL
+
+### Data
+
+**Data Source**:
+A database a checkout (a Worktree or the Workspace's own directory) can reach, found in its environment files, framework configuration or compose file, or added by the user. Agent Sessions in the same checkout share its Data Sources. An agent names a Data Source and never sees its credentials.
+_Avoid_: Connection (that is Connection State), database URL, datasource, DB
+
+**Local Data Source**:
+A Data Source on the Host itself: a loopback or Unix-socket listener owned by a known database server, or a verified proxy for a compose database published from this checkout. Agents may read it without asking. Tunnels and unknown listener owners are Remote.
+
+**Remote Data Source**:
+Any Data Source that is not Local; no agent reaches it until it has a Data Source Approval, and no agent writes to it unless the user has also allowed writes there.
+
+**Data Source Approval**:
+The user's remembered, per-Host choice that lets agents read one Remote Data Source (its exact server, database and user) or every database on one server; a Data Source that starts pointing somewhere else needs a new one.
+_Avoid_: Trust (that lets Polaris run a Workspace's code), allowlist
+
+**Query**:
+One SQL statement run against a Data Source, by the user in Data or by an agent through Polaris, recorded with who ran it and in which Turn.
+
+**Query Log**:
+The record of every Query against a checkout's Data Sources, attributed to its Agent Session and Turn, which the user can inspect and run again; agent queries that bypassed Polaris (a `psql` Tool Call) appear in it, marked as such.
+_Avoid_: Query history (alone), audit log
+
+**Schema Diff**:
+What changed in the tables, columns and indexes of a Data Source an Agent Session used, between the start and end of a Turn; Review shows it beside the code that caused it, such as a migration.
+_Avoid_: Migration diff, DDL diff
+
+### Traces
+
+**Trace**:
+The record of one operation through running code, such as an HTTP request or a test, made of Spans, sent to Polaris by code that runs with Polaris's endpoint.
+_Avoid_: Request (an HTTP request is one kind of Span), log
+
+**Span**:
+One timed step of a Trace, with its attributes and the log records written during it; a Span whose operation failed is an error Span.
+_Avoid_: Event (that is the event log's)
+
+**Profile**:
+A CPU profile of one process Polaris launched, recorded over a stretch of time and shown as a flame chart beside the Spans it overlaps.
+_Avoid_: Flame graph (that is how a Profile is drawn), trace
 
 ### Language tooling
 

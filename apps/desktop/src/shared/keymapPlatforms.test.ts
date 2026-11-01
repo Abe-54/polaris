@@ -144,6 +144,8 @@ describe("Windows and Linux keys", () => {
       "view.orchestrate": "Alt+1",
       "view.review": "Alt+2",
       "view.edit": "Alt+3",
+      "view.data": "Alt+4",
+      "view.traces": "Alt+5",
       "view.output": "Ctrl+Shift+B",
       "session.next": "Ctrl+Page Down / Ctrl+Tab",
       "session.previous": "Ctrl+Page Up / Ctrl+Shift+Tab",
@@ -205,9 +207,11 @@ const noConflicts = (platform: KeyPlatform) => {
     const seen = new Map<string, CommandId>();
     const bindings = keymapFor(platform);
 
+    const shares = (id: CommandId) => bindings.find((x) => x.id === id)?.shares;
+
+    // Siblings that both share one command (Data's and Traces' ⌘L) are declared too.
     const declared = (a: CommandId, b: CommandId) =>
-      bindings.find((x) => x.id === a)?.shares === b ||
-      bindings.find((x) => x.id === b)?.shares === a;
+      shares(a) === b || shares(b) === a || (shares(a) !== undefined && shares(a) === shares(b));
 
     for (const { id, key: k } of chords) {
       const other = seen.get(k);

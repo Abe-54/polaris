@@ -1,0 +1,64 @@
+/** RX probe: Desktop Queries through the production composition and data.query.stream. Not committed. */
+import { DataRpcs } from "@polaris/protocol";
+import { SQL } from "bun";
+import { Effect, Exit, Layer, Redacted, Stream } from "effect";
+import { RpcTest } from "effect/rpc";
+import { useFileSecretsForTests } from "../secrets/index.ts";
+import { EventStore } from "../store/EventStore.ts";
+import { dataServices } from "../transport/serve.ts";
+import { DataRpcsLive } from "./index.ts";
+import { seedDataSessionAt, started } from "./approvals.testing.ts";
+import { paths } from "../paths.ts";
+import { tableSql } from "../../../desktop/src/renderer/features/data/ui/table/sql.ts";
+
+useFileSecretsForTests();
+const services = DataRpcsLive.pipe(Layer.provideMerge(dataServices), Layer.provideMerge(EventStore.layerSqlite(":memory:")));
+const ENGINES = {
+  postgres: { port: 55432, admin: process.env.RX_PG_URL!, user: "postgres" },
+  mysql: { port: 53306, admin: process.env.RX_MYSQL_URL!, user: "root" },
+} as const;
+
+await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+  yield* seedDataSessionAt(paths().root);
+  const client = yield* RpcTest.makeClient(DataRpcs);
+  const sessionId = started.session.id;
+  for (const engine of ["postgres", "mysql"] as const) {
+    const e = ENGINES[engine];
+    const admin = new SQL({ url: e.admin, max: 1, ...(engine === "mysql" ? { allowPublicKeyRetrieval: true } : {}) } as never);
+    yield* Effect.promise(async () => {
+      await admin.unsafe("DROP TABLE IF EXISTS rx_events");
+      await admin.unsafe("CREATE TABLE rx_events (id INT PRIMARY KEY, v VARCHAR(20))");
+      await admin.unsafe("INSERT INTO rx_events VALUES (1, 'a')");
+    });
+    const saved = yield* client["data.source.save"]({ sessionId, name: `rx-${engine}`, engine, host: "127.0.0.1",
+      port: e.port, database: "ledger", user: e.user, password: Redacted.make(process.env.RX_PASSWORD!), label: { text: "", colour: "none" } });
+    const filters = [
+      "false; commit; insert into rx_events values (999999,'w'); select 1 as id",
+      "id = 1; insert into rx_events values (999998,'w')",
+      "id = 1 /* ; */ ; insert into rx_events values (999997,'w')",
+      "id = 1 -- ;\n; insert into rx_events values (999996,'w')",
+      engine === "mysql" ? "id = 1 # c\n; insert into rx_events values (999995,'w')" : "id = 1 /* /* */ ; */ ; insert into rx_events values (999995,'w')",
+      "v = 'x;y'",
+      "id = 1 --",
+    ];
+    const sqlTab = [
+      "select 1; insert into rx_events values (999994,'w')",
+      "commit; insert into rx_events values (999993,'w')",
+      "select 1 /* hide ; */; insert into rx_events values (999992,'w')",
+      `select '${process.env.RX_PASSWORD}' AS pw, 1/0 AS boom`,
+    ];
+    const cases = [...filters.map((f) => tableSql({ engine, table: "rx_events", filter: f, orderBy: ["id"], limit: 200, offset: 0 })), ...sqlTab];
+    for (const sql of cases) {
+      const exit = yield* Stream.runCollect(client["data.query.stream"]({ sessionId, source: saved.id, sql })).pipe(Effect.exit);
+      const out = Exit.isSuccess(exit) ? `ok ${JSON.stringify(exit.value).slice(0, 90)}` : String(exit.cause).replace(/\s+/g, " ").slice(0, 140);
+      console.log(`[${engine}] ${JSON.stringify(sql).slice(0, 110)} => ${out}`);
+    }
+    const rows = yield* Effect.promise(() => admin.unsafe("SELECT id FROM rx_events ORDER BY id"));
+    console.log(`[${engine}] rx_events ids after all cases:`, JSON.stringify(rows.map((r: { id: number }) => r.id)));
+    yield* Effect.promise(async () => { await admin.unsafe("DROP TABLE IF EXISTS rx_events"); await admin.close({ timeout: 0 }); });
+  }
+  const log = yield* client["data.queryLog.page"]({ sessionId, limit: 100 });
+  const text = JSON.stringify(log);
+  console.log("log entries:", log.entries.length, "password in log:", text.includes(process.env.RX_PASSWORD!));
+  for (const entry of log.entries.slice(0, 40)) console.log("  log", entry.state, entry.author.kind, JSON.stringify(entry.sql).slice(0, 70), entry.error ? `err=${entry.error.slice(0, 80)}` : "", entry.params ? `params=${JSON.stringify(entry.params)}` : "");
+})).pipe(Effect.provide(services)));

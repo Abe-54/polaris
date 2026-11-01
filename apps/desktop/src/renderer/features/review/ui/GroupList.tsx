@@ -12,6 +12,10 @@ import type { ReviewFile } from "../model/layout.ts";
 import type { MarkSeverity } from "../model/marks.ts";
 import { FileRow } from "./FileRows.tsx";
 import { IntentGlyph } from "./IntentGlyph.tsx";
+import { isMigrationPath, placeData } from "../schema/model.ts";
+import type { FileListTraces } from "../traces/section.ts";
+import type { FileListData } from "./FileList.tsx";
+import { isSectionRow, SectionRow, type SectionListRow, sectionRows } from "./SectionRow.tsx";
 
 export interface GroupListProps {
   readonly groups: ReadonlyArray<FileGroup>;
@@ -21,7 +25,18 @@ export interface GroupListProps {
   readonly current: string | null;
   readonly onOpen: (key: string) => void;
   readonly onViewed: (key: string, viewed: boolean) => void;
+  readonly data: FileListData | null;
+  readonly traces: FileListTraces | null;
 }
+
+type Row = GroupListRow | SectionListRow;
+
+/** A migration's row, or a folded group holding one: the Data section follows it. */
+const isMigrationRow = (row: Row) => {
+  if (row.kind === "file") return isMigrationPath(row.file.file.path);
+
+  return row.kind === "group" && row.head.group.files.some((f) => isMigrationPath(f.file.path));
+};
 
 const ROW_HEIGHT = 28;
 
@@ -61,8 +76,10 @@ const GroupRow = ({
   );
 };
 
-const keyOf = (row: GroupListRow | undefined) => {
+const keyOf = (row: Row | undefined) => {
   if (row === undefined) return "none";
+
+  if (isSectionRow(row)) return row.key;
 
   if (row.kind === "group") return `group:${row.head.group.key}`;
 
@@ -75,7 +92,12 @@ export const GroupList = (props: GroupListProps) => {
   const [chosen, setChosen] = useState<ReadonlySet<string> | null>(null);
   const open = chosen ?? new Set(first === undefined ? [] : [first.key]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const rows = groupListRows(props.groups, props.viewedOf, props.severities, open);
+
+  const rows = placeData<Row>(
+    groupListRows(props.groups, props.viewedOf, props.severities, open),
+    sectionRows(props.data, props.traces),
+    isMigrationRow
+  );
 
   const toggle = (key: string) =>
     setChosen(() => {
@@ -94,7 +116,9 @@ export const GroupList = (props: GroupListProps) => {
     overscan: 12,
   });
 
-  const render = (row: GroupListRow) => {
+  const render = (row: Row) => {
+    if (isSectionRow(row)) return <SectionRow row={row} data={props.data} traces={props.traces} />;
+
     if (row.kind === "group") return <GroupRow head={row.head} onToggle={toggle} />;
 
     if (row.kind === "summary")

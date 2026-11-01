@@ -109,6 +109,72 @@ const run = (label: string, argv: ReadonlyArray<string>, expectFailure = false) 
 
 run("typecheck polaris.qnt", ["typecheck", "polaris.qnt"]);
 
+run("Schema Diff attribution scenarios", ["test", "polaris.qnt", "--main=data_snapshots"]);
+
+run("Schema Diff attribution safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_snapshots",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
+run("Inspector attach approval scenarios", ["test", "polaris.qnt", "--main=profile_attach"]);
+
+run("Inspector attach approval safety", [
+  "run",
+  "polaris.qnt",
+  "--main=profile_attach",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
+run("Data approval scenarios", ["test", "polaris.qnt", "--main=data_approvals"]);
+
+run("Data approval safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_approvals",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
+run("Data write scenarios", ["test", "polaris.qnt", "--main=data_writes"]);
+
+run("Data write safety", [
+  "run",
+  "polaris.qnt",
+  "--main=data_writes",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
+for (const mutant of ["default", "once", "cards"]) {
+  const main = `data_approvals_${mutant}_mutant`;
+  run(`Data approval ${mutant} regression witness`, ["test", "polaris.qnt", `--main=${main}`]);
+  run(
+    `Data approval ${mutant} mutant violates safety`,
+    [
+      "run",
+      "polaris.qnt",
+      `--main=${main}`,
+      "--invariant=safety",
+      `--max-samples=${samples}`,
+      "--max-steps=60",
+      `--seed=${seed}`,
+    ],
+    true
+  );
+}
+
 run("typecheck polaris_test.qnt", ["typecheck", "polaris_test.qnt"]);
 
 run("typecheck worker-admission.qnt", ["typecheck", "worker-admission.qnt"]);

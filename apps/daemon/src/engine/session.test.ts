@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { describe, expect, test } from "bun:test";
 import {
   ApprovalDecision,
@@ -142,8 +143,8 @@ describe("session machine", () => {
 
     // Update README.md when these move.
     expect(counts).toEqual([
-      [47, 277],
-      [55, 367],
+      [47, 285],
+      [55, 377],
     ]);
   });
 
@@ -462,4 +463,93 @@ describe("session machine", () => {
       expect(decideSession(idle, { type: "idle.timeout", harnessLive: false }).events).toEqual([]);
     });
   });
+});
+
+test("inspector requests cannot come from a Harness or accept a remembered grant", () => {
+  const before = record(run(["start"]));
+  const turnId = workingTurn(before)!.id;
+
+  const request = Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(requestFor(turnId)),
+    kind: "tool",
+    profileAttach: { pid: 42, command: "node server.js", runtime: "node", seconds: 5 },
+  });
+
+  expect(decideSession(before, { type: "harness.approvalRequested", request }).events).toEqual([]);
+  expect(decideSession(before, { type: "data.approvalRequested", request }).events).toEqual([]);
+
+  const opened = decideSession(before, { type: "inspector.approvalRequested", request }).next
+    .context.record!;
+
+  expect(opened.session.state).toBe("needs-you");
+
+  for (const decision of [
+    ApprovalDecision.cases.Allow.make({ remember: true }),
+    ApprovalDecision.cases.Answer.make({ text: "yes" }),
+  ]) {
+    const refused = decideSession(opened, {
+      type: "approval.respond",
+      requestId: request.id,
+      decision,
+      resolvedBy: "user",
+    });
+
+    expect(refused.events).toEqual([]);
+    expect(refused.rejection).not.toBeNull();
+  }
+
+  const allowed = decideSession(opened, {
+    type: "approval.respond",
+    requestId: request.id,
+    decision: ApprovalDecision.cases.Allow.make({ remember: false }),
+    resolvedBy: "user",
+  });
+
+  expect(allowed.next.context.record!.session.state).toBe("working");
+  expect(allowed.next.context.record!.pending.size).toBe(0);
+});
+
+test("P9-5: upgrade withdraws orphaned inspector approval without taking terminal control", () => {
+  const pending = record(
+    run(["start", "complete", "openTerminal", "terminalTurn", "requestAttach"], codex)
+  );
+
+  expect(pending.session.state).toBe("in-terminal");
+  expect(pending.pending.size).toBe(1);
+
+  const next = decideSession(pending, { type: "daemon.recover", cause: "upgrade", at: AT }).next
+    .context.record!;
+
+  expect(next.session.state).toBe("in-terminal");
+  expect(next.pending.size).toBe(0);
+  expect(workingTurn(next)?.id).toBe(workingTurn(pending)?.id);
+});
+
+test("P9-5: a Data approval also preserves In Terminal and is withdrawn on upgrade", () => {
+  const before = record(run(["start", "complete", "openTerminal", "terminalTurn"], codex));
+
+  const request = Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(requestFor(workingTurn(before)!.id)),
+    dataSource: {
+      sourceId: "db",
+      sourceName: "Database",
+      engine: "postgres",
+      host: "db.example",
+      port: 5432,
+      database: "app",
+      user: "reader",
+    },
+  });
+
+  const pending = decideSession(before, { type: "data.approvalRequested", request }).next.context
+    .record!;
+
+  expect(pending.session.state).toBe("in-terminal");
+  expect(pending.pending.size).toBe(1);
+
+  const next = decideSession(pending, { type: "daemon.recover", cause: "upgrade", at: AT }).next
+    .context.record!;
+
+  expect(next.pending.size).toBe(0);
+  expect(next.session.state).toBe("in-terminal");
 });

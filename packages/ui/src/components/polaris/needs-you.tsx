@@ -68,9 +68,11 @@ export function NeedsYouCard({
             <Button variant="primary" size="xs" onClick={approval.onApprove}>
               Approve
             </Button>
-            <Button size="xs" className="px-2" onClick={approval.onAlwaysAllow}>
-              Always here
-            </Button>
+            {approval.onAlwaysAllow === undefined ? null : (
+              <Button size="xs" className="px-2" onClick={approval.onAlwaysAllow}>
+                Always here
+              </Button>
+            )}
             <span className="flex-1" />
             <Button variant="ghost" size="xs" className="px-1.5" onClick={approval.onDeny}>
               Deny

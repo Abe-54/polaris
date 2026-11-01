@@ -37,7 +37,16 @@ import type {
   Place,
   WaitingSession,
 } from "../model/inbox.ts";
-import { approve, continueTurn, deny, retryTurn, takeBack } from "../respond.ts";
+import { offersAlwaysAllow } from "../../data/approval/decide.ts";
+import { DENY_PROMPT, dryRunKicker, writeName, writeWants } from "../../data/write/model.ts";
+import {
+  type ApprovalTarget,
+  approve,
+  continueTurn,
+  deny,
+  retryTurn,
+  takeBack,
+} from "../respond.ts";
 import { clientCopy } from "../../../../shared/clientCopy.ts";
 import { secretLine } from "../../session/model/secret.ts";
 
@@ -96,9 +105,39 @@ const Dismissable = ({
   </div>
 );
 
-/** A question's ask; a secret's label only, its reason staying in the session's card. */
-const inboxAsk = (request: ApprovalRequest) =>
-  request.kind === "secret" ? secretLine(request.title) : request.title;
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A question's ask; a secret's label only, its reason staying in the session's card; a write's. */
+const inboxAsk = (request: ApprovalRequest) => {
+  if (request.dataWrite !== undefined)
+    return `${capitalize(writeWants(request.dataWrite))} · ${dryRunKicker(request.dataWrite).toLowerCase()}`;
+
+  return request.kind === "secret" ? secretLine(request.title) : request.title;
+};
+
+/** A write is answered in its card, where its SQL and dry run are: both open it. */
+const writeAnswers = (target: ApprovalTarget, open: () => void): ReadonlyArray<CardAction> => {
+  const write = target.request.dataWrite;
+
+  return write === undefined
+    ? []
+    : [
+        { label: `Review the ${writeName(write)}`, run: open },
+        {
+          label: `${DENY_PROMPT}…`,
+          run: () => void deny(target, open),
+          command: "approval.deny",
+        },
+      ];
+};
+
+/** The card's answers; Always allow only where the request offers it. */
+interface Answering {
+  readonly command: string;
+  readonly onApprove: () => void;
+  readonly onDeny: () => void;
+  onAlwaysAllow?: () => void;
+}
 
 const Waiting = ({
   item,
@@ -113,20 +152,31 @@ const Waiting = ({
   const selection = useSelection();
   const { session } = item.entry;
   const request = item.requests[0];
-  const target = { hostKey: item.hostKey, sessionId: session.id, requestId: request?.id ?? "" };
   const open = () => selectSession({ hostKey: item.hostKey, sessionId: session.id });
   const more = item.requests.length > 1 ? ` · ${item.requests.length} waiting` : "";
 
   if (request === undefined) return null;
+  const target = { hostKey: item.hostKey, sessionId: session.id, request };
 
-  // A question is answered, and a secret typed, only in the session's own card.
-  const inCard = request.kind === "question" || request.kind === "secret";
+  const answering: Answering = {
+    command: request.detail ?? request.title,
+    onApprove: () => void approve(target),
+    onDeny: () => void deny(target),
+  };
+
+  const always = offersAlwaysAllow(request);
+
+  if (always) answering.onAlwaysAllow = () => void approve(target, true);
+
+  // A question is answered, a secret typed and a write's reason given only in the session's card.
+  const write = request.dataWrite !== undefined;
+  const inCard = request.kind === "question" || request.kind === "secret" || write;
 
   const answers: ReadonlyArray<CardAction> = inCard
-    ? []
+    ? writeAnswers(target, open)
     : [
         { label: "Approve", run: () => void approve(target), command: "approval.approve" },
-        { label: "Always allow", run: () => void approve(target, true) },
+        ...(always ? [{ label: "Always allow", run: () => void approve(target, true) }] : []),
         { label: "Deny", run: () => void deny(target), command: "approval.deny" },
       ];
 
@@ -140,16 +190,7 @@ const Waiting = ({
         selected={selection.pane === "session" && selection.sessionId === session.id}
         title={<Title onOpen={open}>{session.title}</Title>}
         where={`${where(item, item.since, now)}${more}`}
-        {...(inCard
-          ? { question: inboxAsk(request) }
-          : {
-              approval: {
-                command: request.detail ?? request.title,
-                onApprove: () => void approve(target),
-                onAlwaysAllow: () => void approve(target, true),
-                onDeny: () => void deny(target),
-              },
-            })}
+        {...(inCard ? { question: inboxAsk(request) } : { approval: answering })}
       />
     </CardMenu>
   );

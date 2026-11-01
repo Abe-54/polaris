@@ -3,7 +3,7 @@
  * each its own section with a divider, or one Turn picked in the header.
  */
 import { harnessHue } from "@polaris/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SessionSubject } from "../../../routes/review.ts";
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { hasCapability, useSession } from "../../session/hooks.ts";
@@ -20,15 +20,26 @@ import { reviewSlots, subjectKey } from "../surface.ts";
 import { ReviewBody } from "./ReviewBody.tsx";
 import { SessionHeader } from "./SubjectHeader.tsx";
 import { useWorkerCaption } from "../constellation/useWorkerCaption.ts";
+import { useReviewSchema } from "../schema/useReviewSchema.ts";
+import { useReviewTraces } from "../traces/useReviewTraces.ts";
 
 const ALL: TurnPick = { kind: "all" };
+
+/** The pick a subject opens with: its Turn when it names one, else every Turn. */
+export const subjectPick = (subject: SessionSubject): TurnPick =>
+  subject.turnId === undefined ? ALL : { kind: "turn", turnId: subject.turnId };
 
 export const SessionReview = ({ subject }: { readonly subject: SessionSubject }) => {
   const { hostKey, sessionId } = subject;
   const model = useSession(hostKey, sessionId);
   const host = useApp((s) => s.hosts.find((h) => h.key === hostKey));
   const workspaces = useApp((s) => s.hostModels[hostKey]?.workspaces);
-  const [pick, setPick] = useState<TurnPick>(ALL);
+  const [pick, setPick] = useState<TurnPick>(() => subjectPick(subject));
+
+  // Opened again at a Turn while shown (the Data tab's "Schema diff"): that Turn is picked.
+  useEffect(() => {
+    if (subject.turnId !== undefined) setPick(subjectPick(subject));
+  }, [subject]);
   const { session } = model;
   const turns = reviewTurns(model.turns);
   const spans = hasCapability(host, "git.diff-turns");
@@ -45,6 +56,17 @@ export const SessionReview = ({ subject }: { readonly subject: SessionSubject })
     session === null ? undefined : (workspaces?.get(session.workspaceId)?.name ?? undefined);
 
   const worker = useWorkerCaption(hostKey, sessionId);
+  const schema = useReviewSchema({ hostKey, sessionId, host, turns, pick, views: model.turns });
+
+  const traces = useReviewTraces({
+    hostKey,
+    sessionId,
+    host,
+    turns,
+    pending,
+    pick,
+    views: model.turns,
+  });
 
   const caption = [
     session === null ? null : harnessHue(session.harness).name,
@@ -82,6 +104,8 @@ export const SessionReview = ({ subject }: { readonly subject: SessionSubject })
           session === null ? null : { hostKey, root: session.cwd, workspaceId: session.workspaceId }
         }
         diff={diff}
+        schema={schema}
+        traces={traces}
         pullViewed={null}
         mergeBase={null}
         session={{

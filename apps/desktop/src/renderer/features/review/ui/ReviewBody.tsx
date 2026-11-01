@@ -3,7 +3,7 @@
  * diff while it loads, fails or waits for a Review Checkout), and the risk panel (the Risk
  * Summary slot and its foot slot). The file list goes under the queue (`filesSlot.tsx`).
  */
-import { EmptyState, Panel, PixelForkIcon, SegmentedControl } from "@polaris/ui";
+import { cn, EmptyState, Panel, PixelForkIcon, SegmentedControl } from "@polaris/ui";
 import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs";
 import { type ReactNode, useEffect, useMemo } from "react";
 import { useStore } from "zustand";
@@ -39,6 +39,11 @@ import { FileList } from "./FileList.tsx";
 import { InFilesSlot } from "./filesSlot.tsx";
 import { useThemeType } from "../../diffs/index.ts";
 import { type PullViewed, useReviewModel } from "./useReviewModel.ts";
+import { SchemaDiffBody } from "../schema/SchemaDiffBody.tsx";
+import { type ReviewSchema, useSchemaSection } from "../schema/section.ts";
+import { TracesCompareBody } from "../traces/TracesCompareBody.tsx";
+import { useTracesSection } from "../traces/section.ts";
+import type { ReviewTraces } from "../traces/useReviewTraces.ts";
 
 export interface Placeholder {
   readonly title: string;
@@ -61,6 +66,10 @@ export interface ReviewBodyProps {
   readonly place: EditorPlace | null;
   /** The subject's header, at the top of the diff's panel. */
   readonly header: ReactNode;
+  /** An Agent Session's Schema Diff (ENG-645); null for a pull request or without one. */
+  readonly schema: ReviewSchema | null;
+  /** An Agent Session's route timings (ENG-660); null for a pull request or without them. */
+  readonly traces: ReviewTraces | null;
 }
 
 /** The right panel: the Risk Summary card and its foot (the Reviewer's composer). */
@@ -157,7 +166,13 @@ const Ready = ({
   session,
   mergeBase,
   header,
+  schema,
+  traces,
 }: ReviewBodyProps & { readonly diff: Extract<ReviewDiff, { readonly kind: "ready" }> }) => {
+  const section = useSchemaSection(subjectKey, schema);
+  const timings = useTracesSection(subjectKey, traces);
+  // A Schema Diff or Route timings stands in for the diff until a file is opened.
+  const replaced = section.shown !== null || timings.shown;
   const surface = useStore(surfaceStore, (s) => s[subjectKey] ?? emptySurface);
   const themeType = useThemeType();
   const risk = useRisk(subjectKey);
@@ -217,6 +232,8 @@ const Ready = ({
           notice={scaleNotice(diff.scale, model.files.length)}
           onOpen={(file) => {
             setTab(subjectKey, "changes");
+            section.closeSchema();
+            timings.closeTraces();
             model.open(file);
           }}
           onViewed={model.setViewed}
@@ -225,6 +242,8 @@ const Ready = ({
           grouping={model.grouping}
           mode={listMode}
           onMode={setListGrouping}
+          data={section.data}
+          traces={timings.list}
         />
       </InFilesSlot>
       <DiffPanel header={header}>
@@ -242,37 +261,58 @@ const Ready = ({
               data-complete={diff.complete ? "" : undefined}
               data-files={model.files.length}
             >
-              {session !== null && pane.kind !== "message" && (
+              {session !== null && pane.kind !== "message" && !replaced && (
                 <SessionGroupingBar grouping={model.grouping} />
               )}
-              {pane.kind === "message" ? (
-                <Waiting placeholder={{ title: pane.title, fact: pane.fact }} />
-              ) : (
-                <DiffPane
-                  items={model.items}
-                  marksCss={model.marksCss}
-                  themeType={themeType}
-                  loadDiffFiles={model.loadDiffFiles}
-                  itemKeys={model.itemKeys}
-                  subjectKey={subjectKey}
-                  onSelect={(id, range) => {
-                    const file = model.files.find((f) => f.key === id);
-                    const parsed = model.items.find((p) => p.item.id === id)?.item;
-
-                    updateSurface(subjectKey, {
-                      selection:
-                        file === undefined || range === null
-                          ? null
-                          : selectionOf(
-                              file.file.path,
-                              range,
-                              parsed?.type === "diff" ? parsed : null,
-                              diff.sections.find((s) => s.id === file.section)?.divider?.turn ??
-                                null
-                            ),
-                    });
-                  }}
+              {section.shown !== null && schema !== null && (
+                <SchemaDiffBody
+                  source={section.shown}
+                  scope={schema.scope}
+                  turn={schema.turn}
+                  turnNumber={schema.turnNumber}
+                  pruned={schema.pruned?.text ?? null}
+                  onOpenTable={(table) =>
+                    section.shown === null ? undefined : schema.onOpenTable(section.shown, table)
+                  }
                 />
+              )}
+              {timings.shown && traces !== null && (
+                <TracesCompareBody
+                  answer={traces.answer}
+                  plan={traces.plan}
+                  onOpenRoute={traces.onOpenRoute}
+                />
+              )}
+              {pane.kind === "message" ? (
+                !replaced && <Waiting placeholder={{ title: pane.title, fact: pane.fact }} />
+              ) : (
+                <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", replaced && "hidden")}>
+                  <DiffPane
+                    items={model.items}
+                    marksCss={model.marksCss}
+                    themeType={themeType}
+                    loadDiffFiles={model.loadDiffFiles}
+                    itemKeys={model.itemKeys}
+                    subjectKey={subjectKey}
+                    onSelect={(id, range) => {
+                      const file = model.files.find((f) => f.key === id);
+                      const parsed = model.items.find((p) => p.item.id === id)?.item;
+
+                      updateSurface(subjectKey, {
+                        selection:
+                          file === undefined || range === null
+                            ? null
+                            : selectionOf(
+                                file.file.path,
+                                range,
+                                parsed?.type === "diff" ? parsed : null,
+                                diff.sections.find((s) => s.id === file.section)?.divider?.turn ??
+                                  null
+                              ),
+                      });
+                    }}
+                  />
+                </div>
               )}
             </div>
           }

@@ -1250,3 +1250,222 @@ module removal {
     MAX_CRASHES = 1,
   ).*
 }
+
+/** Data approvals refine HRequest/Respond with locality, shared waiters and one-request grants. */
+module data_approvals {
+  import data_approvals_model(BUG_DEFAULT_GRANT=false,BUG_REUSE_ONCE=false,BUG_SESSION_CARDS=false).* from "./data-approvals"
+  run localDefaultTest = init.then(locality("s1/d1/u1",true)).then(changeWrites("s1/d1/u1"))
+    .then(read(1,"s1/d1/u1")).then(locality("s1/d1/u1",false))
+    .expect(not(admitted(1,"s1/d1/u1")) and safety)
+  run duplicateWaitTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1"))
+    .then(waitExpired).expect(data.pending.size() == 2 and data.cards.size() == 1 and safety)
+    .then(allow("s1/d1/u1",false,false)).then(read(1,"s1/d1/u1")).then(read(2,"s1/d1/u1"))
+    .expect(data.pending.size() == 0 and not(admitted(1,"s1/d1/u1")) and not(admitted(2,"s1/d1/u1")) and safety)
+  run serverScopeTest = init.then(request(1,"s1/d1/u1")).then(allow("s1/d1/u1",true,true))
+    .expect(admitted(2,"s1/d2/u1") and not(admitted(2,"s1/d1/u2")) and safety)
+    .then(revoke("s1/d2/u1")).expect(not(admitted(1,"s1/d1/u1")) and safety)
+  run turnEndTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1"))
+    .then(endTurn(1)).expect(data.pending.size() == 0 and data.cards.size() == 0 and safety)
+    .then(continueTurn(1)).then(request(1,"s1/d1/u1")).then(allow("s1/d1/u1",false,false))
+    .then(endTurn(1)).then(continueTurn(1)).expect(not(admitted(1,"s1/d1/u1")) and safety)
+}
+module data_approvals_default_mutant {
+  import data_approvals_model(BUG_DEFAULT_GRANT=true,BUG_REUSE_ONCE=false,BUG_SESSION_CARDS=false).* from "./data-approvals"
+  run exposesDefaultGrantTest = init.then(locality("s1/d1/u1",true)).then(changeWrites("s1/d1/u1"))
+    .then(locality("s1/d1/u1",false)).then(read(1,"s1/d1/u1")).expect(not(safety))
+}
+module data_approvals_once_mutant {
+  import data_approvals_model(BUG_DEFAULT_GRANT=false,BUG_REUSE_ONCE=true,BUG_SESSION_CARDS=false).* from "./data-approvals"
+  run exposesReusableGrantTest = init.then(request(1,"s1/d1/u1")).then(allow("s1/d1/u1",false,false))
+    .then(read(1,"s1/d1/u1")).then(read(1,"s1/d1/u1")).expect(not(safety))
+}
+module data_approvals_cards_mutant {
+  import data_approvals_model(BUG_DEFAULT_GRANT=false,BUG_REUSE_ONCE=false,BUG_SESSION_CARDS=true).* from "./data-approvals"
+  run exposesDuplicateCardsTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1")).expect(not(safety))
+}
+
+/** Writes bind safe previews to identity; COMMIT confirmation can be unknown. */
+module data_writes {
+  type WriteState = { turn: bool, phase: str, dryRuns: int, approval: str,
+    claims: int, runs: int, affected: int, expected: int, value: int,
+    safe: bool, triggers: bool, ddl: bool, previewed: bool, identity: str, expectedIdentity: str,
+    external: int, writes: bool, local: bool, readApproved: bool, sent: bool }
+  var write: WriteState
+  action init = write' = { turn: true, phase: "new", dryRuns: 0, approval: "none",
+    claims: 0, runs: 0, affected: 0, expected: 0, value: 0,
+    safe: true, triggers: false, ddl: false, previewed: false, identity: "same", expectedIdentity: "same",
+    external: 0, writes: true, local: true, readApproved: false, sent: false }
+  val admitted = write.writes and (write.local or write.readApproved)
+  action inspect(safe: bool, triggers: bool): bool = all { write.phase == "new",
+    write' = { ...write, safe: safe, triggers: triggers } }
+  action schemaChange = all { write.phase == "new", write' = { ...write, ddl: true } }
+  action policy(local: bool, writes: bool, approved: bool): bool = all { write.phase == "new",
+    write' = { ...write, local: local, writes: writes, readApproved: approved } }
+  action rows(identity: str): bool = write' = { ...write, identity: identity }
+  action dryRun(n: int): bool = all { write.turn, write.phase == "new", admitted, write.safe, not(write.triggers), not(write.ddl),
+    write' = { ...write, phase: "previewed", previewed: true, dryRuns: 1, expected: n, expectedIdentity: write.identity, external: if (write.safe and not(write.triggers)) 0 else 1 } }
+  action notPreviewed = all { write.turn, write.phase == "new", admitted, write.safe, (write.triggers or write.ddl),
+    write' = { ...write, phase: "previewed", previewed: false } }
+  action request = all { write.turn, write.phase == "previewed",
+    write' = { ...write, phase: "pending", approval: "pending" } }
+  action waitExpired = write' = write
+  action allow = all { write.turn, write.phase == "pending",
+    write' = { ...write, phase: "approved", approval: "approved" } }
+  action deny = all { write.turn, write.phase == "pending",
+    write' = { ...write, phase: "denied", approval: "denied" } }
+  action claim = all { write.turn, write.phase == "approved", write.claims == 0, admitted,
+    write' = { ...write, phase: "started", claims: 1 } }
+  def matches(n: int): bool = not(write.previewed) or (n == write.expected and write.identity == write.expectedIdentity)
+  action execute(n: int): bool = all { write.turn, write.phase == "started", write.runs == 0,
+    write' = { ...write, phase: if (matches(n)) "completed" else "failed",
+      runs: 1, affected: n, value: if (matches(n)) n else 0 } }
+  action sendCommit = all { write.phase == "started", write.turn, write' = { ...write, sent: true } }
+  action confirm(n: int): bool = all { write.phase == "started", write.sent, matches(n),
+    write' = { ...write, phase: "completed", runs: 1, affected: n, value: n } }
+  action unknown(n: int): bool = all { write.phase == "started", write.sent,
+    write' = { ...write, phase: "unknown", runs: 1, affected: n, value: n } }
+  action endTurn = write' = { ...write, turn: false,
+    phase: if (write.phase == "pending") "expired" else write.phase,
+    approval: if (write.approval == "pending") "expired" else write.approval }
+  action restart = write' = { ...write, turn: false,
+    phase: if (write.phase == "started") "unknown" else if (write.phase == "pending") "expired" else write.phase,
+    approval: if (write.approval == "pending") "expired" else write.approval }
+  action retry = write' = write
+  action step = {
+    nondet n = Set(0,1,2).oneOf()
+    nondet b = Set(true,false).oneOf()
+    any { schemaChange,inspect(b,b),policy(b,b,b),rows(if (b) "same" else "different"),dryRun(n),notPreviewed,
+      request,waitExpired,allow,deny,claim,execute(n),sendCommit,confirm(n),unknown(n),endTurn,restart,retry }
+  }
+  val safety = all {
+    write.claims <= 1, write.runs <= write.claims,
+    write.claims > 0 implies write.approval == "approved",
+    Set("denied","expired").contains(write.approval) implies write.runs == 0,
+    write.approval != "none" implies (write.previewed or write.triggers or write.ddl),
+    write.dryRuns > 0 implies write.safe and not(write.triggers) and not(write.ddl) and write.external == 0,
+    write.value != 0 implies Set("completed","unknown").contains(write.phase),
+    write.phase == "completed" implies (not(write.previewed) or write.affected == write.expected),
+    not(write.turn) implies write.phase != "pending"
+  }
+  run rollbackPreviewTest = init.then(dryRun(2)).expect(write.value == 0 and safety)
+  run approvedOnceTest = init.then(dryRun(2)).then(request).then(allow).then(claim).then(execute(2))
+    .then(retry).expect(write.value == 2 and write.runs == 1 and safety)
+  run completedRetryAfterEndTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(execute(1))
+    .then(endTurn).then(restart).then(retry).expect(write.phase == "completed" and write.runs == 1 and write.value == 1 and safety)
+  run deniedNeverRunsTest = init.then(dryRun(2)).then(request).then(deny).then(retry)
+    .expect(write.value == 0 and write.claims == 0 and write.runs == 0 and safety)
+  run turnEndExpiresTest = init.then(dryRun(2)).then(request).then(endTurn).expect(write.approval == "expired" and safety)
+  run restartExpiresTest = init.then(dryRun(2)).then(request).then(restart).expect(write.approval == "expired" and safety)
+  run countDriftRollsBackTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(execute(2))
+    .expect(write.phase == "failed" and write.value == 0 and safety)
+  run identityDriftRollsBackTest = init.then(dryRun(2)).then(request).then(allow).then(rows("different")).then(claim).then(execute(2))
+    .expect(write.phase == "failed" and write.value == 0 and safety)
+  run triggerNotPreviewedTest = init.then(inspect(true,true)).then(notPreviewed).then(request).then(allow).then(claim).then(execute(2))
+    .expect(write.dryRuns == 0 and write.value == 2 and safety)
+  run ddlNotPreviewedTest = init.then(schemaChange).then(notPreviewed).then(request).then(allow).then(claim).then(execute(0))
+    .expect(write.dryRuns == 0 and write.phase == "completed" and safety)
+  run commitUnknownTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(sendCommit).then(unknown(1))
+    .then(retry).expect(write.phase == "unknown" and write.value == 1 and safety)
+  run endDuringCommitTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(sendCommit).then(endTurn).then(confirm(1))
+    .expect(write.phase == "completed" and write.value == 1 and safety)
+  run restartStartedTest = init.then(dryRun(1)).then(request).then(allow).then(claim).then(restart)
+    .expect(write.phase == "unknown" and safety)
+  run unsafePreviewRefusedTest = init.then(inspect(false,false)).then(retry).expect(write.dryRuns == 0 and write.external == 0 and safety)
+  run localWritesOffTest = init.then(policy(true,false,false)).then(retry).expect(not(admitted) and write.dryRuns == 0 and safety)
+  run remoteDefaultsOffTest = init.then(policy(false,false,true)).then(retry).expect(not(admitted) and safety)
+  run timeoutDoesNotRunTest = init.then(dryRun(1)).then(request).then(waitExpired).expect(write.phase == "pending" and write.runs == 0 and safety)
+}
+
+/** Schema Diff is a sidecar projection: target attribution never changes Session receipts. */
+module data_snapshots {
+  type SnapshotState = { turn: int, working: bool, revision: int, baselineRevision: int,
+    origin: int, lastEnd: int, baseline: str, captures: int, concurrent: bool, uncertain: bool }
+  var snap: SnapshotState
+  action init = snap' = { turn: 0, working: false, revision: 0, baselineRevision: -1,
+    origin: -1, lastEnd: -1, baseline: "first-use", captures: 0, concurrent: false, uncertain: false }
+  action begin = all {
+    not(snap.working), snap.turn < 8,
+    val stale = snap.origin < 0 or snap.baselineRevision != snap.revision
+    snap' = { ...snap, turn: snap.turn + 1, working: true,
+      origin: if (stale) snap.turn + 1 else snap.origin,
+      baselineRevision: if (stale) snap.revision else snap.baselineRevision,
+      captures: snap.captures + (if (stale) 1 else 0),
+      baseline: if (stale) (if (snap.turn == 0) "turn-start" else "first-use") else if (snap.lastEnd == snap.turn) "previous-turn-end" else "first-use",
+      concurrent: false, uncertain: false }
+  }
+  action activity(sameTarget: bool, otherSession: bool): bool = snap' = { ...snap,
+    revision: snap.revision + (if (sameTarget) 1 else 0),
+    concurrent: snap.concurrent or (sameTarget and otherSession and snap.working),
+    uncertain: snap.uncertain or (sameTarget and snap.working) }
+  action finish(used: bool): bool = all {
+    snap.working,
+    snap' = { ...snap, working: false,
+      origin: if (used) snap.turn else snap.origin,
+      lastEnd: if (used) snap.turn else snap.lastEnd,
+      baselineRevision: if (used) snap.revision else snap.baselineRevision,
+      captures: snap.captures + (if (used) 1 else 0) }
+  }
+  action step = any { begin, finish(true), finish(false), activity(true,true), activity(true,false), activity(false,true) }
+  val safety = all { snap.captures >= 0, snap.origin <= snap.turn,
+    snap.concurrent implies snap.uncertain,
+    (snap.baseline == "previous-turn-end" and snap.working) implies snap.lastEnd == snap.turn - 1 }
+  run carriedProvenanceTest = init.then(begin).then(finish(false)).then(begin)
+    .expect(snap.captures == 1 and snap.origin == 1 and snap.baseline == "first-use" and safety)
+  run adjacentEndTest = init.then(begin).then(finish(true)).then(begin)
+    .expect(snap.captures == 2 and snap.origin == 1 and snap.baseline == "previous-turn-end" and safety)
+  run userActivityStalesTest = init.then(begin).then(finish(true)).then(activity(true,false)).then(begin)
+    .expect(snap.captures == 3 and snap.origin == 2 and snap.baseline == "first-use" and safety)
+  run unrelatedTargetTest = init.then(begin).then(finish(true)).then(activity(false,true)).then(begin)
+    .expect(snap.captures == 2 and snap.baseline == "previous-turn-end" and safety)
+  run concurrentWriterTest = init.then(begin).then(activity(true,true)).then(finish(true))
+    .expect(snap.concurrent and snap.uncertain and safety)
+}
+
+/** ENG-659: per-request inspector authority refines Session approvals, never a remembered grant. */
+module profile_attach {
+  var a: { working: bool, writable: bool, registered: bool, pending: bool,
+    credit: int, approved: int, opened: int, capturing: bool, listening: bool, user: bool, grant: bool }
+  action init = a' = { working: true, writable: true, registered: true, pending: false,
+    credit: 0, approved: 0, opened: 0, capturing: false, listening: false, user: false, grant: true }
+  action request = all { a.working, a.writable, a.registered, not(a.pending), a.credit == 0,
+    a' = { ...a, pending: true } }
+  action allow(remember: bool): bool = all { a.pending,
+    a' = if (remember) a else { ...a, pending: false, credit: 1, approved: a.approved + 1 } }
+  action deny = all { a.pending, a' = { ...a, pending: false, credit: 0 } }
+  action attach = all { a.working, a.writable, a.registered, a.credit == 1, not(a.capturing),
+    a' = { ...a, credit: 0, opened: a.opened + 1, capturing: true, user: false } }
+  action userCapture = all { a.writable, a.registered, not(a.capturing),
+    a' = if (a.grant) { ...a, capturing: true, user: true } else a }
+  action revokeGrant = a' = { ...a, grant: false }
+  action close = a' = { ...a, capturing: false }
+  action endTurn = a' = { ...a, working: false, pending: false, credit: 0, capturing: a.capturing and a.user }
+  action readonly = a' = { ...a, writable: false, credit: 0, capturing: false }
+  action disconnect = a' = { ...a, registered: false, credit: 0, capturing: false }
+  action step = any { request, allow(false), allow(true), deny, attach, userCapture, revokeGrant, close, endTurn, readonly, disconnect }
+  val safety = all {
+    a.opened <= a.approved,
+    a.credit >= 0 and a.credit <= 1,
+    not(a.listening),
+    a.capturing implies ((a.working or a.user) and a.writable and a.registered),
+    not(a.working) implies not(a.pending)
+  }
+  run approvedCaptureTest = init.then(request).then(allow(false)).then(attach).then(close)
+    .expect(a.opened == 1 and a.credit == 0 and not(a.capturing) and safety)
+  run rememberedRefusedTest = init.then(request).then(allow(true))
+    .expect(a.pending and a.credit == 0 and a.approved == 0 and safety)
+  run deniedTest = init.then(request).then(deny)
+    .expect(a.opened == 0 and a.credit == 0 and not(a.pending) and safety)
+  run everyAttachNeedsApprovalTest = init.then(request).then(allow(false)).then(attach).then(close)
+    .then(request).then(allow(false)).then(attach)
+    .expect(a.opened == 2 and a.approved == 2 and safety)
+  run turnEndRevokesTest = init.then(request).then(allow(false)).then(endTurn)
+    .expect(a.credit == 0 and a.opened == 0 and safety)
+  run lostDaemonClosesTest = init.then(request).then(allow(false)).then(attach).then(disconnect)
+    .expect(not(a.capturing) and safety)
+  run idleUserCaptureTest = init.then(endTurn).then(userCapture)
+    .expect(a.capturing and not(a.pending) and a.approved == 0 and safety)
+  run userGrantRequiredTest = init.then(endTurn).then(revokeGrant).then(userCapture)
+    .expect(not(a.capturing) and safety)
+  run userCaptureSurvivesTurnEndTest = init.then(userCapture).then(endTurn)
+    .expect(a.capturing and safety)
+}

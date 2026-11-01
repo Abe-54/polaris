@@ -5,8 +5,10 @@
  * builders and reach its composer through its test id, without editing it.
  */
 import type { SessionId } from "@polaris/protocol";
-import { Commands, Decisions } from "../commands.ts";
+import { Commands } from "../commands.ts";
 import { harnessBackgroundsCommands } from "../features/harness/index.ts";
+import { tracesUnavailable } from "../features/traces/index.ts";
+import { approve, deny } from "../features/needs-you/respond.ts";
 import { runInBackground, send } from "../features/session/dispatch.ts";
 import { foregroundCommands } from "../features/session/model/running.ts";
 import { toggleOutput } from "../features/session/index.ts";
@@ -20,6 +22,7 @@ import { activeSessions, shownWorkspaces } from "../routes/topBar.ts";
 import type { SessionEntry } from "../store/hostModel.ts";
 import { setAppearance, setSessionPrefs, settingsStore } from "../features/settings/index.ts";
 import { type AppState, type Connection, sessionKey } from "../store/store.ts";
+import { approvalInView } from "./approvalInView.ts";
 import { workspaceList } from "./visibility.ts";
 
 const ordered = (entries: ReadonlyArray<SessionEntry>, sort: SessionSort) =>
@@ -77,6 +80,10 @@ export const shellContext =
 
     if (mode === "edit") keys.push("mode.edit");
 
+    if (mode === "data") keys.push("mode.data");
+
+    if (mode === "traces") keys.push("mode.traces");
+
     return { keys, values };
   };
 
@@ -127,26 +134,21 @@ export const shellCommands = ({
     return s === null ? null : interruptCommand(s.entry.session.id, lastTurn(s.hostKey, s.entry));
   };
 
-  const answer = (approve: boolean) => () => {
+  const inView = () => {
     const s = selected();
-    const request = s?.entry.pendingApprovals[0];
+    const request = s === null ? null : approvalInView(s.entry.pendingApprovals);
 
-    // A Secret Request is answered only in its card, never approved or denied from a shortcut.
-    if (s === null || request === undefined || request.kind === "secret") return;
+    return s === null || request === null
+      ? null
+      : { hostKey: s.hostKey, sessionId: s.entry.session.id, request };
+  };
 
-    const decision = approve
-      ? Decisions.Allow({ remember: false })
-      : Decisions.Deny({ reason: null });
+  /** The approval in view, answered as its card would (a Data Source Approval's scope). */
+  const answer = (approving: boolean) => () => {
+    const target = inView();
 
-    void send(
-      s.hostKey,
-      Commands.RespondToApproval({
-        sessionId: s.entry.session.id,
-        requestId: request.id,
-        decision,
-      }),
-      "Couldn't answer"
-    );
+    if (target === null) return;
+    void (approving ? approve(target) : deny(target));
   };
 
   /** Ctrl-B, as in Claude Code: only while the session's Turn waits on a command it can move. */
@@ -165,16 +167,21 @@ export const shellCommands = ({
       : null;
   };
 
-  const hasApproval = () => {
-    const first = selected()?.entry.pendingApprovals[0];
-
-    return first !== undefined && first.kind !== "secret";
-  };
+  const hasApproval = () => inView() !== null;
 
   return {
     "view.orchestrate": { run: () => actions.setMode("orchestrate") },
     "view.review": { run: () => actions.setMode("review") },
     "view.edit": { run: () => actions.setMode("edit") },
+    "view.data": { run: () => actions.setMode("data") },
+    "view.traces": {
+      run: () => actions.setMode("traces"),
+      enabled: () => {
+        const { hostKey } = navigation.current();
+
+        return tracesUnavailable(app().hosts.find((h) => h.key === hostKey)) === null;
+      },
+    },
     "view.wordWrap": {
       run: () => setAppearance({ wordWrap: !settingsStore.getState().appearance.wordWrap }),
     },

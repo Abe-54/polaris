@@ -47,9 +47,14 @@ export interface McpToolResult {
   readonly content: Array<{ type: "text"; text: string }>;
   readonly isError?: boolean;
   readonly structuredContent?: {
-    readonly findings: ReadonlyArray<ConstellationFinding>;
-    readonly graph: ConstellationRejected["graph"];
-    readonly revision: number;
+    readonly findings?: ReadonlyArray<ConstellationFinding>;
+    readonly graph?: ConstellationRejected["graph"];
+    readonly revision?: number;
+    readonly [key: string]:
+      | typeof Schema.Json.Type
+      | ReadonlyArray<ConstellationFinding>
+      | ConstellationRejected["graph"]
+      | undefined;
   };
 }
 
@@ -57,9 +62,13 @@ export interface BoundTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: ReturnType<typeof Schema.toJsonSchemaDocument>["schema"];
-  readonly call: (input: typeof Schema.Json.Type) => Promise<McpToolResult>;
+  readonly call: (input: typeof Schema.Json.Type, signal?: AbortSignal) => Promise<McpToolResult>;
   /** MCP tool annotations; `readOnlyHint` lets a Harness run the tool unasked, in plan mode too. */
-  readonly annotations?: { readonly readOnlyHint?: boolean; readonly openWorldHint?: boolean };
+  readonly annotations?: {
+    readonly readOnlyHint?: boolean;
+    readonly destructiveHint?: boolean;
+    readonly openWorldHint?: boolean;
+  };
 }
 
 export const rejection = (code: string, message: string, fix: string) =>

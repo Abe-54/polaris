@@ -10,6 +10,8 @@ import type {
   SessionId,
   SessionState,
 } from "@polaris/protocol";
+import type { ReactNode } from "react";
+import { useShownApproval } from "../../../shell/approvalInView.ts";
 import {
   ApprovalCard,
   BranchIcon,
@@ -30,6 +32,7 @@ import { age } from "../../../shell/copy.ts";
 import { SentAttachments } from "../../attachments/index.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { Decisions } from "../../../commands.ts";
+import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { type Row, turnReceipt, turnTime } from "../model/conversation.ts";
 import { totals } from "../model/diff.ts";
 import { plural } from "../model/format.ts";
@@ -48,6 +51,15 @@ import { SessionTargetContext } from "./polarisTool/target.ts";
 import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
+import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCard.tsx";
+import { sourceForTarget } from "../../data/approval/decide.ts";
+import { askedBy, type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
+import { useDataSources } from "../../data/data/hooks.tsx";
+import { dataOpeners } from "../../data/output/open.ts";
+import { useWriteEntry } from "../../data/write/hooks.ts";
+import type { DataWrite } from "../../data/write/model.ts";
+import { WriteApprovalCard } from "../../data/write/WriteApprovalCard.tsx";
+import type { WriteOutcome } from "../../../store/sessionModel.ts";
 import { SourcesPill } from "./sources.tsx";
 import { ReplyStatsLine } from "./replyStats.tsx";
 import type { SecretOutcome } from "../model/secret.ts";
@@ -417,18 +429,97 @@ const Secret = ({
   );
 };
 
+/** A Data Source Approval: the exact target, its scope, and the Host that remembers it. */
+const DataApproval = ({
+  request,
+  target,
+  ctx,
+}: {
+  request: ApprovalRequest;
+  target: DataSourceTarget;
+  ctx: RowContext;
+}) => {
+  const { hostKey, sessionId } = ctx.diff;
+  const hostLabel = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.label ?? "this Host");
+  const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? "");
+  const sources = useDataSources({ hostKey, sessionId });
+  const listed = sources.status === "ready" ? sources.value : [];
+
+  return (
+    <DataSourceApprovalCard
+      key={request.id}
+      hostKey={hostKey}
+      request={request}
+      target={target}
+      who={askedBy(title)}
+      hostLabel={hostLabel}
+      alreadyApproved={sourceForTarget(listed, target)?.access === "approved"}
+    />
+  );
+};
+
+/** An agent's write: the dry run, before and after, and Run or Deny with a reason. */
+const DataWriteApproval = ({
+  request,
+  write,
+  wrote,
+  ctx,
+}: {
+  request: ApprovalRequest;
+  write: DataWrite;
+  wrote: WriteOutcome | null;
+  ctx: RowContext;
+}) => {
+  const { hostKey, sessionId } = ctx.diff;
+  const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? "");
+  const sources = useDataSources({ hostKey, sessionId });
+  const listed = sources.status === "ready" ? sources.value : [];
+  const entry = useWriteEntry({ hostKey, sessionId }, write, wrote?.kind === "allowed");
+  const open = dataOpeners({ hostKey, sessionId }, listed, useShellActions());
+
+  return (
+    <WriteApprovalCard
+      onOpenTable={() => open.approval(write, entry)}
+      hostKey={hostKey}
+      request={request}
+      write={write}
+      who={askedBy(title)}
+      source={sourceForTarget(listed, write.target)}
+      outcome={wrote}
+      entry={entry}
+    />
+  );
+};
+
+/** The card's box, which ⌘⇧A looks at to answer the approval in view. */
+const ShownApproval = ({ requestId, children }: { requestId: string; children: ReactNode }) => (
+  <div ref={useShownApproval(requestId)} data-approval-id={requestId}>
+    {children}
+  </div>
+);
+
 const Approval = ({
   request,
   settled,
+  wrote,
   ctx,
 }: {
   request: ApprovalRequest;
   settled: SecretOutcome | null;
+  wrote: WriteOutcome | null;
   ctx: RowContext;
 }) => {
   if (request.kind === "secret") return <Secret request={request} settled={settled} ctx={ctx} />;
 
+  if (request.dataWrite !== undefined)
+    return (
+      <DataWriteApproval request={request} write={request.dataWrite} wrote={wrote} ctx={ctx} />
+    );
+
   if (request.kind === "question") return <Question request={request} ctx={ctx} />;
+  const target = dataSourceTarget(request);
+
+  if (target !== null) return <DataApproval request={request} target={target} ctx={ctx} />;
   const who = ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name;
   const respond = (decision: ApprovalDecision) => ctx.onRespond(request, decision);
 
@@ -440,11 +531,13 @@ const Approval = ({
         <ApprovalCard
           harness={ctx.harness}
           title={request.title}
-          summary={`${who} ${KIND_WANTS[request.kind]}`}
+          summary={`${who} ${request.profileAttach === undefined ? KIND_WANTS[request.kind] : "wants to profile this Node process"}`}
           command={request.detail ?? request.title}
           where={ctx.where}
           onApprove={() => respond(Decisions.Allow({ remember: false }))}
-          onAlwaysAllow={() => respond(Decisions.Allow({ remember: true }))}
+          {...(request.profileAttach === undefined
+            ? { onAlwaysAllow: () => respond(Decisions.Allow({ remember: true })) }
+            : {})}
           onDeny={() => respond(Decisions.Deny({ reason: null }))}
         />
       )}
@@ -585,7 +678,11 @@ export const ConversationRow = ({ row, ctx }: { row: Row; ctx: RowContext }) => 
         />
       );
     case "approval":
-      return <Approval request={row.request} settled={row.settled} ctx={ctx} />;
+      return (
+        <ShownApproval requestId={row.request.id}>
+          <Approval request={row.request} settled={row.settled} wrote={row.wrote} ctx={ctx} />
+        </ShownApproval>
+      );
     case "ending":
       return <Ending row={row} ctx={ctx} />;
   }

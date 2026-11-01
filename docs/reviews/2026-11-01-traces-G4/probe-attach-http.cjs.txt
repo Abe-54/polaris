@@ -1,0 +1,17 @@
+const { Worker } = require("worker_threads"); const http = require("http");
+setTimeout(() => { console.log("TIMEOUT"); process.exit(2); }, 15000).unref();
+function handleOrder(){const until=Date.now()+5; let n=0; while(Date.now()<until){for(let i=0;i<1000;i++)n+=Math.sqrt(i)} return n}
+const s = http.createServer((q, r) => r.end(String(handleOrder()))).listen(0, "127.0.0.1", async () => {
+  const port = s.address().port; const hit = () => new Promise(res => http.get({ port, host: "127.0.0.1", path: "/" }, r => { r.resume(); r.on("end", res); }));
+  for (let i = 0; i < 200; i++) await hit(); // warm up: handleOrder gets optimized
+  const w = new Worker(`
+    const inspector = require("node:inspector"); const { parentPort } = require("node:worker_threads");
+    const s = new inspector.Session(); s.connectToMainThread(); setInterval(() => {}, 1000);
+    const post = (m, p) => new Promise((res, rej) => s.post(m, p ?? {}, (e, r) => e ? rej(e) : res(r)));
+    (async () => { await post("Profiler.enable"); await post("Profiler.start"); parentPort.postMessage("started"); await new Promise(r => setTimeout(r, 2000));
+      const { profile } = await post("Profiler.stop"); s.disconnect();
+      parentPort.postMessage([...new Set(profile.nodes.map(n => n.callFrame.functionName || "(anon)"))]); })();
+  `, { eval: true });
+  let load = true;
+  w.on("message", async (m) => { if (m === "started") { while (load) await hit(); } else { load = false; console.log(m.includes("handleOrder") ? "handleOrder PRESENT" : "handleOrder MISSING", JSON.stringify(m).slice(0, 300)); process.exit(0); } });
+});

@@ -2,6 +2,8 @@
  * Domain model shared by the Daemon and every Client. Names follow CONTEXT.md.
  */
 import { Effect, Schema } from "effect";
+import { ScrubbedDataValue, ScrubbedText } from "./dataValues.ts";
+import { DataWritePreviewFacts } from "./data.ts";
 import { CelestialBody } from "./celestial.ts";
 import { HarnessKind } from "./harnesses.ts";
 import {
@@ -603,11 +605,57 @@ export class ApprovalQuestion extends Schema.Class<ApprovalQuestion>("ApprovalQu
   multiSelect: Schema.Boolean,
 }) {}
 
+/** The exact credential-free target whose agent read the user is deciding. */
+export class DataSourceApproval extends Schema.Class<DataSourceApproval>("DataSourceApproval")({
+  sourceId: Schema.String,
+  sourceName: Schema.String,
+  branch: Schema.optionalKey(
+    Schema.Struct({ provider: Schema.Literals(["planetscale", "neon"]), name: Schema.String })
+  ),
+  engine: Schema.Literals(["postgres", "mysql"]),
+  host: Schema.String,
+  port: Schema.Int,
+  database: Schema.String,
+  user: Schema.String,
+}) {}
+
 export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequest")({
   id: RequestId,
   sessionId: SessionId,
   turnId: TurnId,
   kind: ApprovalKind,
+  profileAttach: Schema.optionalKey(
+    Schema.Struct({
+      pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+      command: ScrubbedText,
+      runtime: Schema.Literal("node"),
+      seconds: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+    })
+  ),
+  dataSource: Schema.optionalKey(DataSourceApproval),
+  dataWrite: Schema.optionalKey(
+    Schema.Struct({
+      target: DataSourceApproval,
+      fingerprint: Schema.String,
+      requestHash: Schema.optionalKey(Schema.String),
+      params: Schema.optionalKey(Schema.Array(ScrubbedDataValue)),
+      previewed: Schema.optionalKey(Schema.Boolean),
+      ...DataWritePreviewFacts,
+      identity: Schema.optionalKey(Schema.String),
+      queryId: Schema.String,
+      sql: ScrubbedText,
+      reason: ScrubbedText,
+      affected: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      columns: Schema.Array(Schema.String).check(Schema.isMaxLength(256)),
+      before: Schema.Array(Schema.Array(ScrubbedDataValue).check(Schema.isMaxLength(256))).check(
+        Schema.isMaxLength(20)
+      ),
+      after: Schema.Array(Schema.Array(ScrubbedDataValue).check(Schema.isMaxLength(256))).check(
+        Schema.isMaxLength(20)
+      ),
+      note: Schema.String,
+    })
+  ),
   /** One-line summary for hover cards and notifications. */
   title: Schema.String,
   detail: Schema.NullOr(Schema.String),
@@ -623,7 +671,10 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
 }) {}
 
 export const ApprovalDecision = Schema.TaggedUnion({
-  Allow: { remember: Schema.Boolean },
+  Allow: {
+    remember: Schema.Boolean,
+    dataScope: Schema.optionalKey(Schema.Literals(["target", "server"])),
+  },
   Deny: { reason: Schema.NullOr(Schema.String) },
   Answer: {
     /** The whole answer as text, for a Harness or Daemon that reads only this. */

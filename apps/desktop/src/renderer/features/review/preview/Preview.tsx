@@ -3,11 +3,13 @@
  * and the large-Review bench: `#review/pull`, `#review/session`, `#review/large` (2,500
  * files, collapsed) and `#review/list-only` (12,000 files); the queue's Reviewed group in
  * `#review/queue-reviewed` and `#review/queue-done`; Reviewers and Merge in `#review/merge-…`
- * and `#review/reviewers…` (mergeFixtures.ts). A stand-in bridge serves the patches;
+ * and `#review/reviewers…` (mergeFixtures.ts); the Data section in `#review/session-data…`
+ * (schemaScenes.ts) and the Traces section in `#review/session-traces…` (tracesScenes.ts). A
+ * stand-in bridge serves the patches;
  * no Daemon or GitHub is involved. Its own chunk.
  */
 import { stackedDetail } from "../../pulls/preview/stack.ts";
-import { type GitDiffSpec, ReviewCheckout } from "@polaris/protocol";
+import { type GitDiffSpec, ReviewCheckout, type TraceCompareSelector } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
@@ -74,6 +76,10 @@ import {
   worstReviewerSession,
   worstSummary,
 } from "./worstScenes.ts";
+import { isSchemaScene, schemaDiffAnswer, schemaHosts, schemaPatch } from "./schemaScenes.ts";
+import { openSchemaDiff } from "../schema/store.ts";
+import { isTracesScene, opensTraces, tracesCompareAnswer, tracesHosts } from "./tracesScenes.ts";
+import { openTracesCompare } from "../traces/store.ts";
 
 const encode = (text: string) => new TextEncoder().encode(text);
 
@@ -84,12 +90,17 @@ const patchFor = (scene: string, spec: GitDiffSpec) => {
 
   if (isWorst(scene)) return scene === "worst-empty" ? "" : worstPatch(200);
 
-  return Predicate.isTagged(spec, "Turn") ? (TURN_PATCHES.get(spec.turnId) ?? "") : PULL_PATCH;
+  return Predicate.isTagged(spec, "Turn")
+    ? schemaPatch(scene, spec.turnId, TURN_PATCHES.get(spec.turnId) ?? "")
+    : PULL_PATCH;
 };
 
 /** What the stand-in reads of a request's input. */
 interface PreviewInput {
   readonly spec?: GitDiffSpec;
+  readonly turn?: string;
+  readonly a?: TraceCompareSelector;
+  readonly b?: TraceCompareSelector;
 }
 
 const ok = <A,>(value: A): Promise<Result<A>> => Promise.resolve({ ok: true, value });
@@ -120,6 +131,15 @@ const xgOr = (scene: string) => {
   return scene === "large" || scene === "list-only" ? [] : PULL_FINDINGS;
 };
 
+/** An Agent Session's Data and Traces sections; null for any other method. */
+const sessionAnswer = (scene: string, method: string, input: PreviewInput) => {
+  if (method === "data.schemaDiff") return schemaDiffAnswer(scene, SESSION.id, input.turn);
+
+  return method === "traces.compare" && isTracesScene(scene)
+    ? tracesCompareAnswer(scene, input)
+    : null;
+};
+
 const request = (scene: string) => (method: string, input: PreviewInput) => {
   if (method === "git.diff" && input.spec !== undefined) {
     return ok({ bytes: encode(patchFor(scene, input.spec)), files: 0, fileIndex: [] });
@@ -141,6 +161,10 @@ const request = (scene: string) => (method: string, input: PreviewInput) => {
   }
 
   if (method === "review.verdicts") return ok([]);
+
+  const session = sessionAnswer(scene, method, input);
+
+  if (session !== null) return session;
 
   const merging = mergeAnswer(scene, method);
 
@@ -270,7 +294,7 @@ export const mountReviewPreview = (root: HTMLElement, hash: string) => {
 
   const store = createStore<AppState>(() => ({
     ...initialState,
-    hosts: bench ? [] : worstHosts(HOSTS, scene),
+    hosts: bench ? [] : tracesHosts(scene, schemaHosts(scene, worstHosts(HOSTS, scene))),
     hostModels: bench
       ? benchModels(new URLSearchParams(search))
       : {
@@ -322,6 +346,17 @@ export const mountReviewPreview = (root: HTMLElement, hash: string) => {
   if (scene.startsWith("session")) {
     openSessionReview(navigation.actions, "local", SESSION.id);
     markOlderTurnsViewed(subjectKey({ kind: "session", hostKey: "local", sessionId: SESSION.id }));
+
+    if (isSchemaScene(scene) && scene !== "session-data-diff" && scene !== "session-data-pruned")
+      openSchemaDiff(
+        subjectKey({ kind: "session", hostKey: "local", sessionId: SESSION.id }),
+        scene === "session-data-worst"
+          ? "src-household_income_eligibility_determinations_by_county_and_program_year_with_overrides_replica"
+          : "src-app"
+      );
+
+    if (opensTraces(scene))
+      openTracesCompare(subjectKey({ kind: "session", hostKey: "local", sessionId: SESSION.id }));
     updateSurface(subjectKey({ kind: "session", hostKey: "local", sessionId: SESSION.id }), {
       findings: SESSION_FINDINGS,
       selectedFinding: SESSION_FINDINGS[0]?.id ?? null,

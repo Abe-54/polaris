@@ -13,6 +13,7 @@ import { arrivedBelow, type JumpControl, tailOf, watchFollow } from "./follow.ts
 import { JumpToLatest } from "./JumpToLatest.tsx";
 import { preloadMarkdown } from "./markdown/index.tsx";
 import { OverlayScrollbar } from "./overlayScrollbar.tsx";
+import { REVEAL_APPROVAL } from "../../../shell/approvalInView.ts";
 import { ConversationRow, type RowContext } from "./rows.tsx";
 
 const saved = new Map<string, ReadonlyArray<VirtualItem>>();
@@ -156,6 +157,27 @@ export const Conversation = ({
 
   useEffect(() => jump?.bind({ run: pin.jump, available: () => !pin.on() }), [jump, pin]);
 
+  // An approval asked to show itself (Approve from elsewhere): release the end, its row on top.
+  useEffect(() => {
+    const list = scrollRef.current;
+
+    if (list === null) return;
+
+    const reveal = (event: Event) => {
+      const row = event.target instanceof Element ? event.target.closest("[data-index]") : null;
+      const index = Number(row?.getAttribute("data-index") ?? Number.NaN);
+
+      if (!Number.isInteger(index)) return;
+      event.preventDefault();
+      pin.set(false);
+      virtualizer.scrollToIndex(index, { align: "start" });
+    };
+
+    list.addEventListener(REVEAL_APPROVAL, reveal);
+
+    return () => list.removeEventListener(REVEAL_APPROVAL, reveal);
+  }, [pin, virtualizer]);
+
   const tail = useRef(tailOf(rows, firstTurnId));
 
   // Rows arriving below while released mark the arrow; a page landing above doesn't.
@@ -230,6 +252,7 @@ export const Conversation = ({
         ref={scrollRef}
         className="min-h-0 flex-1 [scrollbar-width:none] overflow-y-auto overscroll-contain select-text [overflow-anchor:none]"
         data-testid="conversation"
+        data-approval-viewport
       >
         <div ref={virtualizer.containerRef} className="relative w-full">
           {virtualizer.getVirtualItems().map((item) => {

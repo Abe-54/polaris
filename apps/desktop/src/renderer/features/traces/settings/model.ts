@@ -1,0 +1,172 @@
+/**
+ * Settings → Traces and the fixed-exporter card (DESIGN.md, Traces → Setup; Paper T4): which
+ * Hosts can answer, which detected exporters have their URL fixed in code, and each row's line.
+ */
+import {
+  type DetectedTraceExporter,
+  type TraceForwardTarget,
+  TRACES_SETTINGS_CAPABILITY,
+  TraceForwardUrl,
+  type WorkspaceTracesSettings,
+} from "@polaris/protocol";
+import { Schema } from "effect";
+import type { HostView } from "../../../../shared/api.ts";
+
+/** Why a Host can't show its Workspaces' Traces settings, or null when it can. */
+export const tracesSettingsUnavailable = (
+  host: Pick<HostView, "label" | "status"> | undefined
+): string | null => {
+  if (host === undefined) return "This host is no longer listed";
+
+  if (host.status.state !== "connected") return `${host.label} isn't connected`;
+
+  return host.status.capabilities.includes(TRACES_SETTINGS_CAPABILITY)
+    ? null
+    : `Traces settings need a newer daemon on ${host.label}`;
+};
+
+/**
+ * Exporters the environment can't redirect: a literal collector URL, or Axiom's exporter with
+ * its URL in code. `otlp-env` reads the standard variables and `@vercel/otel` adds the env one.
+ */
+const FIXED_KINDS: ReadonlySet<DetectedTraceExporter["kind"]> = new Set(["fixed-url", "axiom"]);
+
+export const fixedExporters = (
+  settings: Pick<WorkspaceTracesSettings, "detectedExporters">
+): ReadonlyArray<DetectedTraceExporter> =>
+  settings.detectedExporters.filter((e) => FIXED_KINDS.has(e.kind));
+
+/** The Daemon's file for evidence from exported process variables: no checkout path behind it. */
+const ENVIRONMENT = "environment";
+
+export const exporterLocation = (e: Pick<DetectedTraceExporter, "file" | "line">) =>
+  e.file === ENVIRONMENT ? "the environment" : `${e.file}:${e.line}`;
+
+const foundIn = (e: Pick<DetectedTraceExporter, "file">) =>
+  e.file === ENVIRONMENT ? "the environment" : e.file;
+
+const VENDORS: Readonly<Record<DetectedTraceExporter["kind"], string>> = {
+  axiom: "Axiom",
+  vercel: "@vercel/otel",
+  "otlp-env": "OpenTelemetry",
+  "fixed-url": "its collector",
+};
+
+const targetOf = (exporters: ReadonlyArray<DetectedTraceExporter>) => {
+  const kinds = new Set(exporters.map((e) => e.kind));
+  const only = kinds.size === 1 ? [...kinds][0] : undefined;
+
+  return only === undefined ? "its collectors" : VENDORS[only];
+};
+
+/** "sightline sends its traces straight to Axiom": the card's title. */
+export const fixedExporterTitle = (
+  workspace: string,
+  exporters: ReadonlyArray<DetectedTraceExporter>
+) => `${workspace} sends its traces straight to ${targetOf(exporters)}`;
+
+/** The collector's host for the closed field ("api.axiom.co"), or the URL when it won't parse. */
+export const forwardHost = (url: string): string => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+};
+
+/**
+ * Why Polaris can't see them, and what the change keeps. The last clause names the collector
+ * Polaris forwards to, only while forwarding is on and a collector is set.
+ */
+export const fixedExporterLead = (
+  exporters: ReadonlyArray<DetectedTraceExporter>,
+  forwardingTo: string | null
+) => {
+  const who =
+    exporters.length === 1
+      ? "An exporter sets its address"
+      : `${exporters.length} exporters set their address`;
+
+  const keep =
+    forwardingTo === null
+      ? `Reading the endpoint from the environment sends agents' traces to Polaris instead; turn on forwarding to keep ${targetOf(exporters)} getting them.`
+      : `Reading the endpoint from the environment sends agents' traces to Polaris, which forwards a copy to ${forwardHost(forwardingTo)}.`;
+
+  return `${who} in code, so Polaris never sees them. ${keep}`;
+};
+
+const isForwardUrl = Schema.is(TraceForwardUrl);
+
+export type ForwardUrlCheck =
+  | { readonly ok: true; readonly url: string | null }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * A URL the Daemon would take, or why not; credentials stay in the app's headers. An emptied
+ * field clears a saved collector (url null), and asks for one when none is saved.
+ */
+export const checkForwardUrl = (text: string, saved: boolean): ForwardUrlCheck => {
+  const url = text.trim();
+
+  if (url === "")
+    return saved ? { ok: true, url: null } : { ok: false, reason: "Enter the collector's URL" };
+
+  return isForwardUrl(url)
+    ? { ok: true, url }
+    : {
+        ok: false,
+        reason:
+          "Use an http or https URL with no user, password, query or fragment; keys stay in the app's headers",
+      };
+};
+
+/** Known credential names, plus whether the app's own headers stay with its launch origin. */
+export const headersLine = (target: TraceForwardTarget | null) => {
+  const headers = target?.headerNames ?? [];
+  const listed = headers.length === 0 ? "No configured headers" : `Headers ${headers.join(" · ")}`;
+
+  if (target?.passesAppHeaders !== true) return listed;
+  const origin = new URL(target.url).origin;
+
+  return headers.length === 0
+    ? `The headers your app sends to ${origin}`
+    : `${listed}, and the headers your app sends to ${origin}`;
+};
+
+/** One line: where the collector came from; the URL row below names the headers. */
+export const forwardCaption = (settings: WorkspaceTracesSettings): string => {
+  const found = settings.detectedExporters[0];
+
+  if (settings.forwardTo === null) {
+    if (found === undefined) return "No exporter found here. Add the collector your app sends to.";
+
+    return found.file === ENVIRONMENT
+      ? "Found an exporter in the environment. Add the collector it sends to."
+      : `Suggested collector from ${foundIn(found)}. Save its URL to forward traces.`;
+  }
+
+  return settings.forwarding
+    ? "A copy of each trace goes on to this collector."
+    : "Forwarding is off. Turn it on to send a copy to this collector.";
+};
+
+/** Requested mode beside what actually happens; a skip reason wins. */
+export const instrumentCaption = (settings: WorkspaceTracesSettings): string => {
+  if (settings.autoInstrumentSkipReason !== null)
+    return `Skipped: ${settings.autoInstrumentSkipReason}`;
+
+  switch (settings.autoInstrument) {
+    case "off":
+      return "Commands agents run here get OpenTelemetry only if the app sets it up. Bun is never instrumented automatically.";
+    case "node":
+      return "Node commands agents run here get OpenTelemetry without code changes. Bun is never instrumented automatically.";
+    case "deno":
+      return "Deno commands agents run here export through Deno's built-in OpenTelemetry. Bun is never instrumented automatically.";
+  }
+};
+
+/**
+ * What the receiver keeps per checkout (DEFAULT_RETENTION in apps/daemon/src/traces/database.ts):
+ * errors outlast other spans under size pressure, never past the age limit.
+ */
+export const KEEP_LINE = "200 MB · 7 days";

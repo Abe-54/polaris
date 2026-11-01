@@ -1,13 +1,15 @@
-import { modelServerResources } from "@polaris/client/prediction/probe";
-import type { MainPredictionPlacement } from "../prediction/placement.ts";
-import type { PredictionSettings } from "../prediction/preferences.ts";
-import type { PredictionOutcomes } from "../prediction/outcomes.ts";
-import { predictionPreferenceView } from "../../shared/predictionPlacement.ts";
 /**
  * The handlers behind `window.polaris.request`: one per method, each taking the
  * decoded input and returning a structured-clone-friendly output. Blobs the
  * Daemon sends (file contents, diffs) are taken here and cross IPC as bytes.
  */
+import { dataHandlers } from "./data.ts";
+import { tracesHandlers } from "./traces.ts";
+import { modelServerResources } from "@polaris/client/prediction/probe";
+import type { MainPredictionPlacement } from "../prediction/placement.ts";
+import type { PredictionSettings } from "../prediction/preferences.ts";
+import type { PredictionOutcomes } from "../prediction/outcomes.ts";
+import { predictionPreferenceView } from "../../shared/predictionPlacement.ts";
 import { clientCopy } from "../../shared/clientCopy.ts";
 import type { HostConnection, LiveSession } from "@polaris/client";
 import { FileContent, FileVersion } from "@polaris/protocol";
@@ -261,6 +263,8 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...voiceHandlers,
   ...browserHandlers(ctx.browser),
   ...secretHandlers,
+  ...dataHandlers,
+  ...tracesHandlers,
   "updates.get": () => Effect.sync(ctx.updates.get),
   "updates.check": () => Effect.sync(ctx.updates.check),
   "updates.setAutomatic": ({ enabled }) => Effect.sync(() => ctx.updates.setAutomatic(enabled)),

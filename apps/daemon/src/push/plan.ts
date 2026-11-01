@@ -93,7 +93,11 @@ const tracked = (session: AgentSession): Tracked => ({
 });
 
 const categoryOf = (request: ApprovalRequest) =>
-  request.kind === "question" || request.kind === "secret" ? "question" : "approval";
+  request.kind === "question" || request.kind === "secret"
+    ? "question"
+    : request.profileAttach === undefined
+      ? "approval"
+      : "approval-once";
 
 const needsYou = (
   session: Tracked,

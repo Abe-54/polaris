@@ -21,7 +21,7 @@ export const PushKey = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{87}$
 export const PUSH_ENC_BYTES = 65;
 
 /** How the app offers a notification: Approve / Always here / Deny, an answer, or none. */
-export const PushCategory = Schema.Literals(["approval", "question"]);
+export const PushCategory = Schema.Literals(["approval", "approval-once", "question"]);
 
 export type PushCategory = typeof PushCategory.Type;
 

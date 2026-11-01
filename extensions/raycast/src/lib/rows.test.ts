@@ -1,6 +1,14 @@
+import { Schema } from "effect";
+import { ApprovalRequest } from "@polaris/protocol";
 import { expect, test } from "bun:test";
 import { approval, entry, hostView, workspace } from "./fixtures.testing.ts";
-import { approvalRows, sessionKey, sessionSections, workspaceRows } from "./rows.ts";
+import {
+  offersAlwaysAllow,
+  approvalRows,
+  sessionKey,
+  sessionSections,
+  workspaceRows,
+} from "./rows.ts";
 
 const day = (n: number) => `2026-10-${String(n).padStart(2, "0")}T00:00:00.000Z`;
 
@@ -95,4 +103,17 @@ test("workspaces list by name with their agent sessions counted", () => {
     ["alpha", 0],
     ["zeta", 1],
   ]);
+});
+
+test("P9-10: Raycast offers no Always Approve for attach", () => {
+  const ordinary = approval("s1", "r1", day(1));
+  expect(offersAlwaysAllow(ordinary)).toBe(true);
+  expect(
+    offersAlwaysAllow(
+      Schema.decodeUnknownSync(ApprovalRequest)({
+        ...Schema.encodeSync(ApprovalRequest)(ordinary),
+        profileAttach: { pid: 42, command: "node app", runtime: "node", seconds: 5 },
+      })
+    )
+  ).toBe(false);
 });

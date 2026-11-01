@@ -1,0 +1,188 @@
+{"home":"/tmp/g3h-ugd4QO","workspace":"/private/tmp/g3e2e/ws-mbIsuo"}
+seeded workspace+session and issued a Plain MCP binding for trace-test
+daemon argv: bun /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/apps/daemon/src/main.ts serve --foreground pid 68628
+daemon ready in ms 286
+PASS hello advertises traces capability ["traces","traces.settings","traces.compare","traces.profiles"]
+initial watch page: {"availability":{"_tag":"Listening"},"userExported":false,"endpoint":"http://127.0.0.1:4319/otlp/<token>","traces":[],"total":0}
+PASS receiver Listening {"_tag":"Listening"}
+PASS first watch page carries endpoint
+app responses: {"/orders/42":200,"/":200,"/fail":500}
+app exit code 0 app output:
+listening 44588
+PASS app exported and exited cleanly after flush {"code":0}
+watch page traces: [
+ {
+  "id": "581a98a7a38d8cba453d677d81feaace",
+  "root": "GET",
+  "service": "orders-api",
+  "spans": 1,
+  "errors": 0,
+  "status": "unset",
+  "sessionId": "trace-test",
+  "turn": null,
+  "durationMs": 0.152583
+ },
+ {
+  "id": "9cf563fa937e93a58e1ff30369dc2ee9",
+  "root": "GET",
+  "service": "orders-api",
+  "spans": 2,
+  "errors": 2,
+  "status": "error",
+  "sessionId": "trace-test",
+  "turn": null,
+  "durationMs": 0.46025
+ },
+ {
+  "id": "b6dfd64502bea2cbff2b6896aede18a6",
+  "root": "GET",
+  "service": "orders-api",
+  "spans": 2,
+  "errors": 0,
+  "status": "unset",
+  "sessionId": "trace-test",
+  "turn": null,
+  "durationMs": 2.537292
+ }
+]
+PASS watch lists 3 traces {"total":3}
+PASS every trace service.name is orders-api
+PASS every trace attributed to the session
+PASS exactly one trace marked error (the /fail request) [{"id":"9cf563fa937e93a58e1ff30369dc2ee9","root":"GET","errors":2}]
+PASS status:error filter returns only the failing trace {"total":1}
+traces.get spans: [
+ {
+  "id": "0f456bd18dc343d6",
+  "parent": "bcd77af0dd2c67c0",
+  "name": "orders.charge",
+  "kind": "internal",
+  "status": "error",
+  "statusMessage": "card declined for customer 42",
+  "ms": 0.177709,
+  "polaris": {
+   "checkout": "/private/tmp/g3e2e/ws-mbIsuo",
+   "workspaceId": "trace-workspace",
+   "sessionId": "trace-test",
+   "turn": null,
+   "launchedTurn": null
+  }
+ },
+ {
+  "id": "bcd77af0dd2c67c0",
+  "parent": null,
+  "name": "GET",
+  "kind": "server",
+  "status": "error",
+  "statusMessage": "",
+  "ms": 0.46025,
+  "polaris": {
+   "checkout": "/private/tmp/g3e2e/ws-mbIsuo",
+   "workspaceId": "trace-workspace",
+   "sessionId": "trace-test",
+   "turn": null,
+   "launchedTurn": null
+  }
+ }
+]
+PASS traces.get returns the error trace with >=2 spans {"spans":2}
+PASS spans carry checkout + workspace + session attribution {"checkout":"/private/tmp/g3e2e/ws-mbIsuo","workspaceId":"trace-workspace","sessionId":"trace-test","turn":null,"launchedTurn":null}
+PASS orders.charge span has error status {"status":"error","events":["exception"]}
+PASS traces.span returns server span attributes {"name":"GET","status_code":"500","route":"/fail"}
+ok trace spans: GET(server,unset), orders.load(internal,unset)
+daemon loopback listeners: [ 64839, 64840, 64841, 64850 ]
+MCP tools: plan,dispatch,review,answer,message,status,set_state,read_worker,wait_for_command,notify,request_secret,sessions,search_history,read_history,data_sources,describe,query,execute,traces,trace,span,compare,profile,visualize
+PASS found MCP HTTP endpoint for the session token {"origin":"http://127.0.0.1:64850"}
+MCP traces text:
+All turns · 3 traces
+581a98a7a38d8cba453d677d81feaace  GET  orders-api  0.2 ms  1 spans  1 services
+9cf563fa937e93a58e1ff30369dc2ee9  GET  orders-api  0.5 ms  2 spans  1 services  2 ERROR: card declined for customer 42
+b6dfd64502bea2cbff2b6896aede18a6  GET  orders-api  2.5 ms  2 spans  1 services
+PASS MCP traces lists the same 3 traces {"ids":["581a98a7a38d8cba453d677d81feaace","9cf563fa937e93a58e1ff30369dc2ee9","b6dfd64502bea2cbff2b6896aede18a6"]}
+MCP traces (default current turn) text:
+Between turns · 3 traces
+581a98a7a38d8cba453d677d81feaace  GET  orders-api  0.2 ms  1 spans  1 services
+9cf563fa937e93a58e1ff30369dc2ee9  GET  orders-api  0.5 ms  2 spans  1 services  2 ERROR: card declined for customer 42
+b6dfd64502bea2cbff2b6896aede18a6  GET  orders-api  2.5 ms  2 spans  1 services
+MCP trace text:
+GET · 0.5 ms · 2 spans · orders-api 2 (0.6 ms) · between turns · 2 errors
++0 ms  0.5 ms  GET  orders-api  ERROR  span bcd77af0
++0 ms  0.2 ms    orders.charge  ERROR  span 0f456bd1
+  TypeError: card declined for customer 42 · at file:///private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts:13:11
+PASS MCP trace returns the waterfall {"firstLine":"GET · 0.5 ms · 2 spans · orders-api 2 (0.6 ms) · between turns · 2 errors"}
+MCP span text:
+orders.charge · internal · orders-api · error · 0.2 ms
+Trace: 9cf563fa937e93a58e1ff30369dc2ee9 · span 0f456bd18dc343d6
+Offset: +0 ms · parent bcd77af0dd2c67c0
+Time: 1793488475213000000–1793488475213177709
+Status message: card declined for customer 42 · trace state: 
+Turn: between turns
+Code: /private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts:12
+events
+  exception · 1793488475213148875 · 0 dropped attributes
+  exception.type: TypeError
+  exception.message: card declined for customer 42
+  exception stack
+        at file:///private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts:13:11
+        at file:///private/tmp/g3e2e/ws-mbIsuo/package/src/tracing.ts:42:20
+        at traced (file:///private/tmp/g3e2e/ws-mbIsuo/package/src/tracing.ts:40:17)
+        at charge (file:///private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts:12:9)
+        at Server.<anonymous> (file:///private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts:23:13)
+    TypeError: card declined for customer 42
+        at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:65:14)
+        at AsyncLocalStorageContextManager.with (file:///private/tmp/g3e2e/ws-mbIsuo/package/node_modules/@opentelemetry/context-async-hooks/dist/AsyncLocalStorageContextManager.mjs:45:34)
+        at ContextAPI.with (file:///private/tmp/g3e2e/ws-mbIsuo/package/node_modules/@opentelemetry/api/dist/api/context.mjs:46:40)
+        at Tracer$1.startActiveSpan (file:///private/tmp/g3e2e/ws-mbIsuo/package/node_modules/@opentelemetry/sdk-trace/dist/Tracer.mjs:119:26)
+        at Server.emit (node:events:514:28)
+logs · 0 of 0
+attributes
+  code.function.name: charge
+  code.file.path: /private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts
+  code.line.number: 12
+polaris
+  checkout: /private/tmp/g3e2e/ws-mbIsuo
+  workspaceId: trace-workspace
+  sessionId: trace-test
+  turn: null
+resource
+  service.name: orders-api
+  host.name: Lucas-Mac-Studio.local
+  host.arch: arm64
+  host.id: 6C712B01-128E-5D2A-8ECC-28D09728436A
+  process.pid: 68665
+  process.executable.name: node
+  process.executable.path: /Users/lucasdoell/.nvm/versions/node/v24.22.1/bin/node
+  process.command_args: ["/Users/lucasdoell/.nvm/versions/node/v24.22.1/bin/node","--import","./instrumentation.ts","/private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts"]
+  process.runtime.version: 24.22.1
+  process.runtime.name: nodejs
+  process.runtime.description: Node.js
+  process.command: /private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts
+  process.owner: lucasdoell
+  telemetry.sdk.language: nodejs
+  telemetry.sdk.name: opentelemetry
+  telemetry.sdk.version: 3.0.0
+scope
+  name: app
+  version: 
+links
+Dropped by exporter: 0 attributes, 0 events, 0 links
+PASS MCP span returns an attribute and attribution {"attributes":{"code.function.name":"charge","code.file.path":"/private/tmp/g3e2e/ws-mbIsuo/package/src/server.ts","code.line.number":"12"},"status":"error"}
+cleaned up /tmp/g3h-ugd4QO /private/tmp/g3e2e/ws-mbIsuo
+SUMMARY [
+ "PASS hello advertises traces capability",
+ "PASS receiver Listening",
+ "PASS first watch page carries endpoint",
+ "PASS app exported and exited cleanly after flush",
+ "PASS watch lists 3 traces",
+ "PASS every trace service.name is orders-api",
+ "PASS every trace attributed to the session",
+ "PASS exactly one trace marked error (the /fail request)",
+ "PASS status:error filter returns only the failing trace",
+ "PASS traces.get returns the error trace with >=2 spans",
+ "PASS spans carry checkout + workspace + session attribution",
+ "PASS orders.charge span has error status",
+ "PASS traces.span returns server span attributes",
+ "PASS found MCP HTTP endpoint for the session token",
+ "PASS MCP traces lists the same 3 traces",
+ "PASS MCP trace returns the waterfall",
+ "PASS MCP span returns an attribute and attribution"
+]

@@ -864,3 +864,116 @@ held retirement, and retirement timeout without spending crash retries.
 The authenticated Host setting is configuration outside EventStore, like SQL
 dialect and Python interpreter selection. No EventStore command, commit, stream,
 acknowledgment or recovery semantics change. Runtime trace replay includes Evict.
+
+## Data Source Approvals (ENG-644)
+
+`data_approvals` in `polaris.qnt` refines the existing HRequest/Respond lifecycle with exact target and whole-server remembering, duplicate requests, bounded waits, revocation and restart. `engine/session.ts` decides `data.approvalRequested`; `data/approvals.ts` commits its events, and `data/approvalStore.ts` projects durable decisions into data.sqlite. Approvals remain pending only with a Turn in flight; waits leave the card in place. Target identity includes engine, host, port, database and user; source names are not permission keys. The existing commit/replay/first-response-wins properties still apply. `verification/dataApprovals.model.test.ts` drives the real machine and persistence against an independent model.
+
+### Findings
+
+MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.
+
+
+## Data write approvals (ENG-645)
+
+`data_writes` in `polaris.qnt` models write policy, the side-effect-free precondition,
+not-previewed triggers and Local DDL, one-shot approval, identity drift, cancellation at the COMMIT boundary,
+unknown outcomes and recovery. The Session machine remains the approval authority.
+
+| Model | Runtime mapping |
+| --- | --- |
+| `policy`, `inspect` | `writeQueries.resolve`, `approvalStore`, `writePreflight` and the extended function guard reject writes off, Remote defaults, unsafe functions and non-InnoDB dependencies before preview. |
+| `dryRun`, `notPreviewed`, `request` | `writeExecution` rolls back eligible previews; triggers skip execution and `writeApprovals.open` commits the card through the Session machine. |
+| `allow`, `deny`, `endTurn` | ApprovalResolved/Withdrawn events projected into WriteApprovalStore; Turn end expires pending authority with the withdrawal reason but does not invent a definite outcome for a started write. |
+| `rows`, `execute` | Complete affected-key/full-row identity plus count checked before commit; INSERT excludes database-filled columns. |
+| `claim`, `retry` | Durable SQLite compare-and-set and immutable request arguments; completed receipts do not reopen a source. |
+| `sendCommit`, `confirm`, `unknown` | `writeCommit` shields confirmation for five seconds; `settleWrite` persists the result even under interruption. Lost confirmation has a distinct DataError and Query Log state. |
+| `restart` | Pending cards expire with the withdrawal reason; started requests and running Query Log writes become unknown. |
+
+`dataWrites.model.test.ts` drives the real machine/projection and independent lifecycle model,
+including recovery from started. Policy, actual effects, identity and wire values are exercised
+by the Data unit and opt-in native regression suites. `bun run spec` runs 17 write scenarios
+and 3,000 safety traces. The model treats sequence allocation as an explicit exception to
+rollback, not a transactional row effect; it does not promise distributed exactly-once commit.
+
+Version 2 `scripts/data-write-replay` accepts persisted ApprovalRequests, committed events,
+WriteApprovalStore status, Query Log entries, and observed database values/identity hashes.
+It derives transitions from that evidence; a test cannot supply a phase label. Native
+`writes.real` records the normal path; `writeReplay.real` records denied, identity drift,
+not-previewed and unknown paths. The replay tests reject missing approval events, status/log
+mismatches, identity drift reported as success, unapproved external effects and retries that
+change data again. Commands and bounded identity limits are in the Data README.
+
+Engine trace validation remains `POLARIS_TRACE_DIR=/tmp/wf-engine-traces bun test
+apps/daemon/src/verification/engine.model.test.ts`, then `cd packages/spec && bun scripts/replay.ts
+/tmp/wf-engine-traces`. Approval events use the existing Session machine transitions.
+
+### Schema Diff observation (ENG-645)
+
+`data/schemaSnapshots.ts` consumes committed Turn boundaries, completed commands
+and target-keyed Query Log activity in a scoped background worker. Snapshotting
+never decides, acknowledges or commits a Session command, opens an approval or
+changes stream/resume/recovery semantics. A synchronous pre-write baseline only
+joins the authorized Data write path, outside Session commit.
+
+`polaris.qnt`, module `data_snapshots`, models the sidecar's target revisions,
+adjacent-end reuse, carried original provenance, user invalidation and concurrent
+writer uncertainty. Its scenarios and safety simulation run with `bun run spec`.
+This is separate from Session receipts: it adds no Session transition.
+`data/schemaSnapshots.regression.test.ts` checks these policies against the real
+worker and SQLite, including cross-checkout activity and same-session users.
+The additive `baselineTurn`/`baselineCapturedAt` fields identify the actual capture;
+only an actual immediately previous end uses `previous-turn-end`, older carried
+content uses `first-use`. `concurrent`, `capturedLate`, `errorCode`, `pruned` and
+per-table `detailsTruncated` expose attribution and retention limits on the wire.
+
+`data/schemaSnapshots.test.ts` and `engine/Engine.schemaSnapshots.test.ts` cover
+commit independence, Remote approval boundaries and archive cleanup.
+`data/schemaStore.test.ts` checks content deduplication, indexed Turn reads,
+50-Turn/Host-byte retention, pruning notices and persisted author counts.
+`data/schemaCatalog.regression.real.test.ts` checks stable identity, detail bounds,
+expressions, ordered indexes, views, triggers and redacted text against disposable
+Postgres/MySQL; `schemaCatalog.cost.real.test.ts` and `schemaSnapshots.cost.test.ts`
+measure RSD C1/W7. Native tests are opt-in via `POLARIS_TEST_PG_URL` and
+`POLARIS_TEST_MYSQL_URL`; worker cost also accepts `POLARIS_SCHEMA_COST=1`.
+Existing Data approval model/trace checks remain the authority for approval
+transitions. Unknown writers outside Polaris and catalog changes during a
+multi-query capture remain observational limits, not receipt guarantees.
+
+RX fix-round coverage (ENG-644): `data-approvals.qnt` supplies the refined model imported by
+`data_approvals`. It models two sessions, Local/Remote changes, writes-policy changes, shared
+pending cards, Turn end and one-request grant consumption. Safety checks executed-read audit
+counts, remaining grant credits and card cardinality rather than restating the admission
+predicate. `data_approvals_default_mutant`, `data_approvals_once_mutant` and
+`data_approvals_cards_mutant` must each violate safety; the spec runner checks their witnesses
+and simulator failures. The real projection model varies locality, writes, server user,
+remembering, restart and Turn end across two Session records. `data/approvals.test.ts` also
+exercises the composed EventStore service with two concurrent waiters and one-request retries.
+The Session machine's transitions are unchanged; these are refinements of its existing
+ApprovalRequested, ApprovalResolved and ApprovalWithdrawn events. Engine trace replay remains
+`POLARIS_TRACE_DIR=/tmp/xf-traces bun test apps/daemon/src/verification/engine.model.test.ts`
+then `cd packages/spec && bun scripts/replay.ts /tmp/xf-traces`.
+
+### Cooperative inspector profiling (ENG-659)
+
+`polaris.qnt`'s `profile_attach` refines the existing Session approval events.
+`inspector.approvalRequested` uses the Session machine's active-Turn/Archived
+rules. `session.testing.ts` and `session.graph.test.ts` replay its request and
+resolution alongside Harness approvals; the reactor never forwards its response
+to a Harness. Optional `ApprovalRequest.profileAttach` carries pid, command,
+Node runtime and seconds; no remembered Allow or Answer can authorize it.
+
+| Model | Runtime mapping |
+| --- | --- |
+| `request`, `allow`, `deny` | `traces/attach/approval.ts`: fresh Pending Approval, explicit user Allow once, denial and scoped withdrawal. |
+| `userCapture`, `grant` | User RPC requires the same Client grant as RespondToApproval. The click authorizes capture without a Turn or Pending Approval. |
+| `attach`, `credit` | `captureAttached`: one in-memory invocation consumes one response, rechecks policy and target, and writes through `Profiles.record`. |
+| `endTurn`, `readonly` | Policy is rechecked throughout capture; agent captures also follow their active Turn. User captures survive Turn end. |
+| `disconnect`, `close` | The Worker disconnects its in-process Session on control loss; the registry times out native-blocked captures. No TCP listener or PID signalling path exists. |
+
+The spec runner checks its scenarios and safety simulation. Real Node tests in
+`traces/attach/attach.test.ts` exercise capture, denial and in-target watchdog
+shutdown. `listening` stays false even while the main thread is blocked in native code. In Terminal handles inspector and Data approvals without leaving the terminal; upgrade withdraws orphaned Daemon-owned requests. Timing bounds and native transport behavior are tested in real Node,
+not proven by the abstract model. Existing Engine trace validation still applies:
+`POLARIS_TRACE_DIR=/tmp/p9-engine-traces bun test apps/daemon/src/verification/engine.model.test.ts`,
+then `cd packages/spec && bun scripts/replay.ts /tmp/p9-engine-traces`.

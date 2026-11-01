@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "env": {
+    "machine": "Mac14,13",
+    "machineSlug": "mac14-13-apple-m2-max-12c",
+    "cpu": "Apple M2 Max",
+    "cores": 12,
+    "memoryGiB": 32,
+    "os": "macOS 27.0 (Darwin 27.0.0)",
+    "arch": "arm64",
+    "bun": "1.4.4",
+    "gitSha": "7044f9ce2a38",
+    "gitDirty": true,
+    "daemon": "source",
+    "daemonBinary": null,
+    "transport": "bridge",
+    "sampler": "darwin-libproc",
+    "date": "2026-11-01T03:45:55.539Z",
+    "backgroundCores": 4.5
+  },
+  "options": {
+    "quick": false,
+    "runs": 3,
+    "profile": false,
+    "scenarios": [
+      "traces"
+    ]
+  },
+  "scenarios": {
+    "traces": {
+      "metrics": {
+        "spans_per_s": {
+          "value": 33980.280351329784,
+          "unit": "spans/s",
+          "kind": "throughput",
+          "better": "higher",
+          "runs": [
+            31233.05037989754,
+            33980.280351329784,
+            34205.98624390082
+          ],
+          "min": 31233.05037989754,
+          "max": 34205.98624390082
+        },
+        "ingest_ms": {
+          "value": 5885.766624999997,
+          "unit": "ms",
+          "kind": "time",
+          "better": "lower",
+          "runs": [
+            6403.473166,
+            5885.766624999997,
+            5846.929791000002
+          ],
+          "min": 5846.929791000002,
+          "max": 6403.473166
+        },
+        "cpu_avg_pct": {
+          "value": 107.20259297093146,
+          "unit": "%",
+          "kind": "cpu",
+          "better": "lower",
+          "runs": [
+            100.53016719197223,
+            107.20259297093146,
+            108.62040417258494
+          ],
+          "min": 100.53016719197223,
+          "max": 108.62040417258494
+        },
+        "rss_peak_over_base_mib": {
+          "value": 182.34375,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "tolerance": {
+            "relative": 0.25,
+            "absolute": 10
+          },
+          "runs": [
+            195.625,
+            182.34375,
+            180.53125
+          ],
+          "min": 180.53125,
+          "max": 195.625
+        },
+        "rss_after_quiet_mib": {
+          "value": 297.78125,
+          "unit": "MiB",
+          "kind": "memory",
+          "better": "lower",
+          "runs": [
+            311.609375,
+            297.78125,
+            295.5
+          ],
+          "min": 295.5,
+          "max": 311.609375
+        },
+        "rpc_during_p99_ms": {
+          "value": 5.865292000002228,
+          "unit": "ms",
+          "kind": "latency",
+          "better": "lower",
+          "runs": [
+            7.158916000000318,
+            5.865292000002228,
+            2.891250000000582
+          ],
+          "min": 2.891250000000582,
+          "max": 7.158916000000318
+        }
+      },
+      "notes": [
+        "Forwarding: unconfigured.",
+        "200000 spans in 200 JSON batches; real receiver, SQLite worker, concurrent files.stat; 32s quiet worker retirement."
+      ],
+      "durationMs": 119956.26895900001
+    }
+  }
+}

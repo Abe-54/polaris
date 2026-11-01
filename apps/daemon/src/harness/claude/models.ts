@@ -7,7 +7,7 @@
  * process (~0.5 s) and whatever Claude Code itself fetches to answer; nothing
  * is sent to a model.
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { mkdirSync } from "node:fs";
 import type { EffortLevel, ModelInfo, Options } from "@anthropic-ai/claude-agent-sdk";
 import { Model } from "@polaris/protocol";
@@ -64,7 +64,7 @@ export const listClaudeModels = (driver: {
       strictMcpConfig: true,
       settingSources: ["user"],
       settings: { disableAllHooks: true },
-      env: childEnv({ ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "polaris-daemon" }),
+      env: harnessEnv({ ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "polaris-daemon" }),
     };
 
     const infos = yield* Effect.acquireUseRelease(

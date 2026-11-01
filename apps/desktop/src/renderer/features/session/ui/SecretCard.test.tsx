@@ -73,7 +73,7 @@ const ctx: RowContext = {
 const mount = (settled: SecretOutcome | null = null) => {
   decisions.length = 0;
 
-  const row = { kind: "approval" as const, key: "approval:r1", request, settled };
+  const row = { kind: "approval" as const, key: "approval:r1", request, settled, wrote: null };
 
   return within(
     render(
