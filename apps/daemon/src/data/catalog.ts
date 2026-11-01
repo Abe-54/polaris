@@ -11,6 +11,23 @@ import { readEffect, type ReadInput } from "./execution.ts";
 import { DataPools } from "./pools.ts";
 import { catalogValues, catalogError } from "./catalogValues.ts";
 import { serverEngine } from "./engine.ts";
+import { sqliteTable, sqliteTree } from "./sqlite/catalog.ts";
+
+const noFile = () =>
+  new DataError({
+    code: "E-DATA-UNREACHABLE",
+    message: "This SQLite source has no file.",
+    fix: "The user can check this data source in Data (⌘4).",
+  });
+
+/** SQLite's tree, or one table's detail and sample SQL. */
+const sqliteCatalog = (input: Omit<ReadInput, "sql" | "limit">, table: string | undefined) => {
+  const file = input.connection.file;
+
+  if (file === undefined) return Effect.fail(noFile());
+
+  return table === undefined ? sqliteTree(file) : sqliteTable(file, table);
+};
 
 const pgVisible =
   "n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%'";
@@ -243,7 +260,17 @@ export const makeCatalogReader = (read: typeof readEffect) =>
       )
   );
 
-export const readCatalog = makeCatalogReader(readEffect);
+const serverCatalog = makeCatalogReader(readEffect);
+
+export const readCatalog = (
+  pools: DataPools,
+  input: Omit<ReadInput, "sql" | "limit">,
+  table?: string,
+  snapshotTree?: SchemaTree
+) =>
+  input.source.engine === "sqlite"
+    ? sqliteCatalog(input, table)
+    : serverCatalog(pools, input, table, snapshotTree);
 
 const missingTable = () =>
   new DataError({

@@ -1,2 +1,2 @@
 [test]
-preload = ["../../tooling/test/tmpdir.ts"]
+preload = ["../../tooling/test/tmpdir.ts", "./src/developerMode/testPreload.ts"]

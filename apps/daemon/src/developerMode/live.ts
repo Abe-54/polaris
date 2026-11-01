@@ -9,7 +9,7 @@ import {
   type Workspace,
   type WorkspaceId,
 } from "@polaris/protocol";
-import { Context, Effect, Layer, Predicate, type Scope, Semaphore, Stream } from "effect";
+import { Context, Effect, Layer, Match, Predicate, type Scope, Semaphore, Stream } from "effect";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { paths } from "../paths.ts";
 import { isEmbeddedPath } from "../platform/detect.ts";
@@ -169,10 +169,22 @@ export const developerModeLayer = (options: DeveloperModeOptions) =>
     )
   );
 
-/** A Daemon run from source rather than from a compiled `polaris` binary. */
-export const runsFromSource = (): boolean => !isEmbeddedPath(import.meta.path);
+/** `POLARIS_DEVELOPER_MODE`: `off` or `on` overrides the from-source check; anything else keeps it. */
+export const DEVELOPER_MODE_ENV = "POLARIS_DEVELOPER_MODE";
 
-/** The Host's Developer Mode, stored in `~/.polaris/developer-mode.json`. */
+/** Whether this Daemon counts as run from source, `override` first (README.md). */
+export const fromSourceFor = (override: string | undefined, embedded: boolean): boolean =>
+  Match.value(override).pipe(
+    Match.when("off", () => false),
+    Match.when("on", () => true),
+    Match.orElse(() => !embedded)
+  );
+
+/** A Daemon run from source rather than from a compiled `polaris` binary, unless overridden. */
+export const runsFromSource = (): boolean =>
+  fromSourceFor(process.env[DEVELOPER_MODE_ENV], isEmbeddedPath(import.meta.path));
+
+/** The Host's Developer Mode, stored in `~/.polaris/developer-mode.json`; the env is read once. */
 export const DeveloperModeLive = Layer.unwrap(
   Effect.sync(() =>
     developerModeLayer({

@@ -36,6 +36,7 @@ import {
 import { type LiveSource, makeFeed, type SequenceMark } from "@polaris/client/resume";
 import { Data, Effect, Option, Predicate, type Redacted, Stream } from "effect";
 import { type RpcClient, RpcGroup } from "effect/rpc";
+import { tracedDispatch } from "../selfTraces/index.ts";
 import type { RpcClientError } from "effect/rpc/RpcClientError";
 
 /** Why a call or feed failed, as the user reads it. */
@@ -255,7 +256,9 @@ export const daemonThreadSource = (options: DaemonThreadOptions): ThreadSource =
         )
       ).pipe(Stream.mapError(failure)),
     dispatch: (command, commandId) =>
-      withClient(live, (client) => Effect.asVoid(client.dispatch({ commandId, command }))),
+      withClient(live, (client) =>
+        tracedDispatch(command, commandId, Effect.asVoid(client.dispatch({ commandId, command })))
+      ),
     provideSecret: (sessionId, requestId, value) =>
       withClient(live, (client) => client["secret.provide"]({ sessionId, requestId, value })),
     continuity: has("session.continuity")

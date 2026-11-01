@@ -62,6 +62,8 @@ export const testEnv = (
     HOME: userHome ?? home,
     POLARIS_HOME: home,
     POLARIS_BENCH_HARNESS: benchHarness ? "1" : "0",
+    // Run from source, but not tracing itself unless a script turns Developer Mode on (ENG-709).
+    POLARIS_DEVELOPER_MODE: "off",
     ...extra,
   };
 

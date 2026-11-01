@@ -78,6 +78,9 @@ export const launchDaemon = async (options: LaunchOptions): Promise<Daemon> => {
   // The gateway on an ephemeral port: the same listener, without taking 7477 from a real Daemon.
   env.POLARIS_GATEWAY_PORT = "0";
 
+  // From source counts as Developer Mode; off, so the scenarios measure the untraced path (ENG-709).
+  env.POLARIS_DEVELOPER_MODE = "off";
+
   if (profileDir) env.POLARIS_DEBUG_DIR = profileDir;
   Object.assign(env, options.env);
   // Disposable Daemons cannot inherit or override the Host's upgrade descriptors.

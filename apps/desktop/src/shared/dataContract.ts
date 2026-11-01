@@ -7,6 +7,7 @@ import {
   CommitDataEdits,
   type DataWriteResult,
   SaveDataSource,
+  SaveDataFileSource,
   RemoveDataSource,
   LabelDataSource,
   QueryDataStream,
@@ -36,6 +37,7 @@ export const DataRequestInputs = {
     ...SaveDataSource.payloadSchema.fields,
     password: Schema.optionalKey(Schema.String),
   }),
+  "data.source.saveFile": Schema.Struct({ ...OnHost, ...SaveDataFileSource.payloadSchema.fields }),
   "data.source.remove": Schema.Struct({ ...OnHost, ...RemoveDataSource.payloadSchema.fields }),
   "data.source.label": Schema.Struct({ ...OnHost, ...LabelDataSource.payloadSchema.fields }),
   "data.queryLog.page": Schema.Struct({ ...OnHost, ...PageDataQueryLog.payloadSchema.fields }),
@@ -48,6 +50,7 @@ export interface DataRequestOutputs {
   readonly "data.edits.commit": DataWriteResult;
   readonly "data.query": QueryResult;
   readonly "data.source.save": DataSource;
+  readonly "data.source.saveFile": DataSource;
   readonly "data.source.remove": null;
   readonly "data.source.label": DataSource;
   readonly "data.queryLog.page": typeof DataQueryLogPage.Type;

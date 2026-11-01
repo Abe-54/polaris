@@ -51,6 +51,7 @@ import { StatesGallery, statesGalleryOn } from "./states/index.ts";
 import { ThreadGallery, threadGalleryOn } from "./thread/ThreadGallery.tsx";
 import { useWidgetLinks } from "./widgets/useWidgetLinks.ts";
 import { WidgetSync } from "./widgets/WidgetSync.ts";
+import { SelfTraceSync } from "./selfTraces/SelfTraceSync.ts";
 import { ThemeProvider, themedStyles } from "./theme/index.ts";
 
 const TAB_BAR = 58;
@@ -278,6 +279,7 @@ export const App = () => {
             <RelayProvider>
               <FollowedHostsProvider>
                 <WidgetSync />
+                <SelfTraceSync />
                 <CheckAlive />
                 <Push />
                 <NavigationProvider>

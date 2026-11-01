@@ -10,6 +10,7 @@ import { commitWindow } from "./writeCommit.ts";
 import { DataPools } from "./pools.ts";
 import { decodeResult, type RawResult, typeName } from "./values.ts";
 import { serverEngine } from "./engine.ts";
+import { sqliteRead } from "./sqlite/client.ts";
 
 const DriverError = Schema.Struct({
   message: Schema.optionalKey(Schema.String),
@@ -471,6 +472,14 @@ export async function executeRead(pools: DataPools, input: ReadInput, signal: Ab
 }
 
 export function readEffect(pools: DataPools, input: ReadInput) {
+  if (input.source.engine === "sqlite") {
+    const file = input.connection.file;
+
+    return file === undefined
+      ? Effect.fail(queryError(new Error("This SQLite source has no file."), []))
+      : sqliteRead(file, input);
+  }
+
   let running: ReturnType<typeof executeRead> | undefined;
 
   return Effect.tryPromise({

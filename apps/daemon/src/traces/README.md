@@ -302,3 +302,29 @@ credentials and are omitted from settings even though the private target remains
 `POLARIS_BENCH_TRACE_FORWARDING=down bun run bench traces ...` enables forwarding to an
 unavailable loopback collector for the existing scenario; its notes record this mode. It uses
 the same receiver/store and baseline metrics. The idle scenario leaves the queue unused.
+
+## Self-Traces (ENG-710, ADR 0095)
+
+`self/` holds Polaris's own Spans. `serve` installs `selfTracer` as the root Tracer. While
+`DeveloperModeState` (from `developerMode/service.ts`) is not effective, its `span` is the native
+tracer's, so there is no exportable Span, buffer, timer or store worker wake-up. `selfTraceExport`
+follows the state's `changes`. While it is effective, ended sampled Spans are buffered (at most
+1,024; extra are counted and dropped) and flushed every 250 ms as `polaris-daemon`. On a switch,
+Spans already buffered go to the old sink.
+
+Self-Spans become OTLP JSON and go through `TraceStore.ingest`: the same decoder, redaction and
+bounds as the receiver. They are stored under the reserved checkout key `polaris:self`, which is
+not a path. That scope has its own retention of 50 MiB or 24 hours (`self/scope.ts`), separate
+from checkout budgets. `traces.ingestSelf` refuses with `developer-mode-off` unless Developer Mode
+is effective. It drops Spans that end before they start and stamps the batch's `service` as
+`service.name`. The protocol schema bounds a batch to 1,024 Spans and 512 KiB.
+
+`traces.watch/get/span` read the session's checkout and, when its Workspace is
+`polarisWorkspaceId`, the Self-Trace scope too. Pages are merged newest first, and a prefix
+resolves in the checkout first. `scope: "self"` reads only the Self-Trace scope. The session
+still authorizes the read, and the first page carries no endpoint.
+
+`transport/traceContext.ts` rebuilds Effect's request `traceId`/`spanId`/`sampled` from the
+`traceparent` header alone, so a handler Span is the child of the Client Span that sent it.
+Effect's own client fields are never trusted. No trace context leaves the Daemon:
+`harnessEnv` is unchanged and still strips `POLARIS_OTEL_*`.

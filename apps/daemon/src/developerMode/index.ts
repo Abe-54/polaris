@@ -5,6 +5,8 @@ export {
   DeveloperModeControl,
   DeveloperModeLive,
   developerModeLayer,
+  DEVELOPER_MODE_ENV,
+  fromSourceFor,
   runsFromSource,
   type DeveloperModeOptions,
 } from "./live.ts";

@@ -8,4 +8,6 @@ export interface TracesSlotProps {
   /** The open trace and selected span; null when none. */
   readonly traceId: string | null;
   readonly spanId: string | null;
+  /** The Polaris switch, when Self-Traces have no checkout of their own to sit in. */
+  readonly polaris?: { readonly on: boolean; readonly set: (on: boolean) => void } | undefined;
 }

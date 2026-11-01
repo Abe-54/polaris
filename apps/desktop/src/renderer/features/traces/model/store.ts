@@ -1,7 +1,7 @@
 /** The trace and span open in each Agent Session's Traces, kept while the user moves around. */
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { TracesSessionKey } from "./session.ts";
+import { scopedKey, type TracesSessionKey } from "./session.ts";
 
 export interface TracesSelection {
   readonly traceId: string | null;
@@ -12,7 +12,7 @@ const NONE: TracesSelection = { traceId: null, spanId: null };
 
 const store = createStore<Readonly<Record<string, TracesSelection>>>(() => ({}));
 
-const keyOf = (at: TracesSessionKey) => `${at.hostKey}\u0000${at.sessionId}`;
+const keyOf = scopedKey;
 
 const set = (at: TracesSessionKey, next: TracesSelection) =>
   store.setState((s) => ({ ...s, [keyOf(at)]: next }));

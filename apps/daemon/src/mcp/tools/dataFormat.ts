@@ -189,6 +189,9 @@ const foundIn = (source: DataSource) =>
     : `from ${source.foundIn.file ?? source.foundIn.kind}${source.foundIn.key === undefined ? "" : ` (${source.foundIn.key})`}`;
 
 const access = (source: DataSource) => {
+  if (source.engine === "sqlite")
+    return source.locality === "local" ? "read · read only" : "outside the checkout, denied";
+
   if (source.access === "needs-approval") return "needs approval";
 
   if (source.access === "denied") return "denied";
@@ -218,13 +221,17 @@ export const sourcesView = (
   known: Known = []
 ) => {
   const data = sources.map((source) => {
-    const item: Omit<DataSource, "id" | "user" | "label"> = {
+    // A SQLite source's server fields are placeholders; agents get its file instead.
+    const target =
+      source.engine === "sqlite"
+        ? { path: source.path ?? "" }
+        : { host: source.host, port: source.port, database: source.database };
+
+    const item = {
       name: source.name,
       engine: source.engine,
       locality: source.locality,
-      host: source.host,
-      port: source.port,
-      database: source.database,
+      ...target,
       foundIn: source.foundIn,
       access: source.access,
       writes: source.writes,
@@ -245,9 +252,11 @@ export const sourcesView = (
       source.name,
       `${source.engine}${source.version === undefined ? "" : ` ${source.version}`}`,
       source.locality,
-      source.branch === undefined
-        ? `${source.host}:${source.port}/${source.database}`
-        : `(${source.branch.provider === "planetscale" ? "PlanetScale" : "Neon"} branch ${source.branch.name})`,
+      source.engine === "sqlite"
+        ? (source.path ?? "")
+        : source.branch === undefined
+          ? `${source.host}:${source.port}/${source.database}`
+          : `(${source.branch.provider === "planetscale" ? "PlanetScale" : "Neon"} branch ${source.branch.name})`,
       foundIn(source),
       access(source),
     ])
