@@ -2,7 +2,7 @@
  * Add data source (DESIGN.md, Data → Sidebar): a manual source posted with `data.source.save`.
  * The password is write-only: never shown, never read back, and blank keeps the saved one.
  */
-import type { DataSource, DataSourceLabel } from "@polaris/protocol";
+import type { DataSourceLabel, ServerDataEngine } from "@polaris/protocol";
 import {
   Button,
   Dialog,
@@ -22,12 +22,12 @@ import { MANUAL_LABEL } from "../../model/source.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { LabelSwatches } from "../connection/LabelSwatches.tsx";
 
-const PORTS: Record<DataSource["engine"], number> = { postgres: 5432, mysql: 3306 };
+const PORTS: Record<ServerDataEngine, number> = { postgres: 5432, mysql: 3306 };
 
 /** The password isn't here: it stays in its uncontrolled field, so it never reaches the DOM's attributes. */
 export interface Draft {
   readonly name: string;
-  readonly engine: DataSource["engine"];
+  readonly engine: ServerDataEngine;
   readonly host: string;
   readonly port: string;
   readonly database: string;
@@ -52,7 +52,8 @@ const draftOf = (form: Form): Draft =>
       }
     : {
         name: form.source.name,
-        engine: form.source.engine,
+        // Server sources only: no SQLite source exists until ENG-708 task SQ gives it its own form.
+        engine: form.source.engine === "sqlite" ? "postgres" : form.source.engine,
         host: form.source.host,
         port: String(form.source.port),
         database: form.source.database,
@@ -181,7 +182,7 @@ const Fields = (props: FieldsProps) => {
   return (
     <div className="flex flex-col gap-3 px-5 pb-4">
       <NameField {...props} />
-      <SegmentedControl<DataSource["engine"]>
+      <SegmentedControl<ServerDataEngine>
         aria-label="Engine"
         variant="fill"
         value={draft.engine}

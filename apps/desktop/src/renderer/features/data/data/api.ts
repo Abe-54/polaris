@@ -12,6 +12,7 @@ import type {
   QueryResult,
   SchemaTree,
   TableDetail,
+  ServerDataEngine,
   TurnId,
 } from "@polaris/protocol";
 import { Match } from "effect";
@@ -72,7 +73,7 @@ export interface QueryStream {
 /** A manual Data Source (`data.source.save`); the password is write-only and never read back. */
 export interface SaveSourceInput {
   readonly name: string;
-  readonly engine: DataSource["engine"];
+  readonly engine: ServerDataEngine;
   readonly host: string;
   readonly port: number;
   readonly database: string;

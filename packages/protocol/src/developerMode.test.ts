@@ -49,15 +49,19 @@ test.each([
 const mode = {
   stored: false,
   leases: 1,
+  fromSource: false,
   effective: true,
   polarisWorkspaceId: "w1",
   polarisWorkspaceSource: "remote",
 };
 
-test("Developer Mode is effective exactly when stored or leased, and a Workspace has a source", () => {
+test("Developer Mode is effective exactly when stored, leased or from source, and a Workspace has a source", () => {
   const decode = Schema.decodeUnknownSync(DeveloperMode);
   expect(decode(mode).effective).toBe(true);
+  expect(decode({ ...mode, leases: 0, fromSource: true }).effective).toBe(true);
+  expect(decode({ ...mode, leases: 0, stored: true }).effective).toBe(true);
   expect(() => decode({ ...mode, leases: 0 })).toThrow();
+  expect(() => decode({ ...mode, leases: 0, fromSource: true, effective: false })).toThrow();
   expect(() => decode({ ...mode, polarisWorkspaceSource: null })).toThrow();
   expect(() => decode({ ...mode, polarisWorkspaceId: null })).toThrow();
 });

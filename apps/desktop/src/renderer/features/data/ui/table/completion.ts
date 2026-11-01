@@ -25,6 +25,7 @@ const KEYWORDS = ["and", "or", "not", "is null", "is not null", "like", "in", "b
 const ENGINE_KEYWORDS: Readonly<Record<Engine, ReadonlyArray<string>>> = {
   postgres: [...KEYWORDS, "ilike"],
   mysql: [...KEYWORDS, "regexp"],
+  sqlite: [...KEYWORDS, "glob"],
 };
 
 const MAX_ITEMS = 8;

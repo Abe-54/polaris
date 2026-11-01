@@ -20,7 +20,9 @@ const DeveloperModeFields = Schema.Struct({
   stored: Schema.Boolean,
   /** Live `developerMode.lease` streams on this Host, from development builds. */
   leases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  /** Whether this Host traces now: `stored`, or any lease held. */
+  /** The Daemon runs from source rather than a packaged build, so it always traces. */
+  fromSource: Schema.Boolean,
+  /** Whether this Host traces now: `stored`, any lease held, or `fromSource`. */
   effective: Schema.Boolean,
   polarisWorkspaceId: Schema.NullOr(WorkspaceId),
   /** Null exactly when `polarisWorkspaceId` is. */
@@ -28,7 +30,7 @@ const DeveloperModeFields = Schema.Struct({
 }).check(
   Schema.makeFilter(
     (mode) =>
-      mode.effective === (mode.stored || mode.leases > 0) &&
+      mode.effective === (mode.stored || mode.leases > 0 || mode.fromSource) &&
       (mode.polarisWorkspaceId === null) === (mode.polarisWorkspaceSource === null)
   )
 );
@@ -40,6 +42,7 @@ export class DeveloperMode extends Schema.Class<DeveloperMode>("DeveloperMode")(
 export const DEFAULT_DEVELOPER_MODE = DeveloperMode.make({
   stored: false,
   leases: 0,
+  fromSource: false,
   effective: false,
   polarisWorkspaceId: null,
   polarisWorkspaceSource: null,

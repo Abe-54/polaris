@@ -76,7 +76,11 @@ export const kickerText = (source: DataSource, text = source.label.text): string
  */
 export const MANUAL_LABEL: DataSourceLabel = { text: "", colour: "red" };
 
-const ENGINES: Record<DataSource["engine"], string> = { postgres: "PostgreSQL", mysql: "MySQL" };
+const ENGINES: Record<DataSource["engine"], string> = {
+  postgres: "PostgreSQL",
+  mysql: "MySQL",
+  sqlite: "SQLite",
+};
 
 const PROVIDERS: Record<NonNullable<DataSource["branch"]>["provider"], string> = {
   planetscale: "PlanetScale",

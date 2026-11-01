@@ -13,7 +13,7 @@ const ROWS = 5_000;
 
 const Ids = Schema.Array(Schema.Struct({ id: Schema.Number }));
 
-const urls: Readonly<Record<Engine, string | undefined>> = {
+const urls: Readonly<Record<Exclude<Engine, "sqlite">, string | undefined>> = {
   postgres: process.env["POLARIS_TEST_PG_URL"],
   mysql: process.env["POLARIS_TEST_MYSQL_URL"],
 };

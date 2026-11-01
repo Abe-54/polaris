@@ -116,7 +116,9 @@ export const useTableEdits = (input: TableEditsInput) => {
 
       if (facts === undefined) return null;
 
-      return source === null ? facts : { ...facts, engine: source.engine };
+      return source === null || source.engine === "sqlite"
+        ? facts
+        : { ...facts, engine: source.engine };
     };
 
     return {
