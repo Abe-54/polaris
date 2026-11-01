@@ -188,9 +188,12 @@ export const affectedLines = (entry: QueryLogEntry): ReadonlyArray<string> =>
     (a) => `${a.schema === undefined ? a.table : `${a.schema}.${a.table}`} · ${rows(a.rows)}`
   );
 
-/** Where an unqualified table lives: Postgres' `public`, a MySQL database's own name. */
-export const defaultSchema = (source: Pick<DataSource, "engine" | "database">) =>
-  source.engine === "postgres" ? "public" : source.database;
+/** Where an unqualified table lives: Postgres' `public`, SQLite's `main`, a MySQL database's own name. */
+export const defaultSchema = (source: Pick<DataSource, "engine" | "database">) => {
+  if (source.engine === "postgres") return "public";
+
+  return source.engine === "sqlite" ? "main" : source.database;
+};
 
 /** The table "Open in Data" opens for a write: the first the Daemon counted, else the SQL's. */
 export const writeTable = (

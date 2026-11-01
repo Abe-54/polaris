@@ -1,5 +1,7 @@
 /** Work done on a read-only SQLite handle inside the query Worker; plain data in and out. */
 import { Database } from "bun:sqlite";
+import { realpathSync } from "node:fs";
+import { Predicate } from "effect";
 import { guardSqliteRead } from "./guard.ts";
 
 export type SqliteValue = string | number | bigint | boolean | Uint8Array | null;
@@ -64,6 +66,12 @@ export interface CatalogOutput {
 
 /** The database enforces read-only: no write can commit through this handle. */
 export function openReadOnly(file: string) {
+  // The Daemon resolved this path's links when it chose the file; one swapped in since is refused.
+  if (realpathSync(file) !== file)
+    throw Object.assign(new Error("The database file moved since Polaris found it."), {
+      code: "SQLITE_CANTOPEN",
+    });
+
   const db = new Database(file, { readonly: true, create: false, safeIntegers: true });
   db.exec("PRAGMA trusted_schema = OFF");
   db.exec("PRAGMA busy_timeout = 5000");
@@ -93,37 +101,62 @@ export function runRead(db: Database, job: ReadJob): ReadOutput {
     return finish(names, declared, rows, [], job.limit, statement.columnNames.length);
   }
 
-  const inner = db.prepare(`SELECT * FROM (\n${checked.sql}\n)`).columnNames.slice(0, 256);
+  const { rows, clipped, over } = budgetedRows(db, checked.sql, params, job.limit);
+  const output = finish(names, declared, rows, clipped, job.limit, statement.columnNames.length);
 
-  const projection = inner.flatMap((name) => {
+  return over ? { ...output, truncated: true } : output;
+}
+
+/** Bytes of cells one read returns at most, as the server engines' `READ_BYTES`. */
+export const SQLITE_READ_BYTES = 1024 * 1024;
+
+const cellBytes = (value: SqliteValue) => {
+  if (Predicate.isString(value)) return value.length * 3 + 32;
+
+  return value instanceof Uint8Array ? value.byteLength * 2 + 32 : 32;
+};
+
+/**
+ * Rows read one at a time, each cell clipped in SQL (wider rows clip sooner), stopping once the
+ * cells pass `SQLITE_READ_BYTES` so a wide or long result never fills the Daemon's memory.
+ */
+function budgetedRows(db: Database, sql: string, params: SqliteValue[], limit: number) {
+  const inner = db.prepare(`SELECT * FROM (\n${sql}\n)`).columnNames.slice(0, 256);
+  const cap = Math.min(SQLITE_CELL_CAP, Math.floor(131072 / Math.max(inner.length, 1)));
+
+  const projection = inner.flatMap((name, i) => {
     const column = quote(name);
-    const long = `typeof(${column}) IN ('text','blob') AND length(${column}) > ${SQLITE_CELL_CAP}`;
+    const long = `typeof(${column}) IN ('text','blob') AND length(${column}) > ${cap}`;
 
     return [
-      `CASE WHEN ${long} THEN substr(${column},1,${SQLITE_CELL_CAP}) ELSE ${column} END`,
-      `CASE WHEN ${long} THEN length(CAST(${column} AS BLOB)) END`,
+      `CASE WHEN ${long} THEN substr(${column},1,${cap}) ELSE ${column} END AS v${i}`,
+      `CASE WHEN ${long} THEN length(CAST(${column} AS BLOB)) END AS n${i}`,
     ];
   });
 
-  const rows = db
-    .prepare(
-      `SELECT ${projection.join(",") || "NULL"} FROM (\n${checked.sql}\n) LIMIT ${job.limit + 1}`
-    )
-    .values(...params);
-
-  const clipped: Array<readonly [string, number]> = [];
-
-  const values = rows.map((row, r) =>
-    names.map((_, c) => {
-      const size = row[c * 2 + 1];
-
-      if (size !== null && size !== undefined) clipped.push([`${r}:${c}`, Number(size)]);
-
-      return row[c * 2] ?? null;
-    })
+  const statement = db.prepare<Record<string, SqliteValue>, SqliteValue[]>(
+    `SELECT ${projection.join(",") || "NULL"} FROM (\n${sql}\n) LIMIT ${limit + 1}`
   );
 
-  return finish(names, declared, values, clipped, job.limit, statement.columnNames.length);
+  const rows: SqliteValue[][] = [];
+  const clipped: Array<readonly [string, number]> = [];
+  let bytes = 0;
+
+  for (const record of statement.iterate(...params)) {
+    const row = inner.map((_, c) => record[`v${c}`] ?? null);
+    bytes += row.reduce<number>((sum, value) => sum + cellBytes(value), 0);
+
+    if (bytes > SQLITE_READ_BYTES && rows.length > 0) return { rows, clipped, over: true };
+
+    inner.forEach((_, c) => {
+      const size = record[`n${c}`];
+
+      if (size !== null && size !== undefined) clipped.push([`${rows.length}:${c}`, Number(size)]);
+    });
+    rows.push(row);
+  }
+
+  return { rows, clipped, over: false };
 }
 
 function finish(

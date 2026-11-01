@@ -26,7 +26,7 @@ import { discover } from "./discovery.ts";
 import { cachedDiscovery } from "./discoveryCache.ts";
 import { dataPasswords } from "./passwords.ts";
 import { dataFailure, openStorage, sourceStorage, type ManualSource } from "./storage.ts";
-import { fileLocality } from "./sqlite/files.ts";
+import { fileLocality, realFile, sqliteFile } from "./sqlite/files.ts";
 import type { DataSources } from "./index.ts";
 
 const unknownSource = () =>
@@ -150,6 +150,18 @@ export const sources = Effect.fnUntraced(function* (options: {
     );
   });
 
+  /** A SQLite candidate names its file's real path, so locality and every read use the same file. */
+  const realCandidate = (candidate: Candidate) =>
+    Effect.promise(async () => {
+      const file = sqliteFile(Redacted.value(candidate.url));
+
+      if (file === undefined) return candidate;
+      const path = await realFile(file);
+      const target = { engine: "sqlite", host: "", port: 0, database: "", user: "", path };
+
+      return { ...candidate, url: connectionUrl(target, "") };
+    });
+
   const checkoutPath = (sessionId: SessionId) =>
     options.checkout(sessionId).pipe(
       Effect.catchTag("NotFound", () => Effect.fail(unknownSource())),
@@ -158,7 +170,7 @@ export const sources = Effect.fnUntraced(function* (options: {
 
   const catalog = Effect.fnUntraced(function* (sessionId: SessionId) {
     const checkout = yield* checkoutPath(sessionId);
-    const items = yield* candidates(checkout);
+    const items = yield* Effect.forEach(yield* candidates(checkout), realCandidate);
 
     const result: { source: DataSource; candidate: Candidate }[] = [];
     const probe = localityProbe(checkout);

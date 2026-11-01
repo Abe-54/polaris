@@ -5,6 +5,7 @@ import {
   queryData,
   commitDataEdits,
   saveDataSource,
+  saveDataFileSource,
   removeDataSource,
   labelDataSource,
   pageDataQueryLog,
@@ -75,6 +76,8 @@ export const dataHandlers = {
         password === undefined ? input : { ...input, password: Redacted.make(password) }
       )
     ),
+  "data.source.saveFile": ({ hostKey, ...input }: RequestInput<"data.source.saveFile">) =>
+    onHost(hostKey, (session) => saveDataFileSource(session, input)),
   "data.source.remove": ({ hostKey, ...input }: RequestInput<"data.source.remove">) =>
     onHost(hostKey, (session) => removeDataSource(session, input)).pipe(Effect.as(null)),
   "data.source.label": ({ hostKey, ...input }: RequestInput<"data.source.label">) =>
