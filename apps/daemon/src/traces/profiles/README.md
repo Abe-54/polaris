@@ -11,21 +11,29 @@ verified Agent Session cwd; binding and storage stay at the canonical checkout r
 containment before stopping and relaunching. `--cpu-prof` comes from `NODE_OPTIONS` or `BUN_OPTIONS`;
 `--cpu-prof-dir` is a single argv entry because Bun retains quotes in BUN_OPTIONS.
 Output is discarded rather than retained without bounds. The wait defaults to 30
-seconds; it does not stop a long-running command. Native process exit flushes the
-artifact. Profiles from child processes are not aggregated into the main recording.
+seconds; it does not stop a long-running command. A private per-recording preload
+turns SIGINT into a normal exit so Node and Bun flush `--cpu-prof`. Restart and
+Daemon shutdown send SIGINT, allow five seconds for exit/write, then SIGTERM for
+five seconds, then SIGKILL. A process that blocks or replaces the handler can still
+require escalation and lose its profile. Profiles from child processes are not
+aggregated into the main recording.
 
 `restart(sessionId,pid)` only accepts a live retained Bun subprocess handle from
 this service in the same checkout. A restart rebuilds the tracing overlay from the original upstream source environment
 and the restart invocation's verified Turn (P2's optional third environment argument),
 so it does not reuse a signed endpoint claiming the original launch Turn.
 The Daemon rechecks policy and identity before
-signalling its process group. Concurrent restarts are refused; a process that does
-not stop within five seconds stays owned until exit/shutdown. Nothing adopts an
-external PID. After a Daemon restart, previous in-flight summaries show failed.
+signalling its process group and reserves the replacement's live-capture slot
+before stopping it. Concurrent restarts are refused. Nothing adopts an external
+PID. Shutdown drains completion jobs before closing the worker queue. List/get
+recover flushed artifacts from orphan recordings left by an earlier Daemon.
 P2/P9 can replace this local launch seam with their authenticated launch authority.
 
 The worker validates CPU graph ids, parents, cycles/depth, finite nonnegative
-sample deltas and timing bounds. Weights produce self and inclusive time; recursive
+sample deltas and timing bounds. Validation keeps parent/depth maps, never a stack
+copy for every node; only the current sampled stack is materialised. Consecutive
+samples of the same stack coalesce, and existing frame durations update in place.
+Weights produce self and inclusive time; recursive
 appearances count inclusive time once per sample. Adjacent matching stack frames
 merge into chronological nodes. Functions sort by total time then self time; nodes
 and the hottest stack use the remapped stable table. Paths become checkout-relative
@@ -38,8 +46,10 @@ POLARIS_HOME. Metadata, raw artifact and cached detail stay together. Reads reso
 ids in that checkout, never a returned path. Missing detail caches rebuild from the
 raw artifact. Symlink/hardlink/oversized artifacts are refused before read or chmod. Retention
 prunes on access/completion: seven days, 200 MiB per checkout including artifacts and
-cached detail, and at most 200 recordings; reads do not pin. No idle sweep runs.
-One active profile worker job runs at a time with at most 32 queued jobs, four live
+cached detail, and at most 200 finished recordings; active recordings do not consume
+that budget. Reads do not pin. No idle sweep runs. One profile worker job runs at a
+time with at most 32 queued jobs; completions and discards wait for queue space.
+Parsing does not consume the limit of four live
 captures, command labels capped at 4096 characters (exact argv stays private for restart),
 64 MiB per artifact, 200k CPU nodes, 2m samples and 500k flame frames.
 
@@ -48,7 +58,11 @@ The one-shot worker is an explicit compiled entrypoint in scripts/build-daemon.t
 rebuilds a small real Node artifact through profiles.get, then a synthetic 50 MB
 recording with one million samples while measuring concurrent files.stat RPCs.
 It never installs a build.
-The MCP text and error contract is docs/specs/traces-tools-v1.md. Span-level trace
+MCP text stays within 16,000 characters and structuredContent within 16,000 UTF-8
+JSON bytes: clipped metadata, top self/total frames, hot-path frames, overlap and
+original counts. Each frame includes its full-detail table index. The separate
+`profiles.get` RPC retains full function and chronological-node tables; open the
+recording in Traces for the full view. Span-level trace
 overlap queries run in the existing trace worker, capped at 200 with a match count.
 
 ## P9 scoped recording seam

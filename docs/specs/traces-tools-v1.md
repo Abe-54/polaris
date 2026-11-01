@@ -185,7 +185,11 @@ Daemon's Profiles service launched; it restarts that command with CPU profiling.
 `id` reads a retained recording. `waitSeconds` (1–120, default 30) bounds the wait for
 a command, not its lifetime: a long-running command returns `recording` and stays owned
 by the Daemon until it exits. Profiles are written on normal process exit; use `id` to
-read the completed recording. A restart returns the new `recording` immediately.
+read the completed recording. Restart and Daemon shutdown send SIGINT; an owned
+preload converts it to normal exit so Node and Bun flush their profiles. After five
+seconds without exit, stop escalates to SIGTERM, then SIGKILL after five more seconds.
+Shutdown drains completed artifacts. Restart reserves the replacement slot before
+stopping and returns the new `recording` after the old recording is parsed.
 
 Node receives `--cpu-prof` through `NODE_OPTIONS`, Bun through `BUN_OPTIONS`;
 `--cpu-prof-dir` is passed as a single argv element so directories with spaces work.
@@ -202,19 +206,29 @@ The single text block (at most 16,000 characters) starts with status, runtime, d
 profile id and the verified execution directory (`Profile.cwd`). A completed recording shows hot functions ranked by self time and by
 total time, in-project files first in each view, with `file:line`; the hottest stack;
 the absolute `.cpuprofile` path; and retained traces whose spans overlap the recording's
-wall-clock window. Lists state omitted counts and point to structuredContent or `id`.
+wall-clock window. Lists state omitted counts and point to the full recording in Traces (⌘5).
 No overlap is a valid empty list, and never implies the command exported traces.
 
-`structuredContent`: `{profile, hotFunctions, hotPath, nodes, traces, traceCount}` for completed
-recordings (the first four fields are `ProfileDetail`); `{profile}` while recording or
-failed. Function indices and parent indices retain the protocol's original table order.
+`structuredContent` is at most 16,000 UTF-8 JSON bytes. Completed recordings return
+`{profile, hotFunctions, totalFunctions, hotPath, traces, functionCount, nodeCount,
+hotPathCount, traceCount, detail}`. The function rankings lead with self and total
+time respectively. Frame rows include `index`, `name`, `file`, `line`, `selfMs` and
+`totalMs`; `index` refers to the full function table. Hot-path rows use the same shape.
+Labels/metadata are clipped to 256 characters, arrays have byte budgets, and counts
+refer to the unabridged results. Chronological nodes are omitted. The separate
+`profiles.get` RPC serves the full `ProfileDetail` for the Desktop App or an explicit
+Client read. Recording/failed results return bounded `{profile}` metadata.
 `origin` is `command` or `restart`; `service` is the launch environment's `OTEL_SERVICE_NAME`
 when present, falling back to the instrumentation overlay's `POLARIS_OTEL_SERVICE_NAME`.
 Parsing and aggregation run in a worker, including 50 MB inputs.
 Overlapping traces are capped at 200, with their full retained match count in `traceCount`.
 Retained recordings follow the trace store's seven-day retention and a separate 200 MiB
-per-checkout budget covering raw artifacts and parsed details. Prune on access and
-completion; no idle polling. A single artifact over 64 MiB is refused. Reads never pin.
+per-checkout budget covering raw artifacts and parsed details of finished recordings.
+Active recordings do not consume the retention budget. Four live recordings/starts
+are allowed per Host; parsing does not consume a slot. The refusal names that limit.
+Completion jobs wait for queue space; list/get recover orphan flushed artifacts.
+Prune on access and completion; no idle polling. A single artifact over 64 MiB is
+refused. Reads never pin.
 
 Errors use the same `{code,message,fix}` envelope. `E-PROFILE-INVALID` means an unsupported
 command or malformed/oversized artifact; `E-PROFILE-NOT-FOUND` means an expired or foreign
