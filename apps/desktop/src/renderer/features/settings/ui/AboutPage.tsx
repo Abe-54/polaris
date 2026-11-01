@@ -21,6 +21,7 @@ import { clientPlatform, toClientPlatform } from "../../../../shared/platform.ts
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { polaris } from "../../bridge.ts";
 import { useSettings } from "../store.ts";
+import { DeveloperModeCard } from "./DeveloperMode.tsx";
 import { appUpdateRow, checkedAt, type AppUpdateRow } from "../updates/model.ts";
 import {
   checkForUpdates,
@@ -323,6 +324,7 @@ export const AboutPage = () => {
         <WhatPolarisSends view={view} />
         <Daemons version={version} />
       </SettingsGrid>
+      <DeveloperModeCard />
     </div>
   );
 };

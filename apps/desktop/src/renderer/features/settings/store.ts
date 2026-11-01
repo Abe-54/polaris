@@ -22,6 +22,8 @@ export interface SettingsState {
   readonly sessions: SessionPrefs;
   /** Empty until main answers. */
   readonly version: string;
+  /** Polaris Dev: Developer Mode comes from its leases and the switch is locked on. */
+  readonly developmentBuild: boolean;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -41,6 +43,7 @@ export const settingsStore = createStore<SettingsState>(() => ({
   sessionDefaults: {},
   sessions: DEFAULT_SESSION_PREFS,
   version: "",
+  developmentBuild: false,
 }));
 
 let bridge: PolarisApi | null = null;
@@ -68,6 +71,7 @@ export const connectSettings = (api: PolarisApi) => {
       sessionDefaults: v.sessionDefaults,
       sessions: v.sessions,
       version: v.version,
+      developmentBuild: v.developmentBuild,
     });
   });
 

@@ -3,6 +3,7 @@
  * decoded input and returning a structured-clone-friendly output. Blobs the
  * Daemon sends (file contents, diffs) are taken here and cross IPC as bytes.
  */
+import { hostDeveloperModes } from "../developerMode/index.ts";
 import { dataHandlers } from "./data.ts";
 import { tracesHandlers } from "./traces.ts";
 import { modelServerResources } from "@polaris/client/prediction/probe";
@@ -80,6 +81,8 @@ export interface RequestContext {
   readonly sshHosts: () => ReadonlyArray<string>;
   readonly setWelcomeSeen: () => void;
   readonly appVersion: string;
+  /** Polaris Dev (`dev` in main): Developer Mode comes from its leases, not the setting. */
+  readonly developmentBuild: boolean;
   /** The native folder picker on the focused window; null when cancelled. */
   readonly pickFolder: () => Promise<string | null>;
   readonly writeClipboard: (text: string) => Promise<void>;
@@ -279,6 +282,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
         sessionDefaults: settings.sessionDefaults ?? {},
         sessions: sessionPrefsOf(settings),
         version: ctx.appVersion,
+        developmentBuild: ctx.developmentBuild,
         welcomeSeen: settings.welcomeSeen ?? false,
         hosts: (settings.hosts ?? []).map((h) => ({
           alias: h.alias,
@@ -467,6 +471,12 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   "sessions.visuals": ({ hostKey }) => onLive(hostKey, (s) => s.client["sessions.visuals"]({})),
   "sessions.setVisuals": ({ hostKey, settings }) =>
     onLive(hostKey, (s) => s.client["sessions.setVisuals"]({ settings })).pipe(done),
+  "developerMode.hosts": () => Effect.sync(hostDeveloperModes.all),
+  "developerMode.get": ({ hostKey }) => onLive(hostKey, (s) => s.client["developerMode.get"]({})),
+  "developerMode.set": ({ hostKey, enabled }) =>
+    onLive(hostKey, (s) => s.client["developerMode.set"]({ enabled })),
+  "developerMode.setWorkspace": ({ hostKey, workspaceId }) =>
+    onLive(hostKey, (s) => s.client["developerMode.setWorkspace"]({ workspaceId })),
   "continuity.markRead": ({ hostKey, ...payload }) =>
     onLive(hostKey, (s) => s.client["continuity.markRead"](payload)),
   "continuity.saveDraft": ({ hostKey, ...payload }) =>

@@ -18,6 +18,7 @@ import {
   ConstellationDefaultsPublisher,
   IdleCompactionPublisher,
   VisualsPublisher,
+  DeveloperModePublisher,
 } from "../features/settings/index.ts";
 import { PullsPublisher } from "../features/pulls/index.ts";
 // Not the feature's index: that loads the Review view's chunk.
@@ -44,6 +45,7 @@ export const App = ({ value, onboarding = settled }: AppProps) => (
             <ConstellationDefaultsPublisher />
             <IdleCompactionPublisher />
             <VisualsPublisher />
+            <DeveloperModePublisher />
             <PullsPublisher />
             <CheckoutPublisher />
             <LinkedPullsPublisher />

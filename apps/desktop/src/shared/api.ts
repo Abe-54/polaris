@@ -23,6 +23,7 @@ import type {
   AutoArchiveSettings,
   IdleCompactionSettings,
   VisualsSettings,
+  DeveloperMode,
   AttachmentUsage,
   StagedAmount,
   Capability,
@@ -345,6 +346,8 @@ export interface SettingsView extends Appearance {
   readonly sessions: SessionPrefs;
   /** This build's version, for About Polaris. */
   readonly version: string;
+  /** Polaris Dev: it holds a Developer Mode lease on each Host and never writes the setting. */
+  readonly developmentBuild: boolean;
   /** False until the user pressed "Get started" on the welcome. */
   readonly welcomeSeen: boolean;
   readonly hosts: ReadonlyArray<{
@@ -520,6 +523,11 @@ export interface RequestOutputs
   "sessions.setIdleCompaction": null;
   "sessions.visuals": Plain<VisualsSettings>;
   "sessions.setVisuals": null;
+  /** Every connected Host's watched Developer Mode, by Host key. */
+  "developerMode.hosts": Readonly<Record<string, Plain<DeveloperMode>>>;
+  "developerMode.get": Plain<DeveloperMode>;
+  "developerMode.set": Plain<DeveloperMode>;
+  "developerMode.setWorkspace": Plain<DeveloperMode>;
   "continuity.markRead": Plain<ReadPosition>;
   "continuity.saveDraft": Plain<ComposerDraft>;
   "review.runRiskSummary": Rpc.Success<typeof RunRiskSummary>;
@@ -634,6 +642,12 @@ export type AppEvent =
   | { readonly kind: "command"; readonly id: CommandId }
   | { readonly kind: "appearance"; readonly appearance: Appearance }
   | { readonly kind: "updates"; readonly updates: AppUpdateView }
+  /** A Host's Developer Mode changed; null when it is no longer known (ENG-709). */
+  | {
+      readonly kind: "developer-mode";
+      readonly hostKey: string;
+      readonly mode: Plain<DeveloperMode> | null;
+    }
   | { readonly kind: "session-defaults"; readonly sessionDefaults: SessionDefaults }
   | { readonly kind: "sessions"; readonly sessions: SessionPrefs }
   /** Dev only (Develop menu): start the bench-Harness proof session on this Host. */

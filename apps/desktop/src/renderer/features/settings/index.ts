@@ -30,4 +30,14 @@ export { IdleCompactionPublisher } from "./idleCompactionSync.ts";
 
 export { VisualsPublisher } from "./visualsSync.ts";
 
+export { DeveloperModePublisher } from "./developerModeSync.ts";
+
+export {
+  connectHostDeveloperModes,
+  type HostDeveloperModeView,
+  hostDeveloperModesStore,
+  useHostDeveloperMode,
+  useHostDeveloperModes,
+} from "./hostDeveloperModes.ts";
+
 export { setResourcesClient, type ResourcesClient } from "./resources.ts";

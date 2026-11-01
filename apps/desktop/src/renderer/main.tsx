@@ -5,7 +5,12 @@ import { arcadeCommands } from "./features/arcade/index.ts";
 import { onNeedsYouEvent } from "./features/needs-you/index.ts";
 import { bannerEntry, recordBanner } from "./features/session/index.ts";
 import { applyAppearance } from "./appearance.ts";
-import { connectSettings, settingsCommands, settingsStore } from "./features/settings/index.ts";
+import {
+  connectHostDeveloperModes,
+  connectSettings,
+  settingsCommands,
+  settingsStore,
+} from "./features/settings/index.ts";
 import { connectUpdates, updatesStore } from "./features/settings/updates/store.ts";
 import { createOnboarding } from "./features/onboarding/index.ts";
 import { installPalette } from "./features/palette/index.ts";
@@ -143,6 +148,8 @@ settingsStore.subscribe((state, prev) => {
 });
 
 connectSettings(window.polaris);
+
+connectHostDeveloperModes(window.polaris);
 
 connectUpdates(window.polaris);
 

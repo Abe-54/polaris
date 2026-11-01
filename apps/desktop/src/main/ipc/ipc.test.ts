@@ -145,6 +145,7 @@ const context: RequestContext = {
   sshHosts: () => ["studio", "pi"],
   setWelcomeSeen: () => undefined,
   appVersion: "0.1.0",
+  developmentBuild: false,
   pickFolder: () => Promise.resolve(null),
   writeClipboard: () => Promise.resolve(),
   writeSecretClipboard: async () => undefined,
@@ -245,6 +246,7 @@ describe("requests", () => {
         sessionDefaults: {},
         sessions: DEFAULT_SESSION_PREFS,
         version: "0.1.0",
+        developmentBuild: false,
         welcomeSeen: false,
         hosts: [{ alias: "studio", label: "studio", colour: null, forwardAgent: false }],
       })

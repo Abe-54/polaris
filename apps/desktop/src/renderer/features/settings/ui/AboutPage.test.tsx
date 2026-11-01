@@ -10,11 +10,17 @@ import { createNavigation } from "../../../routes/navigation.ts";
 import { AppProvider } from "../../../shell/hooks.ts";
 import { type AppState, initialState } from "../../../store/store.ts";
 import { updatesStore } from "../updates/store.ts";
+import { DEFAULT_DEVELOPER_MODE, DeveloperMode, WorkspaceId } from "@polaris/protocol";
+import { DEFAULT_SESSION_PREFS } from "../../../../shared/sessionPrefs.ts";
+import { developerModes } from "../developerModeSync.ts";
+import { settingsStore } from "../store.ts";
 import { AboutPage } from "./AboutPage.tsx";
 
 afterEach(() => {
   cleanup();
   updatesStore.setState({ view: null, problem: null, changing: false });
+  developerModes.setState({}, true);
+  settingsStore.setState({ sessions: DEFAULT_SESSION_PREFS, developmentBuild: false });
 });
 
 const view = (patch: Partial<AppUpdateView> = {}): AppUpdateView => ({
@@ -113,4 +119,63 @@ test("with automatic checks off, the install ID is not sent", () => {
 
   expect(fields.getByText("Not sent while automatic checks are off")).not.toBeNull();
   expect(fields.queryByText(/7c1e/)).toBeNull();
+});
+
+const developerSwitch = () =>
+  within(screen.getByTestId("about-developer-mode")).getByRole("switch", {
+    name: /Developer mode/,
+  });
+
+test("Developer Mode is off by default, and the switch turns it on for every host", () => {
+  mount(view());
+
+  expect(developerSwitch().getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(developerSwitch());
+
+  expect(settingsStore.getState().sessions.developerMode).toBe(true);
+  expect(developerSwitch().getAttribute("aria-checked")).toBe("true");
+});
+
+test("in Polaris Dev the switch is on and locked, whatever the setting says", () => {
+  settingsStore.setState({ developmentBuild: true });
+  mount(view());
+
+  expect(developerSwitch().getAttribute("aria-checked")).toBe("true");
+  expect(developerSwitch().hasAttribute("disabled")).toBe(true);
+  expect(screen.getByText(/On in Polaris Dev/)).not.toBeNull();
+
+  fireEvent.click(developerSwitch());
+  expect(settingsStore.getState().sessions.developerMode).toBe(false);
+});
+
+test("each host shows its Polaris workspace and how it was found", () => {
+  const studio = hostView("studio");
+  const pi = hostView("pi");
+
+  const withMode = (h: HostView): HostView => ({
+    ...h,
+    status: { ...h.status, capabilities: ["developer-mode"] },
+  });
+
+  developerModes.setState({
+    studio: {
+      kind: "mode",
+      mode: DeveloperMode.make({
+        stored: false,
+        leases: 0,
+        fromSource: false,
+        effective: false,
+        polarisWorkspaceId: WorkspaceId.make("polaris"),
+        polarisWorkspaceSource: "remote",
+      }),
+    },
+    pi: { kind: "mode", mode: DEFAULT_DEVELOPER_MODE },
+  });
+  mount(view(), [withMode(studio), withMode(pi), hostView("old")]);
+
+  const card = within(screen.getByTestId("about-developer-mode"));
+
+  expect(card.getByText("polaris · by git remote")).not.toBeNull();
+  expect(card.getByText("No polaris workspace found")).not.toBeNull();
+  expect(card.queryByText("old")).toBeNull();
 });

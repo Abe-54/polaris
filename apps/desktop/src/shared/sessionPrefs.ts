@@ -32,6 +32,7 @@ export const DEFAULT_SESSION_PREFS: SessionPrefs = {
   editorAutosave: false,
   editorInlineDiagnostics: true,
   advancedView: false,
+  developerMode: false,
   commitMessages: { harness: "claude", model: "claude-haiku-5-5", effort: null },
 };
 

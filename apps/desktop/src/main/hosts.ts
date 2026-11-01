@@ -17,6 +17,7 @@ import {
   reportPresence,
 } from "@polaris/client";
 import { Capability, type UserPresence } from "@polaris/protocol";
+import { holdDeveloperModeLease, hostDeveloperModes } from "./developerMode/index.ts";
 import {
   Context,
   Effect,
@@ -252,6 +253,8 @@ export interface HostDirectoryInput {
   readonly invalidateLanguage?: (hostKey: string) => void;
   /** Whether the user is at this computer; told to every Host that asks (ENG-495). */
   readonly presence?: Stream.Stream<UserPresence>;
+  /** Polaris Dev: hold a Developer Mode lease on every Host (ENG-709). */
+  readonly developerModeLease?: boolean;
   /** Serves the Host's Browser streams on each live session (`browserCdp/`, ENG-616). */
   readonly browserHost?: (
     hostKey: string,
@@ -280,6 +283,7 @@ export class HostDirectory extends Context.Service<
     languageEpoch,
     invalidateLanguage,
     presence,
+    developerModeLease,
     browserHost,
   }: HostDirectoryInput) =>
     Layer.effect(
@@ -364,6 +368,16 @@ export class HostDirectory extends Context.Service<
                 ? Effect.void
                 : reportPresence(connection.sessionChanges, presence);
 
+            const lease =
+              developerModeLease !== true || connection.sessionChanges === undefined
+                ? Effect.void
+                : holdDeveloperModeLease(connection.sessionChanges);
+
+            const developerMode =
+              connection.sessionChanges === undefined
+                ? Effect.void
+                : hostDeveloperModes.watch(entry.key, connection.sessionChanges);
+
             const browsers =
               browserHost === undefined || connection.sessionChanges === undefined
                 ? Effect.void
@@ -388,7 +402,7 @@ export class HostDirectory extends Context.Service<
               )
             );
 
-            const tracker = yield* Effect.all([track, report, browsers], {
+            const tracker = yield* Effect.all([track, report, lease, developerMode, browsers], {
               concurrency: "unbounded",
               discard: true,
             }).pipe(Effect.forkIn(scope));

@@ -49,6 +49,7 @@ import {
 } from "./hosts.ts";
 import { Effect, Layer, Option, SubscriptionRef } from "effect";
 import { type PresenceWatch, watchPresence } from "./presence/index.ts";
+import { hostDeveloperModes } from "./developerMode/index.ts";
 import { followFocus, followReviewRequests, githubLayer } from "./github/electron.ts";
 import { legacyTokens } from "./github/store.ts";
 import { secureStorageLayer } from "./secure/electron.ts";
@@ -403,9 +404,16 @@ const start = async () => {
     onChange: (next) => Effect.runSync(SubscriptionRef.set(presence, next)),
   });
 
+  hostDeveloperModes.subscribe((hostKey, mode) => {
+    const event: AppEvent = { kind: "developer-mode", hostKey, mode };
+
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send(CHANNELS.app, event);
+  });
+
   runtime = startClientRuntime(
     {
       presence: SubscriptionRef.changes(presence),
+      developerModeLease: dev,
       entries: hostEntries({
         local: localDaemon,
         remotes: settings.hosts ?? [],
@@ -529,6 +537,7 @@ const start = async () => {
       setWelcomeSeen: () => saveSettings({ welcomeSeen: true }),
       pickFolder,
       appVersion: app.getVersion(),
+      developmentBuild: dev,
       proofWorkspace: () =>
         Option.exists(Effect.runSync(local.current), (daemon) => daemon.benchHarness)
           ? mkdtempSync(join(tmpdir(), "polaris-proof-"))

@@ -219,6 +219,8 @@ export const SessionPrefs = Schema.Struct({
   advancedView: Schema.Boolean,
   /** Settings → Editor: the Harness and Model that write commit messages (a small, fast one). */
   commitMessages: RoleDefault,
+  /** About Polaris: Developer Mode (ENG-709, off by default); written to every Host. */
+  developerMode: Schema.Boolean,
 });
 
 export type SessionPrefs = typeof SessionPrefs.Type;
@@ -247,6 +249,7 @@ export const SessionPrefsPatch = Schema.Struct({
   editorInlineDiagnostics: Schema.optionalKey(Schema.Boolean),
   advancedView: Schema.optionalKey(Schema.Boolean),
   commitMessages: Schema.optionalKey(RoleDefault),
+  developerMode: Schema.optionalKey(Schema.Boolean),
 });
 
 export type SessionPrefsPatch = typeof SessionPrefsPatch.Type;
@@ -395,6 +398,11 @@ export const RequestInputs = {
   /** The Visuals setting (capability `sessions.visuals`): how readily agents draw. */
   "sessions.visuals": onHost({}),
   "sessions.setVisuals": onHost({ settings: VisualsSettings }),
+  /** Developer Mode (capability `developer-mode`): the Host's stored setting and Polaris Workspace. */
+  "developerMode.hosts": Schema.Struct({}),
+  "developerMode.get": onHost({}),
+  "developerMode.set": onHost({ enabled: Schema.Boolean }),
+  "developerMode.setWorkspace": onHost({ workspaceId: Schema.NullOr(WorkspaceId) }),
   /** Continuity (capability `session.continuity`): the last Turn seen, and the composer's draft. */
   "continuity.markRead": onHost({ sessionId: SessionId, turnId: TurnId }),
   "continuity.saveDraft": onHost({
