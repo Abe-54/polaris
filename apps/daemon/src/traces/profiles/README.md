@@ -32,8 +32,12 @@ PID. Shutdown drains completion jobs before closing the worker queue. List/get
 recover flushed artifacts from orphan recordings left by an earlier Daemon.
 P2/P9 can replace this local launch seam with their authenticated launch authority.
 
-The worker validates CPU graph ids, parents, cycles/depth, finite nonnegative
-sample deltas and timing bounds. Validation keeps parent/depth maps, never a stack
+The worker validates CPU graph ids, parents, cycles/depth, finite sample deltas
+and timing bounds. Node can emit samples out of timestamp order on Windows, including
+negative deltas; these become cumulative timestamps, sorted with their sample IDs
+in place, before weights are calculated. Timestamps outside the capture remain invalid.
+Both ordered and out-of-order maximum-size profiles retain the 700 MiB RSS gate.
+Validation keeps parent/depth maps, never a stack
 copy for every node; only the current sampled stack is materialised. Consecutive
 samples of the same stack coalesce, and existing frame durations update in place.
 Weights produce self and inclusive time; recursive

@@ -26,8 +26,8 @@ const CpuProfile = Schema.Struct({
   startTime: Nonnegative,
   endTime: Nonnegative,
   nodes: Schema.Array(CpuNode).check(Schema.isMaxLength(200_000)),
-  samples: Schema.Array(Schema.Int).check(Schema.isMaxLength(2_000_000)),
-  timeDeltas: Schema.Array(Nonnegative).check(Schema.isMaxLength(2_000_000)),
+  samples: Schema.mutable(Schema.Array(Schema.Int).check(Schema.isMaxLength(2_000_000))),
+  timeDeltas: Schema.mutable(Schema.Array(Schema.Finite).check(Schema.isMaxLength(2_000_000))),
 });
 
 export const invalidProfile = () =>
@@ -79,18 +79,19 @@ export const parseProfile = (
   const { functions, functionOf } = profileFunctions(cpu.nodes, checkout);
 
   const durationMs = (cpu.endTime - cpu.startTime) / 1000;
+  const { samples, timeDeltas } = chronologicalSamples(cpu);
   const nodes: MutableNode[] = [];
   const stackWeights = new Map<number, number>();
   let active: number[] = [];
   let elapsed = 0;
 
-  for (let i = 0; i < cpu.samples.length; i++) {
-    const sample = cpu.samples[i]!;
+  for (let i = 0; i < samples.length; i++) {
+    const sample = samples[i]!;
     const stack = stackFor(sample, parents, functionOf);
-    let micros = cpu.timeDeltas[i]!;
+    let micros = timeDeltas[i]!;
 
-    while (i + 1 < cpu.samples.length && cpu.samples[i + 1] === sample) {
-      micros += cpu.timeDeltas[++i]!;
+    while (i + 1 < samples.length && samples[i + 1] === sample) {
+      micros += timeDeltas[++i]!;
     }
 
     const ms = micros / 1000;
@@ -134,6 +135,56 @@ export const parseProfile = (
     hotPath,
     nodes,
   };
+};
+
+const chronologicalSamples = (cpu: typeof CpuProfile.Type) => {
+  if (!cpu.timeDeltas.some((delta) => delta < 0)) return cpu;
+  let time = 0;
+  const order = new Uint32Array(cpu.timeDeltas.length);
+
+  for (let index = 0; index < order.length; index++) {
+    time += cpu.timeDeltas[index]!;
+
+    if (!Number.isFinite(time) || time < 0 || time > cpu.endTime - cpu.startTime + 1000)
+      throw invalidProfile();
+
+    cpu.timeDeltas[index] = time;
+    order[index] = index;
+  }
+
+  order.sort((a, b) => cpu.timeDeltas[a]! - cpu.timeDeltas[b]!);
+  reorderSamples(cpu, order);
+  time = 0;
+
+  for (let index = 0; index < order.length; index++) {
+    const next = cpu.timeDeltas[index]!;
+    cpu.timeDeltas[index] = next - time;
+    time = next;
+  }
+
+  return cpu;
+};
+
+const reorderSamples = (cpu: typeof CpuProfile.Type, order: Uint32Array) => {
+  // The worker owns this JSON-parsed buffer; move paired timestamps and IDs in place.
+  for (let index = 0; index < order.length; index++) {
+    if (order[index] === index) continue;
+    const sample = cpu.samples[index]!;
+    const time = cpu.timeDeltas[index]!;
+    let destination = index;
+
+    while (order[destination] !== index) {
+      const source = order[destination]!;
+      cpu.samples[destination] = cpu.samples[source]!;
+      cpu.timeDeltas[destination] = cpu.timeDeltas[source]!;
+      order[destination] = destination;
+      destination = source;
+    }
+
+    cpu.samples[destination] = sample;
+    cpu.timeDeltas[destination] = time;
+    order[destination] = destination;
+  }
 };
 
 type MutableNode = { -readonly [K in keyof ProfileNode]: ProfileNode[K] };

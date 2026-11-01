@@ -63,6 +63,8 @@ test("malformed sample ids, negative time, cycles, duplicate parents and out-of-
   const invalid = [
     { ...sampled(), samples: [123, 4, 2, 3] },
     { ...sampled(), timeDeltas: [-1, 3000, 1000, 4000] },
+    { ...sampled(), timeDeltas: [2000, -3000, 1000, 4000] },
+    { ...sampled(), timeDeltas: [12000, -2000, 0, 0] },
     { ...sampled(), timeDeltas: [2000] },
     { ...sampled(), endTime: 2000 },
     { ...sampled(), nodes: [...sampled().nodes, sampled().nodes[0]] },
@@ -87,6 +89,38 @@ test("the hot path aggregates nonadjacent samples of the same stack instead of p
     "leaf",
   ]);
 });
+
+for (const { samples, timeDeltas } of [
+  { samples: [2, 4, 3], timeDeltas: [4000, -1000, 5000] },
+  { samples: [3, 4, 2], timeDeltas: [8000, -5000, 1000] },
+  { samples: [4, 3, 2, 4], timeDeltas: [3000, 5000, -4000, -1000] },
+])
+  test(`out-of-order Node samples retain timestamps and weights (${samples.join(",")})`, () => {
+    const cpu = {
+      ...sampled(),
+      startTime: 0,
+      endTime: 10_000,
+      samples,
+      timeDeltas,
+    };
+
+    const parsed = parseProfile(JSON.stringify(cpu), "/checkout");
+
+    expect(
+      parsed.hotFunctions.map(({ name, selfMs, totalMs }) => ({ name, selfMs, totalMs }))
+    ).toEqual([
+      { name: "(root)", selfMs: 0, totalMs: 8 },
+      { name: "other", selfMs: 4, totalMs: 4 },
+      { name: "caller", selfMs: 1, totalMs: 4 },
+      { name: "leaf", selfMs: 3, totalMs: 3 },
+    ]);
+    expect(parsed).toEqual(
+      parseProfile(
+        JSON.stringify({ ...cpu, samples: [4, 2, 3], timeDeltas: [3000, 1000, 4000] }),
+        "/checkout"
+      )
+    );
+  });
 
 test("parsed profile locations and labels redact credential-bearing URLs before reaching tools", () => {
   const cpu = sampled();
