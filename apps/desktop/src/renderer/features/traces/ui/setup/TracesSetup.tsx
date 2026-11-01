@@ -18,8 +18,9 @@ const Fixed = ({ place }: { readonly place: SetupPlaceView }) => (
     workspaceId={place.workspaceId}
     workspaceName={place.workspaceName}
     session={place.session}
+    placement={place.placement}
     exporters={place.fixed}
-    forwarding={place.forwarding}
+    forwardingTo={place.forwardingTo}
     onSettings={place.openSettings ?? (() => undefined)}
     onDismiss={place.dismiss}
   />
@@ -43,6 +44,7 @@ const Empty = ({
       hostKey={place.hostKey}
       workspaceId={place.workspaceId}
       session={place.session}
+      placement={place.placement}
       onInstrument={place.openSettings}
     />
     {endpoint === null ? null : (
@@ -86,32 +88,29 @@ const Unavailable = ({
   </Column>
 );
 
+/** The Daemon injects no endpoint here, so the fixed-exporter change can't help: no card. */
 const UserExported = ({ place }: { readonly place: SetupPlaceView }) => (
   <Column testId="traces-setup-user-exported">
-    {place.fixed.length > 0 ? (
-      <Fixed place={place} />
-    ) : (
-      <Lead title="This app sends its traces elsewhere">
-        <p>
-          Its exporter is set up with an endpoint of its own, so its traces go there and don’t reach
-          Polaris.
+    <Lead title="This app sends its traces elsewhere">
+      <p>
+        Its exporter is set up with an endpoint of its own, so its traces go there and don’t reach
+        Polaris.
+      </p>
+      {place.openSettings === null ? (
+        <p className="text-text-faint">
+          Forwarding a copy of them into Polaris needs a newer daemon on this host.
         </p>
-        {place.openSettings === null ? (
-          <p className="text-text-faint">
-            Forwarding a copy of them into Polaris needs a newer daemon on this host.
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="min-w-0 flex-1">
+            Polaris can take a copy on their way: forward to the collector in Settings → Traces.
           </p>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="min-w-0 flex-1">
-              Polaris can take a copy on their way: forward to the collector in Settings → Traces.
-            </p>
-            <Button variant="ghost" className="border-hairline border" onClick={place.openSettings}>
-              Traces settings
-            </Button>
-          </div>
-        )}
-      </Lead>
-    )}
+          <Button variant="ghost" className="border-hairline border" onClick={place.openSettings}>
+            Traces settings
+          </Button>
+        </div>
+      )}
+    </Lead>
   </Column>
 );
 

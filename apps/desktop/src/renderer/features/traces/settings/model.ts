@@ -64,23 +64,6 @@ export const fixedExporterTitle = (
   exporters: ReadonlyArray<DetectedTraceExporter>
 ) => `${workspace} sends its traces straight to ${targetOf(exporters)}`;
 
-/** Why Polaris can't see them, and what the change keeps; forwarding decides the last clause. */
-export const fixedExporterLead = (
-  exporters: ReadonlyArray<DetectedTraceExporter>,
-  forwarding: boolean
-) => {
-  const who =
-    exporters.length === 1
-      ? "An exporter sets its address"
-      : `${exporters.length} exporters set their address`;
-
-  const keep = forwarding
-    ? `Reading the endpoint from the environment keeps ${targetOf(exporters)} getting everything; Polaris forwards to it.`
-    : `Reading the endpoint from the environment sends agents' traces to Polaris instead; turn on forwarding to keep ${targetOf(exporters)} getting them.`;
-
-  return `${who} in code, so Polaris never sees them. ${keep}`;
-};
-
 /** The collector's host for the closed field ("api.axiom.co"), or the URL when it won't parse. */
 export const forwardHost = (url: string): string => {
   try {
@@ -90,17 +73,42 @@ export const forwardHost = (url: string): string => {
   }
 };
 
+/**
+ * Why Polaris can't see them, and what the change keeps. The last clause names the collector
+ * Polaris forwards to, only while forwarding is on and a collector is set.
+ */
+export const fixedExporterLead = (
+  exporters: ReadonlyArray<DetectedTraceExporter>,
+  forwardingTo: string | null
+) => {
+  const who =
+    exporters.length === 1
+      ? "An exporter sets its address"
+      : `${exporters.length} exporters set their address`;
+
+  const keep =
+    forwardingTo === null
+      ? `Reading the endpoint from the environment sends agents' traces to Polaris instead; turn on forwarding to keep ${targetOf(exporters)} getting them.`
+      : `Reading the endpoint from the environment sends agents' traces to Polaris, which forwards a copy to ${forwardHost(forwardingTo)}.`;
+
+  return `${who} in code, so Polaris never sees them. ${keep}`;
+};
+
 const isForwardUrl = Schema.is(TraceForwardUrl);
 
 export type ForwardUrlCheck =
-  | { readonly ok: true; readonly url: string }
+  | { readonly ok: true; readonly url: string | null }
   | { readonly ok: false; readonly reason: string };
 
-/** A URL the Daemon would take, or why not; credentials stay in the app's headers. */
-export const checkForwardUrl = (text: string): ForwardUrlCheck => {
+/**
+ * A URL the Daemon would take, or why not; credentials stay in the app's headers. An emptied
+ * field clears a saved collector (url null), and asks for one when none is saved.
+ */
+export const checkForwardUrl = (text: string, saved: boolean): ForwardUrlCheck => {
   const url = text.trim();
 
-  if (url === "") return { ok: false, reason: "Enter the collector's URL" };
+  if (url === "")
+    return saved ? { ok: true, url: null } : { ok: false, reason: "Enter the collector's URL" };
 
   return isForwardUrl(url)
     ? { ok: true, url }
@@ -146,5 +154,8 @@ export const instrumentCaption = (settings: WorkspaceTracesSettings): string => 
   }
 };
 
-/** What the receiver keeps per checkout (apps/daemon/src/traces/database.ts, retention.ts). */
-export const KEEP_LINE = "200 MB · 7 days · errors always";
+/**
+ * What the receiver keeps per checkout (DEFAULT_RETENTION in apps/daemon/src/traces/database.ts):
+ * errors outlast other spans under size pressure, never past the age limit.
+ */
+export const KEEP_LINE = "200 MB · 7 days";

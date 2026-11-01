@@ -1,4 +1,5 @@
 import "../../../test/dom.testing.ts";
+import { WorkspaceId } from "@polaris/protocol";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { type FakeBridge, installFakeBridge } from "../../../test/bridge.testing.ts";
@@ -119,4 +120,58 @@ test("a daemon without traces.settings says so and reads nothing", async () => {
 
   expect(fake.sent("traces.settings")).toEqual([]);
   expect(screen.getByText("Traces settings need a newer daemon on This Mac")).toBeTruthy();
+});
+
+test("removing the picked workspace falls back to one still listed, not 'No workspaces yet'", async () => {
+  const { store } = await mount();
+  const picker = screen.getByRole("combobox", { name: "Workspace" });
+
+  await act(async () => {
+    fireEvent.keyDown(picker, { key: "ArrowDown" });
+  });
+  await act(async () => {
+    fireEvent.keyDown(screen.getByRole("option", { name: /ledger/ }), { key: "Enter" });
+  });
+
+  expect(screen.getByRole("combobox", { name: "Workspace" }).textContent).toBe("ledger");
+
+  await act(async () => {
+    store.setState((s) => {
+      const mac = s.hostModels.mac;
+
+      if (mac === undefined) return s;
+      const workspaces = new Map(mac.workspaces);
+
+      workspaces.delete(WorkspaceId.make("ledger"));
+
+      return { hostModels: { ...s.hostModels, mac: { ...mac, workspaces } } };
+    });
+  });
+
+  expect(screen.queryByText("No workspaces yet")).toBeNull();
+  expect(screen.getByRole("combobox", { name: "Workspace" }).textContent).toBe("sightline");
+});
+
+test("emptying the collector URL offers Remove, which clears the collector", async () => {
+  await mount();
+  const field = screen.getByRole("textbox", { name: "Collector URL" });
+
+  fireEvent.change(field, { target: { value: "  " } });
+
+  expect(screen.getByText(/^Saving removes this collector/)).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  await settle();
+
+  expect(fake.sent("traces.setSettings").map((s) => s.settings)).toEqual([{ forwardTo: null }]);
+});
+
+test("why a URL is refused is the field's description, so a screen reader hears it", async () => {
+  await mount();
+  const field = screen.getByRole("textbox", { name: "Collector URL" });
+
+  fireEvent.change(field, { target: { value: "https://api.axiom.co/v1/traces?token=abc" } });
+  const described = document.getElementById(field.getAttribute("aria-describedby") ?? "");
+
+  expect(described?.textContent).toMatch(/no user, password, query or fragment/);
 });

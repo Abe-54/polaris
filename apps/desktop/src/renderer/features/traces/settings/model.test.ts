@@ -28,7 +28,12 @@ test.each([
   ["ftp://api.axiom.co/v1/traces", false],
   ["   ", false],
 ])("a forward URL %s is accepted: %s", (url, ok) => {
-  expect(checkForwardUrl(url).ok).toBe(ok);
+  expect(checkForwardUrl(url, false).ok).toBe(ok);
+});
+
+test("an emptied field clears a saved collector, and asks for one when none is saved", () => {
+  expect(checkForwardUrl("  ", true)).toEqual({ ok: true, url: null });
+  expect(checkForwardUrl("", false)).toEqual({ ok: false, reason: "Enter the collector's URL" });
 });
 
 test("evidence from process variables reads as the environment, never as a file:line", () => {

@@ -33,8 +33,9 @@ commands Polaris launches, and forwards what it receives to the app's own collec
   prefilled from detected Axiom or Vercel exporters). Forwarding never waits on Polaris's store and
   a failed forward never drops our copy; the headers are never stored. A Workspace can turn it off.
 - **Fixed exporters.** An exporter whose URL is a literal in code can't be redirected from the
-  environment. We ask the app to read `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` with its URL as the
-  fallback (one line, offered as an agent task) rather than patching exporters at runtime or
+  environment. We ask the app to read `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, else
+  `OTEL_EXPORTER_OTLP_ENDPOINT` plus `/v1/traces` (the base every Daemon injects), with its URL as
+  the fallback (one line, offered as an agent task) rather than patching exporters at runtime or
   pulling spans back from the vendor with the user's credentials.
 - **Second exporters.** `@vercel/otel` (vercel/otel@40c3bdd, `sdk.ts`) adds an env-configured OTLP
   exporter beside an explicit `traceExporter`, so the app already sends to its vendor and to us.

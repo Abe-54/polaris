@@ -2,7 +2,7 @@
  * The fixed-exporter card (DESIGN.md, Traces → Setup; Paper T4, middle): exporters whose URL is in
  * code, each at file:line with its runtime, the one-line change, and "Ask an agent to make this change".
  */
-import type { AgentSession, DetectedTraceExporter } from "@polaris/protocol";
+import type { AgentSession, DetectedTraceExporter, SessionPlacement } from "@polaris/protocol";
 import { Button } from "@polaris/ui";
 import { useState } from "react";
 import { useShellActions } from "../../../../shell/hooks.ts";
@@ -17,6 +17,7 @@ const ASKED: Readonly<Record<Asked["kind"], string>> = {
   sent: "Sent to this agent session as its next turn.",
   started: "An agent session is making the change in this checkout.",
   refused: "The agent session didn’t take it; the reason is in the toast.",
+  waiting: "This agent session is still starting. Ask again once it’s ready.",
 };
 
 const Exporters = ({ exporters }: { readonly exporters: ReadonlyArray<DetectedTraceExporter> }) => (
@@ -39,8 +40,9 @@ export const FixedExporterCard = ({
   workspaceId,
   workspaceName,
   session,
+  placement,
   exporters,
-  forwarding,
+  forwardingTo,
   onSettings,
   onDismiss,
 }: {
@@ -48,8 +50,10 @@ export const FixedExporterCard = ({
   readonly workspaceId: string;
   readonly workspaceName: string;
   readonly session: AgentSession | null;
+  readonly placement: SessionPlacement | null;
   readonly exporters: ReadonlyArray<DetectedTraceExporter>;
-  readonly forwarding: boolean;
+  /** The collector Polaris forwards to; null while forwarding is off or has no collector. */
+  readonly forwardingTo: string | null;
   /** Opens Settings → Traces for this Workspace, where forwarding is set. */
   readonly onSettings: () => void;
   readonly onDismiss: () => void;
@@ -59,21 +63,27 @@ export const FixedExporterCard = ({
   const [busy, setBusy] = useState(false);
 
   const ask = async () => {
-    if (session === null) return;
+    if (session === null || placement === null) return;
     setBusy(true);
-    setAsked(await askAgent({ hostKey, workspaceId, session }, fixedExporterPrompt(exporters)));
+    setAsked(
+      await askAgent({ hostKey, workspaceId, session, placement }, fixedExporterPrompt(exporters))
+    );
     setBusy(false);
   };
 
   return (
     <div className="flex flex-col gap-4" data-testid="traces-fixed-exporter">
       <Lead title={fixedExporterTitle(workspaceName, exporters)}>
-        <p>{fixedExporterLead(exporters, forwarding)}</p>
+        <p>{fixedExporterLead(exporters, forwardingTo)}</p>
       </Lead>
       <Exporters exporters={exporters} />
       <Copyable text={FIXED_EXPORTER_CHANGE} label="Copy" />
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" disabled={busy || session === null} onClick={() => void ask()}>
+        <Button
+          variant="secondary"
+          disabled={busy || session === null || placement === null}
+          onClick={() => void ask()}
+        >
           Ask an agent to make this change
         </Button>
         <Button variant="ghost" onClick={onDismiss}>
@@ -81,7 +91,7 @@ export const FixedExporterCard = ({
         </Button>
       </div>
       <Button variant="ghost" size="xs" className="-mt-2 self-start" onClick={onSettings}>
-        {forwarding ? "Forwarding settings" : "Turn on forwarding"}
+        {forwardingTo === null ? "Turn on forwarding" : "Forwarding settings"}
       </Button>
       {asked === null ? null : (
         <div className="flex items-center gap-2" role="status" data-testid="traces-fixed-asked">
