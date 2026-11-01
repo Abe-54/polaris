@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type ByteTransport, makeWire, type TransportError } from "@polaris/protocol";
 import { type Cause, Effect, Predicate, Queue, Schema, Stream, type Tracer } from "effect";
+import { RpcClient } from "effect/rpc";
 import { connectRpc } from "../rpc.ts";
 import { selfSpanOf } from "./span.ts";
 import { gatedTracer } from "./tracer.ts";
@@ -53,8 +54,11 @@ const decodeSent = Schema.decodeUnknownSync(Schema.fromJsonString(Sent));
 
 type Pipe = Queue.Queue<Uint8Array, TransportError | Cause.Done>;
 
-/** Sends one request to a peer that never answers, and returns the request as the peer read it. */
-const sentRequest = (on: boolean) =>
+/**
+ * Sends one request to a peer that never answers, and returns the request as the peer read it.
+ * `on` is the `traceContext` option; undefined leaves it out. `headers` are set by the caller.
+ */
+const sentRequest = (on: boolean | undefined, headers: Record<string, string> = {}) =>
   Effect.scoped(
     Effect.gen(function* () {
       const toPeer: Pipe = yield* Queue.unbounded<Uint8Array, TransportError | Cause.Done>();
@@ -72,13 +76,18 @@ const sentRequest = (on: boolean) =>
         Effect.sync(() => void received.push(decodeSent(text)))
       );
       const transport = { ...side(toClient, toPeer), diagnose: Effect.die("unused") };
-      const connection = yield* connectRpc(transport, { traceContext: () => on });
-      const { tracer } = recorder({ value: on });
+
+      const connection = yield* connectRpc(
+        transport,
+        on === undefined ? {} : { traceContext: () => on }
+      );
+
+      const { tracer } = recorder({ value: on === true });
       const caller = { traceId: "" };
 
       yield* Effect.gen(function* () {
         caller.traceId = (yield* Effect.currentSpan).traceId;
-        yield* connection.client["developerMode.get"]({});
+        yield* connection.client["developerMode.get"]({}).pipe(RpcClient.withHeaders(headers));
       }).pipe(Effect.withSpan("composer.send"), Effect.withTracer(tracer), Effect.forkScoped);
       yield* Effect.sleep(50);
 
@@ -104,5 +113,23 @@ describe("trace context on the wire", () => {
     expect(request?.tag).toBe("developerMode.get");
     expect(request?.headers?.some(([name]) => name.startsWith("trace"))).toBe(false);
     expect(request?.traceId).toBeUndefined();
+  });
+
+  test("without the option, a caller's own trace headers go out untouched (the Mobile App)", async () => {
+    const traceparent = `00-${"c".repeat(32)}-${"d".repeat(16)}-01`;
+
+    const { request } = await Effect.runPromise(
+      sentRequest(undefined, { traceparent, tracestate: "mobile=1" })
+    );
+
+    expect(request?.headers).toContainEqual(["traceparent", traceparent]);
+    expect(request?.headers).toContainEqual(["tracestate", "mobile=1"]);
+  });
+
+  test("with the option off, even a caller's own trace headers are stripped", async () => {
+    const traceparent = `00-${"c".repeat(32)}-${"d".repeat(16)}-01`;
+    const { request } = await Effect.runPromise(sentRequest(false, { traceparent }));
+
+    expect(request?.headers?.some(([name]) => name.startsWith("trace"))).toBe(false);
   });
 });

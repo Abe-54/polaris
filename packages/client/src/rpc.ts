@@ -91,7 +91,10 @@ export interface RpcConnectionOptions {
    * (a phone's socket after a network change) is lost rather than silent.
    */
   readonly keepAliveStreams?: boolean;
-  /** Whether requests carry W3C trace context now (Self-Traces on, ADR 0095); none by default. */
+  /**
+   * Whether requests carry W3C trace context now (Self-Traces, ADR 0095): true adds the RPC Span's
+   * `traceparent`, false strips all of it. Absent, requests go as the caller built them.
+   */
   readonly traceContext?: () => boolean;
 }
 
@@ -318,9 +321,11 @@ export const connectRpcWith = Effect.fnUntraced(function* <Rpcs extends Rpc.Any>
               settled(request.requestId);
             }
 
+            const traceContext = options.traceContext;
+
             const encoded = parser.encode(
-              Predicate.isTagged(request, "Request")
-                ? withTraceContext(request, options.traceContext?.() === true)
+              traceContext !== undefined && Predicate.isTagged(request, "Request")
+                ? withTraceContext(request, traceContext())
                 : request
             );
 
