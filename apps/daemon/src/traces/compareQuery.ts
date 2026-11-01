@@ -193,16 +193,18 @@ const compareSnapshot = async (
 
     const next = db.query(`SELECT trace_id AS value FROM (${page})`);
 
+    const filter = baseline && side === "a" ? selected : { sql: "1", bindings: [] };
+
     const insert = db.query(`WITH page AS MATERIALIZED (${page})
       INSERT INTO compare_${side} SELECT ${columns} FROM page s
       JOIN spans r ON r.checkout=s.checkout AND r.trace_id=s.trace_id
-        AND r.id=json_extract(s.value,'$.rootSpanId') WHERE ${selected.sql}`);
+        AND r.id=json_extract(s.value,'$.rootSpanId') WHERE ${filter.sql}`);
 
     let cursor = "";
     let ids = decodeValueRows(next.all(...scan.bindings, cursor));
 
     while (ids.length > 0) {
-      insert.run(...scan.bindings, cursor, ...selected.bindings);
+      insert.run(...scan.bindings, cursor, ...filter.bindings);
       cursor = ids[ids.length - 1]!.value;
       await compareYield();
       ids = decodeValueRows(next.all(...scan.bindings, cursor));

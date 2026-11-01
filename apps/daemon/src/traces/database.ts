@@ -114,9 +114,10 @@ export const refreshSummary = (
   const row = db
     .query(
       `SELECT c.value FROM spans c WHERE c.checkout=? AND c.trace_id=?
-        ORDER BY c.parent IS NULL DESC,(json_extract(c.value,'$.kind') IN ('server','consumer')
-          AND NOT EXISTS (SELECT 1 FROM spans p WHERE p.checkout=c.checkout
-            AND p.trace_id=c.trace_id AND p.id=c.parent)) DESC,c.start,c.id LIMIT 1`
+        ORDER BY CASE WHEN c.parent IS NULL THEN 0
+          WHEN json_extract(c.value,'$.kind') IN ('server','consumer') AND NOT EXISTS (
+            SELECT 1 FROM spans p WHERE p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent)
+          THEN 1 ELSE 2 END,c.start,c.id LIMIT 1`
     )
     .get(checkout, traceId);
 

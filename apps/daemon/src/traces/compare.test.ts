@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Database } from "bun:sqlite";
+import { Effect, Layer, Schema } from "effect";
 import { RpcTest } from "effect/rpc";
 import {
   TraceCompareRpcs,
@@ -434,3 +435,92 @@ test.each([2, 5])(
       expect(route.partial).toBeUndefined();
     })
 );
+
+const nativeBindingBudget = () => {
+  const db = new Database(":memory:");
+
+  try {
+    return Schema.decodeUnknownSync(Schema.Struct({ budget: Schema.Int }))(
+      db
+        .query(`
+      SELECT CAST(substr(compile_options,length('MAX_VARIABLE_NUMBER=')+1) AS INTEGER) AS budget
+      FROM pragma_compile_options WHERE compile_options LIKE 'MAX_VARIABLE_NUMBER=%'`)
+        .get()
+    ).budget;
+  } finally {
+    db.close();
+  }
+};
+
+test("a large resolved Turn range keeps the original SQL binding budget", () =>
+  withComparisons(async ({ store, ingest }) => {
+    await ingest(1, [100, 110, 120]);
+    await ingest(2, [800, 820, 840]);
+
+    const emptyTurns = Array.from(
+      { length: Math.floor(nativeBindingBudget() / 2) },
+      (_, i) => `empty-${i}`
+    );
+
+    const a = TraceCompareSelector.cases.Turns.make({
+      firstTurnId: turnSelector(1).turnId,
+      lastTurnId: TurnId.make(emptyTurns[emptyTurns.length - 1]!),
+    });
+
+    const comparison = await Effect.runPromise(
+      store.compare(compareContext.checkout, a, turnSelector(2), {
+        a: [turnSelector(1).turnId, ...emptyTurns],
+        b: [turnSelector(2).turnId],
+      })
+    );
+
+    expect(comparison.routes[0]!.before).toEqual({ count: 3, p50Ms: 110, p95Ms: 120 });
+    expect(comparison.routes[0]!.after).toEqual({ count: 3, p50Ms: 820, p95Ms: 840 });
+  }));
+
+test("multiple explicit roots retain the earliest root regardless of Span kind", () =>
+  withComparisons(async ({ store, ingest }) => {
+    await ingest(1, [100, 110, 120]);
+    await ingest(2, [800, 820, 840]);
+    const traceId = "abcdef00abcdef00abcdef00abcdef00";
+
+    const first = {
+      ...spanFixture({
+        traceId,
+        start: (BigInt(compareContext.turns[1]!.start) + 1_000_000_000n).toString(),
+      }),
+      kind: 1,
+      name: "POST /invoices",
+      events: [],
+    };
+
+    const later = {
+      ...spanFixture({
+        traceId,
+        id: "9999999999999999",
+        start: (BigInt(compareContext.turns[2]!.start) + 1_000_000_000n).toString(),
+      }),
+      kind: 2,
+      name: "late-server",
+      events: [],
+    };
+
+    const batch = traceFixture([later, first]);
+    batch.resourceSpans[0]!.resource.attributes[0]!.value.stringValue = "ledger-api";
+    await Effect.runPromise(
+      store.ingest({
+        signal: "traces",
+        contentType: "application/json",
+        bytes: new TextEncoder().encode(JSON.stringify(batch)),
+        context: compareContext,
+      })
+    );
+
+    expect(
+      (await read(store)).routes.map((route) => [
+        route.route,
+        route.before.count,
+        route.after.count,
+      ])
+    ).toEqual([["POST /invoices", 4, 3]]);
+  }));
