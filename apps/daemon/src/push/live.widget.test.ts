@@ -11,7 +11,8 @@ import { type HostSlice, toBase64Url } from "@polaris/protocol/relay";
 import { Schema } from "effect";
 import { sealSlice } from "./live.ts";
 
-const swiftc = Bun.which("swiftc");
+// CryptoKit is an Apple framework; a Linux Swift toolchain cannot build this driver.
+const swiftc = process.platform === "darwin" ? Bun.which("swiftc") : null;
 
 const mobile = join(import.meta.dir, "../../../mobile");
 
