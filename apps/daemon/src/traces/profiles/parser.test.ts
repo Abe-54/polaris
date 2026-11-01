@@ -34,6 +34,31 @@ test("recursive appearances of a function count inclusive samples once and count
   });
 });
 
+for (const reversed of [false, true])
+  test(`ancestry depth allows 256 frames and refuses 257 (reversed nodes: ${reversed})`, () => {
+    const profile = (depth: number) => {
+      const nodes = Array.from({ length: depth }, (_, id) => ({
+        id,
+        callFrame: { functionName: `frame${id}`, url: "", lineNumber: -1 },
+        children: id + 1 < depth ? [id + 1] : [],
+      }));
+
+      return JSON.stringify({
+        startTime: 0,
+        endTime: 1000,
+        nodes: reversed ? nodes.reverse() : nodes,
+        samples: [depth - 1],
+        timeDeltas: [1000],
+      });
+    };
+
+    const parsed = parseProfile(profile(256), "/checkout");
+    expect(parsed.hotPath.map((i) => parsed.hotFunctions[i]!.name)).toEqual(
+      Array.from({ length: 256 }, (_, i) => `frame${i}`)
+    );
+    expect(() => parseProfile(profile(257), "/checkout")).toThrow();
+  });
+
 test("malformed sample ids, negative time, cycles, duplicate parents and out-of-window durations are refused", () => {
   const invalid = [
     { ...sampled(), samples: [123, 4, 2, 3] },

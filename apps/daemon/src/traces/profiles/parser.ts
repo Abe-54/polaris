@@ -75,8 +75,8 @@ export const parseProfile = (
   if (cpu.endTime < cpu.startTime || cpu.samples.length !== cpu.timeDeltas.length)
     throw invalidProfile();
   const parents = profileParents(cpu.nodes);
-  const { functions, functionOf } = profileFunctions(cpu.nodes, checkout);
   validateDepths(cpu.nodes, parents);
+  const { functions, functionOf } = profileFunctions(cpu.nodes, checkout);
 
   const durationMs = (cpu.endTime - cpu.startTime) / 1000;
   const nodes: MutableNode[] = [];
@@ -116,14 +116,16 @@ export const parseProfile = (
         a - b
     );
 
-  const remap = new Map(order.map((old, index) => [old, index]));
+  const remap = new Uint32Array(order.length);
+
+  for (let index = 0; index < order.length; index++) remap[order[index]!] = index;
   const hotFunctions = order.map((i) => functions[i]!);
   const hottest = [...stackWeights].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0];
 
   const hotPath =
-    hottest === undefined ? [] : stackFor(hottest, parents, functionOf).map((i) => remap.get(i)!);
+    hottest === undefined ? [] : stackFor(hottest, parents, functionOf).map((i) => remap[i]!);
 
-  for (const node of nodes) node.functionIndex = remap.get(node.functionIndex)!;
+  for (const node of nodes) node.functionIndex = remap[node.functionIndex]!;
 
   return {
     durationMs,
@@ -171,7 +173,9 @@ const appendFrames = (
 type MutableFunction = { -readonly [K in keyof ProfileFunction]: ProfileFunction[K] };
 
 const profileParents = (cpuNodes: ReadonlyArray<typeof CpuNode.Type>) => {
-  const byId = new Map(cpuNodes.map((node) => [node.id, node]));
+  const byId = new Set<number>();
+
+  for (const node of cpuNodes) byId.add(node.id);
 
   if (byId.size !== cpuNodes.length) throw invalidProfile();
   const parents = new Map<number, number>();
@@ -224,24 +228,32 @@ const validateDepths = (
   parents: Map<number, number>
 ) => {
   const depths = new Map<number, number>();
+  const path: number[] = [];
 
   for (const node of cpuNodes) {
-    const path = new Set<number>();
     let id: number | undefined = node.id;
 
     while (id !== undefined && !depths.has(id)) {
-      if (path.has(id) || path.size >= 256) throw invalidProfile();
-      path.add(id);
+      if (path.length >= 256) throw invalidProfile();
+      path.push(id);
+      // Zero marks the current ancestry walk, so revisiting it detects a cycle.
+      depths.set(id, 0);
       id = parents.get(id);
     }
 
-    let depth = id === undefined ? 0 : depths.get(id)!;
+    const depth = id === undefined ? 0 : depths.get(id)!;
 
-    for (const ancestor of [...path].reverse()) {
-      if (++depth > 256) throw invalidProfile();
-      depths.set(ancestor, depth);
-    }
+    if (id !== undefined && depth === 0) throw invalidProfile();
+    recordDepths(path, depths, depth);
   }
+};
+
+const recordDepths = (path: number[], depths: Map<number, number>, ancestorDepth: number) => {
+  let depth = ancestorDepth;
+
+  if (depth + path.length > 256) throw invalidProfile();
+
+  while (path.length > 0) depths.set(path.pop()!, ++depth);
 };
 
 const stackFor = (id: number, parents: Map<number, number>, functionOf: Map<number, number>) => {
