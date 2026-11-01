@@ -1,3 +1,5 @@
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { ApprovalDecision, Attachment, AttachmentId, TurnItem } from "@polaris/protocol";
 import {
@@ -350,16 +352,18 @@ describe("prompts and titles", () => {
   });
 
   test("an @path mention of something in the session's directory goes as a file part (ENG-544)", () => {
+    const cwd = resolve("/w");
+
     const tree = new Map<string, "file" | "folder">([
-      ["/w/src/app.ts", "file"],
-      ["/w/docs", "folder"],
-      ["/w/my notes.md", "file"],
+      [join(cwd, "src/app.ts"), "file"],
+      [join(cwd, "docs"), "folder"],
+      [join(cwd, "my notes.md"), "file"],
     ]);
 
     const prompt = 'fix @src/app.ts per @docs/ and @"my notes.md", not me@x.com or @../etc/passwd';
 
     const parts = promptParts(prompt, [], {
-      cwd: "/w",
+      cwd,
       kindOf: (path) => tree.get(path) ?? null,
     });
 
@@ -368,7 +372,7 @@ describe("prompts and titles", () => {
       type: "file",
       mime: "text/plain",
       filename: "app.ts",
-      url: "file:///w/src/app.ts",
+      url: pathToFileURL(join(cwd, "src/app.ts")).href,
       source: {
         type: "file",
         path: "src/app.ts",
@@ -376,8 +380,8 @@ describe("prompts and titles", () => {
       },
     });
     expect(parts.slice(2)).toMatchObject([
-      { mime: "application/x-directory", url: "file:///w/docs" },
-      { filename: "my notes.md", url: "file:///w/my%20notes.md" },
+      { mime: "application/x-directory", url: pathToFileURL(join(cwd, "docs")).href },
+      { filename: "my notes.md", url: pathToFileURL(join(cwd, "my notes.md")).href },
     ]);
   });
 

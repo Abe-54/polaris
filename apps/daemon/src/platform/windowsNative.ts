@@ -5,7 +5,7 @@
  * See docs/adr/0061-windows-process-trees.md.
  */
 import { dlopen, ptr, read } from "bun:ffi";
-import { renameSync } from "node:fs";
+import { renameSync, rmSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { currentUserSid } from "../transport/windowsPipe/win32.ts";
 import {
@@ -364,7 +364,12 @@ export const writePrivateFile = (path: string, data: string): void => {
   const temporary = `${path}.${randomBytes(8).toString("hex")}`;
 
   createPrivateFile(temporary, data);
-  renameSync(temporary, path);
+
+  try {
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 };
 
 /** A child started inside its own Job Object; closing the job, or the Daemon dying, ends all of it. */

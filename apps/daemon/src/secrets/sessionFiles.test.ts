@@ -4,7 +4,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  statSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -12,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { SessionId, TurnItem } from "@polaris/protocol";
 import { Effect, Predicate, Redacted, type Scope } from "effect";
+import { expectPrivate } from "./privacy.testing.ts";
 import { sessionSecretFiles } from "./sessionFiles.ts";
 
 const S = SessionId.make("s1");
@@ -49,9 +49,9 @@ test("a secret is written owner-only, in an owner-only directory", async () => {
   );
 
   expect(readFileSync(path, "utf8")).toBe(VALUE);
-  expect(statSync(path).mode & 0o777).toBe(0o600);
-  expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
-  expect(statSync(dir).mode & 0o777).toBe(0o700);
+  expectPrivate(path, "file");
+  expectPrivate(dirname(path), "directory");
+  expectPrivate(dir, "directory");
 });
 
 test("a secret is deleted when its time is up", async () => {

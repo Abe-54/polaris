@@ -42,7 +42,7 @@ const fakeHost = (): FakeHost => {
   writeFileSync(log, "");
 
   return {
-    env: { HOME: home, PATH: bin, POLARIS_TEST_CALLS: log },
+    env: { HOME: home, PATH: bin, TMP: tmpdir(), TEMP: tmpdir(), POLARIS_TEST_CALLS: log },
     home,
     bin,
     exe: (name) => join(bin, process.platform === "win32" ? `${name}.cmd` : name),

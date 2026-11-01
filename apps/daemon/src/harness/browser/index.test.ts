@@ -1,6 +1,7 @@
+import { expectPrivate } from "../../secrets/privacy.testing.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { SessionId } from "@polaris/protocol";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Duration, Effect, Exit, Layer, Logger, ManagedRuntime, Scope } from "effect";
@@ -95,7 +96,7 @@ describe("BrowserMcp", () => {
     });
     expect(JSON.stringify(server)).not.toContain("s3cret-token");
     expect(await Bun.file(configOf(server)).json()).toEqual({ cdp: URL });
-    expect(statSync(configOf(server)).mode & 0o777).toBe(0o600);
+    expectPrivate(configOf(server), "file");
     await close();
     expect(existsSync(configOf(server))).toBe(false);
   });

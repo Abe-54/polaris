@@ -1,3 +1,4 @@
+import { localEndpoint } from "@polaris/protocol/endpoint";
 /**
  * The gateway end to end (ENG-399): the Daemon's `ServerRpcs` over a real
  * WebSocket on loopback. A token-less hello and any request before hello are
@@ -100,7 +101,7 @@ const setup = Effect.gen(function* () {
 
   const server = yield* startServer({
     root,
-    socketPath: join(root, "d.sock"),
+    socketPath: localEndpoint(root),
     lockPath: join(root, "d.lock"),
     handlers,
     gateway: { port: 0 },
@@ -241,7 +242,7 @@ test("the Daemon stopping closes gateway connections as going away and removes g
         Effect.gen(function* () {
           const server = yield* startServer({
             root,
-            socketPath: join(root, "d.sock"),
+            socketPath: localEndpoint(root),
             lockPath: join(root, "d.lock"),
             handlers,
             gateway: { port: 0 },
