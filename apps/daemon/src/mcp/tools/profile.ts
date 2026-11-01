@@ -161,7 +161,7 @@ const recordingFor = Effect.fnUntraced(function* (
 export const profileTool = (sessionId: SessionId, sessions: SessionTools): BoundTool => ({
   name: "profile",
   description:
-    "Profile a Node or Bun command (argv array), restart a process Polaris's Profiles service launched, or read a recording by id. Ask the user before restarting a process they started. Commands run in this checkout; waitSeconds defaults to 30 and does not stop long-running commands. Artifacts finalize on process exit. attach profiles a cooperatively registered Node pid for seconds (default 5, maximum 30), only after the user approves a Pending Approval. While attached, any local process can run code in it. Unregistered processes are refused.",
+    "Profile a Node or Bun command (argv array), restart a process Polaris's Profiles service launched, or read a recording by id. Ask the user before restarting a process they started. Commands run in this checkout; waitSeconds defaults to 30 and does not stop long-running commands. Artifacts finalize on process exit. attach profiles a cooperatively registered Node pid for seconds (default 5, maximum 30), only after the user approves a Pending Approval. Capture uses a private in-process profiler without opening a network port. Unregistered processes are refused.",
   inputSchema: jsonSchema(ProfileInput),
   annotations: { readOnlyHint: false },
   call: (input, signal) =>

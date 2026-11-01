@@ -1424,29 +1424,33 @@ module data_snapshots {
 /** ENG-659: per-request inspector authority refines Session approvals, never a remembered grant. */
 module profile_attach {
   var a: { working: bool, writable: bool, registered: bool, pending: bool,
-    credit: int, approved: int, opened: int, listening: bool }
+    credit: int, approved: int, opened: int, capturing: bool, listening: bool, user: bool, grant: bool }
   action init = a' = { working: true, writable: true, registered: true, pending: false,
-    credit: 0, approved: 0, opened: 0, listening: false }
+    credit: 0, approved: 0, opened: 0, capturing: false, listening: false, user: false, grant: true }
   action request = all { a.working, a.writable, a.registered, not(a.pending), a.credit == 0,
     a' = { ...a, pending: true } }
   action allow(remember: bool): bool = all { a.pending,
     a' = if (remember) a else { ...a, pending: false, credit: 1, approved: a.approved + 1 } }
   action deny = all { a.pending, a' = { ...a, pending: false, credit: 0 } }
-  action attach = all { a.working, a.writable, a.registered, a.credit == 1, not(a.listening),
-    a' = { ...a, credit: 0, opened: a.opened + 1, listening: true } }
-  action close = a' = { ...a, listening: false }
-  action endTurn = a' = { ...a, working: false, pending: false, credit: 0, listening: false }
-  action readonly = a' = { ...a, writable: false, credit: 0, listening: false }
-  action disconnect = a' = { ...a, registered: false, credit: 0, listening: false }
-  action step = any { request, allow(false), allow(true), deny, attach, close, endTurn, readonly, disconnect }
+  action attach = all { a.working, a.writable, a.registered, a.credit == 1, not(a.capturing),
+    a' = { ...a, credit: 0, opened: a.opened + 1, capturing: true, user: false } }
+  action userCapture = all { a.writable, a.registered, not(a.capturing),
+    a' = if (a.grant) { ...a, capturing: true, user: true } else a }
+  action revokeGrant = a' = { ...a, grant: false }
+  action close = a' = { ...a, capturing: false }
+  action endTurn = a' = { ...a, working: false, pending: false, credit: 0, capturing: a.capturing and a.user }
+  action readonly = a' = { ...a, writable: false, credit: 0, capturing: false }
+  action disconnect = a' = { ...a, registered: false, credit: 0, capturing: false }
+  action step = any { request, allow(false), allow(true), deny, attach, userCapture, revokeGrant, close, endTurn, readonly, disconnect }
   val safety = all {
     a.opened <= a.approved,
     a.credit >= 0 and a.credit <= 1,
-    a.listening implies (a.working and a.writable and a.registered),
+    not(a.listening),
+    a.capturing implies ((a.working or a.user) and a.writable and a.registered),
     not(a.working) implies not(a.pending)
   }
   run approvedCaptureTest = init.then(request).then(allow(false)).then(attach).then(close)
-    .expect(a.opened == 1 and a.credit == 0 and not(a.listening) and safety)
+    .expect(a.opened == 1 and a.credit == 0 and not(a.capturing) and safety)
   run rememberedRefusedTest = init.then(request).then(allow(true))
     .expect(a.pending and a.credit == 0 and a.approved == 0 and safety)
   run deniedTest = init.then(request).then(deny)
@@ -1457,5 +1461,11 @@ module profile_attach {
   run turnEndRevokesTest = init.then(request).then(allow(false)).then(endTurn)
     .expect(a.credit == 0 and a.opened == 0 and safety)
   run lostDaemonClosesTest = init.then(request).then(allow(false)).then(attach).then(disconnect)
-    .expect(not(a.listening) and safety)
+    .expect(not(a.capturing) and safety)
+  run idleUserCaptureTest = init.then(endTurn).then(userCapture)
+    .expect(a.capturing and not(a.pending) and a.approved == 0 and safety)
+  run userGrantRequiredTest = init.then(endTurn).then(revokeGrant).then(userCapture)
+    .expect(not(a.capturing) and safety)
+  run userCaptureSurvivesTurnEndTest = init.then(userCapture).then(endTurn)
+    .expect(a.capturing and safety)
 }

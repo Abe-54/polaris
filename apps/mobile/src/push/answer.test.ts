@@ -105,3 +105,16 @@ describe("opening a notification", () => {
     expect(tap({}, PushAction.approve)).toBeNull();
   });
 });
+
+test("P9-10: attach notification offers and accepts only one-time approval or denial", () => {
+  expect(
+    PUSH_CATEGORIES.find((c) => c.identifier === "approval-once")?.actions.map((a) => a.identifier)
+  ).toEqual([PushAction.approve, PushAction.deny]);
+  expect(respond(PushAction.always, [approval], "approval-once")).toBeNull();
+  expect(respond(PushAction.approve, [approval], "approval-once")?.dispatch.command).toMatchObject({
+    decision: ApprovalDecision.cases.Allow.make({ remember: false }),
+  });
+  expect(respond(PushAction.deny, [approval], "approval-once")?.dispatch.command).toMatchObject({
+    decision: ApprovalDecision.cases.Deny.make({ reason: null }),
+  });
+});

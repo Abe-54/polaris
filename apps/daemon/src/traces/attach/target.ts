@@ -1,3 +1,5 @@
+import type { Socket } from "node:net";
+import { Schema } from "effect";
 import { readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { dlopen, ptr } from "bun:ffi";
@@ -135,6 +137,34 @@ export const inspectTarget = (pid: number, launchToken: string): AttachTarget =>
 export const recheckTarget = (target: AttachTarget, launchToken: string) => {
   const now = inspectTarget(target.pid, launchToken);
 
-  if (now.identity !== target.identity || now.command !== target.command)
+  if (now.identity !== target.identity)
     throw attachError("The process changed while approval was pending.");
+};
+
+// Socket handles are parsed because Bun exposes the native fd outside node:net's public types.
+const SocketHandle = Schema.Struct({ _handle: Schema.Struct({ fd: Schema.Int }) });
+
+let peerNative: ReturnType<typeof peerLibrary> | undefined;
+
+const peerLibrary = () =>
+  dlopen(libcPath(), {
+    getsockopt: { args: ["i32", "i32", "i32", "ptr", "ptr"], returns: "i32" },
+  });
+
+/** Verify the kernel peer, not the PID asserted by an inherited launch capability. */
+export const peerPid = (socket: Socket) => {
+  const {
+    _handle: { fd },
+  } = Schema.decodeUnknownSync(SocketHandle)(socket);
+
+  peerNative ??= peerLibrary();
+  const bytes = Buffer.alloc(12);
+  const length = new Uint32Array([process.platform === "darwin" ? 4 : 12]);
+  const level = process.platform === "darwin" ? 0 : 1;
+  const option = process.platform === "darwin" ? 2 : 17;
+
+  if (peerNative.symbols.getsockopt(fd, level, option, ptr(bytes), ptr(length)) !== 0)
+    throw attachError("The registering process could not be verified.");
+
+  return bytes.readInt32LE(0);
 };

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ApprovalDecision, ApprovalQuestion, QuestionOption } from "@polaris/protocol";
 import { request } from "./daemon.testing.ts";
-import { answered, answersDecision, pick, requestCard } from "./requests.ts";
+import { offersAlwaysAllow, answered, answersDecision, pick, requestCard } from "./requests.ts";
 
 const option = (label: string) => new QuestionOption({ label, description: null });
 
@@ -56,4 +56,16 @@ describe("pending requests in the thread", () => {
       })
     );
   });
+});
+
+test("P9-10: attach approval has no remembered action, ordinary tool approvals keep it", () => {
+  expect(
+    offersAlwaysAllow(
+      request({
+        kind: "tool",
+        profileAttach: { pid: 42, command: "node app", runtime: "node", seconds: 5 },
+      })
+    )
+  ).toBe(false);
+  expect(offersAlwaysAllow(request({ kind: "tool" }))).toBe(true);
 });

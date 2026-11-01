@@ -966,13 +966,14 @@ Node runtime and seconds; no remembered Allow or Answer can authorize it.
 | Model | Runtime mapping |
 | --- | --- |
 | `request`, `allow`, `deny` | `traces/attach/approval.ts`: fresh Pending Approval, explicit user Allow once, denial and scoped withdrawal. |
+| `userCapture`, `grant` | User RPC requires the same Client grant as RespondToApproval. The click authorizes capture without a Turn or Pending Approval. |
 | `attach`, `credit` | `captureAttached`: one in-memory invocation consumes one response, rechecks policy and target, and writes through `Profiles.record`. |
-| `endTurn`, `readonly` | Active Turn and policy are rechecked before attach and followed while it runs. |
-| `disconnect`, `close` | The cooperative in-target worker closes its inspector on control loss or timeout; no PID signalling path exists. |
+| `endTurn`, `readonly` | Policy is rechecked throughout capture; agent captures also follow their active Turn. User captures survive Turn end. |
+| `disconnect`, `close` | The Worker disconnects its in-process Session on control loss; the registry times out native-blocked captures. No TCP listener or PID signalling path exists. |
 
 The spec runner checks its scenarios and safety simulation. Real Node tests in
 `traces/attach/attach.test.ts` exercise capture, denial and in-target watchdog
-shutdown. Timing bounds and native transport behavior are tested in real Node,
+shutdown. `listening` stays false even while the main thread is blocked in native code. In Terminal handles inspector and Data approvals without leaving the terminal; upgrade withdraws orphaned Daemon-owned requests. Timing bounds and native transport behavior are tested in real Node,
 not proven by the abstract model. Existing Engine trace validation still applies:
 `POLARIS_TRACE_DIR=/tmp/p9-engine-traces bun test apps/daemon/src/verification/engine.model.test.ts`,
 then `cd packages/spec && bun scripts/replay.ts /tmp/p9-engine-traces`.

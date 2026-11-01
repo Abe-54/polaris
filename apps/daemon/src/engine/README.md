@@ -81,6 +81,8 @@ stateDiagram-v2
   idle --> in_terminal: terminal.open
   dormant --> in_terminal: terminal.open
   failed --> in_terminal: terminal.open
+  in_terminal --> in_terminal: inspector / data approval requested, answered or withdrawn
+  in_terminal --> in_terminal: daemon.recover upgrade (withdraw Daemon-owned approvals)
   in_terminal --> starting: terminal.return
   live --> failed: harness.turnEnded (failed), harness.exited (error), session.fail
   live --> limited: harness.turnEnded (failed at a usage limit; the Turn ends Interrupted)
@@ -204,7 +206,7 @@ Every state but `absent` and `removing` takes `checkout.reportHead` (it records 
 
 | Driver | States (shortest paths) | State-changing transitions (one path each) |
 |---|---|---|
-| Claude (sequential hand-off) | 53 | 301 |
+| Claude (sequential hand-off) | 47 | 285 |
 | Codex (live co-attach) | 55 | 377 |
 
 `requestAttach` also drives Daemon-owned inspector approvals through the machine.

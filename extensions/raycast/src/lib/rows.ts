@@ -133,3 +133,6 @@ export const workspaceRows = (
       }))
       .sort((a, b) => a.workspace.name.localeCompare(b.workspace.name))
   );
+
+export const offersAlwaysAllow = (approval: ApprovalRow["approval"]) =>
+  approval.profileAttach === undefined;

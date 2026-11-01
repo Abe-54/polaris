@@ -75,7 +75,12 @@ export const hostSlice = (host: LiveHost): HostSlice => {
             line: oldest.title,
             requestId: oldest.id,
             // A secret has no Approve: like a question, the takeover opens the app.
-            kind: oldest.kind === "question" || oldest.kind === "secret" ? "question" : "approval",
+            kind:
+              oldest.kind === "question" ||
+              oldest.kind === "secret" ||
+              oldest.profileAttach !== undefined
+                ? "question"
+                : "approval",
           },
     needs: requests.length,
     celestials: [...working]
