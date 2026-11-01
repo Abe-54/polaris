@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -101,7 +102,7 @@ test("history follows parents that arrive late, change name or are removed by re
 });
 
 test("opening the previous trace database backfills indexed history without losing retained data", async () => {
-  const dir = await mkdtemp("/tmp/tf2-migration-");
+  const dir = await mkdtemp(shortTemp("tf2-migration-"));
   const path = join(dir, "traces.sqlite");
   let db = openTraceDatabase(path);
 

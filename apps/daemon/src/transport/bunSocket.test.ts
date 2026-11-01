@@ -4,7 +4,8 @@
  * pin the socket open. Driven by fake timers so the 10 s bound is asserted deterministically.
  */
 import { afterEach, expect, jest, test } from "bun:test";
-import { BunSocketStream, type SocketLike } from "./bunSocket.ts";
+import { Effect, Exit, Stream } from "effect";
+import { BunSocketStream, type SocketLike, toTransport } from "./bunSocket.ts";
 
 afterEach(() => {
   jest.useRealTimers();
@@ -57,4 +58,24 @@ test("a graceful end force-terminates a stuck peer only after the drain deadline
   expect(calls.terminated).toBe(1);
   expect(closed).toBe(true);
   expect(writeError?.message).toBe("socket terminated");
+});
+
+test("a late socket error after the reader ends does not escape the transport", async () => {
+  const { socket } = stuckSocket();
+  const stream = new BunSocketStream(socket);
+  const transport = toTransport(stream);
+  stream.closed();
+  await Effect.runPromise(Stream.runDrain(transport.incoming));
+
+  expect(() => stream.emit("error", new Error("EPIPE"))).not.toThrow();
+});
+
+test("a socket error still fails an attached reader", async () => {
+  const { socket } = stuckSocket();
+  const stream = new BunSocketStream(socket);
+  const transport = toTransport(stream);
+  stream.emit("error", new Error("ECONNRESET"));
+  const result = await Effect.runPromiseExit(Stream.runDrain(transport.incoming));
+
+  expect(Exit.isFailure(result)).toBe(true);
 });

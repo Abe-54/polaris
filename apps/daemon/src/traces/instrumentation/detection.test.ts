@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
@@ -5,7 +6,7 @@ import { join } from "node:path";
 import { detectFixedExporters, fixedExporterChange, fixedExporterLines } from "./detection.ts";
 
 const fixture = async (run: (root: string) => Promise<void>) => {
-  const root = await mkdtemp("/tmp/p3-detection-");
+  const root = await mkdtemp(shortTemp("p3-detection-"));
 
   try {
     execFileSync("git", ["init", "--quiet", root]);
@@ -51,7 +52,7 @@ test("bounded discovery respects gitignore, regular files and checkout containme
     await mkdir(join(root, "ignored"));
     await writeFile(join(root, "ignored/fixed.ts"), fixed);
     await writeFile(join(root, "large.ts"), fixed + " ".repeat(65536));
-    const outside = await mkdtemp("/tmp/p3-detection-outside-");
+    const outside = await mkdtemp(shortTemp("p3-detection-outside-"));
 
     try {
       await writeFile(join(outside, "fixed.ts"), fixed);

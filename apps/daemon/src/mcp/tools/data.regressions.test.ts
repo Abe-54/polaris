@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { homedir } from "node:os";
 import { expect, test } from "bun:test";
 import { DataError, DataSource, DataValueTags, QueryResult, RequestId } from "@polaris/protocol";
@@ -328,13 +329,16 @@ test("RM F2/F3: a secret crossing the bounded input window cannot leak its prefi
   expect(view.text).not.toContain("ssss");
 });
 
-test("RM F11: source checkout copy abbreviates the user home", async () => {
-  const response = await toolsWithData({
-    sources: () => Effect.succeed({ checkout: `${homedir()}/code/ledger`, sources: [source] }),
-  })("data_sources").call({});
+test.each([`${homedir()}/code/ledger`, join(homedir(), "code", "ledger")])(
+  "RM F11: source checkout copy abbreviates the user home: %s",
+  async (checkout) => {
+    const response = await toolsWithData({
+      sources: () => Effect.succeed({ checkout, sources: [source] }),
+    })("data_sources").call({});
 
-  expect(response.content[0]!.text).toContain("1 data source in ~/code/ledger");
-});
+    expect(response.content[0]!.text).toContain("1 data source in ~/code/ledger");
+  }
+);
 
 test("an approved retry forwards only the internal approval id", async () => {
   let attempts = 0;
@@ -363,4 +367,16 @@ test("an approved retry forwards only the internal approval id", async () => {
 
   expect(forged.structuredContent?.code).toBe("E-INPUT");
   expect(attempts).toBe(2);
+});
+
+test("source checkout copy respects native backslash semantics", async () => {
+  const response = await toolsWithData({
+    sources: () => Effect.succeed({ checkout: join(homedir(), "code\\ledger"), sources: [source] }),
+  })("data_sources").call({});
+
+  expect(response.content[0]!.text).toContain(
+    process.platform === "win32"
+      ? "1 data source in ~/code/ledger"
+      : "1 data source in ~/code\\ledger"
+  );
 });

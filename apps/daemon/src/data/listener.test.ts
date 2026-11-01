@@ -29,63 +29,66 @@ const candidate = {
   foundIn: { kind: "env" as const },
 };
 
-test.each(["TCP", "Unix"])(
-  "F2: a real non-database %s listener stays remote through list and resolve",
-  (mode) =>
-    Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { root, options } = yield* sourceFixture;
+// Data socket URLs require POSIX absolute paths; Windows named pipes are unsupported.
+for (const mode of ["TCP", "Unix"])
+  test.skipIf(process.platform === "win32" && mode === "Unix")(
+    `F2: a real non-database ${mode} listener stays remote through list and resolve`,
+    () =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { root, options } = yield* sourceFixture;
 
-          const path = join(yield* Effect.promise(() => realpath(root)), "listener.sock");
+            const path = join(yield* Effect.promise(() => realpath(root)), "listener.sock");
 
-          const listen =
-            mode === "Unix" ? `unix:${JSON.stringify(path)}` : 'hostname:"127.0.0.1",port:0';
+            const listen =
+              mode === "Unix" ? `unix:${JSON.stringify(path)}` : 'hostname:"127.0.0.1",port:0';
 
-          const child = Bun.spawn(
-            [
-              process.execPath,
-              "-e",
-              `process.title="postgres"; const s = Bun.listen({${listen},socket:{data(){}}}); console.log(s.port || 5432); setInterval(()=>{},60000);`,
-            ],
-            { stdout: "pipe", stderr: "pipe" }
-          );
-
-          try {
-            const reader = child.stdout.getReader();
-            const result = yield* Effect.promise(() => reader.read());
-            const port = Number(new TextDecoder().decode(result.value).trim());
-            expect(port).toBeGreaterThan(0);
-
-            const owners = yield* Effect.promise(() =>
-              listenerOwners(mode === "Unix" ? { ...connection, path } : { ...connection, port })
+            const child = Bun.spawn(
+              [
+                process.execPath,
+                "-e",
+                `process.title="postgres"; const s = Bun.listen({${listen},socket:{data(){}}}); console.log(s.port || 5432); setInterval(()=>{},60000);`,
+              ],
+              { stdout: "pipe", stderr: "pipe" }
             );
 
-            expect(owners.map((owner) => owner.pid)).toContain(child.pid);
-            expect(owners.every((owner) => !owner.executable.endsWith("/postgres"))).toBe(true);
-            writeFileSync(
-              join(root, ".env"),
-              `DATABASE_URL=postgres://reader:secret@127.0.0.1:${port}/app${mode === "Unix" ? `?socket=${encodeURIComponent(path)}` : ""}`
-            );
-            const service = yield* sources(options);
-            expect((yield* service.list({ sessionId }))[0]).toMatchObject({
-              locality: "remote",
-              access: "needs-approval",
-              label: { text: "REMOTE", colour: "red" },
-            });
-            expect((yield* service.resolve({ sessionId, source: "app" })).source).toMatchObject({
-              locality: "remote",
-              access: "needs-approval",
-            });
-            reader.releaseLock();
-          } finally {
-            child.kill();
-            yield* Effect.promise(() => child.exited);
-          }
-        })
+            try {
+              const reader = child.stdout.getReader();
+              const result = yield* Effect.promise(() => reader.read());
+              const port = Number(new TextDecoder().decode(result.value).trim());
+              expect(port).toBeGreaterThan(0);
+
+              const owners = yield* Effect.promise(() =>
+                listenerOwners(mode === "Unix" ? { ...connection, path } : { ...connection, port })
+              );
+
+              if (process.platform === "win32") expect(owners).toEqual([]);
+              else expect(owners.map((owner) => owner.pid)).toContain(child.pid);
+              expect(owners.every((owner) => !owner.executable.endsWith("/postgres"))).toBe(true);
+              writeFileSync(
+                join(root, ".env"),
+                `DATABASE_URL=postgres://reader:secret@127.0.0.1:${port}/app${mode === "Unix" ? `?socket=${encodeURIComponent(path)}` : ""}`
+              );
+              const service = yield* sources(options);
+              expect((yield* service.list({ sessionId }))[0]).toMatchObject({
+                locality: "remote",
+                access: "needs-approval",
+                label: { text: "REMOTE", colour: "red" },
+              });
+              expect((yield* service.resolve({ sessionId, source: "app" })).source).toMatchObject({
+                locality: "remote",
+                access: "needs-approval",
+              });
+              reader.releaseLock();
+            } finally {
+              child.kill();
+              yield* Effect.promise(() => child.exited);
+            }
+          })
+        )
       )
-    )
-);
+  );
 
 test("F2: missing listeners and unsupported/unknown owners fail closed", async () => {
   expect(await localityProbe("/checkout")({ ...connection, port: 1 }, candidate)).toBe("remote");

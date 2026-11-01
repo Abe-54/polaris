@@ -29,7 +29,9 @@ const input = (cwd: string, command: string) => ({
   cwd,
 });
 
-test(
+// Claude trace hooks explicitly refuse Windows because launch rewrites require POSIX Bash.
+
+test.skipIf(process.platform === "win32")(
   "Claude and its MCP children stay uninstrumented while its Bash Node app traces the launch Turn",
   () =>
     withInstrumentation(async (f) => {
@@ -140,7 +142,9 @@ test(
   20000
 );
 
-test("entering plan mode stops Bash trace rewrites", () =>
+// Claude trace hooks explicitly refuse Windows because launch rewrites require POSIX Bash.
+
+test.skipIf(process.platform === "win32")("entering plan mode stops Bash trace rewrites", () =>
   withInstrumentation(async (f) => {
     await f.runtime.runPromise(
       Effect.scoped(
@@ -172,4 +176,5 @@ test("entering plan mode stops Bash trace rewrites", () =>
         })
       )
     );
-  }));
+  })
+);

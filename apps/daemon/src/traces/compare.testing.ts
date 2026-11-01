@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -46,7 +47,7 @@ export const withComparisons = async (
   }) => Promise<void>,
   options: TraceWorkerOptions = {}
 ) => {
-  const root = await mkdtemp("/tmp/p8-compare-");
+  const root = await mkdtemp(shortTemp("p8-compare-"));
   const now = BigInt(Date.now()) * 1_000_000n;
   compareContext = contextAt(now);
 

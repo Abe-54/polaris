@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { parseProfile } from "./parser.ts";
 
@@ -7,8 +8,8 @@ test("sample weights produce self and inclusive totals, merge adjacent frames an
   const parsed = parseProfile(JSON.stringify(sampled()), "/checkout");
   expect(parsed.hotFunctions).toEqual([
     { name: "(root)", file: null, line: null, selfMs: 0, totalMs: 10 },
-    { name: "caller", file: "src/main.ts", line: 10, selfMs: 1, totalMs: 6 },
-    { name: "leaf", file: "src/leaf.ts", line: 20, selfMs: 5, totalMs: 5 },
+    { name: "caller", file: join("src", "main.ts"), line: 10, selfMs: 1, totalMs: 6 },
+    { name: "leaf", file: join("src", "leaf.ts"), line: 20, selfMs: 5, totalMs: 5 },
     { name: "other", file: "node:internal", line: 1, selfMs: 4, totalMs: 4 },
   ]);
   expect(parsed.hotPath).toEqual([0, 1, 2]);
@@ -26,17 +27,44 @@ test("recursive appearances of a function count inclusive samples once and count
   const parsed = parseProfile(JSON.stringify(cpu), "/checkout");
   expect(parsed.hotFunctions.find((f) => f.name === "caller")).toEqual({
     name: "caller",
-    file: "src/main.ts",
+    file: join("src", "main.ts"),
     line: 10,
     selfMs: 6,
     totalMs: 6,
   });
 });
 
+for (const reversed of [false, true])
+  test(`ancestry depth allows 256 frames and refuses 257 (reversed nodes: ${reversed})`, () => {
+    const profile = (depth: number) => {
+      const nodes = Array.from({ length: depth }, (_, id) => ({
+        id,
+        callFrame: { functionName: `frame${id}`, url: "", lineNumber: -1 },
+        children: id + 1 < depth ? [id + 1] : [],
+      }));
+
+      return JSON.stringify({
+        startTime: 0,
+        endTime: 1000,
+        nodes: reversed ? nodes.reverse() : nodes,
+        samples: [depth - 1],
+        timeDeltas: [1000],
+      });
+    };
+
+    const parsed = parseProfile(profile(256), "/checkout");
+    expect(parsed.hotPath.map((i) => parsed.hotFunctions[i]!.name)).toEqual(
+      Array.from({ length: 256 }, (_, i) => `frame${i}`)
+    );
+    expect(() => parseProfile(profile(257), "/checkout")).toThrow();
+  });
+
 test("malformed sample ids, negative time, cycles, duplicate parents and out-of-window durations are refused", () => {
   const invalid = [
     { ...sampled(), samples: [123, 4, 2, 3] },
     { ...sampled(), timeDeltas: [-1, 3000, 1000, 4000] },
+    { ...sampled(), timeDeltas: [2000, -3000, 1000, 4000] },
+    { ...sampled(), timeDeltas: [12000, -2000, 0, 0] },
     { ...sampled(), timeDeltas: [2000] },
     { ...sampled(), endTime: 2000 },
     { ...sampled(), nodes: [...sampled().nodes, sampled().nodes[0]] },
@@ -61,6 +89,38 @@ test("the hot path aggregates nonadjacent samples of the same stack instead of p
     "leaf",
   ]);
 });
+
+for (const { samples, timeDeltas } of [
+  { samples: [2, 4, 3], timeDeltas: [4000, -1000, 5000] },
+  { samples: [3, 4, 2], timeDeltas: [8000, -5000, 1000] },
+  { samples: [4, 3, 2, 4], timeDeltas: [3000, 5000, -4000, -1000] },
+])
+  test(`out-of-order Node samples retain timestamps and weights (${samples.join(",")})`, () => {
+    const cpu = {
+      ...sampled(),
+      startTime: 0,
+      endTime: 10_000,
+      samples,
+      timeDeltas,
+    };
+
+    const parsed = parseProfile(JSON.stringify(cpu), "/checkout");
+
+    expect(
+      parsed.hotFunctions.map(({ name, selfMs, totalMs }) => ({ name, selfMs, totalMs }))
+    ).toEqual([
+      { name: "(root)", selfMs: 0, totalMs: 8 },
+      { name: "other", selfMs: 4, totalMs: 4 },
+      { name: "caller", selfMs: 1, totalMs: 4 },
+      { name: "leaf", selfMs: 3, totalMs: 3 },
+    ]);
+    expect(parsed).toEqual(
+      parseProfile(
+        JSON.stringify({ ...cpu, samples: [4, 2, 3], timeDeltas: [3000, 1000, 4000] }),
+        "/checkout"
+      )
+    );
+  });
 
 test("parsed profile locations and labels redact credential-bearing URLs before reaching tools", () => {
   const cpu = sampled();

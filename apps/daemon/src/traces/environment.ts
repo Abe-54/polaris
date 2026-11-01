@@ -1,6 +1,6 @@
 import type { SessionId } from "@polaris/protocol";
 import { Effect, Option } from "effect";
-import { TraceRuntime, type TraceEnvironment } from "./runtime.ts";
+import { TraceRuntime, type TraceEnvironment } from "./runtimeService.ts";
 
 /** Only endpoint variables cross reviewer allowlists; exporter headers and vendor credentials do not. */
 export const traceEndpointEnvironment = (source: TraceEnvironment) => {

@@ -5,7 +5,7 @@
  * See docs/adr/0061-windows-process-trees.md.
  */
 import { dlopen, ptr, read } from "bun:ffi";
-import { renameSync } from "node:fs";
+import { renameSync, rmSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { currentUserSid } from "../transport/windowsPipe/win32.ts";
 import {
@@ -364,7 +364,12 @@ export const writePrivateFile = (path: string, data: string): void => {
   const temporary = `${path}.${randomBytes(8).toString("hex")}`;
 
   createPrivateFile(temporary, data);
-  renameSync(temporary, path);
+
+  try {
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 };
 
 /** A child started inside its own Job Object; closing the job, or the Daemon dying, ends all of it. */
@@ -416,6 +421,37 @@ const createKillOnCloseJob = (): Handle => {
   }
 
   return job;
+};
+
+/** Enclose a child waiting at its startup gate; closing the job also retires its descendants. */
+export const containProcess = (pid: number): (() => void) => {
+  const job = createKillOnCloseJob();
+  // AssignProcessToJobObject requires PROCESS_SET_QUOTA | PROCESS_TERMINATE.
+  const process = k32().OpenProcess(0x100 | 0x1, 0, pid);
+
+  if (process === 0n) {
+    const error = failed("OpenProcess");
+    k32().CloseHandle(job);
+    throw error;
+  }
+
+  try {
+    if (!k32().AssignProcessToJobObject(job, process)) {
+      const error = failed("AssignProcessToJobObject");
+      k32().CloseHandle(job);
+      throw error;
+    }
+  } finally {
+    k32().CloseHandle(process);
+  }
+
+  let open = true;
+
+  return () => {
+    if (!open) return;
+    open = false;
+    k32().CloseHandle(job);
+  };
 };
 
 const jobPids = (job: Handle): ReadonlyArray<number> => {

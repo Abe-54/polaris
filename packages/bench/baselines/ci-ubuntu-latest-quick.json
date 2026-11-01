@@ -108,7 +108,7 @@
           "max": 77.76953125
         },
         "footprint_settled_mib": {
-          "value": 40.09765625,
+          "value": 46.08984375,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -129,7 +129,7 @@
           "max": 40.4453125
         },
         "startup_modules": {
-          "value": 603,
+          "value": 703,
           "unit": "modules",
           "kind": "count",
           "better": "lower",
@@ -262,7 +262,7 @@
           "max": 3.9969868554710466
         },
         "client_rss_mib": {
-          "value": 80.6953125,
+          "value": 90.23828125,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -283,7 +283,7 @@
           "max": 81.12109375
         },
         "client_footprint_mib": {
-          "value": 43.30078125,
+          "value": 51.16015625,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -420,7 +420,7 @@
           "max": 0.2999300434168833
         },
         "noclient_rss_mib": {
-          "value": 80.755859375,
+          "value": 90.36328125,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -441,7 +441,7 @@
           "max": 81.171875
         },
         "noclient_footprint_mib": {
-          "value": 43.328125,
+          "value": 51.22265625,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -675,7 +675,7 @@
     "sessions": {
       "metrics": {
         "rss_before_mib": {
-          "value": 86.4921875,
+          "value": 99.70703125,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -932,7 +932,7 @@
           "max": 115.26953125
         },
         "m5.footprint_peak_mib": {
-          "value": 71.0390625,
+          "value": 87.7890625,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -1215,7 +1215,7 @@
           "max": 136.15625
         },
         "m10c3.footprint_peak_mib": {
-          "value": 92.23828125,
+          "value": 115.40625,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -1549,7 +1549,7 @@
           "max": 158.31640625
         },
         "seed_footprint_peak_mib": {
-          "value": 107.671875,
+          "value": 137.1640625,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -1595,7 +1595,7 @@
           "max": 520.8535870000051
         },
         "loaded_rss_mib": {
-          "value": 80.90234375,
+          "value": 90.66796875,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -1616,7 +1616,7 @@
           "max": 81.28515625
         },
         "loaded_footprint_mib": {
-          "value": 43.6015625,
+          "value": 51.6953125,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -2592,7 +2592,7 @@
           "max": 0.39995762592938067
         },
         "tabs20_daemon_rss_mib": {
-          "value": 81.6328125,
+          "value": 90.84765625,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -2613,7 +2613,7 @@
           "max": 82.875
         },
         "tabs20_daemon_footprint_mib": {
-          "value": 43.18359375,
+          "value": 51.58203125,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",
@@ -2972,7 +2972,7 @@
           "max": 72.93387612803922
         },
         "rss_peak_over_base_mib": {
-          "value": 22.01953125,
+          "value": 33.6328125,
           "unit": "MiB",
           "kind": "memory",
           "better": "lower",

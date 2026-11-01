@@ -1,6 +1,5 @@
 /** Text-first Data output; the JSON view uses the same sanitized, clipped values. */
 import { homedir } from "node:os";
-import { sep } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { Array as Arrays, Match, Schema, Predicate, Redacted } from "effect";
 import {
@@ -198,10 +197,18 @@ const access = (source: DataSource) => {
 };
 
 const checkoutLabel = (checkout: string) => {
-  const home = homedir();
+  const normalize = (value: string) =>
+    process.platform === "win32" ? value.replaceAll("\\", "/") : value;
 
-  return checkout === home || checkout.startsWith(`${home}${sep}`)
-    ? `~${checkout.slice(home.length)}`
+  const home = normalize(homedir());
+  const path = normalize(checkout);
+
+  const comparable = (value: string) =>
+    process.platform === "win32" ? value.toLowerCase() : value;
+
+  return comparable(path) === comparable(home) ||
+    comparable(path).startsWith(`${comparable(home)}/`)
+    ? `~${path.slice(home.length)}`
     : checkout;
 };
 

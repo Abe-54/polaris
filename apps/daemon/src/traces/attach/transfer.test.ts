@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -8,7 +9,7 @@ const withPeer = async (
   response: string,
   run: (registry: TargetRegistry, target: RegisteredTarget) => Promise<void>
 ) => {
-  const root = await mkdtemp("/tmp/p9-transfer-");
+  const root = await mkdtemp(shortTemp("p9-transfer-"));
   const registry = new TargetRegistry(join(root, "bootstrap"));
   const program = join(root, "peer.cjs");
 
@@ -55,35 +56,45 @@ registration.on('data', chunk => {
   }
 };
 
-test("private profile transfer preserves UTF-8 split across socket reads", async () => {
-  const profile = JSON.stringify({
-    nodes: [{ callFrame: { functionName: "函数", url: "file:///tmp/café.js" } }],
-  });
+// TargetRegistry refuses cooperative attach on Windows: peer credentials are unavailable.
+test.skipIf(process.platform === "win32")(
+  "private profile transfer preserves UTF-8 split across socket reads",
+  async () => {
+    const profile = JSON.stringify({
+      nodes: [{ callFrame: { functionName: "函数", url: "file:///tmp/café.js" } }],
+    });
 
-  await withPeer(
-    `worker.write(JSON.stringify({kind:'opened',pid:process.pid})+'\\n');
+    await withPeer(
+      `worker.write(JSON.stringify({kind:'opened',pid:process.pid})+'\\n');
 const frame = Buffer.from(JSON.stringify({kind:'chunk',pid:process.pid,data:${JSON.stringify(profile)}})+'\\n');
 const split = frame.indexOf(Buffer.from('函'))+1;
 worker.write(frame.subarray(0,split));
 setTimeout(() => { worker.write(frame.subarray(split)); worker.write(JSON.stringify({kind:'completed',pid:process.pid})+'\\n'); },30);`,
-    async (registry, target) => {
-      const capture = await registry.open(target, 1);
-      expect(await capture.profile).toBe(profile);
-      await capture.close();
-    }
-  );
-}, 10000);
+      async (registry, target) => {
+        const capture = await registry.open(target, 1);
+        expect(await capture.profile).toBe(profile);
+        await capture.close();
+      }
+    );
+  },
+  10000
+);
 
-test("P9-1: completion before capture acknowledgement cannot strand the request", async () => {
-  await withPeer(
-    "worker.write(JSON.stringify({kind:'completed',pid:process.pid})+'\\n');",
-    async (registry, target) => {
-      const outcome = registry.open(target, 1).then(
-        () => "opened",
-        () => "refused"
-      );
+// TargetRegistry refuses cooperative attach on Windows: peer credentials are unavailable.
+test.skipIf(process.platform === "win32")(
+  "P9-1: completion before capture acknowledgement cannot strand the request",
+  async () => {
+    await withPeer(
+      "worker.write(JSON.stringify({kind:'completed',pid:process.pid})+'\\n');",
+      async (registry, target) => {
+        const outcome = registry.open(target, 1).then(
+          () => "opened",
+          () => "refused"
+        );
 
-      expect(await Promise.race([outcome, Bun.sleep(500).then(() => "pending")])).toBe("refused");
-    }
-  );
-}, 10000);
+        expect(await Promise.race([outcome, Bun.sleep(500).then(() => "pending")])).toBe("refused");
+      }
+    );
+  },
+  10000
+);

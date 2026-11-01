@@ -1,6 +1,6 @@
 /**
  * The Live Activity's contract: slices the app builds (src/live/content.ts), folded by the
- * extension's own Swift (targets/widgets/LiveSlices.swift). Needs swiftc, so it runs on a Mac.
+ * extension's own Swift (targets/widgets/LiveSlices.swift). Needs swiftc and Apple's SDK, so it runs only on macOS.
  */
 import { CELESTIAL_PLANETS, CELESTIAL_RARE } from "@polaris/protocol";
 import { afterAll, beforeAll, expect, test } from "bun:test";
@@ -19,7 +19,8 @@ import {
 import { type LiveHost, liveContent } from "../src/live/content.ts";
 import { LIVE_CELESTIALS_PATH, liveCelestialsSwift, TONES } from "./liveCelestials.ts";
 
-const swiftc = Bun.which("swiftc");
+// Apple-only frameworks: Linux toolchains have swiftc but no SwiftUI, CryptoKit or os.
+const swiftc = process.platform === "darwin" ? Bun.which("swiftc") : null;
 
 const directory = mkdtempSync(join(tmpdir(), "polaris-live-"));
 

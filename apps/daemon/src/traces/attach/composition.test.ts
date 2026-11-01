@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +25,7 @@ const eventually = async <A>(read: () => Promise<A>, accept: (value: A) => boole
 test.skipIf(process.platform !== "darwin" && process.platform !== "linux")(
   "runtime composition preserves a user import, real HTTP tracing and cooperative Node registration",
   async () => {
-    const root = await mkdtemp("/tmp/p9-composition-");
+    const root = await mkdtemp(shortTemp("p9-composition-"));
     const targets = new TargetRegistry(join(root, "bootstrap"));
 
     try {

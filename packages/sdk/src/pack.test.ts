@@ -11,6 +11,7 @@ import { launchDaemon, type TestDaemon } from "./daemon.testing.ts";
 
 const Manifest = Schema.Struct({
   name: Schema.String,
+  version: Schema.String,
   repository: Schema.Struct({ url: Schema.String, directory: Schema.String }),
   dependencies: Schema.Record(Schema.String, Schema.String),
   devDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
@@ -88,6 +89,7 @@ test("the manifest carries the published name and the repository npm provenance 
   );
 
   expect(manifest.name).toBe("@doellsoftware/polaris-sdk");
+  expect(manifest.version).toBe("0.2.0");
   expect(manifest.repository).toEqual({
     url: "git+https://github.com/luxdotdev/polaris.git",
     directory: "packages/sdk",
@@ -153,6 +155,9 @@ test.each(["NodeNext", "Bundler"] as const)(
 type IsAny<T> = 0 extends 1 & T ? true : false;
 const stateIsTyped: IsAny<HostView["sessions"][number]["session"]["state"]> = false;
 const itemsAreTyped: IsAny<SessionView["turns"][number]["items"][number]> = false;
+// Raycast checks this field before offering a remembered approval.
+export const offersAlwaysAllow = (approval: HostView["approvals"][number]) =>
+  approval.profileAttach === undefined;
 
 export const main = async (pairing: string) => {
   const polaris = await createPolaris({ pairings: [pairing], clientName: "consumer" });

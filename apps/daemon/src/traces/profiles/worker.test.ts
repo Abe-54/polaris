@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile, readdir, stat, symlink, link } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,7 +21,7 @@ const withWorker = async (
     directory: string;
   }) => Promise<void>
 ) => {
-  const root = await mkdtemp("/tmp/p4-worker-");
+  const root = await mkdtemp(shortTemp("p4-worker-"));
   const id = ProfileId.make(crypto.randomUUID());
 
   const profile = Profile.make({
@@ -91,10 +92,11 @@ for (const { kind, create } of [
       await job("start", profile.id, profile);
       const target = join(root, "external.json");
       await writeFile(target, JSON.stringify(sampled()), { mode: 0o644 });
+      const originalMode = (await stat(target)).mode;
       await create(target, join(directory, "cpu.cpuprofile"));
       const result = await job("complete");
       expect("profile" in result && result.profile.status).toBe("failed");
-      expect((await stat(target)).mode & 0o777).toBe(0o644);
+      expect((await stat(target)).mode).toBe(originalMode);
       expect(await readdir(directory)).toEqual(["profile.json"]);
     }));
 

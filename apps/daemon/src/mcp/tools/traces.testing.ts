@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -63,7 +64,7 @@ export const withStoredTools = async (
     sourceCalls: () => number;
   }) => Promise<void>
 ) => {
-  const root = await mkdtemp("/tmp/t2-traces-");
+  const root = await mkdtemp(shortTemp("t2-traces-"));
 
   try {
     await Effect.runPromise(

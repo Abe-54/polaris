@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,7 +22,7 @@ const Reply = Schema.Struct({
 });
 
 test("real OTLP receiver to SQLite to MCP HTTP resolves each binding's session, checkout and current Turn", async () => {
-  const root = await realpath(await mkdtemp("/tmp/t2-mcp-http-"));
+  const root = await realpath(await mkdtemp(shortTemp("t2-mcp-http-")));
   const cwd = join(root, "package");
   await mkdir(cwd);
 

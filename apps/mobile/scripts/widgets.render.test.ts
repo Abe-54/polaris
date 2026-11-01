@@ -1,6 +1,6 @@
 /**
  * W2 in the app's theme: scripts/widgetsDriver/render.swift draws targets/widgets/HomeWidgetView
- * on macOS and samples its pixels. Needs swiftc, so it runs on a Mac.
+ * on macOS and samples its pixels. Needs swiftc and Apple's SDK, so it runs only on macOS.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PALETTES } from "../src/horizon/scene.ts";
 
-const swiftc = Bun.which("swiftc");
+// Apple-only frameworks: Linux toolchains have swiftc but no SwiftUI, CryptoKit or os.
+const swiftc = process.platform === "darwin" ? Bun.which("swiftc") : null;
 
 const directory = mkdtempSync(join(tmpdir(), "polaris-widget-render-"));
 

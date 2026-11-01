@@ -21,10 +21,11 @@ const Packages = Schema.Struct({
   devDependencies: Schema.Record(Schema.String, Schema.String),
 });
 
-/** The repository's manifest with every workspace package replaced by what npm has. */
+/** Replaces workspace packages with npm versions, or a local SDK tarball for validation. */
 export const standaloneManifest = (
   manifest: Schema.JsonObject,
-  sdkVersion: string
+  sdkVersion: string,
+  sdkTarball?: string
 ): Schema.JsonObject => {
   const { private: _private, ...rest } = manifest;
   const packages = Schema.decodeUnknownSync(Packages)(manifest);
@@ -33,7 +34,8 @@ export const standaloneManifest = (
     ...rest,
     dependencies: {
       ...packages.dependencies,
-      "@polaris/sdk": `npm:${SDK_ON_NPM}@${sdkVersion}`,
+      "@polaris/sdk":
+        sdkTarball === undefined ? `npm:${SDK_ON_NPM}@${sdkVersion}` : resolve(sdkTarball),
     },
     devDependencies: {
       "@types/node": "22.15.3",
@@ -88,7 +90,7 @@ const readManifest = (path: string) =>
   Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(readFileSync(path, "utf8"));
 
 /** Writes the standalone project into `target`, replacing what is there. */
-export const writeStandalone = (target: string) => {
+export const writeStandalone = (target: string, sdkTarball?: string) => {
   const manifest = readManifest(join(EXTENSION, "package.json"));
 
   const sdk = Schema.decodeUnknownSync(Schema.Struct({ version: Schema.String }))(
@@ -106,7 +108,7 @@ export const writeStandalone = (target: string) => {
   );
   writeFileSync(
     join(target, "package.json"),
-    `${JSON.stringify(standaloneManifest(manifest, sdk.version), null, 2)}\n`
+    `${JSON.stringify(standaloneManifest(manifest, sdk.version, sdkTarball), null, 2)}\n`
   );
   writeFileSync(join(target, "tsconfig.json"), `${JSON.stringify(TSCONFIG, null, 2)}\n`);
 };

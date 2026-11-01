@@ -126,9 +126,28 @@ test("oversized, malformed and compressed bodies are refused without writing rec
     const send = (body: string | Uint8Array, headers: Record<string, string>) =>
       fetch(`${f.endpoint}/v1/traces`, { method: "POST", headers, body });
 
-    expect(
-      (await send("x".repeat(4 * 1024 * 1024 + 1), { "content-type": "application/json" })).status
-    ).toBe(413);
+    // Wait for refusal before uploading: Windows resets a sender still writing a rejected body.
+    const oversized = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        `${f.endpoint}/v1/traces`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "content-length": 4 * 1024 * 1024 + 1 },
+        },
+        (res) => {
+          res.resume();
+          res.once("end", () => {
+            req.destroy();
+            resolve(res.statusCode ?? 0);
+          });
+        }
+      );
+
+      req.once("error", reject);
+      req.end();
+    });
+
+    expect(oversized).toBe(413);
     expect((await send("{", { "content-type": "application/json" })).status).toBe(400);
     expect(
       (await send(new Uint8Array([10, 255]), { "content-type": "application/x-protobuf" })).status

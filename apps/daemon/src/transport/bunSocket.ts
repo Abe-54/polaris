@@ -35,6 +35,8 @@ export class BunSocketStream extends EventEmitter {
 
   constructor(private readonly socket: SocketLike) {
     super();
+    // A peer can fail after readEvents detaches; an unhandled EventEmitter error would crash Bun.
+    this.on("error", () => {});
   }
 
   write(chunk: Uint8Array, callback: Callback): boolean {

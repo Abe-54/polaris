@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Fiber, Option, Redacted, Stream } from "effect";
 import { sourceId } from "./connection.ts";
@@ -65,7 +65,7 @@ test("F13: checkout symlink and trailing slash share manual metadata and Secure 
   run(
     Effect.gen(function* () {
       const { root, options } = yield* sourceFixture;
-      symlinkSync(root, join(root, "alias"));
+      symlinkSync(root, join(root, "alias"), "junction");
 
       const service = yield* sources({
         ...options,
@@ -179,23 +179,27 @@ test("F1: a stalled checkout times out without taking the Host storage lock", ()
     Effect.gen(function* () {
       const { options } = yield* sourceFixture;
 
+      const ready = Promise.withResolvers<void>();
+
       const service = yield* sources({
         ...options,
-        discovery: (checkout, signal) =>
-          checkout.endsWith("/other")
-            ? new Promise((_, reject) =>
-                signal?.addEventListener("abort", () => reject(new Error("aborted")), {
-                  once: true,
-                })
-              )
-            : discover(checkout, signal),
+        discovery: (checkout, signal) => {
+          if (basename(checkout) !== "other") return discover(checkout, signal);
+          ready.resolve();
+
+          return new Promise((_, reject) =>
+            signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            })
+          );
+        },
       });
 
       const stalled = yield* service
         .list({ sessionId: SessionId.make("other") })
         .pipe(Effect.flip, Effect.forkChild);
 
-      yield* Effect.sleep(20);
+      yield* Effect.promise(() => ready.promise);
       const started = performance.now();
       const saved = yield* service.save(input);
       expect(saved.name).toBe(input.name);

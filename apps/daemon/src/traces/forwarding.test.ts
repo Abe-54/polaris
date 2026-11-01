@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -173,7 +174,7 @@ test(
   () =>
     withTraceFixture(async (f) => {
       const target = collector();
-      const script = new URL("./fixtures/second-exporter.mjs", import.meta.url).pathname;
+      const script = fileURLToPath(new URL("./fixtures/second-exporter.mjs", import.meta.url));
 
       try {
         await writeFile(

@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
 import {
   appendNodeImport,
@@ -6,15 +8,17 @@ import {
 } from "./nodeOptions.ts";
 
 test("Node imports compose with flags and a preceding bootstrap without changing their bytes", () => {
-  const previous = '--no-warnings --import="file:///tmp/inspector.mjs"';
+  const previous = `--no-warnings --import="${pathToFileURL(resolve("/tmp/inspector.mjs")).href}"`;
   const next = appendNodeImport(previous, "/tmp/register here.mjs");
 
-  expect(next).toBe(`${previous} --import "file:///tmp/register%20here.mjs"`);
+  expect(next).toBe(
+    `${previous} --import "${pathToFileURL(resolve("/tmp/register here.mjs")).href}"`
+  );
   expect(appendNodeImport(next, "/tmp/register here.mjs")).toBe(next);
 });
 
 for (const existing of [
-  '--import "file:///tmp/register%20here.mjs" --enable-source-maps',
+  `--import "${pathToFileURL(resolve("/tmp/register here.mjs")).href}" --enable-source-maps`,
   '--import="/tmp/register here.mjs" --enable-source-maps',
   "--import /tmp/register.mjs",
 ]) {
@@ -27,7 +31,7 @@ for (const existing of [
 
 test("an unrelated option value is not mistaken for an import", () => {
   expect(appendNodeImport('--title="/tmp/register.mjs"', "/tmp/register.mjs")).toBe(
-    '--title="/tmp/register.mjs" --import "file:///tmp/register.mjs"'
+    `--title="/tmp/register.mjs" --import "${pathToFileURL(resolve("/tmp/register.mjs")).href}"`
   );
 });
 
@@ -38,7 +42,7 @@ for (const old of [
   `--import ${JSON.stringify(instrumentationImport("/tmp/node-instrumentation/old/register.mjs"))}`,
 ]) {
   test(`replaces an inherited Polaris import and keeps the inspector: ${old}`, () => {
-    const inspector = '--import="file:///tmp/inspector.mjs" --no-warnings';
+    const inspector = `--import="${pathToFileURL(resolve("/tmp/inspector.mjs")).href}" --no-warnings`;
 
     const result = appendNodeImport(
       `${old} ${inspector}`,

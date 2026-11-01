@@ -9,7 +9,8 @@ import { TEST_SESSION } from "../testing.ts";
 import { InspectorTargets } from "./registry.ts";
 
 // Use the production Layer's event subscription, not a test's direct prune call.
-test.each([false, true])(
+// TargetRegistry refuses cooperative attach on Windows: peer credentials are unavailable.
+test.skipIf(process.platform === "win32").each([false, true])(
   "P9-3: archive retires launch capabilities even when immediately unarchived: %p",
   (unarchive) =>
     withProfiles(async ({ root, runtime }) => {
