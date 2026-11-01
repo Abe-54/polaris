@@ -11,9 +11,9 @@
  * was copied.
  */
 
-import { childEnv } from "../../service/childEnv.ts";
-import { defaultRunVersion } from "./version.ts";
+import { harnessEnv } from "../environment.ts";
 import { sessionTraceEnvironment } from "../../traces/environment.ts";
+import { defaultRunVersion } from "./version.ts";
 import { join } from "node:path";
 import {
   type CanUseTool,
@@ -370,7 +370,7 @@ const openSession = Effect.fnUntraced(function* (
     systemPrompt: { type: "preset", preset: "claude_code", append: polarisInstructions(options) },
     settingSources: ["user", "project", "local"],
     additionalDirectories: [join(driver.stagingDir ?? paths().staging, options.sessionId)],
-    env: childEnv({
+    env: harnessEnv({
       ...process.env,
       ...options.environment,
       ...traceEnv,
@@ -407,7 +407,12 @@ const openSession = Effect.fnUntraced(function* (
     sdkOptions.env = env;
   }
 
-  yield* applyClaudeTraceHooks(sdkOptions, options, () => active?.turnId ?? null);
+  yield* applyClaudeTraceHooks(
+    sdkOptions,
+    options,
+    () => active?.turnId ?? null,
+    () => permissionMode
+  );
 
   if (options.model !== null) sdkOptions.model = options.model;
 

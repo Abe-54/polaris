@@ -5,7 +5,7 @@
  * right after (~0.9 s on Claude Code 2.1.286). Nothing is sent to a model.
  * `classify` decides how each one runs; the README has the table.
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -271,7 +271,7 @@ export const listClaudeCommands =
         strictMcpConfig: true,
         settingSources: ["user", "project", "local"],
         settings: { disableAllHooks: true },
-        env: childEnv({ ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "polaris-daemon" }),
+        env: harnessEnv({ ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: "polaris-daemon" }),
       };
 
       const commands = yield* Effect.acquireUseRelease(
