@@ -1,4 +1,5 @@
 /** About on fixture Updates: every reachable phase and a fake-only interactive flow. */
+import { DeveloperMode, WorkspaceId } from "@polaris/protocol";
 import { Schema } from "effect";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
@@ -11,6 +12,9 @@ import { type AppState, type Connection, initialState } from "../../../../store/
 import { standInBridge } from "../../../bridge.ts";
 import { settingsCommands } from "../../actions.ts";
 import { connectUpdates, updatesStore } from "../store.ts";
+import { HOSTS, MODELS } from "../../../needs-you/preview/fixtures.ts";
+import { hostDeveloperModesStore } from "../../hostDeveloperModes.ts";
+import { settingsStore } from "../../store.ts";
 
 const PHASES: ReadonlyArray<AppUpdateView["phase"]> = [
   "idle",
@@ -23,6 +27,25 @@ const PHASES: ReadonlyArray<AppUpdateView["phase"]> = [
 ];
 
 const Enabled = Schema.Struct({ enabled: Schema.Boolean });
+
+/** `#updates/developer` and `#updates/developer-dev`: About's Developer Mode on three Hosts. */
+const DEVELOPER_SCENES = new Set(["developer", "developer-dev"]);
+
+const developerMode = (stored: boolean, leases: number, workspace: string | null) =>
+  DeveloperMode.make({
+    stored,
+    leases,
+    fromSource: false,
+    effective: stored || leases > 0,
+    polarisWorkspaceId: workspace === null ? null : WorkspaceId.make(workspace),
+    polarisWorkspaceSource: workspace === null ? null : "remote",
+  });
+
+const developerModes = (dev: boolean) => ({
+  local: developerMode(false, dev ? 1 : 0, "w-polaris"),
+  "linux-vm": developerMode(false, dev ? 1 : 0, null),
+  pi: developerMode(false, dev ? 1 : 0, null),
+});
 
 const fixtureBridge = (hash: string): PolarisApi => {
   const scene = hash.replace(/^#updates\//, "");
@@ -77,6 +100,17 @@ const fixtureBridge = (hash: string): PolarisApi => {
           break;
         case "updates.showInFinder":
           break;
+        case "developerMode.get":
+        case "developerMode.set":
+        case "developerMode.setWorkspace": {
+          const { hostKey } = Schema.decodeUnknownSync(Schema.Struct({ hostKey: Schema.String }))(
+            input
+          );
+          // SAFETY: the developerMode methods answer a DeveloperMode.
+
+          return { ok: true, value: developerModes(false)[hostKey as "local"] as never };
+        }
+
         default:
           return { ok: false, error: { code: "Unsupported", message: "preview" } };
       }
@@ -94,7 +128,17 @@ const fixtureBridge = (hash: string): PolarisApi => {
 };
 
 export const mountUpdatesPreview = (root: HTMLElement, hash: string) => {
-  const store = createStore<AppState>(() => initialState);
+  const scene = hash.replace(/^#updates\//, "");
+  const developer = DEVELOPER_SCENES.has(scene);
+
+  const store = createStore<AppState>(() =>
+    developer ? { ...initialState, hosts: HOSTS, hostModels: MODELS } : initialState
+  );
+
+  if (developer) {
+    settingsStore.setState({ developmentBuild: scene === "developer-dev" });
+    hostDeveloperModesStore.setState(developerModes(scene === "developer-dev"), true);
+  }
 
   const connection: Connection = {
     store,
