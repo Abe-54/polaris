@@ -16,6 +16,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "daemon:dev": "sh scripts/daemon-dev.sh --watch serve --foreground",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "bench": "turbo run bench --log-prefix=none --",
