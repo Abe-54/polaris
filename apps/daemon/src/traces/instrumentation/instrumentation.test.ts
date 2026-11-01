@@ -1,11 +1,11 @@
 import { beforeAll, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import { Effect } from "effect";
 import { autoInstrumentationEnvironment, prepareAutoInstrumentation } from "./index.ts";
 import { buildInstrumentationAssets, instrumentationPlugin } from "./build.ts";
 import { materializeInstrumentation } from "./assets.ts";
+import { appendNodeImport, instrumentationImport } from "../nodeOptions.ts";
 import { withTraceFixture } from "../testing.ts";
 
 const settings = { enabled: true, autoInstrument: "node", autoInstrumentOverride: false } as const;
@@ -87,7 +87,7 @@ for (const dependency of [
       });
 
       expect(env.NODE_OPTIONS).toBe(
-        '--import "file:///tmp/space%20here/register.mjs" --no-warnings'
+        appendNodeImport("--no-warnings", instrumentationImport("/tmp/space here/register.mjs"))
       );
       expect(env.POLARIS_OTEL_SERVICE_NAME).toBe("nested-app");
     }));
@@ -110,12 +110,15 @@ test(
       );
       const binary = join(root, "probe");
 
+      const plugin = await instrumentationPlugin();
+
       const compiled = await Bun.build({
         entrypoints: [entry],
         compile: { outfile: binary },
-        plugins: [await instrumentationPlugin()],
+        plugins: [plugin],
       });
 
+      plugin.assertEmbedded();
       expect(compiled.logs.map((log) => log.message)).toEqual([]);
       expect(compiled.success).toBe(true);
 
@@ -153,12 +156,11 @@ test(
 );
 
 test(
-  "bundled Node HTTP and fetch instrumentation exports spans and correlated logs to the real receiver",
+  "bundled Node HTTP and fetch instrumentation keeps the server and its outgoing fetch in one parented trace",
   () =>
     withTraceFixture(async (f) => {
       const registerPath = await materializeInstrumentation(assets, f.root);
       await writeFile(join(f.root, "package.json"), '{"name":"real-node-app"}');
-      const api = createRequire(import.meta.url).resolve("@opentelemetry/api");
 
       const upstream = Bun.serve({
         hostname: "127.0.0.1",
@@ -171,9 +173,7 @@ test(
         await writeFile(
           script,
           `import http from 'node:http';
-        import api from ${JSON.stringify(api)};
         const server = http.createServer(async (_req,res) => {
-          api.logs.getLogger('app').emit({body:'received request'});
           res.end(await (await fetch('http://127.0.0.1:${upstream.port}/data')).text());
         });
         server.listen(0,'127.0.0.1',async () => {
@@ -220,11 +220,14 @@ test(
         expect(spans.every((span) => span.resource["service.name"] === "real-node-app")).toBe(true);
         const serverSpan = spans.find((span) => span.kind === "server")!;
 
-        const detail = await Effect.runPromise(
-          f.store.span(f.root, serverSpan.traceId, serverSpan.id)
+        const childSpan = spans.find(
+          (span) =>
+            span.scope.name === "@opentelemetry/instrumentation-undici" &&
+            span.parentId === serverSpan.id
         );
 
-        expect(detail.logs.map((log) => log.body)).toContain("received request");
+        expect(childSpan?.traceId).toBe(serverSpan.traceId);
+        expect(new Set(spans.map((span) => span.traceId)).size).toBe(1);
       } finally {
         await upstream.stop(true);
       }

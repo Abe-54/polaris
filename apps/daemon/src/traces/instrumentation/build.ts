@@ -19,6 +19,7 @@ export const buildInstrumentationAssets = async (): Promise<InstrumentationAsset
   ] as const;
 
   const assets: InstrumentationAssets = {
+    "ownership.mjs": await readFile(join(import.meta.dir, "ownership.mjs"), "utf8"),
     "register.mjs": await readFile(join(import.meta.dir, "register.mjs"), "utf8"),
     "lib/register.js": await readFile(join(dirname(middle), "lib/register.js"), "utf8"),
     "lib/package.json": '{"type":"commonjs"}',
@@ -35,7 +36,7 @@ export const buildInstrumentationAssets = async (): Promise<InstrumentationAsset
         {
           name: "shared-esm-registry",
           setup(builder) {
-            builder.onResolve({ filter: /lib\/register(?:\.js)?$/ }, (args) =>
+            builder.onResolve({ filter: /lib[/\\]register(?:\.js)?$/ }, (args) =>
               args.importer.includes("import-in-the-middle")
                 ? { path: "./lib/register.js", external: true }
                 : undefined
@@ -53,16 +54,27 @@ export const buildInstrumentationAssets = async (): Promise<InstrumentationAsset
   return assets;
 };
 
-export const instrumentationPlugin = async (): Promise<BunPlugin> => {
+export const instrumentationPlugin = async (): Promise<
+  BunPlugin & { assertEmbedded: () => void }
+> => {
   const assets = await buildInstrumentationAssets();
 
+  let embedded = false;
+
   return {
+    assertEmbedded() {
+      if (!embedded) throw new Error("Node instrumentation embedding plugin did not run");
+    },
     name: "polaris-node-instrumentation",
     setup(builder) {
-      builder.onLoad({ filter: /traces\/instrumentation\/embedded\.ts$/ }, () => ({
-        contents: `export const embeddedInstrumentation = ${JSON.stringify(assets)};`,
-        loader: "js",
-      }));
+      builder.onLoad({ filter: /traces[/\\]instrumentation[/\\]embedded\.ts$/ }, () => {
+        embedded = true;
+
+        return {
+          contents: `export const embeddedInstrumentation = ${JSON.stringify(assets)};`,
+          loader: "js",
+        };
+      });
     },
   };
 };
