@@ -7,10 +7,12 @@ import {
   type SessionId,
   type ExecuteDataInput,
   type CommitDataEdits,
+  type DataSource,
 } from "@polaris/protocol";
 import { Effect, Predicate, Schema } from "effect";
 import type { EventStore } from "../store/EventStore.ts";
 import { targetLocks } from "./writeLocks.ts";
+import { daemonReadOnly, isDaemonSource } from "./daemonSources.ts";
 import { outcomeUnknown } from "./writeCommit.ts";
 import { duringWriteTurn, settleWrite } from "./writeTurn.ts";
 import { writeRequestKey, writeRequestHash } from "./writeIdentity.ts";
@@ -40,12 +42,14 @@ const denied = (message: string, fix = "Don't retry; ask the user.") =>
   new DataError({ code: "E-DATA-DENIED", message, fix });
 
 /** SQLite writes and approvals are ENG-720; until then every write path refuses them. */
-export const sqliteReadOnly = () =>
-  new DataError({
-    code: "E-DATA-READ-ONLY",
-    message: "SQLite data sources are read-only in Polaris.",
-    fix: "Use query to read; make changes with your project's own tools.",
-  });
+export const sqliteReadOnly = (source?: Pick<DataSource, "foundIn">) =>
+  source !== undefined && isDaemonSource(source)
+    ? daemonReadOnly()
+    : new DataError({
+        code: "E-DATA-READ-ONLY",
+        message: "SQLite data sources are read-only in Polaris.",
+        fix: "Use query to read; make changes with your project's own tools.",
+      });
 
 const previewFacts = (preview: WritePreview) => ({
   ...(preview.redactedCells === undefined ? undefined : { redactedCells: preview.redactedCells }),
@@ -68,7 +72,7 @@ export const writeQueries = Effect.fnUntraced(function* (
   const resolve = Effect.fnUntraced(function* (input: { sessionId: SessionId; source: string }) {
     const resolved = yield* sources.resolve(input);
 
-    if (resolved.source.engine === "sqlite") return yield* sqliteReadOnly();
+    if (resolved.source.engine === "sqlite") return yield* sqliteReadOnly(resolved.source);
     const access = yield* approvals.read(resolved.source);
 
     if (access.writes === "off")
@@ -409,7 +413,7 @@ export const writeQueries = Effect.fnUntraced(function* (
         yield* context(input.sessionId, input);
         const resolved = yield* sources.resolve(input);
 
-        if (resolved.source.engine === "sqlite") return yield* sqliteReadOnly();
+        if (resolved.source.engine === "sqlite") return yield* sqliteReadOnly(resolved.source);
 
         return yield* withTarget(
           sourceKey(resolved.source),

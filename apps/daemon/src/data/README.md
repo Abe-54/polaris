@@ -359,3 +359,13 @@ on the same reservation, under the same total deadline. SLEEP, BENCHMARK, lock f
 user-variable assignments are refused before probing; session release clears any remaining user
 variables. Use SELECT-only credentials (ADR 0091's guard matrix). ENG-670 tracks a driver path
 that obtains prepared-statement column metadata without executing a probe.
+
+## Daemon Sources (ENG-714)
+
+While Developer Mode is effective, `daemonSources.ts` lists every regular `POLARIS_HOME/*.sqlite`
+file at request time (no watcher; nothing runs while off) as `Daemon · <file>`, `foundIn.kind: "daemon"`.
+They show in the Polaris Workspace's checkouts, or in every checkout when there is none.
+They are Remote and never take the checkout path rule: `filePolicy` and `require` read them by kind.
+Writes, execute, labels, removal and access changes are refused with E-DATA-READ-ONLY. Reads use
+the SQLite child's read-only handle, so no lock outlives a query and nothing checkpoints the WAL.
+`watch` re-lists on Developer Mode changes; `lazyData` hands `DeveloperModeState` to the Data build.

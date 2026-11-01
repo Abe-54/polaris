@@ -3,6 +3,7 @@
  * Connection bar; rule/data-source-label): the label's tone, the driver line and agent access.
  */
 import type { DataSource, DataSourceLabel } from "@polaris/protocol";
+import { isDaemonSource } from "./daemon.ts";
 
 export type LabelColour = DataSourceLabel["colour"];
 
@@ -116,7 +117,7 @@ export const barParts = (source: DataSource): ReadonlyArray<string> =>
 
 /** A SQLite file outside the checkout: agents are refused it, with no approval to ask for. */
 const outsideFile = (source: DataSource) =>
-  source.engine === "sqlite" && source.locality === "remote";
+  source.engine === "sqlite" && source.locality === "remote" && !isDaemonSource(source);
 
 /** A Remote Data Source agents can't reach until the user approves it (or after a denial). */
 export const isLocked = (source: DataSource) =>
@@ -134,10 +135,13 @@ const ACCESS: Record<DataSource["access"], (source: DataSource) => string> = {
 };
 
 /** The agents' access, at the bar's end (DESIGN.md, Data → Connection bar). */
-export const accessText = (source: DataSource): string =>
-  outsideFile(source)
+export const accessText = (source: DataSource): string => {
+  if (isDaemonSource(source)) return "Agents read · never written";
+
+  return outsideFile(source)
     ? "Outside this checkout · agents can't read it"
     : ACCESS[source.access](source);
+};
 
 const SHORT: Record<DataSource["access"], (source: DataSource) => string> = {
   read: (s) => (s.writes === "off" ? "Read only" : "Read · writes ask"),
@@ -147,8 +151,11 @@ const SHORT: Record<DataSource["access"], (source: DataSource) => string> = {
 };
 
 /** The same facts in a narrow bar, so the access is the last thing to go, never clipped. */
-export const accessShort = (source: DataSource): string =>
-  outsideFile(source) ? "Outside checkout" : SHORT[source.access](source);
+export const accessShort = (source: DataSource): string => {
+  if (isDaemonSource(source)) return "Read only";
+
+  return outsideFile(source) ? "Outside checkout" : SHORT[source.access](source);
+};
 
 /** The card's AGENTS line: the same facts, lowercase. */
 export const accessLine = (source: DataSource): string => {
@@ -158,6 +165,8 @@ export const accessLine = (source: DataSource): string => {
     "needs-approval": "not approved",
     denied: "denied",
   };
+
+  if (isDaemonSource(source)) return "read · never written";
 
   if (outsideFile(source)) return "outside this checkout · can't read it";
 
@@ -180,6 +189,8 @@ export const foundText = (source: DataSource): string => {
   const { kind, file, key } = source.foundIn;
 
   if (kind === "manual") return "added by you";
+
+  if (kind === "daemon") return `the daemon's own database · ${file ?? ""}`;
 
   return [file, key].filter((part) => part !== undefined && part !== "").join(" · ") || kind;
 };

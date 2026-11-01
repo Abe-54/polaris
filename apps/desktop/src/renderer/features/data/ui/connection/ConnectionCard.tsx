@@ -13,6 +13,7 @@ import { accessLine, driverText, foundText, kickerText, statusText } from "../..
 import type { DataSessionKey } from "../../model/store.ts";
 import { LabelSwatches } from "./LabelSwatches.tsx";
 import { WritesChoice } from "./WritesChoice.tsx";
+import { isDaemonSource } from "../../model/daemon.ts";
 
 const Line = ({ label, value }: { readonly label: string; readonly value: string }) => (
   <div className="text-caption flex min-w-0 gap-3 font-mono">
@@ -183,7 +184,10 @@ export interface ConnectionCardProps {
 }
 
 /** Inside the popover's content, so closing the card unmounts it and flushes the label draft. */
-const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
+const CardBody = ({ at, source, canEdit: connected, onRemoved }: ConnectionCardProps) => {
+  // A Daemon Source can't be relabelled, written to or have its access changed.
+  const daemon = isDaemonSource(source);
+  const canEdit = connected && !daemon;
   const { draft, edit, post, error } = useLabel(at, source);
   const api = useDataApi();
   const [accessError, setAccessError] = useState<string | null>(null);
@@ -227,13 +231,13 @@ const CardBody = ({ at, source, canEdit, onRemoved }: ConnectionCardProps) => {
         </p>
       ) : null}
       <PendingDataApproval hostKey={at.hostKey} source={source} />
-      <WritesChoice at={at} source={source} canEdit={canEdit} />
+      {daemon ? null : <WritesChoice at={at} source={source} canEdit={canEdit} />}
       {error === null ? null : (
         <p role="alert" className="text-caption text-failed-text">
           Couldn't save the label · {error}
         </p>
       )}
-      {api.accessSource ? (
+      {api.accessSource && !daemon ? (
         <div className="border-hairline flex flex-col gap-2 border-t pt-2">
           <p className="text-caption text-text-subtle">
             Revoke removes this target's approval and any server-wide approval for this user.

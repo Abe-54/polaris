@@ -3,7 +3,22 @@
  * provides: the live IPC one by default, fixtures in previews and tests.
  */
 import type { DataSource, QueryLogEntry, SchemaTree, TableDetail } from "@polaris/protocol";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useHostDeveloperMode } from "../../settings/hostDeveloperModes.ts";
+import {
+  daemonSwitchShown,
+  setDaemonSwitch,
+  shownSources,
+  useDaemonSwitch,
+} from "../model/daemon.ts";
 import type { IpcError } from "../../../../shared/api.ts";
 import { markListed, useSourcesGeneration } from "../model/refresh.ts";
 import { type DataSessionKey, dataSessionKey } from "../model/store.ts";
@@ -75,9 +90,38 @@ const sources = (api: DataApi) => api.watchSources;
 
 const queryLog = (api: DataApi) => api.watchQueryLog;
 
+export interface DataSourcesView {
+  readonly sources: Loaded<ReadonlyArray<DataSource>>;
+  /** The Polaris switch for Daemon Sources, where it shows. */
+  readonly polaris?: { readonly on: boolean; readonly set: (on: boolean) => void };
+}
+
+/** The checkout's Data Sources as Data shows them, live, and the Polaris switch if it shows. */
+export const useDataSourcesView = (at: DataSessionKey): DataSourcesView => {
+  const listed = useWatch(at, sources, useSourcesGeneration(at), markListed);
+  const mode = useHostDeveloperMode(at.hostKey);
+  const on = useDaemonSwitch(at.hostKey);
+  const { hostKey } = at;
+
+  return useMemo(() => {
+    if (listed.status !== "ready") return { sources: listed };
+    const shown = daemonSwitchShown(listed.value, mode);
+    const value = shownSources(listed.value, shown, on);
+
+    const ready = { status: "ready", value } as const;
+
+    if (!shown) return { sources: ready };
+
+    return {
+      sources: ready,
+      polaris: { on, set: (next: boolean) => setDaemonSwitch(hostKey, next) },
+    };
+  }, [listed, mode, on, hostKey]);
+};
+
 /** The checkout's Data Sources, live; `refreshSources` re-lists them. */
 export const useDataSources = (at: DataSessionKey): Loaded<ReadonlyArray<DataSource>> =>
-  useWatch(at, sources, useSourcesGeneration(at), markListed);
+  useDataSourcesView(at).sources;
 
 /** The checkout's Query Log, newest last, live; nothing is watched while `enabled` is false. */
 export const useQueryLog = (

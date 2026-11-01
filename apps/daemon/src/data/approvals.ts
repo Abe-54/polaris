@@ -18,6 +18,7 @@ import { decideSession } from "../engine/session.ts";
 import { DataDatabase, storageError } from "./database.ts";
 import { ApprovalStore, targetKey, targetOf } from "./approvalStore.ts";
 import { writeApprovalMethods } from "./writeApprovals.ts";
+import { isDaemonSource } from "./daemonSources.ts";
 import { DataApprovalRequired, type DataApprovalOutcome } from "./approvalRequired.ts";
 
 const approvalItem = (item: LiveItem, id?: RequestId) => {
@@ -100,6 +101,9 @@ export const dataApprovalsLayer = Layer.effect(
       turn?: TurnId,
       grantedId?: RequestId
     ) {
+      // Listed only while Developer Mode shows it; never through the checkout's path rule.
+      if (isDaemonSource(source)) return;
+
       if (source.engine === "sqlite") {
         if (source.locality === "local") return;
 

@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DataRpcs, Unsupported } from "@polaris/protocol";
-import { Context, Deferred, Effect, Layer, Predicate, Stream } from "effect";
+import { Context, Deferred, Effect, Layer, Option, Predicate, Stream } from "effect";
+import { DeveloperModeState } from "../developerMode/service.ts";
 import { DataApprovals } from "../data/approvalService.ts";
 import { DataSources, DataQueries } from "../data/services.ts";
 import { SchemaSnapshots } from "../data/schemaSnapshotService.ts";
@@ -14,6 +15,8 @@ import { cacheDaemonBuild, lazyRpcLayer } from "./lazy.ts";
 export const lazyData = Layer.fromBuild((memoMap, scope) =>
   Effect.gen(function* () {
     const store = yield* EventStore;
+    // Daemon Sources follow Developer Mode; the lazy build sees only what is handed to it here.
+    const developerMode = yield* Effect.serviceOption(DeveloperModeState);
     let loaded = false;
     let started = false;
 
@@ -24,6 +27,9 @@ export const lazyData = Layer.fromBuild((memoMap, scope) =>
 
         const built = yield* Layer.buildWithMemoMap(dataServices, memoMap, scope).pipe(
           Effect.provideService(EventStore, store),
+          Option.isSome(developerMode)
+            ? Effect.provideService(DeveloperModeState, developerMode.value)
+            : (effect) => effect,
           Effect.orDie
         );
 

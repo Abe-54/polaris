@@ -100,7 +100,8 @@ const DataSourceFields = Schema.Struct({
   /** The database file on the Host: present exactly when `engine` is `sqlite`. */
   path: Schema.optionalKey(DataFilePath),
   foundIn: Schema.Struct({
-    kind: Schema.Literals(["env", "framework", "compose", "manual"]),
+    /** `daemon`: a Daemon Source, one of the Daemon's own databases (CONTEXT.md). */
+    kind: Schema.Literals(["env", "framework", "compose", "manual", "daemon"]),
     file: Schema.optionalKey(Schema.String),
     key: Schema.optionalKey(Schema.String),
   }),

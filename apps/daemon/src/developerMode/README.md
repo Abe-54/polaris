@@ -18,3 +18,5 @@ A Daemon run from source (not a compiled `polaris` binary) counts as `fromSource
 | unset or anything else | detected from the binary |
 
 It is read once, when the Daemon starts. The stored setting and leases still apply either way.
+
+Data reads it too: Daemon Sources (`data/daemonSources.ts`) exist only while `effective` is true.

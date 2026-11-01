@@ -3,11 +3,11 @@
  * source", or the empty state naming what was searched.
  */
 import type { DataSource, QueryLogEntry } from "@polaris/protocol";
-import { Button, cn, EmptyState, PixelServerIcon, PlusIcon } from "@polaris/ui";
+import { Button, cn, EmptyState, PixelServerIcon, PlusIcon, Switch } from "@polaris/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMemo, useRef } from "react";
 import { useApp } from "../../../../shell/hooks.ts";
-import { useDataSources, useTableChanges } from "../../data/hooks.tsx";
+import { type DataSourcesView, useDataSourcesView, useTableChanges } from "../../data/hooks.tsx";
 import { busyKey, busyTables, type LogLookups } from "../../model/queryLog.ts";
 import { openSourceForm, toggleTreeRow, useSidebar } from "../../model/sidebar.ts";
 import { type DataSessionKey, openTable } from "../../model/store.ts";
@@ -72,6 +72,27 @@ const NoSources = ({ at, canAdd }: AddProps) => (
       </Button>
     }
   />
+);
+
+/** The Daemon's own databases beside this checkout's (CONTEXT.md, Daemon Source), as in Traces. */
+const PolarisSwitch = ({
+  polaris,
+}: {
+  readonly polaris: NonNullable<DataSourcesView["polaris"]>;
+}) => (
+  <label
+    className="text-caption text-text-default mx-2.5 flex h-6 shrink-0 items-center justify-between gap-2 px-1"
+    data-testid="data-polaris-switch"
+  >
+    <span className="min-w-0 truncate">
+      Polaris <span className="text-text-subtle">· daemon sources</span>
+    </span>
+    <Switch
+      aria-label="Show the daemon's own databases"
+      checked={polaris.on}
+      onCheckedChange={polaris.set}
+    />
+  </label>
 );
 
 /** The file every source was found in, shown by the kicker; none when they differ. */
@@ -179,7 +200,21 @@ const Tree = ({
 };
 
 export const SourcesView = (props: SourcesViewProps) => {
-  const sources = useDataSources(props.at);
+  const view = useDataSourcesView(props.at);
+  const switchRow = view.polaris === undefined ? null : <PolarisSwitch polaris={view.polaris} />;
+
+  return (
+    <>
+      {switchRow}
+      <SourcesBody {...props} sources={view.sources} />
+    </>
+  );
+};
+
+const SourcesBody = (
+  props: SourcesViewProps & { readonly sources: DataSourcesView["sources"] }
+) => {
+  const { sources } = props;
 
   if (sources.status === "loading")
     return <p className="text-caption text-text-subtle px-panel py-2">Looking for data sources…</p>;

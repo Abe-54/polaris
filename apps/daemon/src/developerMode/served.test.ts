@@ -57,3 +57,37 @@ test("the served Daemon's Developer Mode is the live one, and follows the stored
       })
     )
   ));
+
+// Data reads `DeveloperModeState` optionally; without it in the served graph no Daemon Source shows.
+test("the served Daemon lists its own databases as Daemon Sources once Developer Mode is on", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { engineServices } = yield* Effect.promise(() => import("../transport/serve.ts"));
+        const { DataSources } = yield* Effect.promise(() => import("../data/services.ts"));
+
+        const { seedDataSessionAt, started } = yield* Effect.promise(
+          () => import("../data/approvals.testing.ts")
+        );
+
+        const services = yield* Layer.build(engineServices);
+        const control = yield* Effect.provide(Effect.service(DeveloperModeControl), services);
+        const sources = yield* Effect.provide(Effect.service(DataSources), services);
+        yield* Effect.provide(seedDataSessionAt(home), services);
+        const sessionId = started.session.id;
+
+        const daemon = Effect.map(sources.list({ sessionId }), (list) =>
+          list.filter((source) => source.foundIn.kind === "daemon").map((source) => source.name)
+        );
+
+        // The test before this one stored the setting on in this home.
+        yield* control.setStored(false);
+
+        expect(yield* daemon).toEqual([]);
+
+        yield* control.setStored(true);
+
+        expect(yield* daemon).toContain("Daemon · state");
+      })
+    )
+  ));

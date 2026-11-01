@@ -6,6 +6,7 @@ import {
   NotFound,
   type SaveDataFileSource,
   type SessionId,
+  type WorkspaceId,
 } from "@polaris/protocol";
 import { Effect, Option, PubSub, Redacted, Semaphore, Stream, Schema } from "effect";
 import { paths } from "../paths.ts";
@@ -27,6 +28,15 @@ import { cachedDiscovery } from "./discoveryCache.ts";
 import { dataPasswords } from "./passwords.ts";
 import { dataFailure, openStorage, sourceStorage, type ManualSource } from "./storage.ts";
 import { fileLocality, realFile, sqliteFile } from "./sqlite/files.ts";
+import { DeveloperModeState } from "../developerMode/service.ts";
+import {
+  DAEMON_SOURCE_LABEL,
+  daemonPolicy,
+  daemonSources,
+  daemonUnchangeable,
+  isDaemonSource,
+  type DaemonSources,
+} from "./daemonSources.ts";
 import type { DataSources } from "./index.ts";
 
 const unknownSource = () =>
@@ -40,11 +50,22 @@ export const sourceDependencies = Effect.gen(function* () {
   const store = yield* EventStore;
   const secrets = yield* HostSecrets;
   const access = yield* DataSourceAccess;
+  const developerMode = yield* Effect.serviceOption(DeveloperModeState);
 
   return {
     secrets,
     access,
     path: paths().data,
+    ...Option.match(developerMode, {
+      onNone: () => undefined,
+      onSome: (mode) => ({
+        daemon: {
+          sources: daemonSources({ mode: mode.current, changes: mode.changes }),
+          workspace: (sessionId: SessionId) =>
+            Effect.map(store.model, (model) => model.sessions.get(sessionId)?.session.workspaceId),
+        },
+      }),
+    }),
     checkout: (sessionId: SessionId) =>
       Effect.flatMap(store.model, (model) => {
         const record = model.sessions.get(sessionId);
@@ -98,6 +119,11 @@ export const sources = Effect.fnUntraced(function* (options: {
   readonly checkout: (sessionId: SessionId) => Effect.Effect<string, NotFound>;
   readonly secrets: HostSecrets["Service"];
   readonly access: DataSourceAccess["Service"];
+  /** Daemon Sources while Developer Mode is effective; absent, a checkout lists none. */
+  readonly daemon?: {
+    readonly sources: DaemonSources;
+    readonly workspace: (sessionId: SessionId) => Effect.Effect<WorkspaceId | undefined>;
+  };
 }): Effect.fn.Return<DataSources["Service"], DataError, import("effect").Scope.Scope> {
   const discoverSources = cachedDiscovery(options.discovery ?? discover);
   const db = yield* openStorage(options.path);
@@ -168,11 +194,33 @@ export const sources = Effect.fnUntraced(function* (options: {
       Effect.flatMap((path) => Effect.tryPromise({ try: () => realpath(path), catch: dataFailure }))
     );
 
+  /** Daemon Sources never take the checkout's path rule, labels or approvals. */
+  const daemonEntries = Effect.fnUntraced(function* (sessionId: SessionId, checkout: string) {
+    const daemon = options.daemon;
+
+    if (daemon === undefined) return [];
+    const items = yield* daemon.sources.candidates(yield* daemon.workspace(sessionId));
+
+    return items.flatMap((candidate) => {
+      // Remote, so a path that skipped the Daemon Source checks would deny it rather than read it.
+      const source = metadata(checkout, candidate, "remote");
+
+      if (!source) return [];
+      const encoded = Schema.encodeSync(DataSource)(source);
+      const listed = { ...encoded, ...daemonPolicy, label: DAEMON_SOURCE_LABEL };
+
+      return [{ source: new DataSource(listed), candidate }];
+    });
+  });
+
   const catalog = Effect.fnUntraced(function* (sessionId: SessionId) {
     const checkout = yield* checkoutPath(sessionId);
     const items = yield* Effect.forEach(yield* candidates(checkout), realCandidate);
 
-    const result: { source: DataSource; candidate: Candidate }[] = [];
+    const result: { source: DataSource; candidate: Candidate }[] = [
+      ...(yield* daemonEntries(sessionId, checkout)),
+    ];
+
     const probe = localityProbe(checkout);
 
     for (const candidate of items) {
@@ -417,6 +465,8 @@ export const sources = Effect.fnUntraced(function* (options: {
     const checkout = yield* checkoutPath(input.sessionId);
     const source = yield* find(input);
 
+    if (isDaemonSource(source)) return yield* daemonUnchangeable();
+
     if (source.foundIn.kind !== "manual") return yield* unknownSource();
     yield* lock.withPermit(
       Effect.gen(function* () {
@@ -432,6 +482,8 @@ export const sources = Effect.fnUntraced(function* (options: {
   ) {
     const checkout = yield* checkoutPath(input.sessionId);
     const source = yield* find(input);
+
+    if (isDaemonSource(source)) return yield* daemonUnchangeable();
     yield* lock.withPermit(storage.setLabel(checkout, source, input.label));
     yield* PubSub.publish(changes, checkout);
 
@@ -469,6 +521,8 @@ export const sources = Effect.fnUntraced(function* (options: {
       const checkout = yield* checkoutPath(input.sessionId);
       const source = yield* find(input);
 
+      if (isDaemonSource(source)) return yield* daemonUnchangeable();
+
       if (options.access.change === undefined)
         return yield* new DataError({
           code: "E-DATA-DENIED",
@@ -493,15 +547,20 @@ export const sources = Effect.fnUntraced(function* (options: {
           const checkout = yield* checkoutPath(input.sessionId);
           const subscription = yield* PubSub.subscribe(changes);
 
-          return Stream.concat(
-            Stream.fromEffect(list(input)),
-            Stream.merge(
+          // Developer Mode's changes start with the current mode, so they also list the first snapshot.
+          const first = options.daemon?.sources.changes ?? Stream.succeed(undefined);
+
+          return Stream.mergeAll(
+            [
+              first,
               Stream.fromSubscription(subscription).pipe(
-                Stream.filter((path) => path === "*" || path === checkout)
+                Stream.filter((path) => path === "*" || path === checkout),
+                Stream.map(() => undefined)
               ),
-              (options.access.changes ?? Stream.empty).pipe(Stream.map(() => checkout))
-            ).pipe(Stream.mapEffect(() => list(input)))
-          );
+              options.access.changes ?? Stream.empty,
+            ],
+            { concurrency: "unbounded" }
+          ).pipe(Stream.mapEffect(() => list(input)));
         })
       ),
   };

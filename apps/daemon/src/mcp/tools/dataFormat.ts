@@ -184,11 +184,18 @@ export const queryView = (result: QueryResult, known: Known = []) => {
 };
 
 const foundIn = (source: DataSource) =>
-  source.foundIn.kind === "manual"
-    ? "added by you"
-    : `from ${source.foundIn.file ?? source.foundIn.kind}${source.foundIn.key === undefined ? "" : ` (${source.foundIn.key})`}`;
+  Match.value(source.foundIn.kind).pipe(
+    Match.when("manual", () => "added by you"),
+    Match.when("daemon", () => "the Daemon's own database (Developer Mode)"),
+    Match.orElse(() => discoveredIn(source))
+  );
+
+const discoveredIn = (source: DataSource) =>
+  `from ${source.foundIn.file ?? source.foundIn.kind}${source.foundIn.key === undefined ? "" : ` (${source.foundIn.key})`}`;
 
 const access = (source: DataSource) => {
+  if (source.foundIn.kind === "daemon") return "read · never written";
+
   if (source.engine === "sqlite")
     return source.locality === "local" ? "read · read only" : "outside the checkout, denied";
 
