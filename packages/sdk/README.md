@@ -156,6 +156,11 @@ socket and the gateway) are tried in order. In a browser the package resolves to
 build, which has the gateway only. `createPolarisWith` and `openPolarisWith` take a transport of
 your own.
 
+## 0.2.0
+
+Bundles the current protocol, including Data, Traces, Profiles and profile-attach approval
+requests. This lets Extensions handle the approvals emitted by Polaris 0.8.0.
+
 ## Building
 
 In the Polaris repository, `bun run --cwd packages/sdk build` writes the package to `dist/`, and

@@ -4,6 +4,7 @@
  * Daemon, starts a session and answers its approval (ENG-477).
  *
  *   bun scripts/e2e.ts [project dir]   (a temporary directory when omitted)
+ * Set POLARIS_SDK_TARBALL to test a packed SDK before publishing it.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -28,7 +29,7 @@ const project = given === undefined ? mkdtempSync("/tmp/pl-raycast-") : resolve(
 const dist = join(project, "dist");
 
 try {
-  writeStandalone(project);
+  writeStandalone(project, process.env["POLARIS_SDK_TARBALL"]);
   run(["npm", "install", "--no-audit", "--no-fund"], project);
   run(["npm", "run", "build"], project);
   run(["node", join(import.meta.dir, "checkShared.mjs"), dist], project);

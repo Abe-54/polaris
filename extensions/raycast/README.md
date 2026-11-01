@@ -47,6 +47,16 @@ bun run --cwd extensions/raycast e2e        # the release's project, built by ra
 user would (the SDK from npm), builds it with `ray build`, and drives the built SDK under
 Node through pairing, a session and its approval.
 
+Before publishing a new SDK version, test the same project against its local tarball:
+
+```sh
+bun run --cwd packages/sdk pack
+POLARIS_SDK_TARBALL="$PWD/packages/sdk/build/doellsoftware-polaris-sdk-0.2.0.tgz" bun run --cwd extensions/raycast e2e
+```
+
+The override installs that tarball under `@polaris/sdk`; without it, the project installs
+from npm at the version in `packages/sdk/package.json`.
+
 `src/lib/` is the model (sections, approvals, pairings, Connection State, copy) and has no
 Raycast imports, so it runs under `bun test`; `src/lib/daemon.test.ts` drives it through the
 SDK against `polaris serve` from source. Publishing to the Raycast Store waits for the SDK
