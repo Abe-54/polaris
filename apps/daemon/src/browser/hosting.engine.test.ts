@@ -96,7 +96,7 @@ describe("Browser hosting against the real Engine", () => {
           })
         );
 
-        yield* waitFor((m) => m.sessions.get(sessionId) !== undefined, 10_000);
+        yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "idle", 10_000);
         expect(yield* engine.hostableSession(sessionId)).toBe(true);
 
         const hosting = BrowserHosting.make(
@@ -108,7 +108,7 @@ describe("Browser hosting against the real Engine", () => {
 
         // The connection has not registered yet, so the claim parks on the registration wait.
         const claiming = yield* Effect.forkChild(hosting.claim(1, sessionId).pipe(Effect.flip));
-        yield* eventually(() => hosting.awaitingClaims(1) === 1);
+        expect(yield* eventually(() => hosting.awaitingClaims(1) === 1)).toBe(true);
 
         // Archive the session mid-wait, then let the connection register: the post-wait recheck
         // must see the archived state and refuse, rather than record a claim for a dead session.
