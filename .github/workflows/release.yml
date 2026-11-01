@@ -443,7 +443,8 @@ jobs:
           fi
           tag=latest
           if [[ "${PACKAGE##*@}" == *-* ]]; then tag=next; fi
-          npm publish handoff/polaris-sdk.tgz --provenance --access public --ignore-scripts --tag "$tag"
+          # The ./ keeps npm 11 from reading the path as a GitHub user/repo shorthand.
+          npm publish ./handoff/polaris-sdk.tgz --provenance --access public --ignore-scripts --tag "$tag"
 
   raycast:
     name: Build the Raycast extension (no credentials)
