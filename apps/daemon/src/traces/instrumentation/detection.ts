@@ -48,7 +48,7 @@ export const fixedExporterLines = (source: string) => {
   for (const match of source.matchAll(constructors)) {
     if (strings.some(({ start, end }) => start <= match.index && match.index < end)) continue;
     const body = match[1]!;
-    const url = /\burl\s*:\s*(["'`])https?:\/\/[^"'`\r\n]+\1/.exec(body);
+    const url = /(?:\burl|["']url["'])\s*:\s*(["'`])https?:\/\/[^"'`\r\n]+\1/.exec(body);
 
     if (!url || url[0].includes("${") || body.includes("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"))
       continue;

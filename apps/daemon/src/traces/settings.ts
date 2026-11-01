@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, Option } from "effect";
 import {
   TraceSettingsError,
   WorkspaceTracesSettings,
@@ -8,6 +8,9 @@ import {
   type DetectedTraceExporter,
   type WorkspaceId,
 } from "@polaris/protocol";
+import { realpath } from "node:fs/promises";
+import { TraceSessions } from "./sessions.ts";
+import { TraceStore } from "./store.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { polarisHome } from "../paths.ts";
 import {
@@ -49,6 +52,11 @@ const defaults = WorkspaceTracesSettings.make({
   autoInstrumentSkipReason: null,
 });
 
+interface InstrumentationEvidence {
+  readonly skipReason: string | null;
+  readonly detectedExporters: ReadonlyArray<DetectedTraceExporter>;
+}
+
 type Binding = Pick<IngestContext, "workspaceId" | "checkout" | "sessionId">;
 
 const key = (context: Binding) =>
@@ -65,7 +73,11 @@ export interface TracePolicy {
 export class TraceSettings extends Context.Service<
   TraceSettings,
   {
-    readonly get: (id: WorkspaceId) => Effect.Effect<WorkspaceTracesSettings, TraceSettingsError>;
+    readonly recordLaunch: (context: Binding) => Effect.Effect<void>;
+    readonly get: (
+      id: WorkspaceId,
+      refreshDetection?: boolean
+    ) => Effect.Effect<WorkspaceTracesSettings, TraceSettingsError>;
     readonly patch: (
       id: WorkspaceId,
       patch: WorkspaceTracesSettingsUpdate
@@ -79,7 +91,7 @@ export class TraceSettings extends Context.Service<
     readonly subscribe: (listener: (id: WorkspaceId) => void) => () => void;
     readonly recordInstrumentation: (
       id: WorkspaceId,
-      result: { skipReason: string | null; detectedExporters: ReadonlyArray<DetectedTraceExporter> }
+      result: InstrumentationEvidence
     ) => Effect.Effect<void>;
   }
 >()("polaris/traces/Settings") {
@@ -87,164 +99,242 @@ export class TraceSettings extends Context.Service<
     filename: string | null,
     resolve: (id: WorkspaceId) => Effect.Effect<string, TraceSettingsError>
   ) =>
-    Layer.sync(TraceSettings, () => {
-      let saved: typeof SavedSettings.Type | null = null;
-      const launches = new Map<string, ExporterDetection>();
-      const latest = new Map<WorkspaceId, ExporterDetection>();
+    Layer.effect(
+      TraceSettings,
+      Effect.gen(function* () {
+        const events = yield* Effect.serviceOption(EventStore);
+        const traces = yield* Effect.serviceOption(TraceStore);
+        const sessions = yield* Effect.serviceOption(TraceSessions);
+        const latestCheckout = new Map<WorkspaceId, string>();
+        const applications = new Set<string>();
+        let saved: typeof SavedSettings.Type | null = null;
+        const launches = new Map<string, ExporterDetection>();
+        const latest = new Map<WorkspaceId, ExporterDetection>();
 
-      const instrumentation = new Map<
-        WorkspaceId,
-        { skipReason: string | null; detectedExporters: ReadonlyArray<DetectedTraceExporter> }
-      >();
+        const instrumentation = new Map<WorkspaceId, InstrumentationEvidence>();
 
-      const generations = new Map<WorkspaceId, number>();
-      const listeners = new Set<(id: WorkspaceId) => void>();
-
-      const load = () => {
-        saved ??=
-          filename !== null && existsSync(filename)
-            ? decodeSaved(readFileSync(filename, "utf8"))
-            : {};
-
-        return saved;
-      };
-
-      const policy = (id: WorkspaceId, detection: ExporterDetection): TracePolicy => {
-        const value = load()[id] ?? {};
-        const target = value.forwardTo;
-
-        const fallback =
-          target == null
-            ? null
-            : collectorFromEnvironment({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: target.url });
-
-        return {
-          generation: generations.get(id) ?? 0,
-          enabled: value.enabled ?? true,
-          forwarding: value.forwarding ?? true,
-          collector:
-            detection.collector ??
-            fallback ??
-            (target === null ? null : detection.suggestedCollector),
-          alreadyExporting: detection.detectedExporters.some((e) => e.alreadyExporting),
+        const rememberInstrumentation = (id: WorkspaceId, result: InstrumentationEvidence) => {
+          if (instrumentation.size >= 256 && !instrumentation.has(id))
+            instrumentation.delete(instrumentation.keys().next().value!);
+          instrumentation.set(id, result);
         };
-      };
 
-      const view = (id: WorkspaceId, detection: ExporterDetection) => {
-        const value = load()[id] ?? {};
-        const extra = instrumentation.get(id);
+        const generations = new Map<WorkspaceId, number>();
+        const listeners = new Set<(id: WorkspaceId) => void>();
 
-        return WorkspaceTracesSettings.make({
-          ...defaults,
-          ...value,
-          forwardTo: publicCollector(policy(id, detection).collector),
-          detectedExporters: [...detection.detectedExporters, ...(extra?.detectedExporters ?? [])],
-          autoInstrumentSkipReason: extra?.skipReason ?? null,
-        });
-      };
+        const load = () => {
+          saved ??=
+            filename !== null && existsSync(filename)
+              ? decodeSaved(readFileSync(filename, "utf8"))
+              : {};
 
-      const detect = (checkout: string, source: TraceEnvironment) =>
-        Effect.tryPromise({
-          try: () => detectExporters(checkout, source),
-          catch: unavailable,
-        });
+          return saved;
+        };
 
-      const prepare = Effect.fnUntraced(function* (context: Binding, source: TraceEnvironment) {
-        const detected = yield* detect(context.checkout, source);
-        const previous = launches.get(key(context));
+        const policy = (id: WorkspaceId, detection: ExporterDetection): TracePolicy => {
+          const value = load()[id] ?? {};
+          const target = value.forwardTo;
 
-        const injected =
-          isPolarisEndpoint(source.OTEL_EXPORTER_OTLP_ENDPOINT) ||
-          isPolarisEndpoint(source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT);
+          const fallback =
+            target == null
+              ? null
+              : collectorFromEnvironment({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: target.url });
 
-        const detection =
-          injected && collectorFromEnvironment(source) === null && previous !== undefined
-            ? {
-                ...detected,
-                collector: previous.collector,
-                suggestedCollector: previous.suggestedCollector,
-              }
-            : detected;
+          return {
+            generation: generations.get(id) ?? 0,
+            enabled: value.enabled ?? true,
+            forwarding: value.forwarding ?? true,
+            collector:
+              detection.collector ??
+              fallback ??
+              (target === null ? null : detection.suggestedCollector),
+            alreadyExporting: detection.detectedExporters.some((e) => e.alreadyExporting),
+          };
+        };
 
-        return yield* Effect.try({
-          try: () => {
-            if (launches.size >= 1024) launches.delete(launches.keys().next().value!);
-            launches.set(key(context), detection);
-            latest.set(context.workspaceId, detection);
+        const view = (id: WorkspaceId, detection: ExporterDetection) => {
+          const value = load()[id] ?? {};
+          const extra = instrumentation.get(id);
 
-            return policy(context.workspaceId, detection);
-          },
-          catch: unavailable,
-        });
-      });
+          return WorkspaceTracesSettings.make({
+            ...defaults,
+            ...value,
+            forwardTo: publicCollector(policy(id, detection).collector),
+            detectedExporters: [
+              ...detection.detectedExporters,
+              ...(extra?.detectedExporters ?? []),
+            ],
+            autoInstrumentSkipReason:
+              (value.autoInstrument ?? "off") === "off" ? null : (extra?.skipReason ?? null),
+          });
+        };
 
-      const get = Effect.fnUntraced(function* (id: WorkspaceId) {
-        const checkout = yield* resolve(id);
-        const detection = latest.get(id) ?? (yield* detect(checkout, process.env));
-
-        return yield* Effect.try({ try: () => view(id, detection), catch: unavailable });
-      });
-
-      return TraceSettings.of({
-        get,
-        prepare,
-        current: (id, generation) => (generations.get(id) ?? 0) === generation,
-        policy: Effect.fnUntraced(function* (context) {
-          const detection = launches.get(key(context));
-
-          if (detection === undefined) return yield* prepare(context, process.env);
-
-          return yield* Effect.try({
-            try: () => policy(context.workspaceId, detection),
+        const detect = (checkout: string, source: TraceEnvironment) =>
+          Effect.tryPromise({
+            try: () => detectExporters(checkout, source),
             catch: unavailable,
           });
-        }),
-        patch: Effect.fnUntraced(function* (id, patch) {
-          const checkout = yield* resolve(id);
-          const detection = latest.get(id) ?? (yield* detect(checkout, process.env));
 
-          const update = yield* Effect.try({
-            try: () => Schema.decodeUnknownSync(WorkspaceTracesSettingsUpdate)(patch),
-            catch: invalid,
-          });
+        const prepare = Effect.fnUntraced(function* (context: Binding, source: TraceEnvironment) {
+          const detected = yield* detect(context.checkout, source);
+          const previous = launches.get(key(context));
 
-          if (isPolarisEndpoint(update.forwardTo?.url)) return yield* invalid();
+          const injected =
+            isPolarisEndpoint(source.OTEL_EXPORTER_OTLP_ENDPOINT) ||
+            isPolarisEndpoint(source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT);
+
+          const detection =
+            injected && collectorFromEnvironment(source) === null && previous !== undefined
+              ? {
+                  ...detected,
+                  collector: previous.collector,
+                  suggestedCollector: previous.suggestedCollector,
+                }
+              : detected;
 
           return yield* Effect.try({
             try: () => {
-              const next = { ...load(), [id]: { ...load()[id], ...update } };
+              if (launches.size >= 1024) launches.delete(launches.keys().next().value!);
+              launches.set(key(context), detection);
+              latest.set(context.workspaceId, detection);
 
-              if (filename !== null) {
-                mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
-                const temporary = `${filename}.${crypto.randomUUID()}.tmp`;
-                writeFileSync(temporary, JSON.stringify(next), { mode: 0o600, flag: "wx" });
-                renameSync(temporary, filename);
-              }
+              if (latestCheckout.size >= 256)
+                latestCheckout.delete(latestCheckout.keys().next().value!);
+              latestCheckout.set(context.workspaceId, context.checkout);
 
-              saved = next;
-              generations.set(id, (generations.get(id) ?? 0) + 1);
-
-              if (update.forwarding === false || update.forwardTo !== undefined)
-                for (const listener of listeners) listener(id);
-
-              return view(id, detection);
+              return policy(context.workspaceId, detection);
             },
             catch: unavailable,
           });
-        }),
-        subscribe: (listener) => {
-          listeners.add(listener);
+        });
 
-          return () => {
-            listeners.delete(listener);
-          };
-        },
-        recordInstrumentation: (id, result) =>
-          Effect.sync(() => {
-            instrumentation.set(id, result);
+        const get = Effect.fnUntraced(function* (id: WorkspaceId, refreshDetection = true) {
+          const registered = yield* resolve(id);
+          const known = latest.get(id);
+
+          if (!refreshDetection && known !== undefined)
+            return yield* Effect.try({ try: () => view(id, known), catch: unavailable });
+          const root = yield* Effect.promise(() => realpath(registered).catch(() => registered));
+          const candidate = latestCheckout.get(id);
+
+          const available =
+            candidate !== undefined &&
+            Option.isSome(sessions) &&
+            (yield* sessions.value.workspaceActive(id, candidate));
+
+          const checkout = available ? candidate : root;
+          const detection = latest.get(id) ?? (yield* detect(checkout, process.env));
+          let appRan = applications.has(JSON.stringify([id, checkout]));
+
+          if (refreshDetection && !appRan && Option.isSome(events)) {
+            const { observedApplication } = yield* Effect.promise(
+              () => import("./instrumentation/observation.ts")
+            );
+
+            appRan = yield* observedApplication(events.value, id, checkout).pipe(
+              Effect.orElseSucceed(() => false)
+            );
+          }
+
+          if (refreshDetection && !appRan && instrumentation.has(id))
+            rememberInstrumentation(id, {
+              skipReason: instrumentation.get(id)?.skipReason ?? null,
+              detectedExporters: [],
+            });
+
+          if (refreshDetection && appRan && Option.isSome(traces)) {
+            const page = yield* traces.value.list(checkout).pipe(Effect.orElseSucceed(() => null));
+
+            if (page !== null) {
+              const { detectFixedExporters } = yield* Effect.promise(
+                () => import("./instrumentation/detection.ts")
+              );
+
+              const detectedExporters = yield* Effect.promise(() =>
+                detectFixedExporters({ checkout, appRan, spansArrived: page.total > 0 })
+              );
+
+              rememberInstrumentation(id, {
+                skipReason: instrumentation.get(id)?.skipReason ?? null,
+                detectedExporters,
+              });
+            }
+          }
+
+          return yield* Effect.try({ try: () => view(id, detection), catch: unavailable });
+        });
+
+        return TraceSettings.of({
+          get,
+          recordLaunch: (context) =>
+            Effect.sync(() => {
+              if (applications.size >= 256)
+                applications.delete(applications.values().next().value!);
+              applications.add(JSON.stringify([context.workspaceId, context.checkout]));
+
+              if (latestCheckout.size >= 256)
+                latestCheckout.delete(latestCheckout.keys().next().value!);
+              latestCheckout.set(context.workspaceId, context.checkout);
+            }),
+          prepare,
+          current: (id, generation) => (generations.get(id) ?? 0) === generation,
+          policy: Effect.fnUntraced(function* (context) {
+            const detection = launches.get(key(context));
+
+            if (detection === undefined) return yield* prepare(context, process.env);
+
+            return yield* Effect.try({
+              try: () => policy(context.workspaceId, detection),
+              catch: unavailable,
+            });
           }),
-      });
-    });
+          patch: Effect.fnUntraced(function* (id, patch) {
+            const checkout = yield* resolve(id);
+            const detection = latest.get(id) ?? (yield* detect(checkout, process.env));
+
+            const update = yield* Effect.try({
+              try: () => Schema.decodeUnknownSync(WorkspaceTracesSettingsUpdate)(patch),
+              catch: invalid,
+            });
+
+            if (isPolarisEndpoint(update.forwardTo?.url)) return yield* invalid();
+
+            return yield* Effect.try({
+              try: () => {
+                const next = { ...load(), [id]: { ...load()[id], ...update } };
+
+                if (filename !== null) {
+                  mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
+                  const temporary = `${filename}.${crypto.randomUUID()}.tmp`;
+                  writeFileSync(temporary, JSON.stringify(next), { mode: 0o600, flag: "wx" });
+                  renameSync(temporary, filename);
+                }
+
+                saved = next;
+                generations.set(id, (generations.get(id) ?? 0) + 1);
+
+                if (update.forwarding === false || update.forwardTo !== undefined)
+                  for (const listener of listeners) listener(id);
+
+                return view(id, detection);
+              },
+              catch: unavailable,
+            });
+          }),
+          subscribe: (listener) => {
+            listeners.add(listener);
+
+            return () => {
+              listeners.delete(listener);
+            };
+          },
+          recordInstrumentation: (id, result) =>
+            Effect.sync(() => {
+              rememberInstrumentation(id, result);
+            }),
+        });
+      })
+    );
 
   static layerFromStoreAt = (filename: string) =>
     Layer.unwrap(

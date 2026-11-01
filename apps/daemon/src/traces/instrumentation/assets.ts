@@ -4,7 +4,9 @@ import { dirname, join } from "node:path";
 import { polarisHome } from "../../paths.ts";
 import { embeddedInstrumentation } from "./embedded.ts";
 
-let prepared: Promise<string> | undefined;
+const prepared = new Map<string, Promise<string>>();
+
+let bundled: Promise<Readonly<Record<string, string>>> | undefined;
 
 /** Content-addressed, private files survive Daemon upgrades while Node apps still use their loader. */
 export const materializeInstrumentation = async (
@@ -32,16 +34,22 @@ export const materializeInstrumentation = async (
   return join(dir, "register.mjs");
 };
 
-export const bundledRegisterPath = () => {
-  prepared ??= (async () => {
-    const assets =
-      embeddedInstrumentation ?? (await (await import("./build.ts")).buildInstrumentationAssets());
+export const bundledRegisterPath = (home = polarisHome()) => {
+  const existing = prepared.get(home);
 
-    return materializeInstrumentation(assets, polarisHome());
-  })().catch((error) => {
-    prepared = undefined;
-    throw error;
-  });
+  if (existing !== undefined) return existing;
+  bundled ??= (async () =>
+    embeddedInstrumentation ?? (await (await import("./build.ts")).buildInstrumentationAssets()))();
 
-  return prepared;
+  const promise = bundled
+    .then((assets) => materializeInstrumentation(assets, home))
+    .catch((error) => {
+      prepared.delete(home);
+      throw error;
+    });
+
+  if (prepared.size >= 32) prepared.delete(prepared.keys().next().value!);
+  prepared.set(home, promise);
+
+  return promise;
 };

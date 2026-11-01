@@ -1,8 +1,8 @@
-import { pathToFileURL } from "node:url";
 import type { WorkspaceTracesSettings } from "@polaris/protocol";
 import type { TraceEnvironment } from "../runtime.ts";
 import { bundledRegisterPath } from "./assets.ts";
 import { isNodeSdk, launchPackages } from "./package.ts";
+import { appendNodeImport } from "../nodeOptions.ts";
 
 export interface AutoInstrumentationOptions {
   readonly checkout: string;
@@ -12,6 +12,7 @@ export interface AutoInstrumentationOptions {
     "enabled" | "autoInstrument" | "autoInstrumentOverride"
   >;
   readonly source: TraceEnvironment;
+  readonly home?: string | undefined;
   readonly registerPath?: string;
   readonly runtime?: "node" | "deno" | "bun";
 }
@@ -27,11 +28,10 @@ export const prepareAutoInstrumentation = async (
 ): Promise<AutoInstrumentationResult> => {
   const { settings, source } = options;
 
-  if (!settings.enabled || settings.autoInstrument === "off")
-    return { environment: {}, skipReason: null };
+  if (settings.autoInstrument === "off") return { environment: {}, skipReason: null };
 
   if (options.runtime === "bun")
-    return { environment: {}, skipReason: "Bun does not support Node auto-instrumentation." };
+    return { environment: {}, skipReason: "Automatic instrumentation is unavailable for Bun." };
 
   if (!source.OTEL_EXPORTER_OTLP_ENDPOINT)
     return { environment: {}, skipReason: "The trace receiver is unavailable." };
@@ -39,6 +39,15 @@ export const prepareAutoInstrumentation = async (
   if (settings.autoInstrument === "deno")
     return { environment: { OTEL_DENO: "true" }, skipReason: null };
   const packages = await launchPackages(options.checkout, options.cwd);
+
+  if (packages.length === 0)
+    return { environment: {}, skipReason: "The launch directory is outside this checkout." };
+
+  if (packages.some((info) => !info.valid) && !settings.autoInstrumentOverride)
+    return {
+      environment: {},
+      skipReason: "package.json could not be checked for an existing OpenTelemetry SDK.",
+    };
   const sdk = packages.flatMap((info) => info.dependencies).find(isNodeSdk);
 
   if (sdk && !settings.autoInstrumentOverride)
@@ -48,12 +57,16 @@ export const prepareAutoInstrumentation = async (
     };
 
   try {
-    const path = options.registerPath ?? (await bundledRegisterPath());
-    const preload = `--import ${JSON.stringify(pathToFileURL(path).href)}`;
+    const path = options.registerPath ?? (await bundledRegisterPath(options.home));
+    const appended = appendNodeImport(source.NODE_OPTIONS, path);
+    const preload = appendNodeImport(undefined, path);
 
     return {
       environment: {
-        NODE_OPTIONS: `${preload}${source.NODE_OPTIONS ? ` ${source.NODE_OPTIONS}` : ""}`,
+        NODE_OPTIONS:
+          appended === source.NODE_OPTIONS
+            ? appended
+            : `${preload}${source.NODE_OPTIONS ? ` ${source.NODE_OPTIONS}` : ""}`,
         POLARIS_OTEL_ENDPOINT: source.OTEL_EXPORTER_OTLP_ENDPOINT,
         POLARIS_OTEL_SERVICE_NAME: packages.find((info) => info.name)?.name ?? "node-app",
       },

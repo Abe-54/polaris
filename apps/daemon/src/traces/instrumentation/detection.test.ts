@@ -103,3 +103,9 @@ test("discovery caps exporter evidence without recording URL content", () =>
     expect(result).toHaveLength(32);
     expect(result[31]?.line).toBe(95);
   }));
+
+test("a quoted exporter url property is detected", () => {
+  expect(
+    fixedExporterLines("new OTLPTraceExporter({ 'url': 'https://vendor.example/v1/traces' })")
+  ).toEqual([1]);
+});

@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Context, Effect, Layer, Option } from "effect";
 import {
   TraceAvailability,
@@ -7,6 +7,10 @@ import {
   type TurnId,
   type TracesSnapshot,
 } from "@polaris/protocol";
+import { WorkspaceTrust } from "../services.ts";
+import { EventStore } from "../store/EventStore.ts";
+import { launchInstrumentation } from "./instrumentation/runtime.ts";
+import { applicationProgram } from "./instrumentation/observation.ts";
 import { polarisHome } from "../paths.ts";
 import { followTokenLifecycle } from "./tokenLifecycle.ts";
 import { TraceSessions } from "./sessions.ts";
@@ -40,6 +44,7 @@ export class TraceRuntime extends Context.Service<
       cwd: string,
       source: TraceEnvironment
     ) => Effect.Effect<Record<string, string>, TraceError>;
+    readonly launched?: (cwd: string, argv: ReadonlyArray<string>) => Effect.Effect<void>;
     readonly authenticate: (token: string) => Effect.Effect<IngestContext | null, TraceError>;
     readonly setup: (
       sessionId: SessionId,
@@ -57,6 +62,14 @@ export class TraceRuntime extends Context.Service<
         const sessions = yield* TraceSessions;
         const store = yield* TraceStore;
         const settings = yield* Effect.serviceOption(TraceSettings);
+
+        const instrumentationServices = {
+          home: filename === null ? undefined : dirname(filename),
+          settings: Option.getOrUndefined(settings),
+          trust: Option.getOrUndefined(yield* Effect.serviceOption(WorkspaceTrust)),
+          events: Option.getOrUndefined(yield* Effect.serviceOption(EventStore)),
+        };
+
         const vault = new TraceTokenVault(filename);
         yield* followTokenLifecycle(vault);
 
@@ -106,7 +119,15 @@ export class TraceRuntime extends Context.Service<
           if (Option.isSome(settings))
             yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
 
-          return injectedEnvironment(yield* endpoint(context, launchTurn));
+          const injected = injectedEnvironment(yield* endpoint(context, launchTurn));
+
+          const instrumentation = yield* launchInstrumentation(
+            context,
+            { ...source, ...injected },
+            instrumentationServices
+          ).pipe(Effect.orElseSucceed(() => ({})));
+
+          return { ...injected, ...instrumentation };
         });
 
         const authenticate = Effect.fnUntraced(function* (token: string) {
@@ -143,6 +164,13 @@ export class TraceRuntime extends Context.Service<
         return TraceRuntime.of({
           environment,
           authenticate,
+          launched: Effect.fnUntraced(function* (cwd, argv) {
+            if (!applicationProgram(argv[0] ?? "", argv.slice(1)) || Option.isNone(settings))
+              return;
+            const context = yield* sessions.workspace(cwd).pipe(Effect.orElseSucceed(() => null));
+
+            if (context !== null) yield* settings.value.recordLaunch(context);
+          }),
           revokeSession,
           terminalEnvironment: Effect.fnUntraced(function* (cwd, source) {
             if (!TraceAvailability.guards.Listening(availability)) return {};
@@ -151,7 +179,16 @@ export class TraceRuntime extends Context.Service<
             if (Option.isSome(settings))
               yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
 
-            return injectedEnvironment(yield* endpoint(context, null));
+            const injected = injectedEnvironment(yield* endpoint(context, null));
+
+            const instrumentation = yield* launchInstrumentation(
+              context,
+              { ...source, ...injected },
+              instrumentationServices,
+              cwd
+            ).pipe(Effect.orElseSucceed(() => ({})));
+
+            return { ...injected, ...instrumentation };
           }),
           checkout: (id) => Effect.map(sessions.session(id), (context) => context.checkout),
           setup: Effect.fnUntraced(function* (id, includeEndpoint = true) {

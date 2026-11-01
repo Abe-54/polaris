@@ -22,7 +22,7 @@ const temp = async (run: (root: string) => Promise<void>) => {
   }
 };
 
-test("off, disabled, Deno and Bun do not prepare a Node preload", () =>
+test("off, Deno and Bun select their requested runtime policy", () =>
   temp(async (root) => {
     const base = {
       checkout: root,
@@ -40,7 +40,7 @@ test("off, disabled, Deno and Bun do not prepare a Node preload", () =>
     ).toEqual({});
     expect(
       await autoInstrumentationEnvironment({ ...base, settings: { ...settings, enabled: false } })
-    ).toEqual({});
+    ).toHaveProperty("NODE_OPTIONS");
     expect(await autoInstrumentationEnvironment({ ...base, runtime: "bun" })).toEqual({});
     expect(
       await autoInstrumentationEnvironment({
@@ -257,3 +257,41 @@ test(
     }),
   10000
 );
+
+test("unreadable manifest bounds fail closed instead of assuming no SDK", () =>
+  temp(async (root) => {
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        dependencies: { "@opentelemetry/sdk-node": "0.300.0" },
+        padding: "x".repeat(65536),
+      })
+    );
+
+    const result = await prepareAutoInstrumentation({
+      checkout: root,
+      cwd: root,
+      source,
+      settings,
+      registerPath: "/unused/register.mjs",
+    });
+
+    expect(result.environment).toEqual({});
+    expect(result.skipReason).toContain("could not be checked");
+  }));
+
+test("a known SDK wrapper is skipped to preserve Vercel's second exporter", () =>
+  temp(async (root) => {
+    await writeFile(join(root, "package.json"), '{"dependencies":{"@vercel/otel":"2.1.1"}}');
+    expect(
+      (
+        await prepareAutoInstrumentation({
+          checkout: root,
+          cwd: root,
+          source,
+          settings,
+          registerPath: "/unused/register.mjs",
+        })
+      ).skipReason
+    ).toContain("@vercel/otel");
+  }));

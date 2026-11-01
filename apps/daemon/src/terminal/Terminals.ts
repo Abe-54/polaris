@@ -794,6 +794,9 @@ export const makeTerminalsWith = (options: TerminalsOptions) =>
         setTimeout(() => finish(live, spawned.proc.exitCode), DRAIN_AFTER_EXIT_MS);
       });
 
+      if (Option.isSome(traces) && traces.value.launched !== undefined)
+        yield* traces.value.launched(cwd, argv).pipe(Effect.ignore);
+
       return id;
     });
 
