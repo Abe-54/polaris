@@ -5,11 +5,11 @@
 import type { TraceDetail } from "@polaris/protocol";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { TracesSessionKey } from "./session.ts";
+import { scopedKey, type TracesSessionKey } from "./session.ts";
 
 const store = createStore<Readonly<Record<string, TraceDetail>>>(() => ({}));
 
-const keyOf = (at: TracesSessionKey) => `${at.hostKey}\u0000${at.sessionId}`;
+const keyOf = scopedKey;
 
 /** The waterfall's answer for `at`; null when it has none (nothing open, loading, failed). */
 export const publishOpenTrace = (at: TracesSessionKey, detail: TraceDetail | null) =>

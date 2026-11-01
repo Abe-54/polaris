@@ -11,7 +11,9 @@ import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
 import { useTracesUnavailable } from "../model/availability.ts";
 import { useMainView } from "../model/mainView.ts";
-import type { TracesSessionKey } from "../model/session.ts";
+import { sessionKey, type TracesSessionKey } from "../model/session.ts";
+import { usePolarisSwitchShown } from "../model/developerMode.ts";
+import { useState } from "react";
 import { type SetupState, setupState } from "../model/setup.ts";
 import { useTracesSelection } from "../model/store.ts";
 import { TracesDrawer } from "./Drawer.tsx";
@@ -70,10 +72,27 @@ const Centered = ({
   </div>
 );
 
-const Workbench = ({ slot }: { slot: Omit<TracesSlotProps, "traceId" | "spanId"> }) => {
+/** Self-Traces in place of the checkout's while the Polaris switch is on, wherever it shows. */
+const usePolarisScope = (at: TracesSessionKey) => {
+  const shown = usePolarisSwitchShown(at.hostKey);
+  const [on, set] = useState(false);
+  const self = shown && on;
+
+  return {
+    at: self ? sessionKey(at.hostKey, at.sessionId, "self") : at,
+    polaris: shown ? { on: self, set } : undefined,
+  };
+};
+
+const Workbench = ({ slot: given }: { slot: Omit<TracesSlotProps, "traceId" | "spanId"> }) => {
+  const scoped = usePolarisScope(given.at);
+  const slot = { ...given, at: scoped.at, polaris: scoped.polaris };
   const selection = useTracesSelection(slot.at);
   const props = { ...slot, ...selection };
-  const { setup, receiver } = useSetup(slot.at);
+  const checkout = useSetup(slot.at);
+  // Self-Traces need no setup in this checkout; an empty list says so itself.
+  const setup = slot.at.scope === "self" ? null : checkout.setup;
+  const { receiver } = checkout;
   // The service map brings its own panel; the span panel waits for Waterfall or Table.
   const map = useMainView(slot.at) === "map";
 

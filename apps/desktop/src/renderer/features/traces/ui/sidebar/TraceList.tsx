@@ -8,6 +8,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import { useApp } from "../../../../shell/hooks.ts";
 import { showBidi } from "../../../data/grid/value.ts";
 import type { TracesSessionKey } from "../../model/session.ts";
+import { isSelfTrace } from "../../model/developerMode.ts";
 import { groupByTurn, OTHER_SESSION, tracesLabel, turnKicker } from "../../model/sidebar.ts";
 import { durationLabel } from "../../model/waterfall/time.ts";
 
@@ -32,6 +33,7 @@ const TraceRow = ({
   readonly onOpen: (id: string) => void;
 }) => {
   const error = trace.errors > 0;
+  const self = isSelfTrace(trace);
 
   return (
     <button
@@ -39,7 +41,7 @@ const TraceRow = ({
       data-testid="traces-row"
       data-trace={trace.id}
       aria-current={open ? "true" : undefined}
-      aria-label={`${trace.root}, ${durationLabel(trace.durationMs)}${error ? ", has an error" : ""}${trace.partial ? ", partial" : ""}`}
+      aria-label={`${trace.root}, ${durationLabel(trace.durationMs)}${error ? ", has an error" : ""}${trace.partial ? ", partial" : ""}${self ? ", from Polaris" : ""}`}
       onClick={() => onOpen(trace.id)}
       className={cn(
         "h-tree-row hover:bg-fill-hover focus-visible:ring-starlight flex w-full shrink-0 cursor-default items-center gap-1.5 rounded-full px-2.5 text-left outline-none focus-visible:ring-2",
@@ -57,6 +59,15 @@ const TraceRow = ({
       >
         {showBidi(trace.root)}
       </span>
+      {self ? (
+        <span
+          className="text-micro text-text-subtle shrink-0 font-mono"
+          data-testid="traces-row-self"
+          title={trace.service}
+        >
+          polaris
+        </span>
+      ) : null}
       <span
         className={cn(
           "text-micro tabular w-10 shrink-0 text-right font-mono whitespace-nowrap",

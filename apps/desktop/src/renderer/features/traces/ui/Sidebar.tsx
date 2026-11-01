@@ -5,7 +5,7 @@
  * shows the last answer, dimmed (rule/remote-is-normal).
  */
 import type { TraceFilter } from "@polaris/protocol";
-import { cn, SegmentedControl } from "@polaris/ui";
+import { cn, SegmentedControl, Switch } from "@polaris/ui";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { useTraces } from "../data/hooks.tsx";
@@ -13,7 +13,7 @@ import { useProfiles } from "../data/profiles.tsx";
 import { useProfilesUnavailable } from "../model/availability.ts";
 import { publishListed } from "../model/listed.ts";
 import { refreshProfile } from "../model/profile/store.ts";
-import type { TracesSessionKey } from "../model/session.ts";
+import { sessionKey, type TracesSessionKey } from "../model/session.ts";
 import { selectTrace } from "../model/store.ts";
 import { ProfileList } from "./profiles/ProfileList.tsx";
 import { AgentsHere } from "./sidebar/AgentsHere.tsx";
@@ -26,6 +26,33 @@ const Quiet = ({ children }: { readonly children: string }) => (
   <p className="text-caption text-text-subtle px-2 py-2" data-testid="traces-sidebar-quiet">
     {children}
   </p>
+);
+
+const emptyLabel = (at: TracesSessionKey, filter: TraceFilter | undefined) => {
+  if (filter !== undefined) return "No traces match the filter";
+
+  return at.scope === "self" ? "No self-traces yet" : "No traces yet";
+};
+
+/** Polaris's own Self-Traces in place of this checkout's (CONTEXT.md, Self-Trace). */
+const PolarisSwitch = ({
+  polaris,
+}: {
+  readonly polaris: NonNullable<TracesSlotProps["polaris"]>;
+}) => (
+  <label
+    className="text-caption text-text-default flex h-6 items-center justify-between gap-2 px-1"
+    data-testid="traces-polaris-switch"
+  >
+    <span className="min-w-0 truncate">
+      Polaris <span className="text-text-subtle">· self-traces</span>
+    </span>
+    <Switch
+      aria-label="Show Polaris's self-traces"
+      checked={polaris.on}
+      onCheckedChange={polaris.set}
+    />
+  </label>
 );
 
 const useLatestTurn = (at: TracesSessionKey) =>
@@ -63,13 +90,14 @@ const Body = ({
   const snapshot = last.current;
 
   const listed = snapshot.status === "ready" ? snapshot.value.traces : null;
-  const { hostKey, sessionId } = at;
+  const { hostKey, sessionId, scope } = at;
 
   useEffect(() => {
-    publishListed({ hostKey, sessionId }, listed);
+    const key = sessionKey(hostKey, sessionId, scope);
+    publishListed(key, listed);
 
-    return () => publishListed({ hostKey, sessionId }, null);
-  }, [hostKey, sessionId, listed]);
+    return () => publishListed(key, null);
+  }, [hostKey, sessionId, scope, listed]);
 
   const latestTurn = useLatestTurn(at);
 
@@ -78,8 +106,7 @@ const Body = ({
   if (snapshot.status === "failed") return <Quiet>{snapshot.error.message}</Quiet>;
   const { traces, total } = snapshot.value;
 
-  if (traces.length === 0)
-    return <Quiet>{filter === undefined ? "No traces yet" : "No traces match the filter"}</Quiet>;
+  if (traces.length === 0) return <Quiet>{emptyLabel(at, filter)}</Quiet>;
 
   return (
     <>
@@ -115,6 +142,7 @@ export const TracesSidebar = (props: TracesSlotProps) => {
     >
       <div className="px-panel pt-panel flex flex-col gap-[calc(var(--spacing-panel)*0.75)] pb-1">
         <Header {...props} />
+        {props.polaris === undefined ? null : <PolarisSwitch polaris={props.polaris} />}
         <SegmentedControl<SidebarView>
           aria-label="Traces or profiles"
           variant="fill"
