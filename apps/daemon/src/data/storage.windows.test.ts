@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { shortTemp } from "../platform/testing.ts";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -18,21 +18,11 @@ test.skipIf(process.platform !== "win32")(
     try {
       await Effect.runPromise(Effect.scoped(openStorage(path)));
 
-      const script =
-        "$acl = Get-Acl -LiteralPath $env:POLARIS_DATA_ACL_TEST; $acl.AreAccessRulesProtected; $acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value }";
+      const acl = join(root, "sources.acl");
+      execFileSync(system32("icacls.exe"), [path, "/save", acl, "/q"]);
+      const rules = readFileSync(acl, "utf16le").trim().split(/\r?\n/).slice(1);
 
-      const lines = execFileSync(
-        system32(join("WindowsPowerShell", "v1.0", "powershell.exe")),
-        ["-NoProfile", "-NonInteractive", "-Command", script],
-        {
-          env: { ...process.env, POLARIS_DATA_ACL_TEST: path },
-          encoding: "utf8",
-        }
-      )
-        .trim()
-        .split(/\r?\n/);
-
-      expect(lines).toEqual(["True", thisUserSid()]);
+      expect(rules).toEqual([`D:P(A;;FA;;;${thisUserSid()})`]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
