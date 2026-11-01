@@ -101,7 +101,7 @@ Daemon shutdown. Registration creates no Worker or timer in the target.
 
 The private Unix socket verifies LOCAL_PEERPID on macOS or SO_PEERCRED on Linux
 for both registration and capture. Identity uses pid, start time, executable
-inode/device, OS user and the kernel launch token; argv is display-only. Tokens
+inode/device, OS user and the launch token; argv is display-only. Tokens
 expire with their Agent Session, not after a launch count. The registry caps
 registration sockets at 256 and watchdog sockets at one, reserving the watchdog
 lane by kernel peer PID. Unclassified sockets expire after two seconds. No capabilities persist on restart.
@@ -116,4 +116,4 @@ may delay completion, in which case capture fails cleanly without network exposu
 
 Artifacts use Profiles.record, its parser worker, checkout storage, retention and
 origin: attach. No registration grants restart or signal authority. Startup cost:
-`bun apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/attach/startup.ts`.
+`bun --no-env-file --config=./scripts/daemon-dev.toml apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/attach/startup.ts`.
