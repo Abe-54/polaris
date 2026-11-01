@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { TraceSettings } from "./settings.ts";
-import { forwardHeaders, type ForwardQueue } from "./forwardQueue.ts";
+import type { ForwardQueue } from "./forwardQueue.ts";
+import { forwardHeaders, sameCollectorOrigin } from "./forwardHeaders.ts";
 import type { IngestContext } from "./ingest.ts";
 
 /** Policy and forwarding failure cannot prevent Polaris's independent storage attempt. */
@@ -34,7 +35,10 @@ export const forwardReceived = async (
         workspaceId: context.workspaceId,
         url: target,
         bytes,
-        headers: forwardHeaders(request.headers, configured ?? {}),
+        headers: forwardHeaders(request.headers, configured ?? {}, {
+          passesAppHeaders: sameCollectorOrigin(target, policy.launchCollector?.[signal]),
+          launchHeaderNames: policy.launchHeaderNames,
+        }),
       });
     }
 

@@ -267,7 +267,7 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
       join(daemonDir, "src", "traces", "worker.ts"),
       join(daemonDir, "src", "traces", "profiles", "worker.ts"),
     ],
-    compile: { target, outfile: binary },
+    compile: { target, outfile: binary, autoloadDotenv: false, autoloadBunfig: false },
     minify: true,
 
     // Lazily imported commands and Harness drivers become separate chunks, parsed only

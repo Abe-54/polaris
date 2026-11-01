@@ -1,6 +1,12 @@
 import type { DetectedTraceExporter } from "@polaris/protocol";
 import { expect, test } from "bun:test";
-import { checkForwardUrl, exporterLocation, fixedExporters, forwardCaption } from "./model.ts";
+import {
+  checkForwardUrl,
+  exporterLocation,
+  fixedExporters,
+  forwardCaption,
+  headersLine,
+} from "./model.ts";
 import { FRESH_SETTINGS } from "./fixtures.ts";
 
 const at = (kind: DetectedTraceExporter["kind"], line: number): DetectedTraceExporter => ({
@@ -43,5 +49,41 @@ test("evidence from process variables reads as the environment, never as a file:
   expect(exporterLocation(at("fixed-url", 12))).toBe("src/otel.ts:12");
   expect(forwardCaption({ ...FRESH_SETTINGS, forwardTo: null, detectedExporters: [env] })).toBe(
     "Found an exporter in the environment. Add the collector it sends to."
+  );
+});
+
+test("repository collectors are described as unsaved suggestions until a target is saved", () => {
+  const detectedExporters = [{ ...at("otlp-env", 1), file: ".env" }];
+
+  expect(forwardCaption({ ...FRESH_SETTINGS, forwardTo: null, detectedExporters })).toBe(
+    "Suggested collector from .env. Save its URL to forward traces."
+  );
+
+  const saved = {
+    ...FRESH_SETTINGS,
+    detectedExporters,
+    forwardTo: { url: "https://chosen.test/v1/traces", headerNames: [] },
+  };
+
+  expect(forwardCaption({ ...saved, forwarding: true })).toBe(
+    "A copy of each trace goes on to this collector."
+  );
+  expect(forwardCaption({ ...saved, forwarding: false })).toBe(
+    "Forwarding is off. Turn it on to send a copy to this collector."
+  );
+});
+
+test("header copy names configured credentials and limits app headers to the launch origin", () => {
+  const target = {
+    url: "https://collector.test/v1/traces",
+    headerNames: ["authorization", "x-key"],
+  };
+
+  expect(headersLine({ ...target, passesAppHeaders: true })).toBe(
+    "Headers authorization · x-key, and the headers your app sends to https://collector.test"
+  );
+  expect(headersLine({ ...target, passesAppHeaders: false })).toBe("Headers authorization · x-key");
+  expect(headersLine({ ...target, headerNames: [], passesAppHeaders: false })).toBe(
+    "No configured headers"
   );
 });

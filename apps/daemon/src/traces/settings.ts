@@ -67,6 +67,8 @@ export interface TracePolicy {
   readonly enabled: boolean;
   readonly forwarding: boolean;
   readonly collector: Collector | null;
+  readonly launchCollector: Collector | null;
+  readonly launchHeaderNames: ReadonlyArray<string>;
   readonly alreadyExporting: boolean;
 }
 
@@ -147,7 +149,9 @@ export class TraceSettings extends Context.Service<
             collector:
               detection.collector ??
               fallback ??
-              (target === null ? null : detection.suggestedCollector),
+              (target === null ? null : detection.launchVendorCollector),
+            launchCollector: detection.collector ?? detection.launchVendorCollector,
+            launchHeaderNames: detection.launchHeaderNames,
             alreadyExporting: detection.detectedExporters.some((e) => e.alreadyExporting),
           };
         };
@@ -155,11 +159,16 @@ export class TraceSettings extends Context.Service<
         const view = (id: WorkspaceId, detection: ExporterDetection) => {
           const value = load()[id] ?? {};
           const extra = instrumentation.get(id);
+          const effective = policy(id, detection);
 
           return WorkspaceTracesSettings.make({
             ...defaults,
             ...value,
-            forwardTo: publicCollector(policy(id, detection).collector),
+            forwardTo: publicCollector(
+              effective.collector,
+              effective.launchCollector,
+              effective.launchHeaderNames
+            ),
             detectedExporters: [
               ...detection.detectedExporters,
               ...(extra?.detectedExporters ?? []),
@@ -188,6 +197,8 @@ export class TraceSettings extends Context.Service<
               ? {
                   ...detected,
                   collector: previous.collector,
+                  launchVendorCollector: previous.launchVendorCollector,
+                  launchHeaderNames: previous.launchHeaderNames,
                   suggestedCollector: previous.suggestedCollector,
                 }
               : detected;
