@@ -30,7 +30,7 @@ subsequent restarts retain the derived endpoints.
 
 Claude, Codex (including read-only configuration), and terminal processes receive
 `OTEL_EXPORTER_OTLP_ENDPOINT` without a trailing slash. The trace and log signal-specific variables are also injected, so an existing
-signal-specific target cannot bypass Polaris. Existing targets become upstream collectors. The legacy `userExported` snapshot flag is false because a collector no longer prevents injection; existing clients keep the live endpoint. Reviewer environment allowlists
+signal-specific target cannot bypass Polaris. Existing launch-environment targets become upstream collectors. Checkout-file targets remain suggestions until saved in Settings → Traces. The legacy `userExported` snapshot flag is false because a collector no longer prevents injection; existing clients keep the live endpoint. Reviewer environment allowlists
 retain endpoint variables but no exporter credentials; reviewer network policy
 still blocks network access (ENG-676).
 
@@ -218,22 +218,49 @@ expiry/partial-data handling and selector authorization.
 `TraceSettings` owns registered-Workspace settings and private launch-time target resolution.
 `traces.settings` and `traces.setSettings` share this service. Patches persist atomically in
 `trace-settings.json` (0600); detection, exporter header values and inferred collector URLs
-are never persisted. Source environment takes precedence over checkout `.env*`, then the
-Workspace target, then vendor suggestions. Within an environment, a signal-specific endpoint
-is used verbatim; a general endpoint gets `/v1/traces` or `/v1/logs` appended. The Workspace
-field is a full traces URL. Clearing it suppresses vendor suggestions; an explicitly exported
-or file-defined endpoint still wins. The forwarding switch overrides every source.
+are never persisted. Launch-environment OTLP collectors take precedence over the saved
+Workspace target, then launch-environment vendor collectors. Destination and credentials are
+resolved from the launch environment and checkout `.env*` files separately; they never mix.
+File-derived OTLP and vendor collectors are suggestions only: Polaris sends nothing to them
+until the user saves their URL as `forwardTo` in Settings → Traces. File-derived credentials
+are never attached to a saved target. Incoming credentials stay with the launch collector's origin.
+Within an environment, a signal-specific endpoint is used verbatim; a general endpoint gets
+`/v1/traces` or `/v1/logs` appended. The Workspace field is a full traces URL. Clearing it
+suppresses launch vendor fallback; an explicitly exported OTLP endpoint still wins. The
+forwarding switch overrides every source. The public `forwardTo` describes the effective target;
+repository discovery remains evidence in `detectedExporters`, with an unsaved suggestion caption.
+
+`forwarding-sources.test.ts` sends through the real receiver, store and forwarding queue to
+loopback HTTP collectors. It covers a repository `AXIOM_URL` with launch-only credentials,
+unsaved OTLP/vendor endpoints, saved targets and launch-only vendor forwarding. Only Axiom's
+default remote service is replaced at the fetch boundary; no live vendor receives test data.
 
 Discovery reads at most 16 regular files of 64 KiB, scans at most 256 directory entries,
 refuses symlinks, and never executes checkout code or expands environment expressions.
 Mode-specific `.env.<NODE_ENV>.local`, `.env.local`, `.env.<NODE_ENV>` and `.env` precede
 other `.env*` files; example/sample/template files are excluded. Detection refreshes on launch,
 without watchers or timers. Per-launch private targets are memory-only; after a Daemon restart,
-authenticated traffic re-resolves from the Daemon environment and current checkout files.
-App headers received with a request always override configured environment headers.
+authenticated traffic re-resolves automatic targets from the Daemon environment. Checkout
+files still supply detection evidence, never automatic forwarding authority.
+Configured headers override incoming app headers. Incoming credential-bearing headers and
+all non-transport names from launch OTLP header variables pass only to the original launch collector's
+origin (scheme, host and port); another origin gets only non-credential app headers.
+Framing and hop-by-hop headers are removed. Settings lists configured header names plus
+launch OTLP header names for a matching origin, excluding transport headers;
+`passesAppHeaders` tells Desktop that additional app headers can pass without observing them.
 
-Axiom packages and `AXIOM_TOKEN`/`AXIOM_DATASET` prefill its OTLP traces target. Vercel packages
-and exporter environment produce evidence; `VERCEL_OTEL_ENDPOINTS` prefills the platform's
+Compiled Daemons disable Bun's cwd `.env` and `bunfig.toml` autoloading, preventing repository
+configuration from entering the trusted launch environment before detection. Build with
+`bun scripts/build-daemon.ts darwin-arm64`, then run
+`bun apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/compiled-environment.smoke.ts apps/daemon/dist/darwin-arm64/polaris`.
+The smoke starts that binary in a scratch directory containing both startup files, checks
+forwarding resolution and a child process environment, and rejects a preload side effect.
+Passing `dev` instead probes the source runner separately. On Bun 1.4.4 that mode still
+loads both cwd files and fails this smoke; ENG-698 tracks safe development startup. The
+compiled protection does not apply to direct `bun apps/daemon/src/main.ts` invocation.
+
+Axiom packages produce evidence; launch `AXIOM_TOKEN`/`AXIOM_DATASET` select its OTLP
+traces target. Vercel packages and exporter environment produce evidence; launch `VERCEL_OTEL_ENDPOINTS` prefills the platform's
 loopback collector (port 4318 or its configured port). `@vercel/otel` with a direct imported
 `registerOTel` call, an explicit exporter constructed with a known separate HTTP(S) URL, and automatic processors is marked already
 exporting. Its incoming spans are stored without forwarding a duplicate. Syntax analysis

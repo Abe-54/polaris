@@ -283,6 +283,8 @@ export const TraceForwardUrl = Schema.String.check(
 export const TraceForwardTarget = Schema.Struct({
   url: TraceForwardUrl,
   headerNames: Schema.Array(Schema.String.check(Schema.isPattern(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/))),
+  /** Read-only metadata; absent on older Daemons. True only for the app's launch origin. */
+  passesAppHeaders: Schema.optionalKey(Schema.Boolean),
 });
 
 export type TraceForwardTarget = typeof TraceForwardTarget.Type;

@@ -41,9 +41,7 @@ test("a deep link opens on its workspace, with the detected collector and header
     "value",
     "https://api.axiom.co/v1/traces"
   );
-  expect(
-    screen.getByText("Headers authorization · x-axiom-dataset · values stay on this host")
-  ).toBeTruthy();
+  expect(screen.getByText("Headers authorization · x-axiom-dataset")).toBeTruthy();
   expect(screen.getByText(/^Skipped: this workspace sets up OpenTelemetry itself/)).toBeTruthy();
   expect(tracesSettingsTarget.getState()).toBeNull();
 });

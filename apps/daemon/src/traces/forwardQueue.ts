@@ -167,26 +167,4 @@ export class ForwardQueue {
   }
 }
 
-/** Preserve application headers, excluding connection framing and hop-by-hop fields. */
-export const forwardHeaders = (incoming: Headers, configured: Readonly<Record<string, string>>) => {
-  const headers = new Headers(configured);
-  incoming.forEach((value, key) => headers.set(key, value));
-  const connection = headers.get("connection")?.split(",") ?? [];
-
-  for (const key of [
-    "host",
-    "content-length",
-    "connection",
-    "keep-alive",
-    "transfer-encoding",
-    "te",
-    "trailer",
-    "upgrade",
-    "proxy-authorization",
-    "proxy-authenticate",
-    ...connection,
-  ])
-    headers.delete(key.trim());
-
-  return headers;
-};
+export { forwardHeaders } from "./forwardHeaders.ts";

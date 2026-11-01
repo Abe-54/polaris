@@ -13,7 +13,7 @@ const fixture = async (run: (root: string) => Promise<void>) => {
   }
 };
 
-test("exported trace endpoint takes precedence over general, then checkout environment files", () =>
+test("exported trace endpoint takes precedence over general; checkout endpoints are suggestions", () =>
   fixture(async (root) => {
     await writeFile(
       join(root, ".env"),
@@ -39,7 +39,9 @@ test("exported trace endpoint takes precedence over general, then checkout envir
         })
       ).collector?.traces
     ).toBe("http://exported.test/base/v1/traces");
-    expect((await detectExporters(root, {})).collector?.traces).toBe("http://local.test/v1/traces");
+    const detected = await detectExporters(root, {});
+    expect(detected.collector).toBeNull();
+    expect(detected.suggestedCollector?.traces).toBe("http://local.test/v1/traces");
   }));
 
 test("signal-specific headers override general headers without exposing values or private URL paths", () => {
@@ -54,6 +56,7 @@ test("signal-specific headers override general headers without exposing values o
   expect(publicCollector(collector)).toEqual({
     url: "https://collector.test/v1/traces",
     headerNames: ["x-key"],
+    passesAppHeaders: false,
   });
   expect(
     publicCollector(
@@ -82,7 +85,7 @@ test("checkout discovery refuses symlinks and never evaluates shell substitution
         join(root, ".env"),
         "OTEL_EXPORTER_OTLP_ENDPOINT=$(touch /tmp/p1-should-not-execute)"
       );
-      expect((await detectExporters(root, {})).collector).toBeNull();
+      expect((await detectExporters(root, {})).suggestedCollector).toBeNull();
     } finally {
       await rm(external, { recursive: true, force: true });
     }
@@ -106,9 +109,22 @@ test("Axiom dependency and environment prefill only credential-free metadata", (
     expect(publicCollector(result.suggestedCollector)).toEqual({
       url: "https://api.axiom.co/v1/traces",
       headerNames: ["authorization", "x-axiom-dataset"],
+      passesAppHeaders: false,
     });
     expect(JSON.stringify(result.detectedExporters)).not.toContain("private-");
   }));
+
+for (const [file, source] of [
+  ["AXIOM_URL=https://file.test\nAXIOM_TOKEN=file-token", { AXIOM_DATASET: "launch-dataset" }],
+  ["AXIOM_DATASET=file-dataset", { AXIOM_URL: "https://launch.test", AXIOM_TOKEN: "launch-token" }],
+] as const)
+  test("partial vendor configuration never borrows credentials from the other source", () =>
+    fixture(async (root) => {
+      await writeFile(join(root, ".env"), file);
+      const detected = await detectExporters(root, source);
+      expect(detected.launchVendorCollector).toBeNull();
+      expect(detected.suggestedCollector).toBeNull();
+    }));
 
 for (const [label, code, duplicate] of [
   [
