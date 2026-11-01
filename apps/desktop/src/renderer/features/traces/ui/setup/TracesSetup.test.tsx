@@ -213,12 +213,12 @@ const installThen = async (feedEnd: () => void) => {
 
 test.each([
   ["with an error", { code: "Disconnected", message: "the host went away" }],
-  ["without one", undefined],
+  ["without one", null],
 ] as const)(
   "when the install's feed ends %s, setup stops and offers Try again",
   async (_how, error) => {
     await installThen(() => {
-      for (const feed of fake.feeds("terminal")) feed.listener.end(error);
+      for (const feed of fake.feeds("terminal")) feed.listener.end?.(error);
     });
 
     expect(screen.getByTestId("traces-setup-progress").textContent).toBe(

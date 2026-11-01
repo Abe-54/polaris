@@ -1,12 +1,10 @@
 import { expect, test } from "bun:test";
-import {
-  DEFAULT_RETENTION,
-  openTraceDatabase,
-} from "../../../../../../daemon/src/traces/database.ts";
-import { pruneCheckout } from "../../../../../../daemon/src/traces/retention.ts";
+import { daemon } from "../model/daemon.testing.ts";
 import { KEEP_LINE } from "./model.ts";
 
 const DAY = 86_400_000;
+
+const { DEFAULT_RETENTION, openTraceDatabase, pruneCheckout } = daemon;
 
 /** Whether one unpinned error Span `daysOld` days old survives the Daemon's default pruning. */
 const errorSurvives = (daysOld: number): boolean => {

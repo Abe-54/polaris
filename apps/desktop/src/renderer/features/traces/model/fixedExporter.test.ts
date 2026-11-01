@@ -3,7 +3,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { traceFixture, withTraceFixture } from "../../../../../../daemon/src/traces/testing.ts";
+import { daemon } from "./daemon.testing.ts";
 import { fixedExporterPrompt } from "./agentSetup.ts";
 import { FIXED_EXPORTER_CHANGE } from "./setup.ts";
 
@@ -39,14 +39,14 @@ const ENVIRONMENTS = [
 ] as const;
 
 test.each(ENVIRONMENTS)("the fixed-exporter line reaches the receiver under %s", (_name, given) =>
-  withTraceFixture(async (f) => {
+  daemon.withTraceFixture(async (f) => {
     const env = await Effect.runPromise(f.runtime.environment(f.context.sessionId!, {}));
     const url = urlUnder(given(env));
 
     const posted = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(traceFixture()),
+      body: JSON.stringify(daemon.traceFixture()),
     });
 
     expect({ url, status: posted.status }).toEqual({
