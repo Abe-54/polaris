@@ -36,7 +36,7 @@ test("each Host's value follows its watch, and is forgotten when it disconnects 
       yield* Queue.offer(sessions, host([mode(false), mode(true)]));
       yield* settle;
       expect(modes.current("studio")?.stored).toBe(true);
-      expect(modes.all()).toEqual({ studio: mode(true) });
+      expect(modes.all()).toEqual(new Map([["studio", mode(true)]]));
 
       yield* Queue.offer(sessions, null);
       yield* settle;

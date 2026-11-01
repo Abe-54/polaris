@@ -22,8 +22,10 @@ export interface HostDeveloperModes {
   /** The Host's Developer Mode; null while it isn't connected or its Daemon is older. */
   readonly current: (hostKey: string) => DeveloperMode | null;
   /** Every Host known now, by Host key. */
-  readonly all: () => Readonly<Record<string, DeveloperMode>>;
+  readonly all: () => ReadonlyMap<string, DeveloperMode>;
   readonly subscribe: (listener: DeveloperModeListener) => () => void;
+  /** Any Host's change, for readers of `all()` (Self-Traces' `developerModeSource`). */
+  readonly onChange: (listener: () => void) => () => void;
   /** Runs until interrupted: follows the Host's connections, and forgets it when it ends. */
   readonly watch: (
     hostKey: string,
@@ -58,11 +60,17 @@ export const makeHostDeveloperModes = (): HostDeveloperModes => {
 
   return {
     current: (hostKey) => modes.get(hostKey) ?? null,
-    all: () => Object.fromEntries(modes),
+    all: () => new Map(modes),
     subscribe: (listener) => {
       listeners.add(listener);
 
       return () => listeners.delete(listener);
+    },
+    onChange: (listener) => {
+      const each: DeveloperModeListener = () => listener();
+      listeners.add(each);
+
+      return () => listeners.delete(each);
     },
     watch: (hostKey, sessions) =>
       sessions.pipe(

@@ -139,6 +139,8 @@ export const CHANNELS = {
   batch: "polaris:batch",
   /** main → renderer: an `AppEvent` (a menu command, a changed appearance). */
   app: "polaris:app",
+  /** renderer → main, `send(selfSpans, SelfSpan[])`: only while Self-Traces are on. */
+  selfSpans: "polaris:selfSpans",
 } as const;
 
 /** A failure crossing IPC: the tagged error's tag and message, nothing that can't be cloned. */
@@ -570,6 +572,7 @@ export interface RequestOutputs
   "editor.publishDirty": null;
   "editor.savedAll": null;
   "dev.proofWorkspace": { readonly path: string };
+  "selfTraces.state": { readonly enabled: boolean; readonly version: string };
 }
 
 // Every method has an output type; a missing one fails to compile here.
@@ -671,7 +674,9 @@ export type AppEvent =
   /** The quit prompt's "Save and quit": the Editor saves every file, then answers `editor.savedAll`. */
   | { readonly kind: "editor-save-all" }
   /** A `polaris://` link (Raycast and the like): open a session or a Workspace, nothing more. */
-  | { readonly kind: "deep-link"; readonly link: import("./deepLink.ts").DeepLink };
+  | { readonly kind: "deep-link"; readonly link: import("./deepLink.ts").DeepLink }
+  /** Self-Traces turned on or off: the Polaris Workspace's Host changed Developer Mode. */
+  | { readonly kind: "self-traces"; readonly enabled: boolean };
 
 /** A pull request to open in Review, with its node id when known. */
 export interface OpenPull extends PullRef {
@@ -679,6 +684,11 @@ export interface OpenPull extends PullRef {
 }
 
 // ── The API on `window.polaris` ─────────────────────────────────────────────
+
+export interface RequestOptions {
+  /** The renderer Span sending this request; only while Self-Traces are on. */
+  readonly trace?: import("@polaris/protocol").TraceContext;
+}
 
 /** Optional language IPC extension; absent until C1 installs an implementation. */
 export interface LanguageApi {
@@ -703,8 +713,11 @@ export interface PolarisApi {
   ) => void;
   readonly request: <M extends RequestMethod>(
     method: M,
-    input: RequestInput<M>
+    input: RequestInput<M>,
+    options?: RequestOptions
   ) => Promise<Result<RequestOutput<M>>>;
+  /** Sends the renderer's ended Spans to main; call only while Self-Traces are on. */
+  readonly selfSpans?: (spans: ReadonlyArray<import("@polaris/protocol").SelfSpan>) => void;
   /** Opens a live feed; call the returned function to close it. */
   readonly subscribe: <K extends SubscriptionKind>(
     kind: K,

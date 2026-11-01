@@ -42,6 +42,7 @@ import {
   type Scope,
   type Stream,
 } from "effect";
+import { withTraceContext } from "./selfTraces/wire.ts";
 import { type Rpc, RpcClient, type RpcGroup, RpcSchema, RpcSerialization } from "effect/rpc";
 import { RpcClientDefect, RpcClientError } from "effect/rpc/RpcClientError";
 import {
@@ -90,6 +91,11 @@ export interface RpcConnectionOptions {
    * (a phone's socket after a network change) is lost rather than silent.
    */
   readonly keepAliveStreams?: boolean;
+  /**
+   * Whether requests carry W3C trace context now (Self-Traces, ADR 0095): true adds the RPC Span's
+   * `traceparent`, false strips all of it. Absent, requests go as the caller built them.
+   */
+  readonly traceContext?: () => boolean;
 }
 
 /** Tags of the streaming RPCs: long-lived, so waiting on them never needs a ping. */
@@ -315,7 +321,13 @@ export const connectRpcWith = Effect.fnUntraced(function* <Rpcs extends Rpc.Any>
               settled(request.requestId);
             }
 
-            const encoded = parser.encode(request);
+            const traceContext = options.traceContext;
+
+            const encoded = parser.encode(
+              traceContext !== undefined && Predicate.isTagged(request, "Request")
+                ? withTraceContext(request, traceContext())
+                : request
+            );
 
             if (!Predicate.isString(encoded)) return Effect.void;
 

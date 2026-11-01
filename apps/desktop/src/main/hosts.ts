@@ -30,6 +30,7 @@ import {
   Schema,
   Stream,
   SubscriptionRef,
+  Tracer,
 } from "effect";
 import type { ConnectionStatusView, HostKind, HostView, IpcError } from "../shared/api.ts";
 import type { GitHub } from "./github/index.ts";
@@ -260,6 +261,8 @@ export interface HostDirectoryInput {
     hostKey: string,
     sessions: Stream.Stream<LiveSession | null>
   ) => Effect.Effect<void>;
+  /** Every connection's RPC options, e.g. whether requests carry trace context. */
+  readonly rpc?: HostConnectionOptions["rpc"];
 }
 
 /** The Hosts this app connects to, and their views for the renderers. */
@@ -285,6 +288,7 @@ export class HostDirectory extends Context.Service<
     presence,
     developerModeLease,
     browserHost,
+    rpc,
   }: HostDirectoryInput) =>
     Layer.effect(
       HostDirectory,
@@ -352,6 +356,8 @@ export class HostDirectory extends Context.Service<
             };
 
             if (clientIdentity !== undefined) options = { ...options, clientIdentity };
+
+            if (rpc !== undefined) options = { ...options, rpc };
 
             const connection = yield* registry.add(options);
 
@@ -435,11 +441,17 @@ export type ClientRuntime = ManagedRuntime.ManagedRuntime<ClientServices, never>
 export const startClientRuntime = (
   input: HostDirectoryInput,
   machines: Layer.Layer<Machines, never, HostDirectory>,
-  github: Layer.Layer<GitHub>
-): ClientRuntime =>
-  ManagedRuntime.make(
-    Layer.mergeAll(Layer.provideMerge(machines, HostDirectory.layer(input)), github)
+  github: Layer.Layer<GitHub>,
+  tracer?: Tracer.Tracer
+): ClientRuntime => {
+  const services = Layer.mergeAll(Layer.provideMerge(machines, HostDirectory.layer(input)), github);
+
+  return ManagedRuntime.make(
+    tracer === undefined
+      ? services
+      : Layer.provideMerge(services, Layer.succeed(Tracer.Tracer, tracer))
   );
+};
 
 /** Every failure crossing IPC becomes its tag and message; a refusal's message is its `reason`. */
 export const toIpcError = (error: {

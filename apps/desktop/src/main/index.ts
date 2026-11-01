@@ -56,6 +56,9 @@ import { secureStorageLayer } from "./secure/electron.ts";
 import { SecureStorage } from "./secure/index.ts";
 import { iconPng, nameApp, showIcon } from "./identity.ts";
 import { registerIpc } from "./ipc/index.ts";
+import { createDesktopSelfTraces } from "./selfTraces/index.ts";
+import { connectSelfTraces } from "./selfTraces/electron.ts";
+import { developerModeSource } from "./selfTraces/adapter.ts";
 import { type Browsers, createBrowsers } from "./browser/index.ts";
 import { cdpTabsOf, electronCdpVersions, hostBrowsers } from "./browserCdp/index.ts";
 import { registerLanguageIpc } from "./ipc/languages.ts";
@@ -410,8 +413,14 @@ const start = async () => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(CHANNELS.app, event);
   });
 
+  const selfTraces = createDesktopSelfTraces({
+    version: app.getVersion(),
+    source: developerModeSource(LOCAL_HOST_KEY, hostDeveloperModes),
+  });
+
   runtime = startClientRuntime(
     {
+      rpc: { traceContext: selfTraces.enabled },
       presence: SubscriptionRef.changes(presence),
       developerModeLease: dev,
       entries: hostEntries({
@@ -444,9 +453,12 @@ const start = async () => {
       dev,
       localHost: Layer.succeed(LocalHost, local),
     }),
-    githubLayer({ userData, env, secureStorage })
+    githubLayer({ userData, env, secureStorage }),
+    selfTraces.tracer
   );
   const clientRuntime = runtime;
+
+  connectSelfTraces(selfTraces, clientRuntime);
 
   hostAddresses = createHostAddresses({
     isLocal: (hostKey) => clientRuntime.runSync(isLocalHost(hostKey)),
@@ -513,7 +525,9 @@ const start = async () => {
   ipc = registerIpc({
     runtime,
     trusted,
+    selfTraces,
     context: {
+      selfTracesEnabled: selfTraces.enabled,
       browser: browsers,
       updates: currentUpdates,
       restartToUpdate,
