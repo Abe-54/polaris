@@ -147,9 +147,13 @@ export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer
   Layer.provideMerge(HostSecrets.layer)
 );
 
+const traceWorkspaceTrust = Layer.suspend(() => workspaceTrustLayer(paths().root));
+
 /** One receiver, one token authority and one lazy trace worker per Host. */
 export const traceServices = TraceReceiverLive.pipe(
-  Layer.provideMerge(TraceRuntime.layer.pipe(Layer.provide(ReviewerPolicyLive))),
+  Layer.provideMerge(
+    TraceRuntime.layer.pipe(Layer.provide(Layer.merge(ReviewerPolicyLive, traceWorkspaceTrust)))
+  ),
   Layer.provideMerge(TraceSettings.layer),
   Layer.provideMerge(InspectorTargets.layer),
   Layer.provideMerge(TraceSessions.layer),
@@ -166,7 +170,7 @@ export const engineServices = Layer.mergeAll(Engine.layer, Profiles.layer, relea
       CheckpointsLive,
       WorktreeTrackerLive,
       ReviewCheckoutGitLive,
-      Layer.suspend(() => workspaceTrustLayer(paths().root)),
+      traceWorkspaceTrust,
       AttachmentStoreLive(),
       TerminalsDaemonLive,
       ReviewerPolicyLive,

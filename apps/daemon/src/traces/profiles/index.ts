@@ -345,6 +345,9 @@ export class Profiles extends Context.Service<
           );
 
           startingChildren.add(child);
+
+          if (runtime.launched !== undefined)
+            await Effect.runPromise(runtime.launched(launchCwd, argv).pipe(Effect.ignore));
           const service = env.OTEL_SERVICE_NAME ?? env.POLARIS_OTEL_SERVICE_NAME;
 
           const profile = Profile.make({

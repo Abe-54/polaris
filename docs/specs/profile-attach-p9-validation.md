@@ -1,11 +1,13 @@
 # Approved Node inspector profiles — P9 / ENG-659
 
-## Checkpoint and shipping decision
+## Integration and shipping decision
 
-This checkpoint is based on accepted integration `9a0fac480958ce46e47a478c2c3cb3a412ebae9f`.
-P3's accepted shared `appendNodeImport` helper and tracing environment composition
-must still be merged and checked before P9 submits its Claim. The temporary helper
-in this checkpoint is not a competing integration contract.
+P9 includes accepted P3 commit `e615c473c715f4d2228f2483e09ead16f7f17480`
+on accepted integration `9a0fac480958ce46e47a478c2c3cb3a412ebae9f`.
+The shared `appendNodeImport` implementation and tests come from P3 unchanged.
+P9 appends its bootstrap to the instrumentation overlay's `NODE_OPTIONS`, preserving
+user imports, P3's `POLARIS_OTEL_*` variables and P1's signal endpoints. The production
+service layer supplies both Workspace Trust and Reviewer approval policy.
 
 **The owner must decide whether this feature ships: while attached, any local
 process can run code in the target.** Loopback is not authentication. Every capture
@@ -27,6 +29,20 @@ busy. Cancellation and Turn completion withdraw pending approvals or close an
 active capture. Captures use P4's recording scope, parser, retention and store with
 `origin: attach`; the existing Profiles list and flame chart render them.
 
+## Combined P3/P9 regression
+
+A real Node process retains an existing user import, registers for cooperative
+attach, and exports HTTP/undici spans with its package service name through the
+same composed environment. Replacing that composition with the original source
+`NODE_OPTIONS` makes the regression fail because no spans arrive; production code
+was restored before the full checks. All 54 focused attach, instrumentation and
+shared-helper tests passed (163 assertions). Logs: `/tmp/p9-composed-native.log`
+and `/tmp/p9-composition-mutant.log`.
+
+The first merged run lacked the new locked OpenTelemetry packages. Installing
+P3's accepted lockfile resolved those failures without changing the accepted lockfile or
+production source. Root typecheck on the combined source passed all 18 tasks (17 cached).
+
 ## Validation on macOS
 
 All full suites, builds, screenshots and benchmarks ran through the shared `bench`
@@ -34,9 +50,11 @@ lease. These are reported results, not Daemon command-item receipts.
 
 | Check | Result |
 | --- | --- |
-| Root typecheck, final source | 18/18 tasks passed, 16 cached |
-| Root test | 19/19 tasks passed, 4 cached; Daemon 3,300 passed / 87 skipped; Desktop 4,399 passed / 14 skipped; no failures |
+| Root typecheck, final source | 18/18 tasks passed, 17 cached |
+| Root test | 19/19 tasks passed, 17 cached; Daemon 3,338 passed / 87 skipped; Desktop 4,399 passed / 14 skipped; no failures |
 | Root lint | Passed; final changed-file quality also passed |
+| Compiled macOS arm64 Daemon | Native fff, rules/betterleaks and libsodium self-tests pass |
+| Relocated compiled-binary smoke | Two HTTP/fetch spans; `packaged-node-app` service; preload extracted from binary |
 | Real Node attach and MCP regressions | 18 passed, 112 assertions |
 | Quint suite | Passed, including inspector approval scenarios and safety simulation |
 | Engine verification and Session graph | 37 passed, 70,411 assertions |
@@ -56,22 +74,46 @@ focus with reduced motion. Tab/Shift+Tab order and a visible focus ring passed.
 The approval card was captured in dark and light at all three densities; its
 process, risk and one-time decision controls were visually checked. An initially
 missing preview scene registration was corrected and those screenshots recaptured.
-The root test run predates only that preview registration and JSDoc wording;
-final typecheck, build and quality include them.
+The final merged root test run includes the corrected preview registration and
+combined instrumentation regression.
 
-Logs and screenshots are under `/tmp/p9-{root-tests,root-lint,typecheck-final2,
-native-integrated,spec,verification,replay-engine-only,ui}.log`,
+Merged root logs are `/tmp/p9-composed-{tests,typecheck,lint}.log`. Earlier
+focused/model logs are `/tmp/p9-{native-integrated,spec,verification,replay-engine-only,ui}.log`;
+screenshots are under
 `/tmp/p9-profile-screens/` and `/tmp/p9-approval-screens-fixed/` on the Mac Host.
 Existing database-configuration and platform skips are included in the counts;
 no real PostgreSQL/MySQL result is claimed here.
 
+The initial build attempt lacked cross-platform optional native packages. The
+repository-documented `bun install --frozen-lockfile --os=* --cpu=*` resolved it;
+the lockfile was unchanged. The build and smoke were rerun successfully under the
+lease. Build version `0.7.0-dev.3074.2863aba.dirty1793495230` names the pre-merge
+checkpoint, with the final uncommitted merge source included. Logs:
+`/tmp/p9-composed-build-final.log` and `/tmp/p9-composed-packaged-final.log`.
+The smoke used a disposable Daemon home and did not replace the installed Daemon.
+It verifies compiled startup and tracing, not a compiled-binary inspector capture.
+
 ## Performance
+
+On final combined source, three quick idle runs pass every gate against the
+committed `mac14-13-apple-m2-max-12c-quick.json` baseline. Client RSS is 108.2 MiB
+and footprint 65.62 MiB; no-Client RSS is 108.1 MiB and footprint 65.36 MiB.
+Wakeups are 10.50/s with a Client and 7.70/s without one in the quick 10 s windows;
+the latter remains above the bare Bun floor, as the benchmark notes. The longer
+matched runs below use 30 s windows and must not be compared directly with these
+quick samples. The baseline/current runs warn about 2.7/3.3 busy cores. No baseline
+changed. Raw output: `/tmp/p9-composed-idle.json` and `.log`.
+
+The final 20-pair alternating startup check measures medians 28.851 ms without and
+32.863 ms with the cooperative bootstrap: **+4.013 ms**. Raw samples:
+`/tmp/p9-composed-startup.json`. This isolates the attach bootstrap; it is not a
+measurement of P3's full instrumentation startup cost.
 
 Twenty alternating Node starts per condition measured median startup at 28.093 ms
 without and 32.285 ms with the cooperative bootstrap: **+4.192 ms**, below the
 15 ms budget. Raw samples: `/tmp/p9-startup-integrated.json`.
 
-Three full idle runs on the same Mac14,13 / M2 Max / Bun 1.4.4 source checkout,
+Before the P3 merge, three full idle runs on the same Mac14,13 / M2 Max / Bun 1.4.4 source checkout,
 bridge transport, compared the clean accepted base with P9:
 
 | Metric | Accepted base | P9 | Difference |
@@ -102,5 +144,4 @@ match the Host's installed PATH executable. No Pi performance result is claimed.
 Outside the assigned Traces/MCP-tool/Profiles-UI paths, the Lead authorized the
 minimal protocol, Engine/Session-machine, Quint, RPC/IPC and approval-card seams.
 `DESIGN.md` records the approval behavior; this report preserves the validation
-and owner risk decision for review. No dependency or copied third-party code was
-introduced.
+and owner risk decision for review. P9 introduced no dependencies beyond accepted P3 and copied no third-party code.
