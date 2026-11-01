@@ -18,7 +18,6 @@ import { WorkspaceTrust, ApprovalPolicy } from "../../services.ts";
 import { polarisHome } from "../../paths.ts";
 import { ownProcessGroup } from "../../platform/processes.ts";
 import { repositoryEnv } from "../../service/childEnv.ts";
-import { executableOf } from "../../platform/executable.ts";
 import { redactText } from "../redact.ts";
 import { programIn } from "../../terminal/shell.ts";
 import { TraceSessions } from "../sessions.ts";
@@ -26,7 +25,7 @@ import { TraceRuntime } from "../runtime.ts";
 import { traceEndpointEnvironment } from "../environment.ts";
 import { profileDirectory, profileJob } from "./workerClient.ts";
 import type { ProfileJob, ProfileReply } from "./workerProtocol.ts";
-import { stopOwned } from "./stop.ts";
+import { ownedExitModule, ownedExitPreload, spawnOwned, resumeOwned, stopOwned } from "./stop.ts";
 
 const unavailable = () =>
   new ProfileError({
@@ -332,8 +331,8 @@ export class Profiles extends Context.Service<
 
           if (program === null) throw unavailable();
           await mkdir(directory, { recursive: true, mode: 0o700 });
-          const preload = join(directory, "exit.cjs");
-          await writeFile(preload, 'process.once("SIGINT", () => process.exit(0));\n', {
+          const preload = join(directory, ownedExitModule);
+          await writeFile(preload, ownedExitPreload, {
             mode: 0o600,
             flag: "wx",
           });
@@ -348,28 +347,31 @@ export class Profiles extends Context.Service<
 
           const startedAt = Timestamp.make(new Date().toISOString());
 
-          const child = Bun.spawn(
-            [
-              executableOf(program),
-              `--cpu-prof-dir=${directory}`,
-              runtimeName === "node" ? "--require" : "--preload",
-              preload,
-              ...argv.slice(1),
-            ],
-            {
-              cwd: launchCwd,
-              detached: ownProcessGroup(),
-              env: {
-                ...env,
-                [key]: `${env[key] ?? ""} --cpu-prof`.trim(),
-              },
-              stdin: "ignore",
-              stdout: "ignore",
-              stderr: "ignore",
-            }
+          const spawnOptions: Bun.Spawn.SpawnOptions<"ignore", "ignore", "ignore"> = {
+            cwd: launchCwd,
+            detached: ownProcessGroup(),
+            env: { ...env, [key]: `${env[key] ?? ""} --cpu-prof`.trim() },
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+          };
+
+          const child = spawnOwned(
+            program,
+            [`--cpu-prof-dir=${directory}`, ...argv.slice(1)],
+            runtimeName,
+            preload,
+            spawnOptions
           );
 
           startingChildren.add(child);
+
+          try {
+            await resumeOwned(child);
+          } catch (error) {
+            startingChildren.delete(child);
+            throw error;
+          }
 
           if (runtime.launched !== undefined)
             await Effect.runPromise(runtime.launched(launchCwd, argv).pipe(Effect.ignore));

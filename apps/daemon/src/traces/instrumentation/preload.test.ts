@@ -319,7 +319,13 @@ test("two direct register imports and two SDK copies still install just one inst
   const before = polaris.names.length;
 
   const run = await node(
-    ["--import", register, "--import", join(older, "register.mjs"), "app.mjs"],
+    [
+      "--import",
+      pathToFileURL(register).href,
+      "--import",
+      pathToFileURL(join(older, "register.mjs")).href,
+      "app.mjs",
+    ],
     checkout,
     { POLARIS_OTEL_ENDPOINT: polaris.url }
   );
@@ -333,7 +339,7 @@ test("no endpoint loads neither the ESM hook nor the SDK", async () => {
   const register = await bundledRegisterPath(home);
   await writeFile(join(dirname(register), "hook.mjs"), "throw Error('hook loaded');");
   await writeFile(join(dirname(register), "sdk.cjs"), "process.exit(43);");
-  const run = await node(["--import", register, "-e", "0"], scratch, {});
+  const run = await node(["--import", pathToFileURL(register).href, "-e", "0"], scratch, {});
   expect(run).toEqual({ code: 0, stderr: "" });
 });
 

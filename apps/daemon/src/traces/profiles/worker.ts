@@ -43,12 +43,22 @@ const notFound = () =>
   });
 
 const read = (path: string): string => {
+  const before = lstatSync(path);
+
+  if (!before.isFile() || before.isSymbolicLink()) throw invalidProfile();
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
 
   try {
     const stat = fstatSync(fd);
 
-    if (!stat.isFile() || stat.nlink !== 1 || stat.size > MAX_ARTIFACT) throw invalidProfile();
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      stat.size > MAX_ARTIFACT ||
+      stat.ino !== before.ino ||
+      stat.dev !== before.dev
+    )
+      throw invalidProfile();
 
     fchmodSync(fd, 0o600);
 

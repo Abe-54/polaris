@@ -9,7 +9,7 @@ import { TEST_SESSION } from "../testing.ts";
 import { Profiles } from "./index.ts";
 import { cpuWork, withProfiles } from "./testing.ts";
 import { profileDirectory, profileJob } from "./workerClient.ts";
-import { isRunning } from "../../platform/processes.ts";
+import { isRunning, killTree } from "../../platform/processes.ts";
 
 const until = async (condition: () => boolean | Promise<boolean>, ms = 15000) => {
   const deadline = Date.now() + ms;
@@ -426,3 +426,58 @@ test("P4-2: shutdown drains an exited child's completion waiting for queue space
     { worker }
   );
 }, 30000);
+
+// Windows cooperative exit must keep the Job Object's descendant cleanup after its parent exits.
+for (const binary of ["node", "bun"])
+  test.skipIf(process.platform !== "win32")(
+    `cooperative ${binary} profile shutdown retires detached descendants`,
+    () =>
+      withProfiles(async ({ root, runtime }) => {
+        const script = join(root, "parent.cjs");
+        const pidFile = join(root, "descendant.json");
+        await writeFile(
+          script,
+          `
+const child = require("node:child_process").spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { detached: true, stdio: "ignore" });
+require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify(child.pid));
+setInterval(()=>{},1000);
+`
+        );
+
+        const profiles = await runtime.runPromise(Profiles);
+
+        const original = await runtime.runPromise(
+          profiles.capture(TEST_SESSION, [binary, script], 0.01)
+        );
+
+        let descendant: number | undefined;
+
+        try {
+          await until(() => Bun.file(pidFile).exists());
+          descendant = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Int))(
+            await readFile(pidFile, "utf8")
+          );
+          expect(isRunning(descendant)).toBe(true);
+          await runtime.dispose();
+          expect(isRunning(original.pid)).toBe(false);
+          await until(() => !isRunning(descendant!), 5000);
+          expect(isRunning(descendant)).toBe(false);
+
+          const directory = await profileDirectory(
+            join(root, "profiles"),
+            await realpath(root),
+            original.id
+          );
+
+          expect(
+            Schema.decodeUnknownSync(Schema.fromJsonString(Profile))(
+              await readFile(join(directory, "profile.json"), "utf8")
+            ).status
+          ).toBe("completed");
+        } finally {
+          if (descendant !== undefined && isRunning(descendant))
+            await killTree(descendant, "SIGKILL");
+        }
+      }),
+    30000
+  );

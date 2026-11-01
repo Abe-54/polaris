@@ -8,7 +8,7 @@ import {
 } from "./nodeOptions.ts";
 
 test("Node imports compose with flags and a preceding bootstrap without changing their bytes", () => {
-  const previous = '--no-warnings --import="file:///tmp/inspector.mjs"';
+  const previous = `--no-warnings --import="${pathToFileURL(resolve("/tmp/inspector.mjs")).href}"`;
   const next = appendNodeImport(previous, "/tmp/register here.mjs");
 
   expect(next).toBe(
@@ -42,7 +42,7 @@ for (const old of [
   `--import ${JSON.stringify(instrumentationImport("/tmp/node-instrumentation/old/register.mjs"))}`,
 ]) {
   test(`replaces an inherited Polaris import and keeps the inspector: ${old}`, () => {
-    const inspector = '--import="file:///tmp/inspector.mjs" --no-warnings';
+    const inspector = `--import="${pathToFileURL(resolve("/tmp/inspector.mjs")).href}" --no-warnings`;
 
     const result = appendNodeImport(
       `${old} ${inspector}`,

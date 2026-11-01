@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { shortTemp } from "../../platform/testing.ts";
 import { beforeAll, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -140,7 +141,7 @@ test(
       const registerPath = stdout.trim();
 
       const node = Bun.spawn(
-        ["node", "--import", registerPath, "-e", "console.log('standalone')"],
+        ["node", "--import", pathToFileURL(registerPath).href, "-e", "console.log('standalone')"],
         {
           cwd: root,
           env: { PATH: process.env.PATH!, POLARIS_OTEL_ENDPOINT: "http://127.0.0.1:1" },
