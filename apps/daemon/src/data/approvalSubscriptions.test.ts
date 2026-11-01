@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ApprovalDecision, ApprovalRequest, DomainEvent, RequestId } from "@polaris/protocol";
-import { Effect, Fiber, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { EventStore, LiveItem } from "../store/EventStore.ts";
 import { DataApprovals } from "./approvals.ts";
 import { seedDataSession, started } from "./approvals.testing.ts";
@@ -35,11 +35,21 @@ const requested = (id: RequestId) =>
 for (const waiting of [false, true])
   test(`approval projection${waiting ? " and waiter" : ""} skip unrelated live items`, () => {
     const reads = { model: 0, events: 0 };
+    const waiterReady = Deferred.makeUnsafe<void>();
+    let subscriptions = 0;
 
     const counted = Layer.effect(
       EventStore,
       Effect.map(EventStore, (store) => ({
         ...store,
+        subscribe: (options) =>
+          Effect.map(store.subscribe(options), (stream) => {
+            subscriptions++;
+
+            return subscriptions === 2
+              ? stream.pipe(Stream.onStart(Deferred.succeed(waiterReady, undefined)))
+              : stream;
+          }),
         model: Effect.tap(store.model, () => Effect.sync(() => reads.model++)),
         readEvents: (options) =>
           Effect.tap(store.readEvents(options), () => Effect.sync(() => reads.events++)),
@@ -68,7 +78,7 @@ for (const waiting of [false, true])
             ? yield* approvals.awaitApproval(requestId, 1000).pipe(Effect.forkScoped)
             : undefined;
 
-          yield* Effect.sleep(10);
+          if (waiting) yield* Deferred.await(waiterReady);
           const before = { ...reads };
 
           for (let n = 0; n < 64; n++) {
@@ -97,11 +107,21 @@ for (const waiting of [false, true])
           yield* Effect.sleep(10);
           expect(reads).toEqual(before);
 
+          const projectionReady = yield* Deferred.make<void>();
+
+          const projected = yield* approvals.changes.pipe(
+            Stream.drop(1),
+            Stream.onStart(Deferred.succeed(projectionReady, undefined)),
+            Stream.runHead,
+            Effect.forkScoped
+          );
+
+          yield* Deferred.await(projectionReady);
           yield* store.commit({
             commandId: null,
             decide: () => Effect.succeed([requested(RequestId.make("other-approval"))]),
           });
-          yield* Effect.sleep(10);
+          yield* Fiber.join(projected);
           // Only the projection reads for another request; the waiter stays asleep.
           expect(reads.model - before.model).toBe(1);
           expect(reads.events - before.events).toBe(1);

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, posix } from "node:path";
 import { Option, Schema } from "effect";
 import { localHost, type DataConnection, type Candidate } from "./connection.ts";
 
@@ -24,7 +24,7 @@ export const command = (file: string, args: string[]) =>
 const socketPath = (connection: DataConnection) =>
   connection.path ||
   (connection.hostname.startsWith("/")
-    ? join(connection.hostname, `.s.PGSQL.${connection.port}`)
+    ? posix.join(connection.hostname, `.s.PGSQL.${connection.port}`)
     : undefined);
 
 export const lsofOwners = (text: string, connection: DataConnection): Owner[] => {
@@ -87,8 +87,12 @@ const macOwners = async (connection: DataConnection) => {
   );
 };
 
-export const listenerOwners = (connection: DataConnection) =>
-  process.platform === "darwin" ? macOwners(connection) : linuxOwners(connection);
+export const listenerOwners = (connection: DataConnection) => {
+  // Windows has no supported listener-owner inspection; locality remains unverified.
+  if (process.platform === "win32") return Promise.resolve([]);
+
+  return process.platform === "darwin" ? macOwners(connection) : linuxOwners(connection);
+};
 
 const Inspection = Schema.Array(
   Schema.Struct({

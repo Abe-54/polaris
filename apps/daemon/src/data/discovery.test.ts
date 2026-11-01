@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -12,7 +13,7 @@ afterEach(async () => {
 });
 
 const fixture = async (files: Record<string, string>) => {
-  const root = await mkdtemp("/tmp/data-discovery-");
+  const root = await mkdtemp(shortTemp("data-discovery-"));
   roots.push(root);
   await Promise.all(
     Object.entries(files).map(async ([file, text]) => {

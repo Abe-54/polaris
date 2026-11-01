@@ -28,10 +28,10 @@ and returns `{source, connection, matchUrl}` internally. The matching URL and co
 `matchUrl` is for outside-command matching only, never for connecting. Execution passes the explicit connection fields (with `adapter: source.engine`), never the URL, to
 Bun.SQL: Bun 1.4.4's URL constructor lets PGDATABASE change an explicit URL's database.
 Postgres query parameters host/port/user/dbname/password override authority fields; socket/path
-and TLS modes are resolved explicitly. Ambiguous repeated target parameters are skipped.
+and TLS modes are resolved explicitly. Socket URLs require POSIX absolute paths; Windows named pipes are not supported. Ambiguous repeated target parameters are skipped.
 
 `data.sqlite` stores manual metadata and labels in separate tables, not in the event log. Its
-mode is 0600. Passwords live only under `data/<id>` in HostSecrets, base64-encoded at this
+mode is 0600 on POSIX; Windows applies a protected DACL granting access only to the current user. Passwords live only under `data/<id>` in HostSecrets, base64-encoded at this
 namespace boundary so spaces, quotes and Unicode pass the existing token validator. Other
 secret namespaces retain their validation. The empty password uses `=` as its encoded token.
 Errors report constant text and never include parser, SQLite or Secure Storage error details.
@@ -47,7 +47,7 @@ macOS lsof (the executable text mapping, not the process title) or Linux socket 
 proxies additionally need a running database container whose compose working-directory label is
 this real checkout and whose published port matches. Missing owners, permission failures, timeouts,
 tunnels and unknown executables remain remote and need approval. This is a resolve-time observation;
-X re-resolves the target before use. There is no periodic owner polling.
+X re-resolves the target before use. Windows has no supported listener-owner probe, so its sources remain remote and need approval. There is no periodic owner polling.
 
 Stored label overrides carry an engine/host/port/database/user target fingerprint. A mismatch
 removes the override permanently and restores `defaultLabel`. Legacy labels without a fingerprint

@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId } from "@polaris/protocol";
@@ -19,7 +20,7 @@ export const manualInput = {
 } as const;
 
 export const sourceFixture = Effect.gen(function* () {
-  const root = mkdtempSync("/tmp/data-security-");
+  const root = mkdtempSync(shortTemp("data-security-"));
   mkdirSync(join(root, "other"));
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => rmSync(root, { recursive: true, force: true }))

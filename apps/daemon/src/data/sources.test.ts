@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import {
   mkdtempSync,
@@ -36,7 +37,7 @@ const input = {
 } as const;
 
 const fixture = Effect.gen(function* () {
-  const root = mkdtempSync("/tmp/data-sources-");
+  const root = mkdtempSync(shortTemp("data-sources-"));
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => rmSync(root, { recursive: true, force: true }))
   );
@@ -75,7 +76,10 @@ test("manual sources and labels survive restart, share a checkout, isolate anoth
           access: "needs-approval",
           label,
         });
-        expect(statSync(options.path).mode & 0o777).toBe(0o600);
+
+        // Windows protects storage with a user-only DACL, verified by storage.windows.test.ts.
+        if (process.platform !== "win32") expect(statSync(options.path).mode & 0o777).toBe(0o600);
+
         expect(readFileSync(options.path).includes(Buffer.from(password))).toBe(false);
         expect(readFileSync(options.path).includes(Buffer.from("postgres://"))).toBe(false);
         const raw = yield* secrets.get(`data/${source.id}`);

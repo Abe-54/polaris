@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { setPrivateDacl } from "../platform/windowsNative.ts";
 import { targetFingerprint } from "./connection.ts";
 import { DataSource, DataSourceLabel, DataError } from "@polaris/protocol";
 import { Effect, Option, Schema } from "effect";
@@ -43,7 +44,9 @@ export const openStorage = (path: string) =>
       const db = new Database(path, { create: true });
 
       try {
-        chmodSync(path, 0o600);
+        if (process.platform === "win32") {
+          if (!setPrivateDacl(path, "file")) throw new Error("Could not protect Data storage");
+        } else chmodSync(path, 0o600);
         db.exec(`CREATE TABLE IF NOT EXISTS data_manual_sources (checkout TEXT NOT NULL, id TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS data_source_labels (checkout TEXT NOT NULL, id TEXT PRIMARY KEY, value TEXT NOT NULL);`);
 

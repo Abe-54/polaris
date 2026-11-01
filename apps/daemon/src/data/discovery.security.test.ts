@@ -1,6 +1,7 @@
+import { shortTemp } from "../platform/testing.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm, symlink, open, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { Redacted } from "effect";
 import { discover, prisma } from "./discovery.ts";
 import { read } from "./read.ts";
@@ -11,7 +12,7 @@ import { knownFromConnection } from "./knownCredentials.ts";
 const roots: string[] = [];
 
 const fixture = async () => {
-  const root = await mkdtemp("/tmp/data-hostile-");
+  const root = await mkdtemp(shortTemp("data-hostile-"));
   roots.push(root);
 
   return root;
@@ -74,11 +75,9 @@ EXPAND_DATABASE_URL=postgres://\u0024{USER}:\u0024{PASS}@\u0024{HOST}/\u0024{NAM
   ]);
 });
 
-test("R3: devices, FIFOs and oversized regular files cannot enter discovery", async () => {
+test("R3: oversized regular files cannot enter discovery", async () => {
   const root = await fixture();
-  await symlink("/dev/zero", join(root, "compose.yaml"));
-  const fifo = Bun.spawn(["/usr/bin/mkfifo", join(root, "compose.yml")]);
-  expect(await fifo.exited).toBe(0);
+
   const huge = await open(join(root, ".env"), "w");
   await huge.truncate(2 * 1024 ** 3);
   await huge.close();
@@ -107,11 +106,11 @@ test("R2/F7: config and prisma directory symlinks cannot read another checkout",
     join(outside, "prisma/schema.prisma"),
     'datasource db { url = "postgres://u:p@db.test/private" }'
   );
-  await symlink(join(outside, "config"), join(root, "config"));
-  await symlink(join(outside, "prisma"), join(root, "prisma"));
+  await symlink(join(outside, "config"), join(root, "config"), "junction");
+  await symlink(join(outside, "prisma"), join(root, "prisma"), "junction");
   expect(await discover(root)).toEqual([]);
   expect(
-    await read(await realpath(root), "../" + outside.split("/").at(-1) + "/config/database.yml")
+    await read(await realpath(root), relative(root, join(outside, "config/database.yml")))
   ).toBe("");
 });
 
@@ -165,3 +164,15 @@ test.each(["postgres", "mysql"])("R5: manual %s sockets are the explicit driver 
   else expect(parsed.connection.hostname).toBe("/tmp/database.sock");
   expect(metadata("/checkout", item)?.host).toBe("/tmp/database.sock");
 });
+
+// Windows has no POSIX device files or FIFOs for configuration discovery to read.
+test.skipIf(process.platform === "win32")(
+  "R3: devices and FIFOs cannot enter discovery",
+  async () => {
+    const root = await fixture();
+    await symlink("/dev/zero", join(root, "compose.yaml"));
+    const fifo = Bun.spawn(["/usr/bin/mkfifo", join(root, "compose.yml")]);
+    expect(await fifo.exited).toBe(0);
+    expect(await discover(root)).toEqual([]);
+  }
+);
