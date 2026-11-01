@@ -1,0 +1,113 @@
+{
+  "head": "be0f03f3ef95415a5b2ffc122b9a64d14365ab6d",
+  "cases": [
+    {
+      "label": "P8-1",
+      "file": "apps/daemon/src/mcp/tools/compareFormat.ts",
+      "remove": "Array.from(text)",
+      "replace": "text.split(\"\")",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/mcp/tools/compare.test.ts",
+        "-t",
+        "finding P8-1"
+      ],
+      "exitCode": 1,
+      "failedTest": "finding P8-1",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/mcp/tools/compare.test.ts:\n190 |     ],\n191 |   });\n192 | \n193 |   const text = compareView(comparison).text;\n194 | \n195 |   expect(text.isWellFormed()).toBe(true);\n                                    ^\nerror: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/mcp/tools/compare.test.ts:195:31)\n(fail) finding P8-1: compare text never ends a clipped route name on a lone surrogate [0.56ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [196.00ms]\n"
+    },
+    {
+      "label": "P8-2",
+      "file": "apps/daemon/src/traces/compareQuery.ts",
+      "remove": "AND r.start<?",
+      "replace": "AND s.start<?",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/traces/compare.test.ts",
+        "-t",
+        "finding P8-2"
+      ],
+      "exitCode": 1,
+      "failedTest": "finding P8-2",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/traces/compare.test.ts:\n319 |     // A Turn 3 trace (root starts in Turn 3) with a span stamped 25 s earlier, e.g. a skewed clock.\n320 |     await ingest(3, [5000], { child: { name: \"skewed\", ms: 5, at: -25_000 } });\n321 | \n322 |     const route = (await read(store)).routes.find((r) => r.route === \"POST /invoices\")!;\n323 | \n324 |     expect(route.before).toEqual({ count: 3, p50Ms: 110, p95Ms: 120 });\n                               ^\nerror: expect(received).toEqual(expected)\n\n  {\n-   \"count\": 3,\n+   \"count\": 4,\n    \"p50Ms\": 110,\n-   \"p95Ms\": 120,\n+   \"p95Ms\": 30000,\n  }\n\n- Expected  - 2\n+ Received  + 2\n\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/compare.test.ts:324:26)\n(fail) finding P8-2: Baseline leaves out a later Turn's trace even when one of its spans starts before the target Turn [165.94ms]\n\n 0 pass\n 23 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [340.00ms]\n"
+    },
+    {
+      "label": "P8-3",
+      "file": "apps/daemon/src/traces/compareQuery.ts",
+      "remove": "r.parent IS NULL OR (json_extract(r.value,'$.kind')",
+      "replace": "1 OR (json_extract(r.value,'$.kind')",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/traces/compare.test.ts",
+        "-t",
+        "finding P8-3"
+      ],
+      "exitCode": 1,
+      "failedTest": "finding P8-3",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/traces/compare.test.ts:\n359 |     );\n360 | \n361 |     const comparison = await read(store);\n362 |     const phantom = comparison.routes.filter((r) => r.route === \"pg.query invoices\");\n363 | \n364 |     expect(phantom).toMatchObject([{ after: { count: 0 }, partial: { before: 0, after: 1 } }]);\n                          ^\nerror: expect(received).toMatchObject(expected)\n\n  [\n    {\n      \"after\": {\n+       \"count\": 1,\n+       \"p50Ms\": null,\n+       \"p95Ms\": null,\n+     },\n+     \"before\": {\n        \"count\": 0,\n+       \"p50Ms\": null,\n+       \"p95Ms\": null,\n      },\n-     \"partial\": {\n-       \"after\": 1,\n-       \"before\": 0,\n+     \"route\": \"pg.query invoices\",\n+     \"service\": \"ledger-api\",\n+     \"slowestNew\": {\n+       \"durationMs\": 30,\n+       \"name\": \"pg.query invoices\",\n+       \"service\": \"ledger-api\",\n+       \"spanId\": \"4444444444444444\",\n+       \"traceId\": \"abcdef00abcdef00abcdef00abcdef00\",\n      },\n    },\n  ]\n\n- Expected  - 3\n+ Received  + 15\n\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/compare.test.ts:364:21)\n(fail) finding P8-3: a trace without its root span is not counted as a complete sample of a child-named route [152.74ms]\n\n 0 pass\n 23 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [345.00ms]\n"
+    },
+    {
+      "label": "P8-4-yield",
+      "file": "apps/daemon/src/traces/compareYield.ts",
+      "remove": "if (!force && performance.now() - since < 4) return;",
+      "replace": "if (force || !force) return;",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/traces/compareConcurrency.test.ts"
+      ],
+      "exitCode": 1,
+      "failedTest": "compare yields to reads and commits while preserving its original snapshot",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/traces/compareConcurrency.test.ts:\n60 |     );\n61 | \n62 |     const observed = await competing;\n63 |     const result = await comparing;\n64 | \n65 |     expect(observed).toEqual({ count: 3, settled: false });\n                          ^\nerror: expect(received).toEqual(expected)\n\n  {\n    \"count\": 3,\n-   \"settled\": false,\n+   \"settled\": true,\n  }\n\n- Expected  - 1\n+ Received  + 1\n\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/compareConcurrency.test.ts:65:22)\n(fail) compare yields to reads and commits while preserving its original snapshot [13.77ms]\n\n 0 pass\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [176.00ms]\n"
+    },
+    {
+      "label": "P8-4-WAL",
+      "file": "apps/daemon/src/traces/database.ts",
+      "remove": "journal_mode=WAL",
+      "replace": "journal_mode=DELETE",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/traces/compareConcurrency.test.ts"
+      ],
+      "exitCode": 1,
+      "failedTest": "compare yields to reads and commits while preserving its original snapshot",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/traces/compareConcurrency.test.ts:\n11 |   const start = sortableTime(\"1800000000000000000\");\n12 | \n13 |   const insert = (id: string, turn: string) =>\n14 |     db.transaction(() => {\n15 |       db.query(`INSERT INTO spans (checkout,trace_id,id,parent,start,end,service,status,age,bytes,value,name,duration)\n16 |       VALUES ('checkout',?,'root',NULL,?,?,'api','ok',0,100,?,'route',1)`).run(\n                                                                                ^\nSQLiteError: disk I/O error\n      errno: 3850,\n byteOffset: -1,\n       code: \"SQLITE_IOERR_LOCK\"\n\n      at #run (bun:sqlite:195:25)\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/compareConcurrency.test.ts:16:76)\n      at transaction (bun:sqlite:447:27)\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/compareConcurrency.test.ts:41:11)\n(fail) compare yields to reads and commits while preserving its original snapshot [11.96ms]\n\n 0 pass\n 1 fail\nRan 1 test across 1 file. [174.00ms]\n"
+    },
+    {
+      "label": "range",
+      "file": "apps/daemon/src/traces/compareQuery.ts",
+      "remove": "baseline && side === \"a\" ? selected : { sql: \"1\", bindings: [] }",
+      "replace": "selected",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/traces/compare.test.ts",
+        "-t",
+        "large resolved"
+      ],
+      "exitCode": 1,
+      "failedTest": "a large resolved Turn range keeps the original SQL binding budget",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/traces/compare.test.ts:\n94 |         this.armQuiet();\n95 |       }),\n96 |       Match.tag(\"Failure\", (message) => {\n97 |         const waiter = this.pending.get(message.id);\n98 |         this.pending.delete(message.id);\n99 |         waiter?.reject(new WorkerFailure(message.status, new TraceError(message.error)));\n                                                              ^\nerror: The OTLP batch could not be decoded.\n _tag: \"TraceError\",\n  fix: \"Send a valid, bounded OTLP/HTTP traces or logs request.\",\n code: \"E-TRACE-UNAVAILABLE\"\n\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/workerClient.ts:99:58)\n      at add (/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF16/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/internal/matcher.js:44:67)\n      at pipeArguments (/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF16/node_modules/.bun/effect@4.0.0-rc.118/node_modules/effect/dist/Pipeable.js:62:27)\n      at receive (/private/tmp/uf16-final-negative/apps/daemon/src/traces/workerClient.ts:88:24)\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/workerClient.ts:138:14)\n(fail) a large resolved Turn range keeps the original SQL binding budget [311.44ms]\n\n 0 pass\n 23 filtered out\n 1 fail\nRan 1 test across 1 file. [475.00ms]\n"
+    },
+    {
+      "label": "explicit-roots",
+      "file": "apps/daemon/src/traces/database.ts",
+      "remove": "ORDER BY start,id LIMIT 1",
+      "replace": "ORDER BY json_extract(value,'$.kind')='server' DESC,start,id LIMIT 1",
+      "command": [
+        "bun",
+        "test",
+        "apps/daemon/src/traces/compare.test.ts",
+        "-t",
+        "multiple explicit roots"
+      ],
+      "exitCode": 1,
+      "failedTest": "multiple explicit roots retain the earliest root regardless of Span kind",
+      "output": "bun test v1.4.4 (38afee6c8)\n\napps/daemon/src/traces/compare.test.ts:\n520 |       (await read(store)).routes.map((route) => [\n521 |         route.route,\n522 |         route.before.count,\n523 |         route.after.count,\n524 |       ])\n525 |     ).toEqual([[\"POST /invoices\", 4, 3]]);\n            ^\nerror: expect(received).toEqual(expected)\n\n  [\n    [\n      \"POST /invoices\",\n-     4,\n      3,\n+     3,\n+   ],\n+   [\n+     \"late-server\",\n+     0,\n+     1,\n    ],\n  ]\n\n- Expected  - 1\n+ Received  + 6\n\n      at <anonymous> (/private/tmp/uf16-final-negative/apps/daemon/src/traces/compare.test.ts:525:7)\n(fail) multiple explicit roots retain the earliest root regardless of Span kind [140.78ms]\n\n 0 pass\n 23 filtered out\n 1 fail\n 1 expect() calls\nRan 1 test across 1 file. [299.00ms]\n"
+    }
+  ]
+}
