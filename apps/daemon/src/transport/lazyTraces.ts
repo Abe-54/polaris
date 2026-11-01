@@ -5,7 +5,9 @@ import {
   TracesRpcs,
   TracesSettingsRpcs,
   ProfilesRpcs,
+  SelfTraceRpcs,
 } from "@polaris/protocol";
+import { DeveloperModeState } from "../developerMode/service.ts";
 import { TraceRuntime } from "../traces/runtimeService.ts";
 import { TraceSessions } from "../traces/sessionsService.ts";
 import { TraceStore } from "../traces/storeService.ts";
@@ -187,11 +189,17 @@ export const lazyTracesAt = (options: Omit<ReceiverOptions, "handler"> = {}) =>
 
 export const lazyTraces = lazyTracesAt();
 
-const group = TracesRpcs.merge(TracesSettingsRpcs).merge(TraceCompareRpcs).merge(ProfilesRpcs);
+const group = TracesRpcs.merge(TracesSettingsRpcs)
+  .merge(TraceCompareRpcs)
+  .merge(ProfilesRpcs)
+  .merge(SelfTraceRpcs);
 
 export const lazyTraceHandlers = Layer.fromBuild((memoMap, scope) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<TraceRuntime | TraceStore | TraceSessions | Profiles>();
+    const context = yield* Effect.context<
+      TraceRuntime | TraceStore | TraceSessions | Profiles | DeveloperModeState
+    >();
+
     const implementation = yield* TraceImplementation;
 
     const load = yield* cacheDaemonBuild(
@@ -199,13 +207,15 @@ export const lazyTraceHandlers = Layer.fromBuild((memoMap, scope) =>
         const built = yield* implementation.load;
         const rpcs = yield* Effect.promise(() => import("../traces/rpcs.ts"));
         const profiles = yield* Effect.promise(() => import("../traces/profiles/rpcs.ts"));
+        const self = yield* Effect.promise(() => import("../traces/self/rpcs.ts"));
 
         return yield* Layer.buildWithMemoMap(
           Layer.mergeAll(
             rpcs.TracesRpcsLive,
             rpcs.TracesSettingsRpcsLive,
             rpcs.TraceCompareRpcsLive,
-            profiles.ProfilesRpcsLive
+            profiles.ProfilesRpcsLive,
+            self.SelfTraceRpcsLive
           ),
           memoMap,
           scope

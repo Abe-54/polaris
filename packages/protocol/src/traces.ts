@@ -233,22 +233,37 @@ export class TraceError extends Schema.TaggedError<TraceError>()("TraceError", {
 
 const Errors = Schema.Union([TraceError, Unsupported]);
 
+/**
+ * `self` reads the Self-Trace scope instead of the session's checkout (capability `traces.self`);
+ * the sessionId still authorizes the read. Older Daemons ignore it.
+ */
+export const TraceScopeSelector = Schema.optionalKey(Schema.Literal("self"));
+
 /** All reads resolve sessionId to its checkout on the Daemon; callers never supply a checkout path. */
 export const WatchTraces = Rpc.make("traces.watch", {
-  payload: { sessionId: SessionId, filter: Schema.optionalKey(TraceFilter) },
+  payload: {
+    sessionId: SessionId,
+    filter: Schema.optionalKey(TraceFilter),
+    scope: TraceScopeSelector,
+  },
   success: TracesSnapshot,
   error: Errors,
   stream: true,
 });
 
 export const GetTrace = Rpc.make("traces.get", {
-  payload: { sessionId: SessionId, traceId: TraceIdPrefix },
+  payload: { sessionId: SessionId, traceId: TraceIdPrefix, scope: TraceScopeSelector },
   success: TraceDetail,
   error: Errors,
 });
 
 export const GetSpan = Rpc.make("traces.span", {
-  payload: { sessionId: SessionId, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
+  payload: {
+    sessionId: SessionId,
+    traceId: TraceIdPrefix,
+    spanId: SpanIdPrefix,
+    scope: TraceScopeSelector,
+  },
   success: SpanDetail,
   error: Errors,
 });

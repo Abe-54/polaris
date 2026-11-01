@@ -21,6 +21,7 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
     maxBytes: Schema.Number,
     maxAgeMs: Schema.Number,
     flushMs: Schema.Number,
+    selfMaxBytes: Schema.Number,
   },
   Ingest: {
     bytes: Schema.Uint8Array,
