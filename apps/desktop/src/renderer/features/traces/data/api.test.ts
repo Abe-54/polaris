@@ -87,3 +87,20 @@ test("an inactive session with no initial endpoint does not resubscribe forever"
   expect(bridge.feeds("traces.watch")).toHaveLength(1);
   stop();
 });
+
+test("Self-Trace reads carry scope self; the checkout's carry no scope", async () => {
+  const bridge = installFakeBridge();
+  const self = { ...at, scope: "self" as const };
+
+  liveTracesApi.watch(self, undefined, { next: () => undefined })();
+  liveTracesApi.watch(at, undefined, { next: () => undefined })();
+  await liveTracesApi.get(self, "abcd1234");
+  await liveTracesApi.span(self, "abcd1234", "ef012345");
+
+  expect(bridge.feeds("traces.watch").map((feed) => feed.input)).toEqual([
+    { hostKey: "host", sessionId: at.sessionId, scope: "self" },
+    { hostKey: "host", sessionId: at.sessionId },
+  ]);
+  expect(bridge.sent("traces.get")[0]).toMatchObject({ scope: "self", traceId: "abcd1234" });
+  expect(bridge.sent("traces.span")[0]).toMatchObject({ scope: "self", spanId: "ef012345" });
+});

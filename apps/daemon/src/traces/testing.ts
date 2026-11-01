@@ -102,6 +102,7 @@ export interface TraceFixture {
   readonly endpoint: string | null;
   readonly store: TraceStore["Service"];
   readonly runtime: TraceRuntime["Service"];
+  readonly sessions: TraceSessions["Service"];
   readonly settings: TraceSettings["Service"];
   readonly forwarding: ForwardQueue;
   readonly state: {
@@ -175,6 +176,7 @@ export const withTraceFixture = async (
           const store = yield* TraceStore;
           const runtime = yield* TraceRuntime;
           const settings = yield* TraceSettings;
+          const traceSessions = yield* TraceSessions;
           const beforeIngest = options.beforeIngest;
 
           const receiverStore =
@@ -197,6 +199,7 @@ export const withTraceFixture = async (
               endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT ?? null,
               store,
               runtime,
+              sessions: traceSessions,
               settings,
               forwarding,
               state,

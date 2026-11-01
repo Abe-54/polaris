@@ -1,5 +1,8 @@
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
+import { developerModeOff } from "../traces/self/developerMode.ts";
+import { selfTraceExport } from "../traces/self/export.ts";
+import { selfTracer } from "../traces/self/tracer.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
 import { PredictionServerLive } from "../prediction/server.ts";
 /**
@@ -152,7 +155,9 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   Layer.provideMerge(dataServices),
   Layer.provideMerge(traceServices),
   Layer.provideMerge(ReviewerSessions.layer),
-  Layer.provideMerge(EventStore.layerLive)
+  Layer.provideMerge(EventStore.layerLive),
+  // Innermost, so a live Developer Mode Layer provided above it wins (ENG-709).
+  Layer.provideMerge(developerModeOff)
 );
 
 const daemonServices = lazyReviewer.pipe(Layer.provideMerge(engineServices));
@@ -196,7 +201,8 @@ export const daemonHandlers = Layer.mergeAll(
   ReviewerRpcsLive,
   TerminalRpcsLive.pipe(Layer.provide(TerminalsDaemonLive)),
   VoiceRpcsLive.pipe(Layer.provide(Layer.merge(DeepgramLive, HostSecrets.layer))),
-  byteStreamHandlers
+  byteStreamHandlers,
+  selfTraceExport
 ).pipe(Layer.provide(daemonServices));
 
 /** What the lazy language handlers serve: unavailable where no language artifact runs. */
@@ -231,6 +237,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "traces.compare",
   "traces.profiles",
   "traces.profiles.attach",
+  "traces.self",
   "constellation",
   "constellation.defaults",
   "extensions",
@@ -380,6 +387,8 @@ export const serveProgram = Effect.scoped(
     yield* Effect.logInfo(`polaris Daemon stopping on request (${reason})`);
   })
 ).pipe(
+  // Every Daemon Span goes through the Self-Trace Tracer, which is native while it is off.
+  Effect.withTracer(selfTracer),
   // A requested stop ends the scope gracefully; then nothing may keep the process alive.
   Effect.andThen(() => Effect.sync(() => process.exit(SERVE_EXIT_STOPPED))),
   Effect.catchTag("DaemonAlreadyRunning", (error) =>

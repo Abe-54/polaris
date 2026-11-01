@@ -23,6 +23,7 @@ import {
 } from "./queries.ts";
 import { compareTraces } from "./compareQuery.ts";
 import { pruneCheckout } from "./retention.ts";
+import { retentionFor, SELF_RETENTION } from "./self/scope.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
 
 import { traceView } from "../mcp/tools/traceFormat.ts";
@@ -32,6 +33,8 @@ declare const self: Worker;
 let db: Database | null = null;
 
 let retention: Retention = DEFAULT_RETENTION;
+
+let selfRetention: Retention = SELF_RETENTION;
 
 let flushMs = 25;
 
@@ -74,7 +77,12 @@ const flush = (): void => {
 
       for (const [checkout, ids] of touched) {
         for (const id of ids) refreshSummary(store, checkout, id);
-        pruneCheckout(store, checkout, retention, Date.now());
+        pruneCheckout(
+          store,
+          checkout,
+          retentionFor(checkout, retention, selfRetention),
+          Date.now()
+        );
       }
     })();
     failed = false;
@@ -107,7 +115,10 @@ const scheduleFlush = () => {
 const prune = (checkout: string) => {
   flush();
   const store = database();
-  const removed = store.transaction(() => pruneCheckout(store, checkout, retention, Date.now()))();
+
+  const removed = store.transaction(() =>
+    pruneCheckout(store, checkout, retentionFor(checkout, retention, selfRetention), Date.now())
+  )();
 
   if (removed) {
     store.exec("PRAGMA incremental_vacuum(256)");
@@ -122,6 +133,10 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
     db = openTraceDatabase(request.filename);
     retention = { maxBytes: request.maxBytes, maxAgeMs: request.maxAgeMs };
     flushMs = request.flushMs;
+    selfRetention = {
+      ...SELF_RETENTION,
+      maxBytes: request.selfMaxBytes,
+    };
 
     return null;
   }),

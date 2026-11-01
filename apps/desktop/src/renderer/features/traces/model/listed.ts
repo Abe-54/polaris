@@ -5,11 +5,11 @@
 import type { TraceSummary } from "@polaris/protocol";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { TracesSessionKey } from "./session.ts";
+import { scopedKey, type TracesSessionKey } from "./session.ts";
 
 const store = createStore<Readonly<Record<string, ReadonlyArray<TraceSummary>>>>(() => ({}));
 
-const keyOf = (at: TracesSessionKey) => `${at.hostKey}\u0000${at.sessionId}`;
+const keyOf = scopedKey;
 
 /** `traces` as the sidebar lists them; null when it lists none (unmounted, loading, failed). */
 export const publishListed = (at: TracesSessionKey, traces: ReadonlyArray<TraceSummary> | null) =>
