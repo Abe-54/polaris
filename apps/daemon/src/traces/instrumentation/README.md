@@ -38,7 +38,8 @@ not override another register. No endpoint means no manifest reads, loader or SD
 The register enables HTTP, undici/fetch, pg, mysql2 and express instrumentation.
 It configures private trace and log exporters with the Polaris endpoint, registers
 no metric provider, bounds export time to one second and flushes finite commands on
-`beforeExit`. Logs and traces share one HTTP connection because the receiver
+`beforeExit`. The trace batch delay honors `OTEL_BSP_SCHEDULE_DELAY` (a positive
+number of milliseconds, otherwise five seconds). Logs and traces share one HTTP connection because the receiver
 admits one request per token. Setup and export failures do not crash the app;
 telemetry is best effort when the endpoint is down. Explicit `process.exit` or a
 forced process termination can lose pending telemetry. Signal handlers stay with

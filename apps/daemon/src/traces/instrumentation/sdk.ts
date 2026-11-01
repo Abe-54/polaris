@@ -4,6 +4,7 @@ import {
   CompositePropagator,
   W3CTraceContextPropagator,
   W3CBaggagePropagator,
+  getNumberFromEnv,
 } from "@opentelemetry/core";
 import { TracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
@@ -34,12 +35,15 @@ if (endpoint && !process.versions.bun && !Reflect.has(globalThis, guard)) {
       "service.name": process.env.POLARIS_OTEL_SERVICE_NAME ?? "node-app",
     });
 
+    const batchDelay = getNumberFromEnv("OTEL_BSP_SCHEDULE_DELAY") ?? 5000;
+
     const tracerProvider = new TracerProvider({
       resource,
       spanProcessors: [
         new BatchSpanProcessor({
           exporter: new OTLPTraceExporter({ ...transport, url: `${endpoint}/v1/traces` }),
           exportTimeoutMillis: 1000,
+          scheduledDelayMillis: batchDelay > 0 ? batchDelay : 5000,
         }),
       ],
     });

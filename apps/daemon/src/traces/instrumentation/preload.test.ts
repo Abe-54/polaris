@@ -412,3 +412,46 @@ test("a late app SDK exports its manual request span to its vendor under the Pol
     false
   );
 });
+
+test("a configured batch delay exports while the Node application stays running", async () => {
+  const checkout = await mkdtemp(join(scratch, "scheduled-export-"));
+
+  const result = await prepareAutoInstrumentation({
+    checkout,
+    cwd: checkout,
+    settings,
+    source: { OTEL_EXPORTER_OTLP_ENDPOINT: polaris.url },
+    home: join(scratch, "home"),
+  });
+
+  await writeFile(
+    join(checkout, "app.mjs"),
+    `
+    await (await fetch(${JSON.stringify(vendor.url)})).text();
+    console.log('ready');
+    setInterval(() => {}, 10000);`
+  );
+  const before = polaris.names.length;
+
+  const child = Bun.spawn(["node", "app.mjs"], {
+    cwd: checkout,
+    env: { PATH: process.env.PATH, ...result.environment, OTEL_BSP_SCHEDULE_DELAY: "25" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const reader = child.stdout.getReader();
+
+  try {
+    const ready = await reader.read();
+    expect(new TextDecoder().decode(ready.value)).toContain("ready");
+
+    for (let attempt = 0; attempt < 100 && polaris.names.length === before; attempt++)
+      await Bun.sleep(20);
+    expect(polaris.names.slice(before)).toHaveLength(1);
+  } finally {
+    reader.releaseLock();
+    child.kill();
+    await child.exited;
+  }
+});
