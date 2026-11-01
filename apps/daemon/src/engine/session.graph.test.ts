@@ -24,8 +24,10 @@ import { type Context, Effect, Exit, Layer, Scope } from "effect";
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { workingTurn } from "../store/model.ts";
+import { decideSession } from "./session.ts";
 import { Engine } from "./Engine.ts";
 import {
+  attachRequest,
   COMMAND_STEPS,
   channelOf,
   initialSnapshot,
@@ -249,6 +251,25 @@ const replay = (options: ModelOptions, steps: ReadonlyArray<Step>) =>
             return yield* dispatch(
               Command.cases.SetModel.make({ sessionId: SESSION, model: `m${n}`, effort: null })
             );
+          case "requestAttach": {
+            const request = attachRequest(`r${n}`, yield* working());
+
+            return yield* inEngine(
+              Effect.flatMap(EventStore, (store) =>
+                store.commit({
+                  commandId: null,
+                  decide: (model) =>
+                    Effect.succeed(
+                      decideSession(model.sessions.get(SESSION), {
+                        type: "inspector.approvalRequested",
+                        request,
+                      }).events
+                    ),
+                })
+              )
+            );
+          }
+
           case "requestApproval":
             return emit(
               snapshot,

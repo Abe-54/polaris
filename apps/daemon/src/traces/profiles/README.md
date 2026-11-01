@@ -61,4 +61,62 @@ is idempotent. A successful Scope close also finalises; a failed/interrupted Sco
 removes its recording and directory. It uses this service's worker, retention,
 checkout authority, Trust and session policy. It never adopts the supplied PID,
 registers a launch handle, restarts or signals a process. P9 owns inspector access
-and any stronger live-target identity checks. No new attach RPC is provided here.
+and any stronger live-target identity checks. The public attach path is described below.
+
+## Approved cooperative inspector capture (P9 / ENG-659)
+
+`attach(sessionId, pid, seconds)` and `profiles.attach` request a new Pending
+Approval for every capture (1–30 seconds, default 5). The card names the Node
+command, pid and duration and says **while attached, any local process can run
+code in it**. Only Allow once authorizes capture. Remembered Allow, Answer,
+read-only, Reviewer, untrusted Workspace and a completed Turn are refused.
+Approval requests/responses/withdrawals go through the existing Session machine;
+the Engine never forwards these responses to a Harness. Cancellation and Turn
+end withdraw pending requests or close a running capture.
+
+This is deliberately **cooperative-only**. There is no SIGUSR1 or arbitrary-PID
+path. An unregistered process is refused with "Restart with profiling instead."
+Arbitrary Node apps can change `process.debugPort` or bind an inspector publicly;
+SIGUSR1 cannot guarantee that Polaris can discover and close that listener.
+Only the owner can accept those residual risks; arbitrary-PID attach is deferred.
+Windows is refused. Node must expose `process.getBuiltinModule`; older runtimes
+do not register. Bun never receives a signal or a Node inspector request.
+A process that opts out with `--disable-sigusr1` is refused even though this path
+uses no signals.
+
+The same `TraceRuntime.environment` conditions that inject the OTLP endpoint
+(Listening, no user-exported endpoint, active session) inject a small Node
+bootstrap only for writable, non-Reviewer sessions. Terminal environments do
+not inject it. `traces/nodeOptions.ts`'s `appendNodeImport(options, path)` is the
+shared P3/P9 composition seam: preserve existing NODE_OPTIONS and append a quoted
+`--import` path. The bootstrap runs silently if the control socket is absent or
+registration fails. A content-addressed private file survives Daemon shutdown so
+children retaining NODE_OPTIONS can still start. No inspector, watchdog worker
+or timer starts at registration; the control socket is unreferenced in Node.
+
+A private Unix socket and a random per-launch capability bind registration to
+its Agent Session. The Daemon corroborates pid, OS-user, executable and launch
+identity and the launch capability from kernel process information, before approval and again before
+capture. This version accepts only the Node executable currently resolved on
+the Host's PATH; other Node installations are refused. Capabilities and sockets
+are bounded and are not persisted across Daemon restarts.
+
+After Allow once, an in-target Worker opens an inspector with
+`inspector.open(0, '127.0.0.1')`, then reports `inspector.url()` over its authenticated
+control connection. An existing inspector is refused and left untouched.
+Port 9229 is never required or signalled. The Daemon checks the returned endpoint
+and CDP process identity and records a bounded CDP Profiler window. The Worker
+owns inspector shutdown, independently of the application's main event loop:
+control disconnection, missed active-capture heartbeats (1.5 s), a capture deadline
+or an explicit close all deactivate the inspector. The Daemon closes on CDP
+failure and cancellation. The approval's local-code-execution risk still applies
+while that port is open; loopback is not an authorization boundary.
+
+Capture artifacts use `Profiles.record`, its one parser worker, checkout storage,
+retention and `origin: "attach"`. P5's existing Profiles list and flame chart render
+them. The sidebar's "Profile ‹service› for 5 s…" action only requests approval;
+it cannot authorize attach itself. `profile {attach: pid, seconds?: n}` is the
+agent equivalent. No registration creates restart or signal authority.
+
+`bun apps/daemon/src/main.ts lease bench -- bun apps/daemon/src/traces/attach/startup.ts`
+measures the startup budget with 20 alternating `node -e 0` starts per condition.

@@ -1,6 +1,7 @@
 /** Traces over IPC (ADR 0094): the protocol's payloads plus the Host, and its answers unchanged. */
 import {
   GetProfile,
+  AttachProfile,
   CompareTraces,
   GetSpan,
   GetTrace,
@@ -33,6 +34,7 @@ export const TracesRequestInputs = {
     ...OnHost,
     ...SetWorkspaceTracesSettings.payloadSchema.fields,
   }),
+  "profiles.attach": Schema.Struct({ ...OnHost, ...AttachProfile.payloadSchema.fields }),
   "profiles.get": Schema.Struct({ ...OnHost, ...GetProfile.payloadSchema.fields }),
   "profiles.restartWithProfiling": Schema.Struct({
     ...OnHost,
@@ -47,6 +49,7 @@ export interface TracesRequestOutputs {
   /** Workspace policy and detected exporters; header values never cross IPC. */
   readonly "traces.settings": WorkspaceTracesSettings;
   readonly "traces.setSettings": WorkspaceTracesSettings;
+  readonly "profiles.attach": Profile;
   readonly "profiles.get": ProfileDetail;
   /** The new recording. */
   readonly "profiles.restartWithProfiling": Profile;

@@ -29,6 +29,11 @@ test("profile is available on every binding with strict selectors and execution 
       { id: "x", waitSeconds: 1 },
       { command: [] },
       { process: 0 },
+      { attach: 0 },
+      { attach: 1, process: 1 },
+      { attach: 1, seconds: 31 },
+      { attach: 1, waitSeconds: 1 },
+      { command: ["node"], seconds: 1 },
       { command: ["bun"], sessionId: "forged" },
     ])
       expect((await tool.call(input)).structuredContent?.code).toBe("E-INPUT");

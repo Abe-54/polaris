@@ -9,9 +9,11 @@ import { TraceSessions } from "../sessions.ts";
 import { TraceStore } from "../store.ts";
 import { traceReceiver } from "../receiver.ts";
 import { seed } from "../authority.testing.ts";
+import { InspectorTargets, type TargetRegistry } from "../attach/registry.ts";
 
 export const withInstrumentation = async <A>(
-  run: (fixture: InstrumentationFixture) => Promise<A>
+  run: (fixture: InstrumentationFixture) => Promise<A>,
+  targets?: TargetRegistry
 ) => {
   const root = await realpath(await mkdtemp("/tmp/p3-runtime-"));
   const checkout = join(root, "app");
@@ -33,6 +35,7 @@ export const withInstrumentation = async <A>(
   );
 
   const traces = TraceRuntime.layerAt(join(home, "tokens.json"), port).pipe(
+    Layer.provide(targets === undefined ? Layer.empty : Layer.succeed(InspectorTargets, targets)),
     Layer.provideMerge(settings),
     Layer.provideMerge(sessions),
     Layer.provideMerge(

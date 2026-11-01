@@ -17,6 +17,7 @@ import { TraceRuntime } from "../runtime.ts";
 import { TraceStore } from "../store.ts";
 import { commit, seed } from "../authority.testing.ts";
 import { TEST_SESSION } from "../testing.ts";
+import { InspectorTargets, TargetRegistry } from "../attach/registry.ts";
 import { Profiles, type ProfileOptions } from "./index.ts";
 
 interface ProfileTestSession {
@@ -29,8 +30,9 @@ interface ProfileTestSession {
 export const withProfiles = async (
   run: (f: {
     root: string;
+    targets: TargetRegistry;
     runtime: ManagedRuntime.ManagedRuntime<
-      Profiles | EventStore | TraceStore | TraceSessions,
+      Profiles | EventStore | TraceStore | TraceSessions | TraceRuntime,
       never
     >;
     trust: (value: boolean) => void;
@@ -40,26 +42,33 @@ export const withProfiles = async (
   options: ProfileOptions = {}
 ) => {
   const root = await mkdtemp("/tmp/p4-");
+  const targets = new TargetRegistry(join(root, "bootstrap"));
   let trusted = true;
   let readOnly = false;
+
   await mkdir(join(root, "package"));
+
+  const policyLayer = Layer.succeed(ApprovalPolicy)({
+    readOnly: () => readOnly,
+    decide: () => Effect.succeed(null),
+  });
+
   const events = EventStore.layerSqlite(join(root, "events.sqlite"));
   const sessions = TraceSessions.layer.pipe(Layer.provideMerge(events));
 
   const traces = TraceRuntime.layerAt(join(root, "tokens.json")).pipe(
+    Layer.provide(Layer.succeed(InspectorTargets, targets)),
+    Layer.provide(policyLayer),
     Layer.provideMerge(TraceStore.layerAt(join(root, "traces.sqlite"))),
     Layer.provideMerge(sessions)
   );
 
   const layer = Profiles.layerAt(join(root, "profiles"), options).pipe(
     Layer.provideMerge(traces),
+    Layer.provide(Layer.succeed(InspectorTargets, targets)),
+    Layer.provide(policyLayer),
     Layer.provide(Layer.succeed(WorkspaceTrust)({ trusted: () => Effect.sync(() => trusted) })),
-    Layer.provide(
-      Layer.succeed(ApprovalPolicy)({
-        readOnly: () => readOnly,
-        decide: () => Effect.succeed(null),
-      })
-    )
+    Layer.provide(policyLayer)
   );
 
   const runtime = ManagedRuntime.make(layer);
@@ -68,6 +77,7 @@ export const withProfiles = async (
     await runtime.runPromise(seed(root));
     await run({
       root,
+      targets,
       runtime,
       trust: (value) => {
         trusted = value;
@@ -121,6 +131,7 @@ export const withProfiles = async (
     });
   } finally {
     await runtime.dispose();
+    await targets.close();
     await rm(root, { recursive: true, force: true });
   }
 };

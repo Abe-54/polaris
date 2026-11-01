@@ -1420,3 +1420,42 @@ module data_snapshots {
   run concurrentWriterTest = init.then(begin).then(activity(true,true)).then(finish(true))
     .expect(snap.concurrent and snap.uncertain and safety)
 }
+
+/** ENG-659: per-request inspector authority refines Session approvals, never a remembered grant. */
+module profile_attach {
+  var a: { working: bool, writable: bool, registered: bool, pending: bool,
+    credit: int, approved: int, opened: int, listening: bool }
+  action init = a' = { working: true, writable: true, registered: true, pending: false,
+    credit: 0, approved: 0, opened: 0, listening: false }
+  action request = all { a.working, a.writable, a.registered, not(a.pending), a.credit == 0,
+    a' = { ...a, pending: true } }
+  action allow(remember: bool): bool = all { a.pending,
+    a' = if (remember) a else { ...a, pending: false, credit: 1, approved: a.approved + 1 } }
+  action deny = all { a.pending, a' = { ...a, pending: false, credit: 0 } }
+  action attach = all { a.working, a.writable, a.registered, a.credit == 1, not(a.listening),
+    a' = { ...a, credit: 0, opened: a.opened + 1, listening: true } }
+  action close = a' = { ...a, listening: false }
+  action endTurn = a' = { ...a, working: false, pending: false, credit: 0, listening: false }
+  action readonly = a' = { ...a, writable: false, credit: 0, listening: false }
+  action disconnect = a' = { ...a, registered: false, credit: 0, listening: false }
+  action step = any { request, allow(false), allow(true), deny, attach, close, endTurn, readonly, disconnect }
+  val safety = all {
+    a.opened <= a.approved,
+    a.credit >= 0 and a.credit <= 1,
+    a.listening implies (a.working and a.writable and a.registered),
+    not(a.working) implies not(a.pending)
+  }
+  run approvedCaptureTest = init.then(request).then(allow(false)).then(attach).then(close)
+    .expect(a.opened == 1 and a.credit == 0 and not(a.listening) and safety)
+  run rememberedRefusedTest = init.then(request).then(allow(true))
+    .expect(a.pending and a.credit == 0 and a.approved == 0 and safety)
+  run deniedTest = init.then(request).then(deny)
+    .expect(a.opened == 0 and a.credit == 0 and not(a.pending) and safety)
+  run everyAttachNeedsApprovalTest = init.then(request).then(allow(false)).then(attach).then(close)
+    .then(request).then(allow(false)).then(attach)
+    .expect(a.opened == 2 and a.approved == 2 and safety)
+  run turnEndRevokesTest = init.then(request).then(allow(false)).then(endTurn)
+    .expect(a.credit == 0 and a.opened == 0 and safety)
+  run lostDaemonClosesTest = init.then(request).then(allow(false)).then(attach).then(disconnect)
+    .expect(not(a.listening) and safety)
+}

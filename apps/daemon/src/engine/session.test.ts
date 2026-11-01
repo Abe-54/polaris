@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { describe, expect, test } from "bun:test";
 import {
   ApprovalDecision,
@@ -142,8 +143,8 @@ describe("session machine", () => {
 
     // Update README.md when these move.
     expect(counts).toEqual([
-      [47, 277],
-      [55, 367],
+      [53, 301],
+      [55, 377],
     ]);
   });
 
@@ -462,4 +463,48 @@ describe("session machine", () => {
       expect(decideSession(idle, { type: "idle.timeout", harnessLive: false }).events).toEqual([]);
     });
   });
+});
+
+test("inspector requests cannot come from a Harness or accept a remembered grant", () => {
+  const before = record(run(["start"]));
+  const turnId = workingTurn(before)!.id;
+
+  const request = Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(requestFor(turnId)),
+    kind: "tool",
+    profileAttach: { pid: 42, command: "node server.js", runtime: "node", seconds: 5 },
+  });
+
+  expect(decideSession(before, { type: "harness.approvalRequested", request }).events).toEqual([]);
+  expect(decideSession(before, { type: "data.approvalRequested", request }).events).toEqual([]);
+
+  const opened = decideSession(before, { type: "inspector.approvalRequested", request }).next
+    .context.record!;
+
+  expect(opened.session.state).toBe("needs-you");
+
+  for (const decision of [
+    ApprovalDecision.cases.Allow.make({ remember: true }),
+    ApprovalDecision.cases.Answer.make({ text: "yes" }),
+  ]) {
+    const refused = decideSession(opened, {
+      type: "approval.respond",
+      requestId: request.id,
+      decision,
+      resolvedBy: "user",
+    });
+
+    expect(refused.events).toEqual([]);
+    expect(refused.rejection).not.toBeNull();
+  }
+
+  const allowed = decideSession(opened, {
+    type: "approval.respond",
+    requestId: request.id,
+    decision: ApprovalDecision.cases.Allow.make({ remember: false }),
+    resolvedBy: "user",
+  });
+
+  expect(allowed.next.context.record!.session.state).toBe("working");
+  expect(allowed.next.context.record!.pending.size).toBe(0);
 });

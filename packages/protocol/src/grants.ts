@@ -116,6 +116,7 @@ export const RPC_GRANTS = {
   "traces.setSettings": "client",
   "profiles.watch": "client",
   "profiles.get": "client",
+  "profiles.attach": "client",
   "profiles.restartWithProfiling": "client",
   "traces.compare": "client",
   "data.schemaDiff": "client",

@@ -477,6 +477,7 @@ export const defaultHandlers = (options: {
     "traces.settings": () => Effect.fail(new Unsupported({ capability: "traces.settings" })),
     "traces.setSettings": () => Effect.fail(new Unsupported({ capability: "traces.settings" })),
     "profiles.watch": () => Stream.fail(new Unsupported({ capability: "traces.profiles" })),
+    "profiles.attach": () => Effect.fail(new Unsupported({ capability: "traces.profiles.attach" })),
     "profiles.get": () => Effect.fail(new Unsupported({ capability: "traces.profiles" })),
     "profiles.restartWithProfiling": () =>
       Effect.fail(new Unsupported({ capability: "traces.profiles" })),

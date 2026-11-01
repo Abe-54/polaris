@@ -524,11 +524,13 @@ const Approval = ({
         <ApprovalCard
           harness={ctx.harness}
           title={request.title}
-          summary={`${who} ${KIND_WANTS[request.kind]}`}
+          summary={`${who} ${request.profileAttach === undefined ? KIND_WANTS[request.kind] : "wants to profile this Node process"}`}
           command={request.detail ?? request.title}
           where={ctx.where}
           onApprove={() => respond(Decisions.Allow({ remember: false }))}
-          onAlwaysAllow={() => respond(Decisions.Allow({ remember: true }))}
+          {...(request.profileAttach === undefined
+            ? { onAlwaysAllow: () => respond(Decisions.Allow({ remember: true })) }
+            : {})}
           onDeny={() => respond(Decisions.Deny({ reason: null }))}
         />
       )}

@@ -7,7 +7,8 @@ import {
   type TurnId,
   type TracesSnapshot,
 } from "@polaris/protocol";
-import { WorkspaceTrust } from "../services.ts";
+import { InspectorTargets } from "./attach/registry.ts";
+import { ApprovalPolicy, WorkspaceTrust } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { launchInstrumentation } from "./instrumentation/runtime.ts";
 import { applicationProgram } from "./instrumentation/observation.ts";
@@ -62,12 +63,15 @@ export class TraceRuntime extends Context.Service<
         const sessions = yield* TraceSessions;
         const store = yield* TraceStore;
         const settings = yield* Effect.serviceOption(TraceSettings);
+        const policy = yield* Effect.serviceOption(ApprovalPolicy);
+        const targets = yield* Effect.serviceOption(InspectorTargets);
+        const events = yield* Effect.serviceOption(EventStore);
 
         const instrumentationServices = {
           home: filename === null ? undefined : dirname(filename),
           settings: Option.getOrUndefined(settings),
           trust: Option.getOrUndefined(yield* Effect.serviceOption(WorkspaceTrust)),
-          events: Option.getOrUndefined(yield* Effect.serviceOption(EventStore)),
+          events: Option.getOrUndefined(events),
         };
 
         const vault = new TraceTokenVault(filename);
@@ -127,7 +131,24 @@ export class TraceRuntime extends Context.Service<
             instrumentationServices
           ).pipe(Effect.orElseSucceed(() => ({})));
 
-          return { ...injected, ...instrumentation };
+          const session = Option.isSome(events)
+            ? (yield* events.value.model).sessions.get(id)?.session
+            : undefined;
+
+          const cooperative =
+            Option.isSome(targets) &&
+            source.OTEL_EXPORTER_OTLP_ENDPOINT === undefined &&
+            source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT === undefined &&
+            session !== undefined &&
+            session.permissionMode !== "plan" &&
+            session.origin !== "reviewer" &&
+            !(Option.isSome(policy) && policy.value.readOnly(id))
+              ? yield* Effect.tryPromise(() =>
+                  targets.value.environment(id, { ...source, ...instrumentation }.NODE_OPTIONS)
+                ).pipe(Effect.orElseSucceed(() => ({})))
+              : {};
+
+          return { ...injected, ...instrumentation, ...cooperative };
         });
 
         const authenticate = Effect.fnUntraced(function* (token: string) {

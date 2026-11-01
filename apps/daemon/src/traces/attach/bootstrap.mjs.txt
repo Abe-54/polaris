@@ -1,0 +1,107 @@
+import { connect } from "node:net";
+import { Worker, isMainThread, workerData, parentPort } from "node:worker_threads";
+import { Session } from "node:inspector";
+
+const disabled = /--(?:disable-sigusr1|experimental-permission|permission)\b/.test(
+  [...process.execArgv, process.env.NODE_OPTIONS ?? ""].join(" ")
+);
+const supported = !disabled && !process.versions.bun && process.platform !== "win32" && process.getBuiltinModule;
+const address = process.env.POLARIS_PROFILE_SOCKET;
+const token = process.env.POLARIS_PROFILE_TOKEN;
+
+function channel(onMessage, onClose) {
+  const socket = connect(address);
+  let buffer = "";
+  socket.on("error", () => socket.destroy());
+  socket.on("close", onClose);
+  socket.on("data", (chunk) => {
+    buffer += chunk;
+    if (buffer.length > 16384) return socket.destroy();
+    let end;
+    while ((end = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 1);
+      try { onMessage(JSON.parse(line)); } catch { socket.destroy(); }
+    }
+  });
+  socket.unref();
+  return socket;
+}
+
+function register() {
+  let worker;
+  const socket = channel((message) => {
+    if (message.kind !== "capture" || worker || typeof message.nonce !== "string") return;
+    worker = new Worker(new URL(import.meta.url), {
+      workerData: { nonce: message.nonce, seconds: message.seconds }, execArgv: [],
+    });
+    worker.on("error", () => {});
+    worker.on("exit", () => { worker = undefined; });
+    worker.unref();
+  }, () => {});
+  socket.on("connect", () => socket.write(JSON.stringify({
+    kind: "register", token, pid: process.pid, runtime: "node",
+  }) + "\n"));
+}
+
+function watchdog() {
+  const session = new Session();
+  let opened = false;
+  const key = JSON.stringify(`polaris.profile.${workerData.nonce}`);
+  let closing = false;
+  let timeout;
+  let lease;
+  const send = (message) => socket.write(JSON.stringify(message) + "\n");
+  const post = (expression) => new Promise((resolve, reject) => {
+    session.post("Runtime.evaluate", { expression, returnByValue: true }, (error, result) => {
+      if (error || result.exceptionDetails) reject(error ?? new Error("Inspector refused"));
+      else resolve(result.result.value);
+    });
+  });
+  const close = async () => {
+    if (closing) return;
+    closing = true;
+    clearTimeout(timeout);
+    clearTimeout(lease);
+    if (opened) {
+      try { await post(`(() => { const entry = globalThis[Symbol.for(${key})]; if (entry) { delete globalThis[Symbol.for(${key})]; entry.close(); } })()`); } catch {}
+    }
+    session.disconnect();
+    socket.destroy();
+    parentPort.close();
+  };
+  const refresh = () => {
+    clearTimeout(lease);
+    lease = setTimeout(close, 1500);
+  };
+  const socket = channel((message) => {
+    if (message.kind === "ping") refresh();
+    if (message.kind === "close") void close();
+    if (message.kind !== "open" || opened || closing) return;
+    opened = true;
+    void post(`(() => {
+      const inspector = process.getBuiltinModule('node:inspector');
+      if (inspector.url()) return null;
+      inspector.open(0, '127.0.0.1', false);
+      globalThis[Symbol.for(${key})] = { close: inspector.close };
+      return inspector.url();
+    })()`).then((url) => {
+      if (url === null) { opened = false; send({kind: "refused", pid: process.pid}); return close(); }
+      send({ kind: "opened", url, pid: process.pid });
+    }).catch(() => { send({kind: "refused", pid: process.pid}); void close(); });
+  }, () => { void close(); });
+  session.connectToMainThread();
+  socket.ref();
+  socket.on("connect", () => {
+    send({kind: "watchdog", token, nonce: workerData.nonce, pid: process.pid});
+    refresh();
+    timeout = setTimeout(close, Math.min(30, Math.max(1, workerData.seconds)) * 1000 + 5000);
+  });
+}
+
+if (supported && address && token) {
+  try {
+    if (isMainThread) register();
+    else if (workerData?.nonce) watchdog();
+  } catch {}
+}

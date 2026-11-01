@@ -10,6 +10,7 @@ export const sessionProfileTools = (
   traces: TraceStore["Service"]
 ): ProfileSessionTools => ({
   capture: profiles.capture,
+  attach: profiles.attach,
   restart: profiles.restart,
   get: profiles.get,
   overlapping: (id, profile) =>

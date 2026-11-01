@@ -8,7 +8,7 @@ import { profileSelection, selectProfile } from "../../model/profile/store.ts";
 import { selectSpan } from "../../model/store.ts";
 import { host } from "../../preview/appState.ts";
 import { fixtureProfilesApi, LEDGER_PROFILE } from "../../preview/profiles.ts";
-import { mountProfiles as mount, openProfilesTab } from "./profiles.testing.tsx";
+import { LEDGER_PID, mountProfiles as mount, openProfilesTab } from "./profiles.testing.tsx";
 
 afterEach(cleanup);
 
@@ -213,4 +213,40 @@ test("⌘L in the profile panel still adds the Profile after the trace bar re-re
   stop();
 
   expect(drafts.at(-1)).toStartWith("Profile `prof-ledger-api-12`");
+});
+
+test("a cooperative profile request waits for approval and displays a Daemon refusal in the existing sidebar", async () => {
+  let answer: (value: Awaited<ReturnType<NonNullable<ProfilesApi["attach"]>>>) => void = () => {};
+
+  mount({
+    profiles: {
+      ...fixtureProfilesApi({ owned: [LEDGER_PID] }),
+      attach: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    },
+  });
+  await openProfilesTab();
+  fireEvent.click(await screen.findByRole("button", { name: "Profile ledger-api for 5 s…" }));
+  expect(
+    screen
+      .getByRole("button", { name: "Waiting for approval or recording…" })
+      .hasAttribute("disabled")
+  ).toBe(true);
+  expect(screen.getByText(/While attached, any local process can run code in it/)).not.toBeNull();
+  await act(async () =>
+    answer({
+      ok: false,
+      error: {
+        code: "E-PROFILE-ATTACH-REFUSED",
+        message: "This process is not registered.",
+        fix: "Restart with profiling instead.",
+      },
+    })
+  );
+  expect(screen.getByRole("alert").textContent).toContain("Restart with profiling instead.");
+  expect(
+    screen.getByRole("button", { name: "Profile ledger-api for 5 s…" }).hasAttribute("disabled")
+  ).toBe(false);
 });

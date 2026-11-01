@@ -312,7 +312,9 @@ const make = Effect.gen(function* () {
           .get(command.sessionId)
           ?.pending.get(command.requestId);
 
-        return request?.dataSource !== undefined || request?.dataWrite !== undefined
+        return request?.dataSource !== undefined ||
+          request?.dataWrite !== undefined ||
+          request?.profileAttach !== undefined
           ? Effect.void
           : respond(command.sessionId, command.requestId, command.decision);
       },

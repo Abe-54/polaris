@@ -953,3 +953,26 @@ The Session machine's transitions are unchanged; these are refinements of its ex
 ApprovalRequested, ApprovalResolved and ApprovalWithdrawn events. Engine trace replay remains
 `POLARIS_TRACE_DIR=/tmp/xf-traces bun test apps/daemon/src/verification/engine.model.test.ts`
 then `cd packages/spec && bun scripts/replay.ts /tmp/xf-traces`.
+
+### Cooperative inspector profiling (ENG-659)
+
+`polaris.qnt`'s `profile_attach` refines the existing Session approval events.
+`inspector.approvalRequested` uses the Session machine's active-Turn/Archived
+rules. `session.testing.ts` and `session.graph.test.ts` replay its request and
+resolution alongside Harness approvals; the reactor never forwards its response
+to a Harness. Optional `ApprovalRequest.profileAttach` carries pid, command,
+Node runtime and seconds; no remembered Allow or Answer can authorize it.
+
+| Model | Runtime mapping |
+| --- | --- |
+| `request`, `allow`, `deny` | `traces/attach/approval.ts`: fresh Pending Approval, explicit user Allow once, denial and scoped withdrawal. |
+| `attach`, `credit` | `captureAttached`: one in-memory invocation consumes one response, rechecks policy and target, and writes through `Profiles.record`. |
+| `endTurn`, `readonly` | Active Turn and policy are rechecked before attach and followed while it runs. |
+| `disconnect`, `close` | The cooperative in-target worker closes its inspector on control loss or timeout; no PID signalling path exists. |
+
+The spec runner checks its scenarios and safety simulation. Real Node tests in
+`traces/attach/attach.test.ts` exercise capture, denial and in-target watchdog
+shutdown. Timing bounds and native transport behavior are tested in real Node,
+not proven by the abstract model. Existing Engine trace validation still applies:
+`POLARIS_TRACE_DIR=/tmp/p9-engine-traces bun test apps/daemon/src/verification/engine.model.test.ts`,
+then `cd packages/spec && bun scripts/replay.ts /tmp/p9-engine-traces`.
