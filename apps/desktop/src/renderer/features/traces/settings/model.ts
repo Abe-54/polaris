@@ -4,6 +4,7 @@
  */
 import {
   type DetectedTraceExporter,
+  type TraceForwardTarget,
   TRACES_SETTINGS_CAPABILITY,
   TraceForwardUrl,
   type WorkspaceTracesSettings,
@@ -119,24 +120,34 @@ export const checkForwardUrl = (text: string, saved: boolean): ForwardUrlCheck =
       };
 };
 
-/** The app's header names under the URL; their values never leave the Host. */
-export const headersLine = (headers: ReadonlyArray<string>) =>
-  headers.length === 0
-    ? "No headers from the app"
-    : `Headers ${headers.join(" · ")} · values stay on this host`;
+/** Known credential names, plus whether the app's own headers stay with its launch origin. */
+export const headersLine = (target: TraceForwardTarget | null) => {
+  const headers = target?.headerNames ?? [];
+  const listed = headers.length === 0 ? "No configured headers" : `Headers ${headers.join(" · ")}`;
+
+  if (target?.passesAppHeaders !== true) return listed;
+  const origin = new URL(target.url).origin;
+
+  return headers.length === 0
+    ? `The headers your app sends to ${origin}`
+    : `${listed}, and the headers your app sends to ${origin}`;
+};
 
 /** One line: where the collector came from; the URL row below names the headers. */
 export const forwardCaption = (settings: WorkspaceTracesSettings): string => {
   const found = settings.detectedExporters[0];
 
-  if (settings.forwardTo === null)
-    return found === undefined
-      ? "No exporter found here. Add the collector your app sends to."
-      : `Found an exporter in ${foundIn(found)}. Add the collector it sends to.`;
+  if (settings.forwardTo === null) {
+    if (found === undefined) return "No exporter found here. Add the collector your app sends to.";
 
-  return found === undefined
+    return found.file === ENVIRONMENT
+      ? "Found an exporter in the environment. Add the collector it sends to."
+      : `Suggested collector from ${foundIn(found)}. Save its URL to forward traces.`;
+  }
+
+  return settings.forwarding
     ? "A copy of each trace goes on to this collector."
-    : `A copy of each trace goes on to the collector found in ${foundIn(found)}.`;
+    : "Forwarding is off. Turn it on to send a copy to this collector.";
 };
 
 /** Requested mode beside what actually happens; a skip reason wins. */

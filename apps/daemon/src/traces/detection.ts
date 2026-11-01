@@ -1,6 +1,7 @@
 import { opendir } from "node:fs/promises";
 import { Option, Schema } from "effect";
 import { DetectedTraceExporter, TraceForwardTarget } from "@polaris/protocol";
+import { forwardHeaderNames, sameCollectorOrigin } from "./forwardHeaders.ts";
 import { secondExporterLine } from "./secondExporter.ts";
 import { read } from "../data/read.ts";
 import type { TraceEnvironment } from "./runtime.ts";
@@ -13,7 +14,11 @@ export interface Collector {
 }
 
 export interface ExporterDetection {
+  /** Only collectors resolved entirely from the launch environment may forward automatically. */
   readonly collector: Collector | null;
+  readonly launchVendorCollector: Collector | null;
+  readonly launchHeaderNames: ReadonlyArray<string>;
+  /** Discovery hint only; never an automatic forwarding target. */
   readonly suggestedCollector: Collector | null;
   readonly detectedExporters: ReadonlyArray<DetectedTraceExporter>;
 }
@@ -113,15 +118,22 @@ export const collectorFromEnvironment = (env: TraceEnvironment): Collector | nul
 };
 
 /** Public metadata omits every unknown path: URLs can carry secrets outside userinfo/query. */
-export const publicCollector = (collector: Collector | null) => {
+export const publicCollector = (
+  collector: Collector | null,
+  launchCollector: Collector | null = null,
+  launchHeaderNames: ReadonlyArray<string> = []
+) => {
   if (collector?.traces == null) return null;
   const url = new URL(collector.traces);
 
   if (!/^\/(?:v1\/traces)?$/.test(url.pathname)) return null;
 
+  const passesAppHeaders = sameCollectorOrigin(collector.traces, launchCollector?.traces);
+
   const parsed = Schema.decodeUnknownOption(TraceForwardTarget)({
     url: url.href,
-    headerNames: Object.keys(collector.headers).sort(),
+    headerNames: forwardHeaderNames(collector.headers, { passesAppHeaders, launchHeaderNames }),
+    passesAppHeaders,
   });
 
   return Option.getOrNull(parsed);
@@ -238,7 +250,8 @@ export const detectExporters = async (
       );
   }
 
-  const env = {
+  // Combined values inform exporter evidence only, never destinations or credentials.
+  const evidenceEnvironment = {
     ...files,
     ...Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined)),
   };
@@ -253,7 +266,7 @@ export const detectExporters = async (
   if (Object.keys(dependencies).some((key) => key.startsWith("@axiomhq/") || key === "next-axiom"))
     detected.push(evidence("axiom", "package.json", text, text.search(/@axiomhq\/|next-axiom/)));
 
-  detected.push(...(await detectVercel(checkout, dependencies, env, text)));
+  detected.push(...(await detectVercel(checkout, dependencies, evidenceEnvironment, text)));
 
   if (
     Object.keys(source).some(
@@ -262,14 +275,26 @@ export const detectExporters = async (
   )
     detected.push(evidence("otlp-env", "environment", "", 0));
 
-  if (env.AXIOM_TOKEN || env.AXIOM_DATASET) detected.push(evidence("axiom", "environment", "", 0));
+  if (evidenceEnvironment.AXIOM_TOKEN || evidenceEnvironment.AXIOM_DATASET)
+    detected.push(evidence("axiom", "environment", "", 0));
 
-  if (env.VERCEL_OTEL_ENDPOINT || env.VERCEL_OTEL_ENDPOINTS)
+  if (evidenceEnvironment.VERCEL_OTEL_ENDPOINT || evidenceEnvironment.VERCEL_OTEL_ENDPOINTS)
     detected.push(evidence("vercel", "environment", "", 0));
 
   return {
-    collector: collectorFromEnvironment(source) ?? collectorFromEnvironment(files),
-    suggestedCollector: vendorCollector(env),
+    collector: collectorFromEnvironment(source),
+    launchVendorCollector: vendorCollector(source),
+    launchHeaderNames: [
+      ...new Set(
+        [
+          source.OTEL_EXPORTER_OTLP_HEADERS,
+          source.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
+          source.OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+        ].flatMap((value) => Object.keys(headers(value)))
+      ),
+    ],
+    suggestedCollector:
+      collectorFromEnvironment(files) ?? vendorCollector(source) ?? vendorCollector(files),
     detectedExporters: detected,
   };
 };

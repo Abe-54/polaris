@@ -61,11 +61,11 @@ const ForwardUrl = ({
   };
 
   const caption = () => {
-    if (!check.ok) return changed ? check.reason : headersLine(headers);
+    if (!check.ok) return changed ? check.reason : headersLine(settings.forwardTo);
 
     return changed && check.url === null
       ? "Saving removes this collector; nothing is forwarded until you add one"
-      : headersLine(headers);
+      : headersLine(settings.forwardTo);
   };
 
   return (

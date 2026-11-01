@@ -44,7 +44,8 @@ test("a failed collector backs off, then receives the original bytes and applica
           authorization: "Bearer private-app",
           "content-type": "application/x-protobuf; charset=binary",
         }),
-        {}
+        {},
+        { passesAppHeaders: true, launchHeaderNames: [] }
       ),
     });
     await until(() => received.length >= 2);

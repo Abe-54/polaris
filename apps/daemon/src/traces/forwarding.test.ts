@@ -69,7 +69,7 @@ for (const [signal, contentType, body] of [
     ),
   ],
 ] as const)
-  test(`receiver forwards exact ${signal} bytes and headers before redaction`, () =>
+  test(`receiver forwards exact ${signal} bytes and app headers to the launch origin`, () =>
     withTraceFixture(async (f) => {
       const target = collector();
 
@@ -87,6 +87,7 @@ for (const [signal, contentType, body] of [
             "content-type": contentType,
             authorization: "Bearer private-constructor",
             "x-custom": "app-header",
+            "x-configured": "incoming-must-not-win",
           },
           body,
         });

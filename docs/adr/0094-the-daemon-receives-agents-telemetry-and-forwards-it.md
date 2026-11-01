@@ -28,10 +28,14 @@ commands Polaris launches, and forwards what it receives to the app's own collec
   terminals. A value the user exported themselves is respected and becomes the forward target.
 - **Attribution.** The token names the session; the Turn is the one in which a span started, and
   the span also records the Turn that launched its process.
-- **Forwarding.** Polaris sits in the path and forwards the exact request, with the app's own
-  headers, to the app's target (its environment, `.env*`, or the Workspace's "Forward traces to",
-  prefilled from detected Axiom or Vercel exporters). Forwarding never waits on Polaris's store and
-  a failed forward never drops our copy; the headers are never stored. A Workspace can turn it off.
+- **Forwarding.** Polaris forwards the exact payload to a target from the launch environment
+  or the Workspace's saved "Forward traces to". Configured headers win; incoming app credentials
+  pass only to the original launch collector's origin. Settings lists static header names and
+  says when additional app headers pass. Compiled Daemons do not autoload cwd `.env` or `bunfig.toml`.
+  Launch and repository sources are resolved separately: a repository destination never borrows
+  launch credentials. Collectors found in `.env*`, including Axiom and Vercel, remain suggestions
+  until the user saves their URL (ENG-696). Forwarding never waits on Polaris's store and a failed
+  forward never drops our copy; the headers are never stored. A Workspace can turn it off.
 - **Fixed exporters.** An exporter whose URL is a literal in code can't be redirected from the
   environment. We ask the app to read `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, else
   `OTEL_EXPORTER_OTLP_ENDPOINT` plus `/v1/traces` (the base every Daemon injects), with its URL as

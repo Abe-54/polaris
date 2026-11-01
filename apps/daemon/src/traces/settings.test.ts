@@ -75,7 +75,7 @@ test("settings patches persist independently and never persist collector headers
     );
   }));
 
-test("settings validate Workspace authority and resolution follows env, files, setting", () =>
+test("settings validate Workspace authority and resolution follows launch environment then saved setting", () =>
   fixture(async (root, layer) => {
     await writeFile(join(root, ".env"), "OTEL_EXPORTER_OTLP_ENDPOINT=https://file.test");
     await Effect.runPromise(
@@ -90,7 +90,7 @@ test("settings validate Workspace authority and resolution follows env, files, s
             .collector?.traces
         ).toBe("https://env.test/v1/traces");
         expect((yield* settings.prepare(context, {})).collector?.traces).toBe(
-          "https://file.test/v1/traces"
+          "https://setting.test/v1/traces"
         );
         yield* Effect.promise(() => rm(join(root, ".env")));
         expect((yield* settings.prepare(context, {})).collector?.traces).toBe(
