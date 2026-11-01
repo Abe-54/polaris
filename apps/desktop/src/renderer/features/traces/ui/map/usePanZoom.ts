@@ -2,10 +2,19 @@
  * Drag to pan, scroll to zoom, double-click to fit (DESIGN.md, Traces → Service map). The
  * transform is written straight to the layer, so panning never re-renders the map.
  */
-import { type KeyboardEvent, type PointerEvent, useCallback, useEffect, useRef } from "react";
 import {
+  type KeyboardEvent,
+  type PointerEvent,
+  type UIEvent,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
+import {
+  type Box,
   fitView,
   openView,
+  revealView,
   type Size,
   transformOf,
   type Viewport,
@@ -64,13 +73,13 @@ export const usePanZoom = (map: Size) => {
     [show]
   );
 
-  // Opens readable and follows the canvas's size until the user pans, zooms or fits.
+  // Opens readable and follows the canvas's and map's size until the user pans, zooms or fits.
   useEffect(() => {
     const box = canvas.current;
 
     if (box === null) return;
-    touched.current = false;
-    opening();
+
+    if (!touched.current) opening();
 
     const observer = new ResizeObserver(() => {
       if (!touched.current) opening();
@@ -138,6 +147,35 @@ export const usePanZoom = (map: Size) => {
       event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
+  // A click ends any press; one from the keyboard or a screen reader never started a drag.
+  const onClick = () => {
+    dragged.current = false;
+  };
+
+  // Focus scrolls even an overflow-hidden box; the map pans instead, so the foot stays put.
+  const onScroll = (event: UIEvent<HTMLDivElement>) => {
+    event.currentTarget.scrollTop = 0;
+    event.currentTarget.scrollLeft = 0;
+  };
+
+  const reveal = useCallback(
+    (target: Box) => {
+      const box = canvas.current;
+
+      // A press focuses what it lands on; a pan from there mustn't jump.
+      if (box === null || drag.current !== null) return;
+
+      const next = revealView(
+        view.current,
+        { width: box.clientWidth, height: box.clientHeight },
+        target
+      );
+
+      if (next.x !== view.current.x || next.y !== view.current.y) move(next);
+    },
+    [move]
+  );
+
   const centre = () => {
     const box = canvas.current;
 
@@ -169,6 +207,7 @@ export const usePanZoom = (map: Size) => {
     canvas,
     layer,
     fit,
+    reveal,
     /** True when the press that ended was a pan, so it doesn't select what it ended on. */
     wasDrag: () => dragged.current,
     handlers: {
@@ -176,6 +215,8 @@ export const usePanZoom = (map: Size) => {
       onPointerMove,
       onPointerUp,
       onPointerCancel: onPointerUp,
+      onClick,
+      onScroll,
       onDoubleClick: fit,
       onKeyDown,
     },

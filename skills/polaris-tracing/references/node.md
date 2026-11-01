@@ -1,70 +1,125 @@
 # Node: a new SDK setup
 
-For a Node project with no telemetry. The SDK starts only when an OTLP endpoint is set, so the app runs exactly as before anywhere Polaris (or a collector) isn't present.
+For a Node project with no telemetry. For **Next.js**, use [next.md](next.md) instead: Next owns `instrumentation.ts` and calls its `register()` export.
+
+Only change the dev command. The gate below avoids loading SDK packages when no endpoint is set. A production deployment that sets its own endpoint keeps its existing startup command.
 
 ## Install
 
 Use the project's package manager:
 
 ```sh
-npm install @opentelemetry/api @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node \
-  @opentelemetry/instrumentation @opentelemetry/exporter-trace-otlp-proto \
-  @opentelemetry/exporter-logs-otlp-proto @opentelemetry/sdk-logs
+npm install @opentelemetry/api@^1.10 @opentelemetry/sdk-node@^0.300 \
+  @opentelemetry/auto-instrumentations-node@^0.82 @opentelemetry/instrumentation@^0.300 \
+  @opentelemetry/sdk-trace@^3 @opentelemetry/exporter-trace-otlp-proto@^0.300 \
+  @opentelemetry/exporter-logs-otlp-proto@^0.300 @opentelemetry/sdk-logs@^3
 ```
 
-This is the OpenTelemetry JS 3.x line (`@opentelemetry/api` 1.10+, `sdk-node` 0.300+, `sdk-logs` 3+). If the project already depends on 2.x packages (`sdk-node` 0.2xx, `sdk-logs` 0.2xx, or `@vercel/otel` 2), stay on 2.x: install the `0.2xx` exporters and pass the exporter itself to the processor (`new BatchLogRecordProcessor(exporter)`) where 3.x takes `{ exporter }`.
+This is the OpenTelemetry JS 3.x line. If the project already uses 2.x (`sdk-node` 0.2xx, `sdk-logs` 0.2xx, or `@vercel/otel` 2), stay on that line: use its installed exporters, processor constructors from its installed declarations, and import logs from `@opentelemetry/api-logs` in the helper. Do not upgrade unrelated telemetry.
 
-## `instrumentation.ts`
+## ESM: `instrumentation.ts`
 
-At the project root (`.mjs` if the project has no TypeScript runner):
+At the project root (`.mjs` also works; this snippet contains no TypeScript-only syntax):
 
 ```ts
-import { register } from "node:module";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
-import { NodeSDK } from "@opentelemetry/sdk-node";
-
 const endpoint =
   process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
-if (endpoint) {
-  // ESM imports (including node:http) are only patched through this loader hook.
-  register("@opentelemetry/instrumentation/hook.mjs", import.meta.url);
+export let shutdownTelemetry = async () => {};
 
+if (endpoint) {
+  const { register } = await import("node:module");
+  const { getNodeAutoInstrumentations } = await import("@opentelemetry/auto-instrumentations-node");
+  const { OTLPLogExporter } = await import("@opentelemetry/exporter-logs-otlp-proto");
+  const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-proto");
+  const { BatchLogRecordProcessor } = await import("@opentelemetry/sdk-logs");
+  const { BatchSpanProcessor } = await import("@opentelemetry/sdk-trace");
+  const { NodeSDK } = await import("@opentelemetry/sdk-node");
+
+  register("@opentelemetry/instrumentation/hook.mjs", import.meta.url);
+  const spans = new BatchSpanProcessor({ exporter: new OTLPTraceExporter() });
+  const logs = (process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT)
+    ? new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })
+    : undefined;
   const sdk = new NodeSDK({
     serviceName: "orders-api", // the package name
-    traceExporter: new OTLPTraceExporter(),
-    logRecordProcessors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })],
-    metricReaders: [], // otherwise NodeSDK also exports metrics, which Polaris doesn't receive
+    spanProcessors: [spans],
+    logRecordProcessors: logs ? [logs] : [],
+    metricReaders: [],
     instrumentations: [
       getNodeAutoInstrumentations({ "@opentelemetry/instrumentation-fs": { enabled: false } }),
     ],
   });
-
   sdk.start();
 
-  const stop = () => sdk.shutdown().finally(() => process.exit(0));
-  process.on("SIGTERM", stop);
-  process.on("SIGINT", stop);
+  shutdownTelemetry = async () => {
+    try {
+      await spans.forceFlush();
+      await logs?.forceFlush();
+    } finally {
+      await sdk.shutdown();
+    }
+  };
 }
 ```
 
-- The exporters take no `url`: they read `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, else `OTEL_EXPORTER_OTLP_ENDPOINT` plus `/v1/traces` and `/v1/logs`.
-- Keep `metricReaders: []` unless the project exports metrics somewhere already.
-- The `fs` instrumentation is off because it makes a span per file call and buries the request spans.
-- `shutdown` flushes what's batched; a short-lived script (a test run, a CLI) must `await sdk.shutdown()` before it exits, or its last spans are lost.
+## CommonJS: `instrumentation.cjs`
 
-## Load it first
+Use this synchronous preload, so startup finishes before the app's first `require("node:http")`. Do not wrap it in an unawaited async function.
 
-The SDK has to start before the app imports `http`, `express` or a database driver. Change the start command (the `dev` script, not the deploy one unless the user asks):
+```js
+const endpoint =
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+
+module.exports.shutdownTelemetry = async () => {};
+
+if (endpoint) {
+  const { getNodeAutoInstrumentations } = require("@opentelemetry/auto-instrumentations-node");
+  const { OTLPLogExporter } = require("@opentelemetry/exporter-logs-otlp-proto");
+  const { OTLPTraceExporter } = require("@opentelemetry/exporter-trace-otlp-proto");
+  const { BatchLogRecordProcessor } = require("@opentelemetry/sdk-logs");
+  const { BatchSpanProcessor } = require("@opentelemetry/sdk-trace");
+  const { NodeSDK } = require("@opentelemetry/sdk-node");
+
+  const spans = new BatchSpanProcessor({ exporter: new OTLPTraceExporter() });
+  const logs = (process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT)
+    ? new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() })
+    : undefined;
+  const sdk = new NodeSDK({
+    serviceName: "orders-api",
+    spanProcessors: [spans],
+    logRecordProcessors: logs ? [logs] : [],
+    metricReaders: [],
+    instrumentations: [
+      getNodeAutoInstrumentations({ "@opentelemetry/instrumentation-fs": { enabled: false } }),
+    ],
+  });
+  sdk.start();
+
+  module.exports.shutdownTelemetry = async () => {
+    try {
+      await spans.forceFlush();
+      await logs?.forceFlush();
+    } finally {
+      await sdk.shutdown();
+    }
+  };
+}
+```
+
+## Load and stop
+
+The SDK starts before the app imports `http`, `express` or a database driver. Change the **dev** script:
 
 | Project | Command |
 |---|---|
-| ESM or TypeScript on Node 22.18+ | `node --import ./instrumentation.ts src/server.ts` |
-| CommonJS | `node --require ./instrumentation.js src/server.js` (write the file with `require`, and drop the `register` call) |
+| ESM TypeScript on Node 24 | `node --import ./instrumentation.ts src/server.ts` |
+| ESM JavaScript | `node --import ./instrumentation.mjs src/server.mjs` |
+| CommonJS | `node --require ./instrumentation.cjs src/server.cjs` |
 | `tsx` | `tsx --import ./instrumentation.ts src/server.ts` |
-| Next.js | use `@vercel/otel` in `instrumentation.ts`; see [existing-exporters.md](existing-exporters.md) |
 
-Then add spans and logs with [tracing-helper.md](tracing-helper.md).
+The exporters read signal-specific URLs verbatim, else the base endpoint plus `/v1/traces` or `/v1/logs`. Leave compression unset (`none`): Polaris refuses compressed requests. Keep `metricReaders: []`; Polaris has no metrics receiver. The ESM loader hook patches ESM imports, and fs instrumentation is disabled to avoid a span per file call.
+
+Import `shutdownTelemetry` in the app and **await it after draining requests/jobs in the app's existing shutdown handler**, before any existing `process.exit(...)`. Preserve that handler's signal behavior and exit code. The preload installs no signal handlers. If the app has no shutdown handler, add one in its entry point that closes its server/workers, awaits telemetry, then preserves the signal exit status (SIGTERM 143, SIGINT 130); do not force success. For a CLI/test, use `try { await main(); } finally { await shutdownTelemetry(); }`. Flush spans then logs to avoid competing for older receivers' single in-flight request slot; allow exporter retries to complete. SIGKILL cannot flush.
+
+Add spans and logs with [tracing-helper.md](tracing-helper.md). For plain `node:http`, automatic spans may be named only `GET`. At route dispatch set `trace.getActiveSpan()?.setAttributes({ "http.route": "/orders/:id" })` and `trace.getActiveSpan()?.updateName("GET /orders/:id")`; use the router's pattern, never the URL's raw ids.

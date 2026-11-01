@@ -39,6 +39,8 @@ export interface MapEdge {
   /** How many of `from`'s requests made these calls, and the most any one of them made. */
   readonly requests: number;
   readonly perRequest: number;
+  /** The most calls one span made, or one served request (a server or consumer span) made. */
+  readonly repeated: number;
 }
 
 export interface Caller {
@@ -46,6 +48,8 @@ export interface Caller {
   readonly command: string | null;
   /** The Turn that launched it, else the Turn it ran in; null between Turns. */
   readonly turn: TraceTurn | null;
+  /** A Turn is known to have launched it, rather than it only running during one. */
+  readonly launched: boolean;
   /** Root spans per service, in the order they started. */
   readonly roots: ReadonlyMap<string, number>;
 }
@@ -72,6 +76,8 @@ interface Call {
   readonly span: TimedSpan;
   /** The caller's span whose request made the call. */
   readonly via: TimedSpan;
+  /** The span that made the call: calls under one span are a loop. */
+  readonly by: TimedSpan;
   readonly protocol: string | null;
   readonly inferred: TargetKind | null;
 }
@@ -106,16 +112,36 @@ const entries = (times: TraceTimes) => {
   };
 };
 
-const awayChildren = (times: TraceTimes, s: TimedSpan) =>
-  (times.children.get(s.span.id) ?? []).filter((k) => k.span.service !== s.span.service);
+const CHILDREN_NONE: ReadonlyArray<TimedSpan> = [];
 
-/** A client span's calls: into the services its children ran in, or the dependency it names. */
+/** The span that made a client span's call: its nearest ancestor that isn't a call in its service. */
+const makerOf = (byId: ReadonlyMap<string, TimedSpan>) => (s: TimedSpan) => {
+  let at = s;
+
+  for (let hops = 0; hops <= byId.size; hops++) {
+    const parent = at.span.parentId === null ? undefined : byId.get(at.span.parentId);
+
+    if (parent === undefined) return at;
+
+    if (parent.span.service !== s.span.service || !CALLS.has(parent.span.kind)) return parent;
+    at = parent;
+  }
+
+  return at;
+};
+
+/**
+ * A client span's calls: into the services its children ran in, or the dependency it names.
+ * One wrapping another client span (fetch over undici, an ORM over its driver) leaves it to that.
+ */
 const clientCalls = (
   s: TimedSpan,
-  away: ReadonlyArray<TimedSpan>,
-  services: ReadonlySet<string>
+  children: ReadonlyArray<TimedSpan>,
+  services: ReadonlySet<string>,
+  by: TimedSpan
 ): ReadonlyArray<Call> => {
   const from = s.span.service;
+  const away = children.filter((k) => k.span.service !== from);
 
   if (away.length > 0) {
     const callees = new Map(away.map((k) => [k.span.service, k]));
@@ -125,11 +151,13 @@ const clientCalls = (
       to,
       span: s,
       via: s,
+      by,
       protocol: protocolOf(s.span.attributes) ?? protocolOf(child.span.attributes),
       inferred: null,
     }));
   }
 
+  if (children.some((k) => CALLS.has(k.span.kind))) return [];
   const target = inferTarget(s.span.attributes);
 
   if (target === null) return [];
@@ -143,6 +171,7 @@ const clientCalls = (
       to: service ?? target.name,
       span: s,
       via: s,
+      by,
       protocol: target.protocol,
       inferred: service === null ? target.kind : null,
     },
@@ -151,37 +180,54 @@ const clientCalls = (
 
 const callsOf = (times: TraceTimes): ReadonlyArray<Call> => {
   const services = new Set(times.services.map((s) => s.name));
+  const maker = makerOf(new Map(times.spans.map((s) => [s.span.id, s])));
 
   return times.spans.flatMap((s) => {
-    const away = awayChildren(times, s);
+    const children = times.children.get(s.span.id) ?? CHILDREN_NONE;
 
-    if (CALLS.has(s.span.kind)) return clientCalls(s, away, services);
+    if (CALLS.has(s.span.kind)) return clientCalls(s, children, services, maker(s));
 
-    return away.map((k) => ({
-      from: s.span.service,
-      to: k.span.service,
-      span: k,
-      via: s,
-      protocol: protocolOf(k.span.attributes),
-      inferred: null,
-    }));
+    return children
+      .filter((k) => k.span.service !== s.span.service)
+      .map((k) => ({
+        from: s.span.service,
+        to: k.span.service,
+        span: k,
+        via: s,
+        by: s,
+        protocol: protocolOf(k.span.attributes),
+        inferred: null,
+      }));
   });
+};
+
+/** How many distinct keys the items have, and the most items under one; a null key is skipped. */
+const tally = <T>(items: ReadonlyArray<T>, key: (item: T) => string | null) => {
+  const counts = new Map<string, number>();
+
+  for (const item of items) {
+    const k = key(item);
+
+    if (k !== null) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+
+  return { keys: counts.size, most: Math.max(0, ...counts.values()) };
 };
 
 const edgesOf = (calls: ReadonlyArray<Call>, entryOf: (s: TimedSpan) => TimedSpan) => {
   const grouped = Map.groupBy(calls, (c) => `${c.from}\u0000${c.to}`);
 
+  const served = (c: Call) => {
+    const entry = entryOf(c.via);
+
+    return ENTRIES.has(entry.span.kind) ? entry.span.id : null;
+  };
+
   return [...grouped.values()].flatMap((group): ReadonlyArray<MapEdge> => {
     const [first] = group;
 
     if (first === undefined) return [];
-    const perEntry = new Map<string, number>();
-
-    for (const c of group) {
-      const id = entryOf(c.via).span.id;
-
-      perEntry.set(id, (perEntry.get(id) ?? 0) + 1);
-    }
+    const perEntry = tally(group, (c) => entryOf(c.via).span.id);
 
     return [
       {
@@ -192,8 +238,9 @@ const edgesOf = (calls: ReadonlyArray<Call>, entryOf: (s: TimedSpan) => TimedSpa
         errors: group.filter((c) => c.span.span.status === "error").length,
         protocol: group.find((c) => c.protocol !== null)?.protocol ?? null,
         inferred: first.inferred !== null,
-        requests: perEntry.size,
-        perRequest: Math.max(...perEntry.values()),
+        requests: perEntry.keys,
+        perRequest: perEntry.most,
+        repeated: Math.max(tally(group, (c) => c.by.span.id).most, tally(group, served).most),
       },
     ];
   });
@@ -267,6 +314,7 @@ const callerOf = (times: TraceTimes): Caller => {
   return {
     command: first === undefined || ENTRIES.has(first.kind) ? null : commandOf(first.resource),
     turn: first?.polaris.launchedTurn ?? first?.polaris.turn ?? null,
+    launched: (first?.polaris.launchedTurn ?? null) !== null,
     roots: counts,
   };
 };

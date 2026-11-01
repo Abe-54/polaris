@@ -35,9 +35,34 @@ const newRows = Schema.decodeUnknownSync(
   )
 );
 
-const selection = (db: Database, checkout: string, selector: TraceCompareSelector) => {
-  if (TraceCompareSelector.guards.Turn(selector))
-    return { sql: "checkout=? AND turn_id=?", bindings: [checkout, selector.turnId] };
+/** The Turn ids a Turn or Turns selector resolved to in its Agent Session, in order. */
+export interface CompareTurns {
+  readonly baselineStart?: string;
+  readonly a?: ReadonlyArray<string>;
+  readonly b?: ReadonlyArray<string>;
+}
+
+const turnsOf = (selector: TraceCompareSelector, resolved: ReadonlyArray<string> | undefined) => {
+  if (resolved !== undefined && resolved.length > 0) return resolved;
+
+  if (TraceCompareSelector.guards.Turn(selector)) return [selector.turnId];
+
+  throw compareInputError();
+};
+
+const inList = (ids: ReadonlyArray<string>) => ids.map(() => "?").join(",");
+
+const selection = (
+  db: Database,
+  checkout: string,
+  selector: TraceCompareSelector,
+  resolved: ReadonlyArray<string> | undefined
+) => {
+  if (TraceCompareSelector.guards.Turn(selector) || TraceCompareSelector.guards.Turns(selector)) {
+    const ids = turnsOf(selector, resolved);
+
+    return { sql: `checkout=? AND turn_id IN (${inList(ids)})`, bindings: [checkout, ...ids] };
+  }
 
   if (!TraceCompareSelector.guards.Trace(selector)) throw compareInputError();
 
@@ -77,26 +102,24 @@ export const compareTraces = (
   checkout: string,
   a: TraceCompareSelector,
   b: TraceCompareSelector,
-  baselineStart?: string
+  turns: CompareTurns = {}
 ): TraceComparison => {
-  const after = selection(db, checkout, b);
+  const { baselineStart } = turns;
+  const after = selection(db, checkout, b, turns.b);
   const baseline = TraceCompareSelector.guards.Baseline(a);
+  const target = after.bindings.slice(1);
 
-  if (baseline && (!TraceCompareSelector.guards.Turn(b) || baselineStart === undefined))
+  if (baseline && (TraceCompareSelector.guards.Trace(b) || baselineStart === undefined))
     throw compareInputError();
 
   const before = baseline
     ? {
-        sql: `checkout=? AND start<? AND turn_id IS NOT NULL AND turn_id<>?
+        sql: `checkout=? AND start<? AND turn_id IS NOT NULL AND turn_id NOT IN (${inList(target)})
       AND EXISTS (SELECT 1 FROM b WHERE b.root=summaries.root
         AND b.routeService=json_extract(summaries.value,'$.service'))`,
-        bindings: [
-          checkout,
-          sortableTime(baselineStart!),
-          TraceCompareSelector.guards.Turn(b) ? b.turnId : "",
-        ],
+        bindings: [checkout, sortableTime(baselineStart!), ...target],
       }
-    : selection(db, checkout, a);
+    : selection(db, checkout, a, turns.a);
 
   const columns =
     "checkout,trace_id,root,duration,partial,json_extract(value,'$.service') AS routeService";

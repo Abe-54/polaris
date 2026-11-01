@@ -90,6 +90,12 @@ const routesFor = (scene: string): ReadonlyArray<Route> => {
   return ROUTES;
 };
 
+/** The Daemon's rule: under three runs on either side, both sides lose their percentiles. */
+const daemonSides = (before: TraceRouteStats, after: TraceRouteStats) =>
+  before.count >= 3 && after.count >= 3
+    ? { before, after }
+    : { before: runs(null, before.count), after: runs(null, after.count) };
+
 const turn = (id: string) => TraceCompareSelector.cases.Turn.make({ turnId: TurnId.make(id) });
 
 /** What the Daemon would answer for the scene; the Daemon's service-then-route order. */
@@ -108,7 +114,11 @@ export const tracesCompareAnswer = (
     });
 
   const routes = routesFor(scene)
-    .map(([service, route, before, after]) => ({ service, route, before, after }))
+    .map(([service, route, before, after]) => ({
+      service,
+      route,
+      ...daemonSides(before, after),
+    }))
     .toSorted((x, y) =>
       x.service === y.service ? x.route.localeCompare(y.route) : x.service.localeCompare(y.service)
     );

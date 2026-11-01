@@ -17,11 +17,15 @@ import {
   linkTrace,
   listTraces,
   traceHistory,
+  summaryFor,
+  listToolTraces,
   overlappingTraces,
 } from "./queries.ts";
 import { compareTraces } from "./compareQuery.ts";
 import { pruneCheckout } from "./retention.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
+
+import { traceView } from "../mcp/tools/traceFormat.ts";
 
 declare const self: Worker;
 
@@ -160,17 +164,29 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
     return records;
   }),
   Match.tag("Compare", (request) =>
-    compareTraces(
-      prune(request.checkout),
-      request.checkout,
-      request.a,
-      request.b,
-      request.baselineStart
-    )
+    compareTraces(prune(request.checkout), request.checkout, request.a, request.b, request.turns)
   ),
   Match.tag("List", (request) =>
     listTraces(prune(request.checkout), request.checkout, request.filter)
   ),
+  Match.tag("ToolList", (request) =>
+    listToolTraces(prune(request.checkout), request.checkout, request.filter)
+  ),
+  Match.tag("View", (request) => {
+    const db = prune(request.checkout);
+    const detail = getTrace(db, request.checkout, request.traceId);
+
+    return traceView(detail, request.focus, traceHistory(db, request.checkout, detail.summary.id));
+  }),
+  Match.tag("ToolSpan", (request) => {
+    const db = prune(request.checkout);
+    const detail = getSpan(db, request.checkout, request.traceId, request.spanId);
+
+    return {
+      detail,
+      start: summaryFor(db, request.checkout, detail.span.traceId).startTimeUnixNano,
+    };
+  }),
   Match.tag("Overlap", (request) =>
     overlappingTraces(prune(request.checkout), request.checkout, request.start, request.end)
   ),

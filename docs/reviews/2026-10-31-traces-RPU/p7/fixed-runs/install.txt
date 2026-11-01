@@ -1,0 +1,36 @@
+
+│
+●   codex  Agent detected — installing non-interactively
+[?25l│
+◇  Source: /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7/skills/polaris-tracing
+[?25h[?25l│
+◇  Local path validated
+[?25h[?25l│
+◇  Found 1 skill
+[?25h│
+●  Skill: polaris-tracing
+│
+│  Add OpenTelemetry traces and logs to a Node or Bun project so Polaris shows them, keeping an existing Axiom, @vercel/otel or other exporter working. Use when asked to set up tracing, instrument an app, send spans or logs to Polaris, or when the `traces` tool reports E-TRACE-NONE.
+
+│
+◇  Installation Summary ─────────────╮
+│                                    │
+│  ./.agents/skills/polaris-tracing  │
+│    universal: Codex                │
+│    symlink → Claude Code           │
+│                                    │
+├────────────────────────────────────╯
+[?25l│
+◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ──────────────────╮
+│                                      │
+│  ✓ ./.agents/skills/polaris-tracing  │
+│    universal: Codex                  │
+│    symlinked: Claude Code            │
+│                                      │
+├──────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.

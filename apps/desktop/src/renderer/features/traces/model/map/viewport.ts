@@ -42,13 +42,40 @@ export const fitView = (canvas: Size, map: Size): Viewport => {
 /** The smallest zoom the map opens at: below it the labels stop being readable. */
 export const OPEN_ZOOM = 0.8;
 
-/** Fitted when that stays readable; otherwise at OPEN_ZOOM, centred across, from the top. */
+/**
+ * Fitted when that stays readable or when only height limits it, so no row opens under the foot;
+ * otherwise, too wide to read whole, at OPEN_ZOOM, centred across, from the top.
+ */
 export const openView = (canvas: Size, map: Size): Viewport => {
   const fitted = fitView(canvas, map);
+  const across = (canvas.width - 2 * MARGIN.side) / map.width;
 
-  if (fitted.k >= OPEN_ZOOM) return fitted;
+  if (fitted.k >= OPEN_ZOOM || across >= OPEN_ZOOM) return fitted;
 
   return { x: (canvas.width - map.width * OPEN_ZOOM) / 2, y: MARGIN.top, k: OPEN_ZOOM };
+};
+
+export interface Box {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+const shift = (start: number, size: number, from: number, to: number) => {
+  if (size > to - from || start < from) return from - start;
+
+  return start + size > to ? to - (start + size) : 0;
+};
+
+/** Panned just enough that `box` (in map coordinates) sits inside the margins, above the foot. */
+export const revealView = (view: Viewport, canvas: Size, box: Box): Viewport => {
+  const left = view.x + box.x * view.k;
+  const top = view.y + box.y * view.k;
+  const dx = shift(left, box.width * view.k, MARGIN.side, canvas.width - MARGIN.side);
+  const dy = shift(top, box.height * view.k, MARGIN.top, canvas.height - MARGIN.foot);
+
+  return { ...view, x: view.x + dx, y: view.y + dy };
 };
 
 /** Scaled by `factor` (within the limits) about `at`, a point on the canvas. */

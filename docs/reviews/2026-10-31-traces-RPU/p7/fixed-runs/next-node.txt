@@ -1,0 +1,82 @@
+{
+  "case": "next-node",
+  "command": [
+    "node",
+    "node_modules/next/dist/bin/next",
+    "dev",
+    "--webpack",
+    "-p",
+    "63533"
+  ],
+  "exit": 0,
+  "spans": 24,
+  "logs": 5,
+  "manual": [
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.load",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "unset"
+    },
+    {
+      "name": "orders.charge",
+      "code": {
+        "code.function.name": "GET",
+        "code.file.path": "/private/tmp/uf7/next/app/[[...path]]/route.ts",
+        "code.line.number": "4",
+        "operation.name": "app"
+      },
+      "status": "error"
+    }
+  ],
+  "outgoingTraceparents": []
+}
+2026-10-31T23:09:32.836Z POST /otlp/tok_review/v1/logs type=application/x-protobuf enc= bytes=553
+2026-10-31T23:09:36.661Z POST /otlp/tok_review/v1/traces type=application/x-protobuf enc= bytes=14644
+
+▲ Next.js 16.3.8 (webpack)
+- Local:         http://localhost:63533
+- Network:       http://192.168.1.5:63533
+✓ Ready in 343ms
+✓ Running next.config took 12ms
+
+ GET / 200 in 285ms
+ GET / 200 in 54ms (next.js: 39ms, application-code: 15ms)
+ GET /orders/42 200 in 4ms (next.js: 1.9ms, application-code: 1.7ms)
+ GET /rates/eur 200 in 1.9ms (next.js: 0.6ms, application-code: 1.3ms)
+ GET /fail 500 in 3ms (next.js: 0.9ms, application-code: 1.9ms)
+[?25h

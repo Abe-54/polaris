@@ -75,11 +75,31 @@ const openMap = async (page: Page, root: string) => {
   await page.getByTestId("map-node").first().waitFor();
 };
 
+/** Services whose button ends under the foot's top edge or starts above the canvas (RPU P6-1). */
+const CLIPPED = `(() => {
+  const box = document.querySelector('[data-testid="service-map"] [role="group"]');
+  const foot = box.lastElementChild.getBoundingClientRect().top;
+  const top = box.getBoundingClientRect().top;
+  return [...document.querySelectorAll('[data-testid="map-node"]')]
+    .filter((n) => { const r = n.getBoundingClientRect(); return r.bottom > foot || r.top < top; })
+    .map((n) => n.dataset.node);
+})()`;
+
+const clipped: Record<string, ReadonlyArray<string>> = {};
+
 const shoot = async (page: Page, name: string) => {
   await page.mouse.move(1430, 890);
   await page.waitForTimeout(250);
   await page.screenshot({ path: join(out, `${name}.png`) });
   console.log(`traces-map: saved ${name}.png`);
+};
+
+/** A fixture map's shot, after checking every row opened above the foot. */
+const shootWhole = async (page: Page, name: string) => {
+  const cut = await page.evaluate<ReadonlyArray<string>>(CLIPPED);
+
+  clipped[name] = cut;
+  await shoot(page, name);
 };
 
 const node = (page: Page, name: string) =>
@@ -93,19 +113,19 @@ const screens = async (page: Page) => {
       await appearance(page, look, density);
       await openMap(page, "settlements.run");
       await node(page, "notifier").click();
-      await shoot(page, `map-${look.name}-${density}`);
+      await shootWhole(page, `map-${look.name}-${density}`);
     }
 
   for (const look of THEMES) {
     await appearance(page, look, "calm");
     await openMap(page, "POST /invoices/overdue");
-    await shoot(page, `overdue-${look.name}-calm`);
+    await shootWhole(page, `overdue-${look.name}-calm`);
     await openMap(page, "test overdue-totals");
     await node(page, "fx-rates.internal").click();
-    await shoot(page, `failing-test-${look.name}-calm`);
+    await shootWhole(page, `failing-test-${look.name}-calm`);
     await openMap(page, "settlements.run");
     await page.getByTestId("waterfall-errors-only").click();
-    await shoot(page, `errors-only-${look.name}-calm`);
+    await shootWhole(page, `errors-only-${look.name}-calm`);
     await page.getByTestId("waterfall-errors-only").click();
   }
 };
@@ -174,6 +194,12 @@ try {
   await sizeWindow(app, 1440, 900);
 
   if (!perfOnly) await screens(page);
+  const cut = Object.entries(clipped).filter(([, names]) => names.length > 0);
+
+  writeFileSync(join(out, "clipped.json"), JSON.stringify(clipped, null, 2));
+  console.log(`traces-map: ${Object.keys(clipped).length} fixture maps, ${cut.length} clipped`);
+
+  if (cut.length > 0) throw new Error(`rows under the foot: ${JSON.stringify(cut)}`);
   await perf(page);
 } finally {
   await app.close();

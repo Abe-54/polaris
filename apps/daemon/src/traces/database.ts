@@ -31,12 +31,14 @@ export const openTraceDatabase = (filename: string): Database => {
       age INTEGER NOT NULL,bytes INTEGER NOT NULL,value TEXT NOT NULL,
       PRIMARY KEY(checkout,trace_id,id));
     CREATE INDEX IF NOT EXISTS spans_age ON spans(checkout,status,age);
+    CREATE INDEX IF NOT EXISTS spans_retention ON spans(checkout,age,bytes);
     CREATE TABLE IF NOT EXISTS logs (
       checkout TEXT NOT NULL,id TEXT NOT NULL,trace_id TEXT,span_id TEXT,
       time TEXT NOT NULL,severity INTEGER NOT NULL,age INTEGER NOT NULL,bytes INTEGER NOT NULL,value TEXT NOT NULL,
       PRIMARY KEY(checkout,id));
     CREATE INDEX IF NOT EXISTS logs_span ON logs(checkout,trace_id,span_id,time);
     CREATE INDEX IF NOT EXISTS logs_age ON logs(checkout,age);
+    CREATE INDEX IF NOT EXISTS logs_retention ON logs(checkout,age,bytes);
     CREATE TABLE IF NOT EXISTS trace_pins (
       checkout TEXT NOT NULL,trace_id TEXT NOT NULL,PRIMARY KEY(checkout,trace_id));
     CREATE TABLE IF NOT EXISTS summaries (
@@ -46,7 +48,33 @@ export const openTraceDatabase = (filename: string): Database => {
     CREATE INDEX IF NOT EXISTS summaries_start ON summaries(checkout,start DESC,trace_id);
   `);
 
+  migrateHistory(db);
+
   return db;
+};
+
+const migrateHistory = (db: Database) => {
+  const columns = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(
+    db.query("PRAGMA table_info(spans)").all()
+  );
+
+  db.transaction(() => {
+    if (!columns.some((column) => column.name === "name")) {
+      db.exec(`ALTER TABLE spans ADD COLUMN name TEXT;
+        ALTER TABLE spans ADD COLUMN parent_name TEXT;
+        ALTER TABLE spans ADD COLUMN trace_start TEXT;
+        ALTER TABLE spans ADD COLUMN duration REAL;
+        UPDATE spans SET name=json_extract(value,'$.name'),duration=json_extract(value,'$.durationMs');
+        UPDATE spans AS c SET parent_name=(SELECT p.name FROM spans p
+          WHERE p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent),
+          trace_start=(SELECT s.start FROM summaries s WHERE s.checkout=c.checkout AND s.trace_id=c.trace_id);`);
+    }
+
+    db.exec(`CREATE INDEX IF NOT EXISTS spans_history_covering ON spans(checkout,name,parent_name,trace_start DESC,start DESC,duration);
+      DROP INDEX IF EXISTS spans_history;
+      CREATE INDEX IF NOT EXISTS summaries_history ON summaries(checkout,root,start DESC);
+      CREATE INDEX IF NOT EXISTS spans_error ON spans(checkout,trace_id,status,start);`);
+  })();
 };
 
 export const ValueRow = Schema.Struct({ value: Schema.String });
@@ -101,6 +129,16 @@ export const refreshSummary = (
         "SELECT min(start) AS start,max(end) AS end,count(*) AS count,sum(status='error') AS errors FROM spans WHERE checkout=? AND trace_id=?"
       )
       .get(checkout, traceId)
+  );
+
+  db.query(`UPDATE spans AS c SET
+    parent_name=(SELECT p.name FROM spans p WHERE p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent),
+    trace_start=? WHERE c.checkout=? AND c.trace_id=? AND (c.trace_start IS NOT ? OR
+    c.parent_name IS NOT (SELECT p.name FROM spans p WHERE p.checkout=c.checkout AND p.trace_id=c.trace_id AND p.id=c.parent))`).run(
+    stats.start,
+    checkout,
+    traceId,
+    stats.start
   );
 
   const services = decodeServices(
@@ -167,9 +205,10 @@ export const writeBatch = (db: Database, batch: TraceBatch): Map<string, Set<str
     if (traceId !== null) ids.add(traceId);
   };
 
-  const spanInsert = db.query(`INSERT INTO spans VALUES (?,?,?,?,?,?,?,?,?,?,?)
+  const spanInsert =
+    db.query(`INSERT INTO spans (checkout,trace_id,id,parent,start,end,service,status,age,bytes,value,name,duration) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(checkout,trace_id,id) DO UPDATE SET parent=excluded.parent,start=excluded.start,end=excluded.end,
-    service=excluded.service,status=excluded.status,age=excluded.age,bytes=excluded.bytes,value=excluded.value`);
+    service=excluded.service,status=excluded.status,age=excluded.age,bytes=excluded.bytes,value=excluded.value,name=excluded.name,duration=excluded.duration`);
 
   const logInsert = db.query("INSERT INTO logs VALUES (?,?,?,?,?,?,?,?,?)");
 
@@ -185,8 +224,10 @@ export const writeBatch = (db: Database, batch: TraceBatch): Map<string, Set<str
       span.service,
       span.status,
       Number(BigInt(span.startTimeUnixNano) / 1000000n),
-      bytes + 192,
-      value
+      bytes + 256,
+      value,
+      span.name,
+      span.durationMs
     );
     mark(span.polaris.checkout, span.traceId);
   }

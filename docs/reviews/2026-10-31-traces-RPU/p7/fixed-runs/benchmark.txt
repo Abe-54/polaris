@@ -1,0 +1,51 @@
+$ turbo run bench --log-prefix=none -- traces --runs "3" --compare "packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json"
+
+   • turbo 2.11.5
+   • Packages in scope: @polaris/bench, @polaris/client, @polaris/daemon, @polaris/desktop, @polaris/even-g2, @polaris/lint-config, @polaris/mobile, @polaris/predict, @polaris/protocol, @polaris/relay, @polaris/sdk, @polaris/site, @polaris/spec, @polaris/syntax-diff, @polaris/tooling, @polaris/ui, @polaris/visualization, polaris
+   • Running bench in 18 packages
+   • Remote caching disabled, using shared worktree cache
+
+cache bypass, force executing b366cb56957afb60
+$ bun src/cli.ts traces --runs "3" --compare "packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json"
+[bench 2.2s] Mac14,13 (Apple M2 Max), source Daemon, results in /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7/packages/bench/results/2026-10-31T23-15-44-930Z
+[bench 2.2s] warning: 3.3 cores are busy with other work; throughput and CPU will not match a quiet baseline
+[bench 2.2s] traces: run 1/3
+[bench 47.6s] traces: run 2/3
+[bench 92.8s] traces: run 3/3
+Mac14,13 · Apple M2 Max · 12 cores · 32 GiB · macOS 27.0 (Darwin 27.0.0) · bun 1.4.4 · source Daemon · bridge · 9a0fac480958-dirty · full × 3 run(s) · 3.3 cores busy before
+
+▸ traces  (135.7 s)
+  metric                  median     unit        range
+  ──────────────────────  ──────  ───────  ───────────
+  spans_per_s              17517  spans/s  17201–17673
+  ingest_ms                11417       ms  11317–11627
+  cpu_avg_pct              107.0        %  106.9–108.0
+  rss_peak_over_base_mib   192.3      MiB  179.4–199.2
+  rss_after_quiet_mib      299.2      MiB  287.4–305.7
+  rpc_during_p99_ms         2.72       ms    2.61–5.98
+  note: Forwarding: unconfigured.
+  note: 200000 spans in 200 JSON batches; real receiver, SQLite worker, concurrent files.stat; 32s quiet worker retirement.
+
+
+compared with /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7/packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json
+warning: baseline started with 11.1 cores busy with other work: throughput and CPU are not comparable
+warning: this run started with 3.3 cores busy with other work: throughput and CPU are not comparable
+metric                         baseline  current     unit  worse by     status
+─────────────────────────────  ────────  ───────  ───────  ────────  ─────────
+traces spans_per_s                13323    17517  spans/s    -31.5%   improved
+traces ingest_ms                  15012    11417       ms    -23.9%         ok
+traces cpu_avg_pct                91.53    107.0        %    +16.9%         ok
+traces rss_peak_over_base_mib     153.1    192.3      MiB    +25.6%  REGRESSED
+traces rss_after_quiet_mib        184.8    299.2      MiB    +61.9%  REGRESSED
+traces rpc_during_p99_ms          16.34     2.72       ms    -83.3%   improved
+2 regression(s) beyond tolerance
+error: script "bench" exited with code 1
+@polaris/bench#bench:  ERROR  command (/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3.worktrees/4a07ebd0-23c2-4fa5-9594-3fe68758ca08/UF7/packages/bench) /Users/lucasdoell/.bun/bin/bun run bench traces --runs 3 --compare packages/bench/baselines/mac14-13-apple-m2-max-12c-eng656-traces.json exited (1)
+
+ Tasks:    0 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    2m18.087s
+Failed:    @polaris/bench#bench
+
+ ERROR  run failed: command  exited (1)
+error: script "bench" exited with code 1

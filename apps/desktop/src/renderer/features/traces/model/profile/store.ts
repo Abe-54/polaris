@@ -48,3 +48,12 @@ export const profileSelection = (at: TracesSessionKey): ProfileSelection =>
 
 export const useProfileSelection = (at: TracesSessionKey): ProfileSelection =>
   useStore(store, (s) => s[keyOf(at)] ?? NONE);
+
+const focus = createStore<Readonly<Record<string, boolean>>>(() => ({}));
+
+/** Whether focus is in the open Profile's panel; the trace bar leaves ⌘L to it meanwhile. */
+export const setProfileFocused = (at: TracesSessionKey, focused: boolean) =>
+  focus.setState((s) => (s[keyOf(at)] === focused ? s : { ...s, [keyOf(at)]: focused }));
+
+export const useProfileFocused = (at: TracesSessionKey): boolean =>
+  useStore(focus, (s) => s[keyOf(at)] ?? false);

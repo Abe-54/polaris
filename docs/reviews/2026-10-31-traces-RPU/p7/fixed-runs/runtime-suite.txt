@@ -1,0 +1,8 @@
+PASS no-endpoint and production gates without SDK dependencies
+PASS node-esm: 6 spans, 1 correlated logs, exit 3
+PASS node-cjs: 6 spans, 1 correlated logs, exit 3
+PASS bun-esm: 8 spans, 1 correlated logs, exit 3
+PASS bun-cjs: 6 spans, 1 correlated logs, exit 3
+PASS next-node: 24 spans, 5 correlated logs, exit 0
+PASS next-bun: 20 spans, 4 correlated logs, exit 0
+PASS fixed exporters: Node ESM + CJS and Bun, all 9 precedence cases

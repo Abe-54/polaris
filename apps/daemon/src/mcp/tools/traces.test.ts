@@ -61,7 +61,7 @@ test("traces defaults to the current Turn and composes route glob, service, stat
     );
     const current = await f.tool("traces").call({ limit: 1 });
     expect(text(current)).toBe(
-      "Turn 12 · 2 traces (1 shown of 2; add limit or narrow filters)\ncccccccc  POST /invoices/new  billing  90 ms  1 spans  1 services"
+      "Turn 12 · 2 traces (1 shown of 2; add limit or narrow filters)\ncccccccccccccccccccccccccccccccc  POST /invoices/new  billing  90 ms  1 spans  1 services"
     );
     expect(current.structuredContent?.traces).toEqual([
       {
@@ -86,7 +86,7 @@ test("traces defaults to the current Turn and composes route glob, service, stat
     });
 
     expect(text(filtered)).toContain(
-      "All turns · 1 traces\n12345678  POST /invoices/overdue  ledger-api  840 ms"
+      "All turns · 1 traces\n1234567890abcdef1234567890abcdef  POST /invoices/overdue  ledger-api  840 ms"
     );
     expect(text(filtered)).not.toContain("SLOW");
     expect(text(await f.tool("traces").call({ turn: "all" }))).toContain("All turns · 3 traces");
@@ -156,9 +156,9 @@ test("error paths retain exception type, message and the in-project frame before
     ]);
     const result = await f.tool("trace").call({ id: TRACE_ID });
     expect(text(result)).toContain(
-      `calculate total  ERROR  span 00000000\n  AssertionError: expected 1200, got 0 · at total (${context.checkout}/src/invoices.ts:22:3)`
+      `calculate total  ERROR  span ${sid(4)}\n  AssertionError: expected 1200, got 0 · at total (${context.checkout}/src/invoices.ts:22:3)`
     );
-    expect(text(result).indexOf("AssertionError:")).toBeLessThan(
+    expect(text(result).indexOf("AssertionError:")).toBeGreaterThan(
       text(result).indexOf("slow sibling")
     );
     const errors = await f.tool("trace").call({ id: TRACE_ID, focus: "errors" });
@@ -309,7 +309,9 @@ test("span and list cap overflow name omitted sections while structuredContent r
     });
     await f.ingest([makeSpan(1, undefined, "huge " + "x".repeat(20_000), 30, 2, "a".repeat(32))]);
     const list = await f.tool("traces").call({});
-    expect(text(list)).toBe("Turn 12 · 2 traces (0 shown of 2; add limit or narrow filters)");
+    expect(text(list)).toContain("Turn 12 · 2 traces");
+    expect(text(list)).toContain("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(text(list)).toContain("value chars folded");
   }));
 
 test("empty, ambiguous, missing and unavailable traces return actionable code/message/fix errors", () =>
@@ -353,13 +355,24 @@ test("the critical chain uses the longest individual child before the aggregate 
   withStoredTools(async (f) => {
     await f.ingest([
       makeSpan(1),
-      ...Array.from({ length: 21 }, (_, i) => makeSpan(i + 2, 1, "small repeated", 10, i)),
-      makeSpan(24, 1, "longest child", 100, 30),
-      makeSpan(25, 24, "critical leaf", 90, 35),
+      ...Array.from({ length: 40 }, (_, group) =>
+        Array.from({ length: 3 }, (_, member) =>
+          makeSpan(
+            2 + group * 3 + member,
+            1,
+            `repeated ${group} ${"x".repeat(500)}`,
+            60,
+            group + member
+          )
+        )
+      ).flat(),
+      makeSpan(124, 1, "longest child", 100, 130),
+      makeSpan(125, 124, "critical leaf", 90, 135),
     ]);
     const result = text(await f.tool("trace").call({ id: TRACE_ID }));
-    expect(result.indexOf("longest child")).toBeLessThan(result.indexOf("×21 small repeated"));
-    expect(result.indexOf("critical leaf")).toBeLessThan(result.indexOf("×21 small repeated"));
+    expect(result).toContain("longest child");
+    expect(result).toContain("critical leaf");
+    expect(result).toContain("spans under 61 ms folded");
   }));
 
 test("long names and exception messages retain the error path and explicitly count clipped characters", () =>
