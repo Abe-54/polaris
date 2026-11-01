@@ -11,6 +11,7 @@ import type { SessionTools } from "../sessions/index.ts";
 import type { Profiles } from "../../traces/profiles/index.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 import { duration, inline, TRACE_CAP } from "./traceFormat.ts";
+import { profileMetadata, profileSummary } from "./profileSummary.ts";
 
 export interface ProfileSessionTools extends Pick<
   Profiles["Service"],
@@ -55,7 +56,7 @@ const boundedSection = <A>(
   let length = title.length;
 
   const note = (omitted: number) =>
-    `\n… ${omitted} lines omitted; use profile id structuredContent.`;
+    `\n… ${omitted} lines omitted; open the full recording in Traces (⌘5).`;
 
   for (const value of values) {
     const line = render(value, count);
@@ -74,7 +75,7 @@ export const profileView = (
   overlap: { traces: ReadonlyArray<TraceSummary>; total: number }
 ): string => {
   const { profile, hotFunctions, hotPath } = detail;
-  const header = `${profile.status} · ${profile.runtime} · ${duration(profile.durationMs)} · profile ${profile.id}${profile.cwd === undefined ? "" : `\nDirectory: ${inline(profile.cwd)}`}\nArtifact: ${inline(profile.path ?? "none")}\nLabels over 256 characters are clipped; use profile id structuredContent for full details.`;
+  const header = `${profile.status} · ${profile.runtime} · ${duration(profile.durationMs)} · profile ${profile.id}${profile.cwd === undefined ? "" : `\nDirectory: ${inline(profile.cwd)}`}\nArtifact: ${inline(profile.path ?? "none")}\nLabels over 256 characters are clipped; open the full recording in Traces (⌘5) for full details.`;
 
   const location = (f: ProfileDetail["hotFunctions"][number]) =>
     `${inline(f.name).slice(0, 256)}${f.file === null ? "" : `  ${inline(f.file).slice(0, 256)}${f.line === null ? "" : `:${f.line}`}`}`;
@@ -202,14 +203,14 @@ export const profileTool = (sessionId: SessionId, sessions: SessionTools): Bound
                 text: `${profile.status} · ${profile.runtime} · profile ${profile.id}${profile.cwd === undefined ? "" : `\nDirectory: ${inline(profile.cwd)}`}\n${profile.status === "recording" ? "The artifact finalizes on process exit. Read it with profile id." : "No valid artifact was produced. Run a shorter Node or Bun command and retry."}`,
               },
             ],
-            structuredContent: { profile },
+            structuredContent: { profile: profileMetadata(profile) },
           } satisfies McpToolResult;
         const detail = retained ?? (yield* profiles.get(sessionId, profile.id));
         const overlap = yield* profiles.overlapping(sessionId, profile);
 
         return {
           content: [{ type: "text", text: profileView(detail, overlap) }],
-          structuredContent: { ...detail, traces: overlap.traces, traceCount: overlap.total },
+          structuredContent: profileSummary(detail, overlap),
         } satisfies McpToolResult;
       }).pipe(
         Effect.catchTag("ProfileError", (e) => Effect.succeed(failure(e.code, e.message, e.fix)))

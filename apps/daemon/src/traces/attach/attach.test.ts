@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect";
 import {
   ApprovalDecision,
   ApprovalRequest,
-  ProfileDetail,
+  Profile,
   DomainEvent,
   TraceAvailability,
 } from "@polaris/protocol";
@@ -80,9 +80,7 @@ native(
 
         const running = profileTool(TEST_SESSION, { ...unavailableSessions, profiles: tools })
           .call({ attach: child.pid, seconds: 1 })
-          .then(
-            (result) => Schema.decodeUnknownSync(ProfileDetail)(result.structuredContent).profile
-          );
+          .then((result) => Schema.decodeUnknownSync(Profile)(result.structuredContent?.profile));
 
         const request = await eventually(
           () =>
