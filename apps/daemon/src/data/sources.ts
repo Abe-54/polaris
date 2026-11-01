@@ -1,5 +1,12 @@
-import { realpath } from "node:fs/promises";
-import { DataError, DataSource, NotFound, type SessionId } from "@polaris/protocol";
+import { open, realpath } from "node:fs/promises";
+import {
+  DATA_FILE_SERVER,
+  DataError,
+  DataSource,
+  NotFound,
+  type SaveDataFileSource,
+  type SessionId,
+} from "@polaris/protocol";
 import { Effect, Option, PubSub, Redacted, Semaphore, Stream, Schema } from "effect";
 import { paths } from "../paths.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -18,7 +25,8 @@ import { localityProbe } from "./listener.ts";
 import { discover } from "./discovery.ts";
 import { cachedDiscovery } from "./discoveryCache.ts";
 import { dataPasswords } from "./passwords.ts";
-import { dataFailure, openStorage, sourceStorage } from "./storage.ts";
+import { dataFailure, openStorage, sourceStorage, type ManualSource } from "./storage.ts";
+import { fileLocality } from "./sqlite/files.ts";
 import type { DataSources } from "./index.ts";
 
 const unknownSource = () =>
@@ -53,6 +61,36 @@ type SaveInput = Parameters<DataSources["Service"]["save"]>[0] & {
   readonly passwordAction?: "keep" | "clear" | "set";
 };
 
+type SaveFileInput = typeof SaveDataFileSource.payloadSchema.Type;
+
+const notSqlite = () =>
+  new DataError({
+    code: "E-DATA-UNREACHABLE",
+    message: "There is no SQLite database file at that path.",
+    fix: "Choose an existing SQLite file on this Host.",
+  });
+
+/** A regular file that is empty or starts with SQLite's header. */
+async function checkSqliteFile(path: string) {
+  const handle = await open(path, "r").catch(() => undefined);
+
+  if (handle === undefined) throw notSqlite();
+
+  try {
+    const stat = await handle.stat();
+
+    if (!stat.isFile()) throw notSqlite();
+
+    if (stat.size === 0) return;
+    const header = Buffer.alloc(16);
+    await handle.read(header, 0, 16, 0);
+
+    if (header.toString("latin1") !== "SQLite format 3\0") throw notSqlite();
+  } finally {
+    await handle.close();
+  }
+}
+
 /** Public construction goes through DataSources.layer; options supply boundary fakes in fixture tests. */
 export const sources = Effect.fnUntraced(function* (options: {
   readonly path: string;
@@ -73,7 +111,13 @@ export const sources = Effect.fnUntraced(function* (options: {
   const privilegeWarnings = new Map<string, ReadonlyArray<string>>();
 
   const privilegeKey = (source: DataSource, connection: import("./connection.ts").DataConnection) =>
-    Bun.CryptoHasher.hash("sha256", JSON.stringify(sqlOptions(source, connection)), "hex");
+    Bun.CryptoHasher.hash(
+      "sha256",
+      JSON.stringify(
+        source.engine === "sqlite" ? ["sqlite", connection.file] : sqlOptions(source, connection)
+      ),
+      "hex"
+    );
 
   const secret = <A, E>(effect: Effect.Effect<A, E>) => Effect.mapError(effect, dataFailure);
 
@@ -124,8 +168,11 @@ export const sources = Effect.fnUntraced(function* (options: {
 
       if (!parsed) continue;
 
+      const file = parsed.connection.file;
+
       const locality = yield* Effect.tryPromise({
-        try: () => probe(parsed.connection, candidate),
+        try: () =>
+          file === undefined ? probe(parsed.connection, candidate) : fileLocality(checkout, file),
         catch: dataFailure,
       }).pipe(Effect.timeoutOption(1500), Effect.map(Option.getOrElse(() => "remote" as const)));
 
@@ -201,13 +248,80 @@ export const sources = Effect.fnUntraced(function* (options: {
     if (Option.isSome(previous)) yield* secret(passwords.set(id, previous.value));
   });
 
-  const save = Effect.fnUntraced(function* (input: SaveInput) {
-    const checkout = yield* checkoutPath(input.sessionId);
+  /** The manual entry being edited, after checking the new name is free in this checkout. */
+  const claimName = Effect.fnUntraced(function* (
+    checkout: string,
+    name: string,
+    rawPrevious: string | undefined,
+    discovered: ReadonlyArray<Candidate>
+  ) {
+    const manual = yield* storage.manual(checkout);
+    const previousName = rawPrevious?.trim().toLowerCase();
+    const previous = manual.find((entry) => entry.name === previousName);
 
-    const discovered = yield* Effect.tryPromise({
+    if (previousName && !previous) return yield* unknownSource();
+
+    const taken =
+      manual.some((entry) => entry.name === name && entry.id !== previous?.id) ||
+      (!previous && discovered.some((entry) => entry.name === name));
+
+    if (taken)
+      return yield* new DataError({
+        code: "E-DATA-UNKNOWN-SOURCE",
+        message: "A data source already uses that name.",
+        fix: "Choose a different name or edit the existing data source.",
+      });
+
+    return previous;
+  });
+
+  const discoverFor = (checkout: string) =>
+    Effect.tryPromise({
       try: (signal) => discoverSources(checkout, signal),
       catch: dataFailure,
     }).pipe(Effect.timeout(2000), Effect.mapError(dataFailure));
+
+  const saveFile = Effect.fnUntraced(function* (input: SaveFileInput) {
+    const checkout = yield* checkoutPath(input.sessionId);
+    const discovered = yield* discoverFor(checkout);
+    const name = input.name.trim().toLowerCase();
+
+    if (!/^[a-z0-9][a-z0-9._-]*$/.test(name)) return yield* unknownSource();
+    yield* Effect.tryPromise({
+      try: () => checkSqliteFile(input.path),
+      catch: (error) => (error instanceof DataError ? error : notSqlite()),
+    });
+
+    const id = yield* lock.withPermit(
+      Effect.gen(function* () {
+        const id = sourceId(checkout, name);
+        const previous = yield* claimName(checkout, name, input.previousName, discovered);
+
+        const item: ManualSource = {
+          id,
+          name,
+          engine: "sqlite",
+          ...DATA_FILE_SERVER,
+          path: input.path,
+        };
+
+        yield* secret(passwords.remove(id));
+        yield* storage.save(checkout, item, input.label, previous?.id);
+
+        if (previous && previous.id !== id) yield* secret(passwords.remove(previous.id));
+        yield* PubSub.publish(changes, checkout);
+
+        return id;
+      })
+    );
+
+    return yield* find({ sessionId: input.sessionId, source: id });
+  });
+
+  const save = Effect.fnUntraced(function* (input: SaveInput) {
+    const checkout = yield* checkoutPath(input.sessionId);
+
+    const discovered = yield* discoverFor(checkout);
 
     const id = yield* lock.withPermit(
       Effect.gen(function* () {
@@ -248,22 +362,7 @@ export const sources = Effect.fnUntraced(function* (options: {
           user: validated.user ?? "",
         };
 
-        const manual = yield* storage.manual(checkout);
-        const previousName = input.previousName?.trim().toLowerCase();
-        const previous = manual.find((entry) => entry.name === previousName);
-
-        if (previousName && !previous) return yield* unknownSource();
-
-        const taken =
-          manual.some((entry) => entry.name === name && entry.id !== previous?.id) ||
-          (!previous && discovered.some((entry) => entry.name === name));
-
-        if (taken)
-          return yield* new DataError({
-            code: "E-DATA-UNKNOWN-SOURCE",
-            message: "A data source already uses that name.",
-            fix: "Choose a different name or edit the existing data source.",
-          });
+        const previous = yield* claimName(checkout, name, input.previousName, discovered);
         const action = input.passwordAction ?? (input.password === undefined ? "keep" : "set");
 
         if (
@@ -337,6 +436,9 @@ export const sources = Effect.fnUntraced(function* (options: {
 
   return {
     inspect: Effect.fnUntraced(function* (source, connection) {
+      // SQLite has no users or grants to warn about.
+      if (source.engine === "sqlite") return;
+
       const warnings = yield* Effect.tryPromise({
         try: (signal) => inspectPrivileges(pools, source, connection, signal),
         catch: dataFailure,
@@ -370,6 +472,7 @@ export const sources = Effect.fnUntraced(function* (options: {
     refresh,
     resolve,
     save,
+    saveFile,
     remove,
     label,
     watch: (input) =>

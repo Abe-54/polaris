@@ -1,8 +1,10 @@
 import { readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { Option, Redacted, Schema } from "effect";
 import { connectionUrl, metadata, sourceName, type Candidate } from "./connection.ts";
 import { blocks, namedBlocks, literalTarget, unquote } from "./literals.ts";
 import { composeSources, throughCompose } from "./formats.ts";
+import { isSqliteUrl, sqliteFile } from "./sqlite/files.ts";
 
 import { read } from "./read.ts";
 
@@ -68,6 +70,23 @@ const frameworkObject = (
   ];
 };
 
+/** A SQLite candidate's URL becomes an absolute `file:` URL resolved against `base`. */
+const fileCandidate = (item: Candidate, base: string): Candidate[] => {
+  const url = Redacted.value(item.url);
+
+  if (!isSqliteUrl(url)) return [item];
+  const path = sqliteFile(url, base);
+
+  if (path === undefined) return [];
+
+  return [
+    {
+      ...item,
+      url: connectionUrl({ engine: "sqlite", host: "", port: 0, database: "", user: "", path }, ""),
+    },
+  ];
+};
+
 export const prisma = (text: string, file: string, env: Record<string, string>) => {
   const found: Candidate[] = [];
 
@@ -82,7 +101,24 @@ export const prisma = (text: string, file: string, env: Record<string, string>) 
   return found;
 };
 
+/** drizzle-kit takes a bare path or a `file:` URL for SQLite, relative to the checkout. */
+const drizzleSqlite = (text: string, file: string, env: Record<string, string>) => {
+  const key = /\burl\s*:\s*process\.env(?:\.([\w]+)|\[["']([^"']+)["']\])/.exec(text);
+  const envKey = key?.[1] ?? key?.[2];
+  const literal = /\burl\s*:\s*["']([^"']+)["']/.exec(text)?.[1];
+  const value = envKey ? env[envKey] : literal;
+
+  if (!value) return [];
+  const url = isSqliteUrl(value) ? value : `file:${value}`;
+
+  return [candidate(envKey ?? "drizzle", url, file, envKey ?? "url")];
+};
+
 const drizzle = (text: string, file: string, env: Record<string, string>) => {
+  const dialect = /\bdialect\s*:\s*["']([^"']+)["']/.exec(text)?.[1];
+
+  if (dialect === "sqlite") return drizzleSqlite(text, file, env);
+
   const credentials = /\bdbCredentials\s*:\s*/.exec(text);
 
   if (!credentials) return [];
@@ -97,9 +133,8 @@ const drizzle = (text: string, file: string, env: Record<string, string>) => {
   const fields = literalTarget(body);
 
   if (!fields) return [];
-  const dialect = /\bdialect\s*:\s*["']([^"']+)["']/.exec(text)?.[1] ?? "postgres";
 
-  return frameworkObject("drizzle", { ...fields, dialect }, file);
+  return frameworkObject("drizzle", { ...fields, dialect: dialect ?? "postgres" }, file);
 };
 
 const django = (text: string, file: string) => {
@@ -199,8 +234,18 @@ export const discover = async (checkout: string, signal?: AbortSignal): Promise<
     signal?.throwIfAborted();
     const text = await read(checkout, file);
 
-    if (file.endsWith(".prisma")) found.push(...prisma(text, file, env));
-    else if (file.startsWith("drizzle")) found.push(...drizzle(text, file, env));
+    if (file.endsWith(".prisma")) {
+      // Prisma resolves a SQLite file: path against the schema's directory, even through env().
+      const items = prisma(text, file, env).flatMap((item) =>
+        fileCandidate(item, join(checkout, dirname(file)))
+      );
+
+      const files = new Set(
+        items.filter((item) => isSqliteUrl(Redacted.value(item.url))).map((item) => item.name)
+      );
+
+      found.splice(0, found.length, ...found.filter((item) => !files.has(item.name)), ...items);
+    } else if (file.startsWith("drizzle")) found.push(...drizzle(text, file, env));
     else if (file.endsWith(".yml")) found.push(...rails(text, file, env));
     else found.push(...django(text, file));
   }
@@ -209,7 +254,11 @@ export const discover = async (checkout: string, signal?: AbortSignal): Promise<
 
   for (const file of ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"])
     composed.push(...composeSources(await read(checkout, file), file, env));
-  const mapped = found.map((item) => throughCompose(item, composed));
+
+  const mapped = found
+    .flatMap((item) => fileCandidate(item, checkout))
+    .map((item) => (isSqliteUrl(Redacted.value(item.url)) ? item : throughCompose(item, composed)));
+
   mapped.push(...composed);
   const names = new Set<string>();
 

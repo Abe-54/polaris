@@ -23,6 +23,7 @@ import {
   type QueryData,
   type WatchDataQueryLog,
   type SaveDataSource,
+  type SaveDataFileSource,
   type RemoveDataSource,
   type LabelDataSource,
 } from "@polaris/protocol";
@@ -74,6 +75,10 @@ export class DataSources extends Context.Service<
       input: Input<typeof WatchDataSources>
     ) => Stream.Stream<ReadonlyArray<DataSource>, Failure>;
     readonly save: (input: Input<typeof SaveDataSource>) => Effect.Effect<DataSource, Failure>;
+    /** A manual SQLite source by its file on the Host; absent where SQLite is unsupported. */
+    readonly saveFile?: (
+      input: Input<typeof SaveDataFileSource>
+    ) => Effect.Effect<DataSource, Failure>;
     readonly remove: (input: Input<typeof RemoveDataSource>) => Effect.Effect<void, Failure>;
     readonly label: (input: Input<typeof LabelDataSource>) => Effect.Effect<DataSource, Failure>;
     readonly access: (

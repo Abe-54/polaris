@@ -25,6 +25,14 @@ export const matchingSource = (span: Span, sources: ReadonlyArray<DataSource>) =
   const port = value(span, "server.port", "net.peer.port");
   const database = value(span, "db.namespace", "db.name");
 
+  if (engine === "sqlite") {
+    const files = sources.filter(
+      (source) => source.engine === "sqlite" && source.path === database
+    );
+
+    return files.length === 1 ? { id: files[0]!.id, name: files[0]!.name } : undefined;
+  }
+
   if (engine === undefined || host === undefined || database === undefined) return undefined;
 
   const normalize = (name: string) =>
@@ -32,6 +40,7 @@ export const matchingSource = (span: Span, sources: ReadonlyArray<DataSource>) =
 
   const matches = sources.filter(
     (source) =>
+      source.engine !== "sqlite" &&
       (source.engine === engine || (source.engine === "postgres" && engine === "postgresql")) &&
       normalize(source.host) === normalize(host) &&
       source.database === database &&

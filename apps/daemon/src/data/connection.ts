@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
-import { DataSource, type DataSourceLabel } from "@polaris/protocol";
+import { DATA_FILE_SERVER, DataSource, type DataSourceLabel } from "@polaris/protocol";
 import { Redacted } from "effect";
+import { sqliteFile } from "./sqlite/files.ts";
 
 export interface Candidate {
   readonly name: string;
@@ -17,7 +18,20 @@ export interface DataConnection {
   readonly password: Redacted.Redacted<string>;
   readonly tls: false | "disable" | "allow" | "prefer" | "require" | "verify-ca" | "verify-full";
   readonly path?: string;
+  /** The SQLite database file; the server fields are then `DATA_FILE_SERVER` placeholders. */
+  readonly file?: string;
 }
+
+/** A SQLite candidate's connection: only `file` is real. */
+const fileConnection = (file: string): DataConnection => ({
+  hostname: DATA_FILE_SERVER.host,
+  port: DATA_FILE_SERVER.port,
+  database: DATA_FILE_SERVER.database,
+  username: "",
+  password: Redacted.make(""),
+  tls: false,
+  file,
+});
 
 const hasControl = (value: string) => Array.from(value).some((char) => char.charCodeAt(0) < 32);
 
@@ -26,6 +40,9 @@ export const parseConnection = (
   candidate: Candidate
 ): { engine: DataSource["engine"]; connection: DataConnection } | undefined => {
   try {
+    const file = sqliteFile(Redacted.value(candidate.url));
+
+    if (file !== undefined) return { engine: "sqlite", connection: fileConnection(file) };
     const url = new URL(Redacted.value(candidate.url));
 
     if (!["postgres:", "postgresql:", "mysql:"].includes(url.protocol)) return undefined;
@@ -167,6 +184,20 @@ export const metadata = (
 
     if (!parsed) return undefined;
     const { engine, connection } = parsed;
+
+    if (engine === "sqlite" && connection.file !== undefined)
+      return new DataSource({
+        id: sourceId(checkout, candidate.name),
+        name: candidate.name,
+        engine,
+        ...DATA_FILE_SERVER,
+        path: connection.file,
+        locality,
+        foundIn: candidate.foundIn,
+        label: defaultLabel(locality),
+        access: locality === "local" ? "read" : "denied",
+        writes: "off",
+      });
     const host = connection.path || connection.hostname;
     const { database, username: user, port } = connection;
     const branch = branchOf(connection.hostname, user);
@@ -201,9 +232,18 @@ export const connectionUrl = (
     port: number;
     database: string;
     user: string;
+    path?: string | undefined;
   },
   password: string
 ) => {
+  if (input.engine === "sqlite") {
+    if (input.path === undefined) throw new Error("A SQLite source needs its file path");
+
+    return Redacted.make(
+      `file:${encodeURI(input.path).replaceAll("?", "%3F").replaceAll("#", "%23")}`
+    );
+  }
+
   const host =
     input.host.includes(":") && !input.host.startsWith("[") ? `[${input.host}]` : input.host;
 
@@ -224,10 +264,14 @@ export const connectionUrl = (
 
 /** Labels are scoped to the selected driver target, independently of the display name. */
 export const targetFingerprint = (
-  source: Pick<DataSource, "engine" | "host" | "port" | "database" | "user">
+  source: Pick<DataSource, "engine" | "host" | "port" | "database" | "user" | "path">
 ) =>
   createHash("sha256")
     .update(
-      JSON.stringify([source.engine, source.host, source.port, source.database, source.user ?? ""])
+      JSON.stringify(
+        source.engine === "sqlite"
+          ? [source.engine, source.path ?? ""]
+          : [source.engine, source.host, source.port, source.database, source.user ?? ""]
+      )
     )
     .digest("hex");

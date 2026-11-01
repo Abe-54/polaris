@@ -13,6 +13,7 @@
  *   polaris tailscale <on|off|status>  Remote Access over Tailscale (ADR 0076)
  *   polaris voice key <set|clear|status>   the voice provider's key in the Host's secure storage
  *   polaris rules-scan             (internal) run the Rules' pattern scan; the Daemon starts it
+ *   polaris data-sqlite            (internal) run one SQLite Data read; the Daemon starts it
  */
 // Every command loads only what it needs: `bridge` runs once per remote Client for as
 // long as it stays connected, and `serve` should not carry the install code.
@@ -86,6 +87,12 @@ switch (command) {
     const result = await selfTest();
     console.log(result.lines.join("\n"));
     process.exitCode = result.ok ? 0 : 1;
+    break;
+  }
+
+  case "data-sqlite": {
+    const { runSqliteChild } = await import("./data/sqlite/child.ts");
+    process.exit(await runSqliteChild());
     break;
   }
 

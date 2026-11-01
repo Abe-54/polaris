@@ -45,7 +45,10 @@ export const DataRpcsLive = DataRpcs.toLayer(
       "data.queryLog.page": (input) => queries.pageLog(input).pipe(Effect.mapError(wireFailure)),
       "data.queryLog.watch": (input) => queries.watchLog(input).pipe(Stream.mapError(wireFailure)),
       "data.source.save": (input) => sources.save(input).pipe(Effect.mapError(wireFailure)),
-      "data.source.saveFile": () => Effect.fail(new Unsupported({ capability: "data.sqlite" })),
+      "data.source.saveFile": (input) =>
+        sources.saveFile
+          ? sources.saveFile(input).pipe(Effect.mapError(wireFailure))
+          : Effect.fail(new Unsupported({ capability: "data.sqlite" })),
       "data.source.remove": (input) => sources.remove(input).pipe(Effect.mapError(wireFailure)),
       "data.source.label": (input) => sources.label(input).pipe(Effect.mapError(wireFailure)),
       "data.source.access": (input) => sources.access(input).pipe(Effect.mapError(wireFailure)),
