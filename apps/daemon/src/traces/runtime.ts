@@ -7,6 +7,9 @@ import {
   type TurnId,
   type TracesSnapshot,
 } from "@polaris/protocol";
+import { InspectorTargets } from "./attach/registry.ts";
+import { ApprovalPolicy } from "../services.ts";
+import { EventStore } from "../store/EventStore.ts";
 import { polarisHome } from "../paths.ts";
 import { followTokenLifecycle } from "./tokenLifecycle.ts";
 import { TraceSessions } from "./sessions.ts";
@@ -57,6 +60,9 @@ export class TraceRuntime extends Context.Service<
         const sessions = yield* TraceSessions;
         const store = yield* TraceStore;
         const settings = yield* Effect.serviceOption(TraceSettings);
+        const policy = yield* Effect.serviceOption(ApprovalPolicy);
+        const targets = yield* Effect.serviceOption(InspectorTargets);
+        const events = yield* Effect.serviceOption(EventStore);
         const vault = new TraceTokenVault(filename);
         yield* followTokenLifecycle(vault);
 
@@ -106,7 +112,27 @@ export class TraceRuntime extends Context.Service<
           if (Option.isSome(settings))
             yield* settings.value.prepare(context, source).pipe(Effect.mapError(tokenError));
 
-          return injectedEnvironment(yield* endpoint(context, launchTurn));
+          const session = Option.isSome(events)
+            ? (yield* events.value.model).sessions.get(id)?.session
+            : undefined;
+
+          const cooperative =
+            Option.isSome(targets) &&
+            source.OTEL_EXPORTER_OTLP_ENDPOINT === undefined &&
+            source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT === undefined &&
+            session !== undefined &&
+            session.permissionMode !== "plan" &&
+            session.origin !== "reviewer" &&
+            !(Option.isSome(policy) && policy.value.readOnly(id))
+              ? yield* Effect.tryPromise(() =>
+                  targets.value.environment(id, source.NODE_OPTIONS)
+                ).pipe(Effect.orElseSucceed(() => ({})))
+              : {};
+
+          return {
+            ...injectedEnvironment(yield* endpoint(context, launchTurn)),
+            ...cooperative,
+          };
         });
 
         const authenticate = Effect.fnUntraced(function* (token: string) {

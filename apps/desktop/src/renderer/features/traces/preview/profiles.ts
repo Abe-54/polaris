@@ -406,6 +406,14 @@ export const fixtureProfilesApi = ({ large = false, owned }: ProfilesFixture = {
         fail("E-PROFILE-UNAVAILABLE", "This recording has no profile to read", "Record it again")
       );
     },
+    attach: () =>
+      Promise.resolve(
+        fail(
+          "E-PROFILE-ATTACH-REFUSED",
+          "This process is not registered.",
+          "Restart with profiling instead."
+        )
+      ),
     restart: (_at, pid) => {
       if (owned !== undefined && !owned.includes(pid))
         return Promise.resolve(

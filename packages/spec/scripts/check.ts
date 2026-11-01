@@ -121,6 +121,18 @@ run("Schema Diff attribution safety", [
   `--seed=${seed}`,
 ]);
 
+run("Inspector attach approval scenarios", ["test", "polaris.qnt", "--main=profile_attach"]);
+
+run("Inspector attach approval safety", [
+  "run",
+  "polaris.qnt",
+  "--main=profile_attach",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
 run("Data approval scenarios", ["test", "polaris.qnt", "--main=data_approvals"]);
 
 run("Data approval safety", [

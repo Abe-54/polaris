@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 /**
  * A test model over the session machine for `xstate/graph`: abstract Steps a
  * test can also drive against the real Engine (a Client command, something
@@ -47,7 +48,7 @@ export const BACKGROUND_COMMAND = new BackgroundTask({
 });
 
 /** What a test can do to a session, in the terms of the Engine's public surface. */
-export type Step =
+type StepVariant =
   | { readonly type: "start" }
   | { readonly type: "fork" }
   | { readonly type: "send" }
@@ -65,6 +66,7 @@ export type Step =
   | { readonly type: "setModel" }
   /** The fake Harness (or, In Terminal, the followed terminal UI) reports… */
   | { readonly type: "requestApproval" }
+  | { readonly type: "requestAttach" }
   /** …an approval request for a Turn that already ended (a stale or misbehaving Harness). */
   | { readonly type: "lateApproval" }
   | { readonly type: "withdrawApproval" }
@@ -80,6 +82,8 @@ export type Step =
   | { readonly type: "crash" }
   /** The Daemon restarts onto the same store. */
   | { readonly type: "restart" };
+
+export type Step = { readonly type: StepVariant["type"] };
 
 export const COMMAND_STEPS = [
   "send",
@@ -206,6 +210,17 @@ const approvalRequest = (id: string, turnId: TurnId, title: string) =>
     openedAt: AT,
   });
 
+export const attachRequest = (id: string, turnId: TurnId) =>
+  Schema.decodeUnknownSync(ApprovalRequest)({
+    ...Schema.encodeSync(ApprovalRequest)(
+      approvalRequest(id, turnId, "Profile Node process 42 for 5 s")
+    ),
+    kind: "tool",
+    profileAttach: { pid: 42, command: "node server.mjs", runtime: "node", seconds: 5 },
+    detail:
+      "node server.mjs · pid 42 · Node · profile for 5 s\nwhile attached, any local process can run code in it",
+  });
+
 const firstPending = (record: SessionRecord | undefined) => {
   const [first] = record?.pending.keys() ?? [];
 
@@ -295,6 +310,10 @@ const INPUTS = {
       canSwitchModel: c.options.switchModel,
     },
   ],
+  requestAttach: (c) =>
+    c.channel === null || c.working === undefined || (c.record?.pending.size ?? 0) >= 2
+      ? []
+      : [{ type: "inspector.approvalRequested", request: attachRequest(`r${c.n}`, c.working.id) }],
   requestApproval: (c) =>
     c.channel === null || c.working === undefined || (c.record?.pending.size ?? 0) >= 2
       ? []
@@ -456,6 +475,7 @@ export const ALL_STEPS: ReadonlyArray<Step> = [
   { type: "fork" },
   ...COMMAND_STEPS.map((type) => ({ type })),
   { type: "requestApproval" },
+  { type: "requestAttach" },
   { type: "lateApproval" },
   { type: "withdrawApproval" },
   { type: "terminalTurn" },

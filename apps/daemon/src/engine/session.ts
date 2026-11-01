@@ -318,7 +318,7 @@ const archive = ({ context, event }: { context: Context; event: { at: string } }
 
 type ApprovalRequestedInput = Extract<
   SessionInput,
-  { type: "harness.approvalRequested" | "data.approvalRequested" }
+  { type: "harness.approvalRequested" | "data.approvalRequested" | "inspector.approvalRequested" }
 >;
 
 /**
@@ -484,6 +484,8 @@ export const sessionMachine = createMachine({
 
       return started === null ? undefined : settle(enq, need(context), [started]);
     },
+    "inspector.approvalRequested": ({ context, event }, enq) =>
+      approvalRequested(need(context), event, enq, "needs-you"),
     "data.approvalRequested": ({ context, event }, enq) =>
       approvalRequested(need(context), event, enq, "needs-you"),
     "harness.approvalRequested": ({ context, event }, enq) =>
@@ -761,6 +763,7 @@ export const sessionMachine = createMachine({
         "harness.turnStarted": ignore,
         "harness.approvalRequested": ignore,
         "data.approvalRequested": ignore,
+        "inspector.approvalRequested": ignore,
         "harness.exited": ignore,
         "session.fail": ignore,
         // Only Unarchive leaves Archived.

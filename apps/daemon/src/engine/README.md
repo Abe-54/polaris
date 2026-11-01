@@ -62,7 +62,7 @@ stateDiagram-v2
     state "Idle" as idle
     state "Working" as working
     idle --> working: turn.send, turn.deliver, turn.retry, harness.turnStarted (including background reports)
-    working --> needs_you: harness.approvalRequested, data.approvalRequested (source or write, Turn in flight)
+    working --> needs_you: harness.approvalRequested, data.approvalRequested, inspector.approvalRequested (Turn in flight)
     needs_you --> working: approval.respond, harness.approvalWithdrawn (last request, Turn in flight)
     working --> working: turn.send (autonomous Turn: steer user prompt)
     working --> working: turn.deliver (waitForTurn effect; no events)
@@ -204,10 +204,12 @@ Every state but `absent` and `removing` takes `checkout.reportHead` (it records 
 
 | Driver | States (shortest paths) | State-changing transitions (one path each) |
 |---|---|---|
-| Claude (sequential hand-off) | 47 | 277 |
-| Codex (live co-attach) | 55 | 367 |
+| Claude (sequential hand-off) | 53 | 301 |
+| Codex (live co-attach) | 55 | 377 |
 
-Simple paths are too many to replay (455k and 2.4M), so every transition is covered instead. Not replayed: `idle.timeout` (the Engine's timer; covered by `Engine.test.ts`) and `session.fail` (a failing Worktree or Harness open). `session.test.ts` checks the machine on its own: all nine Session States are reachable, the rebuild-from-fold property, the guards, recovery and effects.
+`requestAttach` also drives Daemon-owned inspector approvals through the machine.
+
+Simple paths are too many to replay, so every transition is covered instead. Not replayed: `idle.timeout` (the Engine's timer; covered by `Engine.test.ts`) and `session.fail` (a failing Worktree or Harness open). `session.test.ts` checks the machine on its own: all nine Session States are reachable, the rebuild-from-fold property, the guards, recovery and effects.
 
 When you change the lifecycle: change `session.ts`, then `session.testing.ts` if a new Step or Engine follow-up is needed, update the counts above and in `session.test.ts`, and keep this diagram in step.
 

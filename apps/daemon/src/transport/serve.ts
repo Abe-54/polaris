@@ -1,3 +1,4 @@
+import { InspectorTargets } from "../traces/attach/registry.ts";
 import { Profiles } from "../traces/profiles/index.ts";
 import { ProfilesRpcsLive } from "../traces/profiles/rpcs.ts";
 import { DataDatabase } from "../data/database.ts";
@@ -148,8 +149,9 @@ export const dataServices = Layer.merge(DataQueries.layer, SchemaSnapshots.layer
 
 /** One receiver, one token authority and one lazy trace worker per Host. */
 export const traceServices = TraceReceiverLive.pipe(
-  Layer.provideMerge(TraceRuntime.layer),
+  Layer.provideMerge(TraceRuntime.layer.pipe(Layer.provide(ReviewerPolicyLive))),
   Layer.provideMerge(TraceSettings.layer),
+  Layer.provideMerge(InspectorTargets.layer),
   Layer.provideMerge(TraceSessions.layer),
   Layer.provideMerge(TraceStore.layer)
 );
@@ -173,9 +175,9 @@ export const engineServices = Layer.mergeAll(Engine.layer, Profiles.layer, relea
     )
   ),
   Layer.provideMerge(usageServices),
-  Layer.provideMerge(ReviewerSessions.layer),
   Layer.provideMerge(dataServices),
   Layer.provideMerge(traceServices),
+  Layer.provideMerge(ReviewerSessions.layer),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -257,6 +259,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "traces.settings",
   "traces.compare",
   "traces.profiles",
+  "traces.profiles.attach",
   "constellation",
   "constellation.defaults",
   "extensions",

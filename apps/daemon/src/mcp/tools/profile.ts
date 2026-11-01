@@ -2,7 +2,7 @@ import {
   ProfileId,
   type Profile,
   type ProfileDetail,
-  type ProfileError,
+  ProfileError,
   type SessionId,
   type TraceSummary,
 } from "@polaris/protocol";
@@ -16,6 +16,7 @@ export interface ProfileSessionTools extends Pick<
   Profiles["Service"],
   "capture" | "restart" | "get"
 > {
+  readonly attach?: Profiles["Service"]["attach"];
   readonly overlapping: (
     session: SessionId,
     profile: Profile
@@ -29,6 +30,8 @@ export const ProfileInput = Schema.Struct({
       Schema.isMaxLength(128)
     )
   ),
+  attach: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  seconds: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 }))),
   process: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   id: Schema.optionalKey(ProfileId),
   waitSeconds: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 120 }))),
@@ -120,10 +123,44 @@ export const profileView = (
   return sections.join("\n").slice(0, TRACE_CAP);
 };
 
+const validSelector = (value: typeof ProfileInput.Type) =>
+  [value.command, value.process, value.attach, value.id].filter((v) => v !== undefined).length ===
+    1 &&
+  (value.waitSeconds === undefined || value.command !== undefined) &&
+  (value.seconds === undefined || value.attach !== undefined);
+
+const recordingFor = Effect.fnUntraced(function* (
+  profiles: ProfileSessionTools,
+  sessionId: SessionId,
+  value: typeof ProfileInput.Type
+): Effect.fn.Return<{ profile: Profile; retained?: ProfileDetail }, ProfileError> {
+  if (value.id !== undefined) {
+    const retained = yield* profiles.get(sessionId, value.id);
+
+    return { profile: retained.profile, retained };
+  }
+
+  if (value.attach !== undefined) {
+    if (!profiles.attach)
+      return yield* new ProfileError({
+        code: "E-PROFILE-UNAVAILABLE",
+        message: "Inspector profiling is unavailable.",
+        fix: "Use Restart with profiling instead.",
+      });
+
+    return { profile: yield* profiles.attach(sessionId, value.attach, value.seconds) };
+  }
+
+  if (value.process !== undefined)
+    return { profile: yield* profiles.restart(sessionId, value.process) };
+
+  return { profile: yield* profiles.capture(sessionId, value.command!, value.waitSeconds) };
+});
+
 export const profileTool = (sessionId: SessionId, sessions: SessionTools): BoundTool => ({
   name: "profile",
   description:
-    "Profile a Node or Bun command (argv array), restart a process Polaris's Profiles service launched, or read a recording by id. Ask the user before restarting a process they started. Commands run in this checkout; waitSeconds defaults to 30 and does not stop long-running commands. Artifacts finalize on process exit.",
+    "Profile a Node or Bun command (argv array), restart a process Polaris's Profiles service launched, or read a recording by id. Ask the user before restarting a process they started. Commands run in this checkout; waitSeconds defaults to 30 and does not stop long-running commands. Artifacts finalize on process exit. attach profiles a cooperatively registered Node pid for seconds (default 5, maximum 30), only after the user approves a Pending Approval. While attached, any local process can run code in it. Unregistered processes are refused.",
   inputSchema: jsonSchema(ProfileInput),
   annotations: { readOnlyHint: false },
   call: (input, signal) =>
@@ -137,18 +174,15 @@ export const profileTool = (sessionId: SessionId, sessions: SessionTools): Bound
           return failure(
             "E-INPUT",
             "Invalid input for profile.",
-            "Use exactly one of command, process or id."
+            "Use exactly one of command, process, attach or id."
           );
         const value = decoded.value;
 
-        if (
-          [value.command, value.process, value.id].filter((v) => v !== undefined).length !== 1 ||
-          (value.waitSeconds !== undefined && value.command === undefined)
-        )
+        if (!validSelector(value))
           return failure(
             "E-INPUT",
             "Invalid profile selector.",
-            "Use exactly one of command, process or id; waitSeconds applies only to command."
+            "Use exactly one of command, process, attach or id; waitSeconds applies only to command and seconds only to attach."
           );
 
         if (sessions.profiles === undefined)
@@ -158,15 +192,7 @@ export const profileTool = (sessionId: SessionId, sessions: SessionTools): Bound
             "Check Traces (⌘5) on the host and retry."
           );
         const profiles = sessions.profiles;
-        let profile: Profile;
-        let retained: ProfileDetail | undefined;
-
-        if (value.id !== undefined) {
-          retained = yield* profiles.get(sessionId, value.id);
-          profile = retained.profile;
-        } else if (value.process !== undefined)
-          profile = yield* profiles.restart(sessionId, value.process);
-        else profile = yield* profiles.capture(sessionId, value.command!, value.waitSeconds);
+        const { profile, retained } = yield* recordingFor(profiles, sessionId, value);
 
         if (profile.status !== "completed")
           return {

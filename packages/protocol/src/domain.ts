@@ -606,6 +606,14 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   sessionId: SessionId,
   turnId: TurnId,
   kind: ApprovalKind,
+  profileAttach: Schema.optionalKey(
+    Schema.Struct({
+      pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+      command: ScrubbedText,
+      runtime: Schema.Literal("node"),
+      seconds: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+    })
+  ),
   dataSource: Schema.optionalKey(DataSourceApproval),
   dataWrite: Schema.optionalKey(
     Schema.Struct({

@@ -79,3 +79,22 @@ test("any other approval still offers Always here", () => {
 
   expect(within(mount(command)).getByRole("button", { name: "Always here" })).not.toBeNull();
 });
+
+test("inspector approval never offers Always here", () => {
+  const { dataSource: _source, ...base } = fixtureDataApproval(
+    FIXTURE_SESSIONS.backfill.id,
+    TurnId.make("turn-5")
+  );
+
+  const card = mount({
+    ...base,
+    kind: "tool",
+    title: "Profile Node process 42 for 5 s",
+    detail:
+      "node server.js · pid 42 · Node · profile for 5 s\nwhile attached, any local process can run code in it",
+    profileAttach: { pid: 42, command: "node server.js", runtime: "node", seconds: 5 },
+  });
+
+  expect(within(card).getByRole("button", { name: "Approve" })).not.toBeNull();
+  expect(within(card).queryByRole("button", { name: "Always here" })).toBeNull();
+});

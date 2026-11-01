@@ -1,3 +1,5 @@
+import { InspectorTargets } from "../attach/registry.ts";
+import { captureAttached } from "../attach/capture.ts";
 import { mkdir, realpath, stat } from "node:fs/promises";
 import { basename, join, resolve, relative, isAbsolute } from "node:path";
 import { Context, Effect, Exit, Layer, Option, PubSub, Stream, type Scope } from "effect";
@@ -68,6 +70,11 @@ export type ProfileRecordingMeta = Pick<Profile, "command" | "runtime" | "pid" |
 export class Profiles extends Context.Service<
   Profiles,
   {
+    readonly attach: (
+      sessionId: SessionId,
+      pid: number,
+      seconds?: number
+    ) => Effect.Effect<Profile, ProfileError>;
     readonly record: (
       sessionId: SessionId,
       meta: ProfileRecordingMeta
@@ -92,6 +99,7 @@ export class Profiles extends Context.Service<
     Layer.effect(
       Profiles,
       Effect.gen(function* () {
+        const targets = yield* Effect.serviceOption(InspectorTargets);
         const sessions = yield* TraceSessions;
         const eventStore = yield* EventStore;
         const trust = yield* WorkspaceTrust;
@@ -513,6 +521,23 @@ export class Profiles extends Context.Service<
 
         return Profiles.of({
           record,
+          attach: (id, pid, seconds = 5) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                yield* authorize(id);
+
+                if (Option.isNone(targets)) return yield* unavailable();
+
+                return yield* captureAttached(
+                  id,
+                  pid,
+                  seconds,
+                  record,
+                  targets.value,
+                  authorize(id)
+                ).pipe(Effect.provideService(EventStore, eventStore));
+              })
+            ),
           list,
           capture: Effect.fnUntraced(function* (id, argv, waitSeconds = 30) {
             yield* authorize(id);
