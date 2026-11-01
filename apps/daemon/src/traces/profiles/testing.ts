@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
@@ -41,7 +42,7 @@ export const withProfiles = async (
   }) => Promise<void>,
   options: ProfileOptions = {}
 ) => {
-  const root = await mkdtemp("/tmp/p4-");
+  const root = await mkdtemp(shortTemp("p4-"));
   const targets = new TargetRegistry(join(root, "bootstrap"));
   let trusted = true;
   let readOnly = false;

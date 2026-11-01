@@ -1,10 +1,11 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { collectorFromEnvironment, detectExporters, publicCollector } from "./detection.ts";
 
 const fixture = async (run: (root: string) => Promise<void>) => {
-  const root = await mkdtemp("/tmp/p1-detect-");
+  const root = await mkdtemp(shortTemp("p1-detect-"));
 
   try {
     await run(root);
@@ -76,7 +77,7 @@ test("signal-specific headers override general headers without exposing values o
 
 test("checkout discovery refuses symlinks and never evaluates shell substitutions", () =>
   fixture(async (root) => {
-    const external = await mkdtemp("/tmp/p1-outside-");
+    const external = await mkdtemp(shortTemp("p1-outside-"));
 
     try {
       await writeFile(join(external, "secret"), "OTEL_EXPORTER_OTLP_ENDPOINT=https://outside.test");

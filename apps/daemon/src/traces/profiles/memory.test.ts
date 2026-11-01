@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ const Measurement = Schema.Struct({
 });
 
 test("P4-6: largest in-bounds artifact stays below 700 MiB peak RSS in the real profile worker", async () => {
-  const root = await mkdtemp("/tmp/profile-memory-");
+  const root = await mkdtemp(shortTemp("profile-memory-"));
   const id = ProfileId.make(crypto.randomUUID());
 
   try {

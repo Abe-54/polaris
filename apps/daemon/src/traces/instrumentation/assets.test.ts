@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -5,7 +6,7 @@ import { materializeInstrumentation } from "./assets.ts";
 import { instrumentationPlugin } from "./build.ts";
 
 test("partial extracted assets are repaired and only the newest three builds remain", async () => {
-  const home = await mkdtemp("/tmp/uf11-assets-");
+  const home = await mkdtemp(shortTemp("uf11-assets-"));
 
   try {
     const assets = { "register.mjs": "export {};", "sdk.cjs": "module.exports = {};" };
@@ -41,7 +42,7 @@ test("partial extracted assets are repaired and only the newest three builds rem
 });
 
 test("an embedding build that misses embedded.ts is rejected", async () => {
-  const root = await mkdtemp("/tmp/uf11-embedding-");
+  const root = await mkdtemp(shortTemp("uf11-embedding-"));
 
   try {
     const entry = join(root, "entry.ts");

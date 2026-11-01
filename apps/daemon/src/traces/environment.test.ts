@@ -113,7 +113,11 @@ test("terminals use a Workspace endpoint in both ordinary and repository environ
               cwd: f.root,
               cols: 80,
               rows: 24,
-              argv: ["/bin/sh", "-c", 'printf "%s" "$OTEL_EXPORTER_OTLP_ENDPOINT"'],
+              argv: [
+                process.execPath,
+                "-e",
+                "process.stdout.write(process.env.OTEL_EXPORTER_OTLP_ENDPOINT)",
+              ],
               environment,
             });
 

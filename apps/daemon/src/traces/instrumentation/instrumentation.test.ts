@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { beforeAll, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ const settings = { enabled: true, autoInstrument: "node", autoInstrumentOverride
 const source = { OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4319/otlp/test" };
 
 const temp = async (run: (root: string) => Promise<void>) => {
-  const root = await mkdtemp("/tmp/p3-instrumentation-");
+  const root = await mkdtemp(shortTemp("p3-instrumentation-"));
 
   try {
     await run(root);

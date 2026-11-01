@@ -1,3 +1,4 @@
+import { shortTemp } from "../../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -113,7 +114,7 @@ test("P4-2: a process that exits while the profile queue is full still completes
 // P4-3: retention counts an in-flight recording's bytes but can never evict it, so every
 // finished recording in the checkout is deleted while one large recording is active.
 test("P4-3: finished recordings are not evicted for bytes an active recording holds", async () => {
-  const root = await mkdtemp("/tmp/rp4-ret-");
+  const root = await mkdtemp(shortTemp("rp4-ret-"));
   const checkout = "/checkout";
 
   const recording = (id: string, status: Profile["status"], ageMs: number) =>

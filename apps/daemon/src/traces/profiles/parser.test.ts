@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { parseProfile } from "./parser.ts";
 
@@ -7,8 +8,8 @@ test("sample weights produce self and inclusive totals, merge adjacent frames an
   const parsed = parseProfile(JSON.stringify(sampled()), "/checkout");
   expect(parsed.hotFunctions).toEqual([
     { name: "(root)", file: null, line: null, selfMs: 0, totalMs: 10 },
-    { name: "caller", file: "src/main.ts", line: 10, selfMs: 1, totalMs: 6 },
-    { name: "leaf", file: "src/leaf.ts", line: 20, selfMs: 5, totalMs: 5 },
+    { name: "caller", file: join("src", "main.ts"), line: 10, selfMs: 1, totalMs: 6 },
+    { name: "leaf", file: join("src", "leaf.ts"), line: 20, selfMs: 5, totalMs: 5 },
     { name: "other", file: "node:internal", line: 1, selfMs: 4, totalMs: 4 },
   ]);
   expect(parsed.hotPath).toEqual([0, 1, 2]);
@@ -26,7 +27,7 @@ test("recursive appearances of a function count inclusive samples once and count
   const parsed = parseProfile(JSON.stringify(cpu), "/checkout");
   expect(parsed.hotFunctions.find((f) => f.name === "caller")).toEqual({
     name: "caller",
-    file: "src/main.ts",
+    file: join("src", "main.ts"),
     line: 10,
     selfMs: 6,
     totalMs: 6,

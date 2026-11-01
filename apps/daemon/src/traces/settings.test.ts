@@ -1,3 +1,4 @@
+import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,7 +21,7 @@ const id = WorkspaceId.make("settings-test");
 const fixture = async (
   run: (root: string, layer: ReturnType<typeof TraceSettings.layerAt>) => Promise<void>
 ) => {
-  const root = await mkdtemp("/tmp/p1-settings-");
+  const root = await mkdtemp(shortTemp("p1-settings-"));
 
   const resolve = (key: WorkspaceId) =>
     key === id

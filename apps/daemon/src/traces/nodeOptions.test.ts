@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
 import {
   appendNodeImport,
@@ -9,12 +11,14 @@ test("Node imports compose with flags and a preceding bootstrap without changing
   const previous = '--no-warnings --import="file:///tmp/inspector.mjs"';
   const next = appendNodeImport(previous, "/tmp/register here.mjs");
 
-  expect(next).toBe(`${previous} --import "file:///tmp/register%20here.mjs"`);
+  expect(next).toBe(
+    `${previous} --import "${pathToFileURL(resolve("/tmp/register here.mjs")).href}"`
+  );
   expect(appendNodeImport(next, "/tmp/register here.mjs")).toBe(next);
 });
 
 for (const existing of [
-  '--import "file:///tmp/register%20here.mjs" --enable-source-maps',
+  `--import "${pathToFileURL(resolve("/tmp/register here.mjs")).href}" --enable-source-maps`,
   '--import="/tmp/register here.mjs" --enable-source-maps',
   "--import /tmp/register.mjs",
 ]) {
@@ -27,7 +31,7 @@ for (const existing of [
 
 test("an unrelated option value is not mistaken for an import", () => {
   expect(appendNodeImport('--title="/tmp/register.mjs"', "/tmp/register.mjs")).toBe(
-    '--title="/tmp/register.mjs" --import "file:///tmp/register.mjs"'
+    `--title="/tmp/register.mjs" --import "${pathToFileURL(resolve("/tmp/register.mjs")).href}"`
   );
 });
 
