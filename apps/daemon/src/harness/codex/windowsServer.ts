@@ -6,7 +6,7 @@
  * and before anything is sent to it that listener must still be the recorded process.
  * See docs/adr/0061-windows-process-trees.md.
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { killTree } from "../../platform/processes.ts";
 import {
   type JobProcess,
@@ -127,7 +127,7 @@ export const windowsLaunch = async (options: {
 
   const job = spawnInJob({
     argv: [options.codexPath, ...serverArgs(options.tokenFile)],
-    env: childEnv(),
+    env: harnessEnv(),
     logFile: options.logFile,
   });
 

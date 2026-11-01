@@ -1,8 +1,8 @@
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 
 export const defaultRunVersion = async (path: string) => {
   const proc = Bun.spawn([path, "--version"], {
-    env: childEnv(),
+    env: harnessEnv(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",

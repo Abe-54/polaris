@@ -22,7 +22,7 @@
  *
  * `polaris uninstall` stops it (`stopAppServer`).
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect, Option, Schema, type Scope, Semaphore } from "effect";
@@ -193,7 +193,7 @@ export const installedCodexVersion = (codexPath: string): Effect.Effect<string |
   Effect.promise(async () => {
     try {
       const proc = Bun.spawn([codexPath, "--version"], {
-        env: childEnv(),
+        env: harnessEnv(),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "ignore",
@@ -262,7 +262,7 @@ interface Launched {
 /** Runs `launchArgv`'s shell and returns the pid it printed. */
 const posixLaunch = async (argv: Array<string>): Promise<Launched> => {
   const proc = Bun.spawn(argv, {
-    env: childEnv(),
+    env: harnessEnv(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
