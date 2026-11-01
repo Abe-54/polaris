@@ -21,6 +21,7 @@ import { installDebugHooks, reportStartupModules } from "../debug.ts";
 import { Engine } from "../engine/Engine.ts";
 import { EngineRpcHandlers } from "../engine/rpc.ts";
 import { VisualsRpcHandlers } from "../visuals/index.ts";
+import { DeveloperModeLive, DeveloperModeRpcHandlers } from "../developerMode/index.ts";
 import { RestartRpcHandlers } from "../engine/restartRpc.ts";
 import { Continuity, ContinuityRpcsLive } from "../continuity/index.ts";
 import { FileSearchLive } from "../files/FileSearch.ts";
@@ -152,6 +153,7 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   Layer.provideMerge(dataServices),
   Layer.provideMerge(traceServices),
   Layer.provideMerge(ReviewerSessions.layer),
+  Layer.provideMerge(DeveloperModeLive),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -178,6 +180,7 @@ export const daemonHandlers = Layer.mergeAll(
   CommitMessageRpcsLive,
   EngineRpcHandlers,
   VisualsRpcHandlers,
+  DeveloperModeRpcHandlers,
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),
@@ -223,6 +226,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "prediction.managed",
   "commit.suggest-message",
   "approval.secret",
+  "developer-mode",
   "data",
   "data.writes",
   "data.schemaDiff",
