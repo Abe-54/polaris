@@ -2,7 +2,13 @@
 import { existsSync, mkdirSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { Duration, Effect, Exit } from "effect";
-import { cleanup, launchDaemon, sampleDaemon, type TransportKind } from "./daemon.ts";
+import {
+  cleanup,
+  type DeveloperModeSetting,
+  launchDaemon,
+  sampleDaemon,
+  type TransportKind,
+} from "./daemon.ts";
 import { median } from "./stats.ts";
 import type {
   AggregatedMetric,
@@ -18,6 +24,8 @@ export interface RunnerOptions {
   readonly runs: number;
   readonly binary: string | null;
   readonly transport: TransportKind;
+  readonly developerMode: DeveloperModeSetting;
+  readonly clientSelfTraces: boolean;
   /** Directory for this invocation's profiles; null without --profile. */
   readonly profileRoot: string | null;
   readonly log: (message: string) => void;
@@ -28,12 +36,19 @@ const SCENARIO_TIMEOUT = Duration.minutes(30);
 const contextFor = (options: RunnerOptions, profileDir: string | null): ScenarioContext => ({
   quick: options.quick,
   transport: options.transport,
+  clientSelfTraces: options.clientSelfTraces,
   profileDir,
   log: options.log,
   launch: (launch = {}) =>
     Effect.acquireRelease(
       Effect.promise(() =>
-        launchDaemon({ binary: options.binary, profileDir, ...launch, home: launch.home ?? null })
+        launchDaemon({
+          binary: options.binary,
+          developerMode: options.developerMode,
+          profileDir,
+          ...launch,
+          home: launch.home ?? null,
+        })
       ),
       (daemon) =>
         Effect.promise(async () => {

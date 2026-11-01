@@ -154,6 +154,17 @@ describe("compare", () => {
     expect(c.rows.find((r) => r.metric === "peak")?.status).toBe("regressed");
   });
 
+  test("a Developer Mode run warns against an older baseline, which ran it off", () => {
+    const old = result({ mem: metric("memory", 100) });
+    const off = result({ mem: metric("memory", 100) }, "m", { developerMode: "off" });
+    const on = result({ mem: metric("memory", 100) }, "m", { developerMode: "on" });
+
+    expect(compare(old, off, new Set(["memory"])).warnings).toEqual([]);
+    expect(compare(old, on, new Set(["memory"])).warnings).toEqual([
+      "baseline ran with Developer Mode off, this run on",
+    ]);
+  });
+
   test("a run on a busy machine warns, whichever side it is", () => {
     const quiet = result({ mem: metric("memory", 100) });
     const busy: BenchResult = { ...quiet, env: { ...quiet.env, backgroundCores: 4.2 } };

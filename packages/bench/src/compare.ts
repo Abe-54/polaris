@@ -120,6 +120,29 @@ export const gatingKinds = (
   return new Set([...failOn].filter((gate) => !CPU_BOUND_KINDS.has(gate)));
 };
 
+const developerModeOf = (result: BenchResult) => result.env.developerMode ?? "off";
+
+const clientSelfTracesOf = (result: BenchResult) => result.options.clientSelfTraces ?? false;
+
+/** Developer Mode and Client Self-Traces: both absent in older results, which ran them off. */
+const selfTraceWarnings = (baseline: BenchResult, current: BenchResult): Array<string> => {
+  const warnings: Array<string> = [];
+
+  if (developerModeOf(baseline) !== developerModeOf(current)) {
+    warnings.push(
+      `baseline ran with Developer Mode ${developerModeOf(baseline)}, this run ${developerModeOf(current)}`
+    );
+  }
+
+  if (clientSelfTracesOf(baseline) !== clientSelfTracesOf(current)) {
+    warnings.push(
+      `baseline's Clients ${clientSelfTracesOf(baseline) ? "sent" : "sent no"} Self-Traces, this run's ${clientSelfTracesOf(current) ? "did" : "did not"}`
+    );
+  }
+
+  return warnings;
+};
+
 /** Differences in how the two results were produced that make them less comparable. */
 const environmentWarnings = (baseline: BenchResult, current: BenchResult): Array<string> => {
   const warnings: Array<string> = [];
@@ -151,6 +174,8 @@ const environmentWarnings = (baseline: BenchResult, current: BenchResult): Array
       `baseline used the ${baseline.env.transport} transport, this run ${current.env.transport}`
     );
   }
+
+  warnings.push(...selfTraceWarnings(baseline, current));
 
   if (current.options.profile)
     warnings.push("this run was profiled: timings include profiler overhead");
