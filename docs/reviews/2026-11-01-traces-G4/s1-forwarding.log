@@ -1,0 +1,63 @@
+system daemon before: {"pid":"10276","alive":true,"current":"0.7.0"}
+collector R1 (launch-environment collector): http://127.0.0.1:60248
+collector R2 (repository .env collector): http://127.0.0.1:60249
+daemon: {"argv":"bun --no-env-file --config=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/scripts/daemon-dev.toml /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/apps/daemon/src/main.ts serve --foreground","pid":90771,"home":"/tmp/g4h-u2KaBV","cwd":"/tmp/g4cwd-q4rZPl","env":["OTEL_EXPORTER_OTLP_ENDPOINT","OTEL_EXPORTER_OTLP_HEADERS"]}
+daemon A capabilities: ["traces","traces.settings","traces.compare","traces.profiles","traces.profiles.attach"]
+PASS A: receiver Listening {"_tag":"Listening"}
+A ws1 app env: {"nodeOptions":null,"polarisOtel":null,"otlpHeaders":"set","override":null,"otlpEndpoint":"http://127.0.0.1:4319/otlp/<token>"}
+PASS A ws1: app exited 0 after flush {"exit":0}
+PASS A ws1: the app's OTEL_EXPORTER_OTLP_ENDPOINT is the Polaris receiver, not R1 "http://127.0.0.1:4319/otlp/<token>"
+PASS A ws1: Polaris kept its own local copy (traces.watch total) {"total":4}
+R1 received: [{"path":"/v1/traces","ct":"application/x-protobuf","spans":4,"headers":["accept","accept-encoding","authorization","connection","content-length","content-type","host","user-agent","x-collector-key"]}]
+R1 span names: ["orders-api:GET /env","orders-api:GET /fast","orders-api:GET /slow","orders-api:GET /fast"]
+PASS A ws1: R1 got the app's spans (forwarded by Polaris) ["orders-api:GET /env","orders-api:GET /fast","orders-api:GET /slow","orders-api:GET /fast"]
+PASS A ws1: R1 requests carry the launch-env OTEL_EXPORTER_OTLP_HEADERS {"x-collector-key":"shell-secret-k1","authorization":"Bearer shell-secret-auth"}
+PASS A ws1: R1 received only via Polaris (user-agent is the app exporter, path /v1/traces) ["OTel-OTLP-Exporter-JavaScript/0.300.0"]
+A ws1 settings: {"enabled":true,"forwarding":true,"forwardTo":{"url":"http://127.0.0.1:60248/v1/traces","headerNames":["authorization","x-collector-key"],"passesAppHeaders":true},"detectedExporters":[{"kind":"otlp-env","file":"environment","line":1,"runtime":null,"alreadyExporting":false}],"autoInstrument":"off","autoInstrumentOverride":false,"autoInstrumentSkipReason":null}
+PASS A ws1: settings forwardTo is R1 with header names, passesAppHeaders {"url":"http://127.0.0.1:60248/v1/traces","headerNames":["authorization","x-collector-key"],"passesAppHeaders":true}
+PASS A ws2: app exited 0 {"exit":0}
+PASS A ws2 (SEC1): R2 from the repository .env received nothing {"r2":0}
+A ws2 settings: {"enabled":true,"forwarding":true,"forwardTo":{"url":"http://127.0.0.1:60248/v1/traces","headerNames":["authorization","x-collector-key"],"passesAppHeaders":true},"detectedExporters":[{"kind":"otlp-env","file":".env","line":1,"runtime":null,"alreadyExporting":false},{"kind":"otlp-env","file":"environment","line":1,"runtime":null,"alreadyExporting":false}],"autoInstrument":"off","autoInstrumentOverride":false,"autoInstrumentSkipReason":null}
+PASS A ws2: settings show the .env exporter as detection evidence; forwardTo stays R1 {"detected":[{"kind":"otlp-env","file":".env","line":1,"runtime":null,"alreadyExporting":false},{"kind":"otlp-env","file":"environment","line":1,"runtime":null,"alreadyExporting":false}],"forwardTo":{"url":"http://127.0.0.1:60248/v1/traces","headerNames":["authorization","x-collector-key"],"passesAppHeaders":true}}
+daemon A exit: 130
+daemon: {"argv":"bun --no-env-file --config=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/scripts/daemon-dev.toml /Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3/apps/daemon/src/main.ts serve --foreground","pid":90797,"home":"/tmp/g4h-0VXcvq","cwd":"/tmp/g4cwd-6mBr7l","env":["OTEL_EXPORTER_OTLP_HEADERS"]}
+B ws3 app env: {"nodeOptions":null,"polarisOtel":null,"otlpHeaders":"set","override":null,"otlpEndpoint":"http://127.0.0.1:4319/otlp/<token>"}
+PASS B ws3: app exited 0 {"exit":0}
+PASS B ws3 (SEC1): unsaved .env collector R2 received nothing {"r2":0}
+PASS B ws3: R1 (not configured on B) received nothing
+B ws3 settings before save: {"enabled":true,"forwarding":true,"forwardTo":null,"detectedExporters":[{"kind":"otlp-env","file":".env","line":1,"runtime":null,"alreadyExporting":false},{"kind":"otlp-env","file":"environment","line":1,"runtime":null,"alreadyExporting":false}],"autoInstrument":"off","autoInstrumentOverride":false,"autoInstrumentSkipReason":null}
+PASS B ws3: settings show .env evidence as a suggestion, forwardTo null {"forwardTo":null,"detected":[{"kind":"otlp-env","file":".env","line":1,"runtime":null,"alreadyExporting":false},{"kind":"otlp-env","file":"environment","line":1,"runtime":null,"alreadyExporting":false}]}
+B ws3 settings after save: {"enabled":true,"forwarding":true,"forwardTo":{"url":"http://127.0.0.1:60249/v1/traces","headerNames":[],"passesAppHeaders":false},"detectedExporters":[{"kind":"otlp-env","file":".env","line":1,"runtime":null,"alreadyExporting":false},{"kind":"otlp-env","file":"environment","line":1,"runtime":null,"alreadyExporting":false}],"autoInstrument":"off","autoInstrumentOverride":false,"autoInstrumentSkipReason":null}
+PASS B ws3: saved target shows R2, no header names, passesAppHeaders false {"url":"http://127.0.0.1:60249/v1/traces","headerNames":[],"passesAppHeaders":false}
+PASS B ws3: app exited 0 after save {"exit":0}
+R2 received: [{"path":"/v1/traces","spans":["GET /env","GET /slow","GET /slow"],"headers":{"accept":"*/*","accept-encoding":"gzip, deflate, br, zstd","connection":"keep-alive","content-length":"2141","content-type":"application/x-protobuf","host":"127.0.0.1:60249","user-agent":"OTel-OTLP-Exporter-JavaScript/0.300.0"}}]
+PASS B ws3: saved R2 target receives the app's spans ["repo-env-app:GET /env","repo-env-app:GET /slow","repo-env-app:GET /slow"]
+PASS B ws3 (SEC1): R2 never receives shell or .env credential headers []
+PASS B ws3: the app did send the shell credentials to Polaris (precondition for the strip) {"nodeOptions":null,"polarisOtel":null,"otlpHeaders":"set","override":null,"otlpEndpoint":"http://127.0.0.1:4319/otlp/<token>"}
+daemon B exit: 130
+system daemon after: {"pid":"10276","alive":true,"current":"0.7.0"}
+PASS system Daemon unchanged {"before":{"pid":"10276","alive":true,"current":"0.7.0"},"after":{"pid":"10276","alive":true,"current":"0.7.0"}}
+cleaned up: ["/tmp/g4h-u2KaBV","/tmp/g4cwd-q4rZPl","/tmp/g4ws1-QLn8Vq","/tmp/g4ws2-5KcNX1","/tmp/g4h-0VXcvq","/tmp/g4cwd-6mBr7l","/tmp/g4ws3-UKPNSv"]
+SUMMARY [
+ "PASS A: receiver Listening",
+ "PASS A ws1: app exited 0 after flush",
+ "PASS A ws1: the app's OTEL_EXPORTER_OTLP_ENDPOINT is the Polaris receiver, not R1",
+ "PASS A ws1: Polaris kept its own local copy (traces.watch total)",
+ "PASS A ws1: R1 got the app's spans (forwarded by Polaris)",
+ "PASS A ws1: R1 requests carry the launch-env OTEL_EXPORTER_OTLP_HEADERS",
+ "PASS A ws1: R1 received only via Polaris (user-agent is the app exporter, path /v1/traces)",
+ "PASS A ws1: settings forwardTo is R1 with header names, passesAppHeaders",
+ "PASS A ws2: app exited 0",
+ "PASS A ws2 (SEC1): R2 from the repository .env received nothing",
+ "PASS A ws2: settings show the .env exporter as detection evidence; forwardTo stays R1",
+ "PASS B ws3: app exited 0",
+ "PASS B ws3 (SEC1): unsaved .env collector R2 received nothing",
+ "PASS B ws3: R1 (not configured on B) received nothing",
+ "PASS B ws3: settings show .env evidence as a suggestion, forwardTo null",
+ "PASS B ws3: saved target shows R2, no header names, passesAppHeaders false",
+ "PASS B ws3: app exited 0 after save",
+ "PASS B ws3: saved R2 target receives the app's spans",
+ "PASS B ws3 (SEC1): R2 never receives shell or .env credential headers",
+ "PASS B ws3: the app did send the shell credentials to Polaris (precondition for the strip)",
+ "PASS system Daemon unchanged"
+]

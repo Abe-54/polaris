@@ -1,0 +1,238 @@
+/**
+ * G4 scenario 1: forwarding to a launch-environment collector, and SEC1's repository-file negative case.
+ * Daemon A has OTEL_EXPORTER_OTLP_ENDPOINT + HEADERS in its launch env; Daemon B has only the shell's HEADERS.
+ * Apps run through real Polaris terminals (terminal.open argv), so the Daemon builds their environment.
+ */
+import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
+import {
+  check,
+  collector,
+  connect,
+  finish,
+  get,
+  makeWorkspace,
+  note,
+  openTerminal,
+  readPort,
+  registerWorkspace,
+  run,
+  startDaemon,
+  startSession,
+  systemDaemonState,
+  until,
+  writeApp,
+  firstOf,
+  type Client,
+} from "./common.ts";
+
+const LOG = "/dev/null";
+const SHELL_HEADERS = "x-collector-key=shell-secret-k1,authorization=Bearer%20shell-secret-auth";
+const before = systemDaemonState();
+note("system daemon before", before);
+
+const R1 = collector("R1 (launch-environment collector)");
+const R2 = collector("R2 (repository .env collector)");
+const stops: Array<() => unknown> = [() => R1.stop(), () => R2.stop()];
+
+/** Run the app in a Polaris terminal, send requests, then /shutdown (flush + exit 0). */
+const runAppInTerminal = async (c: Client, cwd: string, service: string, paths: string[]) => {
+  const portFile = join(cwd, `port-${service}-${Date.now()}`);
+  const term = await openTerminal(c, cwd, [
+    "node",
+    "--import",
+    "./instr.mjs",
+    "app.cjs",
+    service,
+    portFile,
+  ]);
+  const port = await readPort(portFile).catch((e) => {
+    throw new Error(`${e}; terminal output: ${term.output()}`);
+  });
+  const env = JSON.parse((await get(port, "/env")).body);
+  for (const p of paths) await get(port, p);
+  await get(port, "/shutdown").catch(() => null);
+  await until("terminal exit", () => term.exit() !== undefined, 15_000);
+  const exit = term.exit();
+  await term.close();
+  return { env, exit, output: term.output() };
+};
+
+const watchTotal = async (c: Client, sessionId: string) =>
+  ((await firstOf<any>(c.client["traces.watch"]({ sessionId }))) as any).total as number;
+
+try {
+  // ---------------- Daemon A: launch-environment collector ----------------
+  const daemonA = await startDaemon({
+    OTEL_EXPORTER_OTLP_ENDPOINT: R1.origin,
+    OTEL_EXPORTER_OTLP_HEADERS: SHELL_HEADERS,
+  });
+  stops.unshift(() => daemonA.stop());
+  const a = await connect(daemonA);
+  note("daemon A capabilities", a.hello.capabilities.filter((x: string) => x.startsWith("traces")));
+
+  const ws1 = await makeWorkspace("g4ws1");
+  await writeApp(ws1, { name: "orders-api" });
+  const ws2 = await makeWorkspace("g4ws2");
+  await writeApp(ws2, { name: "repo-env-app" });
+  await writeFile(
+    join(ws2, ".env"),
+    `OTEL_EXPORTER_OTLP_ENDPOINT=${R2.origin}\nOTEL_EXPORTER_OTLP_HEADERS=x-file-key=file-secret\n`
+  );
+  const ws1Id = await registerWorkspace(a, ws1, "G4 ws1");
+  const ws2Id = await registerWorkspace(a, ws2, "G4 ws2");
+  const s1 = await startSession(a, ws1Id);
+  const s2 = await startSession(a, ws2Id);
+  const first: any = await firstOf(a.client["traces.watch"]({ sessionId: s1 }));
+  check("A: receiver Listening", first.availability._tag === "Listening", first.availability);
+
+  const appA = await runAppInTerminal(a, ws1, "orders-api", ["/fast", "/slow", "/fast"]);
+  note("A ws1 app env", appA.env);
+  check("A ws1: app exited 0 after flush", appA.exit === 0, { exit: appA.exit });
+  check(
+    "A ws1: the app's OTEL_EXPORTER_OTLP_ENDPOINT is the Polaris receiver, not R1",
+    /^http:\/\/127\.0\.0\.1:4319\/otlp\/<token>$/.test(appA.env.otlpEndpoint),
+    appA.env.otlpEndpoint
+  );
+  const stored1 = await until("Polaris stored ws1 traces", async () => { const t = await watchTotal(a, s1); return t >= 3 ? t : null; }, 15_000);
+  check("A ws1: Polaris kept its own local copy (traces.watch total)", stored1 >= 3, { total: stored1 });
+  const r1Traces = await until("R1 receives forwarded spans", () =>
+    R1.received.filter((r) => r.path === "/v1/traces" && r.spans.length > 0).length > 0
+      ? R1.received.filter((r) => r.path === "/v1/traces")
+      : null
+  );
+  const r1Names = R1.spanNames();
+  note("R1 received", R1.received.map((r) => ({ path: r.path, ct: r.contentType, spans: r.spans.length, headers: Object.keys(r.headers).sort() })));
+  note("R1 span names", r1Names);
+  check(
+    "A ws1: R1 got the app's spans (forwarded by Polaris)",
+    r1Names.includes("orders-api:GET /fast") && r1Names.includes("orders-api:GET /slow"),
+    r1Names
+  );
+  const r1Headers = r1Traces[0]!.headers;
+  check(
+    "A ws1: R1 requests carry the launch-env OTEL_EXPORTER_OTLP_HEADERS",
+    r1Traces.every(
+      (r) =>
+        r.headers["x-collector-key"] === "shell-secret-k1" &&
+        r.headers["authorization"] === "Bearer shell-secret-auth"
+    ),
+    { "x-collector-key": r1Headers["x-collector-key"], authorization: r1Headers["authorization"] }
+  );
+  check(
+    "A ws1: R1 received only via Polaris (user-agent is the app exporter, path /v1/traces)",
+    r1Traces.every((r) => r.path === "/v1/traces"),
+    r1Traces.map((r) => r.headers["user-agent"])
+  );
+  const settings1: any = await run(a.client["traces.settings"]({ workspaceId: ws1Id }));
+  note("A ws1 settings", settings1);
+  check(
+    "A ws1: settings forwardTo is R1 with header names, passesAppHeaders",
+    settings1.forwardTo?.url === `${R1.origin}/v1/traces` &&
+      settings1.forwardTo.headerNames.includes("x-collector-key") &&
+      settings1.forwardTo.passesAppHeaders === true,
+    settings1.forwardTo
+  );
+
+  // ws2 has a .env pointing at R2: the launch collector still wins, R2 gets nothing.
+  const r1Before = R1.received.length;
+  const appB = await runAppInTerminal(a, ws2, "repo-env-app", ["/fast", "/fast"]);
+  check("A ws2: app exited 0", appB.exit === 0, { exit: appB.exit });
+  await until("Polaris stored ws2 traces", async () => (await watchTotal(a, s2)) >= 2, 15_000);
+  await until("R1 receives ws2 spans", () =>
+    R1.received.slice(r1Before).some((r) => r.spans.some((s) => s.service === "repo-env-app"))
+  );
+  await Bun.sleep(1500); // let any (wrong) forward to R2 arrive before asserting absence
+  check("A ws2 (SEC1): R2 from the repository .env received nothing", R2.received.length === 0, {
+    r2: R2.received.length,
+  });
+  const settings2: any = await run(a.client["traces.settings"]({ workspaceId: ws2Id }));
+  note("A ws2 settings", settings2);
+  check(
+    "A ws2: settings show the .env exporter as detection evidence; forwardTo stays R1",
+    settings2.detectedExporters.some((e: any) => e.kind === "otlp-env" && e.file === ".env") &&
+      settings2.forwardTo?.url === `${R1.origin}/v1/traces`,
+    { detected: settings2.detectedExporters, forwardTo: settings2.forwardTo }
+  );
+  await a.close();
+  const exitA = await daemonA.stop();
+  note("daemon A exit", exitA);
+
+  // ---------------- Daemon B: shell credentials only, repository .env collector ----------------
+  const daemonB = await startDaemon({ OTEL_EXPORTER_OTLP_HEADERS: SHELL_HEADERS });
+  stops.unshift(() => daemonB.stop());
+  const b = await connect(daemonB);
+  const ws3 = await makeWorkspace("g4ws3");
+  await writeApp(ws3, { name: "repo-env-app" });
+  await writeFile(
+    join(ws3, ".env"),
+    `OTEL_EXPORTER_OTLP_ENDPOINT=${R2.origin}\nOTEL_EXPORTER_OTLP_HEADERS=x-file-key=file-secret\n`
+  );
+  const ws3Id = await registerWorkspace(b, ws3, "G4 ws3");
+  const s3 = await startSession(b, ws3Id);
+  const r1Count = R1.received.length;
+  const appC = await runAppInTerminal(b, ws3, "repo-env-app", ["/fast", "/fast", "/fast"]);
+  note("B ws3 app env", appC.env);
+  check("B ws3: app exited 0", appC.exit === 0, { exit: appC.exit });
+  await until("Polaris stored ws3 traces", async () => (await watchTotal(b, s3)) >= 3, 15_000);
+  await Bun.sleep(1500);
+  check("B ws3 (SEC1): unsaved .env collector R2 received nothing", R2.received.length === 0, {
+    r2: R2.received.length,
+  });
+  check("B ws3: R1 (not configured on B) received nothing", R1.received.length === r1Count);
+  const settings3: any = await run(b.client["traces.settings"]({ workspaceId: ws3Id }));
+  note("B ws3 settings before save", settings3);
+  check(
+    "B ws3: settings show .env evidence as a suggestion, forwardTo null",
+    settings3.forwardTo === null &&
+      settings3.detectedExporters.some((e: any) => e.kind === "otlp-env" && e.file === ".env"),
+    { forwardTo: settings3.forwardTo, detected: settings3.detectedExporters }
+  );
+
+  // The user saves the suggested URL (P1-2 / ENG-696 attack shape): R2 now receives spans but no credentials.
+  const saved: any = await run(
+    b.client["traces.setSettings"]({
+      workspaceId: ws3Id,
+      settings: { forwardTo: { url: `${R2.origin}/v1/traces`, headerNames: [] } },
+    })
+  );
+  note("B ws3 settings after save", saved);
+  check(
+    "B ws3: saved target shows R2, no header names, passesAppHeaders false",
+    saved.forwardTo?.url === `${R2.origin}/v1/traces` &&
+      saved.forwardTo.headerNames.length === 0 &&
+      saved.forwardTo.passesAppHeaders === false,
+    saved.forwardTo
+  );
+  const appD = await runAppInTerminal(b, ws3, "repo-env-app", ["/slow", "/slow"]);
+  check("B ws3: app exited 0 after save", appD.exit === 0, { exit: appD.exit });
+  const r2Traces = await until("R2 receives after save", () =>
+    R2.received.filter((r) => r.path === "/v1/traces" && r.spans.length > 0).length > 0
+      ? R2.received.filter((r) => r.path === "/v1/traces")
+      : null
+  );
+  note("R2 received", R2.received.map((r) => ({ path: r.path, spans: r.spans.map((s) => s.name), headers: r.headers })));
+  check("B ws3: saved R2 target receives the app's spans", R2.spanNames().includes("repo-env-app:GET /slow"), R2.spanNames());
+  const leaked = R2.received.flatMap((r) =>
+    Object.entries(r.headers).filter(
+      ([k, v]) =>
+        ["authorization", "x-collector-key", "x-file-key"].includes(k) || /secret/.test(v)
+    )
+  );
+  check("B ws3 (SEC1): R2 never receives shell or .env credential headers", leaked.length === 0, leaked);
+  check(
+    "B ws3: the app did send the shell credentials to Polaris (precondition for the strip)",
+    appD.env.otlpHeaders === "set",
+    appD.env
+  );
+  await b.close();
+  note("daemon B exit", await daemonB.stop());
+} catch (error) {
+  console.error("ERROR", error);
+  check("script completed without exception", false, String(error));
+} finally {
+  const after = systemDaemonState();
+  note("system daemon after", after);
+  check("system Daemon unchanged", before.pid === after.pid && before.current === after.current && after.alive, { before, after });
+  await finish(LOG, stops);
+}

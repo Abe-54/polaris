@@ -1,0 +1,14 @@
+#!/bin/bash
+set -u
+INT=/Users/lucasdoell/code/polaris.worktrees/polaris/grill-with-docs-i-want-to-do-7ce3
+(cd /tmp/pl-main && bun scripts/build-daemon.ts linux-arm64 >/tmp/g4pi/build-main.log 2>&1); echo build-main=$?
+(cd $INT && bun scripts/build-daemon.ts linux-arm64 >/tmp/g4pi/build-head.log 2>&1); echo build-head=$?
+SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=yes lucas-rpi"
+$SSH 'mkdir -p /tmp/g4pi/main /tmp/g4pi/head'
+scp -q -o BatchMode=yes -o StrictHostKeyChecking=yes /tmp/pl-main/apps/daemon/dist/linux-arm64/polaris lucas-rpi:/tmp/g4pi/main/polaris
+scp -q -o BatchMode=yes -o StrictHostKeyChecking=yes $INT/apps/daemon/dist/linux-arm64/polaris lucas-rpi:/tmp/g4pi/head/polaris
+scp -q -o BatchMode=yes -o StrictHostKeyChecking=yes /tmp/g4pi/pi-idle.sh /tmp/g4pi/pi-ctx.sh lucas-rpi:/tmp/g4pi/
+for i in 1 2 3; do
+  $SSH 'bash /tmp/g4pi/pi-idle.sh main /tmp/g4pi/main/polaris; bash /tmp/g4pi/pi-idle.sh head /tmp/g4pi/head/polaris; bash /tmp/g4pi/pi-ctx.sh main /tmp/g4pi/main/polaris; bash /tmp/g4pi/pi-ctx.sh head /tmp/g4pi/head/polaris'
+done
+$SSH 'uptime; rm -rf /tmp/g4pi'

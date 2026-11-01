@@ -1,0 +1,213 @@
+/**
+ * G4 scenario 3 (UF14/UF15): CPU Profiles end to end on a never-exiting Node server.
+ * The agent's MCP `profile {command}` launches it (a Polaris-owned, cooperative launch); the sidebar's
+ * profiles.attach captures it while lsof watches its listeners; the sidebar's profiles.restartWithProfiling
+ * restarts it; Daemon shutdown finalizes the restarted recording.
+ */
+import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import {
+  REPO,
+  check,
+  connect,
+  finish,
+  firstOf,
+  issueMcpToken,
+  listeners,
+  makeWorkspace,
+  mcpCall,
+  mcpEndpoint,
+  note,
+  registerWorkspace,
+  run,
+  startDaemon,
+  startSession,
+  systemDaemonState,
+  trustWorkspace,
+  until,
+} from "./common.ts";
+
+const { profileDirectory } = await import(`${REPO}/apps/daemon/src/traces/profiles/workerClient.ts`);
+
+const before = systemDaemonState();
+note("system daemon before", before);
+const stops: Array<() => unknown> = [];
+const pids: number[] = [];
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const server = `
+const fs = require("fs"), http = require("http");
+function polarisBurn(){const until=Date.now()+40; let n=0; while(Date.now()<until){for(let i=0;i<10000;i++)n+=Math.sqrt(i)} return n}
+setInterval(polarisBurn, 100);
+function handleOrder(){const until=Date.now()+5; let n=0; while(Date.now()<until){for(let i=0;i<1000;i++)n+=Math.sqrt(i)} return n}
+const s = http.createServer((q, r) => r.end(q.url === "/order" ? String(handleOrder()) : "ok")).listen(0, "127.0.0.1", () =>
+  fs.writeFileSync(__dirname + "/port-" + process.pid, String(s.address().port)));
+`;
+
+const summarize = (d: any) => ({
+  id: d.profile.id,
+  status: d.profile.status,
+  origin: d.profile.origin,
+  pid: d.profile.pid,
+  durationMs: Math.round(d.profile.durationMs),
+  nodes: d.nodes.length,
+  functions: d.hotFunctions.length,
+  top: d.hotFunctions.slice(0, 8).map((f: any) => `${f.name}@${f.file ?? "?"}:${f.line ?? "?"} self=${Math.round(f.selfMs)}`),
+});
+
+// G4_HOLD_4319=1 holds the trace receiver's fixed port first, as another Daemon (e.g. a bench run) would.
+const holder = process.env.G4_HOLD_4319 === "1"
+  ? Bun.listen({ hostname: "127.0.0.1", port: 4319, socket: { data() {} } })
+  : null;
+if (holder) stops.push(() => holder.stop(true));
+
+try {
+  const daemon = await startDaemon();
+  stops.unshift(() => daemon.stop());
+  const c = await connect(daemon);
+  check("hello advertises traces.profiles and traces.profiles.attach", ["traces.profiles", "traces.profiles.attach"].every((x) => c.hello.capabilities.includes(x)), c.hello.capabilities.filter((x: string) => x.startsWith("traces")));
+  const ws = await makeWorkspace("g4prof");
+  await writeFile(join(ws, "server.cjs"), server);
+  const wsId = await registerWorkspace(c, ws, "G4 profiles");
+  await trustWorkspace(c, daemon.home, wsId, ws);
+  const sessionId = await startSession(c, wsId);
+  const watched: any = await firstOf(c.client["traces.watch"]({ sessionId }));
+  note("trace receiver availability", watched.availability);
+  const token = await issueMcpToken(daemon.home, sessionId, wsId);
+  const mcp = await mcpEndpoint(c, daemon, token);
+  note("MCP endpoint", mcp.replace(/mcp\/.*/, "mcp/<token>"));
+
+  // 1. The agent profiles a never-exiting server.
+  const launched = await mcpCall(mcp, "profile", { command: ["node", "server.cjs"], waitSeconds: 1 });
+  const original = launched?.structuredContent?.profile;
+  note("MCP profile {command} result", { isError: launched?.isError, text: launched?.content?.[0]?.text?.slice(0, 300), profile: original });
+  check("MCP profile {command} starts a recording", original?.status === "recording" && original?.origin === "command", original?.status);
+  const p1: number = original.pid;
+  pids.push(p1);
+  const port1 = await until("server port", () => existsSync(join(ws, `port-${p1}`)) && Number(readFileSync(join(ws, `port-${p1}`), "utf8")));
+  const psEnv = Bun.spawnSync(["ps", "eww", "-o", "command=", "-p", String(p1)]).stdout.toString();
+  const envFacts = {
+    bootstrapInNodeOptions: /NODE_OPTIONS=[^ ]*--import/.test(psEnv) || /attach|bootstrap/.test((/NODE_OPTIONS=(.*?)( [A-Z_]+=|$)/.exec(psEnv)?.[1]) ?? ""),
+    nodeOptions: ((/NODE_OPTIONS=(.*?)(?= [A-Z_][A-Z0-9_]*=|$)/.exec(psEnv)?.[1]) ?? null)?.replace(/g4h-[^/]+/g, "g4h-*"),
+    profileSocket: /POLARIS_PROFILE_SOCKET=/.test(psEnv),
+    profileToken: /POLARIS_PROFILE_TOKEN=/.test(psEnv),
+  };
+  note("target launch environment (ps eww)", envFacts);
+  const listenBefore = listeners(p1);
+  note("listeners of the app before attach", listenBefore);
+  check("app listens only on its own port before attach", listenBefore.length === 1 && listenBefore[0] === `127.0.0.1:${port1}`, listenBefore);
+
+  // 2. The sidebar's user attach: watch the app's listening sockets for the whole capture.
+  const seen = new Set<string>();
+  let samples = 0;
+  let done = false;
+  const sampler = (async () => {
+    while (!done) {
+      for (const l of listeners(p1)) seen.add(l);
+      samples++;
+      await Bun.sleep(50);
+    }
+  })();
+  // Warm the request handler (JIT), then keep it under load for the whole capture, as a dev server would be.
+  const warm = process.env.G4_WARM ?? "requests";
+  note("warm-up mode", warm);
+  if (warm === "requests") for (let i = 0; i < 200; i++) await fetch(`http://127.0.0.1:${port1}/order`).then((r) => r.text());
+  if (warm === "sleep") await Bun.sleep(5000);
+  if (warm === "requests-new-conn") for (let i = 0; i < 200; i++) await fetch(`http://127.0.0.1:${port1}/order`, { keepalive: false, headers: { connection: "close" } }).then((r) => r.text());
+  let load = process.env.G4_LOAD !== "0";
+  let requests = 0;
+  const loader = (async () => {
+    while (load) {
+      await fetch(`http://127.0.0.1:${port1}/order`).then((r) => r.text());
+      requests++;
+    }
+  })();
+  const t0 = Date.now();
+  const attached: any = await run(c.client["profiles.attach"]({ sessionId, pid: p1, seconds: 3 })).catch((e) => ({ error: String(e) }));
+  const attachMs = Date.now() - t0;
+  if (attached?.error) {
+    // Diagnose: does the same request succeed once the app is no longer serving requests?
+    load = false;
+    await loader;
+    const retry: any = await run(c.client["profiles.attach"]({ sessionId, pid: p1, seconds: 1 })).catch((e) => ({ error: String(e) }));
+    note("attach retried after load stopped", { retry: retry?.error ?? { id: retry?.id, origin: retry?.origin } });
+    check("[diagnostic] the same attach succeeds once the app is idle", retry?.origin === "attach", retry?.error);
+  }
+  note("profiles.attach result", { attachMs, attached });
+  let attachDetail: any = null;
+  if (attached?.id) {
+    attachDetail = await until("attach profile completes", async () => {
+      const d: any = await run(c.client["profiles.get"]({ sessionId, profileId: attached.id })).catch(() => null);
+      return d && d.profile.status !== "recording" ? d : null;
+    }, 30_000).catch(() => null);
+  }
+  done = true;
+  load = false;
+  await sampler;
+  await loader;
+  note("requests served during attach", requests);
+  note("listeners seen during attach", { samples, seen: [...seen] });
+  check("during the user attach the app showed only its own listener (no inspector port)", samples > 10 && seen.size === 1 && seen.has(`127.0.0.1:${port1}`), { samples, seen: [...seen] });
+  check("profiles.attach returns an attach-origin Profile", attached?.origin === "attach" && attached?.pid === p1, attached);
+  note("attach profile detail", attachDetail && summarize(attachDetail));
+  check("attach capture completed with frames including the hot request handler handleOrder", attachDetail?.profile.status === "completed" && attachDetail.nodes.length > 0 && attachDetail.hotFunctions.some((f: any) => f.name === "handleOrder"), attachDetail && summarize(attachDetail));
+  note("attach: polarisBurn (an OSR-optimized setInterval loop running since start) present?", attachDetail?.hotFunctions.some((f: any) => f.name === "polarisBurn") ?? null);
+  if (attachDetail?.profile.path) {
+    // The raw artifact the in-process session produced, before the Daemon's parser.
+    const raw = JSON.parse(await readFile(attachDetail.profile.path, "utf8").catch(() => "null"));
+    const names = raw ? [...new Set(raw.nodes.map((n: any) => n.callFrame.functionName || "(anonymous)"))] : null;
+    const sampled = raw ? new Map<number, number>() : null;
+    if (raw) for (const id of raw.samples) sampled!.set(id, (sampled!.get(id) ?? 0) + 1);
+    const byName = raw ? raw.nodes.filter((n: any) => sampled!.has(n.id)).map((n: any) => `${n.callFrame.functionName || "(anonymous)"}:${sampled!.get(n.id)}`) : null;
+    note("attach raw artifact", { nodes: raw?.nodes.length, samples: raw?.samples.length, functionNames: names?.slice(0, 60), sampledLeaves: byName?.slice(0, 40) });
+    check("raw attach artifact contains handleOrder or polarisBurn frames", !!names && (names.includes("handleOrder") || names.includes("polarisBurn")), names?.length);
+  }
+  check("attach did not stop the app", alive(p1) && (await fetch(`http://127.0.0.1:${port1}/`).then((r) => r.text())) === "ok");
+
+  // 3. Restart with profiling from the sidebar RPC.
+  const restarted: any = await run(c.client["profiles.restartWithProfiling"]({ sessionId, pid: p1 }));
+  note("profiles.restartWithProfiling result", restarted);
+  pids.push(restarted.pid);
+  check("restart returns a new recording with origin restart and a new pid", restarted.status === "recording" && restarted.origin === "restart" && restarted.pid !== p1, { pid: restarted.pid, status: restarted.status });
+  const origDetail: any = await until("original profile completes", async () => {
+    const d: any = await run(c.client["profiles.get"]({ sessionId, profileId: original.id })).catch(() => null);
+    return d && d.profile.status !== "recording" ? d : null;
+  }, 30_000);
+  note("original (restarted) profile detail", summarize(origDetail));
+  check("UF15: restarting the never-exiting server completes its profile with frames", origDetail.profile.status === "completed" && origDetail.nodes.length > 0 && origDetail.hotFunctions.some((f: any) => f.name === "polarisBurn"), summarize(origDetail));
+  check("the old process is gone, the new one serves", !alive(p1) && alive(restarted.pid));
+  const port2 = await until("restarted server port", () => existsSync(join(ws, `port-${restarted.pid}`)) && Number(readFileSync(join(ws, `port-${restarted.pid}`), "utf8")));
+  check("the restarted server answers", (await fetch(`http://127.0.0.1:${port2}/`).then((r) => r.text())) === "ok");
+  const list: any = await firstOf(c.client["profiles.watch"]({ sessionId }));
+  note("profiles.watch", list.profiles.map((p: any) => ({ id: p.id.slice(0, 8), origin: p.origin, status: p.status, pid: p.pid })));
+  const mcpRead = await mcpCall(mcp, "profile", { id: original.id });
+  note("MCP profile {id} text", mcpRead?.content?.[0]?.text?.slice(0, 900));
+  check("MCP profile {id} reads the completed recording", mcpRead?.isError !== true && /polarisBurn/.test(mcpRead?.content?.[0]?.text ?? ""));
+
+  // 4. Daemon shutdown finalizes the restarted recording (stopped through its SIGINT handler).
+  await c.close();
+  const exit = await daemon.stop();
+  note("daemon exit", exit);
+  check("Daemon shutdown stopped the restarted server", await until("restarted server gone", () => !alive(restarted.pid), 20_000).then(() => true, () => false));
+  const directory = await profileDirectory(join(daemon.home, "profiles"), ws, restarted.id);
+  const saved = JSON.parse(await readFile(join(directory, "detail.json"), "utf8").catch(() => "null"));
+  note("restart profile after Daemon stop", saved && summarize(saved));
+  check("the restarted recording completed with frames on Daemon shutdown", saved?.profile?.status === "completed" && saved.nodes.length > 0 && saved.hotFunctions.some((f: any) => f.name === "polarisBurn"), saved && summarize(saved));
+} catch (error) {
+  console.error("ERROR", error);
+  check("script completed without exception", false, String(error));
+} finally {
+  for (const pid of pids) if (alive(pid)) { note("killing leftover app pid", pid); process.kill(pid, "SIGKILL"); }
+  const after = systemDaemonState();
+  note("system daemon after", after);
+  check("system Daemon unchanged", before.pid === after.pid && before.current === after.current && after.alive, { before, after });
+  await finish("/dev/null", stops);
+}

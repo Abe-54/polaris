@@ -1,0 +1,9 @@
+setTimeout(() => { console.log("TIMEOUT"); process.exit(2); }, 10000).unref();
+function polarisBurn(){const until=Date.now()+40; let n=0; while(Date.now()<until){for(let i=0;i<10000;i++)n+=Math.sqrt(i)} return n}
+setInterval(polarisBurn, 100);
+setTimeout(() => {
+  const s = new (require("node:inspector").Session)(); s.connect();
+  s.post("Profiler.enable", () => s.post("Profiler.start", () => setTimeout(() => s.post("Profiler.stop", (e, { profile }) => {
+    console.log(JSON.stringify([...new Set(profile.nodes.map(n => n.callFrame.functionName || "(anon)"))])); process.exit(0);
+  }), 2000)));
+}, 500);

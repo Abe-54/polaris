@@ -1,0 +1,7 @@
+node v24.22.1
+plain run 1: handleOrder PRESENT ["(root)","(program)","(anon)","emit","p
+plain run 2: handleOrder PRESENT ["(root)","(program)","(anon)","emit","p
+plain run 3: handleOrder PRESENT ["(root)","(program)","(anon)","emit","p
+--cpu-prof run 1: handleOrder PRESENT ["(root)","(program)","(anon)","emit","p
+--cpu-prof run 2: handleOrder PRESENT ["(root)","(program)","(anon)","emit","p
+--cpu-prof run 3: handleOrder PRESENT ["(root)","(program)","(anon)","emit","p
