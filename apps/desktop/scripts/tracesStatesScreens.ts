@@ -75,10 +75,11 @@ const SHOTS: ReadonlyArray<Shot> = [
     hash: "#traces/empty?settings=sightline",
     ready: "traces-fixed-exporter",
   },
+  // Fixed exporters detected, but the app exports elsewhere: the elsewhere note, no card (P10-8).
   {
     name: "fixed-exporter-user-exported",
     hash: "#traces/userExported?settings=sightline",
-    ready: "traces-fixed-exporter",
+    ready: "traces-setup-user-exported",
   },
   {
     name: "settings-traces",
