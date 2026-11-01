@@ -8,7 +8,7 @@ import { profileSelection, selectProfile } from "../../model/profile/store.ts";
 import { selectSpan } from "../../model/store.ts";
 import { host } from "../../preview/appState.ts";
 import { fixtureProfilesApi, LEDGER_PROFILE } from "../../preview/profiles.ts";
-import { mountProfiles as mount, openProfilesTab } from "./profiles.testing.tsx";
+import { LEDGER_PID, mountProfiles as mount, openProfilesTab } from "./profiles.testing.tsx";
 
 afterEach(cleanup);
 
