@@ -3,7 +3,7 @@ import { exists, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { ApprovalDecision, DomainEvent, ProfileDetail, ProfilesRpcs } from "@polaris/protocol";
+import { ApprovalDecision, DomainEvent, Profile, ProfilesRpcs } from "@polaris/protocol";
 import { TEST_SESSION } from "../testing.ts";
 import { RpcTest } from "effect/rpc";
 import { ProfilesRpcsLive } from "../profiles/rpcs.ts";
@@ -395,9 +395,9 @@ native(
           )
         );
         const result = await running;
-        expect(
-          Schema.decodeUnknownSync(ProfileDetail)(result.structuredContent).profile.status
-        ).toBe("completed");
+        expect(Schema.decodeUnknownSync(Profile)(result.structuredContent?.profile).status).toBe(
+          "completed"
+        );
         child.kill();
         await child.exited;
 
