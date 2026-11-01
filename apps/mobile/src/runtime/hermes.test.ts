@@ -24,7 +24,7 @@ describe("the shared runtime on Hermes", () => {
     async () => {
       const { results, vmOutput } = await run;
 
-      expect(results?.length, vmOutput).toBe(6);
+      expect(results?.length, vmOutput).toBe(7);
       expect(failures(results ?? [])).toEqual([]);
     },
     120_000

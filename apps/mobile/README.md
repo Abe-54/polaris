@@ -305,10 +305,27 @@ extension: seal a PushMessage to the key `pushKey()` returns (`sealPush` in
 `apps/daemon/src/push/seal.ts`) and send
 `{"aps":{"alert":{"title":"Polaris","body":"Open Polaris to see what changed."},"mutable-content":1},"p":"<sealed>"}`.
 
+## Self-Traces
+
+`src/selfTraces/` is the Mobile App's Tracer (ENG-713, ADR 0095), service `polaris-mobile`.
+Developer Mode is read only here: `SelfTraceSync` (under `HostsProvider`) follows
+`developerMode.watch` on each Host that announces `developer-mode` and `traces.self`, and points
+the Tracer at the first Host, by id, whose mode is effective and that holds the Polaris
+Workspace. With no such Host it is off: Spans are no-ops, commands carry no `traceparent`, the
+buffer is empty and no timer runs.
+
+- **Spans.** `mobile.connect` (transport and hello, with the route), `mobile.feed.subscribe`
+  (each Home feed (re)subscription until its first item) and `mobile.dispatch.<Command>` (send,
+  steer, start, approvals from Home and notifications). `tracer.traced` runs an Effect in a client
+  Span; its RPCs carry the `traceparent` header and nested traced work becomes its child.
+- **Buffer.** At most 1 MiB or 5 minutes of Spans, the oldest dropped first; every 5 s while on,
+  batches that fit `traces.ingestSelf` go to the target Host. An unreachable Host keeps them;
+  a refused batch is dropped. Turning off drops the buffer.
+
 ## The Hermes check
 
 `src/runtime/selfCheck.ts` exercises Effect 4, the frame codec and pairing strings, the
-Connection State machine, the resumable feed and the Markdown parser. The app runs it at startup in development, and
+Connection State machine, the resumable feed, the Markdown parser and the Self-Trace Tracer. The app runs it at startup in development, and
 `bun run test` runs it on Hermes:
 
 - `hermesc` (the `hermes-compiler` React Native ships) must compile the bundled check, always;

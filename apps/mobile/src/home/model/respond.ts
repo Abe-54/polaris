@@ -2,6 +2,7 @@
 import type { DaemonClient } from "@polaris/client/rpc";
 import { ApprovalDecision, type ApprovalRequest, Command, CommandId } from "@polaris/protocol";
 import { Effect, Match } from "effect";
+import { tracedDispatch } from "../../selfTraces/index.ts";
 
 export type Reply =
   | { readonly kind: "approve" }
@@ -39,4 +40,8 @@ export const respond = (
   approval: ApprovalRequest,
   reply: Reply,
   commandId: CommandId = newCommandId()
-) => Effect.asVoid(client.dispatch({ commandId, command: respondCommand(approval, reply) }));
+) => {
+  const command = respondCommand(approval, reply);
+
+  return tracedDispatch(command, commandId, Effect.asVoid(client.dispatch({ commandId, command })));
+};

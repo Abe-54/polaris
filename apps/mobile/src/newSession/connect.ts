@@ -1,6 +1,7 @@
 /** A new session's calls and Hosts over the app's HostConnections (src/runtime/hostConnection.ts). */
 import type { Workspace } from "@polaris/protocol";
 import type { HostConnection } from "../runtime/hostConnection.ts";
+import { tracedDispatch } from "../selfTraces/index.ts";
 import type { NewSessionApi } from "./api.ts";
 import type { SessionUse, SheetHost } from "./model.ts";
 
@@ -26,7 +27,9 @@ export const newSessionApi = (hosts: ReadonlyArray<HostConnection>): NewSessionA
       client["harness.models"]({ harness, refresh: false })
     ),
   dispatch: async (hostId, commandId, command) => {
-    await connectionOf(hosts, hostId).run((client) => client.dispatch({ commandId, command }));
+    await connectionOf(hosts, hostId).run((client) =>
+      tracedDispatch(command, commandId, client.dispatch({ commandId, command }))
+    );
   },
 });
 

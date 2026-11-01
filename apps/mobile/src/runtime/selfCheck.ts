@@ -18,11 +18,15 @@ import {
   encodePairingString,
   FrameDecoder,
   PairingPayload,
+  readTraceContext,
+  SelfTraceBatch,
+  type SelfTraceBatch as Batch,
 } from "@polaris/protocol";
 import { Data, Effect, Option, Schema, Stream } from "effect";
 import { alignChange } from "../diff/align.ts";
 import { lineOf } from "../markdown/line.ts";
 import { parseAfter } from "../markdown/parse.ts";
+import { openSelfTracer } from "../selfTraces/tracer.ts";
 
 export interface CheckResult {
   readonly name: string;
@@ -215,6 +219,39 @@ const diffCheck = Effect.sync(() => {
   );
 });
 
+// Self-Traces: a traced Effect's Span, its ids, the buffer's byte count and a valid batch.
+const selfTraceCheck = Effect.gen(function* () {
+  const sent: Array<Batch> = [];
+
+  const tracer = openSelfTracer({
+    now: () => 1_000,
+    random: Math.random,
+    every: () => () => undefined,
+  });
+
+  tracer.setTarget({
+    hostId: "h",
+    send: (batch) => {
+      sent.push(batch);
+
+      return Promise.resolve("sent");
+    },
+  });
+  yield* tracer.traced("check", { "polaris.check": "é" }, Effect.sleep("1 millis"));
+  yield* Effect.promise(() => tracer.flush());
+  const spans = sent[0]?.spans ?? [];
+  const parent = readTraceContext(() => `00-${spans[0]?.traceId}-${spans[0]?.id}-01`);
+
+  return expectEqual(
+    {
+      valid: sent.every(Schema.is(SelfTraceBatch)),
+      names: spans.map((span) => span.name),
+      parent: parent !== null,
+    },
+    { valid: true, names: ["check"], parent: true }
+  );
+});
+
 const CHECKS: ReadonlyArray<readonly [string, Effect.Effect<string | null, unknown>]> = [
   ["effect", effectCheck],
   ["frame codec", frameCheck],
@@ -222,6 +259,7 @@ const CHECKS: ReadonlyArray<readonly [string, Effect.Effect<string | null, unkno
   ["resume", resumeCheck],
   ["markdown", markdownCheck],
   ["diff", diffCheck],
+  ["self-traces", selfTraceCheck],
 ];
 
 const runOne = ([name, check]: (typeof CHECKS)[number]) =>
