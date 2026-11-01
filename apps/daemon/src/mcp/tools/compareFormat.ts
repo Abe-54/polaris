@@ -4,8 +4,10 @@ import { duration, inline, TRACE_CAP } from "./traceFormat.ts";
 const name = (value: string) => {
   const text = inline(value);
 
-  return text.length > 240
-    ? `${text.slice(0, 240)}… (${text.length - 240} chars omitted; full name in structuredContent)`
+  const points = Array.from(text);
+
+  return points.length > 240
+    ? `${points.slice(0, 240).join("")}… (${points.length - 240} chars omitted; full name in structuredContent)`
     : text;
 };
 

@@ -12,7 +12,7 @@ import { TraceSessions } from "./sessions.ts";
 import { TraceStore } from "./store.ts";
 import { TraceCompareRpcsLive } from "./rpcs.ts";
 import { compareForSession } from "./compare.ts";
-import { TEST_SESSION } from "./testing.ts";
+import { TEST_SESSION, spanFixture, traceFixture } from "./testing.ts";
 import { baseline, compareContext, turnSelector, withComparisons } from "./compare.testing.ts";
 
 const sessions = { session: () => Effect.succeed(compareContext) };
@@ -308,3 +308,129 @@ test("comparison statistics aren't truncated by the listing tool's fifty-Trace c
 
     expect(before).toEqual({ count: 61, p50Ms: 31, p95Ms: 58 });
   }));
+
+// Baseline selects `start<target start` on the trace's earliest span, but the Turn comes from the root.
+test("finding P8-2: Baseline leaves out a later Turn's trace even when one of its spans starts before the target Turn", () =>
+  withComparisons(async ({ store, ingest }) => {
+    await ingest(1, [100, 110, 120]);
+    await ingest(2, [800, 820, 840]);
+
+    // A Turn 3 trace (root starts in Turn 3) with a span stamped 25 s earlier, e.g. a skewed clock.
+    await ingest(3, [5000], { child: { name: "skewed", ms: 5, at: -25_000 } });
+
+    const route = (await read(store)).routes.find((r) => r.route === "POST /invoices")!;
+
+    expect(route.before).toEqual({ count: 3, p50Ms: 110, p95Ms: 120 });
+  }));
+
+// A trace whose root never arrived (in flight, or its process was killed) isn't partial in the store.
+test("finding P8-3: a trace without its root span is not counted as a complete sample of a child-named route", () =>
+  withComparisons(async ({ store, ingest }) => {
+    await ingest(1, [100, 110, 120]);
+    await ingest(2, [800, 820, 840]);
+
+    const start = BigInt(compareContext.turns[2]!.start) + 2_000_000_000n;
+
+    const orphan = {
+      ...spanFixture({
+        traceId: "abcdef00abcdef00abcdef00abcdef00",
+        id: "4444444444444444",
+        parentId: "5555555555555555",
+        start: start.toString(),
+      }),
+      name: "pg.query invoices",
+      // A client Span whose parent never arrived; a server Span with a remote parent would be a real root.
+      kind: 3,
+      endTimeUnixNano: (start + 30_000_000n).toString(),
+      events: [],
+    };
+
+    const batch = traceFixture([orphan]);
+    batch.resourceSpans[0]!.resource.attributes[0]!.value.stringValue = "ledger-api";
+
+    await Effect.runPromise(
+      store.ingest({
+        signal: "traces",
+        contentType: "application/json",
+        bytes: new TextEncoder().encode(JSON.stringify(batch)),
+        context: compareContext,
+      })
+    );
+
+    const comparison = await read(store);
+    const phantom = comparison.routes.filter((r) => r.route === "pg.query invoices");
+
+    expect(phantom).toMatchObject([{ after: { count: 0 }, partial: { before: 0, after: 1 } }]);
+    expect(phantom[0]!.slowestNew).toBeUndefined();
+
+    const root = {
+      ...orphan,
+      spanId: orphan.parentSpanId,
+      parentSpanId: "",
+      kind: 2,
+      name: "POST /invoices",
+    };
+
+    const completed = traceFixture([root]);
+    completed.resourceSpans[0]!.resource.attributes[0]!.value.stringValue = "ledger-api";
+    await Effect.runPromise(
+      store.ingest({
+        signal: "traces",
+        contentType: "application/json",
+        bytes: new TextEncoder().encode(JSON.stringify(completed)),
+        context: compareContext,
+      })
+    );
+    const recovered = (await read(store)).routes;
+
+    expect(recovered.map((route) => [route.route, route.after.count, route.partial])).toEqual([
+      ["POST /invoices", 4, undefined],
+    ]);
+  }));
+
+test.each([2, 5])(
+  "a kind %i span with an upstream parent is a complete local root even with an earlier child",
+  (kind) =>
+    withComparisons(async ({ store, ingest }) => {
+      await ingest(1, [100, 110, 120]);
+      await ingest(2, [800, 820, 840]);
+      const start = BigInt(compareContext.turns[2]!.start) + 1_000_000_000n;
+
+      const root = {
+        ...spanFixture({
+          traceId: "abcdef00abcdef00abcdef00abcdef00",
+          id: "6666666666666666",
+          parentId: "7777777777777777",
+          start: start.toString(),
+        }),
+        kind,
+        name: "POST /invoices",
+        events: [],
+      };
+
+      const child = {
+        ...root,
+        spanId: "8888888888888888",
+        parentSpanId: root.spanId,
+        kind: 3,
+        name: "early-child",
+        startTimeUnixNano: (start - 25_000_000_000n).toString(),
+      };
+
+      const batch = traceFixture([child, root]);
+      batch.resourceSpans[0]!.resource.attributes[0]!.value.stringValue = "ledger-api";
+      await Effect.runPromise(
+        store.ingest({
+          signal: "traces",
+          contentType: "application/json",
+          bytes: new TextEncoder().encode(JSON.stringify(batch)),
+          context: compareContext,
+        })
+      );
+      const route = (await read(store)).routes[0]!;
+
+      expect(route.before.count).toBe(3);
+      expect(route.after.count).toBe(4);
+      expect(route.partial).toBeUndefined();
+    })
+);

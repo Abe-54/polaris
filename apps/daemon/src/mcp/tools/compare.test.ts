@@ -172,3 +172,26 @@ test("compare caps long multi-route text and retains full structured rows and re
   expect(view.data.routes).toHaveLength(100);
   expect(view.data.routes[0]!.route.length).toBeGreaterThan(2000);
 });
+
+// The boundary character occupies two UTF-16 units and must survive clipping intact.
+test("finding P8-1: compare text never ends a clipped route name on a lone surrogate", () => {
+  const route = `${"a".repeat(239)}\u{1F600}${"b".repeat(20)}`;
+
+  const comparison = TraceComparison.make({
+    a: baseline,
+    b: turnSelector(2),
+    routes: [
+      {
+        service: "ledger-api",
+        route,
+        before: { count: 0, p50Ms: null, p95Ms: null },
+        after: { count: 1, p50Ms: null, p95Ms: null },
+      },
+    ],
+  });
+
+  const text = compareView(comparison).text;
+
+  expect(text.isWellFormed()).toBe(true);
+  expect(text).toContain(`${"a".repeat(239)}\u{1F600}`);
+});

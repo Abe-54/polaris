@@ -223,11 +223,11 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
 
 const decode = Schema.decodeUnknownSync(TraceWorkerMessage);
 
-self.onmessage = (event: MessageEvent<unknown>) => {
+self.onmessage = async (event: MessageEvent<unknown>) => {
   const { id, request } = decode(event.data);
 
   try {
-    const value = handle(request);
+    const value = await handle(request);
     self.postMessage(TraceWorkerReply.cases.Success.make({ id, value }));
   } catch (cause) {
     const status = cause instanceof IngestError ? cause.status : 503;

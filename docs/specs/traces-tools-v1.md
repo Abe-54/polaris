@@ -109,7 +109,7 @@ session returns `E-TRACE-NOT-FOUND`.
 
 The Lead's owner decision: for a Turn, before means the same service/root route's
 traces in this checkout from earlier Turns within retention, and after means
-that Turn's traces. Baseline includes attributed traces starting before the
+that Turn's traces. Baseline includes attributed traces whose root Span starts before the
 target Turn starts (a range's first Turn), across agent sessions in this checkout;
 it excludes the target Turns, between-Turn traces, later traces and partial traces. Explicit pairs
 use their selected traces instead of searching history. There is no sample cap
@@ -121,7 +121,12 @@ Fewer than **three complete retained samples on either side** means `no baseline
 preserve both counts and set both sides' percentiles to null. This also applies
 to explicit trace pairs, which have one sample each. Empty known Turns produce
 zero routes; unknown Turns or missing/expired trace selectors return
-`E-TRACE-NOT-FOUND`. Retention runs before the single worker query snapshot.
+`E-TRACE-NOT-FOUND`. Assign a trace by its root Span, or its earliest Span only
+when no root exists. A missing root makes the trace incomplete: exclude it from
+statistics and semantic span comparison and count it in `partial`. A server or
+consumer Span with an upstream parent and no retained local parent is a local
+root. Retention runs before the comparison's read snapshot; ingest and other
+reads can progress between its query chunks.
 
 ```
 Route timings · retained traces only · 1 route
@@ -140,7 +145,8 @@ never a claim that a code change caused a slowdown. No new span means no line.
 `slowestNew` is `{name,service,durationMs,traceId,spanId}`. Optional
 `partial:{before,after}` counts partial traces excluded from statistics and span
 comparison; text reports those exclusions. All retained routes remain in JSON.
-Text is one block capped at 16,000 characters, with clipped names and a count of
+Text is one block capped at 16,000 characters, with names clipped at code-point
+boundaries and a count of
 omitted routes; retrieve the full rows from compare structuredContent, and use
 `trace` or `span` with the returned ids for detail.
 

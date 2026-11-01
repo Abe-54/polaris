@@ -108,7 +108,8 @@ test("opening the previous trace database backfills indexed history without losi
   try {
     for (let t = 1; t <= 6; t++)
       ingest(db, [make(t, 1, "R", 10, t * 1000), make(t, 2, "SQL", 2, t * 1000 + 1, 1)]);
-    db.exec(`DROP INDEX spans_history_covering;
+    db.exec(`DROP INDEX spans_compare;
+      DROP INDEX spans_history_covering;
       ALTER TABLE spans DROP COLUMN name;
       ALTER TABLE spans DROP COLUMN parent_name;
       ALTER TABLE spans DROP COLUMN trace_start;
