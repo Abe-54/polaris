@@ -1,6 +1,6 @@
 /**
  * The extensions' theme: `targets/widgets/Theme.swift` holds @polaris/ui's tokens and the
- * horizon's ridges for both themes, and reads the name the app writes. The Swift run needs swiftc.
+ * horizon's ridges for both themes, and reads the name the app writes. The Swift run needs swiftc and SwiftUI, so macOS.
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { midnight, moonlit } from "@polaris/ui/tokens";
@@ -52,7 +52,8 @@ describe("Theme.swift", () => {
     ]);
   });
 
-  const swiftc = Bun.which("swiftc");
+  // Apple-only frameworks: Linux toolchains have swiftc but no SwiftUI, CryptoKit or os.
+  const swiftc = process.platform === "darwin" ? Bun.which("swiftc") : null;
   const directory = mkdtempSync(join(tmpdir(), "polaris-theme-"));
 
   afterAll(() => rmSync(directory, { recursive: true, force: true }));
