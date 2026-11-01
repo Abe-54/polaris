@@ -4,7 +4,7 @@
  * `session/update` notifications and `session/request_permission` requests are
  * routed to the session they name; anything else the agent asks is refused.
  */
-import { childEnv } from "../../service/childEnv.ts";
+import { harnessEnv } from "../environment.ts";
 import { appendFileSync } from "node:fs";
 import { Deferred, Effect, Option, Predicate, Schema, type Scope } from "effect";
 import { HarnessError } from "../HarnessDriver.ts";
@@ -154,7 +154,7 @@ export const spawnAgent = (
       Effect.try({
         try: () =>
           Bun.spawn([...options.argv], {
-            env: childEnv(),
+            env: harnessEnv(),
             stdin: "pipe",
             stdout: "pipe",
             stderr: "pipe",
