@@ -1,5 +1,5 @@
 /**
- * A miniature Daemon for upgrade.test.ts: it listens on the Daemon socket,
+ * A miniature Daemon for upgrade.slow.test.ts: it listens on the Daemon socket,
  * keeps one "Harness" child (`cat`) on socketpair stdio, answers `info` with
  * its version, PID, the child's PID and an echo through the child, and
  * serves upgrade requests exactly as the real Daemon will.

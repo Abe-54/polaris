@@ -1,5 +1,5 @@
 /**
- * What the Engine model-based test checks after every step (`engine.model.test.ts`):
+ * What the Engine model-based test checks after every step (`engine.model.slow.test.ts`):
  * the committed log, every answer, approvals, the read model and every Client feed.
  */
 import { expect } from "bun:test";

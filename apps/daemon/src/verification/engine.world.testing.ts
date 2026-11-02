@@ -1,5 +1,5 @@
 /**
- * The real system the Engine model-based test drives (`engine.model.test.ts`):
+ * The real system the Engine model-based test drives (`engine.model.slow.test.ts`):
  * the Engine on a SQLite file with the fake Harness, two devices' connections,
  * and their Client feeds (the real `makeFeed`, wired as `HostConnection` does).
  */

@@ -422,7 +422,7 @@ describe("Codex driver against a fake app-server", () => {
           expect(busy.message).toContain("already in progress");
           yield* session.steer("also run lint");
           yield* waitFor("TurnEnded");
-          // On Windows the TUI reads the server's token in PowerShell (AppServer.test.ts).
+          // On Windows the TUI reads the server's token in PowerShell (AppServer.slow.test.ts).
           expect(yield* session.terminalCommand).toEqual(
             process.platform === "win32"
               ? ["powershell.exe", "-NoLogo", "-NoProfile", "-EncodedCommand", expect.any(String)]

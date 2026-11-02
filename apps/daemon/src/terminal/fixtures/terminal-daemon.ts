@@ -1,5 +1,5 @@
 /**
- * A miniature Daemon for handoff.test.ts: the real `Terminals` (recorded under
+ * A miniature Daemon for handoff.slow.test.ts: the real `Terminals` (recorded under
  * `POLARIS_HOME`, handed across upgrades) behind a line protocol on the Daemon
  * socket, and the real upgrade hand-off.
  *

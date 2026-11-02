@@ -97,7 +97,7 @@ Side effects, measured with Gemini CLI 0.61.0 and Copilot CLI 1.0.89 in an empty
 
 ## Tests
 
-- `AcpDriver.test.ts`: the driver against `testing/fakeAgent.ts` run as a real process. A full Turn (text, thoughts, a tool call, a plan, a title); approvals (Allow with remember, Deny marks declined, auto-allowed by mode); interrupt; one Turn at a time and no steer; not signed in; resume by `session/load` (replay dropped) and by `session/resume`; Model and effort via config options and `listModels`; permission mode → session mode; one shared process, a crash, and a new process after it; terminal handoff; close.
+- `AcpDriver.slow.test.ts`: the driver against `testing/fakeAgent.ts` run as a real process. A full Turn (text, thoughts, a tool call, a plan, a title); approvals (Allow with remember, Deny marks declined, auto-allowed by mode); interrupt; one Turn at a time and no steer; not signed in; resume by `session/load` (replay dropped) and by `session/resume`; Model and effort via config options and `listModels`; permission mode → session mode; one shared process, a crash, and a new process after it; terminal handoff; close.
 - `e2e.test.ts`: one real tiny Turn against an installed Harness (its own sign-in and quota):
 
   ```sh

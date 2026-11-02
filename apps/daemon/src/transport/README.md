@@ -52,7 +52,7 @@ export const daemonHandlers = Layer.mergeAll(
 
 and add their capabilities with `startServer({ capabilities: [...] })` (the transport announces `blobs`).
 
-**BlobChannel is per connection.** Every RPC in `ServerRpcs` carries the `ConnectionBlobs` middleware, which provides the calling connection's `BlobChannel` around each request; handlers read it with `yield* BlobChannel` inside the handler (not while the layer is built). A handler layer that lists `BlobChannel` as a requirement is satisfied at build time by a placeholder that dies if used outside a request, so `startServer` removes `BlobChannel` from the requirements. `transport.test.ts` runs `GitRpcsLive`'s `git.diff` through it.
+**BlobChannel is per connection.** Every RPC in `ServerRpcs` carries the `ConnectionBlobs` middleware, which provides the calling connection's `BlobChannel` around each request; handlers read it with `yield* BlobChannel` inside the handler (not while the layer is built). A handler layer that lists `BlobChannel` as a requirement is satisfied at build time by a placeholder that dies if used outside a request, so `startServer` removes `BlobChannel` from the requirements. `transport.slow.test.ts` runs `GitRpcsLive`'s `git.diff` through it.
 
 **Device label.** `hello` calls `client.annotate(DeviceLabel, deviceLabel)` on the connection, so `dispatch` (engine) records which device resolved an approval. For an Extension the label is its Pairing's name.
 
@@ -85,5 +85,5 @@ and add their capabilities with `startServer({ capabilities: [...] })` (the tran
 - `daemonHandlers` in `serve.ts` is still `Layer.empty`; the lead wires the modules' layers (see above).
 - Token-less Clients retain unrestricted RPC concurrency; their queued JSON uses the Wire's 8 MiB high-water mark. Extension connections have the admission limits above.
 - `hello` does not reject old Clients over the socket; protocol-version negotiation is on the Client side there. Extensions declare `protocolVersions` and are refused a mismatch (`gateway/README.md`).
-- The upgrade adoption path is exercised by `service/upgrade.test.ts` with its fixture, not end to end through `startServer`.
+- The upgrade adoption path is exercised by `service/upgrade.slow.test.ts` with its fixture, not end to end through `startServer`.
 - `git/diff.ts` gets an `ArrayBuffer` from `Response#bytes()` where a `Uint8Array` is typed, so `countFiles` returns 0. The Wire now accepts any byte buffer, but the git module should wrap it in `new Uint8Array(...)`.

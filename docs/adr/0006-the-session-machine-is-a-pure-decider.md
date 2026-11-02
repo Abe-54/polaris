@@ -6,7 +6,7 @@ Every Session State change goes through one XState statechart (`apps/daemon/src/
 
 The event log is the source of truth. A live actor would hold a second copy of each session's state that a restart loses and that can drift from what the log folds to. Deriving the snapshot from the folded record means a restart rebuilds exactly the machine state the session was in, by the same fold the read model already does, and the recorded `SessionStateChanged` and the machine's state cannot disagree (`session.test.ts` checks this for every reachable snapshot and input).
 
-A statechart rather than hand-written `if (state === …)` checks gives one place for every guard and transition, a diagram that stays in step with the code, and model-based tests generated from the machine (`session.graph.test.ts`) that replay every transition against the real Engine.
+A statechart rather than hand-written `if (state === …)` checks gives one place for every guard and transition, a diagram that stays in step with the code, and model-based tests generated from the machine (`session.graph.slow.test.ts`) that replay every transition against the real Engine.
 
 ## Considered Options
 

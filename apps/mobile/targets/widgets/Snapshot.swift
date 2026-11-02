@@ -1,5 +1,5 @@
 // What the widgets show, as the app writes it (apps/mobile/src/widgets/snapshot.ts) and R5's
-// Notification Service Extension adds to. Foundation only: scripts/widgets.swift.test.ts runs it.
+// Notification Service Extension adds to. Foundation only: scripts/widgets.swift.slow.test.ts runs it.
 import Foundation
 
 /// Also in app.json's entitlements and apps/mobile/src/widgets/publish.ts.

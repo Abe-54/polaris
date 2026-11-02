@@ -29,7 +29,7 @@ resolved:
 | idle, previous watch closed long before | 0 / 15 |
 | idle, previous watch closed just before | about 1 in 10 |
 | another watched directory just had 1000 writes | 10 / 30 |
-| `watch.test.ts` dotfiles test, 24 busy loops, 8 parallel `bun test` runs | 19 / 200 runs |
+| `watch.slow.test.ts` dotfiles test, 24 busy loops, 8 parallel `bun test` runs | 19 / 200 runs |
 
 Each event was dropped, not delayed: a lost one was still missing after 8 s. CPU load alone
 barely widens the window. Busy file systems do, since the CF thread waits on `fseventsd`.
@@ -61,7 +61,7 @@ The last probe's watch is removed at exit.
 `watchFile` (open file tabs) is unchanged: its first read takes longer than the stream needs
 to start, and no test could show a write after that read being lost.
 
-The regression test (`watch.test.ts`, macOS only) arms 20 watches, each beside a watched
+The regression test (`watch.slow.test.ts`, macOS only) arms 20 watches, each beside a watched
 directory that just had 1000 writes. Without the probe every run loses 2 to 9 of them.
 
 ## Rejected

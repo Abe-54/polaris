@@ -8,7 +8,7 @@ fixes: a terminal whose command exits at once could freeze the Daemon on macOS
 ## Context
 
 CI (macos-15, run 38751529181 attempt 1) stalled for 300 s in
-`Terminals.test.ts`, at "attaching after exit replays the output and the
+`Terminals.slow.test.ts`, at "attaching after exit replays the output and the
 Exit", whose command is `sh -c "echo done-now; exit 0"`. Bun's own 5 s test
 timeout never fired, so the JavaScript thread itself was blocked.
 
@@ -50,7 +50,7 @@ its exit is seen through kqueue while the event loop is free to drain the PTY.
 - The gate costs one `/bin/sh` start per terminal on macOS. Linux spawns the
   command directly.
 
-The regression test (`Terminals.test.ts`, macOS only) runs 200 such opens in
+The regression test (`Terminals.slow.test.ts`, macOS only) runs 200 such opens in
 a child process under CPU load with a deadline: it fails on every run without
 the gate. The fix belongs upstream in Bun (a non-blocking wait or a drain
 timeout); drop the gate once Bun has one.

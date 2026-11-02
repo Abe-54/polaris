@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const WATCHDOG = join(import.meta.dir, "watchdog.ts");
 
@@ -25,7 +25,10 @@ const gone = async (pid: number) => {
 const suite = (files: Record<string, string>) => {
   const dir = mkdtempSync(join(tmpdir(), "watchdog-"));
 
-  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+  for (const [name, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), body);
+  }
 
   return dir;
 };
@@ -35,7 +38,8 @@ const watch = async (
   stallSeconds = 1,
   githubActions = false,
   args: ReadonlyArray<string> = [],
-  parallel = "1"
+  parallel = "1",
+  extraEnv: Readonly<Record<string, string>> = {}
 ) => {
   const proc = Bun.spawn(["bun", WATCHDOG, ...args], {
     cwd: dir,
@@ -48,6 +52,8 @@ const watch = async (
       AI_AGENT: "",
       CLAUDE_CODE_ENTRYPOINT: "",
       CURSOR_AGENT: "",
+      GITHUB_STEP_SUMMARY: "",
+      ...extraEnv,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -148,4 +154,82 @@ describe("the test watchdog", () => {
     },
     20_000
   );
+
+  /** A file whose one test is named after it, so the output shows which files ran. */
+  const named = (file: string, ms = 0) =>
+    `import { test } from "bun:test";\ntest("ran ${file}", () => Bun.sleep(${ms}));\n`;
+
+  const TIERED = [
+    "a.test.ts",
+    "flow.test.ts",
+    "w.test.ts",
+    "slow.test.ts",
+    "x.slow.test.ts",
+    "sub/y.slow.test.tsx",
+    "sub/z.test.ts",
+  ];
+
+  const SLOW = ["x.slow.test.ts", "sub/y.slow.test.tsx"];
+
+  const ran = (output: string) =>
+    TIERED.filter((file) => output.includes(`(pass) ran ${file}`)).toSorted();
+
+  test.each([
+    ["fast", ["--tier=fast"], TIERED.filter((file) => !SLOW.includes(file))],
+    ["slow", ["--tier=slow"], SLOW],
+    ["all", ["--tier=all"], TIERED],
+    ["all, by default,", [], TIERED],
+    ["slow, within a path filter,", ["--tier=slow", "sub"], ["sub/y.slow.test.tsx"]],
+  ])(
+    "the %s tier runs only its files",
+    async (_, args, expected) => {
+      const dir = suite(Object.fromEntries(TIERED.map((file) => [file, named(file)])));
+
+      const { code, output } = await watch(dir, 30, false, args);
+
+      expect(code).toBe(0);
+      expect(ran(output)).toEqual(expected.toSorted());
+    },
+    20_000
+  );
+
+  test("a tier with no files in a package passes", async () => {
+    const { code } = await watch(suite({ "a.test.ts": PASSES }), 30, false, ["--tier=slow"]);
+
+    expect(code).toBe(0);
+  }, 20_000);
+
+  test("an unknown tier fails the run", async () => {
+    const { code, output } = await watch(suite({ "a.test.ts": PASSES }), 30, false, [
+      "--tier=quick",
+    ]);
+
+    expect(code).not.toBe(0);
+    expect(output).toContain("--tier must be fast, slow or all");
+  }, 20_000);
+
+  test("a fast file over its 2 s budget is listed, also in the GitHub job summary, and the run still passes", async () => {
+    const dir = suite({
+      "over.test.ts": named("over.test.ts", 2200),
+      "under.test.ts": named("under.test.ts"),
+      "exempt.slow.test.ts": named("exempt.slow.test.ts", 2200),
+    });
+
+    const summary = join(dir, "summary.md");
+
+    writeFileSync(summary, "");
+
+    const { code, output } = await watch(dir, 30, false, ["--tier=all"], "2", {
+      GITHUB_STEP_SUMMARY: summary,
+    });
+
+    const listed = output.slice(output.indexOf("over the 2.0 s budget"));
+
+    expect(code).toBe(0);
+    expect(output).toContain("1 fast-tier test file(s) over the 2.0 s budget");
+    expect(listed).toContain("over.test.ts");
+    expect(listed).not.toContain("under.test.ts");
+    expect(listed).not.toContain("exempt.slow.test.ts");
+    expect(readFileSync(summary, "utf8")).toMatch(/\| `[^`]*over\.test\.ts` \| 2\.\d s \|/);
+  }, 20_000);
 });

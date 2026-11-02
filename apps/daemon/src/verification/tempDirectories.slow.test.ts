@@ -97,7 +97,7 @@ test("scope failure and interruption", async () => {
 });
 
 posixTest(
-  "Windows bug: engine.model.test.ts's EventStore SQLite files stay open after a crash and restart (EBUSY)"
+  "Windows bug: engine.model.slow.test.ts's EventStore SQLite files stay open after a crash and restart (EBUSY)"
 )(
   "representative Engine, PBT, Git, composition and store suites leave no temp directories",
   async () => {
@@ -107,10 +107,10 @@ posixTest(
       "../engine/Engine.followups.test.ts",
       "../store/EventStore.bounded.test.ts",
       "../files/search/fffSearch.test.ts",
-      "../git/review/worktree.test.ts",
+      "../git/review/worktree.slow.test.ts",
       "../reviewer/compose.test.ts",
-      "engine.model.test.ts",
-      "store.model.test.ts",
+      "engine.model.slow.test.ts",
+      "store.model.slow.test.ts",
     ].map((file) => join(directory, file));
 
     const result = await runSuite(files, temp);

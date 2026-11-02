@@ -1,6 +1,6 @@
 /**
  * Writes targets/widgets/LiveCelestials.swift: each planet at rest from @polaris/ui's cells, the
- * Death Star mid-shot, and each hued Harness's tones as the app mixes them. widgets.live.test.ts checks.
+ * Death Star mid-shot, and each hued Harness's tones as the app mixes them. widgets.live.slow.test.ts checks.
  */
 import { CELESTIAL_PLANETS, CELESTIAL_RARE, HARNESS_CATALOGUE } from "@polaris/protocol";
 import { bodyHue, type Cell, celestialCells, type Tone } from "@polaris/ui/celestial";

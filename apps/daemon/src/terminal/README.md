@@ -22,7 +22,7 @@ The `Terminals` service and the `terminal.open/attach/attachBinary/input/resize/
 | **execve upgrade** (`polaris upgrade`) | **Keep running.** Same terminal ids, same shells (with their variables and jobs), scrollback replayed, input, resize and the exit code all work afterwards. |
 | **crash, `systemctl`/`launchctl` restart, reboot** | **End.** The PTY master closes with the process, so each shell gets SIGHUP. The next Daemon lists them as ended (`exit: { code: null }`, `endedBy: "daemon-restart"`, with their `cwd` and `argv`); a Client that re-attaches gets the `Exit { code: null }` rather than NotFound, and can offer to open a new terminal in the same `cwd`. |
 
-How the upgrade hand-off works (verified by `handoff.test.ts` on macOS arm64, Debian arm64 (glibc) and Alpine arm64 (musl)):
+How the upgrade hand-off works (verified by `handoff.slow.test.ts` on macOS arm64, Debian arm64 (glibc) and Alpine arm64 (musl)):
 
 1. `open` notes the PTY **master fd** that `Bun.Terminal` opened: the lowest fd that was not open before the spawn and has a slave device (`ptsname`). Bun keeps a few dups of it; one is enough. `Bun.Terminal` does not expose its fd, hence the scan (1024 `fcntl` probes, synchronous with the spawn).
 2. The terminals register a `HandoffContributor` (`service/upgrade.ts`): at upgrade time they hand over `terminal:<id>` → master fd and shell pid (the shell stays our child: same PID), and write `~/.polaris/terminals-handoff.json` (ids, cwd, argv, size, slave device, exit states, base64 scrollback).

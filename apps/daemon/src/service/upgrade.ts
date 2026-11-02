@@ -5,7 +5,7 @@
  * binary in the same PID. Harness child processes stay its children, the
  * listening socket stays open, and the event store reloads from SQLite.
  *
- * What Bun can and cannot do here (proven by upgrade.test.ts on macOS):
+ * What Bun can and cannot do here (proven by upgrade.slow.test.ts on macOS):
  * - `listener.fd` exposes the fd of a `Bun.listen` (and `node:net`) listener.
  * - Neither `Bun.listen({ fd })` nor `net.Server#listen({ fd })` can adopt an
  *   inherited listener ("Bun does not support listening on a file

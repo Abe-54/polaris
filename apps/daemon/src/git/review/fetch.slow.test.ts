@@ -20,7 +20,7 @@ import {
   userClone,
 } from "./testing.ts";
 
-// Each test runs tens of real gits: past bun's 5 s default on a loaded runner (as commit.test.ts).
+// Each test runs tens of real gits: past bun's 5 s default on a loaded runner (as commit.slow.test.ts).
 setDefaultTimeout(15_000);
 
 /** The deepening test runs about 41 s on a Windows desktop, where every git spawn is slow. */

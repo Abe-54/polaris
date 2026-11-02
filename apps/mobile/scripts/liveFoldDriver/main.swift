@@ -1,5 +1,5 @@
 // Folds plain slice JSON (argv) with targets/widgets/LiveSlices.swift and prints the summary,
-// for widgets.live.test.ts. An argument that isn't a slice stands for one the key can't open.
+// for widgets.live.slow.test.ts. An argument that isn't a slice stands for one the key can't open.
 import Foundation
 
 /// ActivityKit's type isn't on macOS; LiveSlices.swift only needs its shape.

@@ -283,7 +283,7 @@ built). `railway.json` builds the Dockerfile and health-checks `/healthz`.
   and replacement.
 - `push.test.ts`: wakes reach a fake push service signed, only with the device's ticket for
   that host and within the rate (across reconnects), and nothing a wake carries is logged.
-- `abuse.test.ts`: key proof failures, auth and idle timeouts, malformed messages, size,
+- `abuse.slow.test.ts`: key proof failures, auth and idle timeouts, malformed messages, size,
   message and byte rates, per-address socket caps.
 - `process.test.ts`: the same exchange against the `bun src/main.ts` process, including a
   clean `SIGTERM` exit.

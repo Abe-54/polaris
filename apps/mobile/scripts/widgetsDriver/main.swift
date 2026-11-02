@@ -1,4 +1,4 @@
-// Drives targets/widgets/Snapshot.swift for widgets.swift.test.ts: argv[1] is the app's snapshot
+// Drives targets/widgets/Snapshot.swift for widgets.swift.slow.test.ts: argv[1] is the app's snapshot
 // JSON, argv[2] the push extension's records, argv[3] "now" in ms; prints what the widgets draw.
 import Foundation
 
