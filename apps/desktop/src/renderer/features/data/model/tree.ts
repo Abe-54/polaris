@@ -21,7 +21,7 @@ export type TreeRow =
       readonly key: string;
       readonly source: DataSource;
       readonly open: boolean;
-      /** False for a locked or unreachable source: there's nothing to show under it. */
+      /** False for an unreachable source: there's nothing to show under it. */
       readonly expandable: boolean;
     }
   | { readonly kind: "note"; readonly key: string; readonly text: string }
@@ -63,7 +63,10 @@ const join = (...parts: ReadonlyArray<string>) => parts.join("\u0000");
 
 export const sourceKey = (source: string) => join("source", source);
 
-const expandable = (source: DataSource) => source.reachable !== false && !isLocked(source);
+/** Approval gates agents, not the user: a locked source still opens, it just never opens itself. */
+const expandable = (source: DataSource) => source.reachable !== false;
+
+const opensByDefault = (source: DataSource) => expandable(source) && !isLocked(source);
 
 /** The first source the user can browse starts open; schemas start open, functions closed. */
 const defaultOpen = (kind: TreeRow["kind"], key: string, firstOpen: string | null) => {
@@ -75,22 +78,25 @@ const defaultOpen = (kind: TreeRow["kind"], key: string, firstOpen: string | nul
 const isOpen = (input: TreeInput, kind: TreeRow["kind"], key: string, firstOpen: string | null) =>
   input.toggled.get(key) ?? defaultOpen(kind, key, firstOpen);
 
-/** Why a source has no children: locked, unreachable, or its schema read failed. */
-const noteFor = (source: DataSource, load: TreeLoad | undefined): string | null => {
-  if (isLocked(source) && source.engine === "sqlite")
-    return "Agents read SQLite files inside this checkout only.";
+/** Why agents can't reach a source, shown under it whether it's open or not. */
+const lockNote = (source: DataSource): string | null => {
+  if (!isLocked(source)) return null;
 
-  if (isLocked(source))
-    return source.access === "denied"
-      ? "You denied agents this data source."
-      : "Agents can't reach it until you approve it.";
+  if (source.engine === "sqlite") return "Agents read SQLite files inside this checkout only.";
 
+  return source.access === "denied"
+    ? "You denied agents this data source."
+    : "Agents can't reach it until you approve it.";
+};
+
+/** Why an open source has no children yet: unreachable, or its schema read failed or is running. */
+const loadNote = (source: DataSource, load: TreeLoad): string | null => {
   if (source.reachable === false)
     return `Can't reach ${whereText(source)}${source.error === undefined ? "" : ` · ${source.error}`}`;
 
-  if (load?.status === "failed") return `Couldn't read its schema · ${load.message}`;
+  if (load.status === "failed") return `Couldn't read its schema · ${load.message}`;
 
-  return load?.status === "loading" ? "Reading schema…" : null;
+  return load.status === "loading" ? "Reading schema…" : null;
 };
 
 const tableRows = (
@@ -162,9 +168,12 @@ const schemaRows = (input: TreeInput, source: string, tree: SchemaTree): Readonl
   return [...rows, { kind: "note", key: join("more", source), text: more }];
 };
 
+const noteRow = (source: DataSource, kind: string, text: string | null): ReadonlyArray<TreeRow> =>
+  text === null ? [] : [{ kind: "note", key: join(kind, source.name), text }];
+
 /** The tree, flattened in display order. */
 export const treeRows = (input: TreeInput): ReadonlyArray<TreeRow> => {
-  const first = input.sources.find(expandable);
+  const first = input.sources.find(opensByDefault);
   const firstOpen = first === undefined ? null : sourceKey(first.name);
 
   return input.sources.flatMap((source): ReadonlyArray<TreeRow> => {
@@ -172,21 +181,22 @@ export const treeRows = (input: TreeInput): ReadonlyArray<TreeRow> => {
     const canOpen = expandable(source);
     const open = canOpen && isOpen(input, "source", key, firstOpen);
     const head: TreeRow = { kind: "source", key, source, open, expandable: canOpen };
-    const load = open ? input.trees.get(source.name) : undefined;
-    const note = canOpen && !open ? null : noteFor(source, load ?? { status: "loading" });
+    const load = input.trees.get(source.name) ?? { status: "loading" };
+    const lock = noteRow(source, "lock", lockNote(source));
 
-    const noteRow: ReadonlyArray<TreeRow> =
-      note === null ? [] : [{ kind: "note", key: join("note", source.name), text: note }];
+    if (!open)
+      return [head, ...lock, ...(canOpen ? [] : noteRow(source, "note", loadNote(source, load)))];
 
-    if (load?.status !== "ready") return [head, ...noteRow];
+    if (load.status !== "ready")
+      return [head, ...lock, ...noteRow(source, "note", loadNote(source, load))];
 
-    return [head, ...schemaRows(input, source.name, load.value)];
+    return [head, ...lock, ...schemaRows(input, source.name, load.value)];
   });
 };
 
 /** The sources whose schema the open tree needs read. */
 export const openSources = (input: Omit<TreeInput, "trees">): ReadonlyArray<string> => {
-  const first = input.sources.find(expandable);
+  const first = input.sources.find(opensByDefault);
   const firstOpen = first === undefined ? null : sourceKey(first.name);
 
   return input.sources

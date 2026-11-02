@@ -11,12 +11,11 @@ import type {
   DataTls,
   QueryLogEntry,
   QueryResult,
-  SchemaTree,
-  TableDetail,
   ServerDataEngine,
   TurnId,
 } from "@polaris/protocol";
-import { Match } from "effect";
+import { SchemaTree, TableDetail } from "@polaris/protocol";
+import { Exit, Match, Schema } from "effect";
 import type { IpcError, Result } from "../../../../shared/api.ts";
 import { polaris } from "../../bridge.ts";
 import type { DataRow } from "../grid/value.ts";
@@ -174,6 +173,21 @@ export interface DataApi {
   ) => Promise<Result<DataSchemaDiff>>;
 }
 
+const Described = Schema.Union([TableDetail, SchemaTree]);
+
+/** IPC's structured clone drops class prototypes; decoding restores them for `instanceof`. */
+const described = (result: Result<SchemaTree | TableDetail>): Result<SchemaTree | TableDetail> => {
+  if (!result.ok) return result;
+  const decoded = Schema.decodeUnknownExit(Described)(result.value);
+
+  return Exit.isSuccess(decoded)
+    ? { ok: true, value: decoded.value }
+    : {
+        ok: false,
+        error: { code: "E-DATA-DESCRIBE", message: "The Host's schema couldn't be read" },
+      };
+};
+
 const session = (at: DataSessionKey) => ({ hostKey: at.hostKey, sessionId: at.sessionId });
 
 /** A watch's items are whole snapshots: only the batch's last one matters. */
@@ -193,10 +207,9 @@ export const liveDataApi: DataApi = {
     const base = { ...session(at), source };
     const withTable = table === undefined ? base : { ...base, table };
 
-    return polaris().request(
-      "data.describe",
-      sample === undefined ? withTable : { ...withTable, sample }
-    );
+    return polaris()
+      .request("data.describe", sample === undefined ? withTable : { ...withTable, sample })
+      .then(described);
   },
   query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
   queryStream: (at, { source, sql, params, limit }, on) => {

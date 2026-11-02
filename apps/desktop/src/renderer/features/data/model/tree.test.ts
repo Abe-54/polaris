@@ -39,7 +39,7 @@ const input = (over: Partial<Parameters<typeof treeRows>[0]> = {}) => ({
 });
 
 describe("the Sources tree", () => {
-  test("opens the first browsable source; a locked remote says why, with nothing under it", () => {
+  test("opens the first unlocked source; a locked remote starts closed and says why", () => {
     expect(
       lines(
         treeRows(
@@ -74,6 +74,19 @@ describe("the Sources tree", () => {
       "  · Agents can't reach it until you approve it.",
       "▾ ledger",
       "  · Reading schema…",
+    ]);
+  });
+
+  test("the user opens a locked remote: agents still can't reach it, its tables show", () => {
+    const toggled = new Map([["source\u0000analytics", true]]);
+    const trees = new Map([["analytics", ready(FIXTURE_SCHEMA)]]);
+    const rows = lines(treeRows(input({ sources: [analytics], toggled, trees })));
+
+    expect(rows.slice(0, 4)).toEqual([
+      "▾ analytics",
+      "  · Agents can't reach it until you approve it.",
+      "  ▾ public 7",
+      "    customers",
     ]);
   });
 
