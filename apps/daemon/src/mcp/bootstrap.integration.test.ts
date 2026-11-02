@@ -1,6 +1,7 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { localEndpoint } from "@polaris/protocol/endpoint";
@@ -14,10 +15,9 @@ import {
   SessionStreamItem,
 } from "@polaris/protocol";
 import { Effect, Fiber, Option, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 
 test("a real idle Daemon lazily binds plain Codex and Claude Sessions and starts their Constellations", async () => {
-  const home = mkdtempSync(shortTemp("polaris-bootstrap-"));
+  const home = newTempDir("polaris-bootstrap-", { short: true });
 
   const daemon = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, "../main.ts"), "serve", "--foreground"],
@@ -138,6 +138,6 @@ test("a real idle Daemon lazily binds plain Codex and Claude Sessions and starts
   } finally {
     daemon.kill("SIGTERM");
     await daemon.exited;
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 }, 20000);

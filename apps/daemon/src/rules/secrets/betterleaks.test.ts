@@ -3,7 +3,7 @@ import { chmodSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gitText } from "../../git/git.ts";
 import { posixDescribe } from "../../platform/testing.ts";
-import { commitAll, makeRepo, removeDir, tempDir, write } from "../../git/testing.ts";
+import { commitAll, makeRepo, removeTempDir, tempDir, write } from "../../git/testing.ts";
 import { scanSecrets } from "./betterleaks.ts";
 import { fetchBetterleaks, hostAsset } from "./fetch.ts";
 import { syntheticSecrets } from "./synthetic.ts";
@@ -11,7 +11,7 @@ import { syntheticSecrets } from "./synthetic.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const dir = (made: string) => {

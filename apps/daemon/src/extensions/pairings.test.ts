@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import { PairingId } from "@polaris/protocol";
 import { Effect, Predicate } from "effect";
 import { Pairings, type PairingStoreError } from "./pairings.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const withStore = <A>(
   body: (pairings: Pairings["Service"], path: string) => Effect.Effect<A, PairingStoreError>
 ): Promise<A> => {
-  const dir = mkdtempSync(join(tmpdir(), "pl-pairings-"));
+  const dir = newTempDir("pl-pairings-");
   const path = join(dir, "extensions.sqlite");
 
   return Effect.runPromise(
@@ -20,7 +20,7 @@ const withStore = <A>(
         Effect.orDie
       )
     )
-  ).finally(() => rmSync(dir, { recursive: true, force: true }));
+  ).finally(() => removeTempDirSettled(dir));
 };
 
 describe("Pairings", () => {

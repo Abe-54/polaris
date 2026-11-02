@@ -1,5 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   CommitMessageRequest,
@@ -10,6 +9,7 @@ import {
 } from "@polaris/protocol";
 import { Effect, Layer, Stream } from "effect";
 import { Availability } from "../harness/availability/Availability.ts";
+import { newTempDir } from "../platform/tempDir.testing.ts";
 
 export const git = (cwd: string, ...args: Array<string>) => {
   const result = Bun.spawnSync(["git", ...args], { cwd, stderr: "pipe" });
@@ -19,7 +19,7 @@ export const git = (cwd: string, ...args: Array<string>) => {
 
 /** A repository with one commit per subject, and nothing staged. */
 export const repo = (subjects: ReadonlyArray<string> = []) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-commit-message-"));
+  const root = newTempDir("pi-commit-message-");
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test");

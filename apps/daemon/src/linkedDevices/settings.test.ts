@@ -1,11 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { shortTemp } from "../platform/testing.ts";
 import { readSetting, writeSetting } from "./settings.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
-const root = mkdtempSync(shortTemp("pl-rset-"));
+const root = newTempDir("pl-rset-", { short: true });
 
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+afterAll(() => removeTempDir(root));
 
 // RX1-10: a route saved with ws:// to another machine is never dialled again.
 test.each([

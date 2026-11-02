@@ -1,5 +1,5 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Claim } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
@@ -8,7 +8,6 @@ import type { ConstellationCommands } from "./tools.ts";
 import { FriendlyReview } from "./tools/inputs.ts";
 import { McpTokens } from "./tokens.ts";
 import { mcpHttp } from "./http.ts";
-import { shortTemp } from "../platform/testing.ts";
 
 interface ToolInput {
   claim?: Claim;
@@ -31,7 +30,7 @@ export const callSendbackTool = async (
   name: string,
   input: ToolInput
 ) => {
-  const tokenRoot = mkdtempSync(shortTemp("polaris-sendback-mcp-"));
+  const tokenRoot = newTempDir("polaris-sendback-mcp-", { short: true });
 
   try {
     return await Effect.runPromise(
@@ -67,6 +66,6 @@ export const callSendbackTool = async (
       ).pipe(Effect.provide(McpTokens.layer(join(tokenRoot, "mcp.sqlite"))))
     );
   } finally {
-    rmSync(tokenRoot, { recursive: true, force: true });
+    removeTempDir(tokenRoot);
   }
 };

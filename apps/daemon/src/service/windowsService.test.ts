@@ -1,5 +1,6 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
@@ -73,7 +74,7 @@ describe("planWindowsTask", () => {
 
 /** A Polaris home with `bin\current\polaris.exe`, as an install leaves it. */
 const installedHome = () => {
-  const home = mkdtempSync(join(tmpdir(), "polaris-installed-"));
+  const home = newTempDir("polaris-installed-");
   mkdirSync(join(home, "bin", "current"), { recursive: true });
   writeFileSync(join(home, "bin", "current", "polaris.exe"), "");
 
@@ -165,7 +166,7 @@ describe("activateWindowsTask", () => {
       expect(error.message).toContain("--replace-task");
       expect(calls.filter(changesTask)).toEqual([]);
     } finally {
-      rmSync(real, { recursive: true, force: true });
+      removeTempDir(real);
     }
   });
 
@@ -218,7 +219,7 @@ console.log(JSON.stringify({ profile, home: homedir(), name }));
 // A real task stands in for the real install's: a redirected home must neither replace nor delete it.
 describe.skipIf(!windows)("a redirected home and the real install's task (Windows only)", () => {
   test("the profile from the token ignores a redirected USERPROFILE, so the name gets a hash", () => {
-    const fake = mkdtempSync(join(tmpdir(), "polaris-fake-profile-"));
+    const fake = newTempDir("polaris-fake-profile-");
     const probe = join(import.meta.dir, `.profile-probe-${process.pid}.ts`);
     writeFileSync(probe, PROFILE_PROBE);
 
@@ -239,14 +240,14 @@ describe.skipIf(!windows)("a redirected home and the real install's task (Window
       expect(seen.name).toMatch(/\.[0-9a-f]{8}$/);
     } finally {
       rmSync(probe, { force: true });
-      rmSync(fake, { recursive: true, force: true });
+      removeTempDir(fake);
     }
   });
 
   test("install refuses the task and uninstall keeps it; both leave it running the real home", async () => {
     const real = installedHome();
     mkdirSync(join(real, "logs"));
-    const redirected = mkdtempSync(join(tmpdir(), "polaris-redirected-"));
+    const redirected = newTempDir("polaris-redirected-");
     const name = `dev.lux.polaris.eng322-test-${process.pid}`;
     const { currentUserSid } = await import("../transport/windowsPipe/win32.ts");
 
@@ -306,8 +307,8 @@ describe.skipIf(!windows)("a redirected home and the real install's task (Window
     } finally {
       Bun.spawnSync(["schtasks", "/End", "/TN", name]);
       Bun.spawnSync(["schtasks", "/Delete", "/F", "/TN", name]);
-      rmSync(real, { recursive: true, force: true });
-      rmSync(redirected, { recursive: true, force: true });
+      removeTempDir(real);
+      removeTempDir(redirected);
     }
   });
 });
@@ -361,7 +362,7 @@ describe.skipIf(!windows)(
         expect(command()).toEqual(before);
       } finally {
         Bun.spawnSync(["schtasks", "/Delete", "/F", "/TN", name]);
-        rmSync(home, { recursive: true, force: true });
+        removeTempDir(home);
       }
     });
   }

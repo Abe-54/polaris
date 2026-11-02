@@ -1,26 +1,18 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type CurrentLink, pointCurrent, readCurrent, versionOfTarget } from "./current.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 /** A `bin` with two installed versions, each with a marker file. */
 const binWithVersions = () => {
-  const bin = mkdtempSync(join(tmpdir(), "polaris-current-"));
+  const bin = newTempDir("polaris-current-");
   dirs.push(bin);
 
   for (const version of ["0.2.0", "0.2.1"]) {

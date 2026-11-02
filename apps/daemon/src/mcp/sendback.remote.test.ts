@@ -1,5 +1,5 @@
+import { newTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   Attempt,
@@ -35,14 +35,13 @@ import {
   connectFake,
   fixtureSession,
 } from "../constellation/transfers/fakeHost.testing.ts";
-import { makeRepo, removeDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir } from "../git/testing.ts";
 import { gitText } from "../git/git.ts";
 import {
   mirrorRemoteAssignments,
   relayOutboxPacket,
 } from "../../../../packages/client/src/constellation/transfer.ts";
 import { trustedSetup } from "../constellation/setup/trust.testing.ts";
-import { shortTemp } from "../platform/testing.ts";
 
 interface WorkerBridge {
   hooks?: RemoteWorkerHooks;
@@ -132,8 +131,8 @@ const commitAttempt = (host: Host, attempt: Attempt) =>
   });
 
 test("remote MCP SendBack feedback survives outbox relay and worker restart before delivery; resume ignores evicted first Turn", async () => {
-  const ownerRoot = mkdtempSync(shortTemp("sendback-owner-"));
-  const workerRoot = mkdtempSync(shortTemp("sendback-remote-"));
+  const ownerRoot = newTempDir("sendback-owner-", { short: true });
+  const workerRoot = newTempDir("sendback-remote-", { short: true });
   const repo = await makeRepo();
   const reason = 'Keep "both tests".\n\nRemote Unicode λ feedback stays verbatim.  ';
   let pending: RemoteWorkerAssignment | undefined;
@@ -356,8 +355,8 @@ test("remote MCP SendBack feedback survives outbox relay and worker restart befo
       ).pipe(Effect.timeout("5 seconds"))
     );
   } finally {
-    rmSync(ownerRoot, { recursive: true, force: true });
-    rmSync(workerRoot, { recursive: true, force: true });
-    removeDir(repo);
+    removeTempDir(ownerRoot);
+    removeTempDir(workerRoot);
+    removeTempDir(repo);
   }
 }, 30000);

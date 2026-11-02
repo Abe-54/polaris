@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { TurnId } from "@polaris/protocol";
 import { captureCheckpoint } from "../git/Checkpoints.ts";
 import { gitText } from "../git/git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../git/testing.ts";
+import { HEAVY_GIT_MS, makeRepo, removeTempDirSettled, tempDir, write } from "../git/testing.ts";
 import { currentBranch, defaultBranch, diffStat, pushRemote } from "./branch.ts";
 import { type CheckpointedTurn, CommitRefused, commitTurns, committedTurnIds } from "./commit.ts";
 import { pushBranch } from "./push.ts";
@@ -16,14 +16,11 @@ import { revertLaterTurns } from "./revert.ts";
 
 const cleanup: Array<string> = [];
 
-afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+afterEach(async () => {
+  for (const dir of cleanup.splice(0)) await removeTempDirSettled(dir);
 });
 
 const SESSION = "s1";
-
-/** Each test runs 60-100 real gits, a few hundred ms here but near bun's 5 s default on a busy runner. */
-const GIT_WORK_MS = 15_000;
 
 /** Runs `edit` as Turn `index`, between its before- and after-checkpoints. */
 const turn = async (root: string, index: number, edit: () => void): Promise<CheckpointedTurn> => {
@@ -74,7 +71,7 @@ describe("commitTurns", () => {
       expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("later\n");
       expect([...(await committedTurnIds(root, SESSION))].sort()).toEqual(["t0", "t1"]);
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 
   test(
@@ -100,7 +97,7 @@ describe("commitTurns", () => {
       expect(await gitText(root, ["rev-parse", "main"])).not.toBe(commits[1]);
       expect(await status(root)).toBe("");
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 
   test(
@@ -119,7 +116,7 @@ describe("commitTurns", () => {
       expect(commits).toEqual([]);
       expect(await log(root)).toBe("initial");
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 
   test(
@@ -142,7 +139,7 @@ describe("commitTurns", () => {
       expect(await gitText(root, ["branch", "--list", "polaris/x"])).toBe("");
       expect(await committedTurnIds(root, SESSION)).toEqual(new Set());
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 
   test(
@@ -166,7 +163,7 @@ describe("commitTurns", () => {
       expect(await gitText(root, ["show", "HEAD:a.txt"])).toBe("1\n2\n3\n4\n5\n6\n7\n8\n9 agent");
       expect(await status(root)).toBe(" M a.txt");
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 });
 
@@ -188,7 +185,7 @@ describe("a Turn editing a file HEAD doesn't have", () => {
       expect(await gitText(root, ["show", "HEAD:notes.txt"])).toBe("rewritten by this one");
       expect(await status(root)).toBe("");
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 });
 
@@ -213,7 +210,7 @@ describe("revertLaterTurns", () => {
       expect(existsSync(join(root, "created.txt"))).toBe(false);
       expect(readFileSync(join(root, "untouched.txt"), "utf8")).toBe("kept\n");
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 });
 
@@ -249,7 +246,7 @@ describe("branch, remote and push", () => {
         deletions: 1,
       });
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 
   test(
@@ -264,6 +261,6 @@ describe("branch, remote and push", () => {
 
       expect(String(failure)).toMatch(/git push to origin failed/);
     },
-    GIT_WORK_MS
+    HEAVY_GIT_MS
   );
 });

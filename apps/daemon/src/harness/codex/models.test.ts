@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Model, SessionId, TurnId } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import { listCodexModels } from "./models.ts";
 import { type ClientRequest, type Handler, startFakeAppServer } from "./testing/FakeAppServer.ts";
-import { shortTemp } from "../../platform/testing.ts";
 import { bunFake } from "../testing/shellFake.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const cleanup: Array<() => void> = [];
 
@@ -17,8 +16,8 @@ afterEach(() => {
 
 /** Socket paths must stay under ~104 bytes, so tests use a short temp root. */
 const tempDir = () => {
-  const dir = mkdtempSync(shortTemp("pcm-"));
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = newTempDir("pcm-", { short: true });
+  cleanup.push(() => removeTempDir(dir));
 
   return dir;
 };

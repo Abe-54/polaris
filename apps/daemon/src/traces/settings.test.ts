@@ -1,6 +1,6 @@
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import {
@@ -21,7 +21,7 @@ const id = WorkspaceId.make("settings-test");
 const fixture = async (
   run: (root: string, layer: ReturnType<typeof TraceSettings.layerAt>) => Promise<void>
 ) => {
-  const root = await mkdtemp(shortTemp("p1-settings-"));
+  const root = newTempDir("p1-settings-", { short: true });
 
   const resolve = (key: WorkspaceId) =>
     key === id
@@ -37,7 +37,7 @@ const fixture = async (
   try {
     await run(root, TraceSettings.layerAt(join(root, "settings.json"), resolve));
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

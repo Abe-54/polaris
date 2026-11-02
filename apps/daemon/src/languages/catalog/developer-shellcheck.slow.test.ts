@@ -1,24 +1,17 @@
-import { afterEach, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { catalog } from "./index";
 import { probeDeveloperShellCheck, shellCheckServerSettings } from "./developer-shellcheck";
 import { posixTest } from "../../platform/testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 
 const posixTools = posixTest(
   "the synthetic ShellCheck is a POSIX sh script with process groups and sessions (ENG-296)"
 );
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
-
 const fixture = async (body: string) => {
-  const root = await mkdtemp(join(tmpdir(), "polaris-synthetic-shellcheck-"));
-  roots.push(root);
+  const root = tempDir("polaris-synthetic-shellcheck-");
   const path = join(root, "shellcheck");
   await writeFile(path, `#!/bin/sh\n${body}\n`);
   await chmod(path, 0o700);

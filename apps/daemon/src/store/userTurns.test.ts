@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentSession,
@@ -15,7 +14,7 @@ import {
   WorkspaceId,
 } from "@polaris/protocol";
 import { Effect } from "effect";
-import { tempDirectory } from "../verification/tempDirectories.testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { EventStore } from "./EventStore.ts";
 import { foldSession, patchTurn, type SessionRecord } from "./model.ts";
 
@@ -168,7 +167,7 @@ describe("reply previews", () => {
 
 describe("an event log from before user Turns", () => {
   test("migrating fills in the numbers and previews its Turns fold to", async () => {
-    const file = join(tempDirectory(join(tmpdir(), "polaris-user-turns-")), "state.sqlite");
+    const file = join(tempDir("polaris-user-turns-"), "state.sqlite");
     const [u1, c1, u2] = [turn("u1", 0), turn("c1", 1, true), turn("u2", 2)];
 
     const storeAt = <A, E>(program: Effect.Effect<A, E, EventStore>) =>

@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentSession,
@@ -36,6 +34,7 @@ import { EventStore } from "../store/EventStore.ts";
 import { attentionOf, startAttention } from "./attention.ts";
 import { ConstellationOwner, ConstellationRuntime } from "./runtime.ts";
 import { Constellations } from "./service.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const WORKER = SessionId.make("worker");
 
@@ -174,7 +173,7 @@ const layer = (file: string) =>
 const user = { kind: "user" as const };
 
 test("a question to the user is one SessionNotified on the Lead; the agents' notify after it collapses", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "attention-"));
+  const dir = newTempDir("attention-");
 
   try {
     const [notifications, outcomes] = await Effect.runPromise(
@@ -265,6 +264,6 @@ test("a question to the user is one SessionNotified on the Lead; the agents' not
     ).toEqual([[LEAD, "A asks you", true]]);
     expect(outcomes).toEqual([NotifyOutcome.Collapsed(), NotifyOutcome.Collapsed()]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

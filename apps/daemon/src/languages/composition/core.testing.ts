@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as P from "@polaris/protocol";
 import { Context, Deferred, Effect, Layer, type Scope } from "effect";
@@ -20,7 +20,7 @@ import {
   LanguageConnectionLifetime,
   languageBrokerLayer,
 } from "./ports.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 export const hostId = P.HostId.make("core-host");
 
@@ -29,10 +29,7 @@ export const fixture = (
   holdLaunch = false
 ) =>
   Effect.gen(function* () {
-    const root = yield* Effect.acquireRelease(
-      Effect.promise(async () => realpath(await mkdtemp(shortTemp("m31-h1-core-")))),
-      (path) => Effect.promise(() => rm(path, { recursive: true, force: true }))
-    );
+    const root = yield* scopedTempDir("m31-h1-core-", { short: true });
 
     const workspaceId = P.WorkspaceId.make("core-workspace");
     yield* Effect.promise(() => writeFile(join(root, "file.ts"), "saved"));

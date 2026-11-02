@@ -5,7 +5,6 @@
  * answers through the relay; nothing the relay logs holds the content or the token.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type IncomingHttpHeaders, type ServerHttp2Stream } from "node:http2";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -33,7 +32,6 @@ import {
   startRelay,
   type TestDevice,
 } from "../linkedDevices/device.testing.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { ServerRpcs } from "../transport/rpcs.ts";
 import { startServer } from "../transport/server.ts";
@@ -47,6 +45,7 @@ import {
   turnEnded,
 } from "./push.testing.ts";
 import { openPush, pushSuite } from "./seal.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const decodeApnsBody = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ aps: Schema.Unknown, p: Schema.String }))
@@ -188,10 +187,10 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
     Effect.scoped(
       Effect.gen(function* () {
         const scope = yield* Effect.scope;
-        const root = mkdtempSync(shortTemp("pl-push-"));
+        const root = newTempDir("pl-push-", { short: true });
         yield* Scope.addFinalizer(
           scope,
-          Effect.sync(() => rmSync(root, { recursive: true, force: true }))
+          Effect.promise(() => removeTempDirSettled(root))
         );
 
         const server = yield* startServer({

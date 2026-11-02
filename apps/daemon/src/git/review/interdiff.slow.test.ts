@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { gitText, resolveCommit } from "../git.ts";
-import { commitAll, removeDir, write } from "../testing.ts";
+import { commitAll, HEAVY_GIT_MS, removeTempDirSettled, write } from "../testing.ts";
 import { fetchPullRequest } from "./fetch.ts";
 import { interdiff, markReviewed } from "./interdiff.ts";
 import { reviewRef } from "./refs.ts";
@@ -16,8 +16,8 @@ import {
 
 const cleanup: Array<string> = [];
 
-afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+afterEach(async () => {
+  for (const dir of cleanup.splice(0)) await removeTempDirSettled(dir);
 });
 
 /** A PR that changes line 7 of app.txt, fetched and marked reviewed. */
@@ -72,63 +72,79 @@ describe.each([
   ["merge-tree", false],
   ["private index (git < 2.40)", true],
 ])("interdiff with %s", (_, forceFallback) => {
-  test("a new commit on top is a fast-forward: just that commit", async () => {
-    const s = await setup();
-    write(s.author, "f1.txt", "one more\n");
-    await commitAll(s.author, "f1");
+  test(
+    "a new commit on top is a fast-forward: just that commit",
+    async () => {
+      const s = await setup();
+      write(s.author, "f1.txt", "one more\n");
+      await commitAll(s.author, "f1");
 
-    const result = await s.update(forceFallback);
+      const result = await s.update(forceFallback);
 
-    expect(result).toMatchObject({ from: s.reviewed.head, fastForward: true });
-    expect(result.changed).toContain("+++ b/f1.txt");
-    expect(result.changed).not.toContain("app.txt");
-  });
+      expect(result).toMatchObject({ from: s.reviewed.head, fastForward: true });
+      expect(result.changed).toContain("+++ b/f1.txt");
+      expect(result.changed).not.toContain("app.txt");
+    },
+    HEAVY_GIT_MS
+  );
 
-  test("merging main into the PR changed nothing the author wrote", async () => {
-    const s = await setup();
-    await pushMain(s.forge, "f3.txt", "upstream\n");
-    await gitText(s.author, ["pull", "-q", "--no-rebase", "--no-edit", "origin", "main"]);
+  test(
+    "merging main into the PR changed nothing the author wrote",
+    async () => {
+      const s = await setup();
+      await pushMain(s.forge, "f3.txt", "upstream\n");
+      await gitText(s.author, ["pull", "-q", "--no-rebase", "--no-edit", "origin", "main"]);
 
-    const result = await s.update(forceFallback);
+      const result = await s.update(forceFallback);
 
-    expect(result.fastForward).toBe(false);
-    expect(result.changed).toBe("");
-  });
+      expect(result.fastForward).toBe(false);
+      expect(result.changed).toBe("");
+    },
+    HEAVY_GIT_MS
+  );
 
-  test("a rebase, squash and one-line tweak shows only the tweak", async () => {
-    const s = await setup();
-    write(s.author, "app.txt", lines(10, { 7: "line 7 pr", 2: "line 2 pr" }));
-    await commitAll(s.author, "pr: line 2");
-    await pushMain(s.forge, "f2.txt", "upstream\n");
-    await gitText(s.author, ["fetch", "-q", "origin"]);
-    // Squashed onto the new main: the same edits plus the tweak.
-    await gitText(s.author, ["reset", "-q", "--hard", "origin/main"]);
-    write(s.author, "app.txt", lines(10, { 7: "line 7 pr-v2", 2: "line 2 pr" }));
-    await commitAll(s.author, "pr, squashed and tweaked");
+  test(
+    "a rebase, squash and one-line tweak shows only the tweak",
+    async () => {
+      const s = await setup();
+      write(s.author, "app.txt", lines(10, { 7: "line 7 pr", 2: "line 2 pr" }));
+      await commitAll(s.author, "pr: line 2");
+      await pushMain(s.forge, "f2.txt", "upstream\n");
+      await gitText(s.author, ["fetch", "-q", "origin"]);
+      // Squashed onto the new main: the same edits plus the tweak.
+      await gitText(s.author, ["reset", "-q", "--hard", "origin/main"]);
+      write(s.author, "app.txt", lines(10, { 7: "line 7 pr-v2", 2: "line 2 pr" }));
+      await commitAll(s.author, "pr, squashed and tweaked");
 
-    const result = await s.update(forceFallback);
+      const result = await s.update(forceFallback);
 
-    expect(result.fastForward).toBe(false);
-    expect(result.changed).toContain("-line 2\n+line 2 pr");
-    expect(result.changed).toContain("-line 7 pr\n+line 7 pr-v2");
-    expect(result.changed).not.toContain("f2.txt");
-  });
+      expect(result.fastForward).toBe(false);
+      expect(result.changed).toContain("-line 2\n+line 2 pr");
+      expect(result.changed).toContain("-line 7 pr\n+line 7 pr-v2");
+      expect(result.changed).not.toContain("f2.txt");
+    },
+    HEAVY_GIT_MS
+  );
 
-  test("a rebase over a conflicting change asks for a full summary", async () => {
-    const s = await setup();
-    await pushMain(s.forge, "app.txt", lines(10, { 7: "line 7 main" }));
-    await gitText(s.author, ["fetch", "-q", "origin"]);
-    await gitText(s.author, ["reset", "-q", "--hard", "origin/main"]);
-    write(s.author, "app.txt", lines(10, { 7: "line 7 pr, again" }));
-    await commitAll(s.author, "pr, redone");
+  test(
+    "a rebase over a conflicting change asks for a full summary",
+    async () => {
+      const s = await setup();
+      await pushMain(s.forge, "app.txt", lines(10, { 7: "line 7 main" }));
+      await gitText(s.author, ["fetch", "-q", "origin"]);
+      await gitText(s.author, ["reset", "-q", "--hard", "origin/main"]);
+      write(s.author, "app.txt", lines(10, { 7: "line 7 pr, again" }));
+      await commitAll(s.author, "pr, redone");
 
-    const result = await s.update(forceFallback);
+      const result = await s.update(forceFallback);
 
-    expect(result).toMatchObject({
-      from: null,
-      reason: "the pull request was rebased over conflicting changes",
-    });
-  });
+      expect(result).toMatchObject({
+        from: null,
+        reason: "the pull request was rebased over conflicting changes",
+      });
+    },
+    HEAVY_GIT_MS
+  );
 });
 
 test("markReviewed records the reviewed head and merge base", async () => {

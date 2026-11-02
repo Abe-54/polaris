@@ -1,11 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AttemptId, BackgroundTask, CommandId, type HarnessKind } from "@polaris/protocol";
 import { Effect, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import { C, CID, HOST, report } from "../../engine/constellation.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { emptyResources } from "../../resources/model.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { workerLine } from "../slots.ts";
@@ -19,7 +18,7 @@ import { WORKER, finish, send, setup, signal, wait, world } from "./testing.ts";
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 // After every wall-clock Turn start in the fixture, so Turn ends read as later than they began.
@@ -184,7 +183,7 @@ test("background work that ends with no Turn after the grace gets the silent end
 });
 
 test("a wait past the ceiling is a silent end, and the wake survives a Daemon restart", async () => {
-  const dir = mkdtempSync(shortTemp("wait-ceiling-"));
+  const dir = newTempDir("wait-ceiling-", { short: true });
   dirs.push(dir);
   const file = join(dir, "state.sqlite");
 

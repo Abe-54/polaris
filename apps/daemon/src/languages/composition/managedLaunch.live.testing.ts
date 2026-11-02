@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { realpath, mkdtemp, rm, writeFile, mkdir, access, cp } from "node:fs/promises";
+import { writeFile, mkdir, access, cp } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as P from "@polaris/protocol";
@@ -9,7 +9,7 @@ import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { lazyLanguageHandlers } from "../../transport/lazyLanguages.ts";
 import { selectImportFix } from "@polaris/predict";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 const Range = Schema.Struct({
   start: Schema.Struct({ line: Schema.Number, character: Schema.Number }),
@@ -140,10 +140,7 @@ test("default Host downloads pinned tools without Trust and serves hover, diagno
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(async () => realpath(await mkdtemp(shortTemp("m31-live-ts-")))),
-          (r) => Effect.promise(() => rm(r, { recursive: true, force: true }))
-        );
+        const root = yield* scopedTempDir("m31-live-ts-", { short: true });
 
         const project = join(root, "project");
         yield* Effect.promise(async () => {

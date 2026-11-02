@@ -3,13 +3,13 @@ import { ConstellationId, TaskId, WorktreeSetupRun } from "@polaris/protocol";
 import { Effect } from "effect";
 import { delimiter } from "node:path";
 import { hostProgram, plantAll, ranOf } from "../../git/planted.testing.ts";
-import { removeDir, tempDir } from "../../git/testing.ts";
+import { removeTempDir, tempDir } from "../../git/testing.ts";
 import { executeSetup } from "./process.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) removeDir(dir);
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const run = (command: string, cwd: string) =>

@@ -1,16 +1,16 @@
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { collectorFromEnvironment, detectExporters, publicCollector } from "./detection.ts";
 
 const fixture = async (run: (root: string) => Promise<void>) => {
-  const root = await mkdtemp(shortTemp("p1-detect-"));
+  const root = newTempDir("p1-detect-", { short: true });
 
   try {
     await run(root);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 
@@ -77,7 +77,7 @@ test("signal-specific headers override general headers without exposing values o
 
 test("checkout discovery refuses symlinks and never evaluates shell substitutions", () =>
   fixture(async (root) => {
-    const external = await mkdtemp(shortTemp("p1-outside-"));
+    const external = newTempDir("p1-outside-", { short: true });
 
     try {
       await writeFile(join(external, "secret"), "OTEL_EXPORTER_OTLP_ENDPOINT=https://outside.test");
@@ -88,7 +88,7 @@ test("checkout discovery refuses symlinks and never evaluates shell substitution
       );
       expect((await detectExporters(root, {})).suggestedCollector).toBeNull();
     } finally {
-      await rm(external, { recursive: true, force: true });
+      await removeTempDirSettled(external);
     }
   }));
 

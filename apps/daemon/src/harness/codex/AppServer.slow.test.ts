@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import {
@@ -13,7 +12,8 @@ import {
   tokenFileOf,
 } from "./AppServer.ts";
 import { makeFakeCodex } from "./testing/fakeCodex.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
@@ -26,12 +26,12 @@ afterEach(() => {
     } catch {}
   }
 
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const setup = (version = "1.0.0") => {
   // Short: Unix socket paths are capped near 104 bytes.
-  const dir = mkdtempSync(shortTemp("pas-"));
+  const dir = newTempDir("pas-", { short: true });
   dirs.push(dir);
   const codex = makeFakeCodex(dir, version);
   const socketPath = join(dir, "c.sock");
@@ -254,7 +254,7 @@ describe("the shared app-server outlives the Daemon", () => {
 
 describe("remoteTuiArgv", () => {
   const recorded = () => {
-    const dir = mkdtempSync(join(tmpdir(), "pas-tui-"));
+    const dir = newTempDir("pas-tui-");
     dirs.push(dir);
     const stateFile = join(dir, "codex-app-server.json");
     const state = { pid: 1, version: null, codexPath: "x", socketPath: "s", startedAt: 0 };

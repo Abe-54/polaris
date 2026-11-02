@@ -1,11 +1,12 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { posixTest } from "../platform/testing.ts";
 
 const handoffTest = posixTest("the execve hand-off and its descriptors (ADR 0060)");
 
@@ -14,7 +15,7 @@ const fixture = join(import.meta.dir, "fixtures/handoff-start.ts");
 test.skipIf(process.platform !== "linux")(
   "accepts Linux startup flags on inherited sockets",
   () => {
-    const home = mkdtempSync(shortTemp("phf-"));
+    const home = newTempDir("phf-", { short: true });
 
     try {
       const result = spawnSync(
@@ -30,7 +31,7 @@ test.skipIf(process.platform !== "linux")(
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("PASS:");
     } finally {
-      rmSync(home, { recursive: true, force: true });
+      removeTempDir(home);
     }
   }
 );
@@ -38,7 +39,7 @@ test.skipIf(process.platform !== "linux")(
 handoffTest(
   "the full source Daemon cold-starts under an inherited invalid listener",
   async () => {
-    const home = mkdtempSync(shortTemp("phm-"));
+    const home = newTempDir("phm-", { short: true });
 
     const daemon = spawn(
       process.execPath,
@@ -111,7 +112,7 @@ handoffTest(
 
       await exited;
       clearTimeout(killed);
-      rmSync(home, { recursive: true, force: true });
+      removeTempDir(home);
     }
   },
   25_000
@@ -130,7 +131,7 @@ for (const mode of [
   handoffTest(
     `ignores a ${mode} hand-off without closing unrelated descriptors`,
     () => {
-      const home = mkdtempSync(shortTemp("phs-"));
+      const home = newTempDir("phs-", { short: true });
 
       try {
         const result = spawnSync(process.execPath, [fixture, mode], {
@@ -143,7 +144,7 @@ for (const mode of [
         expect(result.stderr).toBe("");
         expect(result.status).toBe(0);
       } finally {
-        rmSync(home, { recursive: true, force: true });
+        removeTempDir(home);
       }
     },
     25_000

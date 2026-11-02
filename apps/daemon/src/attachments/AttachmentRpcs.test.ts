@@ -8,7 +8,7 @@ import { AttachmentSettings, SessionId, WorkspaceId } from "@polaris/protocol";
 import { Effect, Layer } from "effect";
 import { RpcTest } from "effect/rpc";
 import { makeFakeBlobChannel } from "../files/testing.ts";
-import { removeDir, tempDir } from "../git/testing.ts";
+import { removeTempDir, tempDir } from "../git/testing.ts";
 import { AttachmentStore } from "../services.ts";
 import { AttachmentRpcs, AttachmentRpcsLive } from "./AttachmentRpcs.ts";
 import { AttachmentStoreLive } from "./AttachmentStore.ts";
@@ -16,7 +16,7 @@ import { AttachmentStoreLive } from "./AttachmentStore.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const ws1 = WorkspaceId.make("ws1");

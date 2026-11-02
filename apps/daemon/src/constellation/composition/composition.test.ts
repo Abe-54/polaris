@@ -30,7 +30,7 @@ import {
   waitUntil,
 } from "../../engine/testing.ts";
 import { HarnessEvent } from "../../harness/HarnessDriver.ts";
-import { makeRepo, removeDir } from "../../git/testing.ts";
+import { makeRepo, removeTempDir } from "../../git/testing.ts";
 import { McpTokens } from "../../mcp/tokens.ts";
 import { HostResources } from "../../resources/index.ts";
 import { patchSession } from "../../store/model.ts";
@@ -330,7 +330,7 @@ test("production composition acquires a slot before first Turn, installs MCP/env
       ).pipe(Effect.provide(layer))
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 

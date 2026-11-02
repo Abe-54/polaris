@@ -1,18 +1,10 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 /**
  * The fallback supervisor script (templates.ts `supervisorScript`), run for
  * real with /bin/sh against a stand-in `polaris serve`.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { shQuote, supervisorScript, supervisorStartLine } from "./templates.ts";
 import { posixTest } from "../platform/testing.ts";
@@ -47,7 +39,7 @@ afterEach(() => {
     } catch {}
   }
 
-  rmSync(root, { recursive: true, force: true });
+  removeTempDir(root);
 });
 
 const waitFor = async (condition: () => boolean, timeoutMs = 10_000) => {
@@ -75,7 +67,7 @@ const alive = (pid: number) => {
  * exits 75 (another Daemon runs), anything else stays up.
  */
 const setup = (behaviour: string) => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "polaris-sup-")));
+  root = newTempDir("polaris-sup-");
   const program = join(root, "polaris");
   writeFileSync(
     program,

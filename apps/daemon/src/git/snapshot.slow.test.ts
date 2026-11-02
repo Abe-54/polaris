@@ -1,21 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { snapshotWorkingTree } from "./snapshot.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs.splice(0)) removeTempDir(d);
 });
 
 const git = (cwd: string, ...args: Array<string>) => {
@@ -30,7 +22,7 @@ const git = (cwd: string, ...args: Array<string>) => {
 const pastSecond = () => Math.floor(Date.now() / 1000) - 10;
 
 test("a same-size edit in the same second as the last index write is still captured", async () => {
-  const repo = mkdtempSync(join(tmpdir(), "polaris-racy-"));
+  const repo = newTempDir("polaris-racy-");
   dirs.push(repo);
   git(repo, "init", "-q");
   git(repo, "config", "user.email", "t@example.com");
@@ -54,7 +46,7 @@ test("a same-size edit in the same second as the last index write is still captu
 });
 
 const makeRepo = (files: Record<string, string>) => {
-  const repo = mkdtempSync(join(tmpdir(), "polaris-snap-"));
+  const repo = newTempDir("polaris-snap-");
   dirs.push(repo);
   git(repo, "init", "-q", "-b", "main");
   git(repo, "config", "user.email", "t@example.com");
@@ -132,7 +124,7 @@ test("a corrupt own index falls back to a fresh copy and is rebuilt", async () =
 
 test("each worktree has its own index", async () => {
   const repo = makeRepo({ "a.txt": "a\n" });
-  const other = mkdtempSync(join(tmpdir(), "polaris-wt-"));
+  const other = newTempDir("polaris-wt-");
   dirs.push(other);
   rmSync(other, { recursive: true });
   git(repo, "worktree", "add", "-q", "-b", "side", other);

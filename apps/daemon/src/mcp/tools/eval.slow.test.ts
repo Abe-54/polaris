@@ -1,5 +1,6 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   PlanOperation,
@@ -36,10 +37,9 @@ import {
 import { FriendlyReview, FriendlyAnswer } from "./inputs.ts";
 import { makeBenchDriver } from "../../harness/bench/BenchDriver.ts";
 import type { Attempt } from "@polaris/protocol";
-import { shortTemp } from "../../platform/testing.ts";
 
 test("Lead dispatches three bench workers, sends a Claim back, and accepts the dependent Gate", async () => {
-  const root = mkdtempSync(shortTemp("polaris-c1-t-eval-"));
+  const root = newTempDir("polaris-c1-t-eval-", { short: true });
   const starts: Attempt[] = [];
   const counter = toolCounter();
 
@@ -266,6 +266,6 @@ test("Lead dispatches three bench workers, sends a Claim back, and accepts the d
     });
     expect(counter.findings).toEqual(["E-NOT-READY", "E-CLAIM-DIRTY", "E-REVISION", "E-REVOKED"]);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 }, 15000);

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { realpath, mkdtemp, rm, writeFile, cp, mkdir } from "node:fs/promises";
+import { realpath, writeFile, cp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { exerciseLogFormat } from "./logFormat.live.testing.ts";
 import { pathToFileURL } from "node:url";
@@ -9,7 +9,7 @@ import { connectRpc, socketTransport } from "@polaris/client";
 import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { lazyLanguageHandlers } from "../../transport/lazyLanguages.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 const requiredPath = (key: string) => {
   const value = process.env[key];
@@ -38,10 +38,7 @@ test("actual default Host routes fence TS completion, live logs across a crash a
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(async () => realpath(await mkdtemp(shortTemp("m31-live-ts-")))),
-          (r) => Effect.promise(() => rm(r, { recursive: true, force: true }))
-        );
+        const root = yield* scopedTempDir("m31-live-ts-", { short: true });
 
         const project = join(root, "project");
 

@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { QueryLogEntry } from "@polaris/protocol";
 import { Effect, Layer } from "effect";
@@ -8,9 +6,10 @@ import { DataDatabase } from "./database.ts";
 import { DataApprovals } from "./approvals.ts";
 import { QueryLog } from "./queryLog.ts";
 import { EventStore } from "../store/EventStore.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 test("F14: restarting the Query Log marks unfinished agent and grid writes unknown", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "wf-log-"));
+  const dir = newTempDir("wf-log-");
 
   const layer = () =>
     QueryLog.layer.pipe(
@@ -53,6 +52,6 @@ test("F14: restarting the Query Log marks unfinished agent and grid writes unkno
       "Check the rows before retrying"
     );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDirSettled(dir);
   }
 });

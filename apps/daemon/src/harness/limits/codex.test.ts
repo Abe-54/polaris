@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { PlanLimit } from "@polaris/protocol";
@@ -13,6 +12,7 @@ import {
   fromSnapshot,
 } from "./codex.ts";
 import { latestRolloutLimits } from "./rollout.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const fixtureText = (name: string) => readFileSync(join(import.meta.dir, "fixtures", name), "utf8");
 
@@ -34,7 +34,7 @@ const summary = (
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 describe("account/rateLimits", () => {
@@ -156,7 +156,7 @@ describe("rollout logs", () => {
   });
 
   test("reads the most recently written rollout under CODEX_HOME", async () => {
-    const home = mkdtempSync(join(tmpdir(), "polaris-codex-home-"));
+    const home = newTempDir("polaris-codex-home-");
     dirs.push(home);
     const older = join(home, "sessions/2026/09/29");
     const newer = join(home, "sessions/2026/09/28");
@@ -176,7 +176,7 @@ describe("rollout logs", () => {
   });
 
   test("passes over newer rollouts without a reading (a session that ended before any response)", async () => {
-    const home = mkdtempSync(join(tmpdir(), "polaris-codex-home-"));
+    const home = newTempDir("polaris-codex-home-");
     dirs.push(home);
     const day = join(home, "sessions/2026/09/30");
     mkdirSync(day, { recursive: true });

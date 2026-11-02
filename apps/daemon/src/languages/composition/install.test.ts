@@ -1,5 +1,4 @@
 import { expect } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { Effect, Layer, Stream } from "effect";
 import { LanguageConnectionIdentity } from "@polaris/protocol";
 import { EventStore } from "../../store/EventStore.ts";
@@ -11,7 +10,8 @@ import {
 import { createHostInstallations } from "../install/host.ts";
 import { artifactFixture, hostId, platform } from "../install/fixture.testing.ts";
 import { LanguageInstallCore, LanguageInstallGrantAuthority } from "./install.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const privateInstallTest = posixTest(
   "language installations require a POSIX-mode private, owned directory (ENG-314)"
@@ -20,7 +20,7 @@ const privateInstallTest = posixTest(
 privateInstallTest(
   "composition maps pinned install intent and scopes progress to independent connection ownership",
   async () => {
-    const root = await realpath(await mkdtemp(shortTemp("m31-install-composition-")));
+    const root = newTempDir("m31-install-composition-", { short: true });
     const registry = createHostInstallations();
     const source = artifactFixture();
     const original = LanguageConnectionIdentity.make({ hostId, clientId: "fake-client" });
@@ -90,7 +90,7 @@ privateInstallTest(
       );
     } finally {
       await registry.dispose();
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     }
   }
 );

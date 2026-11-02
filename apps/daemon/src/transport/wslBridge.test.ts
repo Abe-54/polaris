@@ -5,13 +5,14 @@
  * the real bridge against an in-process Daemon. Nothing here touches real WSL.
  */
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HostTarget, makeHostConnection } from "@polaris/client";
 import { writeFakeWsl } from "@polaris/client/wsl/testing";
 import { Effect, Option, Stream } from "effect";
 import { startServer } from "./server.ts";
-import { posixDescribe, shortTemp } from "../platform/testing.ts";
+import { posixDescribe } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const BRIDGE = join(import.meta.dir, "fixtures", "bridge.ts");
 
@@ -19,8 +20,8 @@ const q = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 
 const homes: Array<string> = [];
 
-afterEach(() => {
-  for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
+afterEach(async () => {
+  for (const home of homes.splice(0)) await removeTempDirSettled(home);
 });
 
 const identity = { name: "polaris-test", version: "0.0.0", deviceLabel: "WSL", capabilities: [] };
@@ -28,7 +29,7 @@ const identity = { name: "polaris-test", version: "0.0.0", deviceLabel: "WSL", c
 /** A distro home whose installed `polaris` bridges to the Daemon at `<home>/.polaris/daemon.sock`. */
 const distroHome = (withPolaris: boolean) => {
   // Short path: Unix socket paths are limited to ~104 bytes on macOS.
-  const home = mkdtempSync(shortTemp("pwsl-"));
+  const home = newTempDir("pwsl-", { short: true });
   homes.push(home);
   const polaris = join(home, ".polaris");
   mkdirSync(join(polaris, "bin", "current"), { recursive: true });

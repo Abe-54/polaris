@@ -1,17 +1,13 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { HostStreamItem, Sequence } from "@polaris/protocol";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Logger, Stream } from "effect";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
-import { shortTemp } from "../platform/testing.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-die-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-die-", { short: true });
 
 const snapshot = HostStreamItem.cases.Snapshot.make({
   sequence: Sequence.make(0),

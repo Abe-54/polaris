@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { system32 } from "../../platform/processes.ts";
 import { ownerOf, thisUserSid } from "../../platform/windowsNative.ts";
 import { isTokenName, isTrustedOwner, tokenFileOf, writeToken } from "./windowsToken.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const windows = process.platform === "win32";
 
@@ -16,11 +16,11 @@ const elevated = windows && Bun.spawnSync([system32("net.exe"), "session"]).exit
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const home = () => {
-  const dir = mkdtempSync(join(tmpdir(), "pas-token-"));
+  const dir = newTempDir("pas-token-");
   dirs.push(dir);
 
   return dir;

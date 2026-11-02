@@ -8,6 +8,7 @@ import { RequestId } from "effect/rpc/RpcMessage";
 import { BlobChannel } from "../services.ts";
 import { ConnectionBlobs } from "./rpcs.ts";
 import { cacheDaemonBuild, lazyRpcLayer } from "./lazy.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("Daemon startup does not import the language runtime, catalog, installer or preview media", async () => {
   const child = Bun.spawn(
@@ -122,15 +123,13 @@ test("lazy RPCs share one Daemon build while streams retain request Scope and Bl
 
 test("empty startup leaves transfer storage absent; persisted assignments activate recovery", async () => {
   const { Database } = await import("bun:sqlite");
-  const { mkdtempSync, rmSync, existsSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  const { tmpdir } = await import("node:os");
+  const { existsSync } = await import("node:fs");
   const { emptyModel } = await import("../store/model.ts");
 
   const { constellationTransferPath, needsConstellationStartup } =
     await import("../constellation/composition/startup.ts");
 
-  const root = mkdtempSync(join(tmpdir(), "polaris-lazy-startup-"));
+  const root = newTempDir("polaris-lazy-startup-");
   const path = constellationTransferPath(root);
 
   try {
@@ -143,7 +142,7 @@ test("empty startup leaves transfer storage absent; persisted assignments activa
     expect(await Effect.runPromise(needsConstellationStartup(root, emptyModel))).toBe(true);
     db.close();
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

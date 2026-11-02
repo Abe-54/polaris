@@ -1,6 +1,6 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { exists, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { exists, writeFile } from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
@@ -41,14 +41,14 @@ const until = async <A>(read: () => A | Promise<A>, ms = 5000): Promise<NonNulla
 };
 
 const scratch = async (run: (root: string, registry: TargetRegistry) => Promise<void>) => {
-  const root = await mkdtemp(shortTemp("rp4p9-"));
+  const root = newTempDir("rp4p9-", { short: true });
   const registry = new TargetRegistry(join(root, "bootstrap"));
 
   try {
     await run(root, registry);
   } finally {
     await registry.close();
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

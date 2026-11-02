@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { gitText } from "../git/git.ts";
-import { commitAll, makeRepo, removeDir, write } from "../git/testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "../git/testing.ts";
 import { addedLines, overlapsAdded, parseAddedLines } from "./addedLines.ts";
 
 const repos: Array<string> = [];
 
-afterAll(() => repos.forEach(removeDir));
+afterAll(() => repos.forEach(removeTempDir));
 
 describe("parseAddedLines", () => {
   test("keeps the new side's ranges and drops pure deletions", () => {
@@ -75,7 +75,7 @@ describe("addedLines", () => {
     const repo = await makeRepo({ "old.ts": "a\nb\nc\n", "keep.ts": "1\n2\n" });
     repos.push(repo);
     const base = await gitText(repo, ["rev-parse", "HEAD"]);
-    removeDir(`${repo}/old.ts`);
+    removeTempDir(`${repo}/old.ts`);
     write(repo, "new.ts", "a\nb\nc\nd\n");
     write(repo, "keep.ts", "1\nchanged\n2\n");
     const head = await commitAll(repo, "edit");

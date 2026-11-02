@@ -4,13 +4,13 @@
  * from `say`.
  */
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { VoiceError } from "@polaris/protocol";
 import { Effect, Exit, Fiber, Predicate, Redacted, Stream } from "effect";
 import { deepgramProvider } from "./deepgram.ts";
 import { snapshots } from "./provider.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const KEY = Redacted.make("0123456789abcdef0123456789abcdef01234567");
 
@@ -302,7 +302,7 @@ const smokeKey = process.env.POLARIS_DEEPGRAM_SMOKE_KEY;
 test.skipIf(smokeKey === undefined || process.platform !== "darwin")(
   "real Deepgram transcribes speech from say",
   async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pl-dg-"));
+    const dir = newTempDir("pl-dg-");
 
     try {
       const wav = join(dir, "speech.wav");
@@ -338,7 +338,7 @@ test.skipIf(smokeKey === undefined || process.platform !== "darwin")(
         "tests"
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   },
   30_000

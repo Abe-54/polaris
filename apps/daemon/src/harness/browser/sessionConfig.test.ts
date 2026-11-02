@@ -1,21 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { SessionId } from "@polaris/protocol";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Scope } from "effect";
 import { type ConfigFiles, realConfigFiles, sessionConfigs } from "./sessionConfig.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const SESSION = SessionId.make("s1");
 
 const dirs: string[] = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const tempDir = () => {
-  const dir = mkdtempSync(join(tmpdir(), "browser-sessions-"));
+  const dir = newTempDir("browser-sessions-");
   dirs.push(dir);
 
   return dir;

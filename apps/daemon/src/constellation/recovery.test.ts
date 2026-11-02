@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { CID, HOST, LEAD } from "../engine/constellation.testing.ts";
@@ -75,9 +73,10 @@ test("resources resume first, then one delegated Continue; Lead and standalone S
 });
 
 import { ConstellationOwner as importOwner } from "./runtime.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("stale is durable through restart, never advances Attempt revision or mechanically settles, and clears on return", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "polaris-l-stale-"));
+  const directory = newTempDir("polaris-l-stale-");
   const file = join(directory, "state.sqlite");
 
   try {
@@ -112,6 +111,6 @@ test("stale is durable through restart, never advances Attempt revision or mecha
       })
     );
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    removeTempDir(directory);
   }
 });

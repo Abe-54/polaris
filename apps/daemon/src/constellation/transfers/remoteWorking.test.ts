@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
 import {
   CommandId,
   ConstellationRelayReceipt,
@@ -45,7 +44,8 @@ import {
   C,
   report,
 } from "../../engine/constellation.testing.ts";
-import { removeDir } from "../../git/testing.ts";
+import { removeTempDir } from "../../git/testing.ts";
+import { newTempDir } from "../../platform/tempDir.testing.ts";
 import { HostResources } from "../../resources/index.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { McpTokens } from "../../mcp/index.ts";
@@ -58,7 +58,6 @@ import { applyWorkerDelivery, ConstellationSessionEffects } from "../delivery/in
 import { validateRemoteDelivery } from "../composition/remoteDelivery.ts";
 import { finish, wait, session } from "../delivery/testing.ts";
 import { remoteWorkingAttemptsLayer } from "./remoteWorking.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 const graph = () =>
   new Constellation({
@@ -88,7 +87,7 @@ const graph = () =>
   });
 
 test("a new remote Attempt starts its brief in an Existing Session with historical Turns, behind a scoped slot", async () => {
-  const root = mkdtempSync(shortTemp("c1wslots-"));
+  const root = newTempDir("c1wslots-", { short: true });
 
   try {
     await Effect.runPromise(
@@ -408,12 +407,12 @@ test("a new remote Attempt starts its brief in an Existing Session with historic
       ).pipe(Effect.timeout("3 seconds"))
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
 test("Host restart restores persisted blocked assignments without starting a first Turn", async () => {
-  const root = mkdtempSync(shortTemp("blocked-assignment-"));
+  const root = newTempDir("blocked-assignment-", { short: true });
   const file = `${root}/transfers.sqlite`;
 
   const assignment = new RemoteWorkerAssignment({
@@ -462,7 +461,7 @@ test("Host restart restores persisted blocked assignments without starting a fir
       ).pipe(Effect.provide(RemoteAssignments.layer.pipe(Layer.provide(dependencies))))
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -522,7 +521,7 @@ test("remote assignment indexing and version subscriptions isolate Sessions and 
 
 for (const outcome of ["resume", "Stop", "SendBack"] as const)
   test(`remote restart waits for registration; queued unblock ${outcome} keeps correct receipt`, async () => {
-    const root = mkdtempSync(shortTemp("remote-blocked-admission-"));
+    const root = newTempDir("remote-blocked-admission-", { short: true });
 
     const assignment = RemoteWorkerAssignment.make({
       graph: Constellation.make(
@@ -701,6 +700,6 @@ for (const outcome of ["resume", "Stop", "SendBack"] as const)
       );
       expect(held).toBe(0);
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   });

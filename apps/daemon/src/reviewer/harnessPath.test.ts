@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Exit, Scope } from "effect";
 import { tempDir } from "../engine/testing.ts";
-import { removeDir } from "../git/testing.ts";
+import { removeTempDir } from "../git/testing.ts";
 import { FakeClaude } from "../harness/claude/fakeClaude.ts";
 import { makeClaudeDriver } from "../harness/claude/ClaudeDriver.ts";
 import { userPath, which } from "../service/userPath.ts";
@@ -26,7 +26,7 @@ const original = process.env.PATH;
 afterEach(() => {
   process.env.PATH = original;
 
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const stub = (dir: string, name: string, script: string) => {

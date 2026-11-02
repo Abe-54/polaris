@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   Attempt,
@@ -32,7 +32,8 @@ import {
   SubscriptionRef,
 } from "effect";
 import { fakeHost, connectFake, fixtureSession, testIdentity } from "./fakeHost.testing.ts";
-import { makeRepo, removeDir, write, commitAll } from "../../git/testing.ts";
+import { makeRepo, removeTempDir, write, commitAll } from "../../git/testing.ts";
+import { newTempDir } from "../../platform/tempDir.testing.ts";
 import { gitText, resolveCommit } from "../../git/git.ts";
 import { constellationRef } from "../../git/constellationBundles.ts";
 import {
@@ -56,7 +57,6 @@ import { ConstellationRelay } from "../../../../../packages/client/src/constella
 import { HostRegistry } from "../../../../../packages/client/src/HostRegistry.ts";
 import { HostConnector, HostTarget } from "../../../../../packages/client/src/HostConnection.ts";
 import { type ConstellationRuntimeService } from "../runtime.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 interface RelayTraceBatch {
   hostId: string;
@@ -67,8 +67,8 @@ interface RelayTraceBatch {
 const id = (name: string) => CommandId.make(name);
 
 const roots = () => ({
-  owner: mkdtempSync(shortTemp("c1wo-")),
-  worker: mkdtempSync(shortTemp("c1ww-")),
+  owner: newTempDir("c1wo-", { short: true }),
+  worker: newTempDir("c1ww-", { short: true }),
 });
 
 const seed = Effect.fnUntraced(function* (
@@ -255,9 +255,9 @@ test("two real fake Hosts transfer the base, commit one Claim before fetch, hydr
       )
     );
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 }, 15_000);
 
@@ -347,9 +347,9 @@ test("remote review re-claim transfers the changed head and preserves the pendin
       )
     );
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 }, 15000);
 
@@ -407,9 +407,9 @@ test("worker outbox survives app loss after owner commit and retry after owner s
       )
     );
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 }, 15_000);
 
@@ -551,9 +551,9 @@ test("automatic event-driven relay recovers after the app disconnects between ow
       )
     ).then();
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 }, 20_000);
 
@@ -644,9 +644,9 @@ test("remote input receipt survives both sides restarting and acknowledges L wit
       )
     );
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 }, 15_000);
 
@@ -703,9 +703,9 @@ test("refused relay receipts survive restart and unchanged retries add no events
       )
     );
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 });
 
@@ -810,8 +810,8 @@ test("automatic relay delivers another Session while one worker RPC waits for it
       )
     );
   } finally {
-    removeDir(paths.owner);
-    removeDir(paths.worker);
-    removeDir(repo);
+    removeTempDir(paths.owner);
+    removeTempDir(paths.worker);
+    removeTempDir(repo);
   }
 }, 15_000);

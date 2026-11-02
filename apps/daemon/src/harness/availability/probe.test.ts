@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { HARNESS_CATALOGUE, type KnownHarnessKind } from "@polaris/protocol";
@@ -14,11 +14,12 @@ import {
 } from "./probe.ts";
 import { hostProgram } from "../../git/planted.testing.ts";
 import { shellFake } from "../testing/shellFake.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 interface FakeHost {
@@ -32,7 +33,7 @@ interface FakeHost {
 }
 
 const fakeHost = (): FakeHost => {
-  const root = mkdtempSync(join(tmpdir(), "polaris-availability-"));
+  const root = newTempDir("polaris-availability-");
   dirs.push(root);
   const home = join(root, "home");
   const bin = join(root, "bin");
@@ -410,7 +411,7 @@ describe("sign-in kind", () => {
 });
 
 test("a Harness is found by its absolute path: a `.` PATH entry and a relative override are the Daemon's cwd's", () => {
-  const daemonCwd = mkdtempSync(join(tmpdir(), "polaris-harness-cwd-"));
+  const daemonCwd = newTempDir("polaris-harness-cwd-");
   dirs.push(daemonCwd);
   const program = basename(hostProgram(daemonCwd, "claude", "x"));
   const home = process.cwd();

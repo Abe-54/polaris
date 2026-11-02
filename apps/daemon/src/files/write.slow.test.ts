@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  mkdtemp,
   chmod,
   lstat,
   readFile,
@@ -12,7 +11,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { renameSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChangedOnDisk, EDITOR_FILE_MAX_BYTES, FileContent, FileError } from "@polaris/protocol";
 import { Effect, Exit, Stream } from "effect";
@@ -26,15 +24,16 @@ import { createPath, deletePath, renamePath, writeVersioned } from "./write.ts";
 import { linuxTrash } from "./trash.ts";
 import { inotifyOpen } from "./inotify.ts";
 import { openFileWatchCount, watchFile } from "./watch.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 let root: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "polaris-files-"));
+  root = newTempDir("polaris-files-");
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTempDirSettled(root);
 });
 
 const bytes = (text: string) => new TextEncoder().encode(text);

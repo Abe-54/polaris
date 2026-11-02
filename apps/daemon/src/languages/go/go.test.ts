@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Predicate } from "effect";
 import * as P from "@polaris/protocol";
@@ -13,7 +13,8 @@ import { createHostPrerequisiteProbe } from "../install/hostStateProbes.ts";
 import { createSelectionLedger } from "../install/selection-ledger.ts";
 import type { LaunchAdmissionRequest } from "../runtime/launchAdmission.ts";
 import { developerLaunchAdapters, developerProvider } from "./launch.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const posixTools = posixTest(
   "the fake gopls is a POSIX sh script; Windows looks for gopls.exe (ENG-296)"
@@ -24,7 +25,7 @@ const gopls = catalog.tools.find((tool) => tool.id === "gopls")!;
 const sentinel = (marker: string) => `#!/bin/sh\necho ran > ${JSON.stringify(marker)}\n`;
 
 async function host() {
-  const home = await realpath(await mkdtemp(shortTemp("polaris-go-")));
+  const home = newTempDir("polaris-go-", { short: true });
   const bin = join(home, "go/bin");
   await mkdir(bin, { recursive: true });
   const probes = createHostPrerequisiteProbe({ home, directories: [bin] });
@@ -123,7 +124,7 @@ test("missing gopls blocks with its command; Check again finds it and Trust gate
     );
     expect(await fixture.ran()).toBe(false);
   } finally {
-    await rm(fixture.home, { recursive: true, force: true });
+    await removeTempDirSettled(fixture.home);
   }
 });
 
@@ -183,7 +184,7 @@ posixTools(
       await lease.release();
       expect(await fixture.ran()).toBe(false);
     } finally {
-      await rm(fixture.home, { recursive: true, force: true });
+      await removeTempDirSettled(fixture.home);
     }
   }
 );

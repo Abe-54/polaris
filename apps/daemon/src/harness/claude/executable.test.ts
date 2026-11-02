@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, linkSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, linkSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { PassThrough } from "node:stream";
 import { claudeExecutable, type Start, spawnWith } from "./executable.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const SHIM = "C:\\npm\\claude.cmd";
 
@@ -29,7 +29,7 @@ test.each([
 });
 
 test("npm's cli.js runs under the shim's own node, never a bare one", async () => {
-  const seen = mkdtempSync(join(tmpdir(), "polaris-node-"));
+  const seen = newTempDir("polaris-node-");
   const node = join(seen, process.platform === "win32" ? "node.exe" : "node");
 
   // A hard link can't cross volumes (CI's temp is on another drive on Windows).
@@ -68,7 +68,7 @@ test("npm's cli.js runs under the shim's own node, never a bare one", async () =
   // Windows can't remove the copied node while it still runs.
   await exited;
   expect(JSON.parse(out)).toEqual([realpathSync(node), "--print"]);
-  rmSync(seen, { recursive: true, force: true });
+  removeTempDir(seen);
 });
 
 test("a child gone without the exit Bun lost still exits for the SDK (ENG-357)", async () => {

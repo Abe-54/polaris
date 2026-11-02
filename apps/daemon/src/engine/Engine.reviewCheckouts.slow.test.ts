@@ -32,7 +32,7 @@ import {
   pushMainCommits,
   userClone,
 } from "../git/review/testing.ts";
-import { commitAll, removeDir, write } from "../git/testing.ts";
+import { commitAll, removeTempDir, write } from "../git/testing.ts";
 import { listWorktrees } from "../git/WorktreeTracker.ts";
 import { CheckoutBlocked, type ReviewCheckoutGit, WorkspaceTrust } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -56,7 +56,7 @@ type Env = Engine | EventStore;
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const run = <A, E>(layer: Layer.Layer<Env>, program: Effect.Effect<A, E, Env>) =>

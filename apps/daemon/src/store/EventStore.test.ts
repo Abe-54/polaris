@@ -1,7 +1,6 @@
-import { tempDirectory } from "../verification/tempDirectories.testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentSession,
@@ -109,7 +108,7 @@ const seed = (store: EventStore["Service"]) =>
 
 describe("EventStore", () => {
   test("a closed store lets go of its database: another connection can take it exclusively", async () => {
-    const file = join(tempDirectory(join(tmpdir(), "polaris-store-")), "state.sqlite");
+    const file = join(tempDir("polaris-store-"), "state.sqlite");
     await run(
       file,
       Effect.flatMap(EventStore, (store) => seed(store))
@@ -126,7 +125,7 @@ describe("EventStore", () => {
   });
 
   test("events, projections and receipt commit together and reload from disk", async () => {
-    const file = join(tempDirectory(join(tmpdir(), "polaris-store-")), "state.sqlite");
+    const file = join(tempDir("polaris-store-"), "state.sqlite");
     await run(
       file,
       Effect.gen(function* () {
@@ -211,7 +210,7 @@ describe("EventStore", () => {
   });
 
   test("commits queued together are decided in order and settled one by one", async () => {
-    const file = join(tempDirectory(join(tmpdir(), "polaris-store-")), "state.sqlite");
+    const file = join(tempDir("polaris-store-"), "state.sqlite");
     await run(
       file,
       Effect.gen(function* () {

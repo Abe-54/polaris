@@ -6,10 +6,9 @@
  *
  *   POLARIS_E2E_RECORD_SUBAGENT=/tmp/rec bun test subagentRecord.e2e
  */
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { query as sdkQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { SessionId, TurnId } from "@polaris/protocol";
@@ -54,7 +53,7 @@ test.skipIf(out === undefined)(
         Effect.gen(function* () {
           const session = yield* driver.open({
             sessionId: SessionId.make("rec"),
-            cwd: tempDirectory(join(tmpdir(), "plr-")),
+            cwd: tempDir("plr-"),
             permissionMode: "full-access",
             model: "haiku",
             effort: null,

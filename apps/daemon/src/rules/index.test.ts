@@ -16,7 +16,7 @@ import {
   WorkspaceId,
 } from "@polaris/protocol";
 import { Effect, Layer } from "effect";
-import { removeDir, tempDir } from "../git/testing.ts";
+import { removeTempDir, tempDir } from "../git/testing.ts";
 import { Rules, ServiceError } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { recordRulesLayer } from "./index.ts";
@@ -24,7 +24,7 @@ import type { RulesOutcome } from "./run.ts";
 
 const dirs: Array<string> = [];
 
-afterAll(() => dirs.forEach(removeDir));
+afterAll(() => dirs.forEach(removeTempDir));
 
 const summaryId = RiskSummaryId.make("sum-rules");
 

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { ApprovalDecision, SessionId, TurnId, WorkspaceId } from "@polaris/protocol";
 import { VisualizeResult } from "@polaris/visualization";
 import { Effect, Exit, Schema, Scope, Stream } from "effect";
-import { removeDir, tempDir } from "../../git/testing.ts";
+import { removeTempDir, tempDir } from "../../git/testing.ts";
 import { HarnessEvent } from "../HarnessDriver.ts";
 import { makeClaudeDriver } from "./ClaudeDriver.ts";
 import { fakeAnthropic, type ToolCall } from "./fakeAnthropic.testing.ts";
@@ -34,7 +34,7 @@ const plan = async (
   constellations: ReadonlyArray<ConstellationAttachment> = []
 ) => {
   const base = tempDir("polaris-e2e-plan-");
-  cleanup.push(() => removeDir(base));
+  cleanup.push(() => removeTempDir(base));
   const cwd = join(base, "work");
   const config = join(base, "config");
   mkdirSync(cwd);

@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("production Data services share agent approvals and persisted RPC Query Log", async () => {
-  const root = mkdtempSync(join(tmpdir(), "data-services-"));
+  const root = newTempDir("data-services-");
 
   try {
     const child = Bun.spawn([process.execPath, join(import.meta.dir, "services.testing.ts")], {
@@ -17,6 +16,6 @@ test("production Data services share agent approvals and persisted RPC Query Log
 
     expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 }, 30000);

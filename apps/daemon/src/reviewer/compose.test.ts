@@ -3,13 +3,13 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "../engine/testing.ts";
 import { gitText } from "../git/git.ts";
-import { commitAll, removeDir, write } from "../git/testing.ts";
+import { commitAll, removeTempDir, write } from "../git/testing.ts";
 import { composeTurns } from "./compose.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const repo = async () => {

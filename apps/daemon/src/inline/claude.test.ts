@@ -1,6 +1,4 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Fiber, Result, Stream } from "effect";
 import { claudeArgs, claudeInline } from "./claude.ts";
@@ -9,18 +7,18 @@ import { propose } from "./proposal.ts";
 import { request } from "./testing.ts";
 import { npmFake } from "../harness/testing/shellFake.ts";
 import { isRunning } from "../platform/processes.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const roots: Array<string> = [];
 
 // Windows holds the fake's node.exe for a moment after the stream ends.
-afterEach(() => {
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
+afterEach(async () => {
+  for (const root of roots.splice(0)) await removeTempDirSettled(root);
 });
 
 /** A claude installed by npm: on Windows its `.cmd` shim, which can't be handed JSON. */
 const fake = (source: string) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-inline-claude-"));
+  const root = newTempDir("pi-inline-claude-");
   roots.push(root);
 
   return { root, binary: npmFake(root, "claude", source) };

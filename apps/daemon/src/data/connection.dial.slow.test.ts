@@ -1,9 +1,8 @@
-import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Redacted } from "effect";
 import { parseConnection } from "./connection.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const environment = {
   PGHOST: "unreachable.invalid",
@@ -25,7 +24,7 @@ for (const [engine, route] of [
   test.skipIf(process.platform === "win32" && route !== "tcp")(
     `R6: ${engine} ${route} dials the explicit target despite Host database environment`,
     async () => {
-      const root = await mkdtemp(shortTemp("data-dial-"));
+      const root = newTempDir("data-dial-", { short: true });
       const hits: string[] = [];
 
       const tcp = Bun.listen({
@@ -95,7 +94,7 @@ for (const [engine, route] of [
           else process.env[key] = value;
         }
 
-        await rm(root, { recursive: true, force: true });
+        await removeTempDirSettled(root);
       }
     }
   );

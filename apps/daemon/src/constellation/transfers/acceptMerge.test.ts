@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import {
   Attempt,
@@ -14,8 +13,8 @@ import {
 import { Context, Effect, Layer, Struct } from "effect";
 import { gitText } from "../../git/git.ts";
 import { mergedInto } from "../../git/constellationBundles.ts";
-import { commitAll, makeRepo, removeDir, write } from "../../git/testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "../../git/testing.ts";
+import { newTempDir } from "../../platform/tempDir.testing.ts";
 import { McpTokens } from "../../mcp/tokens.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { decideConstellation } from "../../engine/constellation.ts";
@@ -78,7 +77,7 @@ const layers = (root: string) => {
 };
 
 test("the user's Accept merges the claimed head it saw into the Lead's branch, never an older one", async () => {
-  const root = mkdtempSync(shortTemp("c1am-"));
+  const root = newTempDir("c1am-", { short: true });
   const repo = await makeRepo();
   const tree = `${repo}.worktrees/A`;
 
@@ -205,8 +204,8 @@ test("the user's Accept merges the claimed head it saw into the Lead's branch, n
       ).pipe(Effect.provide(layers(root)))
     );
   } finally {
-    removeDir(root);
-    removeDir(`${repo}.worktrees`);
-    removeDir(repo);
+    removeTempDir(root);
+    removeTempDir(`${repo}.worktrees`);
+    removeTempDir(repo);
   }
 }, 15_000);

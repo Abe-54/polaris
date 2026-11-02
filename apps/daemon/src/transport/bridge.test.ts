@@ -9,11 +9,11 @@
  * fixtures/echo-daemon.ts.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BRIDGE_EXIT_NO_DAEMON } from "@polaris/protocol";
 import { posixTest } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const supervisorTest = posixTest(
   "the fallback supervisor is a /bin/sh script; Windows has the logon task (ADR 0060)"
@@ -25,7 +25,7 @@ const ECHO = join(import.meta.dir, "fixtures", "echo-daemon.ts");
 
 const homes: Array<string> = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const home of homes.splice(0)) {
     const pidFile = join(home, "echo.pid");
 
@@ -35,7 +35,7 @@ afterEach(() => {
       } catch {}
     }
 
-    rmSync(home, { recursive: true, force: true });
+    await removeTempDirSettled(home);
   }
 });
 
@@ -43,7 +43,7 @@ const q = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 
 /** A POLARIS_HOME whose supervisor (if `script`) runs `script`, logging each start. */
 const makeHome = (script: ((home: string) => string) | null) => {
-  const home = mkdtempSync(join(tmpdir(), "polaris-bridge-"));
+  const home = newTempDir("polaris-bridge-");
   homes.push(home);
 
   if (script !== null) {

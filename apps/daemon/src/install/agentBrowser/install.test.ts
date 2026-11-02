@@ -1,9 +1,9 @@
 import { system32 } from "../../platform/processes.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import type { PinnedFile } from "../../prediction/managed/catalog.ts";
 import { installAgentBrowser, installedOnDisk, NoAgentBrowserBuild } from "./install.ts";
 
@@ -20,15 +20,8 @@ const pin = (bytes: Uint8Array): PinnedFile => ({
   sha256: createHash("sha256").update(bytes).digest("hex"),
 });
 
-const roots: string[] = [];
-
-afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-
 const setup = (served: Uint8Array, pinned: Uint8Array = served) => {
-  const root = mkdtempSync(join(tmpdir(), "ab-install-"));
-  roots.push(root);
+  const root = tempDir("ab-install-");
   let fetched = 0;
 
   return {

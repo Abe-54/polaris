@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { isRunning, system32 } from "./processes.ts";
 import { loopbackListeners, processCreated, spawnInJob } from "./windowsNative.ts";
+import { newTempDir, removeTempDirSettled } from "./tempDir.testing.ts";
 
 const windowsOnly = test.skipIf(process.platform !== "win32");
 
@@ -49,7 +49,7 @@ describe("Windows natives", () => {
   windowsOnly(
     "what a job's child starts is in the job, and stopping it ends them all",
     async () => {
-      const dir = mkdtempSync(join(tmpdir(), "pjob-"));
+      const dir = newTempDir("pjob-");
       const job = spawnInJob({ argv: pingArgv(30), env: process.env, logFile: join(dir, "log") });
 
       try {
@@ -63,13 +63,13 @@ describe("Windows natives", () => {
         expect(pids.filter(isRunning)).toEqual([]);
       } finally {
         await job.stop();
-        rmSync(dir, { recursive: true, force: true });
+        await removeTempDirSettled(dir);
       }
     }
   );
 
   windowsOnly("a parent killed outright takes its job's whole tree with it", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pjob-"));
+    const dir = newTempDir("pjob-");
     const script = join(dir, "parent.ts");
     const native = join(import.meta.dir, "windowsNative.ts");
     const argv = JSON.stringify(pingArgv(60));
@@ -96,7 +96,7 @@ setInterval(() => {}, 1000);`
       expect(await waitUntil(() => pids.filter(isRunning).length === 0)).toBe(true);
     } finally {
       parent.kill("SIGKILL");
-      rmSync(dir, { recursive: true, force: true });
+      await removeTempDirSettled(dir);
     }
   });
 
@@ -114,7 +114,7 @@ setInterval(() => {}, 1000);`
   windowsOnly(
     "a job's child starts while collections run as its environment is read, JIT-compiled",
     async () => {
-      const dir = mkdtempSync(join(tmpdir(), "pjob-"));
+      const dir = newTempDir("pjob-");
       const script = join(dir, "stress.ts");
       const native = join(import.meta.dir, "windowsNative.ts");
       const cmd = system32("cmd.exe");
@@ -156,7 +156,7 @@ console.log(JSON.stringify(failures));`
         expect(await child.exited).toBe(0);
         expect(JSON.parse(output)).toEqual({});
       } finally {
-        rmSync(dir, { recursive: true, force: true });
+        await removeTempDirSettled(dir);
       }
     },
     60_000

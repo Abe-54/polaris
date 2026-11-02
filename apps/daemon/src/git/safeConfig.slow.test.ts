@@ -16,12 +16,12 @@ import {
 } from "./safeConfig/index.ts";
 import { showFile } from "./show.ts";
 import { snapshotWorkingTree } from "./snapshot.ts";
-import { commitAll, makeRepo, removeDir, tempDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const dir = (made: string) => {

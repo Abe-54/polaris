@@ -2,13 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runGitRaw } from "../git/git.ts";
-import { removeDir, tempDir } from "../git/testing.ts";
+import { removeTempDir, tempDir } from "../git/testing.ts";
 import { sanitizedConfig } from "./confinedGit.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 /** What git itself reads from a generated config: its keys and values, or null if it refuses it. */

@@ -12,7 +12,7 @@ import {
 import { Effect, Predicate, Stream } from "effect";
 import { EventStore } from "../store/EventStore.ts";
 import { eventCapability } from "../store/model.ts";
-import { makeRepo, removeDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir } from "../git/testing.ts";
 import { session } from "../constellation/delivery/testing.ts";
 import { decideSession } from "./session.ts";
 import { Engine } from "./Engine.ts";
@@ -137,6 +137,6 @@ test("Workspace setup survives visibility edits and reload; Turn-less failure hy
       ).pipe(Effect.provide(layer()))
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });

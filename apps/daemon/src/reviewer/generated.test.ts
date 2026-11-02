@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { computeDiff, DiffSpec } from "../git/diff.ts";
 import { gitText } from "../git/git.ts";
-import { commitAll, makeRepo, removeDir, write } from "../git/testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "../git/testing.ts";
 import { readDiff } from "./diff.ts";
 import { reviewPrompt } from "./prompt.ts";
 import { generatedAmong, generatedPaths, mayHaveAttributes, parseCheckAttr } from "./generated.ts";
@@ -9,7 +9,7 @@ import { generatedAmong, generatedPaths, mayHaveAttributes, parseCheckAttr } fro
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 describe("generated files", () => {

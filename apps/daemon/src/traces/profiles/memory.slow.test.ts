@@ -1,6 +1,6 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { Profile, ProfileId, Timestamp } from "@polaris/protocol";
@@ -15,7 +15,7 @@ const Measurement = Schema.Struct({
 test.each([false, true])(
   "P4-6: largest in-bounds artifact stays below 700 MiB peak RSS in the real profile worker (out-of-order: %s)",
   async (outOfOrder) => {
-    const root = await mkdtemp(shortTemp("profile-memory-"));
+    const root = newTempDir("profile-memory-", { short: true });
     const id = ProfileId.make(crypto.randomUUID());
 
     try {
@@ -85,7 +85,7 @@ test.each([false, true])(
       expect(measurement.status).toBe("completed");
       expect(measurement.peakRssMiB).toBeLessThan(700);
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     }
   },
   60000

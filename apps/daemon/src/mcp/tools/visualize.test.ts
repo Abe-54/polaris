@@ -1,5 +1,5 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -15,7 +15,6 @@ import { fakeCommands, leadBinding, workerBinding } from "../testing.ts";
 import { attachConstellation } from "../../harness/constellation/attachment.ts";
 import { claudeConstellationOptions } from "../../harness/claude/constellation.ts";
 import { polarisInstructions } from "../../constellation/skills/preamble.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 const plainBinding = McpBinding.cases.Plain.make({
   sessionId: SessionId.make("plain-1"),
@@ -79,12 +78,12 @@ const session = async (
 };
 
 const withRoot = async (body: (root: string) => Promise<void>) => {
-  const root = mkdtempSync(shortTemp("polaris-visualize-"));
+  const root = newTempDir("polaris-visualize-", { short: true });
 
   try {
     await body(root);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 };
 

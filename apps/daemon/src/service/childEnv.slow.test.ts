@@ -1,16 +1,17 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
 import { repositoryEnv } from "./childEnv.ts";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeFakeCodex } from "../harness/codex/testing/fakeCodex.ts";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { posixTest } from "../platform/testing.ts";
 
 for (const phase of ["before", "after"])
   posixTest("the execve hand-off envelope, and a /bin/sh Codex wrapper (ADR 0060)")(
     `${phase} adoption, hand-off stays out of command, Codex and terminal children`,
     () => {
-      const home = mkdtempSync(shortTemp("phc-"));
+      const home = newTempDir("phc-", { short: true });
 
       try {
         const codex = makeFakeCodex(home);
@@ -49,7 +50,7 @@ for (const phase of ["before", "after"])
         expect(result.stderr).toBe("");
         expect(result.status).toBe(0);
       } finally {
-        rmSync(home, { recursive: true, force: true });
+        removeTempDir(home);
       }
     },
     30_000

@@ -1,6 +1,6 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -10,7 +10,6 @@ import { DataApprovalRequired } from "../../data/approvalRequired.ts";
 import { DataSources, DataQueries } from "../../data/index.ts";
 import { session, send } from "../../constellation/delivery/testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
-import { shortTemp } from "../../platform/testing.ts";
 import { McpTokens } from "../tokens.ts";
 import { mcpHttp } from "../http.ts";
 import { fakeCommands } from "../testing.ts";
@@ -18,7 +17,7 @@ import { bindings, result, source, sourceFields, table } from "./data.testing.ts
 
 for (const binding of bindings)
   test(`${binding._tag} Data tools over real MCP HTTP bind the current Turn`, async () => {
-    const root = mkdtempSync(shortTemp("pl-m-data-"));
+    const root = newTempDir("pl-m-data-", { short: true });
     const reads: Array<{ sessionId: string; turn?: TurnId; tool?: string }> = [];
     let waitStarted!: () => void;
 
@@ -220,6 +219,6 @@ for (const binding of bindings)
         )
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });

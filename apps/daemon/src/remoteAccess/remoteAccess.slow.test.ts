@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHmac, randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { RemoteAccess, RemoteAccessLive } from "../extensions/remoteAccess.ts";
@@ -9,6 +8,7 @@ import { runTailscaleCommand } from "./cli.ts";
 import { makeRemoteAccess, RemoteAccessControl } from "./index.ts";
 import { findTailscale, MACOS_APP_CLI } from "./tailscale.ts";
 import { startGateway as startDaemonGateway } from "../gateway/index.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const HOST = "mac.tail1234.ts.net";
 
@@ -106,7 +106,7 @@ const remoteAccess = (os = "darwin") =>
 const windows = process.platform === "win32";
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "pol-ts-"));
+  dir = newTempDir("pol-ts-");
   const bin = join(dir, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "tailscale"), `#!/bin/sh\nexec "${process.execPath}" "${FAKE}" "$@"\n`);
@@ -119,7 +119,7 @@ beforeEach(() => {
 
 afterEach(() => {
   void gateway.stop(true);
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 });
 
 describe.skipIf(windows)("findTailscale", () => {

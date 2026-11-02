@@ -1,5 +1,4 @@
-import { shortTemp } from "../platform/testing.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { SessionId, WorkspaceId, TraceError, type TraceTurn } from "@polaris/protocol";
@@ -122,7 +121,7 @@ export const withTraceFixture = async (
   run: (fixture: TraceFixture) => Promise<void>,
   options: FixtureOptions = {}
 ) => {
-  const root = await mkdtemp(shortTemp("t1-tr-"));
+  const root = newTempDir("t1-tr-", { short: true });
 
   const probe =
     options.port === undefined
@@ -210,7 +209,7 @@ export const withTraceFixture = async (
       )
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

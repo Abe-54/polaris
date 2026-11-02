@@ -1,6 +1,5 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { tmpdir } from "node:os";
 import {
   LanguageCheckout,
   HostId,
@@ -10,9 +9,10 @@ import {
 } from "@polaris/protocol";
 import { effectiveSettings } from "./configuration.ts";
 import { checkoutKey, type CheckoutRegistry } from "../trust/index.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 export async function fixture() {
-  const temporary = await realpath(await mkdtemp(join(tmpdir(), "m31-d1-fixture-")));
+  const temporary = newTempDir("m31-d1-fixture-");
   const root = join(temporary, "workspace");
   const worktree = join(temporary, "worktree");
   const review = join(temporary, "review");
@@ -70,6 +70,6 @@ export async function fixture() {
     registrations,
     put,
     settings: effectiveSettings({ hostId, workspaceId, language: "typescript" }, [], 0),
-    cleanup: () => rm(temporary, { recursive: true, force: true }),
+    cleanup: () => removeTempDirSettled(temporary),
   };
 }

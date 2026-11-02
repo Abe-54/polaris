@@ -7,12 +7,12 @@ import { captureCheckpoint } from "./Checkpoints.ts";
 import { computeDiff, DiffSpec } from "./diff.ts";
 import { gitText } from "./git.ts";
 import { handleGitCommit, handleGitStage } from "./GitRpcs.ts";
-import { removeDir, tempDir, write } from "./testing.ts";
+import { removeTempDir, tempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 /** Long, yet short enough for git's own working directory (about 248 on Windows). */

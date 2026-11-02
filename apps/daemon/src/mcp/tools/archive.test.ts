@@ -1,5 +1,5 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -27,7 +27,6 @@ import { McpTokens } from "../tokens.ts";
 import { revokeMcpBindings } from "../revoke.ts";
 import { LEAD_TOOL_NAMES, WORKER_TOOL_NAMES } from "../testing.ts";
 import { CID, HOST, LEAD, WS, seed, runtime } from "./eval.fixture.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 const layerFor = (root: string) =>
   Constellations.layer.pipe(
@@ -118,7 +117,7 @@ const A = SetConstellationStateAction.cases;
 
 for (const kind of ["claude", "codex"] as const) {
   test(`${kind}: a Lead that archived its Constellation keeps its tools and starts the next one`, async () => {
-    const root = mkdtempSync(shortTemp("polaris-eng560-"));
+    const root = newTempDir("polaris-eng560-", { short: true });
 
     const connect =
       kind === "claude" ? async (a: ConstellationAttachment) => inProcess(a) : overHttp;
@@ -247,7 +246,7 @@ for (const kind of ["claude", "codex"] as const) {
         ).pipe(Effect.provide(layerFor(root)))
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   }, 20000);
 }

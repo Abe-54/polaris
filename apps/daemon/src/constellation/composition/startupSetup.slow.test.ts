@@ -25,7 +25,7 @@ import {
   task,
   report,
 } from "../../engine/constellation.testing.ts";
-import { makeRepo, removeDir, tempDir } from "../../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir } from "../../git/testing.ts";
 import { HarnessRegistry } from "../../services.ts";
 import { makeFakeDriver } from "../../engine/testing.ts";
 import { WorktreeSetupService } from "../setup/index.ts";
@@ -96,7 +96,7 @@ test("fingerprints cover command and root/nested manifests and ecosystem lockfil
       previous = next;
     }
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -225,7 +225,7 @@ for (const interrupted of [false, true])
           })
         );
       } finally {
-        removeDir(root);
+        removeTempDir(root);
       }
     },
     20000
@@ -300,7 +300,7 @@ test("failed deferred setup releases the acquired worker slot and creates no sta
       })
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -353,7 +353,7 @@ shellSetupTest(
         })
       );
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   }
 );

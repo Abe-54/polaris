@@ -1,14 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  chmod,
-  copyFile,
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -18,7 +9,7 @@ import { connectRpc, socketTransport } from "@polaris/client";
 import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { lazyLanguageHandlers } from "../../transport/lazyLanguages.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 /**
  * Opt-in: run with HOME set to POLARIS_LIVE_HOME, a Host home holding `.local/bin/php` (Bun reads
@@ -73,10 +64,7 @@ test.skipIf(home === "" || goplsBuild === "" || fixer === "")(
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const root = yield* Effect.acquireRelease(
-            Effect.promise(async () => realpath(await mkdtemp(shortTemp("polaris-go-php-live-")))),
-            (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true }))
-          );
+          const root = yield* scopedTempDir("polaris-go-php-live-", { short: true });
 
           const project = join(root, "project");
           const sentinel = join(root, "project-code-ran");

@@ -6,12 +6,12 @@ import { Effect, Stream } from "effect";
 import { handleGitCommit, handleGitDiscard, handleGitStage, handleGitUnstage } from "./GitRpcs.ts";
 import { posixTest } from "../platform/testing.ts";
 import { gitText } from "./git.ts";
-import { makeRepo, removeDir, write } from "./testing.ts";
+import { makeRepo, removeTempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const repo = async (files?: Record<string, string>) => {
@@ -48,7 +48,7 @@ describe("git.stage / git.unstage", () => {
     await gitText(root, ["rm", "-q", "--cached", "b.txt"]).then(() =>
       gitText(root, ["reset", "-q"])
     );
-    removeDir(join(root, "b.txt"));
+    removeTempDir(join(root, "b.txt"));
 
     await run(
       handleGitStage({ cwd: join(root, "dir"), paths: ["a.txt", "new file.txt", "b.txt"] })
@@ -93,7 +93,7 @@ describe("git.discard", () => {
 
   test("brings back a deleted file and refuses an untracked one", async () => {
     const root = await repo({ "a.txt": "a\n" });
-    removeDir(join(root, "a.txt"));
+    removeTempDir(join(root, "a.txt"));
     await run(handleGitDiscard({ cwd: root, paths: ["a.txt"] }));
     expect(existsSync(join(root, "a.txt"))).toBe(true);
 

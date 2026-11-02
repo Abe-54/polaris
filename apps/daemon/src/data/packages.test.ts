@@ -1,21 +1,14 @@
-import { shortTemp } from "../platform/testing.ts";
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { metadata } from "./connection.ts";
 import { discover } from "./discovery.ts";
 import { cachedDiscovery } from "./discoveryCache.ts";
 import { PACKAGE_LIMIT, findPackages, packageDirs } from "./packages.ts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
+import { tempDir } from "../platform/tempDir.testing.ts";
 
 const fixture = async (files: Record<string, string>, git = false) => {
-  const root = await mkdtemp(shortTemp("data-packages-"));
-  roots.push(root);
+  const root = tempDir("data-packages-", { short: true });
 
   for (const [file, text] of Object.entries(files)) {
     await mkdir(dirname(join(root, file)), { recursive: true });

@@ -1,13 +1,12 @@
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { openTraceDatabase, sortableTime } from "./database.ts";
 import { compareTraces } from "./compareQuery.ts";
 import { baseline, turnSelector } from "./compare.testing.ts";
 
 test("compare yields to reads and commits while preserving its original snapshot", async () => {
-  const root = await mkdtemp(shortTemp("compare-concurrency-"));
+  const root = newTempDir("compare-concurrency-", { short: true });
   const db = openTraceDatabase(join(root, "traces.sqlite"));
   const start = sortableTime("1800000000000000000");
 
@@ -75,6 +74,6 @@ test("compare yields to reads and commits while preserving its original snapshot
   } finally {
     await pending;
     db.close();
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });

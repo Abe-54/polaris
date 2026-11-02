@@ -1,14 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { shortTemp } from "../../platform/testing.ts";
 import { workerRepoPath } from "./rpc.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const roots: Array<string> = [];
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeTempDir(root);
 });
 
 const graph = { hostId: "host-owner", workspaceId: "workspace-1" };
@@ -16,7 +16,7 @@ const graph = { hostId: "host-owner", workspaceId: "workspace-1" };
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 test("a worker repository prepared at the older two-hash path is still used", async () => {
-  const root = mkdtempSync(shortTemp("c1rp-"));
+  const root = newTempDir("c1rp-", { short: true });
   roots.push(root);
   const legacy = join(root, "constellation", "repos", sha(graph.hostId), sha(graph.workspaceId));
   mkdirSync(legacy, { recursive: true });
@@ -25,7 +25,7 @@ test("a worker repository prepared at the older two-hash path is still used", as
 });
 
 test("a new worker repository leaves its worktrees' git dirs room under Windows' 220", async () => {
-  const root = mkdtempSync(shortTemp("c1rp-"));
+  const root = newTempDir("c1rp-", { short: true });
   roots.push(root);
   const path = await workerRepoPath(root, graph);
   const other = await workerRepoPath(root, { ...graph, workspaceId: "workspace-2" });

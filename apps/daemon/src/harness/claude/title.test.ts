@@ -1,7 +1,6 @@
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
 import { appendFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -24,7 +23,7 @@ const prompt = `${JSON.stringify({
 })}\n`;
 
 const transcript = async (content: string) => {
-  const path = join(tempDirectory(join(tmpdir(), "polaris-claude-title-")), "session.jsonl");
+  const path = join(tempDir("polaris-claude-title-"), "session.jsonl");
   await writeFile(path, content);
 
   return path;

@@ -6,7 +6,7 @@ import { PreparedWorktree, SessionId, WorkerPlacement, WorktreeSetup } from "@po
 import { Effect, Layer } from "effect";
 import { makeFakeDriver } from "../../engine/testing.ts";
 import { CID, HOST, WS, planned, task } from "../../engine/constellation.testing.ts";
-import { makeRepo, removeDir, tempDir } from "../../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir } from "../../git/testing.ts";
 import { HarnessRegistry } from "../../services.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { prepareSession } from "../composition/prepare.ts";
@@ -22,7 +22,7 @@ const shellSetupTest = posixTest(
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 /** The real Trust layer over a private Daemon directory, as the Constellation composition builds it. */

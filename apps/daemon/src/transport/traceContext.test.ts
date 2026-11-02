@@ -1,28 +1,27 @@
 /** A handler Span's parent comes from the request's `traceparent` header through the real server. */
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HostTarget, makeHostConnection } from "@polaris/client";
 import { SessionId, TerminalLaunch, TRACEPARENT_HEADER } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import { Effect, Option, type Scope } from "effect";
 import { RpcClient } from "effect/rpc";
-import { shortTemp } from "../platform/testing.ts";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const homes: string[] = [];
 
 // Each server gets its own home: Windows releases a closed pipe's name only after a while.
 const freshHome = () => {
-  const home = mkdtempSync(shortTemp("tctx-"));
+  const home = newTempDir("tctx-", { short: true });
   homes.push(home);
 
   return home;
 };
 
-afterEach(() => {
-  for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
+afterEach(async () => {
+  for (const home of homes.splice(0)) await removeTempDirSettled(home);
 });
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";

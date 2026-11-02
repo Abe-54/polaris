@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Effect } from "effect";
 import { loadHostInfo } from "../transport/hostInfo.ts";
 import {
@@ -13,6 +10,7 @@ import {
   runtimePlatformOf,
   wireLibcOf,
 } from "./index.ts";
+import { newTempDir, removeTempDir } from "./tempDir.testing.ts";
 
 const probe = (files: ReadonlyArray<string>, compiledLibc?: string, arch = "x64") => ({
   os: "linux",
@@ -74,7 +72,7 @@ describe("detectPlatform", () => {
 
 describe("HostPlatform", () => {
   test("hello's HostInfo carries the Host's libc from the provided platform", async () => {
-    const root = mkdtempSync(join(tmpdir(), "polaris-platform-"));
+    const root = newTempDir("polaris-platform-");
 
     try {
       const musl = await Effect.runPromise(
@@ -102,7 +100,7 @@ describe("HostPlatform", () => {
       expect(windows.platform).toBe("windows-x64");
       expect("libc" in windows).toBe(false);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });
 });

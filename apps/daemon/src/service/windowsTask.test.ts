@@ -1,6 +1,6 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   claimTask,
@@ -250,7 +250,7 @@ const windows = process.platform === "win32";
 // Registers a real per-user task (no administrator), reads it back, and deletes it.
 describe.skipIf(!windows)("schtasks accepts the definition (Windows only)", () => {
   test("registered from the file, the task runs unelevated at the user's logon with no time limit", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "polaris-task-"));
+    const dir = newTempDir("polaris-task-");
     const name = `dev.lux.polaris.test-${process.pid}`;
     const { currentUserSid } = await import("../transport/windowsPipe/win32.ts");
     const file = join(dir, "task.xml");
@@ -279,7 +279,7 @@ describe.skipIf(!windows)("schtasks accepts the definition (Windows only)", () =
       expect(element(xml, "WorkingDirectory")).toBe(dir);
     } finally {
       Bun.spawnSync(["schtasks", "/Delete", "/F", "/TN", name]);
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 });

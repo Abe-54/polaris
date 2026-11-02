@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { posixTest } from "../../platform/testing.ts";
 import { gitExecutable } from "../executable.ts";
 import { gitText, HOOKS_OFF } from "../git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../testing.ts";
 
 /** Git for Windows reads config values and runs drivers through sh: no backslashes. */
 const forward = (path: string) => path.replaceAll("\\", "/");
@@ -22,7 +22,7 @@ const spies: Array<Mock<typeof Bun.spawn>> = [];
 afterEach(() => {
   for (const spy of spies.splice(0)) spy.mockRestore();
 
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const dir = (made: string) => {

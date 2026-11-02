@@ -7,13 +7,13 @@ import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId } from "@polaris/protocol";
 import { captureCheckpoint } from "../git/Checkpoints.ts";
-import { makeRepo, removeDir, tempDir, write } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../git/testing.ts";
 import { conflictReason, contains, type OtherSession, revertConflicts } from "./shared.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const ME = SessionId.make("s-me");

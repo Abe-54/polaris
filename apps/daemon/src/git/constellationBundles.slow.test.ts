@@ -7,7 +7,7 @@ import {
   fetchOrigin,
 } from "./constellationBundles.ts";
 import { gitText, resolveCommit } from "./git.ts";
-import { commitAll, makeRepo, removeDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "./testing.ts";
 
 test("a self-contained base and a later Claim transfer exactly, leaving user branches unchanged", async () => {
   const owner = await makeRepo();
@@ -42,8 +42,8 @@ test("a self-contained base and a later Claim transfer exactly, leaving user bra
     );
     expect(await resolveCommit(owner, constellationRef("graph", "wrong"))).toBeNull();
   } finally {
-    removeDir(owner);
-    removeDir(worker);
+    removeTempDir(owner);
+    removeTempDir(worker);
   }
 });
 
@@ -71,8 +71,8 @@ test("origin transfer is restricted to the selected prefix and verifies the adve
     );
     expect(await resolveCommit(target, constellationRef("g", "b"))).toBeNull();
   } finally {
-    removeDir(source);
-    removeDir(origin);
-    removeDir(target);
+    removeTempDir(source);
+    removeTempDir(origin);
+    removeTempDir(target);
   }
 });

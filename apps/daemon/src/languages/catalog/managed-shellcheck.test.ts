@@ -1,11 +1,11 @@
 import { expect } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { Predicate } from "effect";
 import { HostId } from "@polaris/protocol";
 import { catalog, preflight } from "./index.ts";
 import { createInstaller } from "../install/index.ts";
 import { availability } from "../availability/index.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const test = posixTest(
   "language storage is checked private by POSIX owner and mode bits; Windows needs ACL checks (ENG-314)"
@@ -46,7 +46,7 @@ test("bundled ShellCheck stays audit blocked on all four targets before approval
 
     expect(Predicate.isTagged(fact.preflight, "Blocked")).toBe(true);
 
-    const root = await realpath(await mkdtemp(shortTemp("m31-managed-shellcheck-")));
+    const root = newTempDir("m31-managed-shellcheck-", { short: true });
 
     let approvals = 0;
 
@@ -85,7 +85,7 @@ test("bundled ShellCheck stays audit blocked on all four targets before approval
       expect(await installer.current(tool.id)).toBeNull();
     } finally {
       await installer.dispose();
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     }
   }
 });

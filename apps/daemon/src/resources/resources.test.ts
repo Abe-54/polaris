@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CommandId, DomainEvent, HostResource, ResourceLease, SessionId } from "@polaris/protocol";
 import { Clock, Deferred, Effect, Fiber, Layer, ManagedRuntime, Predicate } from "effect";
@@ -8,6 +6,7 @@ import { EventStore } from "../store/EventStore.ts";
 import { HostResources } from "./index.ts";
 import { recordResourceTrace } from "./trace.testing.ts";
 import { processIdentity } from "./process.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const homes: string[] = [];
 
@@ -17,11 +16,11 @@ afterEach(() => {
   if (originalHome === undefined) delete process.env.POLARIS_HOME;
   else process.env.POLARIS_HOME = originalHome;
 
-  for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
+  for (const home of homes.splice(0)) removeTempDir(home);
 });
 
 const setup = () => {
-  const home = mkdtempSync(join(tmpdir(), "polaris-resource-test-"));
+  const home = newTempDir("polaris-resource-test-");
   homes.push(home);
   process.env.POLARIS_HOME = home;
   const layer = HostResources.layer.pipe(LayerProvide(home));
@@ -45,7 +44,7 @@ const eventually = async (predicate: () => Promise<boolean>) => {
 
 describe("Host resource leases", () => {
   test("held and queued worker slots schedule no monitor sleeps", async () => {
-    const home = mkdtempSync(join(tmpdir(), "polaris-worker-idle-"));
+    const home = newTempDir("polaris-worker-idle-");
     homes.push(home);
     process.env.POLARIS_HOME = home;
     const clock = await Effect.runPromise(Clock.Clock);
@@ -122,7 +121,7 @@ describe("Host resource leases", () => {
     }
   });
   test("a concurrent Lead capacity edit is honored at the grant commit boundary", async () => {
-    const home = mkdtempSync(join(tmpdir(), "polaris-resource-race-"));
+    const home = newTempDir("polaris-resource-race-");
     homes.push(home);
     process.env.POLARIS_HOME = home;
     const storage = ManagedRuntime.make(EventStore.layerSqlite(join(home, "state.sqlite")));

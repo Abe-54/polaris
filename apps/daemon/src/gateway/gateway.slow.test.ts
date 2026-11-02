@@ -7,7 +7,7 @@ import { localEndpoint } from "@polaris/protocol/endpoint";
  * itself; browsers are kept out at the upgrade; revoking cuts the connection.
  */
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
@@ -27,17 +27,14 @@ import { Context, Effect, Exit, Layer, Predicate, Redacted, Stream } from "effec
 import { BlobChannel } from "../services.ts";
 import { DeviceLabel } from "../engine/rpc.ts";
 import { actorOf } from "../extensions/connection.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { ServerRpcs } from "../transport/rpcs.ts";
 import { startServer } from "../transport/server.ts";
 import { webSocketTransport } from "./client.testing.ts";
 import { readGatewayRecord } from "./config.ts";
 import { CLOSE_GOING_AWAY } from "./transport.ts";
+import { newTempDir, removeTempDirSettled, scopedTempDir } from "../platform/tempDir.testing.ts";
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-gw-"))),
-  (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-gw-", { short: true });
 
 /** `dispatch` answers with who asked, to prove the connection's identity reached a handler. */
 const handlers = Layer.mergeAll(
@@ -236,7 +233,7 @@ test("a paired Extension over the gateway gets its Grant, nothing kept for Clien
 test("the Daemon stopping closes gateway connections as going away and removes gateway.json", async () => {
   const outcome = await Effect.runPromise(
     Effect.gen(function* () {
-      const root = mkdtempSync(shortTemp("pl-gw-stop-"));
+      const root = newTempDir("pl-gw-stop-", { short: true });
 
       const result = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -271,7 +268,7 @@ test("the Daemon stopping closes gateway connections as going away and removes g
 
       const code = yield* result.closed;
       const recordLeft = existsSync(result.record);
-      rmSync(root, { recursive: true, force: true });
+      yield* Effect.promise(() => removeTempDirSettled(root));
 
       return { code, recordLeft };
     })

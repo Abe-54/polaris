@@ -1,17 +1,13 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import * as P from "@polaris/protocol";
 import { Effect, Layer, Queue, Schema } from "effect";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
-import { shortTemp } from "../platform/testing.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-lang-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-lang-", { short: true });
 
 const options = (root: string) => ({
   root,

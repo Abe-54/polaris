@@ -1,10 +1,11 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 /**
  * `install` against the real launchd, with a temp home and its own label, never
  * `dev.lux.polaris`. macOS only, opt in: POLARIS_LAUNCHD_E2E=1 bun test launchd.e2e
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir, userInfo } from "node:os";
+import { readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { CommandRunner } from "./CommandRunner.ts";
@@ -89,14 +90,14 @@ const installation = (path: string, version: string, layer = CommandRunner.layer
 
 describe.skipIf(!enabled)("install against the real launchd", () => {
   beforeAll(() => {
-    root = mkdtempSync(join(tmpdir(), "polaris-launchd-"));
+    root = newTempDir("polaris-launchd-");
   });
 
   afterAll(async () => {
     await Effect.runPromise(
       uninstall(ctx("/usr/bin:/bin"), { purge: true }).pipe(Effect.provide(CommandRunner.layer))
     );
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   });
 
   test("loads into gui/<uid>", async () => {

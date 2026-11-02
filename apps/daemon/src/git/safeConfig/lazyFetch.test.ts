@@ -3,13 +3,13 @@ import { chmodSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { posixTest } from "../../platform/testing.ts";
 import { baseEnv, gitText, runGitRaw } from "../git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../testing.ts";
 import { GitLazyFetchUnsupported, safeConfigEnv } from "./index.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const dir = (made: string) => {

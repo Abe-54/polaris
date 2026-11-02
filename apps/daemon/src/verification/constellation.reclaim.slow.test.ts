@@ -11,7 +11,7 @@ import {
 import { Effect, Layer, Predicate, Result, Struct } from "effect";
 import { C, CID, draft, report } from "../engine/constellation.testing.ts";
 import { gitText } from "../git/git.ts";
-import { commitAll, makeRepo, removeDir, write } from "../git/testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "../git/testing.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { Constellations } from "../constellation/service.ts";
 import { ConstellationRuntime } from "../constellation/runtime.ts";
@@ -184,6 +184,6 @@ test("real Git re-claim after a Lead message persists both Claims across SQLite 
       })
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });

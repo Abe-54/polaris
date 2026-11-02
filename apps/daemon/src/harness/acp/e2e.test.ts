@@ -8,14 +8,12 @@
  * (an adapter such as codex-acp) under that Harness's driver instead.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { ApprovalDecision, SessionId, TurnId, TurnItem } from "@polaris/protocol";
 import { Effect, Schema, Stream } from "effect";
 import { HarnessEvent } from "../HarnessDriver.ts";
 import { makeAcpDriver } from "./AcpDriver.ts";
 import { ACP_HARNESSES } from "./harnesses.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const harness = ACP_HARNESSES.find((h) => h.kind === process.env.POLARIS_E2E_ACP);
 
@@ -27,7 +25,7 @@ test.skipIf(harness === undefined)(
   "a real ACP Turn: reply with the word pong",
   async () => {
     if (harness === undefined) return;
-    const repo = mkdtempSync(join(tmpdir(), "polaris-acp-e2e-"));
+    const repo = newTempDir("polaris-acp-e2e-");
     await Bun.$`git init -q && git commit -q --allow-empty -m init`.cwd(repo);
 
     try {
@@ -85,7 +83,7 @@ test.skipIf(harness === undefined)(
 
       expect(reply.join(" ").toLowerCase()).toContain("pong");
     } finally {
-      rmSync(repo, { recursive: true, force: true });
+      removeTempDir(repo);
     }
   },
   180_000

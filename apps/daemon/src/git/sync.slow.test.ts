@@ -6,7 +6,7 @@ import { Effect, Stream } from "effect";
 import { posixTest } from "../platform/testing.ts";
 import { handleGitStatus, handleGitSync } from "./GitRpcs.ts";
 import { gitText } from "./git.ts";
-import { commitAll, makeRepo, removeDir, tempDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
@@ -29,11 +29,11 @@ afterAll(() => {
   if (saved.system === undefined) delete process.env.GIT_CONFIG_NOSYSTEM;
   else process.env.GIT_CONFIG_NOSYSTEM = saved.system;
 
-  removeDir(home);
+  removeTempDir(home);
 });
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const identity = async (root: string) => {

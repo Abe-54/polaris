@@ -30,7 +30,7 @@ import {
 } from "../engine/testing.ts";
 import { CheckpointsLive } from "../git/Checkpoints.ts";
 import { gitText } from "../git/git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../git/testing.ts";
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
 import { HarnessRegistry } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -40,7 +40,7 @@ import { AcceptRpcs, AcceptRpcsLive } from "./AcceptRpcs.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const DRAFT = JSON.stringify({

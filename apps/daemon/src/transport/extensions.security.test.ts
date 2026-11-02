@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import { ExtensionDaemonRpcs, ExtensionTokenRejected } from "@polaris/protocol";
 import { Deferred, Effect, Exit, Fiber, Match, Redacted, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { startServer } from "./server.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const identity = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
@@ -13,10 +12,7 @@ const hello = (token?: string) =>
   token === undefined ? identity : { ...identity, extensionToken: Redacted.make(token) };
 
 const setup = Effect.gen(function* () {
-  const root = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(shortTemp("pl-ext-sec-"))),
-    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true }))
-  );
+  const root = yield* scopedTempDir("pl-ext-sec-", { short: true });
 
   const server = yield* startServer({
     root,
@@ -40,10 +36,7 @@ test("a transport requiring tokens refuses missing hello and pre-hello RPCs", as
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(shortTemp("pl-ext-req-"))),
-          (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true }))
-        );
+        const root = yield* scopedTempDir("pl-ext-req-", { short: true });
 
         const server = yield* startServer({
           root,

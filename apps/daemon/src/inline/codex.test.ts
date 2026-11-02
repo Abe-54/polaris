@@ -1,6 +1,4 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Fiber, Result, Stream } from "effect";
 // connectAppServer is connectUnix on POSIX; on Windows it reaches the fake on its loopback port.
@@ -9,6 +7,7 @@ import { startFakeAppServer, type Handler } from "../harness/codex/testing/FakeA
 import { codexInline } from "./codex.ts";
 import { propose } from "./proposal.ts";
 import { request } from "./testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const cleanups: Array<() => void> = [];
 
@@ -17,7 +16,7 @@ afterEach(() => {
 });
 
 const fake = (turn: Handler, readOnly = true) => {
-  const root = mkdtempSync(join(tmpdir(), "pi-inline-"));
+  const root = newTempDir("pi-inline-");
   const path = join(root, "s.sock");
 
   const server = startFakeAppServer(path, (req, conn) => {
@@ -47,7 +46,7 @@ const fake = (turn: Handler, readOnly = true) => {
 
   cleanups.push(() => {
     server.stop();
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   });
 
   return { path, server };

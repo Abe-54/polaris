@@ -13,7 +13,7 @@ import { Effect, Layer, Fiber } from "effect";
 import { HarnessRegistry } from "../../services.ts";
 import { makeFakeDriver } from "../../engine/testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
-import { makeRepo, removeDir, tempDir } from "../../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir } from "../../git/testing.ts";
 import { session } from "../delivery/testing.ts";
 import { CID, HOST, WS, task, planned } from "../../engine/constellation.testing.ts";
 import { prepareSession } from "../composition/prepare.ts";
@@ -78,7 +78,7 @@ test("detects all supported lockfiles in priority order; custom/disabled/no lock
       )
     ).toBe("make setup");
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -149,7 +149,7 @@ shellSetupTest(
         ).pipe(Effect.provide(fixture(root)))
       );
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   }
 );
@@ -208,7 +208,7 @@ shellSetupTest(
       );
       expect(await readFile(join(root, "setup-count"), "utf8")).toBe("run\nrun\n");
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   }
 );
@@ -261,7 +261,7 @@ shellSetupTest(
         ).pipe(Effect.provide(fixture(root)))
       );
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   },
   10_000
@@ -309,7 +309,7 @@ shellSetupTest(
       for (const [key, value] of Object.entries(saved))
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
-      removeDir(root);
+      removeTempDir(root);
     }
   }
 );

@@ -3,9 +3,8 @@
  * Deny-by-Harness record, only recent Turns in memory, and bounded live
  * subscribers.
  */
-import { tempDirectory } from "../verification/tempDirectories.testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentSession,
@@ -26,7 +25,7 @@ import { RECENT_TURNS } from "./model.ts";
 const run = <A, E>(filename: string, program: Effect.Effect<A, E, EventStore>) =>
   Effect.runPromise(program.pipe(Effect.provide(EventStore.layerSqlite(filename))));
 
-const tempFile = () => join(tempDirectory(join(tmpdir(), "polaris-store-")), "state.sqlite");
+const tempFile = () => join(tempDir("polaris-store-"), "state.sqlite");
 
 const at = "2026-09-28T00:00:00.000Z";
 

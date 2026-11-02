@@ -1,7 +1,6 @@
 /** The Claude driver's read-only sessions, and a Host where Claude Code's sandbox can't start. */
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId, TurnId } from "@polaris/protocol";
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -11,6 +10,7 @@ import { FakeClaude, result } from "./fakeClaude.ts";
 import { unstamped } from "../itemClock.testing.ts";
 import type { ClaudeSandbox } from "./sandbox.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const NO_SOCAT: ClaudeSandbox = { available: false, missing: [{ binary: "socat", pkg: "socat" }] };
 
@@ -119,7 +119,7 @@ describe("Claude driver in a read-only session", () => {
   )(
     "a read-only session's confinement is checked against the env and path Claude Code gets",
     async () => {
-      const base = realpathSync(mkdtempSync(join(tmpdir(), "polaris-driver-ro-")));
+      const base = newTempDir("polaris-driver-ro-");
       const checkout = join(base, "checkout");
       const config = join(checkout, ".claude-config");
       mkdirSync(config, { recursive: true });
@@ -135,7 +135,7 @@ describe("Claude driver in a read-only session", () => {
       expect(o.env).toMatchObject({ CLAUDE_CONFIG_DIR: config });
       expect(o.sandbox?.filesystem?.denyRead).toContain(config);
       await t.close();
-      rmSync(base, { recursive: true, force: true });
+      removeTempDir(base);
     }
   );
 });

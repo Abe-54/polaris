@@ -4,7 +4,7 @@ import { Effect, Exit, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { cpus } from "node:os";
 import { delimiter, join } from "node:path";
 import { hostProgram, plantAll, ranOf } from "../git/planted.testing.ts";
-import { removeDir, tempDir } from "../git/testing.ts";
+import { removeTempDir, tempDir } from "../git/testing.ts";
 import { loginShell, type ShellSources, windowsShell } from "./shell.ts";
 import { Scrollback, TerminalItem, Terminals, TerminalsLive } from "./Terminals.ts";
 
@@ -29,7 +29,7 @@ const cleanup: Array<string> = [];
 afterEach(async () => {
   await runtime?.dispose();
 
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const setup = () => {

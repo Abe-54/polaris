@@ -1,5 +1,6 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PlanOperation, TaskDefinition, TaskId, TurnId } from "@polaris/protocol";
 import { Effect, Fiber, Layer, Predicate, Schema, Stream } from "effect";
@@ -16,11 +17,10 @@ import { LEAD_TOOL_NAMES } from "../testing.ts";
 import { revokeMcpBindings } from "../revoke.ts";
 import { DomainEvent } from "@polaris/protocol";
 import { CID, HOST, LEAD, WS, seed, runtime, repo } from "./eval.fixture.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 for (const kind of ["codex", "claude"] as const) {
   test(`${kind} plain session follows the preamble to start a Constellation, then uses the same Lead tools`, async () => {
-    const root = mkdtempSync(shortTemp("polaris-g2-probe-"));
+    const root = newTempDir("polaris-g2-probe-", { short: true });
 
     const base = Layer.mergeAll(
       EventStore.layerSqlite(join(root, "store.sqlite")),
@@ -173,7 +173,7 @@ for (const kind of ["codex", "claude"] as const) {
         ).pipe(Effect.provide(layer))
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   }, 15000);
 }

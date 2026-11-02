@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PinnedFile } from "./catalog.ts";
 import { downloadFile, freeBytes, isDownloaded, ManagedSetupError, partPath } from "./download.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const BYTES = Buffer.from("a verified model file, two hundred bytes long".repeat(5));
 
@@ -46,7 +46,7 @@ const rejection = async (run: Promise<unknown>): Promise<ManagedSetupError> => {
   throw new Error("expected a ManagedSetupError");
 };
 
-const scratch = () => mkdtempSync(join(tmpdir(), "pl-managed-dl-"));
+const scratch = () => newTempDir("pl-managed-dl-");
 
 const run = (dir: string, file: PinnedFile, fetch: ReturnType<typeof publisher>["fetch"]) => {
   const progress: number[] = [];
@@ -71,7 +71,7 @@ test("a complete download is verified and renamed into place", async () => {
     expect(progress.at(-1)).toBe(BYTES.length);
     expect(await isDownloaded(dir, pinned())).toBe(true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -88,7 +88,7 @@ test("a partial download resumes with Range from the part file's length", async 
     expect(whole.requests).toEqual(["bytes=100-"]);
     expect(readFileSync(join(dir, "model.gguf"))).toEqual(BYTES);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -102,7 +102,7 @@ test("a checksum mismatch refuses the file and discards the part", async () => {
     expect(() => readFileSync(join(dir, "model.gguf"))).toThrow();
     expect(() => readFileSync(partPath(dir, pinned()))).toThrow();
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -117,7 +117,7 @@ test("a file already in the folder with the right hash counts as downloaded with
     writeFileSync(join(dir, "model.gguf"), BYTES.subarray(1));
     expect(await isDownloaded(dir, pinned())).toBe(false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -141,7 +141,7 @@ test("too little free space refuses before any byte is fetched", async () => {
     expect(error.reason).toBe("no-space");
     expect(requests).toEqual([]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -177,7 +177,7 @@ test("cancelling stops the download and keeps the part for a resume", async () =
     expect(error.message).toBe("Download cancelled");
     expect(readFileSync(partPath(dir, pinned())).length).toBe(50);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -185,7 +185,7 @@ test("cancelling stops the download and keeps the part for a resume", async () =
 const DISK_CHURN_BYTES = 256 * 1024 * 1024;
 
 test("free space is read from the nearest existing ancestor of a folder not yet made", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "polaris-free-"));
+  const dir = newTempDir("polaris-free-");
   const missing = join(dir, "models", "deeper");
 
   // Other processes (parallel test workers) write to the disk between two reads.

@@ -1,14 +1,13 @@
 /** Real RPC framing and cancellation with a fake Query executor boundary. */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, queryDataStream, socketTransport } from "@polaris/client";
 import { DaemonRpcs, SessionId, Unsupported, QueryDataStreamItem } from "@polaris/protocol";
 import { Deferred, Effect, Layer, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
 import { DataSources, DataQueries, DataRpcsLive } from "./index.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const sessionId = SessionId.make("stream-session");
 
@@ -18,10 +17,8 @@ test("F4/F6: 10k rows cross the real stream; cancellation closes the executor sc
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = mkdtempSync(shortTemp("pl-dstream-"));
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-        );
+        const root = newTempDir("pl-dstream-", { short: true });
+        yield* Effect.addFinalizer(() => Effect.sync(() => removeTempDir(root)));
         const cancelled = yield* Deferred.make<void>();
 
         const queries = Layer.succeed(

@@ -1,15 +1,13 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import {
@@ -28,7 +26,7 @@ import {
   sha256File,
   uninstall,
 } from "./install.ts";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { posixTest } from "../platform/testing.ts";
 
 // The macOS layout needs an exec bit and a symlink swapped by rename; Windows has its own layout.
 const macLayoutTest = posixTest("POSIX modes and a symlink replaced by rename (ADR 0060)");
@@ -83,12 +81,12 @@ const notLoaded = (argv: ReadonlyArray<string>): Partial<CommandResult> =>
   argv[1] === "print" && argv[2]?.endsWith("/dev.lux.polaris") === true ? { code: 113 } : {};
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "polaris-install-"));
+  root = newTempDir("polaris-install-");
   source = join(root, "polaris-upload");
   writeFileSync(source, "#!/bin/sh\necho polaris 1.2.3 darwin-arm64\n");
 });
 
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => removeTempDir(root));
 
 describe("install on macOS", () => {
   test("lays out the binary, links current and bootstraps the LaunchAgent", async () => {
@@ -392,7 +390,7 @@ describe("uninstall", () => {
     "stops the shared Codex app-server, which otherwise outlives the Daemon",
     async () => {
       // Short paths: the socket must fit the Unix socket path limit.
-      root = mkdtempSync(shortTemp("pun-"));
+      root = newTempDir("pun-", { short: true });
       const home = join(root, ".polaris");
       const socketPath = join(home, "codex.sock");
       const codex = makeFakeCodex(root);

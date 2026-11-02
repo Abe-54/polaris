@@ -1,7 +1,5 @@
 import { expect } from "bun:test";
 import { rejects, throws } from "node:assert/strict";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHostInstallations } from "./host.ts";
 import { createInstallOwnership, type InstallOwnerAuthority } from "./ownership.ts";
@@ -10,6 +8,7 @@ import { failure } from "./validation.ts";
 import { LanguageError } from "@polaris/protocol";
 import { Schema } from "effect";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const test = posixTest(
   "language storage is checked private by POSIX owner and mode bits; Windows needs ACL checks (ENG-314)"
@@ -39,7 +38,7 @@ function authority(clientId = "synthetic-client") {
 }
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "m31-i1-ownership-")));
+  const root = newTempDir("m31-i1-ownership-");
   const source = artifactFixture();
   const started = latch();
   const finish = latch();
@@ -82,7 +81,7 @@ async function fixture() {
     async close() {
       finish.resolve();
       await registry.dispose();
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     },
   };
 }

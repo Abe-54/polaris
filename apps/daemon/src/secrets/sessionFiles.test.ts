@@ -1,16 +1,9 @@
 import { expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { SessionId, TurnItem } from "@polaris/protocol";
 import { Effect, Predicate, Redacted, type Scope } from "effect";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { expectPrivate } from "./privacy.testing.ts";
 import { sessionSecretFiles } from "./sessionFiles.ts";
 
@@ -33,7 +26,7 @@ const outputOf = (item: TurnItem) => (Predicate.isTagged(item, "ToolCall") ? ite
 const run = <A, E>(program: Effect.Effect<A, E, Scope.Scope>) =>
   Effect.runPromise(Effect.scoped(program));
 
-const root = () => mkdtempSync(join(tmpdir(), "session-secrets-"));
+const root = () => tempDir("session-secrets-");
 
 test("a secret is written owner-only, in an owner-only directory", async () => {
   const dir = root();

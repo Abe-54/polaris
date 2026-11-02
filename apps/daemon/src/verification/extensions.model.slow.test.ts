@@ -11,8 +11,6 @@
  *   - a token-less connection is never refused.
  */
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type Command,
@@ -27,6 +25,7 @@ import { Effect, Match } from "effect";
 import fc from "fast-check";
 import { Pairings, type TokenCheck } from "../extensions/pairings.ts";
 import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const RUNS = pbtRuns(40);
 
@@ -59,6 +58,13 @@ const Op = fc.oneof(
 );
 
 type Op = typeof Op extends fc.Arbitrary<infer A> ? A : never;
+
+/** CI's counterexample on 283482cb6 (seed 945359526): a scoped `dispatch` without a Command. */
+const BARE_DISPATCH: ReadonlyArray<Op> = [
+  { op: "pair", name: "Raycast", grant: [] },
+  { op: "rpc", which: 0, rpc: "dispatch" },
+  { op: "pair", name: "Raycast", grant: [] },
+];
 
 /** The reference: each issued token's Pairing and whether it was revoked. */
 interface Issued {
@@ -216,7 +222,7 @@ describe("Pairings and Grants (model-based)", () => {
     async () => {
       await fc.assert(
         fc.asyncProperty(fc.array(Op, { minLength: 1, maxLength: 40 }), async (ops) => {
-          const dir = mkdtempSync(join(tmpdir(), "pl-ext-model-"));
+          const dir = newTempDir("pl-ext-model-");
 
           try {
             await Effect.runPromise(
@@ -225,10 +231,10 @@ describe("Pairings and Grants (model-based)", () => {
               )
             );
           } finally {
-            rmSync(dir, { recursive: true, force: true });
+            await removeTempDirSettled(dir);
           }
         }),
-        { numRuns: RUNS, ...pbtSeed() }
+        { numRuns: RUNS, examples: [[BARE_DISPATCH]], ...pbtSeed() }
       );
     },
     pbtTimeout(RUNS, 500)

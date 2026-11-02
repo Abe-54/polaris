@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { basename, delimiter, join } from "node:path";
 import { hostProgram, plantAll, ranOf } from "../git/planted.testing.ts";
 import {
@@ -9,12 +8,12 @@ import {
   pathOf,
   windowsSearch,
 } from "./executable.ts";
-import { shortTemp } from "./testing.ts";
+import { newTempDir, removeTempDir } from "./tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 const temp = (prefix: string) => {
-  const dir = mkdtempSync(shortTemp(prefix));
+  const dir = newTempDir(prefix, { short: true });
   dirs.push(dir);
 
   return dir;
@@ -29,7 +28,7 @@ const withoutPath = () =>
 afterEach(() => {
   process.chdir(home);
 
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 describe("a program the Daemon starts in a repository", () => {

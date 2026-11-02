@@ -17,12 +17,12 @@ import {
   runCheckpointSweeper,
   sweepCheckpoints,
 } from "./prune.ts";
-import { commitAll, makeRepo, removeDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const repo = async () => {

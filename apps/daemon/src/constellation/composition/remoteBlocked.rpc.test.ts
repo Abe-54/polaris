@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import {
   Attempt,
   CommandId,
@@ -39,7 +38,7 @@ import { fakeHost, connectFake } from "../transfers/fakeHost.testing.ts";
 import { transferError } from "../worktrees.ts";
 import { validateRemoteDelivery } from "./remoteDelivery.ts";
 import { recordRemoteBlockTrace } from "./remoteBlocked.trace.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const X = TaskId.make("X");
 
@@ -91,7 +90,7 @@ const acceptFeed = Effect.fnUntraced(function* () {
 });
 
 test("real delivery RPC queues a blocked Session while another Session proceeds on the same Host", async () => {
-  const root = mkdtempSync(shortTemp("block-cycles-rpc-"));
+  const root = newTempDir("block-cycles-rpc-", { short: true });
 
   try {
     await Effect.runPromise(
@@ -293,6 +292,6 @@ test("real delivery RPC queues a blocked Session while another Session proceeds 
       )
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 }, 15_000);

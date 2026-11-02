@@ -1,4 +1,4 @@
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,7 +49,7 @@ describe("benchTurnEnd", () => {
 
 describe("bench Harness", () => {
   test("streams a scripted Turn, waits on its approval, and touches files", async () => {
-    const cwd = tempDirectory(join(tmpdir(), "polaris-bench-driver-"));
+    const cwd = tempDir("polaris-bench-driver-");
 
     const events = await Effect.runPromise(
       Effect.scoped(

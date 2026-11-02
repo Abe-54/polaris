@@ -1,6 +1,6 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer, Schema } from "effect";
 import { AgentSession, DomainEvent, Workspace } from "@polaris/protocol";
@@ -22,7 +22,7 @@ const Reply = Schema.Struct({
 });
 
 test("real OTLP receiver to SQLite to MCP HTTP resolves each binding's session, checkout and current Turn", async () => {
-  const root = await realpath(await mkdtemp(shortTemp("t2-mcp-http-")));
+  const root = newTempDir("t2-mcp-http-", { short: true });
   const cwd = join(root, "package");
   await mkdir(cwd);
 
@@ -119,6 +119,6 @@ test("real OTLP receiver to SQLite to MCP HTTP resolves each binding's session, 
       )
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 }, 30_000);

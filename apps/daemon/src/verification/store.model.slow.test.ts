@@ -14,8 +14,7 @@
  * `packages/spec/polaris.qnt`.
  */
 import { describe, expect, test } from "bun:test";
-import { tempDirectory, removeTempDirectory } from "./tempDirectories.testing.ts";
-import { tmpdir } from "node:os";
+import { tempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { join } from "node:path";
 import {
   CommandId,
@@ -302,7 +301,7 @@ interface Subscriber {
 
 class World {
   runtime: ManagedRuntime.ManagedRuntime<EventStore, never> | null = null;
-  readonly directory = tempDirectory(join(tmpdir(), "polaris-pbt-store-"));
+  readonly directory = tempDir("polaris-pbt-store-");
   readonly filename = join(this.directory, "state.sqlite");
 
   constructor(
@@ -841,7 +840,7 @@ describe("EventStore, model-based", () => {
               try {
                 if (world.runtime !== null) await world.crash();
               } finally {
-                removeTempDirectory(world.directory);
+                removeTempDir(world.directory);
               }
             }
           }

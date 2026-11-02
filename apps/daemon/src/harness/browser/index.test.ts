@@ -1,8 +1,7 @@
 import { expectPrivate } from "../../secrets/privacy.testing.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { SessionId } from "@polaris/protocol";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { type Duration, Effect, Exit, Layer, Logger, ManagedRuntime, Scope } from "effect";
 import { CdpRelay } from "../../browser/cdpRelay.ts";
@@ -13,6 +12,7 @@ import {
   type InstalledAgentBrowser,
 } from "../../install/agentBrowser/index.ts";
 import { BrowserMcp, type BrowserMcpServer } from "./index.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const SESSION = SessionId.make("s1");
 
@@ -25,7 +25,7 @@ const runtimes: Array<ManagedRuntime.ManagedRuntime<BrowserMcp, never>> = [];
 afterEach(async () => {
   for (const runtime of runtimes.splice(0)) await runtime.dispose();
 
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const relay = (issue: CdpRelay["Service"]["issue"]) =>
@@ -40,7 +40,7 @@ const harness = (
   policy: InstallPolicy = { attemptTimeoutMs: 5_000, retryDelaysMs: [] },
   setupTimeout: Duration.Input = "5 seconds"
 ) => {
-  const dir = mkdtempSync(join(tmpdir(), "browser-mcp-"));
+  const dir = newTempDir("browser-mcp-");
   dirs.push(dir);
   const logs: string[] = [];
   const logger = Logger.make((entry) => logs.push(Logger.formatSimple.log(entry)));

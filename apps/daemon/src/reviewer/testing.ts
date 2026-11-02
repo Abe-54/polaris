@@ -40,7 +40,7 @@ import {
   publishPullRequest,
   userClone,
 } from "../git/review/testing.ts";
-import { commitAll, removeDirSettled, write } from "../git/testing.ts";
+import { commitAll, removeTempDirSettled, write } from "../git/testing.ts";
 import { Availability } from "../harness/availability/index.ts";
 import { benchReviewReply, isReviewerPrompt } from "../harness/bench/review.ts";
 import { HarnessEvent, type HarnessDriver, type TurnInput } from "../harness/HarnessDriver.ts";
@@ -54,7 +54,7 @@ const cleanup: Array<string> = [];
 
 /** Removes what the tests made; run it after each test. */
 export const cleanupReviewerTests = async () => {
-  for (const dir of cleanup.splice(0)) await removeDirSettled(dir);
+  for (const dir of cleanup.splice(0)) await removeTempDirSettled(dir);
 };
 
 /** A command the Reviewer ran: what it printed and how it exited. */

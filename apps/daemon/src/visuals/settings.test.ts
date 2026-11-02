@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { VisualsSettings } from "@polaris/protocol";
 import { Effect } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { visualsFile } from "./settings.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const withPath = async (body: (path: string) => Promise<void>) => {
-  const root = mkdtempSync(shortTemp("polaris-visuals-"));
+  const root = newTempDir("polaris-visuals-", { short: true });
 
   try {
     await body(join(root, "nested", "visuals-settings.json"));
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 };
 

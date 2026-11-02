@@ -4,7 +4,7 @@ import { join, sep } from "node:path";
 import { AttachmentId, SessionId, WorkspaceId } from "@polaris/protocol";
 import { Effect, Layer, Stream } from "effect";
 import { makeFakeBlobChannel } from "../files/testing.ts";
-import { removeDir, tempDir } from "../git/testing.ts";
+import { removeTempDir, tempDir } from "../git/testing.ts";
 import { PNG_1200x800 } from "./imageSize.testing.ts";
 import { AttachmentStore, ServiceError } from "../services.ts";
 import { handleStageAttachment } from "./AttachmentRpcs.ts";
@@ -20,7 +20,7 @@ import {
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const DAY = 24 * 60 * 60 * 1000;

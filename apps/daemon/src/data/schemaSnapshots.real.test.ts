@@ -1,8 +1,7 @@
-import { shortTemp } from "../platform/testing.ts";
 /** Run only against disposable operator-provided Postgres16/MySQL8.4 databases. */
 import { expect, test } from "bun:test";
 import { SQL } from "bun";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DataSource } from "@polaris/protocol";
 import { Effect, Redacted } from "effect";
@@ -13,6 +12,7 @@ import { migrationCheckout, migrationChanged } from "./schemaMigrations.ts";
 import { captureCheckpoint } from "../git/Checkpoints.ts";
 import { runGitRaw } from "../git/git.ts";
 import { fixture, snapshotLayer, turn } from "./schemaSnapshots.testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 for (const engine of ["postgres", "mysql"] as const) {
   const url = process.env[engine === "postgres" ? "POLARIS_TEST_PG_URL" : "POLARIS_TEST_MYSQL_URL"];
@@ -50,7 +50,7 @@ for (const engine of ["postgres", "mysql"] as const) {
       const before = `${prefix}_old`;
       const after = `${prefix}_new`;
       const index = `${prefix}_idx`;
-      const root = mkdtempSync(shortTemp("polaris-schema-"));
+      const root = newTempDir("polaris-schema-", { short: true });
 
       try {
         expect((await runGitRaw(root, ["init"])).code).toBe(0);
@@ -123,7 +123,7 @@ for (const engine of ["postgres", "mysql"] as const) {
         await admin.unsafe(`DROP TABLE IF EXISTS ${after}`);
         await pools.close();
         await admin.close();
-        rmSync(root, { recursive: true, force: true });
+        removeTempDir(root);
       }
     },
     60000

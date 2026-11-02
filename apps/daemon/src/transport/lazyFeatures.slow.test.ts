@@ -25,12 +25,12 @@ import { Effect, Option, Schedule, Schema, Stream } from "effect";
 import { RESTART_NOTE } from "../reviewer/recovery.ts";
 import { RULES_AFTER_TURN } from "../reviewer/run.ts";
 import { EventStore } from "../store/EventStore.ts";
-import { makeRepo, removeDir, tempDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir } from "../git/testing.ts";
 
 const dirs: Array<string> = [];
 
 afterAll(() => {
-  for (const dir of dirs) removeDir(dir);
+  for (const dir of dirs) removeTempDir(dir);
 });
 
 test("Daemon startup does not import the Reviewer, the Usage index or the accept handlers", async () => {

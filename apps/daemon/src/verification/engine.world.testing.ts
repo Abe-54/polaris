@@ -4,7 +4,7 @@
  * and their Client feeds (the real `makeFeed`, wired as `HostConnection` does).
  */
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
-import { removeTempDirectory } from "./tempDirectories.testing.ts";
+import { removeTempDir } from "../platform/tempDir.testing.ts";
 import { join } from "node:path";
 import { type Feed, makeFeed, type SequenceMark } from "@polaris/client";
 import {
@@ -462,7 +462,7 @@ export class World {
 
       if (this.runtime !== null) await this.crash();
     } finally {
-      removeTempDirectory(this.directory);
+      removeTempDir(this.directory);
     }
   }
 

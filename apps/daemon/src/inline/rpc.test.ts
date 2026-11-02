@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DomainEvent, InlinePropose, Workspace, WorkspaceId } from "@polaris/protocol";
 import { Effect, Layer, Result, Stream } from "effect";
@@ -10,10 +9,11 @@ import { HarnessRegistry } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { InlineRpcsLive } from "./index.ts";
 import { request } from "./testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("inline.propose serves the streamed contract without writing disk or committed state", async () => {
-  const root = mkdtempSync(join(tmpdir(), "pi-inline-rpc-"));
-  const outside = mkdtempSync(join(tmpdir(), "pi-inline-outside-"));
+  const root = newTempDir("pi-inline-rpc-");
+  const outside = newTempDir("pi-inline-outside-");
   const previous = process.env.POLARIS_BENCH_HARNESS;
   process.env.POLARIS_BENCH_HARNESS = "1";
   writeFileSync(join(root, "a.ts"), "disk content");
@@ -78,7 +78,7 @@ test("inline.propose serves the streamed contract without writing disk or commit
     if (previous === undefined) delete process.env.POLARIS_BENCH_HARNESS;
     else process.env.POLARIS_BENCH_HARNESS = previous;
 
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    removeTempDir(root);
+    removeTempDir(outside);
   }
 });

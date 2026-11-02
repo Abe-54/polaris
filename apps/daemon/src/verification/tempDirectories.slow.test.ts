@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { posixTest } from "../platform/testing.ts";
-import { tempDirectory } from "./tempDirectories.testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 
 const directory = fileURLToPath(new URL(".", import.meta.url));
 
@@ -32,7 +31,7 @@ const runSuite = async (files: ReadonlyArray<string>, root: string) => {
 };
 
 const fixture = () => {
-  const root = tempDirectory(join(tmpdir(), "polaris-temp-guard-"));
+  const root = tempDir("polaris-temp-guard-");
   const temp = join(root, "temp");
   mkdirSync(temp);
 
@@ -49,9 +48,8 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Fiber } from ${JSON.stringify(fileURLToPath(import.meta.resolve("effect")))};
-import { tempDirectory, scopedTempDirectory } from ${JSON.stringify(join(directory, "tempDirectories.testing.ts"))};
+import { scopedTempDir, suiteTempDir, tempDir } from ${JSON.stringify(join(directory, "../platform/tempDir.testing.ts"))};
 import { fakeRepo } from ${JSON.stringify(join(directory, "../engine/testing.ts"))};
-import { tempDir, suiteTempDir } from ${JSON.stringify(join(directory, "../git/testing.ts"))};
 describe("suite lifetime", () => {
   let shared;
   const createShared = suiteTempDir("polaris-shared-");
@@ -60,7 +58,7 @@ describe("suite lifetime", () => {
   test("second", () => { expect(existsSync(shared)).toBe(true); });
 });
 let released;
-test("success", () => { released = tempDirectory(join(tmpdir(), "polaris-store-")); });
+test("success", () => { released = tempDir("polaris-store-"); });
 test("failure", () => {
   expect(existsSync(released)).toBe(false);
   fakeRepo();
@@ -71,7 +69,7 @@ test("failure", () => {
 test("scope failure and interruption", async () => {
   let failed;
   await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-    failed = yield* scopedTempDirectory(join(tmpdir(), "polaris-proof-"));
+    failed = yield* scopedTempDir("polaris-proof-");
     return yield* Effect.fail("intentional scoped failure");
   })).pipe(Effect.ignore));
   expect(existsSync(failed)).toBe(false);
@@ -79,7 +77,7 @@ test("scope failure and interruption", async () => {
   let ready;
   const acquired = new Promise(resolve => { ready = resolve; });
   const fiber = Effect.runFork(Effect.scoped(Effect.gen(function* () {
-    interrupted = yield* scopedTempDirectory(join(tmpdir(), "polaris-proof-"));
+    interrupted = yield* scopedTempDir("polaris-proof-");
     yield* Effect.sync(() => ready());
     yield* Effect.never;
   })));

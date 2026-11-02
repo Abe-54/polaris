@@ -1,22 +1,15 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as P from "@polaris/protocol";
 import { detectDialect, dialectHint } from "./detection.ts";
 import { managedSqlShellSettings } from "./settings.ts";
 import { shellFormatting } from "./shellFormatting.ts";
 import { createSqlSelection, sqlScope } from "./selection.ts";
-import { shortTemp } from "../../platform/testing.ts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
+import { tempDir } from "../../platform/tempDir.testing.ts";
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-sql-dialect-")));
-  roots.push(root);
+  const root = tempDir("polaris-sql-dialect-", { short: true });
   const path = join(root, "query.sql");
   await writeFile(path, "select 1;");
 

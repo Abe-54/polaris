@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type ByteTransport,
@@ -12,7 +12,6 @@ import {
   SessionId,
 } from "@polaris/protocol";
 import { type Cause, Context, Effect, Exit, Latch, Layer, Queue, Scope, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import {
   CdpRelay,
   type CdpRelayOptions,
@@ -22,6 +21,7 @@ import {
 } from "./cdpRelay.ts";
 import { BrowserHosting } from "./hosting.ts";
 import { CdpRelayStore } from "./relayStore.ts";
+import { newTempDir, removeTempDirSettled, tempDir } from "../platform/tempDir.testing.ts";
 
 const s1 = SessionId.make("session-one");
 
@@ -96,7 +96,7 @@ const fakeHosting = Layer.succeed(BrowserHosting)(
   })
 );
 
-const root = mkdtempSync(shortTemp("polaris-cdp-"));
+const root = newTempDir("polaris-cdp-", { short: true });
 
 const scope = Effect.runSync(Scope.make());
 
@@ -114,7 +114,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await Effect.runPromise(Scope.close(scope, Exit.void));
-  rmSync(root, { recursive: true, force: true });
+  await removeTempDirSettled(root);
 });
 
 const until = async (condition: () => boolean, what: string) => {
@@ -306,7 +306,7 @@ test("revoking closes the session's sockets, refuses its URL, and issues a fresh
 }, 15_000);
 
 test("only token hashes persist; a restarted store still authenticates an issued token", async () => {
-  const path = join(mkdtempSync(shortTemp("polaris-cdp-store-")), "browser-cdp.sqlite");
+  const path = join(tempDir("polaris-cdp-store-", { short: true }), "browser-cdp.sqlite");
 
   const once = <A, E>(body: (store: CdpRelayStore["Service"]) => Effect.Effect<A, E>) =>
     Effect.runPromise(
@@ -397,7 +397,7 @@ test("a token is issued and admitted only for a live session, and dies with the 
 }, 15_000);
 
 test("tokens of sessions archived while the Daemon was down die when it starts", async () => {
-  const home = mkdtempSync(shortTemp("polaris-cdp-restart-"));
+  const home = newTempDir("polaris-cdp-restart-", { short: true });
   const s4 = SessionId.make("session-four");
   hosted.add(s4);
 
@@ -427,5 +427,5 @@ test("tokens of sessions archived while the Daemon was down die when it starts",
     const gone = await Effect.runPromise(Effect.flip(second.issue(s4)));
     expect(gone.presence).toBe("archived");
   });
-  rmSync(home, { recursive: true, force: true });
+  await removeTempDirSettled(home);
 }, 15_000);

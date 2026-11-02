@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { commitAll, removeDir, write } from "../git/testing.ts";
+import { commitAll, removeTempDir, write } from "../git/testing.ts";
 import { gitText } from "../git/git.ts";
 import { tempDir } from "../engine/testing.ts";
 import {
@@ -16,7 +16,7 @@ const cleanup: Array<string> = [];
 const home = process.env.POLARIS_HOME;
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 
   if (home === undefined) delete process.env.POLARIS_HOME;
   else process.env.POLARIS_HOME = home;

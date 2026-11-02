@@ -1,6 +1,5 @@
 /** Every Data RPC goes through the real transport, including write-only password decoding. */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   connectRpcWith,
@@ -16,7 +15,6 @@ import {
   type SchemaSourceDiff,
 } from "@polaris/protocol";
 import { Effect, Layer, Redacted, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
 import { SchemaSnapshots } from "./schemaSnapshots.ts";
@@ -24,6 +22,7 @@ import { DataSourceAccess } from "./access.ts";
 import { sources } from "./sources.ts";
 import { memorySecrets } from "../secrets/index.ts";
 import { DataSources, DataQueries, DataRpcsLive } from "./index.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const sessionId = SessionId.make("data-session");
 
@@ -59,10 +58,8 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = mkdtempSync(shortTemp("pl-data-"));
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-        );
+        const root = newTempDir("pl-data-", { short: true });
+        yield* Effect.addFinalizer(() => Effect.sync(() => removeTempDir(root)));
 
         const access = yield* DataSourceAccess.pipe(Effect.provide(DataSourceAccess.layer));
 

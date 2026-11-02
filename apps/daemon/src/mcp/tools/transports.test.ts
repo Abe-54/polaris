@@ -1,5 +1,5 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -18,11 +18,10 @@ import { McpTokens } from "../tokens.ts";
 import { mcpHttp } from "../http.ts";
 import { attachConstellation } from "../../harness/constellation/attachment.ts";
 import { claudeConstellationOptions } from "../../harness/claude/constellation.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 for (const transport of ["http", "claude"] as const) {
   test(`friendly Lead schemas and structured findings work through ${transport} MCP`, async () => {
-    const root = mkdtempSync(shortTemp("polaris-c1-t-mcp-"));
+    const root = newTempDir("polaris-c1-t-mcp-", { short: true });
     const fake = fakeCommands();
     let deny = false;
 
@@ -136,7 +135,7 @@ for (const transport of ["http", "claude"] as const) {
         ).pipe(Effect.provide(McpTokens.layer(join(root, "tokens.sqlite"))))
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });
 }

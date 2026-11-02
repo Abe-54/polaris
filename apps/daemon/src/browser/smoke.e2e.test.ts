@@ -7,7 +7,7 @@
  * real Claude Code session driving the tab through its `polaris_browser` MCP server.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   ApprovalDecision,
@@ -22,10 +22,10 @@ import { BrowserMcp } from "../harness/browser/index.ts";
 import { makeClaudeDriver } from "../harness/claude/ClaudeDriver.ts";
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
 import { AgentBrowser } from "../install/agentBrowser/index.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { cleanupHome, daemon, endpoint, freshHome } from "../transport/byteStreamsHarness.ts";
 import { CdpRelay } from "./cdpRelay.ts";
 import { BrowserHosting } from "./hosting.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const repo = resolve(import.meta.dir, "../../../..");
 
@@ -111,7 +111,7 @@ const run = async (args: ReadonlyArray<string>, session: string) => {
 
 beforeAll(async () => {
   if (!available) return;
-  root = mkdtempSync(shortTemp("polaris-cdp-smoke-"));
+  root = newTempDir("polaris-cdp-smoke-", { short: true });
   freshHome();
   // A real Daemon transport with the byte-stream handlers; the relay shares its BrowserHosting.
   const { hosting } = await Effect.runPromise(daemon().pipe(Scope.provide(scope)));
@@ -175,8 +175,8 @@ afterAll(async () => {
     if (exited === null) electronProcess.kill();
   }
 
-  rmSync(root, { recursive: true, force: true });
-  cleanupHome();
+  await removeTempDirSettled(root);
+  await cleanupHome();
 }, 30_000);
 
 smoke("a tab session's cookie methods reach only the tab's own partition (real Electron)", () => {

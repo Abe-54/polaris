@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import {
   GATEWAY_DEFAULT_PORT,
   configuredGatewayPort,
@@ -11,14 +10,15 @@ import {
   removeGatewayRecord,
   writeGatewayRecord,
 } from "./config.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const withRoot = async (body: (root: string) => Promise<void>) => {
-  const root = mkdtempSync(shortTemp("pl-gw-cfg-"));
+  const root = newTempDir("pl-gw-cfg-", { short: true });
 
   try {
     await body(root);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 };
 

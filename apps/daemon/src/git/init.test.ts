@@ -4,14 +4,14 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { handleGitInit } from "./GitRpcs.ts";
 import { gitText } from "./git.ts";
-import { removeDir, tempDir } from "./testing.ts";
+import { removeTempDir, tempDir } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 const saved = { ...process.env };
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 
   for (const key of ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"]) {
     if (saved[key] === undefined) delete process.env[key];

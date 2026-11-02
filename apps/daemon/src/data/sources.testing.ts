@@ -1,10 +1,10 @@
-import { shortTemp } from "../platform/testing.ts";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId } from "@polaris/protocol";
 import { Effect } from "effect";
 import { fileSecrets } from "../secrets/index.ts";
 import { DataSourceAccess } from "./access.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 export const sessionId = SessionId.make("one");
 
@@ -20,11 +20,9 @@ export const manualInput = {
 } as const;
 
 export const sourceFixture = Effect.gen(function* () {
-  const root = mkdtempSync(shortTemp("data-security-"));
+  const root = newTempDir("data-security-", { short: true });
   mkdirSync(join(root, "other"));
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-  );
+  yield* Effect.addFinalizer(() => Effect.sync(() => removeTempDir(root)));
   const secrets = fileSecrets(join(root, "secrets"));
   const access = yield* DataSourceAccess.pipe(Effect.provide(DataSourceAccess.layer));
 

@@ -1,6 +1,6 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { TraceRuntime } from "../runtime.ts";
@@ -25,7 +25,7 @@ const eventually = async <A>(read: () => Promise<A>, accept: (value: A) => boole
 test.skipIf(process.platform !== "darwin" && process.platform !== "linux")(
   "runtime composition preserves a user import, real HTTP tracing and cooperative Node registration",
   async () => {
-    const root = await mkdtemp(shortTemp("p9-composition-"));
+    const root = newTempDir("p9-composition-", { short: true });
     const targets = new TargetRegistry(join(root, "bootstrap"));
 
     try {
@@ -122,7 +122,7 @@ server.listen(0,'127.0.0.1', async () => {
       }, targets);
     } finally {
       await targets.close();
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     }
   },
   30000

@@ -2,7 +2,6 @@
  * A Codex session against a fake app-server, for driver tests: open it, script
  * the server, wait for events. Test files run `cleanup` after each test.
  */
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { type PermissionMode, SessionId } from "@polaris/protocol";
 import { Effect, Schema, type Scope, Stream } from "effect";
@@ -22,7 +21,7 @@ import {
   startFakeAppServer,
 } from "./FakeAppServer.ts";
 import { unstamped } from "../../itemClock.testing.ts";
-import { shortTemp } from "../../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../../platform/tempDir.testing.ts";
 
 export const THREAD = "thr_1";
 
@@ -39,8 +38,8 @@ export const cleanup: Array<() => void> = [];
 
 /** Socket paths must stay under ~104 bytes, so tests use a short temp root. */
 const socketPath = () => {
-  const dir = mkdtempSync(shortTemp("pcx-"));
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = newTempDir("pcx-", { short: true });
+  cleanup.push(() => removeTempDir(dir));
 
   return join(dir, "s.sock");
 };

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { catalog } from "../catalog/index.ts";
 import { Schema } from "effect";
@@ -9,14 +8,15 @@ import { managedRustLuaSettings } from "./settings.ts";
 import { rustToolchainProbes } from "./probes.ts";
 import { rustCrates } from "./project.ts";
 import { findRustToolchain } from "./toolchain.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const withDirectory = async (body: (root: string) => Promise<void>) => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "polaris-rust-")));
+  const root = newTempDir("polaris-rust-");
 
   try {
     await body(root);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

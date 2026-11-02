@@ -5,24 +5,23 @@
  *   POLARIS_E2E_CODEX=1 bun test apps/daemon/src/harness/codex/e2e.test.ts
  */
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { ApprovalDecision, SessionId, TurnId, TurnItem } from "@polaris/protocol";
 import { Effect, Stream } from "effect";
 import { HarnessEvent } from "../HarnessDriver.ts";
 import { defaultStateFile, stopAppServer } from "./AppServer.ts";
 import { makeCodexDriver } from "./CodexDriver.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const enabled = process.env.POLARIS_E2E_CODEX === "1";
 
 test.skipIf(!enabled)(
   "a real Codex Turn: reply with the word ok",
   async () => {
-    const repo = mkdtempSync(join(tmpdir(), "polaris-codex-e2e-"));
+    const repo = newTempDir("polaris-codex-e2e-");
     // Short, so it fits the Unix socket path limit.
-    const socketDir = mkdtempSync(shortTemp("pcx-"));
+    const socketDir = newTempDir("pcx-", { short: true });
     await Bun.$`git init -q && git commit -q --allow-empty -m init`.cwd(repo);
 
     try {
@@ -83,8 +82,8 @@ test.skipIf(!enabled)(
       await Effect.runPromise(
         stopAppServer({ stateFile: defaultStateFile(socketPath), socketPath })
       );
-      rmSync(repo, { recursive: true, force: true });
-      rmSync(socketDir, { recursive: true, force: true });
+      removeTempDir(repo);
+      removeTempDir(socketDir);
     }
   },
   180_000
@@ -93,8 +92,8 @@ test.skipIf(!enabled)(
 test.skipIf(!enabled)(
   "a real Codex session in plan mode plans without editing",
   async () => {
-    const repo = mkdtempSync(join(tmpdir(), "polaris-codex-plan-e2e-"));
-    const socketDir = mkdtempSync(shortTemp("pcx-"));
+    const repo = newTempDir("polaris-codex-plan-e2e-");
+    const socketDir = newTempDir("pcx-", { short: true });
     await Bun.$`git init -q && git commit -q --allow-empty -m init`.cwd(repo);
     await Bun.write(join(repo, "README.md"), "# Greeter\n\nPrints a greeting.\n");
 
@@ -147,8 +146,8 @@ test.skipIf(!enabled)(
       await Effect.runPromise(
         stopAppServer({ stateFile: defaultStateFile(socketPath), socketPath })
       );
-      rmSync(repo, { recursive: true, force: true });
-      rmSync(socketDir, { recursive: true, force: true });
+      removeTempDir(repo);
+      removeTempDir(socketDir);
     }
   },
   240_000

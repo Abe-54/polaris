@@ -11,7 +11,7 @@ import { Command, SessionId, SessionPlacement, type Workspace } from "@polaris/p
 import { Duration, Effect, type Layer } from "effect";
 import { gitText } from "../git/git.ts";
 import { type CheckpointPolicy, listCheckpointRefs } from "../git/prune.ts";
-import { makeRepo, removeDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir } from "../git/testing.ts";
 import type { EventStore } from "../store/EventStore.ts";
 import { Engine } from "./Engine.ts";
 import {
@@ -162,7 +162,7 @@ fi
         "turn-b/before",
       ]);
     } finally {
-      removeDir(repo);
+      removeTempDir(repo);
     }
   });
 
@@ -216,7 +216,7 @@ fi
         })
       );
     } finally {
-      removeDir(repo);
+      removeTempDir(repo);
     }
   });
 
@@ -258,7 +258,7 @@ fi
         })
       );
     } finally {
-      removeDir(repo);
+      removeTempDir(repo);
     }
   });
 
@@ -292,7 +292,7 @@ fi
         })
       );
     } finally {
-      removeDir(repo);
+      removeTempDir(repo);
     }
   });
 });

@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Logger } from "effect";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import { startFakeAppServer } from "./testing/FakeAppServer.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const cleanup: Array<() => void> = [];
 
@@ -15,8 +14,8 @@ afterEach(() => {
 
 describe("opening a Codex session", () => {
   test("logs the app-server it connects to and the thread it is ready on", async () => {
-    const dir = mkdtempSync(shortTemp("pcl-"));
-    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const dir = newTempDir("pcl-", { short: true });
+    cleanup.push(() => removeTempDir(dir));
     const socketPath = join(dir, "s.sock");
 
     const server = startFakeAppServer(socketPath, (request, conn) => {

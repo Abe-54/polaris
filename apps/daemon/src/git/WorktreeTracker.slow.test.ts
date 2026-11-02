@@ -4,13 +4,13 @@ import { join } from "node:path";
 import { Effect, Fiber, Stream } from "effect";
 import { type WorktreeInfo, WorktreeTracker } from "../services.ts";
 import { gitText, runGitRaw } from "./git.ts";
-import { commitAll, makeRepo, removeDir, tempDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 import { parseWorktreeList, watchWorktrees, WorktreeTrackerLive } from "./WorktreeTracker.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const run = <A, E>(effect: Effect.Effect<A, E, WorktreeTracker>) =>
@@ -223,8 +223,9 @@ describe("WorktreeTracker", () => {
       await waitFor((list) => list.length === 1);
       await gitText(root, ["worktree", "add", "-q", "-b", "ext", external]);
       await waitFor((list) => list.some((w) => w.branch === "ext"));
-      await gitText(root, ["worktree", "remove", external]);
+      // Counted before the remove: the watch may report the settled list before git returns.
       const count = seen.length;
+      await gitText(root, ["worktree", "remove", external]);
       await waitFor((list) => seen.indexOf(list) >= count && list.length === 1);
     } finally {
       await Effect.runPromise(Fiber.interrupt(fiber));
@@ -261,8 +262,9 @@ describe("WorktreeTracker", () => {
       // Created by the user's own git, not through the tracker.
       await gitText(root, ["worktree", "add", "-q", "-b", "ext", external]);
       await waitFor((list) => list.some((w) => w.branch === "ext"));
-      await gitText(root, ["worktree", "remove", external]);
+      // Counted before the remove: the watch may report the settled list before git returns.
       const count = seen.length;
+      await gitText(root, ["worktree", "remove", external]);
       await waitFor((list) => seen.indexOf(list) >= count && list.length === 1);
     } finally {
       await Effect.runPromise(Fiber.interrupt(fiber));

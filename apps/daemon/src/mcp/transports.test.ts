@@ -1,5 +1,5 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -11,12 +11,11 @@ import { McpTokens } from "./tokens.ts";
 import { WORKER_TOOL_NAMES, fakeCommands, workerBinding } from "./testing.ts";
 import { attachConstellation } from "../harness/constellation/attachment.ts";
 import { claudeConstellationOptions } from "../harness/claude/constellation.ts";
-import { shortTemp } from "../platform/testing.ts";
 
 const withServer = async (
   body: (origin: string, token: string, tokens: McpTokens["Service"]) => Promise<void>
 ) => {
-  const root = mkdtempSync(shortTemp("polaris-mcp-http-"));
+  const root = newTempDir("polaris-mcp-http-", { short: true });
 
   try {
     await Effect.runPromise(
@@ -30,7 +29,7 @@ const withServer = async (
       ).pipe(Effect.provide(McpTokens.layer(join(root, "tokens.sqlite"))))
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 };
 
@@ -105,7 +104,7 @@ test("HTTP refuses idle streams, invalid Origin, bad tokens and malformed JSON",
   }));
 
 test("Claude's in-process server exposes valid schemas and bound handlers; revoke on handover or settle", async () => {
-  const root = mkdtempSync(shortTemp("polaris-mcp-claude-"));
+  const root = newTempDir("polaris-mcp-claude-", { short: true });
 
   try {
     await Effect.runPromise(
@@ -146,6 +145,6 @@ test("Claude's in-process server exposes valid schemas and bound handlers; revok
       }).pipe(Effect.provide(McpTokens.layer(join(root, "tokens.sqlite"))))
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

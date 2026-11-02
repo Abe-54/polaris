@@ -2,14 +2,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { removeDir, tempDir, write } from "../../git/testing.ts";
+import { removeTempDir, tempDir, write } from "../../git/testing.ts";
 import { readOnlyEnv, reviewerHook } from "./readOnly.ts";
 import { posixTest } from "../../platform/testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const layout = () => {

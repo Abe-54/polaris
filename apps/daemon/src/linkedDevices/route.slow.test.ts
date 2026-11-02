@@ -6,7 +6,6 @@
  * Daemon declares its peers again.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
@@ -37,7 +36,6 @@ import {
 } from "effect";
 import { DeviceLabel } from "../engine/rpc.ts";
 import { actorOf } from "../extensions/connection.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import type { LinkTiming } from "./route.ts";
 import { ServerRpcs } from "../transport/rpcs.ts";
@@ -51,6 +49,7 @@ import {
   startRelay,
   type TestDevice,
 } from "./device.testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 /** `dispatch` answers with who asked: the label and the Actor the Engine would record. */
 const handlers = ServerRpcs.toLayerHandler("dispatch", ({ commandId }, { client }) =>
@@ -105,10 +104,10 @@ const key = (text: string) => Option.getOrThrow(fromBase64Url(text));
 /** A started Daemon with the route on, and its Desktop App connection. */
 const daemon = (scope: Scope.Scope, relayLinks?: LinkTiming) =>
   Effect.gen(function* () {
-    const root = mkdtempSync(shortTemp("pl-relay-"));
+    const root = newTempDir("pl-relay-", { short: true });
     yield* Scope.addFinalizer(
       scope,
-      Effect.sync(() => rmSync(root, { recursive: true, force: true }))
+      Effect.promise(() => removeTempDirSettled(root))
     );
 
     const server = yield* startServer({
