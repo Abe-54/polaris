@@ -1,8 +1,8 @@
 /**
  * Keeps the GitHub client's watched repositories (`github.watch`) in step with every git
  * Workspace on every Host, hidden ones included (ENG-185). Each Workspace's remotes are
- * read once per launch while its Host is connected; the last ones read are kept on this
- * Mac, so a Host that is away still has its pull requests matched.
+ * read once its Host is connected and again on `recheck` (ENG-723); the last ones read are
+ * kept on this Mac, so a Host that is away still has its pull requests matched.
  */
 import type { WorkspaceRef } from "../../../../shared/github.ts";
 import { readRemotes, type ReadText } from "./remotes.ts";
@@ -35,6 +35,10 @@ export interface WatcherInput {
 
 export interface Watcher {
   readonly update: (candidates: ReadonlyArray<Candidate>) => Promise<void>;
+  /** Reads every connected Workspace's remotes again, as one added since may match pull requests. */
+  readonly recheck: () => Promise<void>;
+  /** The remotes last read from the Host's Workspaces. */
+  readonly remotesOn: (hostKey: string) => ReadonlyArray<string>;
 }
 
 const keyOf = (c: { readonly hostKey: string; readonly workspaceId: string }) =>
@@ -42,7 +46,7 @@ const keyOf = (c: { readonly hostKey: string; readonly workspaceId: string }) =>
 
 export const createWatcher = ({ read, watch, load, save }: WatcherInput): Watcher => {
   const known = new Map(Object.entries(load()));
-  /** Read during this launch (or being read): never twice. */
+  /** Read since the last recheck (or being read): never twice. */
   const fresh = new Set<string>();
   let sent: string | null = null;
   let latest: ReadonlyArray<Candidate> = [];
@@ -82,17 +86,28 @@ export const createWatcher = ({ read, watch, load, save }: WatcherInput): Watche
     }
   };
 
+  const update = async (candidates: ReadonlyArray<Candidate>) => {
+    latest = candidates;
+    publish();
+
+    const stale = candidates.filter((c) => c.readable && !fresh.has(keyOf(c)));
+
+    if (stale.length === 0) return;
+
+    await Promise.all(stale.map(refresh));
+    publish();
+  };
+
   return {
-    update: async (candidates) => {
-      latest = candidates;
-      publish();
+    update,
+    recheck: () => {
+      fresh.clear();
 
-      const stale = candidates.filter((c) => c.readable && !fresh.has(keyOf(c)));
-
-      if (stale.length === 0) return;
-
-      await Promise.all(stale.map(refresh));
-      publish();
+      return update(latest);
     },
+    remotesOn: (hostKey) =>
+      latest
+        .filter((c) => c.hostKey === hostKey)
+        .flatMap((c) => known.get(keyOf(c))?.remotes ?? []),
   };
 };

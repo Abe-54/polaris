@@ -8,6 +8,9 @@ import { pullsStore } from "../store.ts";
 
 const STORAGE_KEY = "polaris.pulls.remotes.v1";
 
+/** The least time between two rechecks of the remotes when the window takes focus. */
+const RECHECK_GAP_MS = 30_000;
+
 const Saved = Schema.Record(
   Schema.String,
   Schema.Struct({ path: Schema.String, remotes: Schema.Array(Schema.String) })
@@ -62,6 +65,9 @@ const watcher = () => {
   return shared;
 };
 
+/** The git remotes of the Host's Workspaces, as last read. */
+export const remotesOnHost = (hostKey: string) => watcher().remotesOn(hostKey);
+
 /** Every git Workspace on every Host (hidden ones too), as one string so renders stay rare. */
 const candidatesOf = (state: AppState): string => {
   const connected = new Set(
@@ -97,6 +103,21 @@ export const PullsPublisher = () => {
   const candidates = useMemo(() => JSON.parse(signature) as ReadonlyArray<Candidate>, [signature]);
 
   useEffect(() => void watcher().update(candidates), [candidates]);
+
+  // A remote added outside Polaris (`git remote add`) is matched once the user comes back.
+  useEffect(() => {
+    let last = Date.now();
+
+    const onFocus = () => {
+      if (Date.now() - last < RECHECK_GAP_MS) return;
+      last = Date.now();
+      void watcher().recheck();
+    };
+
+    window.addEventListener("focus", onFocus);
+
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   useEffect(() => {
     const api = polaris();

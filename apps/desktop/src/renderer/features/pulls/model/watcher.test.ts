@@ -7,12 +7,13 @@ const setup = (saved: Record<string, { path: string; remotes: ReadonlyArray<stri
   const sent: Array<ReadonlyArray<WatchEntry>> = [];
   const reads: Array<string> = [];
   let stored = saved;
+  let config = CONFIG;
 
   const watcher = createWatcher({
     read: (hostKey) => async (path) => {
       reads.push(`${hostKey}:${path}`);
 
-      return path === "/code/widgets/.git/config" ? CONFIG : null;
+      return path === "/code/widgets/.git/config" ? config : null;
     },
     watch: (entries) => sent.push(entries),
     load: () => stored,
@@ -21,7 +22,11 @@ const setup = (saved: Record<string, { path: string; remotes: ReadonlyArray<stri
     },
   });
 
-  return { watcher, sent, reads, stored: () => stored };
+  const setConfig = (text: string) => {
+    config = text;
+  };
+
+  return { watcher, sent, reads, stored: () => stored, setConfig };
 };
 
 const candidate = (patch: Partial<Candidate> = {}): Candidate => ({
@@ -78,5 +83,23 @@ describe("createWatcher", () => {
     await watcher.update([candidate()]);
     await watcher.update([]);
     expect(sent.at(-1)).toEqual([]);
+  });
+
+  test("a remote added after the first read is watched once rechecked (ENG-723)", async () => {
+    const { watcher, sent, setConfig } = setup();
+
+    setConfig("[core]\n\tbare = false\n");
+    await watcher.update([candidate()]);
+    setConfig(CONFIG);
+    await watcher.update([candidate()]);
+    expect(sent.at(-1)).toEqual([]);
+
+    await watcher.recheck();
+    expect(sent.at(-1)).toEqual([
+      {
+        workspace: { hostKey: "local", workspaceId: "w1" },
+        remotes: ["git@github.com:acme/widgets.git"],
+      },
+    ]);
   });
 });
