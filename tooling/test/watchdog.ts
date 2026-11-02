@@ -10,12 +10,17 @@
  * when one ends, so the watchdog adds a preload (`progress.ts`) that marks each file's start and end.
  *
  * Local runs are parallel by default (`parallel.ts`); `POLARIS_TEST_PARALLEL=N` overrides, 1 is serial.
+ *
+ * `--tier=fast|slow|all` (default all) picks the test files by tier (`tier.ts`). Runs that include
+ * the fast tier end by listing the fast files over their 2 s budget (`budget.ts`).
  */
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { reportBudget, timingsFor } from "./budget.ts";
 import { PROGRESS_MARKER } from "./marker.ts";
 import { parallelFlags } from "./parallel.ts";
+import { parseTier, tierFlags } from "./tier.ts";
 
 /** What the run has shown so far, read from bun's per-file reporter and the progress markers. */
 interface Progress {
@@ -142,8 +147,23 @@ const descendants = (root: number): ReadonlyArray<number> => {
   return found;
 };
 
+const NO_TESTS_OK = "--pass-with-no-tests";
+
+/** The `bun test` args for a tier: a package may have no files in one tier. */
+const tieredArgs = (given: ReadonlyArray<string>) => {
+  const { tier, rest } = parseTier(given);
+  const timings = tier === "slow" ? null : timingsFor(rest);
+  const lenient = tier !== "all" && !rest.includes(NO_TESTS_OK) ? [NO_TESTS_OK] : [];
+
+  return {
+    args: [...tierFlags(tier), ...lenient, ...(timings?.flags ?? []), ...rest],
+    timings,
+  };
+};
+
 const run = async (given: ReadonlyArray<string>): Promise<number> => {
-  const args = [...parallelFlags(given, process.env), ...given];
+  const tiered = tieredArgs(given);
+  const args = [...parallelFlags(tiered.args, process.env), ...tiered.args];
   const stallSeconds = Number(process.env.POLARIS_TEST_STALL_S ?? 300);
   const isolated = args.some((arg) => ISOLATING.test(arg));
   const env = { ...process.env };
@@ -214,6 +234,10 @@ const run = async (given: ReadonlyArray<string>): Promise<number> => {
   );
 
   clearTimeout(timer);
+
+  const timings = tiered.timings?.read() ?? null;
+
+  if (!stalled) reportBudget(timings, process.cwd(), process.env);
 
   return stalled ? 1 : code;
 };

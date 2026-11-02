@@ -41,8 +41,9 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
   - repeating a behaviour another test already covers at the same level (parametrize instead).
   Assert observable outcomes through the real code, with fakes only at the boundary (the fake GitHub, fake Harnesses, test Layers). Product copy is a real requirement and may be asserted; incidental output is not. When you fix a bug, add the test that fails without the fix.
 - Each package's `test` script runs `bun test` through `tooling/test/watchdog.ts`: a run silent for `POLARIS_TEST_STALL_S` seconds (default 300) is killed and the stuck file named. Local runs are parallel (`--parallel=N`, N half the cores, at least 2); `POLARIS_TEST_PARALLEL=N` overrides it, 1 is serial; CI keeps its own flags. Keep new packages on it.
+- Tests come in two tiers (ADR 0096). A file is slow-tier, named `*.slow.test.ts`, when it runs a real Daemon process, real network or SSH, heavy real git, model-based or property runs, or Quint, or takes over 2 s; every other file is fast-tier and keeps under 2 s. The watchdog takes `--tier=fast|slow|all` (default all): pre-push runs the fast tier, CI runs both, and a run lists the fast files over budget.
 - Never use node-pty; terminals use `Bun.Terminal`.
-- **Lifecycle changes go through the state machines**, never ad-hoc `if (state === …)` code: Session States through the Agent Session machine (`apps/daemon/src/engine/session.ts`, the engine's pure decider; see its README), Connection States through `packages/client/src/connection.ts`. They use XState v6 (`xstate@6.0.0-alpha.61`, an alpha, pinned exactly): read the bundled types in `node_modules/xstate/dist/declarations` rather than v5 docs or memory. The event log stays the source of truth: a machine snapshot is always derived from folded events, never kept only in an actor. Update the model-based tests (`*.testing.ts`, `*.graph.test.ts`) and the Mermaid diagrams with the machine.
+- **Lifecycle changes go through the state machines**, never ad-hoc `if (state === …)` code: Session States through the Agent Session machine (`apps/daemon/src/engine/session.ts`, the engine's pure decider; see its README), Connection States through `packages/client/src/connection.ts`. They use XState v6 (`xstate@6.0.0-alpha.61`, an alpha, pinned exactly): read the bundled types in `node_modules/xstate/dist/declarations` rather than v5 docs or memory. The event log stays the source of truth: a machine snapshot is always derived from folded events, never kept only in an actor. Update the model-based tests (`*.testing.ts`, `*.graph.slow.test.ts`) and the Mermaid diagrams with the machine.
 - Run `bun run typecheck && bun run test && bun run lint` before committing.
 
 ## Lint and maintainability
@@ -97,7 +98,7 @@ The event store, the Engine's streams, recovery and approvals, and the Client's 
 
 - A change to the protocol, `apps/daemon/src/engine/`, `apps/daemon/src/store/` or `packages/client/src/resume.ts` that changes how commands are decided, committed, acknowledged, streamed, resumed or recovered must update the spec (and its README mapping) in the same change, and keep the spec checks, the model-based tests and trace validation green.
 - Run locally: `bun run spec` (Quint typecheck, scenario tests, simulator), `bun test apps/daemon/src/verification` (model-based tests; `POLARIS_PBT_RUNS=500` for a longer run, `POLARIS_PBT_SEED` to replay a failure), and trace validation as in the spec README. `bun run spec -- --verify` also runs Apalache (Java 17+).
-- A bug they find that you cannot fix in the same change goes into `apps/daemon/src/verification/findings.test.ts` as a `test.todo` with a note, and into the spec README's Findings.
+- A bug they find that you cannot fix in the same change goes into `apps/daemon/src/verification/findings.slow.test.ts` as a `test.todo` with a note, and into the spec README's Findings.
 
 ## Attribution (required)
 
