@@ -9,6 +9,7 @@ import {
   LOG_MESSAGE_CHARS,
   LOG_SPAN_NAME,
   type LogConsole,
+  logMessage,
   makeLogRecorder,
   SELF_TRACES_LOG_PREFIX,
 } from "./logs.ts";
@@ -168,13 +169,32 @@ describe("log capture", () => {
     ]);
     recorder.record("warn", "console", [
       "retry",
-      { auth: { header: "abc def", padding: "z".repeat(500) } },
+      { config: { header: "abc def", padding: "z".repeat(500) } },
     ]);
 
     expect(emitted.map(message)).toEqual([
       "[redacted] [… 248 chars omitted] [… 1 more arguments omitted]",
       "retry [… 1 argument omitted]",
     ]);
+  });
+
+  test("values under sensitive keys are redacted at any depth while rendering, siblings kept", () => {
+    const logged = {
+      host: "studio",
+      auth: { token: "t0k3n", user: "lucas" },
+      password: ["hunter2", { again: "hunter2" }],
+      headers: [{ authorization: { scheme: "Bearer", value: "abc" }, accept: "json" }],
+      nested: { deeper: { clientSecret: 42 } },
+    };
+
+    const rendered =
+      '{"host":"studio","auth":"[redacted]","password":"[redacted]",' +
+      '"headers":[{"authorization":"[redacted]","accept":"json"}],' +
+      '"nested":{"deeper":{"clientSecret":"[redacted]"}}}';
+
+    // Without the text scrub, the rendering alone already hides every value.
+    expect(logMessage([logged], (text) => text)).toBe(rendered);
+    expect(logMessage([logged])).toBe(rendered.replaceAll('"[redacted]"', "[redacted]"));
   });
 
   test("an argument that fits is scrubbed whole, quoted values with spaces included", () => {

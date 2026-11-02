@@ -3,8 +3,13 @@
  * so the scrubber never sees a value cut in the middle. Rendering gives up as soon as it is over.
  */
 import { Predicate } from "effect";
+import { sensitive } from "../redact.ts";
 
 type Argument = ReadonlyArray<unknown>[number];
+
+const REDACTED = '"[redacted]"';
+
+const fitsIn = (text: string, budget: number) => (text.length <= budget ? text : null);
 
 /** JSON-like text of `value` in at most `budget` characters, or null once it can't fit. */
 const bounded = (value: Argument, budget: number, seen: WeakSet<object>): string | null => {
@@ -20,7 +25,7 @@ const bounded = (value: Argument, budget: number, seen: WeakSet<object>): string
 
   if (value === null || value === undefined) return fits(String(value));
 
-  if (!Predicate.isObject(value)) return fits(`[${typeOfValue(value)}]`);
+  if (!Array.isArray(value) && !Predicate.isObject(value)) return fits(`[${typeOfValue(value)}]`);
 
   if (seen.has(value)) return fits("[Circular]");
   seen.add(value);
@@ -55,9 +60,11 @@ const record = (value: Logged, budget: number, seen: WeakSet<object>) => {
   for (const key in value) {
     if (!Object.hasOwn(value, key)) continue;
     const name = JSON.stringify(key);
+    const room = budget - out.length - name.length - 3;
     // A data property's value; an accessor reads as undefined, so logging never runs a getter.
     const item: Argument = Object.getOwnPropertyDescriptor(value, key)?.value;
-    const part = bounded(item, budget - out.length - name.length - 3, seen);
+    // A sensitive key hides its whole value, nested or not, before the text scrub runs.
+    const part = sensitive(key) ? fitsIn(REDACTED, room) : bounded(item, room, seen);
 
     if (part === null) return null;
     out += `${out === "{" ? "" : ","}${name}:${part}`;
