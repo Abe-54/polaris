@@ -10,7 +10,7 @@ import {
 } from "@polaris/protocol";
 import { Effect } from "effect";
 import { tempDir } from "../engine/testing.ts";
-import { removeDir } from "../git/testing.ts";
+import { removeTempDir } from "../git/testing.ts";
 import {
   EMPTY_SETTINGS,
   loadSettings,
@@ -22,7 +22,7 @@ import {
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const host = (statuses: Partial<Record<"claude" | "codex", HarnessStatus>>) =>

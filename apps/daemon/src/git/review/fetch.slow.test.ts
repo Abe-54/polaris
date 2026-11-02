@@ -5,7 +5,7 @@ import { ReviewCheckoutBlocker } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { CheckoutBlocked } from "../../services.ts";
 import { gitText, resolveCommit } from "../git.ts";
-import { commitAll, removeDir, tempDir, write } from "../testing.ts";
+import { commitAll, removeTempDir, tempDir, write } from "../testing.ts";
 import { describeFetchFailure, fetchPullRequest, type PullRequestFetch } from "./fetch.ts";
 import { reviewRef } from "./refs.ts";
 import { parseRemoteUrl, pickFetchSource } from "./remotes.ts";
@@ -29,7 +29,7 @@ const DEEPEN_MS = process.platform === "win32" ? 120_000 : 30_000;
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const setup = async () => {

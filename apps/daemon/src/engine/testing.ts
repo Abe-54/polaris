@@ -2,10 +2,7 @@
  * Fakes for engine tests: a scriptable Harness driver and in-memory
  * Checkpoints, WorktreeTracker and AttachmentStore. Not used in production.
  */
-import { afterEach } from "bun:test";
-import { mkdirSync, mkdtempSync } from "node:fs";
-import { removeDirSettled } from "../git/testing.ts";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   type ApprovalDecision,
@@ -35,6 +32,7 @@ import {
   type WorktreeInfo,
   WorktreeTracker,
 } from "../services.ts";
+import { tempDir as sharedTempDir } from "../platform/tempDir.testing.ts";
 import { EventStore, StoreConfig } from "../store/EventStore.ts";
 import type { ReadModel } from "../store/model.ts";
 import { DEFAULT_HARNESS_START_TIMEOUT } from "./supervisor.start.ts";
@@ -430,13 +428,7 @@ export const engineLayer = (options: {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 /** Removed after the test, retrying while Windows still holds the event store's files. */
-export const tempDir = (): string => {
-  const directory = mkdtempSync(join(tmpdir(), "polaris-engine-"));
-  // Register in the calling test's context; module-level hooks only cover the importing file.
-  afterEach(() => removeDirSettled(directory));
-
-  return directory;
-};
+export const tempDir = (): string => sharedTempDir("polaris-engine-");
 
 /** A directory that looks like a git repository to RegisterWorkspace. */
 export const fakeRepo = (root = tempDir()): string => {

@@ -6,7 +6,7 @@ import { computeDiff, DiffSpec } from "./diff.ts";
 import { gitText, runGitRaw } from "./git.ts";
 import { listCheckpointRefs, planCheckpointPrune } from "./prune.ts";
 import { inspectCheckout } from "./review/worktree.ts";
-import { makeRepo, removeDir, write } from "./testing.ts";
+import { makeRepo, removeTempDir, write } from "./testing.ts";
 
 test("real Worker identities capture both checkpoints, support Turn diff and retain active checkpoints", async () => {
   const root = await makeRepo();
@@ -37,7 +37,7 @@ test("real Worker identities capture both checkpoints, support Turn diff and ret
     expect(plan.delete).toEqual([]);
     expect(plan.keep).toHaveLength(2);
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -77,7 +77,7 @@ test("unsafe IDs round-trip and produce valid Git refs without collisions or ove
     expect(parseCheckpointRef("refs/polaris/checkpoints-v2/zzzz/t/0000/before")).toBeNull();
     expect(parseCheckpointRef("refs/polaris/checkpoints-v2/0061/t/000/before")).toBeNull();
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -115,7 +115,7 @@ test("legacy valid checkpoints stay at their original path and pruning removes e
     await gitText(root, ["update-ref", "-d", plan.delete[0]!]);
     expect(await listCheckpointRefs(root)).toHaveLength(1);
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });
 
@@ -136,6 +136,6 @@ test("Review checkout inspection excludes encoded checkpoint commits from user-o
     await gitText(root, ["checkout", "--detach", "--force", checkpoint.commit]);
     expect((await inspectCheckout(root, null)).localCommits).toBe(0);
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });

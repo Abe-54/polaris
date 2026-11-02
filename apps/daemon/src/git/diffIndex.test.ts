@@ -7,12 +7,12 @@ import { computeDiff, DiffNotFound, DiffSpec } from "./diff.ts";
 import { indexDiff, unquotePath } from "./diffIndex.ts";
 import { gitText } from "./git.ts";
 import { showFile } from "./show.ts";
-import { commitAll, makeRepo, removeDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const text = new TextDecoder();

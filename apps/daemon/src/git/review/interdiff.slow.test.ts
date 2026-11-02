@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { gitText, resolveCommit } from "../git.ts";
-import { commitAll, removeDir, write } from "../testing.ts";
+import { commitAll, removeTempDir, write } from "../testing.ts";
 import { fetchPullRequest } from "./fetch.ts";
 import { interdiff, markReviewed } from "./interdiff.ts";
 import { reviewRef } from "./refs.ts";
@@ -17,7 +17,7 @@ import {
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 /** A PR that changes line 7 of app.txt, fetched and marked reviewed. */

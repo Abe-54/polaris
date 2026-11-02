@@ -4,13 +4,13 @@ import { join } from "node:path";
 import { Effect, Fiber, Stream } from "effect";
 import { type WorktreeInfo, WorktreeTracker } from "../services.ts";
 import { gitText, runGitRaw } from "./git.ts";
-import { commitAll, makeRepo, removeDir, tempDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 import { parseWorktreeList, watchWorktrees, WorktreeTrackerLive } from "./WorktreeTracker.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const run = <A, E>(effect: Effect.Effect<A, E, WorktreeTracker>) =>

@@ -2,11 +2,10 @@
  * One real, tiny Turn against the installed `claude`, using its own sign-in.
  * Opt in with `POLARIS_E2E_CLAUDE=1 bun test ClaudeDriver.e2e`.
  */
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApprovalDecision, SessionId, TurnId, TurnItem } from "@polaris/protocol";
 import { Effect, Exit, Scope, Stream } from "effect";
@@ -23,7 +22,7 @@ describe.skipIf(!enabled)("Claude driver against the real claude", () => {
       const probe = await Effect.runPromise(driver.probe);
       expect(probe.available).toBe(true);
 
-      const cwd = tempDirectory(join(tmpdir(), "polaris-e2e-claude-"));
+      const cwd = tempDir("polaris-e2e-claude-");
       const scope = Effect.runSync(Scope.make());
 
       const session = await Effect.runPromise(
@@ -84,7 +83,7 @@ describe.skipIf(!enabled)("Claude driver against the real claude", () => {
     "suggests the title Claude Code generates for the session",
     async () => {
       const driver = makeClaudeDriver();
-      const cwd = tempDirectory(join(tmpdir(), "polaris-e2e-claude-title-"));
+      const cwd = tempDir("polaris-e2e-claude-title-");
       const scope = Effect.runSync(Scope.make());
 
       const session = await Effect.runPromise(
@@ -129,7 +128,7 @@ describe.skipIf(!enabled)("Claude driver against the real claude", () => {
     "lists a Workspace's own Skill and command, and runs the command from its /name",
     async () => {
       const driver = makeClaudeDriver();
-      const cwd = tempDirectory(join(tmpdir(), "polaris-e2e-claude-commands-"));
+      const cwd = tempDir("polaris-e2e-claude-commands-");
 
       await mkdir(join(cwd, ".claude/commands"), { recursive: true });
       await mkdir(join(cwd, ".claude/skills/polaris-probe-skill"), { recursive: true });
@@ -210,7 +209,7 @@ describe.skipIf(!enabled)("Claude driver against the real claude", () => {
     "plans without editing: a session started in plan mode writes no file and asks before it would",
     async () => {
       const driver = makeClaudeDriver();
-      const cwd = tempDirectory(join(tmpdir(), "polaris-e2e-claude-plan-"));
+      const cwd = tempDir("polaris-e2e-claude-plan-");
       await writeFile(join(cwd, "README.md"), "# Greeter\n\nPrints a greeting.\n");
       const scope = Effect.runSync(Scope.make());
 

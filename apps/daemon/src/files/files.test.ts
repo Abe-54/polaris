@@ -3,7 +3,7 @@ import { symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FileError, ReadFile } from "@polaris/protocol";
 import { Effect } from "effect";
-import { removeDir, tempDir, write } from "../git/testing.ts";
+import { removeTempDir, tempDir, write } from "../git/testing.ts";
 import { handleListDir, handleReadFile, handleStat } from "./FilesRpcs.ts";
 import { INLINE_TEXT_MAX_BYTES, STREAM_MIN_BYTES } from "./fs.ts";
 import { detectMimeType } from "./mime.ts";
@@ -12,7 +12,7 @@ import { makeFakeBlobChannel } from "./testing.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const dir = () => {

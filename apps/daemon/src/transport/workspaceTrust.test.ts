@@ -5,7 +5,7 @@ import { CommandId, DomainEvent, Workspace, WorkspaceId } from "@polaris/protoco
 import { Effect, Layer } from "effect";
 import { changeTrust } from "../constellation/setup/trust.testing.ts";
 import { AT, HOST, WS } from "../engine/constellation.testing.ts";
-import { makeRepo, removeDir, tempDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir } from "../git/testing.ts";
 import { WorkspaceTrust } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { workspaceTrustLayer } from "./workspaceTrust.ts";
@@ -13,7 +13,7 @@ import { workspaceTrustLayer } from "./workspaceTrust.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const register = (path: string) =>

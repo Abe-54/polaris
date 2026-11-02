@@ -9,7 +9,7 @@ import { finish, send, setup, world } from "../constellation/delivery/testing.ts
 import { ConstellationSessionEffects } from "../constellation/delivery/inputs.ts";
 import { ConstellationRuntime } from "../constellation/runtime.ts";
 import { WorktreeSetupService } from "../constellation/setup/index.ts";
-import { tempDir, removeDir } from "../git/testing.ts";
+import { tempDir, removeTempDir } from "../git/testing.ts";
 import { EventStore } from "../store/EventStore.ts";
 
 for (const crashBeforeMarker of [false, true])
@@ -105,7 +105,7 @@ for (const crashBeforeMarker of [false, true])
         })
       );
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   });
 
@@ -165,6 +165,6 @@ test("ineligible startup receipt survives restart without a first-Turn receipt",
       })
     );
   } finally {
-    removeDir(root);
+    removeTempDir(root);
   }
 });

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { FileFinder } from "@ff-labs/fff-bun";
-import { removeDir, suiteTempDir, write } from "../../git/testing.ts";
+import { removeTempDir, suiteTempDir, write } from "../../git/testing.ts";
 import { fffGrep, MAX_CANDIDATES, narrowRegexGrep } from "./fffSearch.ts";
 import type { GrepQuery } from "./types.ts";
 
@@ -70,7 +70,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   finder?.destroy();
-  removeDir(root);
+  removeTempDir(root);
 });
 
 const run = (query: GrepQuery, narrow: boolean) => {

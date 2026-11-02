@@ -35,7 +35,7 @@ import {
   connectFake,
   fixtureSession,
 } from "../constellation/transfers/fakeHost.testing.ts";
-import { makeRepo, removeDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir } from "../git/testing.ts";
 import { gitText } from "../git/git.ts";
 import {
   mirrorRemoteAssignments,
@@ -358,6 +358,6 @@ test("remote MCP SendBack feedback survives outbox relay and worker restart befo
   } finally {
     rmSync(ownerRoot, { recursive: true, force: true });
     rmSync(workerRoot, { recursive: true, force: true });
-    removeDir(repo);
+    removeTempDir(repo);
   }
 }, 30000);

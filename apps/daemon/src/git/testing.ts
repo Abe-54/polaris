@@ -1,86 +1,15 @@
 /** Test helpers: throwaway git repositories. Not used at runtime. */
-import { afterAll, afterEach } from "bun:test";
-import {
-  appendFileSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { gitText } from "./git.ts";
 
-const BUSY = new Set(["EBUSY", "EPERM", "ENOTEMPTY"]);
-
-const ATTEMPTS = 20;
-
-/** Whether a failed removal may succeed later: Windows keeps a directory busy while it's in use. */
-const retryable = (cause: unknown, attempt: number) => {
-  // SAFETY: rmSync throws only Node system errors, which carry a string `code`.
-  const code = (cause as NodeJS.ErrnoException).code ?? "";
-
-  return process.platform === "win32" && BUSY.has(code) && attempt < ATTEMPTS;
-};
-
-/**
- * Retries for 2 s on Windows, which keeps a directory busy until a closed watch lets go.
- * It blocks the event loop meanwhile; after a Daemon test use `removeDirSettled`.
- */
-export const removeDir = (path: string): void => {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      rmSync(path, { recursive: true, force: true });
-
-      return;
-    } catch (cause) {
-      if (!retryable(cause, attempt)) throw cause;
-      Bun.sleepSync(100);
-    }
-  }
-};
-
-/**
- * `removeDir` that lets the event loop run between attempts, so a child the test's Daemon
- * started (git still being fed its stdin) can finish and let go of the directory (ENG-356).
- */
-export const removeDirSettled = async (path: string): Promise<void> => {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      rmSync(path, { recursive: true, force: true });
-
-      return;
-    } catch (cause) {
-      if (!retryable(cause, attempt)) throw cause;
-      await Bun.sleep(100);
-    }
-  }
-};
-
-/** The native realpath also expands Windows 8.3 names (RUNNER~1) into the ones git prints. */
-export const tempDir = (prefix = "polaris-test-"): string => {
-  const directory = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
-  // Register in the calling test's context; module-level hooks only cover the importing file.
-  afterEach(() => removeDirSettled(directory));
-
-  return directory;
-};
-
-/** Declare before beforeAll; the returned factory keeps shared roots until the suite ends. */
-export const suiteTempDir = (prefix = "polaris-test-"): (() => string) => {
-  const directories: Array<string> = [];
-  afterAll(async () => {
-    for (const directory of directories.splice(0)) await removeDirSettled(directory);
-  });
-
-  return () => {
-    const directory = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
-    directories.push(directory);
-
-    return directory;
-  };
-};
+export {
+  removeTempDir,
+  removeTempDirSettled,
+  suiteTempDir,
+  tempDir,
+} from "../platform/tempDir.testing.ts";
 
 export const write = (root: string, path: string, content: string): void => {
   mkdirSync(dirname(join(root, path)), { recursive: true });

@@ -1,6 +1,5 @@
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { rm, readdir, realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HostId } from "@polaris/protocol";
 import { createInstaller, type InstallerAdapters, type ArtifactPayload } from "./index.ts";
@@ -62,7 +61,7 @@ export function artifactFixture(version = "1.0.0") {
 }
 
 export async function fixture(overrides: Partial<InstallerAdapters> = {}, limits = {}) {
-  const parent = await realpath(tempDirectory(join(tmpdir(), "m31-i0-")));
+  const parent = await realpath(tempDir("m31-i0-"));
   const source = artifactFixture();
   let downloads = 0;
   let decodes = 0;

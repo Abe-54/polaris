@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "../../engine/testing.ts";
-import { removeDir } from "../../git/testing.ts";
+import { removeTempDir } from "../../git/testing.ts";
 import { executableOf } from "./executable.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 /** A `/proc` entry: its binary, its arguments and its children. */

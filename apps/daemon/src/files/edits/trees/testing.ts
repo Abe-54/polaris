@@ -1,7 +1,6 @@
-import { tempDirectory } from "../../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../../platform/tempDir.testing.ts";
 import { expect } from "bun:test";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -15,7 +14,7 @@ import { fingerprint } from "../journal.ts";
 import { createTreeEditCoordinator, snapshotTree, type CoordinatorOptions } from "./index.ts";
 
 export const fixture = async () => {
-  const home = await realpath(tempDirectory(join(tmpdir(), "m31-x2-")));
+  const home = await realpath(tempDir("m31-x2-"));
   const root = join(home, "checkout");
   await mkdir(join(root, "source", "nested"), { recursive: true });
   await writeFile(join(root, "source", "nested", "file"), "alpha\r\n");

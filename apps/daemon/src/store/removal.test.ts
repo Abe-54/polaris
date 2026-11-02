@@ -3,10 +3,9 @@
  * read model and every projection table, keeps every event in the log, and a replay of the log
  * (or a restart that loads the tables) reaches the same purged state (docs/adr/0086).
  */
-import { tempDirectory } from "../verification/tempDirectories.testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentSession,
@@ -201,7 +200,7 @@ const rowsOf = (file: string) => {
   }
 };
 
-const storeFile = () => join(tempDirectory(join(tmpdir(), "polaris-removal-")), "state.sqlite");
+const storeFile = () => join(tempDir("polaris-removal-"), "state.sqlite");
 
 describe("removing a Workspace", () => {
   test("purges its sessions and constellations from the read model, and keeps the others", async () => {

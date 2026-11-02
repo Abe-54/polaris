@@ -13,7 +13,7 @@ import { sendBack } from "./sendback.testing.ts";
 import { startAttempt } from "./workers.ts";
 import { WorktreeSetupService } from "../setup/index.ts";
 import { WorktreeSetup } from "@polaris/protocol";
-import { tempDir, removeDir } from "../../git/testing.ts";
+import { tempDir, removeTempDir } from "../../git/testing.ts";
 
 test("queued new prompts keep arrival order and later prompts join behind the active prompt", async () => {
   const { driver, layer } = inputQueueWorld(makeFakes(), makeFakeDriver("codex", { steer: true }));
@@ -153,6 +153,6 @@ for (const command of ["exit 7", "mkdir package.json"])
         }).pipe(Effect.provide(layer))
       );
     } finally {
-      removeDir(root);
+      removeTempDir(root);
     }
   }, 15000);

@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   attachTerminal,
@@ -60,7 +60,8 @@ import { DaemonAlreadyRunning } from "./lock.ts";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
 import { localEndpoint } from "@polaris/protocol/endpoint";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { posixTest } from "../platform/testing.ts";
 
 const windows = process.platform === "win32";
 
@@ -70,12 +71,10 @@ let home: string;
 
 beforeEach(() => {
   // Short path: Unix socket paths are limited to ~104 bytes on macOS.
-  home = mkdtempSync(shortTemp("plt-"));
+  home = newTempDir("plt-", { short: true });
 });
 
-afterEach(() => {
-  rmSync(home, { recursive: true, force: true });
-});
+afterEach(() => removeTempDirSettled(home));
 
 // On Windows the Daemon listens on a named pipe derived from its home (ADR 0059).
 const socketOf = (dir: string) => localEndpoint(dir);

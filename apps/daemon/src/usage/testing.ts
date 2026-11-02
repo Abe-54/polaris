@@ -1,7 +1,6 @@
 /** Fixture logs for the Usage index tests: Claude transcripts and Codex rollouts on disk. */
-import { tempDirectory } from "../verification/tempDirectories.testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 import { appendFileSync, mkdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 export interface FixtureHost {
@@ -25,7 +24,7 @@ const appendLine = (path: string, text: string) => {
 };
 
 export const fixtureHost = (): FixtureHost => {
-  const root = tempDirectory(join(tmpdir(), "polaris-usage-"));
+  const root = tempDir("polaris-usage-");
   const home = join(root, "home");
   const claudeProjects = join(home, ".claude", "projects");
   const codexSessions = join(home, ".codex", "sessions");

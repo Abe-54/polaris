@@ -1,6 +1,5 @@
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -41,7 +40,7 @@ export async function fixture(
     connectionCloseDeadlineMs?: number;
   } = {}
 ) {
-  const root = await realpath(tempDirectory(join(tmpdir(), "m31-t1-")));
+  const root = await realpath(tempDir("m31-t1-"));
   await writeFile(join(root, "file.ts"), "saved");
 
   const checkout = LanguageCheckout.cases.Workspace.make({

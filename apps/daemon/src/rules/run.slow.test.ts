@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gitText } from "../git/git.ts";
 import { posixDescribe } from "../platform/testing.ts";
-import { commitAll, makeRepo, removeDir, write } from "../git/testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "../git/testing.ts";
 import { runRules } from "./run.ts";
 import { fetchBetterleaks, hostAsset } from "./secrets/fetch.ts";
 import { syntheticSecrets } from "./secrets/synthetic.ts";
@@ -40,7 +40,7 @@ beforeAll(async () => {
   if (asset !== null) await fetchBetterleaks(asset);
 }, 120_000);
 
-afterAll(() => repos.forEach(removeDir));
+afterAll(() => repos.forEach(removeTempDir));
 
 secretsDescribe("runRules on a pull request (history)", () => {
   test("reports all eight secret formats as Critical and every pattern fixture, on added lines only", async () => {

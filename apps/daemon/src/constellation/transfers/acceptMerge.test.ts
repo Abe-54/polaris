@@ -14,7 +14,7 @@ import {
 import { Context, Effect, Layer, Struct } from "effect";
 import { gitText } from "../../git/git.ts";
 import { mergedInto } from "../../git/constellationBundles.ts";
-import { commitAll, makeRepo, removeDir, write } from "../../git/testing.ts";
+import { commitAll, makeRepo, removeTempDir, write } from "../../git/testing.ts";
 import { shortTemp } from "../../platform/testing.ts";
 import { McpTokens } from "../../mcp/tokens.ts";
 import { EventStore } from "../../store/EventStore.ts";
@@ -205,8 +205,8 @@ test("the user's Accept merges the claimed head it saw into the Lead's branch, n
       ).pipe(Effect.provide(layers(root)))
     );
   } finally {
-    removeDir(root);
-    removeDir(`${repo}.worktrees`);
-    removeDir(repo);
+    removeTempDir(root);
+    removeTempDir(`${repo}.worktrees`);
+    removeTempDir(repo);
   }
 }, 15_000);

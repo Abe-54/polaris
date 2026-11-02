@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { TurnId } from "@polaris/protocol";
 import { captureCheckpoint } from "../git/Checkpoints.ts";
 import { gitText } from "../git/git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../git/testing.ts";
 import { currentBranch, defaultBranch, diffStat, pushRemote } from "./branch.ts";
 import { type CheckpointedTurn, CommitRefused, commitTurns, committedTurnIds } from "./commit.ts";
 import { pushBranch } from "./push.ts";
@@ -17,7 +17,7 @@ import { revertLaterTurns } from "./revert.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const SESSION = "s1";

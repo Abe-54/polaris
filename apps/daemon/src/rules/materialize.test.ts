@@ -2,13 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gitText } from "../git/git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../git/testing.ts";
 import { materialize, removeMaterialized } from "./materialize.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const dir = (made: string) => {

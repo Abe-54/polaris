@@ -1,7 +1,6 @@
-import { tempDirectory } from "../../verification/tempDirectories.testing.ts";
+import { tempDir } from "../../platform/tempDir.testing.ts";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SlashCommand as SdkCommand } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
@@ -81,8 +80,8 @@ describe("Claude Code's commands", () => {
   });
 
   test("skill folders are found up to the git root, plugin commands by install path", () => {
-    const home = tempDirectory(join(tmpdir(), "polaris-claude-home-"));
-    const repo = tempDirectory(join(tmpdir(), "polaris-claude-repo-"));
+    const home = tempDir("polaris-claude-home-");
+    const repo = tempDir("polaris-claude-repo-");
     const cwd = join(repo, "packages", "app");
     const plugin = join(home, "plugin");
 

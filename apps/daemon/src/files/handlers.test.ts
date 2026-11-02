@@ -10,7 +10,7 @@ import { RpcTest } from "effect/rpc";
 import { AttachmentRpcs, AttachmentRpcsLive } from "../attachments/AttachmentRpcs.ts";
 import { AttachmentStoreLive } from "../attachments/AttachmentStore.ts";
 import { GitRpcs, GitRpcsLive } from "../git/GitRpcs.ts";
-import { makeRepo, removeDir, tempDir, write } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../git/testing.ts";
 import { TerminalRpcs, TerminalRpcsLive } from "../terminal/TerminalRpcs.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { TerminalsLive } from "../terminal/Terminals.ts";
@@ -21,7 +21,7 @@ import { makeFakeBlobChannel } from "./testing.ts";
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const WorkspaceIoRpcs = FilesRpcs.merge(GitRpcs).merge(AttachmentRpcs).merge(TerminalRpcs);

@@ -7,7 +7,7 @@ import { makeFakeBlobChannel } from "../files/testing.ts";
 import { gitText } from "./git.ts";
 import { GitRpcs, GitRpcsLive } from "./GitRpcs.ts";
 import { gitStatus } from "./status.ts";
-import { makeRepo, removeDir, tempDir, write } from "./testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 import { gitDirsOf, watchGitState } from "./watch.ts";
 
 const cleanup: Array<() => void> = [];
@@ -42,7 +42,7 @@ const watching = async (cwd: string) => {
 
 const repo = async () => {
   const root = await makeRepo({ "a.txt": "one\n", "b.txt": "one\n" });
-  cleanup.push(() => removeDir(root));
+  cleanup.push(() => removeTempDir(root));
 
   return root;
 };
@@ -70,8 +70,8 @@ describe("watchGitState", () => {
     const root = await repo();
     const bare = tempDir("polaris-bare-");
     const parent = tempDir("polaris-other-");
-    cleanup.push(() => removeDir(bare));
-    cleanup.push(() => removeDir(parent));
+    cleanup.push(() => removeTempDir(bare));
+    cleanup.push(() => removeTempDir(parent));
     await gitText(bare, ["init", "-q", "--bare", "-b", "main"]);
     await gitText(root, ["remote", "add", "origin", bare]);
     await gitText(root, ["push", "-q", "-u", "origin", "main"]);
@@ -123,7 +123,7 @@ describe("watchGitState", () => {
   test("a linked worktree's git dir, outside its root, is watched", async () => {
     const root = await repo();
     const linked = join(tempDir("polaris-linked-"), "wt");
-    cleanup.push(() => removeDir(join(linked, "..")));
+    cleanup.push(() => removeTempDir(join(linked, "..")));
     await gitText(root, ["worktree", "add", "-q", linked]);
     write(linked, "a.txt", "two\n");
     const watch = await watching(linked);
@@ -146,7 +146,7 @@ describe("watchGitState", () => {
 
   test("the first commit in a fresh repository arms HEAD's reflog", async () => {
     const root = await makeRepo({});
-    cleanup.push(() => removeDir(root));
+    cleanup.push(() => removeTempDir(root));
     write(root, "a.txt", "one\n");
     await gitText(root, ["add", "a.txt"]);
     await gitText(root, ["commit", "-qm", "first"]);
@@ -195,7 +195,7 @@ describe("git.watch", () => {
 
   test("fails outside a git checkout", async () => {
     const plain = tempDir("polaris-plain-");
-    cleanup.push(() => removeDir(plain));
+    cleanup.push(() => removeTempDir(plain));
 
     const exit = await Effect.runPromiseExit(
       Effect.scoped(

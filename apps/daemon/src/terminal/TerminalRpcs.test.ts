@@ -15,7 +15,7 @@ import {
 import { Effect, Layer, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
 import { makeFakeBlobChannel } from "../files/testing.ts";
-import { removeDir, tempDir } from "../git/testing.ts";
+import { removeTempDir, tempDir } from "../git/testing.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { TerminalRpcs, TerminalRpcsLive } from "./TerminalRpcs.ts";
 import { TerminalsLive } from "./Terminals.ts";
@@ -34,7 +34,7 @@ const cleanup: Array<string> = [];
 afterEach(() => {
   for (const key of Object.keys(AMBIENT)) delete process.env[key];
 
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const at = "2026-10-01T00:00:00.000Z";

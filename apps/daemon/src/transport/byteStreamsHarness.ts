@@ -5,7 +5,6 @@
  * and `cleanupHome` from its own `beforeEach`/`afterEach`.
  */
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
 import {
   type AddressInfo,
   connect as netConnect,
@@ -25,7 +24,7 @@ import { type Capability, readEvents, writeEvents } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import { type Duration, Effect, Fiber, Layer, Scope, Stream } from "effect";
 import { BrowserHosting, ByteStreamQuota, HostAddressStreams } from "../browser/index.ts";
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 import { ByteStreamRpcsLive } from "./byteStreams.ts";
 import { startServer } from "./server.ts";
 
@@ -34,12 +33,10 @@ const MAIN = join(import.meta.dir, "..", "main.ts");
 let home = "";
 
 export const freshHome = () => {
-  home = mkdtempSync(shortTemp("plbs-"));
+  home = newTempDir("plbs-", { short: true });
 };
 
-export const cleanupHome = () => {
-  rmSync(home, { recursive: true, force: true });
-};
+export const cleanupHome = () => removeTempDirSettled(home);
 
 /** The throwaway home's local-socket endpoint path. */
 export const endpoint = () => localEndpoint(home);

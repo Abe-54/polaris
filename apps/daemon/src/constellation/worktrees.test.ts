@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { Attempt, Constellation, WorktreeRequest } from "@polaris/protocol";
 import { Effect, Struct } from "effect";
-import { makeRepo, removeDir, write, commitAll } from "../git/testing.ts";
+import { makeRepo, removeTempDir, write, commitAll } from "../git/testing.ts";
 import { gitText } from "../git/git.ts";
 import { ConstellationWorktrees } from "./worktrees.ts";
 import { TransferStorage } from "./transfers/storage.ts";
@@ -172,8 +172,8 @@ test(
         })
       );
     } finally {
-      removeDir(root);
-      removeDir(`${root}.worktrees`);
+      removeTempDir(root);
+      removeTempDir(`${root}.worktrees`);
     }
   },
   GIT_WORK_MS
@@ -227,8 +227,8 @@ test(
         })
       );
     } finally {
-      removeDir(path);
-      removeDir(root);
+      removeTempDir(path);
+      removeTempDir(root);
     }
   },
   GIT_WORK_MS

@@ -3,7 +3,7 @@ import { rmSync, symlinkSync } from "node:fs";
 import { join, sep } from "node:path";
 import { FileError } from "@polaris/protocol";
 import { Effect, Fiber, Stream } from "effect";
-import { makeRepo, removeDir, tempDir, suiteTempDir, write } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, suiteTempDir, write } from "../git/testing.ts";
 import { FileSearch, FileSearchLive } from "./FileSearch.ts";
 import { handleGrep, handleSearchPaths } from "./FilesRpcs.ts";
 import { fuzzyScore, gitGrepThreads } from "./search/fallback.ts";
@@ -31,7 +31,7 @@ afterAll(() => {
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const fixture = async () => {

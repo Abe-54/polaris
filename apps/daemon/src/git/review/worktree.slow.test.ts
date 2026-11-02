@@ -2,7 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gitText, resolveCommit, runGitRaw } from "../git.ts";
-import { commitAll, removeDir, tempDir, write } from "../testing.ts";
+import { commitAll, removeTempDir, tempDir, write } from "../testing.ts";
 import { listWorktrees } from "../WorktreeTracker.ts";
 import { fetchPullRequest } from "./fetch.ts";
 import { lockReasonFor, reviewRef } from "./refs.ts";
@@ -29,7 +29,7 @@ setDefaultTimeout(15_000);
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 /** A PR that adds a husky-style `post-checkout` hook writing `marker`, and a user with husky set up. */

@@ -9,7 +9,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { SessionId, TurnId } from "@polaris/protocol";
 import { Effect, Exit, Scope, Stream } from "effect";
 import { gitText } from "../../git/git.ts";
-import { makeRepo, removeDir, tempDir, write } from "../../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../../git/testing.ts";
 import { which } from "../../service/userPath.ts";
 import { readConfinement } from "../confinement.ts";
 import { HarnessEvent } from "../HarnessDriver.ts";
@@ -36,8 +36,8 @@ const layout = async () => {
   const repo = await makeRepo({ "src/a.ts": "export const a = 1;\n" });
   const base = tempDir("polaris-e2e-reviewer-");
   cleanup.push(
-    () => removeDir(repo),
-    () => removeDir(base)
+    () => removeTempDir(repo),
+    () => removeTempDir(base)
   );
   await gitText(repo, ["remote", "add", "origin", `https://x:${TOKEN}@github.com/o/r.git`]);
   const checkout = join(base, "pr-7");

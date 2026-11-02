@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync, watch } from "node:fs";
 import { join } from "node:path";
-import { makeRepo, removeDir, tempDir, write } from "../../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir, write } from "../../git/testing.ts";
 import { posixTest } from "../../platform/testing.ts";
 import { WATCH_MAX_DIRECTORIES, watchRoot } from "./watch.ts";
 
@@ -12,7 +12,7 @@ const stops: Array<() => void> = [];
 afterEach(() => {
   for (const stop of stops.splice(0)) stop();
 
-  for (const root of roots.splice(0)) removeDir(root);
+  for (const root of roots.splice(0)) removeTempDir(root);
 });
 
 const recorder = () => {
@@ -55,7 +55,7 @@ test("on Windows a tree watch whose root is deleted closes instead of reporting 
   };
 
   stops.push(await watchRoot(root, () => reports++, { platform: "win32", open }));
-  removeDir(root);
+  removeTempDir(root);
   await Bun.sleep(100);
 
   expect(closed).toBe(true);

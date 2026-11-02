@@ -10,12 +10,12 @@ import { computeDiff, DiffSpec } from "./diff.ts";
 import { handleGitDiff, handleGitStatus } from "./GitRpcs.ts";
 import { findRepoRoot, gitText, mayBeInWorkTree, runGitRaw } from "./git.ts";
 import { parsePorcelainV2 } from "./status.ts";
-import { commitAll, makeRepo, removeDir, tempDir, write } from "./testing.ts";
+import { commitAll, makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
 
 const repo = async (files?: Record<string, string>) => {

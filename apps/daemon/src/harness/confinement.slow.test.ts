@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { isWithin } from "../files/fs.ts";
 import { gitText } from "../git/git.ts";
-import { makeRepo, removeDir, tempDir } from "../git/testing.ts";
+import { makeRepo, removeTempDir, tempDir } from "../git/testing.ts";
 import { readConfinement } from "./confinement.ts";
 import { posixTest } from "../platform/testing.ts";
 
@@ -23,12 +23,12 @@ beforeAll(() => {
 afterAll(() => {
   if (savedHome === undefined) delete process.env.POLARIS_HOME;
   else process.env.POLARIS_HOME = savedHome;
-  removeDir(polarisHome);
+  removeTempDir(polarisHome);
 });
 
 afterEach(() => {
-  for (const dir of cleanup.splice(0)) removeDir(dir);
-  removeDir(join(polarisHome, "confined-git"));
+  for (const dir of cleanup.splice(0)) removeTempDir(dir);
+  removeTempDir(join(polarisHome, "confined-git"));
 });
 
 const TOKEN = "ghp_reviewerMustNeverSeeThis";
