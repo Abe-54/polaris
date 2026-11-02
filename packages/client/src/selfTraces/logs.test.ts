@@ -150,7 +150,7 @@ describe("log capture", () => {
     expect(message(t.emitted[0])).toHaveLength(LOG_MESSAGE_CHARS);
   });
 
-  test("a secret cut by the read limit never reaches the message, even once redactions shrink it", () => {
+  test("an argument over the read limit is omitted whole, so a quoted secret in it never shows", () => {
     const emitted: Array<SelfSpan> = [];
 
     const recorder = makeLogRecorder({
@@ -160,13 +160,29 @@ describe("log capture", () => {
       maxChars: 100,
     });
 
-    // The bearer token (387 chars) shrinks to "[redacted]", so the cut at 400 falls inside the clip.
+    // Redacting the bearer token frees room, so any part of the oversized argument would show.
     recorder.record("warn", "console", [
-      `Bearer ${"a".repeat(380)}`,
-      "https://deploy:hunter2hunter2@git.example.com/repo.git",
+      `Bearer ${"a".repeat(300)}`,
+      `config password: "correct horse battery staple" ${"y".repeat(200)}`,
+      { token: "after" },
+    ]);
+    recorder.record("warn", "console", [
+      "retry",
+      { auth: { header: "abc def", padding: "z".repeat(500) } },
     ]);
 
-    expect(message(emitted[0])).toBe("[redacted]");
+    expect(emitted.map(message)).toEqual([
+      "[redacted] [… 248 chars omitted] [… 1 more arguments omitted]",
+      "retry [… 1 argument omitted]",
+    ]);
+  });
+
+  test("an argument that fits is scrubbed whole, quoted values with spaces included", () => {
+    const t = setup();
+
+    t.target.warn('login failed password: "correct horse battery"', { secret: "two words" });
+
+    expect(message(t.emitted[0])).toBe('login failed password: [redacted] {"secret":[redacted]}');
   });
 
   test("a secret the length cap cuts in half is scrubbed whole, so none of it survives", () => {
@@ -174,12 +190,9 @@ describe("log capture", () => {
     const lead = "x".repeat(LOG_MESSAGE_CHARS - 20);
 
     t.target.warn(lead, "clone https://deploy:hunter2hunter2@git.example.com/repo.git failed");
-    t.target.warn({ password: "hunter2hunter2" }, "word ".repeat(LOG_MESSAGE_CHARS * 2));
 
-    const kept = t.emitted.map(message);
-
-    expect(kept.join("\n")).not.toMatch(/hunt|deploy:|r2h/);
-    expect(kept.map((line) => line.length)).toEqual([LOG_MESSAGE_CHARS, LOG_MESSAGE_CHARS]);
+    expect(message(t.emitted[0])).not.toMatch(/hunt|deploy:|r2h/);
+    expect(message(t.emitted[0])).toHaveLength(LOG_MESSAGE_CHARS);
   });
 
   test("unhooking restores the console", () => {

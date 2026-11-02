@@ -4,8 +4,9 @@
  * messages are capped, a process records at most a few per second, and the rest are counted.
  */
 import type { SelfSpan, TraceAttributes } from "@polaris/protocol";
-import { Formatter, Match, Predicate } from "effect";
+import { Predicate } from "effect";
 import { redactText } from "../redact.ts";
+import { joinArguments } from "./logText.ts";
 
 export type LogLevel = "warn" | "error";
 
@@ -64,42 +65,21 @@ const hex = (bytes: number) =>
     byte.toString(16).padStart(2, "0")
   ).join("");
 
-const text = Match.type<ReadonlyArray<unknown>[number]>().pipe(
-  Match.when(Predicate.isString, (value) => value),
-  Match.when(Predicate.isError, (error) => error.stack ?? `${error.name}: ${error.message}`),
-  Match.orElse((value) => Formatter.format(value))
-);
-
 /** How much of the arguments is read before scrubbing, as a multiple of the clip. */
 const READ_FACTOR = 4;
-
-/**
- * The arguments as one line of at most `limit` characters. Past the limit it ends at the last
- * whitespace before it, so a token the limit cuts never reaches the scrubber half-read.
- */
-const joinArgs = (args: ReadonlyArray<unknown>, limit: number): string => {
-  let joined = "";
-
-  for (const value of args) {
-    if (joined.length > limit) break;
-    joined += (joined === "" ? "" : " ") + text(value);
-  }
-
-  return joined.length > limit ? joined.slice(0, limit).replace(/\s*\S*$/, "") : joined;
-};
 
 const clip = (message: string, max: number) =>
   message.length > max ? `${message.slice(0, max - 1)}…` : message;
 
 /**
- * The console's arguments as one scrubbed line of at most `max` characters. Scrubbing runs
- * before the clip, so a secret the clip would cut in half is still matched whole.
+ * The console's arguments as one scrubbed line of at most `max` characters. The scrubber sees only
+ * whole arguments, and runs before the clip, so no secret reaches it or the result cut in half.
  */
 export const logMessage = (
   args: ReadonlyArray<unknown>,
   scrub: (text: string) => string = redactText,
   max = LOG_MESSAGE_CHARS
-): string => clip(scrub(joinArgs(args, max * READ_FACTOR)), max);
+): string => clip(scrub(joinArguments(args, max * READ_FACTOR)), max);
 
 /** A zero-length Span that stands for one log record outside any Span. */
 export const logSpan = (
