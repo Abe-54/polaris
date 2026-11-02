@@ -1,7 +1,7 @@
 import type { OpenOptions } from "../../harness/HarnessDriver.ts";
 import { visualizeGuidance } from "@polaris/visualization";
 
-export const POLARIS_PREAMBLE_VERSION = 3;
+export const POLARIS_PREAMBLE_VERSION = 4;
 
 type InstructionOptions = Pick<OpenOptions, "readOnly" | "constellation" | "constellations">;
 
@@ -13,6 +13,7 @@ const context = [
   "Workspaces: your agent session belongs to a registered directory, usually a git repository. Follow its AGENTS.md when changing code.",
   "Hosts: each machine runs a Daemon that owns its agent sessions; hosts may be remote.",
   "Only the user grants approvals.",
+  "What the user sees: images you open with view_image or Read show in the conversation, and Markdown images and links in your replies that name absolute paths on this host open in the app (images in a viewer, other files in its editor). Images a tool returns only to you, such as image() inside exec, never reach the user, and HTML files on the host don't open in its browser: show an image by viewing it or linking its path.",
 ];
 
 export const sessionAttachments = (options: InstructionOptions) =>

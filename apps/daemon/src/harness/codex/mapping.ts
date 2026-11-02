@@ -126,6 +126,34 @@ const collabStatus = (status: string) =>
     Match.orElse(() => "completed" as const)
   );
 
+/** A Host path as Codex may spell it (a `file://` URL, as its newer path type does) → the path. */
+export const hostPath = (path: string): string => {
+  if (!/^file:\/\//i.test(path)) return path;
+
+  try {
+    const url = new URL(path);
+
+    return url.host === "" || url.host === "localhost" ? decodeURIComponent(url.pathname) : path;
+  } catch {
+    return path;
+  }
+};
+
+type ImageGeneration = typeof P.ImageGenerationItem.Type;
+
+const imageGenerationStatus = (item: ImageGeneration) =>
+  Match.value(item.status).pipe(
+    Match.when("generating", () => "running" as const),
+    Match.when("inProgress", () => "running" as const),
+    Match.orElse(() => (item.failure === null ? ("completed" as const) : ("failed" as const)))
+  );
+
+/** Its prompt, and the PNG Codex saved, so the Desktop App can show it. */
+const imageGenerationInput = (item: ImageGeneration) =>
+  item.savedPath === undefined
+    ? { prompt: item.revisedPrompt }
+    : { prompt: item.revisedPrompt, path: hostPath(item.savedPath) };
+
 type ItemMapper = (item: P.ThreadItem) => TurnItem | null;
 
 /** One mapper per Codex item type; each checks the fields it needs (unknown items share a type). */
@@ -251,6 +279,7 @@ const itemMappers = new Map<string, ItemMapper>([
         : null,
   ],
   [
+    // Also how a view_image inside code mode's `exec` reaches app-server; the Desktop App shows it.
     "imageView",
     (item) =>
       "path" in item
@@ -258,9 +287,23 @@ const itemMappers = new Map<string, ItemMapper>([
             id: item.id,
             name: "view_image",
             kind: "read",
-            input: { path: item.path },
+            input: { path: hostPath(item.path) },
             output: null,
             status: "completed",
+          })
+        : null,
+  ],
+  [
+    "imageGeneration",
+    (item) =>
+      "revisedPrompt" in item
+        ? ToolCall.make({
+            id: item.id,
+            name: "image_generation",
+            kind: "other",
+            input: imageGenerationInput(item),
+            output: item.failure,
+            status: imageGenerationStatus(item),
           })
         : null,
   ],

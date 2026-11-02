@@ -51,7 +51,7 @@ Tests: `AppServer.test.ts` runs the real lifecycle against a fake `codex` execut
 | `item/started` (commands, file changes, tool calls) | `ItemUpdated` (live progress, `running`) |
 | `item/agentMessage/delta`, `item/plan/delta`, `item/reasoning/summaryTextDelta`, `item/reasoning/textDelta` | `ItemDelta { field: "text" }` |
 | `item/commandExecution/outputDelta` | `ItemDelta { field: "output" }` |
-| `item/completed` | `ItemCompleted`: agentMessage/plan → AssistantMessage, reasoning → Reasoning (summary, else raw content), commandExecution → CommandExecution, fileChange → FileChange (`update` → `modify`), mcpToolCall → ToolCall `server.tool`, dynamicToolCall/collabAgentToolCall/webSearch/imageView → ToolCall. A Turn's first user message (its prompt), compaction and review markers are skipped; later user messages are steers (`UserMessage`). |
+| `item/completed` | `ItemCompleted`: agentMessage/plan → AssistantMessage, reasoning → Reasoning (summary, else raw content), commandExecution → CommandExecution, fileChange → FileChange (`update` → `modify`), mcpToolCall → ToolCall `server.tool`, dynamicToolCall/collabAgentToolCall/webSearch → ToolCall, imageView → ToolCall `view_image` `{ path }` (a `file://` path made plain), imageGeneration → ToolCall `image_generation` `{ prompt, path }` (`savedPath`, when Codex saved it). A Turn's first user message (its prompt), compaction and review markers are skipped; later user messages are steers (`UserMessage`). |
 | `turn/plan/updated` | `ItemUpdated` with the `Plan` (id `<codexTurn>:plan`, its `explanation` when not blank) each time; the latest plan is completed once, just before `TurnEnded` |
 | `error` with `willRetry: false` | `ItemCompleted` with an `Error` item, its message made readable (below) |
 | `turn/completed` | `TurnEnded { status, error }`, the error made readable (below) |
@@ -62,6 +62,8 @@ Tests: `AppServer.test.ts` runs the real lifecycle against a fake `codex` execut
 | connection closed by the server | `Exited { error }`; scope close gives `Exited { error: null }` |
 
 Notifications for other threads on the shared server are ignored, except a Subagent's.
+
+**Code mode** (`exec`, checked with codex-cli 0.164.0, ENG-759): app-server sends no item for the `exec` call or its output. A `tools.view_image` inside it arrives as its own `imageView` item, so the Desktop App shows that image; what the script passes to `image()` reaches only the model. The Polaris preamble (`constellation/skills/preamble.ts`) tells the agent so.
 
 **Readable errors** (`readableError` in `mapping.ts`): Codex forwards the provider's error body as the message (`{"type":"error","error":{"message":…}}`, sometimes after a prefix such as `unexpected status 400:`), so the inner `error.message` is used. A rejected Model (`model '<id>' is not …`) becomes "<id> isn't available on this Codex account or plan. Choose another Model." followed by what Codex said. `model/list` has no per-account flag to filter such Models out beforehand (checked with codex-cli 0.158.0 on a "prolite" account: every listed Model has the same `hidden`, `upgrade`, `availabilityNux` and `availableAccessPrograms`).
 

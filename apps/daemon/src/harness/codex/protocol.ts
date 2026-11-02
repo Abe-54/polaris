@@ -165,6 +165,16 @@ export const ImageViewItem = Schema.Struct({
   path: Schema.String,
 });
 
+/** An image the model generated; `savedPath` is the PNG Codex wrote on the Host, when it did. */
+export const ImageGenerationItem = Schema.Struct({
+  type: Schema.Literal("imageGeneration"),
+  id: Schema.String,
+  status: Schema.String,
+  revisedPrompt: NullableString,
+  savedPath: Schema.optional(Schema.String),
+  failure: Schema.NullOr(Schema.Unknown),
+});
+
 /** What the user typed; gives Turns started in the TUI their prompt. */
 export const UserMessageItem = Schema.Struct({
   type: Schema.Literal("userMessage"),
@@ -190,6 +200,7 @@ export const ThreadItem = Schema.Union([
   SubAgentActivityItem,
   WebSearchItem,
   ImageViewItem,
+  ImageGenerationItem,
   OtherItem,
 ]);
 
@@ -433,6 +444,8 @@ conforms<Conforms<Item<"subAgentActivity">, typeof SubAgentActivityItem>>();
 conforms<Conforms<Item<"webSearch">, typeof WebSearchItem>>();
 
 conforms<Conforms<Item<"imageView">, typeof ImageViewItem>>();
+
+conforms<Conforms<Item<"imageGeneration">, typeof ImageGenerationItem>>();
 
 conforms<Conforms<Gen.InitializeResponse, typeof InitializeResponse>>();
 

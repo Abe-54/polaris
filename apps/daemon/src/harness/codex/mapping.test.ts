@@ -169,6 +169,55 @@ describe("thread items", () => {
     );
   });
 
+  // As codex-cli 0.164.0 sent it for a view_image, direct or inside code mode's exec (ENG-759).
+  test.each([
+    ["a plain path", "/home/ubuntu/shots/after.png", "/home/ubuntu/shots/after.png"],
+    ["a file URL", "file:///home/ubuntu/shots/before%201.png", "/home/ubuntu/shots/before 1.png"],
+  ])("an image view of %s names the image's Host path", (_, path, hostPath) => {
+    expect(item({ type: "imageView", id: "exec-1d6d", path })).toEqual(
+      TurnItem.cases.ToolCall.make({
+        id: "exec-1d6d",
+        name: "view_image",
+        kind: "read",
+        input: { path: hostPath },
+        output: null,
+        status: "completed",
+      })
+    );
+  });
+
+  test("a generated image names the PNG Codex saved; a failed one keeps its failure", () => {
+    const generated = {
+      type: "imageGeneration",
+      id: "ig_1",
+      status: "completed",
+      revisedPrompt: "a cabin at dawn",
+      result: "iVBORw0KGgo=",
+      failure: null,
+      savedPath: "/home/ubuntu/.codex/generated_images/ig_1.png",
+    };
+
+    expect(item(generated)).toEqual(
+      TurnItem.cases.ToolCall.make({
+        id: "ig_1",
+        name: "image_generation",
+        kind: "other",
+        input: { prompt: "a cabin at dawn", path: "/home/ubuntu/.codex/generated_images/ig_1.png" },
+        output: null,
+        status: "completed",
+      })
+    );
+
+    const { savedPath: _, ...unsaved } = generated;
+    const failed = item({ ...unsaved, status: "failed", failure: { message: "blocked" } });
+
+    expect(failed).toMatchObject({
+      input: { prompt: "a cabin at dawn" },
+      output: { message: "blocked" },
+      status: "failed",
+    });
+  });
+
   test("user messages and unknown items are skipped", () => {
     expect(item({ type: "userMessage", id: "u", content: [] })).toBeNull();
     expect(item({ type: "contextCompaction", id: "x" })).toBeNull();

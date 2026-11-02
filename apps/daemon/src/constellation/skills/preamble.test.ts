@@ -54,6 +54,8 @@ test("read-only and unattached sessions advertise no Constellation tools or role
   for (const options of [{}, { readOnly: true, constellation: lead }]) {
     const text = polarisInstructions(options);
     expect(text).toContain("You are running inside Polaris");
+    // ENG-759: an agent assumed the user saw images only its tool results carried.
+    expect(text).toContain("image() inside exec, never reach the user");
     expect(text).not.toContain("mcp__");
     expect(text).not.toContain(lead.instructions);
   }
