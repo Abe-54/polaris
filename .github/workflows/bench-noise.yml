@@ -1,0 +1,77 @@
+name: Bench proof (ENG-743, temporary)
+
+# Temporary: CI's sharded bench gate 12 times on one commit (reps 1-12), and twice with a
+# deliberate 30 MiB regression at Daemon start (reps 13-14). Removed before the branch merges.
+
+on:
+  push:
+    branches: [polaris/dc03441e-c503-4c86-8204-765d513e5095/P2-4-make-the-bench-memory-gate-deterministic]
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.4
+
+jobs:
+  shards:
+    name: shard ${{ matrix.rep }}.${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Retain 30 MiB at Daemon start
+        if: matrix.rep > 12
+        run: |
+          sed -i 's|^    const { runServe } = await import("./transport/serve.ts");|    (globalThis as { leak?: Buffer }).leak = Buffer.alloc(30 * 1024 * 1024, 1);\n&|' apps/daemon/src/main.ts
+          git diff --exit-code apps/daemon/src/main.ts && exit 1 || true
+      - run: bun run bench --quick --json bench-result.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: proof-${{ matrix.rep }}-shard-${{ matrix.shard }}
+          path: bench-result.json
+
+  gate:
+    name: gate ${{ matrix.rep }}
+    needs: shards
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: proof-${{ matrix.rep }}-shard-*
+          path: shards
+      - name: Gate (CI's command)
+        run: |
+          mkdir -p out
+          set +e
+          bun packages/bench/src/gate.ts --json out/merged.json --markdown "$GITHUB_STEP_SUMMARY" \
+            --compare packages/bench/baselines/ci-ubuntu-latest-quick.json \
+            --fail-on memory,cold-start.startup_modules,-git.rss_peak_mib,-blobs.upload_rss_peak_over_base_mib,-blobs.rss_retained_mib,-blobs.footprint_retained_mib,-traces.rss_peak_over_base_mib \
+            --gate-same-machine shards/*/bench-result.json 2>&1 | tee out/log.txt
+          echo "${PIPESTATUS[0]}" | tee out/exit.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: gate-${{ matrix.rep }}
+          path: out

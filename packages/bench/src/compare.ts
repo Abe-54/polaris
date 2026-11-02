@@ -131,8 +131,12 @@ export const memoryClass = (env: Environment): string => {
   return `${kernel}-${env.arch}-${env.cores}c`.toLowerCase();
 };
 
-/** The CPU models a baseline was taken on: `merge.ts` joins several with ` | `. */
-export const baselineCpus = (env: Environment): ReadonlyArray<string> => env.cpu.split(" | ");
+/** The CPU models a result was taken on: `merge.ts` joins several with ` | `. */
+export const cpusOf = (env: Environment): ReadonlyArray<string> => env.cpu.split(" | ");
+
+/** Whether every CPU model behind `current` is one the baseline was taken on. */
+export const coversCpus = (baseline: Environment, current: Environment): boolean =>
+  cpusOf(current).every((cpu) => cpusOf(baseline).includes(cpu));
 
 /**
  * Why `--gate-same-machine` gates nothing for this pair, or null when it gates: another OS, arch
@@ -142,11 +146,13 @@ export const ungatedReason = (baseline: Environment, current: Environment): stri
   if (memoryClass(baseline) !== memoryClass(current))
     return `the baseline is ${memoryClass(baseline)}, this run ${memoryClass(current)}`;
 
-  if (!baselineCpus(baseline).includes(current.cpu))
-    return `the baseline covers ${baselineCpus(baseline).join(", ")}, not ${current.cpu}`;
+  if (!coversCpus(baseline, current))
+    return `the baseline covers ${cpusOf(baseline).join(", ")}, not ${cpusOf(current).join(", ")}`;
 
   return null;
 };
+
+const singleCpu = (env: Environment) => cpusOf(env).length === 1;
 
 /**
  * What gates a comparison: `failOn` (metric kinds, or `scenario.metric` names), narrowed with
@@ -160,7 +166,15 @@ export const gatingKinds = (
   failOn: ReadonlySet<string>,
   sameMachineOnly: boolean
 ): ReadonlySet<string> => {
-  if (!sameMachineOnly || baseline.env.machineSlug === current.env.machineSlug) return failOn;
+  if (!sameMachineOnly) return failOn;
+
+  // Timings gate only between single runs on one CPU model, never against a merged result.
+  if (
+    baseline.env.machineSlug === current.env.machineSlug &&
+    singleCpu(baseline.env) &&
+    singleCpu(current.env)
+  )
+    return failOn;
 
   if (ungatedReason(baseline.env, current.env) !== null) return new Set();
 
@@ -198,9 +212,9 @@ const environmentWarnings = (baseline: BenchResult, current: BenchResult): Array
     warnings.push(
       `baseline is from ${baseline.env.machineSlug}, this run is ${current.env.machineSlug}: numbers are not comparable`
     );
-  } else if (!baselineCpus(baseline.env).includes(current.env.cpu)) {
+  } else if (!coversCpus(baseline.env, current.env)) {
     warnings.push(
-      `baseline ran on ${baselineCpus(baseline.env).join(", ")}, this run on ${current.env.cpu}: --gate-same-machine gates nothing`
+      `baseline ran on ${cpusOf(baseline.env).join(", ")}, this run on ${current.env.cpu}: --gate-same-machine gates nothing`
     );
   } else if (baseline.env.machineSlug !== current.env.machineSlug) {
     warnings.push(
