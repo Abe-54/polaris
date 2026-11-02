@@ -8,11 +8,11 @@ block capped at 16,000 characters plus `structuredContent`; errors are `{code, m
 The point is that a trace reaches an agent already read: a 434-span trace becomes a page that
 says where the time went and what failed, not 434 lines.
 
-## `traces {turn?, route?, service?, status?, minMs?, limit?, scope?}`
+## `traces {turn?, route?, service?, status?, minMs?, attributes?, limit?, scope?}`
 
 Traces from the caller's checkout, newest first. `turn`: a Turn number, `"current"` (default) or
 `"all"`; `route` a glob on the root span name (`POST /invoices*`); `status` `"error"` or `"ok"`;
-`minMs` a duration floor; `limit` ≤ 50 (default 20).
+`minMs` a duration floor; `attributes` Span attribute equalities (see Attribute filters and grouping); `limit` ≤ 50 (default 20).
 
 `scope: "self"` (ENG-731) lists Polaris's own Self-Traces (the Daemon's, the Desktop App's and the
 Mobile App's, stored under `polaris:self`) instead of the checkout. They carry no Turn, so `turn`
@@ -160,7 +160,7 @@ boundaries and a count of
 omitted routes; retrieve the full rows from compare structuredContent, and use
 `trace` or `span` with the returned ids for detail.
 
-## `trace_stats {sinceMinutes?, name?, service?, status?, by?, sort?, limit?, scope?}` (ENG-746)
+## `trace_stats {sinceMinutes?, name?, service?, status?, attributes?, byAttribute?, by?, sort?, limit?, scope?}` (ENG-746)
 
 Spans aggregated over a time window, so "which spans ran, how often, how many failed, how slow"
 is one call instead of SQL against `traces.sqlite`. A separate tool rather than a mode of
@@ -192,10 +192,29 @@ Spans since 2026-11-02T19:08:00.000Z (last 60 min) · 1234 spans in 12 groups
 polaris.rpc.data.query  polaris-daemon  ×412  3 ERRORS  p50 4.2 ms  p95 31 ms  max 2.1 s  latest 2026-11-02T20:07:59.120Z  error trace 4f1c… span 2d91…
 ```
 
-`structuredContent`: `{groups: [{name?, service?, count, errors, p50Ms, p95Ms, maxMs, latestStart,
-example: {trace, span}}], groupCount, spans, truncated, since, coveredSince?}`. `name` is absent
-when grouping by service and `service` when grouping by name. `groupCount` and `spans` count the
-whole read, before `limit` and the text cap.
+`structuredContent`: `{groups: [{name?, service?, attribute?, count, errors, p50Ms, p95Ms, maxMs,
+latestStart, example: {trace, span}}], groupCount, spans, truncated, since, coveredSince?}`. `name`
+is absent when grouping by service and `service` when grouping by name. `groupCount` and `spans`
+count the whole read, before `limit` and the text cap.
+
+### Attribute filters and grouping (ENG-753)
+
+`attributes` (on `traces` and `trace_stats`) is a list of at most five `{key, value}` equalities on
+Span attributes, all of which must hold on one Span. `key` must match `[A-Za-z0-9_.:-]{1,128}`
+(OpenTelemetry names such as `db.system.name`, `http.response.status_code`); anything else is
+`E-INPUT`. `value` is a string (≤ 1,024 characters), number or boolean; a number also matches the
+decimal string OTLP int64 values are stored as, and a boolean matches JSON `true`/`false`. The key
+reaches SQLite only as a bound JSON path parameter (`json_extract(value, ?)`), never in the SQL text.
+
+`trace_stats` `byAttribute: key` also groups by that attribute's value: alone when `by` is
+omitted, or alongside `by`'s name and/or service when given. Each group then has `attribute` (the
+value, or null for Spans without it), and text starts the row with `key=value`. Attribute filters
+and grouping run inside the same window scan and cap, so the plan stays the index range above.
+
+`traces` has no window, so its attribute filter reads only the checkout's newest 20,000 Spans (off
+`spans_retention`, before filtering): a trace is listed when one of those Spans matches. When the
+checkout holds more, `structuredContent.coveredSince` is the oldest Span start read and text says
+`Attribute filters read only the newest 20000 spans, from <time>.`
 
 ## `trace_capture {seconds?, until?, scope?}` (ENG-748)
 

@@ -89,7 +89,7 @@ test("trace_stats reads only the window: older spans count once sinceMinutes rea
 
     const none = await f.tool("trace_stats").call({ sinceMinutes: 10 });
     expect(none.content[0]!.text).toEndWith(
-      "(last 10 min) · none matched. Widen sinceMinutes or loosen name, service or status."
+      "(last 10 min) · none matched. Widen sinceMinutes or loosen name, service, status or attributes."
     );
 
     for (const input of [{ sinceMinutes: 0 }, { sinceMinutes: 7 * 24 * 60 + 1 }, { limit: 101 }])

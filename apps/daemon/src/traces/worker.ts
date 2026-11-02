@@ -188,7 +188,7 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
     listTraces(prune(request.checkout), request.checkout, request.filter)
   ),
   Match.tag("ToolList", (request) =>
-    listToolTraces(prune(request.checkout), request.checkout, request.filter)
+    listToolTraces(prune(request.checkout), request.checkout, request.filter, request.attributes)
   ),
   Match.tag("View", (request) => {
     const db = prune(request.checkout);

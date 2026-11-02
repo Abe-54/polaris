@@ -15,6 +15,7 @@ import { IngestContext } from "./ingest.ts";
 import { SpanCapture, SpanCaptureFilter } from "./capture.ts";
 import { SpanStats, SpanStatsFilter } from "./stats.ts";
 import { SpanErrors, SpanErrorsFilter } from "./errors.ts";
+import { AttributeFilters } from "./attributes.ts";
 
 const OnCheckout = { checkout: Schema.String };
 
@@ -53,7 +54,11 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
     traceId: TraceIdPrefix,
     focus: Schema.Literals(["slow", "errors", "all"]),
   },
-  ToolList: { ...OnCheckout, filter: TraceFilter },
+  ToolList: {
+    ...OnCheckout,
+    filter: TraceFilter,
+    attributes: Schema.optionalKey(AttributeFilters),
+  },
   ToolSpan: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
   Stats: { ...OnCheckout, filter: SpanStatsFilter },
   Capture: { ...OnCheckout, filter: SpanCaptureFilter },
@@ -98,6 +103,8 @@ export const TraceToolPage = Schema.Struct({
   ...TracePageSchema.fields,
   history: Schema.Record(Schema.String, Schema.Number),
   errors: Schema.Record(Schema.String, Schema.String),
+  /** Set when attribute filters read only the newest Spans: the oldest Span start read. */
+  coveredSince: Schema.optionalKey(Schema.String),
 });
 
 export type TraceToolPage = typeof TraceToolPage.Type;

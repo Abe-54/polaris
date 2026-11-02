@@ -24,12 +24,13 @@ const selfOff = () =>
 
 /** The Self-Trace scope alone: Polaris's own Spans carry no Turn, so every one is listed. */
 const selfContext = (input: TracesInput): TraceToolContext => {
-  const { turn: _turn, scope: _scope, ...filter } = input;
+  const { turn: _turn, scope: _scope, attributes, ...filter } = input;
 
   return {
     checkout: SELF_CHECKOUT,
     scopes: [SELF_CHECKOUT],
     filter: { ...filter, limit: input.limit ?? 20 },
+    ...(attributes === undefined ? undefined : { attributes }),
     turn: "all",
     endpoint: null,
   };
@@ -83,7 +84,7 @@ export const sessionTraceTools = (
         message: `Turn ${requested} isn't in this agent session.`,
         fix: "Use an existing turn number or turn all.",
       });
-    const { turn: _turn, scope: _scope, ...filter } = input;
+    const { turn: _turn, scope: _scope, attributes, ...filter } = input;
     const self = yield* selfReadable(context.workspaceId);
 
     return {
@@ -95,6 +96,7 @@ export const sessionTraceTools = (
         ...(requested === "all" ? undefined : { turn: turn?.id ?? null }),
       },
       turn: requested === "all" ? "all" : (turn?.number ?? null),
+      ...(attributes === undefined ? undefined : { attributes }),
       endpoint: setup.endpoint,
     } satisfies TraceToolContext;
   });
@@ -111,7 +113,7 @@ export const sessionTraceTools = (
       return selfContext(input);
     }),
     list: Effect.fnUntraced(function* (context) {
-      const page = yield* store.toolList(context.checkout, context.filter);
+      const page = yield* store.toolList(context.checkout, context.filter, context.attributes);
 
       if (page.total > 0 || (yield* store.list(context.checkout, { limit: 1 })).total > 0)
         return page;

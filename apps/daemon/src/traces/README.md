@@ -163,6 +163,12 @@ URLs, UUIDs, paths, hex and random ids and numbers replaced. It range-scans `spa
 status, age)` with `status='error'` under the same 20,000-Span cap, reading the status message (or
 the first exception event's message) with `json_extract`, so nothing new is stored at ingest.
 
+Attribute filters (`attributes.ts`, ENG-753) are `json_extract(value, ?) IN (?, ?)` clauses whose
+JSON path is a bound parameter; keys are limited to `[A-Za-z0-9_.:-]` so the path can't be escaped.
+In `stats` they and the `attribute` group key ride the same window scan. `toolList(checkout,
+filter, attributes)` has no window, so it matches only the checkout's newest 20,000 Spans, read off
+`spans_retention` before the filter, and its page carries `coveredSince` when that cut anything.
+
 ## Phase 2 contracts (ENG-657)
 
 `packages/protocol/src/traces.ts` owns these additive contracts. The phase 1

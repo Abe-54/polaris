@@ -22,6 +22,7 @@ import type { SpanStats, SpanStatsFilter } from "../../traces/stats.ts";
 import type { CaptureOptions, CaptureResult } from "../sessions/capture.ts";
 import { CAPTURE_SPAN_CAP } from "../../traces/capture.ts";
 import type { SpanErrors, SpanErrorsFilter } from "../../traces/errors.ts";
+import { AttributeFilters, AttributeKey, TRACES_ATTRIBUTE_SCAN } from "../../traces/attributes.ts";
 
 /** A week, the trace store's retention: the widest `trace_stats` window. */
 const MAX_STATS_MINUTES = 7 * 24 * 60;
@@ -41,6 +42,7 @@ export const TracesInput = Schema.Struct({
   status: Schema.optionalKey(Schema.Literals(["error", "ok"])),
   minMs: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))),
+  attributes: Schema.optionalKey(AttributeFilters),
   scope: Schema.optionalKey(TraceScopeInput),
 });
 
@@ -53,6 +55,8 @@ export const TraceStatsInput = Schema.Struct({
   name: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
   service: Schema.optionalKey(Schema.String),
   status: Schema.optionalKey(Schema.Literals(["error", "ok"])),
+  attributes: Schema.optionalKey(AttributeFilters),
+  byAttribute: Schema.optionalKey(AttributeKey),
   by: Schema.optionalKey(Schema.Literals(["name", "service", "both"])),
   sort: Schema.optionalKey(Schema.Literals(["count", "errors", "slow"])),
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
@@ -92,6 +96,8 @@ export interface TraceToolContext {
   readonly scopes: ReadScopes;
   readonly endpoint: string | null;
   readonly filter: TraceFilter;
+  /** Span attribute equalities for `traces`; they read only the newest Spans. */
+  readonly attributes?: AttributeFilters;
   readonly turn: number | "all" | null;
 }
 
@@ -111,6 +117,7 @@ export interface TraceSessionTools {
       total: number;
       history: Record<string, number>;
       errors: Record<string, string>;
+      coveredSince?: string;
     },
     TraceError
   >;
@@ -187,6 +194,7 @@ const listView = (
     total: number;
     history: Record<string, number>;
     errors: Record<string, string>;
+    coveredSince?: string;
   },
   turn: TraceToolContext["turn"]
 ) => {
@@ -203,10 +211,15 @@ const listView = (
     Match.orElse((number) => `Turn ${number}`)
   );
 
+  const scanned =
+    page.coveredSince === undefined
+      ? ""
+      : `\nAttribute filters read only the newest ${TRACES_ATTRIBUTE_SCAN} spans, from ${page.coveredSince}.`;
+
   let count = rows.length;
 
   const title = () =>
-    `${label} · ${page.total} traces${count < page.total ? ` (${count} shown of ${page.total}; add limit or narrow filters)` : ""}`;
+    `${label} · ${page.total} traces${count < page.total ? ` (${count} shown of ${page.total}; add limit or narrow filters)` : ""}${scanned}`;
 
   while (count > 0 && [title(), ...rows.slice(0, count)].join("\n").length > TRACE_CAP) count--;
 
@@ -226,7 +239,13 @@ const listView = (
       : { slow: { usualMs: page.history[trace.id]! } }),
   }));
 
-  return { text: [title(), ...rows.slice(0, count)].join("\n"), data: { traces } };
+  return {
+    text: [title(), ...rows.slice(0, count)].join("\n"),
+    data: {
+      traces,
+      ...(page.coveredSince === undefined ? undefined : { coveredSince: page.coveredSince }),
+    },
+  };
 };
 
 /** The window's start for a `sinceMinutes` input, default an hour. */
@@ -283,7 +302,7 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
   return [
     make(
       "traces",
-      "List this checkout's traces, newest first. Defaults to the current turn; turn all includes every turn. Filter by root route glob, service, status or minMs; limit defaults to 20, at most 50. scope self lists Polaris's own traces (Daemon and apps) while Developer Mode is on.",
+      "List this checkout's traces, newest first. Defaults to the current turn; turn all includes every turn. Filter by root route glob, service, status, minMs or attributes (up to 5 {key, value} equalities; a trace matches when one of its spans among the newest 20,000 has them all); limit defaults to 20, at most 50. scope self lists Polaris's own traces (Daemon and apps) while Developer Mode is on.",
       TracesInput,
       (input, traces) =>
         Effect.gen(function* () {
@@ -325,23 +344,24 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
     ),
     make(
       "trace_stats",
-      "Count spans by name and/or service over the last sinceMinutes (default 60, at most a week): count, errors, p50/p95/max ms, latest start and an example trace and span (an errored one when there are errors). name matches a case-insensitive substring; filter by service or status; by name, service or both (default); sort count (default), errors or slow (p95); limit groups (default 20, at most 100). Reads at most the newest 20,000 matching spans. scope self reads Polaris's own spans while Developer Mode is on.",
+      "Count spans by name and/or service over the last sinceMinutes (default 60, at most a week): count, errors, p50/p95/max ms, latest start and an example trace and span (an errored one when there are errors). name matches a case-insensitive substring; filter by service, status or attributes (up to 5 {key, value} equalities on span attributes); by name, service or both (default); byAttribute groups by one attribute's value (alone, unless by is given); sort count (default), errors or slow (p95); limit groups (default 20, at most 100). Reads at most the newest 20,000 matching spans. scope self reads Polaris's own spans while Developer Mode is on.",
       TraceStatsInput,
       (input, traces) =>
         Effect.gen(function* () {
           const context = yield* traces.context(sessionId, scoped(input.scope));
           const window = yield* windowOf(input.sinceMinutes);
-          const { sinceMinutes: _since, scope: _scope, ...filters } = input;
+          const { sinceMinutes: _since, scope: _scope, byAttribute, ...filters } = input;
 
           const stats = yield* traces.stats(context, {
             ...filters,
             sinceMs: window.sinceMs,
-            by: input.by ?? "both",
+            by: input.by ?? (byAttribute === undefined ? "both" : "none"),
+            ...(byAttribute === undefined ? undefined : { attribute: byAttribute }),
             sort: input.sort ?? "count",
             limit: input.limit ?? 20,
           });
 
-          return viewResult(statsView(stats, window));
+          return viewResult(statsView(stats, { ...window, attribute: byAttribute }));
         })
     ),
     make(

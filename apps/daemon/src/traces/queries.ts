@@ -10,6 +10,7 @@ import {
   type SpanDetail,
 } from "@polaris/protocol";
 import { decodeValueRows, refreshSummary, sortableTime } from "./database.ts";
+import { attributeCoverage, attributeTraces, type AttributeFilters } from "./attributes.ts";
 
 const decodeSummary = Schema.decodeUnknownSync(Schema.fromJsonString(TraceSummary));
 
@@ -50,7 +51,7 @@ const globLike = (glob: string): string =>
     return `\\${char}`;
   });
 
-const where = (checkout: string, filter: TraceFilter) => {
+const where = (checkout: string, filter: TraceFilter, attributes: AttributeFilters) => {
   const clauses = ["s.checkout=?"];
   const bindings: SQLQueryBindings[] = [checkout];
 
@@ -74,11 +75,22 @@ const where = (checkout: string, filter: TraceFilter) => {
   if (filter.status !== undefined)
     clauses.push(filter.status === "error" ? "s.errors>0" : "s.errors=0");
 
+  if (attributes.length > 0) {
+    const matched = attributeTraces(checkout, attributes);
+    clauses.push(matched.sql);
+    bindings.push(...matched.bindings);
+  }
+
   return { sql: clauses.join(" AND "), bindings };
 };
 
-export const listTraces = (db: Database, checkout: string, filter: TraceFilter = {}) => {
-  const query = where(checkout, filter);
+export const listTraces = (
+  db: Database,
+  checkout: string,
+  filter: TraceFilter = {},
+  attributes: AttributeFilters = []
+) => {
+  const query = where(checkout, filter, attributes);
 
   const total = decodeCount(
     db.query(`SELECT count(*) AS count FROM summaries s WHERE ${query.sql}`).get(...query.bindings)
@@ -265,8 +277,13 @@ export const traceHistory = (
 };
 
 /** Only one indexed error record per listed trace crosses the SQLite boundary. */
-export const listToolTraces = (db: Database, checkout: string, filter: TraceFilter) => {
-  const page = listTraces(db, checkout, filter);
+export const listToolTraces = (
+  db: Database,
+  checkout: string,
+  filter: TraceFilter,
+  attributes: AttributeFilters = []
+) => {
+  const page = listTraces(db, checkout, filter, attributes);
   const errors: Record<string, string> = {};
   const history: Record<string, number> = {};
 
@@ -309,7 +326,9 @@ export const listToolTraces = (db: Database, checkout: string, filter: TraceFilt
       history[trace.id] = root;
   }
 
-  return { ...page, history, errors };
+  const coveredSince = attributes.length > 0 ? attributeCoverage(db, checkout) : null;
+
+  return { ...page, history, errors, ...(coveredSince === null ? undefined : { coveredSince }) };
 };
 
 /** Span-level overlap, including traces older than the newest listing page. */

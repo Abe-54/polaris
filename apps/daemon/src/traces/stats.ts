@@ -1,6 +1,7 @@
 /** Span aggregation for the `trace_stats` tool: one bounded, index-ordered scan of a time window. */
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { Match, Schema } from "effect";
+import { AttributeFilters, AttributeKey, attributeClauses, attributePath } from "./attributes.ts";
 
 /** At most this many matching Spans, newest first, are aggregated per call. */
 export const STATS_SCAN_CAP = 20_000;
@@ -12,16 +13,25 @@ export const SpanStatsFilter = Schema.Struct({
   name: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
   service: Schema.optionalKey(Schema.String),
   status: Schema.optionalKey(Schema.Literals(["error", "ok"])),
-  by: Schema.Literals(["name", "service", "both"]),
+  /** Span attribute equalities, all of which must hold. */
+  attributes: Schema.optionalKey(AttributeFilters),
+  /** `none` groups by `attribute` alone. */
+  by: Schema.Literals(["name", "service", "both", "none"]),
+  /** Also groups by this Span attribute's value. */
+  attribute: Schema.optionalKey(AttributeKey),
   sort: Schema.Literals(["count", "errors", "slow"]),
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
 });
 
 export type SpanStatsFilter = typeof SpanStatsFilter.Type;
 
+const AttributeValue = Schema.NullOr(Schema.Union([Schema.String, Schema.Number]));
+
 export const SpanStatsGroup = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   service: Schema.optionalKey(Schema.String),
+  /** The grouped attribute's value, null where a Span lacks it; present only with `attribute`. */
+  attribute: Schema.optionalKey(AttributeValue),
   count: Schema.Number,
   errors: Schema.Number,
   p50Ms: Schema.Number,
@@ -53,6 +63,7 @@ const Row = Schema.Struct({
   error: Schema.Number,
   duration: Schema.Number,
   age: Schema.Number,
+  attribute: AttributeValue,
 });
 
 type Row = typeof Row.Type;
@@ -78,17 +89,21 @@ const statsQuery = (checkout: string, filter: SpanStatsFilter, cap: number) => {
 
   if (filter.status !== undefined)
     clauses.push(filter.status === "error" ? "status='error'" : "status<>'error'");
+  const attributes = attributeClauses(filter.attributes);
+  const grouped = filter.attribute === undefined ? [] : [attributePath(filter.attribute)];
 
   return {
     sql: `SELECT trace_id AS trace,id AS span,coalesce(name,'') AS name,service,status='error' AS error,
-      coalesce(duration,0) AS duration,age FROM spans WHERE ${clauses.join(" AND ")} ORDER BY age DESC LIMIT ?`,
-    bindings: [...bindings, cap + 1],
+      coalesce(duration,0) AS duration,age,${grouped.length > 0 ? "json_extract(value,?)" : "NULL"} AS attribute
+      FROM spans WHERE ${[...clauses, ...attributes.clauses].join(" AND ")} ORDER BY age DESC LIMIT ?`,
+    bindings: [...grouped, ...bindings, ...attributes.bindings, cap + 1],
   };
 };
 
 interface Bucket {
   readonly name: string;
   readonly service: string;
+  readonly attribute: Row["attribute"];
   readonly durations: number[];
   errors: number;
   latest: number;
@@ -96,21 +111,26 @@ interface Bucket {
   slowest: Row;
 }
 
-const keyOf = (by: SpanStatsFilter["by"], row: Row) =>
-  Match.value(by).pipe(
-    Match.when("name", () => row.name),
-    Match.when("service", () => row.service),
-    Match.orElse(() => JSON.stringify([row.name, row.service]))
-  );
+const byName = (filter: SpanStatsFilter) => filter.by === "name" || filter.by === "both";
 
-const add = (buckets: Map<string, Bucket>, by: SpanStatsFilter["by"], row: Row) => {
-  const key = keyOf(by, row);
+const byService = (filter: SpanStatsFilter) => filter.by === "service" || filter.by === "both";
+
+const keyOf = (filter: SpanStatsFilter, row: Row) =>
+  JSON.stringify([
+    byName(filter) ? row.name : null,
+    byService(filter) ? row.service : null,
+    filter.attribute === undefined ? null : row.attribute,
+  ]);
+
+const add = (buckets: Map<string, Bucket>, filter: SpanStatsFilter, row: Row) => {
+  const key = keyOf(filter, row);
   const bucket = buckets.get(key);
 
   if (bucket === undefined) {
     buckets.set(key, {
       name: row.name,
       service: row.service,
+      attribute: row.attribute,
       durations: [row.duration],
       errors: row.error,
       latest: row.age,
@@ -133,13 +153,14 @@ const add = (buckets: Map<string, Bucket>, by: SpanStatsFilter["by"], row: Row) 
 const nearestRank = (sorted: ReadonlyArray<number>, rank: number) =>
   sorted[Math.max(0, Math.ceil(sorted.length * rank) - 1)]!;
 
-const groupOf = (by: SpanStatsFilter["by"], bucket: Bucket): SpanStatsGroup => {
+const groupOf = (filter: SpanStatsFilter, bucket: Bucket): SpanStatsGroup => {
   const sorted = bucket.durations.toSorted((a, b) => a - b);
   const example = bucket.error ?? bucket.slowest;
 
   return {
-    ...(by === "service" ? undefined : { name: bucket.name }),
-    ...(by === "name" ? undefined : { service: bucket.service }),
+    ...(byName(filter) ? { name: bucket.name } : undefined),
+    ...(byService(filter) ? { service: bucket.service } : undefined),
+    ...(filter.attribute === undefined ? undefined : { attribute: bucket.attribute }),
     count: sorted.length,
     errors: bucket.errors,
     p50Ms: nearestRank(sorted, 0.5),
@@ -161,7 +182,8 @@ const order = (sort: SpanStatsFilter["sort"]) => (a: SpanStatsGroup, b: SpanStat
     primary ||
     b.count - a.count ||
     b.errors - a.errors ||
-    (a.name ?? "").localeCompare(b.name ?? "")
+    (a.name ?? "").localeCompare(b.name ?? "") ||
+    String(a.attribute ?? "").localeCompare(String(b.attribute ?? ""))
   );
 };
 
@@ -178,10 +200,10 @@ export const spanStats = (
   const read = truncated ? rows.slice(0, cap) : rows;
   const buckets = new Map<string, Bucket>();
 
-  for (const row of read) add(buckets, filter.by, row);
+  for (const row of read) add(buckets, filter, row);
 
   const groups = [...buckets.values()]
-    .map((bucket) => groupOf(filter.by, bucket))
+    .map((bucket) => groupOf(filter, bucket))
     .toSorted(order(filter.sort));
 
   return {

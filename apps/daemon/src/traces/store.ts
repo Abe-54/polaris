@@ -131,8 +131,15 @@ export const traceStoreLayerAt = (filename: string, options: TraceWorkerOptions 
         list,
         view: (checkout, traceId, focus) =>
           read(TraceWorkerRequest.cases.View.make({ checkout, traceId, focus }), TraceView),
-        toolList: (checkout, filter) =>
-          read(TraceWorkerRequest.cases.ToolList.make({ checkout, filter }), TraceToolPage),
+        toolList: (checkout, filter, attributes) =>
+          read(
+            TraceWorkerRequest.cases.ToolList.make({
+              checkout,
+              filter,
+              ...(attributes === undefined ? undefined : { attributes }),
+            }),
+            TraceToolPage
+          ),
         toolSpan: (checkout, traceId, spanId) =>
           read(
             TraceWorkerRequest.cases.ToolSpan.make({ checkout, traceId, spanId }),

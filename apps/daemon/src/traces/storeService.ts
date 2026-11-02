@@ -17,6 +17,7 @@ import type { TracePage } from "./store.ts";
 import type { SpanStats, SpanStatsFilter } from "./stats.ts";
 import type { SpanCapture, SpanCaptureFilter } from "./capture.ts";
 import type { SpanErrors, SpanErrorsFilter } from "./errors.ts";
+import type { AttributeFilters } from "./attributes.ts";
 
 export class TraceStore extends Context.Service<
   TraceStore,
@@ -41,7 +42,8 @@ export class TraceStore extends Context.Service<
     ) => Effect.Effect<TraceView, TraceError>;
     readonly toolList: (
       checkout: string,
-      filter: TraceFilter
+      filter: TraceFilter,
+      attributes?: AttributeFilters
     ) => Effect.Effect<TraceToolPage, TraceError>;
     readonly toolSpan: (
       checkout: string,

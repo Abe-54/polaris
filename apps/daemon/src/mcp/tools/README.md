@@ -52,6 +52,7 @@ A remote source without approval opens X's needs-you card. The call's deadline s
 
 `traces`, `trace`, `span`, `trace_stats`, `trace_capture` and `trace_errors` are read-only on the same shared tail as Data. They resolve checkout
 and current Turn through the Host's existing trace services; tools never accept a session or path.
+`traces` and `trace_stats` take span attribute equality filters (keys validated, bound as JSON paths).
 The summary keeps error paths, then the critical chain, and collapses repeated siblings.
 SLOW requires five earlier samples, over 20 ms and over three times the median. Text caps name
 folded Spans or omitted sections; structuredContent retains the displayed data. See

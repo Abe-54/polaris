@@ -10,8 +10,9 @@ interface StatsView {
 
 const cell = (value: string) => clipped(inline(value), 200, "value", "trace_stats");
 
-const row = (group: SpanStatsGroup) =>
+const row = (group: SpanStatsGroup, attribute: string | undefined) =>
   [
+    ...(attribute === undefined ? [] : [cell(`${attribute}=${group.attribute ?? "(none)"}`)]),
     ...(group.name === undefined ? [] : [cell(group.name)]),
     ...(group.service === undefined ? [] : [cell(group.service)]),
     `×${group.count}`,
@@ -26,17 +27,21 @@ const row = (group: SpanStatsGroup) =>
 /** One line per group, trimmed from the end to fit the shared 16,000-character cap. */
 export const statsView = (
   stats: SpanStats,
-  window: { readonly since: string; readonly minutes: number }
+  window: {
+    readonly since: string;
+    readonly minutes: number;
+    readonly attribute?: string | undefined;
+  }
 ) => {
   const scope = `Spans since ${window.since} (last ${window.minutes} min)`;
 
   if (stats.spans === 0)
     return {
-      text: `${scope} · none matched. Widen sinceMinutes or loosen name, service or status.`,
+      text: `${scope} · none matched. Widen sinceMinutes or loosen name, service, status or attributes.`,
       data: { groups: [], groupCount: 0, spans: 0, truncated: false, since: window.since },
     } satisfies StatsView;
 
-  const rows = stats.groups.map(row);
+  const rows = stats.groups.map((group) => row(group, window.attribute));
   let count = rows.length;
 
   const capped = stats.truncated
