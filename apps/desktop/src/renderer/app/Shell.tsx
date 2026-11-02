@@ -10,6 +10,7 @@ import { TracesMode } from "../features/traces/index.ts";
 import { EditMode } from "../features/editor/explorer/index.ts";
 import { Arcade } from "../features/arcade/index.ts";
 import { CommandPalette } from "../features/palette/index.ts";
+import { PaneBoundary } from "../features/crash/index.ts";
 import { preloadReview } from "../features/review/index.ts";
 import { SettingsPage } from "../features/settings/index.ts";
 import { useTerminalKey } from "../features/terminal/index.ts";
@@ -22,6 +23,8 @@ import { TitleBar } from "../shell/TitleBar.tsx";
 import { TopBar } from "../shell/TopBar.tsx";
 import { slots } from "./slots.tsx";
 
+const MODE_VIEWS = { edit: EditMode, data: DataMode, traces: TracesMode } as const;
+
 /** Review: the subject open (`routes/review.ts`), or the pull request list. */
 const Review = () => {
   const subject = useReviewSubject();
@@ -32,28 +35,43 @@ const Review = () => {
 
   return (
     <main className="flex min-h-0 flex-1 flex-col">
-      {subject === null ? (
-        <slots.PullRequests onAddAccount={() => openSettings("github", { adding: true })} />
-      ) : (
-        <slots.ReviewSubject subject={subject} onBack={closeReviewSubject} />
-      )}
+      <PaneBoundary pane="review" resetOn={subject}>
+        {subject === null ? (
+          <slots.PullRequests onAddAccount={() => openSettings("github", { adding: true })} />
+        ) : (
+          <slots.ReviewSubject subject={subject} onBack={closeReviewSubject} />
+        )}
+      </PaneBoundary>
     </main>
   );
 };
 
-/** Settings replaces the three zones (DESIGN.md, Settings); otherwise the mode's view. */
+/**
+ * Settings replaces the three zones (DESIGN.md, Settings); otherwise the mode's view. Each pane
+ * has its own keyed boundary, so a crash stays in it (ENG-757).
+ */
 const Body = () => {
-  const { mode, settings } = useSelection();
+  const { mode, settings, sessionId } = useSelection();
 
-  if (settings !== null) return <SettingsPage route={settings} />;
+  if (settings !== null) {
+    return (
+      <PaneBoundary key="settings" pane="settings">
+        <SettingsPage route={settings} />
+      </PaneBoundary>
+    );
+  }
 
-  if (mode === "review") return <Review />;
+  if (mode === "review") return <Review key="review" />;
 
-  if (mode === "edit") return <EditMode />;
+  if (mode === "edit" || mode === "data" || mode === "traces") {
+    const View = MODE_VIEWS[mode];
 
-  if (mode === "data") return <DataMode />;
-
-  if (mode === "traces") return <TracesMode />;
+    return (
+      <PaneBoundary key={mode} pane={mode}>
+        <View />
+      </PaneBoundary>
+    );
+  }
 
   // Panels on a ground, the horizon behind them along the window's foot (DESIGN.md, Chrome redesign).
   return (
@@ -61,7 +79,9 @@ const Body = () => {
       <TopBar />
       <main className="flex min-h-0 flex-1 gap-2 pr-2">
         <Sidebar />
-        <Columns />
+        <PaneBoundary pane="session" resetOn={sessionId}>
+          <Columns />
+        </PaneBoundary>
       </main>
       <Horizon />
     </div>

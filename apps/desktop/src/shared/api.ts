@@ -141,6 +141,8 @@ export const CHANNELS = {
   app: "polaris:app",
   /** renderer → main, `send(selfSpans, SelfSpan[])`: only while Self-Traces are on. */
   selfSpans: "polaris:selfSpans",
+  /** renderer → main, `send(crash, RendererCrash)`: to the crash log (shared/crash.ts). */
+  crash: "polaris:crash",
 } as const;
 
 /** A failure crossing IPC: the tagged error's tag and message, nothing that can't be cloned. */
@@ -718,6 +720,8 @@ export interface PolarisApi {
   ) => Promise<Result<RequestOutput<M>>>;
   /** Sends the renderer's ended Spans to main; call only while Self-Traces are on. */
   readonly selfSpans?: (spans: ReadonlyArray<import("@polaris/protocol").SelfSpan>) => void;
+  /** Records a renderer crash in main's crash log; absent in previews and older preloads. */
+  readonly reportCrash?: (report: import("./crash.ts").RendererCrash) => void;
   /** Opens a live feed; call the returned function to close it. */
   readonly subscribe: <K extends SubscriptionKind>(
     kind: K,

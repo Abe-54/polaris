@@ -59,6 +59,13 @@ import { registerIpc } from "./ipc/index.ts";
 import { createDesktopSelfTraces } from "./selfTraces/index.ts";
 import { connectSelfTraces } from "./selfTraces/electron.ts";
 import { developerModeSource } from "./selfTraces/adapter.ts";
+import {
+  crashRecorder,
+  crashSpans,
+  createCrashLog,
+  rendererCrashEntry,
+  watchWindowCrashes,
+} from "./crashes/index.ts";
 import { type Browsers, createBrowsers } from "./browser/index.ts";
 import { cdpTabsOf, electronCdpVersions, hostBrowsers } from "./browserCdp/index.ts";
 import { registerLanguageIpc } from "./ipc/languages.ts";
@@ -134,6 +141,8 @@ nameApp();
 
 if (env.POLARIS_DESKTOP_USER_DATA !== undefined) {
   app.setPath("userData", env.POLARIS_DESKTOP_USER_DATA);
+  // Scripts and smoke runs keep their crash log with their throwaway userData.
+  app.setAppLogsPath(join(env.POLARIS_DESKTOP_USER_DATA, "logs"));
 }
 
 // Screenshot runs draw another OS's chrome on this one; a release (app.asar) never pretends.
@@ -418,6 +427,11 @@ const start = async () => {
     source: developerModeSource(LOCAL_HOST_KEY, hostDeveloperModes),
   });
 
+  const recordCrash = crashRecorder(
+    createCrashLog({ dir: app.getPath("logs"), version: app.getVersion() }).write,
+    crashSpans(selfTraces.tracer)
+  );
+
   runtime = startClientRuntime(
     {
       rpc: { traceContext: selfTraces.enabled },
@@ -526,6 +540,7 @@ const start = async () => {
     runtime,
     trusted,
     selfTraces,
+    crashes: (report) => recordCrash(rendererCrashEntry(report)),
     context: {
       selfTracesEnabled: selfTraces.enabled,
       browser: browsers,
@@ -604,6 +619,8 @@ const start = async () => {
     savedState: decodeWindowState(settings.window),
     saveState: (state) => saveSettings({ window: state }),
   });
+
+  watchWindowCrashes(win.webContents, recordCrash);
 
   // macOS: closing the window hides it, so the star, notifications and badge keep counting.
   if (process.platform === "darwin") {

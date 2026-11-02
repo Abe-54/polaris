@@ -17,6 +17,7 @@ import {
 import { windowSubscriptions, type WindowSubscriptions } from "./subscriptions.ts";
 import { PredictionNotifications } from "../../shared/predictionOutcomes.ts";
 import { decodeRendererSpans, type DesktopSelfTraces } from "../selfTraces/index.ts";
+import { RendererCrash } from "../../shared/crash.ts";
 
 export interface IpcInput {
   readonly runtime: ClientRuntime;
@@ -25,6 +26,8 @@ export interface IpcInput {
   readonly trusted: (url: string) => boolean;
   /** Self-Traces (ADR 0095): the renderer's Spans and the Trace a request runs in. */
   readonly selfTraces?: Pick<DesktopSelfTraces, "ingestRenderer" | "withRendererTrace">;
+  /** A renderer crash, decoded, for the crash log (main/crashes). */
+  readonly crashes?: (report: RendererCrash) => void;
 }
 
 const decodeRequest = flow(
@@ -36,6 +39,8 @@ const decodeSubscribe = Schema.decodeUnknownOption(SubscribeEnvelope);
 
 const decodeUnsubscribe = Schema.decodeUnknownOption(UnsubscribeEnvelope);
 
+const decodeCrash = Schema.decodeUnknownOption(RendererCrash);
+
 const rejected = (message: string): Result<never> => ({
   ok: false,
   error: { code: "Forbidden", message },
@@ -44,7 +49,7 @@ const rejected = (message: string): Result<never> => ({
 const senderTrusted = (frame: WebFrameMain | null, trusted: IpcInput["trusted"]) =>
   frame !== null && trusted(frame.url);
 
-export const registerIpc = ({ runtime, context, trusted, selfTraces }: IpcInput) => {
+export const registerIpc = ({ runtime, context, trusted, selfTraces, crashes }: IpcInput) => {
   const handlers = requestHandlers(context);
   const windows = new Map<number, WindowSubscriptions>();
 
@@ -122,6 +127,11 @@ export const registerIpc = ({ runtime, context, trusted, selfTraces }: IpcInput)
     Option.map(decodeRendererSpans(message), (spans) => selfTraces?.ingestRenderer(spans));
   });
 
+  ipcMain.on(CHANNELS.crash, (event, message) => {
+    if (!senderTrusted(event.senderFrame, trusted)) return;
+    Option.map(decodeCrash(message), (report) => crashes?.(report));
+  });
+
   ipcMain.on(CHANNELS.subscribe, (event, message) => {
     if (!senderTrusted(event.senderFrame, trusted)) return;
 
@@ -145,6 +155,7 @@ export const registerIpc = ({ runtime, context, trusted, selfTraces }: IpcInput)
       ipcMain.removeAllListeners(CHANNELS.predictionOutcome);
       ipcMain.removeAllListeners(CHANNELS.predictionKeystrokes);
       ipcMain.removeAllListeners(CHANNELS.selfSpans);
+      ipcMain.removeAllListeners(CHANNELS.crash);
     },
   };
 };

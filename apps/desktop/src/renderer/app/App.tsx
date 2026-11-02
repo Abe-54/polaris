@@ -24,6 +24,7 @@ import { PullsPublisher } from "../features/pulls/index.ts";
 // Not the feature's index: that loads the Review view's chunk.
 import { CheckoutPublisher } from "../features/review/checkout/Publisher.tsx";
 import { writeClipboard } from "../features/clipboard.ts";
+import { PaneBoundary } from "../features/crash/index.ts";
 import { Shell } from "./Shell.tsx";
 
 export interface AppProps {
@@ -36,27 +37,29 @@ const settled = settledOnboarding();
 
 export const App = ({ value, onboarding = settled }: AppProps) => (
   <StrictMode>
-    <AppProvider value={value}>
-      <OnboardingProvider value={onboarding}>
-        <CopyProvider write={writeClipboard}>
-          <TooltipProvider>
-            <Shell />
-            <NeedsYouPublisher />
-            <ConstellationDefaultsPublisher />
-            <IdleCompactionPublisher />
-            <VisualsPublisher />
-            <DeveloperModePublisher />
-            <PullsPublisher />
-            <CheckoutPublisher />
-            <LinkedPullsPublisher />
-            <ConstellationFeeds />
-            <BrowserForget />
-            <BrowserWorking />
-            <UpgradeStatusPublisher />
-            <Toaster />
-          </TooltipProvider>
-        </CopyProvider>
-      </OnboardingProvider>
-    </AppProvider>
+    <PaneBoundary pane="shell">
+      <AppProvider value={value}>
+        <OnboardingProvider value={onboarding}>
+          <CopyProvider write={writeClipboard}>
+            <TooltipProvider>
+              <Shell />
+              <NeedsYouPublisher />
+              <ConstellationDefaultsPublisher />
+              <IdleCompactionPublisher />
+              <VisualsPublisher />
+              <DeveloperModePublisher />
+              <PullsPublisher />
+              <CheckoutPublisher />
+              <LinkedPullsPublisher />
+              <ConstellationFeeds />
+              <BrowserForget />
+              <BrowserWorking />
+              <UpgradeStatusPublisher />
+              <Toaster />
+            </TooltipProvider>
+          </CopyProvider>
+        </OnboardingProvider>
+      </AppProvider>
+    </PaneBoundary>
   </StrictMode>
 );

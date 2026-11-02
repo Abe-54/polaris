@@ -57,6 +57,7 @@ function exposePolarisApi() {
         options?.trace === undefined ? { method, input } : { method, input, trace: options.trace }
       ),
     selfSpans: (spans) => ipcRenderer.send(CHANNELS.selfSpans, spans),
+    reportCrash: (report) => ipcRenderer.send(CHANNELS.crash, report),
     subscribe: (kind, input, listener) => {
       const id = nextId++;
 

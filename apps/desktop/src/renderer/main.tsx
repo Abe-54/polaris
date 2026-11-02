@@ -27,6 +27,9 @@ import { workspaceCommands } from "./shell/visibility.ts";
 import { send } from "./features/session/dispatch.ts";
 import { connect } from "./store/store.ts";
 import { actionTraces, connectSelfTraces, traceRequests } from "./features/selfTraces/index.ts";
+import { installCrashReporting } from "./features/crash/index.ts";
+
+installCrashReporting();
 
 /** Requests join the user action that caused them (features/selfTraces/actions.ts). */
 const api = traceRequests(window.polaris);
