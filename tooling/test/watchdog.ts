@@ -8,11 +8,14 @@
  *
  * With `--parallel=N` or `--isolate`, bun's reporter interleaves the files and never says
  * when one ends, so the watchdog adds a preload (`progress.ts`) that marks each file's start and end.
+ *
+ * Local runs are parallel by default (`parallel.ts`); `POLARIS_TEST_PARALLEL=N` overrides, 1 is serial.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { PROGRESS_MARKER } from "./marker.ts";
+import { parallelFlags } from "./parallel.ts";
 
 /** What the run has shown so far, read from bun's per-file reporter and the progress markers. */
 interface Progress {
@@ -139,7 +142,8 @@ const descendants = (root: number): ReadonlyArray<number> => {
   return found;
 };
 
-const run = async (args: ReadonlyArray<string>): Promise<number> => {
+const run = async (given: ReadonlyArray<string>): Promise<number> => {
+  const args = [...parallelFlags(given, process.env), ...given];
   const stallSeconds = Number(process.env.POLARIS_TEST_STALL_S ?? 300);
   const isolated = args.some((arg) => ISOLATING.test(arg));
   const env = { ...process.env };

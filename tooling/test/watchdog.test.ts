@@ -34,7 +34,8 @@ const watch = async (
   dir: string,
   stallSeconds = 1,
   githubActions = false,
-  args: ReadonlyArray<string> = []
+  args: ReadonlyArray<string> = [],
+  parallel = "1"
 ) => {
   const proc = Bun.spawn(["bun", WATCHDOG, ...args], {
     cwd: dir,
@@ -42,6 +43,7 @@ const watch = async (
       ...process.env,
       POLARIS_TEST_STALL_S: String(stallSeconds),
       GITHUB_ACTIONS: githubActions ? "true" : "",
+      POLARIS_TEST_PARALLEL: parallel,
       CLAUDECODE: "",
       AI_AGENT: "",
       CLAUDE_CODE_ENTRYPOINT: "",
@@ -121,6 +123,28 @@ describe("the test watchdog", () => {
 
       expect(code).toBe(exit);
       expect(output).not.toContain("stalled");
+    },
+    20_000
+  );
+
+  /** Each file waits for the other's flag, so the run passes only when both run at once. */
+  const rendezvous = (mine: string, theirs: string) =>
+    `import { test } from "bun:test";\nimport { existsSync, writeFileSync } from "node:fs";\ntest("meets", async () => {\n  writeFileSync("${mine}", "");\n  while (!existsSync("${theirs}")) await Bun.sleep(20);\n}, 4_000);\n`;
+
+  test.each([
+    ["runs files in parallel", "2", 0],
+    ["runs files one at a time when set to 1", "1", 1],
+  ])(
+    "with no scheduling flags, POLARIS_TEST_PARALLEL %s",
+    async (_, parallel, exit) => {
+      const dir = suite({
+        "a.test.ts": rendezvous("a.flag", "b.flag"),
+        "b.test.ts": rendezvous("b.flag", "a.flag"),
+      });
+
+      const { code } = await watch(dir, 30, false, [], parallel);
+
+      expect(code).toBe(exit);
     },
     20_000
   );

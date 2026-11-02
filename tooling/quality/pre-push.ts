@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
  * pre-push: for each pushed ref, checks formatting and lint on the changed files
- * (without writing), then typechecks and tests the changed packages and their
- * dependents through turbo. Git passes `<local ref> <local sha> <remote ref> <remote sha>`
+ * (without writing), then through turbo typechecks the changed packages and their
+ * dependents and tests the changed packages. Git passes `<local ref> <local sha> <remote ref> <remote sha>`
  * lines on stdin.
  */
 import { join } from "node:path";
@@ -19,6 +19,14 @@ const git = (...args: ReadonlyArray<string>) => {
 /** The commit a push is measured from: the remote tip, or where a new branch left main. */
 const baseOf = (localSha: string, remoteSha: string) =>
   ZERO.test(remoteSha) ? git("merge-base", localSha, "origin/main") : remoteSha;
+
+const turbo = (task: string, filter: string) => [
+  join(ROOT, "node_modules/.bin/turbo"),
+  "run",
+  task,
+  filter,
+  "--output-logs=errors-only",
+];
 
 const stepsFor = (base: string, head: string): ReadonlyArray<Step> => {
   const files = (git("diff", "--name-only", "--diff-filter=ACMR", `${base}..${head}`) ?? "")
@@ -39,16 +47,11 @@ const stepsFor = (base: string, head: string): ReadonlyArray<Step> => {
   return [
     ...planChecks(files, "check"),
     {
-      label: "typecheck and test the changed packages",
-      command: [
-        join(ROOT, "node_modules/.bin/turbo"),
-        "run",
-        "typecheck",
-        "test",
-        `--filter=...[${base}...${head}]`,
-        "--output-logs=errors-only",
-      ],
+      label: "typecheck the changed packages and their dependents",
+      command: turbo("typecheck", `--filter=...[${base}...${head}]`),
     },
+    // Dependents' tests are CI's job; a push tests only the packages it changed.
+    { label: "test the changed packages", command: turbo("test", `--filter=[${base}...${head}]`) },
     ...scripts,
   ];
 };

@@ -22,7 +22,11 @@
       ]
     },
     "typecheck": { "dependsOn": ["^typecheck"] },
-    "test": { "dependsOn": ["^build"], "env": ["POLARIS_PBT_*", "POLARIS_EXPECT_ELEVATED"] },
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["POLARIS_PBT_*", "POLARIS_EXPECT_ELEVATED"],
+      "passThroughEnv": ["POLARIS_TEST_PARALLEL", "CI"]
+    },
     "dev": { "cache": false, "persistent": true },
     "bench": {
       "cache": false,
