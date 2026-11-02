@@ -25,6 +25,7 @@ import { inspectPrivileges } from "./privileges.ts";
 import { localityProbe } from "./listener.ts";
 import { discover } from "./discovery.ts";
 import { cachedDiscovery } from "./discoveryCache.ts";
+import { annotateAccessChange, annotateSource } from "./spanAttributes.ts";
 import { dataPasswords } from "./passwords.ts";
 import { dataFailure, openStorage, sourceStorage, type ManualSource } from "./storage.ts";
 import { fileLocality, realFile, sqliteFile } from "./sqlite/files.ts";
@@ -528,8 +529,10 @@ export const sources = Effect.fnUntraced(function* (options: {
       yield* PubSub.publish(changes, "*");
     }),
     access: Effect.fnUntraced(function* (input) {
+      yield* annotateAccessChange(input);
       const checkout = yield* checkoutPath(input.sessionId);
       const source = yield* find(input);
+      yield* annotateSource(source);
 
       if (isDaemonSource(source)) return yield* daemonUnchangeable();
 

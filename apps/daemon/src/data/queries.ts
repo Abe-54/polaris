@@ -24,6 +24,7 @@ import { resultChunks } from "./chunks.ts";
 import { resolveReadSource } from "./readSource.ts";
 import { writeQueries } from "./writeQueries.ts";
 import { type DataAgentContext } from "./approvalRequired.ts";
+import { annotateDescribed, annotateRead, annotateSource } from "./spanAttributes.ts";
 
 const noSession = () =>
   new DataError({
@@ -86,6 +87,7 @@ export const queries = Effect.gen(function* () {
 
     const work = Effect.gen(function* () {
       const resolved = yield* resolveReadSource(sources, input);
+      yield* annotateSource(resolved.source);
       const known = knownCredentials(resolved.connection);
       entry = new QueryLogEntry({
         ...Schema.decodeUnknownSync(Schema.Struct(QueryLogEntry.fields))(entry),
@@ -188,6 +190,7 @@ export const queries = Effect.gen(function* () {
   const describe: DataQueries["Service"]["describe"] = Effect.fnUntraced(function* (input) {
     const ctx = yield* context(input.sessionId, input);
     const resolved = yield* resolveReadSource(sources, input);
+    yield* annotateSource(resolved.source, input.table);
 
     if (input.tool !== undefined)
       yield* approvals.require(input.sessionId, resolved.source, input.turn, input.approvalId);
@@ -207,8 +210,10 @@ export const queries = Effect.gen(function* () {
       })
     );
     const result = yield* readCatalog(pools, resolved, input.table);
+    const tree = result instanceof SchemaTree;
+    yield* annotateDescribed(tree ? "tree" : "table");
 
-    if (result instanceof SchemaTree) return result;
+    if (tree) return result;
 
     if ((input.sample ?? 0) === 0) return result.detail;
 
@@ -229,6 +234,7 @@ export const queries = Effect.gen(function* () {
     Stream.unwrap(
       Effect.gen(function* () {
         const result = yield* query(input, input.limit ?? 10000, false);
+        yield* annotateRead(result);
 
         return Stream.fromIterable(resultChunks(result));
       })
@@ -240,7 +246,11 @@ export const queries = Effect.gen(function* () {
 
   return {
     ...writes,
-    query: (input) => Effect.map(query(input), (result) => new QueryResult(result)),
+    query: (input) =>
+      query(input).pipe(
+        Effect.tap(annotateRead),
+        Effect.map((result) => new QueryResult(result))
+      ),
     describe,
     queryStream,
     awaitApproval: (id, timeout) =>

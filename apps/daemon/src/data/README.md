@@ -123,6 +123,11 @@ SQL and attribution, but never bound parameters or result rows. Approval outcome
 are joined from the durable approval projection. Outside-Polaris entries are
 idempotent by Agent Session and tool item id.
 
+Self-Traces (ENG-745, `spanAttributes.ts`): `data.describe`, `data.query`, `data.query.stream`
+and `data.source.access` Spans carry `polaris.data.*` attributes: source name, engine, locality,
+the described table and which answer came back, rows returned, truncation, elapsed ms, and the
+access change asked for. Never SQL, params, row values, hosts, users or credentials.
+
 ### Execution checks
 
 ```sh
