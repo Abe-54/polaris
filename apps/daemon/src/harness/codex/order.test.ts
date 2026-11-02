@@ -75,14 +75,16 @@ const rejoin = (drive: (send: Send, h: Harness) => Effect.Effect<void, unknown>)
   const send: Send = (method, params) =>
     conn?.notify(method, { threadId: THREAD, turnId: T, ...params });
 
-  const begin = Effect.gen(function* () {
-    send("turn/started", { turn: turn(T) });
-    started(send, userMessage("u1", "sleep, then answer"));
-    started(send, commandItem("sleep", "inProgress"));
-    yield* Effect.sleep("10 millis");
-  });
+  // Waits for the session to see the command, not a fixed sleep a slow runner can outlast.
+  const begin = (h: Harness) =>
+    Effect.gen(function* () {
+      send("turn/started", { turn: turn(T) });
+      started(send, userMessage("u1", "sleep, then answer"));
+      started(send, commandItem("sleep", "inProgress"));
+      yield* h.waitFor("ItemUpdated", (e) => e.item.id === "sleep");
+    });
 
-  return withSession(handler, (h) => begin.pipe(Effect.andThen(drive(send, h))), {
+  return withSession(handler, (h) => begin(h).pipe(Effect.andThen(drive(send, h))), {
     resumeCursor: THREAD,
   });
 };

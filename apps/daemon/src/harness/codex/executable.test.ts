@@ -33,17 +33,20 @@ const fakeProc = () => {
   return proc;
 };
 
+// `/proc` is Linux's; Windows resolves these POSIX link targets to drive paths. Nothing reads it there.
+const posixLinks = test.skipIf(process.platform === "win32");
+
 const NATIVE = "/home/lucas/.codex/packages/standalone/releases/0.164.0/bin/codex";
 
 describe("the app-server's binary", () => {
-  test("is the recorded process's own when Codex runs natively", () => {
+  posixLinks("is the recorded process's own when Codex runs natively", () => {
     const proc = fakeProc();
     entry(proc, 40, NATIVE, ["codex", "app-server", "--listen", "unix:///s"]);
 
     expect(executableOf(40, proc)).toBe(NATIVE);
   });
 
-  test("is the native child an npm launcher starts, not node", () => {
+  posixLinks("is the native child an npm launcher starts, not node", () => {
     const proc = fakeProc();
     const vendored = "/home/lucas/.npm-global/lib/node_modules/@openai/codex/vendor/codex";
     entry(

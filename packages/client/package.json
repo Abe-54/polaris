@@ -23,6 +23,7 @@
     "./relay": "./src/relay/index.ts",
     "./restart": "./src/restart/index.ts",
     "./rpc": "./src/rpc.ts",
+    "./selfTraces/logger": "./src/selfTraces/logger.ts",
     "./selfTraces/logs": "./src/selfTraces/logs.ts",
     "./usage": "./src/usage/index.ts",
     "./userPath": "./src/userPath.ts",
