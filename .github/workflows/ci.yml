@@ -183,16 +183,16 @@ jobs:
         part:
           - name: Daemon 1/3
             scope: daemon
-            run: bunx turbo run test $AFFECTED --filter=@polaris/daemon -- --shard=1/3 --parallel=2
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=1/3 --parallel=2
           - name: Daemon 2/3
             scope: daemon
-            run: bunx turbo run test $AFFECTED --filter=@polaris/daemon -- --shard=2/3 --parallel=2
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=2/3 --parallel=2
           - name: Daemon 3/3
             scope: daemon
-            run: bunx turbo run test $AFFECTED --filter=@polaris/daemon -- --shard=3/3 --parallel=2
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=3/3 --parallel=2
           - name: other packages
             scope: others
-            run: bunx turbo run test $AFFECTED --filter=!@polaris/daemon --filter=!@polaris/spec
+            run: bunx turbo run test {0} --filter=!@polaris/daemon --filter=!@polaris/spec
         include:
           # Once, on Linux: they replay runtime traces through the spec, with no
           # platform-specific code under test.
@@ -200,24 +200,24 @@ jobs:
             part:
               name: spec replays
               scope: spec-replays
-              run: bunx turbo run test $AFFECTED --filter=@polaris/spec
+              run: bunx turbo run test {0} --filter=@polaris/spec
           # The whole Daemon suite on Windows; Windows ships a remote-only Client, whose
           # tests run in `platform-checks`. Tests that don't apply there skip with the gap they name.
           - os: windows-latest
             part:
               name: Daemon 1/3
               scope: daemon
-              run: bunx turbo run test $AFFECTED --filter=@polaris/daemon -- --shard=1/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
+              run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=1/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
           - os: windows-latest
             part:
               name: Daemon 2/3
               scope: daemon
-              run: bunx turbo run test $AFFECTED --filter=@polaris/daemon -- --shard=2/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
+              run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=2/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
           - os: windows-latest
             part:
               name: Daemon 3/3
               scope: daemon
-              run: bunx turbo run test $AFFECTED --filter=@polaris/daemon -- --shard=3/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
+              run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=3/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
@@ -260,10 +260,10 @@ jobs:
           "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
           "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
           "POLARIS_EXPECT_ELEVATED=1" >> $env:GITHUB_ENV
+      # {0} takes --affected on a PR. Windows keeps pwsh: under Git Bash its elevation and terminal tests fail.
       - name: Test
         if: env.RUN == 'true'
-        shell: bash
-        run: ${{ matrix.part.run }}
+        run: ${{ format(matrix.part.run, env.AFFECTED) }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always() && env.RUN == 'true' && runner.os == 'Windows'
         with:
