@@ -13,7 +13,7 @@
     "hermes:build": "bun scripts/buildHermes.ts",
     "sodium:build": "bun scripts/buildSodium.ts",
     "simulator:check": "bun scripts/simulatorCheck.ts",
-    "typecheck": "tsc -p . && tsc -p scripts",
+    "typecheck": "bun check -p . && bun check -p scripts",
     "test": "bun ../../tooling/test/watchdog.ts"
   },
   "dependencies": {

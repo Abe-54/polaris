@@ -9,7 +9,7 @@
     "./examples": "./examples/index.ts"
   },
   "scripts": {
-    "typecheck": "node ../../node_modules/typescript/bin/tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts --pass-with-no-tests",
     "vendor": "bun scripts/vendor.ts",
     "check:browser": "bun scripts/browser-check.ts"

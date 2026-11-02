@@ -18,7 +18,7 @@
     "./tokens": "./src/tokens/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p . && tsc -p src/tokens",
+    "typecheck": "bun check -p . && bun check -p src/tokens",
     "test": "bun ../../tooling/test/watchdog.ts",
     "gallery": "vite --config gallery/vite.config.ts",
     "gallery:build": "vite build --config gallery/vite.config.ts"
