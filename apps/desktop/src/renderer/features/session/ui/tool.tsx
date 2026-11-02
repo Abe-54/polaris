@@ -1,7 +1,8 @@
 /**
  * A tool call that isn't Polaris's own (DESIGN.md, Tool runs): its verb ("Called Paper",
  * "Loaded", "Read") and subject on one line. It opens to what the call returned (a line, a
- * link, its images) and, behind Show raw, the call as the Harness sent it.
+ * link, its images) and, behind Show raw, the call as the Harness sent it. An image it viewed or
+ * made shows under it, read from the session's Host.
  */
 import { JsonText, looksLikeJson } from "./json.tsx";
 import {
@@ -23,6 +24,7 @@ import type { ItemView } from "../model/items.ts";
 import { toolLabel } from "../model/runs.ts";
 import type { ToolOutput } from "../model/toolCalls/index.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
+import { HostImage } from "./markdown/HostImage.tsx";
 import { type Hue, LiveMark } from "./marks.tsx";
 import { RawBody } from "./polarisTool/well.tsx";
 
@@ -206,6 +208,15 @@ export const Tool = ({ item, hue }: { readonly item: ToolView; readonly hue: Hue
           </button>
         ) : null}
       </div>
+      {item.file?.image === true && item.status === "completed" ? (
+        <div className="text-caption mt-1 mb-1 ml-5 flex min-w-0" data-testid="tool-image">
+          <HostImage
+            path={item.file.path}
+            alt=""
+            className="rounded-row border-hairline bg-surface-sunken block h-auto max-h-[180px] w-auto max-w-[min(100%,240px)] border object-contain"
+          />
+        </div>
+      ) : null}
       {open && opens ? <Details item={item} /> : null}
     </div>
   );

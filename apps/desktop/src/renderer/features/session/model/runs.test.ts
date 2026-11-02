@@ -123,6 +123,26 @@ describe("tool runs", () => {
     expect(entries.map(label)).toEqual(["run:2", "m1", "r3", "c1", "r4", "r5"]);
   });
 
+  // ENG-759: Codex's view_image folded into "read 3 files", so its screenshots never showed.
+  test("a call that viewed an image keeps its row between reads", () => {
+    const viewed = tool("v1", "view_image", "completed", {
+      kind: "read",
+      input: { path: "/home/ubuntu/shots/after.png" },
+    });
+
+    const entries = groupItems([
+      tool("r1", "Read"),
+      tool("r2", "Read"),
+      viewed,
+      tool("r3", "Read"),
+    ]);
+
+    expect(entries.map(label)).toEqual(["run:2", "v1", "r3"]);
+    expect(
+      runKind(tool("r4", "Read", "completed", { input: { file_path: "shot.png" } }))
+    ).toBeNull();
+  });
+
   test("only known read, search and fetch tools join older items; others keep their rows", () => {
     expect(runKind(tool("x", "WebFetch"))).toBe("fetch");
     expect(runKind(tool("x", "Agent"))).toBeNull();

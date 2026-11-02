@@ -34,7 +34,7 @@ export const items = (): SessionModel => {
         }),
         I.AssistantMessage.make({
           id: "m11",
-          text: "Rows are **32px** in calm and balanced, 28px in compact. Both themes checked.",
+          text: "Rows are **32px** in calm and balanced, 28px in compact. Both themes checked: [light](screens/rows-light.png), and [the gallery](screens/index.html).\n\n![Compact rows](screens/rows-compact.png)",
         }),
         tool("k3", "polaris.claim", { task: "A2" }),
       ]),

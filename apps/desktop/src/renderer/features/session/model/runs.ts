@@ -43,6 +43,9 @@ const toolRunKind = (item: ToolItem): RunKind | null => {
   // Polaris's own tools have purpose-built rows; a Visualization is never folded away.
   if (item.view !== null || item.polaris || item.visualization !== null) return null;
 
+  // An image the agent viewed or made shows in the conversation, so it keeps its own row.
+  if (item.file?.image === true) return null;
+
   if (item.plumbing) return "plumbing";
 
   if (item.native !== null) return nativeJoinsRuns(item.native) ? "native" : null;
@@ -278,6 +281,7 @@ const VERBS = new Map<string, readonly [running: string, done: string]>([
   ["web_search", ["Searching the web", "Searched the web"]],
   ["subagenthandback", ["Handing back its report", "Handed back its report"]],
   ["view_image", ["Viewing an image", "Viewed an image"]],
+  ["image_generation", ["Generating an image", "Generated an image"]],
 ]);
 
 const POLARIS_TOOL = /^(?:mcp__polaris(?:_\d+)?__|polaris(?:_\d+)?\.)(.+)$/;

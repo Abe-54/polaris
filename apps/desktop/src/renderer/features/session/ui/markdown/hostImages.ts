@@ -7,9 +7,15 @@ import { Option, Schema } from "effect";
 import type { Node } from "./softBreaks.ts";
 
 /** A hast property value, as rehype keeps them. */
-type PropertyValue = string | number | boolean | ReadonlyArray<string | number> | null | undefined;
+export type PropertyValue =
+  | string
+  | number
+  | boolean
+  | ReadonlyArray<string | number>
+  | null
+  | undefined;
 
-interface MutableElement {
+export interface MutableElement {
   readonly type: "element";
   readonly tagName: string;
   properties?: Record<string, PropertyValue>;
@@ -30,7 +36,7 @@ const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
 const isElement = (node: Node): node is MutableElement => node.type === "element";
 
-const each = (node: Node, visit: (element: MutableElement) => void) => {
+export const each = (node: Node, visit: (element: MutableElement) => void) => {
   if (isElement(node)) visit(node);
 
   if ("children" in node && Array.isArray(node.children))
@@ -50,7 +56,7 @@ const eachImage = (tree: Node, visit: (image: MutableElement, src: string) => vo
   });
 
 /** A `file://` URL on this Host's own disk as its (still encoded) path; null for anything else. */
-const fileUrlPath = (src: string): string | null => {
+export const fileUrlPath = (src: string): string | null => {
   if (!/^file:/i.test(src)) return null;
 
   try {

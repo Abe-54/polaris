@@ -63,6 +63,7 @@ const SHOT_SCENES = new Map([
   ["background-open", "background"],
   ["context", "session"],
   ["image", "items"],
+  ["tool-image", "items"],
   ["command-open", "items"],
   ["polaris-lead", "polaris"],
   ["polaris-worker", "polaris"],
@@ -194,11 +195,14 @@ const openBackground = async (page: Page, scene: string) => {
   }
 };
 
-const TRANSCRIPT_SHOTS = new Set(["image", "command-open", "context"]);
+const TRANSCRIPT_SHOTS = new Set(["image", "tool-image", "command-open", "context"]);
 
-/** T-ITEMS' shots: an image a tool showed, a command opened whole, the Session context card. */
+/** T-ITEMS' shots: an image a tool showed (in its row, or opened), a command opened whole, the context card. */
 const openTranscriptShot = async (page: Page, scene: string) => {
-  if (scene === "image") {
+  if (scene === "tool-image") {
+    await page.getByTestId("tool-image").locator("img").waitFor();
+    await page.getByTestId("tool-call").first().scrollIntoViewIfNeeded();
+  } else if (scene === "image") {
     await page.getByTestId("image-link").first().click();
     await page.getByTestId("image-viewer").locator("img").waitFor();
   } else if (scene === "command-open") {

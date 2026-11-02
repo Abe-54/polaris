@@ -1,8 +1,8 @@
 /**
  * An assistant message as Markdown (Streamdown): incomplete syntax mid-stream
  * renders as it will end, code in the code font with a copy action, Mermaid
- * and KaTeX once their plugins load, links open in the browser, images naming a path load from
- * the session's Host.
+ * and KaTeX once their plugins load, links open in the browser, images and links naming a path
+ * open from the session's Host.
  */
 import "./markdown.css";
 import {
@@ -17,6 +17,8 @@ import { COPY_CODE, COPY_TABLE } from "./copyControls.tsx";
 import { editorLinkOf, rehypeFileLinks } from "./fileLinks.ts";
 import { HostImage } from "./HostImage.tsx";
 import { hostImageOf, rehypeFileImages, rehypeHostImages } from "./hostImages.ts";
+import { HostLink } from "./HostLink.tsx";
+import { hostLinkOf, rehypeFileHrefs, rehypeHostLinks } from "./hostLinks.ts";
 import { needsOf } from "./needs.ts";
 import { rehypeSoftBreaks } from "./softBreaks.ts";
 import { usePlugins } from "./plugins.ts";
@@ -31,12 +33,14 @@ const CONTROLS: ControlsConfig = {
 
 const { raw, sanitize, harden } = defaultRehypePlugins;
 
-// Host images are marked between sanitizing and hardening; `<wbr>` and editor links come after both.
+// Host images and links are marked between sanitizing and hardening; `<wbr>` and editor links after.
 const REHYPE = [
   raw,
   rehypeFileImages,
+  rehypeFileHrefs,
   sanitize,
   rehypeHostImages,
+  rehypeHostLinks,
   harden,
   rehypeFileLinks,
   rehypeSoftBreaks,
@@ -55,9 +59,13 @@ const COMPONENTS: Components = {
       <HostImage path={path} alt={props.alt ?? ""} />
     );
   },
-  // `path:line` (rehypeFileLinks) opens in the editor; other links in the user's browser (https only).
+  // `path:line` (rehypeFileLinks) opens in the editor, a Host path as `HostLink` says, other
+  // links in the user's browser (https only).
   a: ({ href, children, node }) => {
     const target = editorLinkOf(node?.properties);
+    const hostPath = hostLinkOf(node?.properties);
+
+    if (hostPath !== null) return <HostLink path={hostPath}>{children}</HostLink>;
 
     if (target !== null)
       return (
