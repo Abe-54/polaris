@@ -19,6 +19,7 @@ import {
   type BarHost,
   type BarWorkspace,
   barWorkspaces,
+  keyedWorkspaces,
   hiddenWorkspaces,
   shortcutLabel,
   shownState,
@@ -122,11 +123,18 @@ const workspaceItem = (bar: ReadonlyArray<BarHost>, w: BarWorkspace, meta: strin
   };
 };
 
-/** The shown chips with their ⌃N, then every hidden Workspace, marked "hidden" (it can be opened). */
+/**
+ * The shown chips with their ⌃N (none on a collapsed Host), then every hidden Workspace, marked
+ * "hidden" (it can be opened).
+ */
 export const workspaceItems = ({ bar, models, machineBar }: JumpData): ReadonlyArray<JumpItem> => {
-  const shown = barWorkspaces(bar).map((w, index) =>
-    workspaceItem(bar, w, machineBar ? "" : (shortcutLabel(index) ?? ""))
-  );
+  const keyed = keyedWorkspaces(bar);
+
+  const shown = barWorkspaces(bar).map((w) => {
+    const index = keyed.indexOf(w);
+
+    return workspaceItem(bar, w, machineBar || index < 0 ? "" : (shortcutLabel(index) ?? ""));
+  });
 
   const hidden = bar.flatMap(({ host }) => {
     const model = models[host.key];

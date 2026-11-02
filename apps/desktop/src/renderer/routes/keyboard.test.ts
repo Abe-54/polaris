@@ -25,6 +25,7 @@ const setup = (platform: KeyPlatform = "mac") => {
     startNewSession: noop,
     closeNewSession: noop,
     toggleFolded: noop,
+    toggleHostCollapsed: noop,
     setSessionSort: noop,
     openSettings: noop,
     closeSettings: noop,

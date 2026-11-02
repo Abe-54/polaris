@@ -789,6 +789,13 @@ Built 2026-10-13 (owner ask; no mockup). A workspace can be hidden from the top 
 - **Still reachable.** The jump menu lists hidden workspaces after the chips, with "hidden" in the shortcut lane, found by name or by "hidden". Opening one (or one of its sessions) lists it as a chip after its host's others: the name, then "hidden" in `caption` `text-faint`, no ⌃N, so the other chips keep theirs; it leaves when the user goes elsewhere.
 - **Needs you is never swallowed (rule/needs-you-is-loudest).** A hidden workspace with a session that needs you (not dismissed on this Mac) is listed the same way, with its count, until the session is answered. The inbox, "Needs you elsewhere", the machine tab's count, the star and notifications count it as before. Hidden workspaces don't count towards the machine bar's 11.
 
+### Collapsed hosts
+
+Built 2026-11-02 (owner ask, ENG-733; no mockup). In the workspace bar a host's name collapses its chips; clicking it again expands them. It's a view choice on this Mac (persisted with navigation), not the host's shared `hidden` flag.
+- **The name toggles.** A host with workspaces collapses and expands on click (`aria-expanded`, tooltip "Collapse {host}" / "Expand {host} · N workspaces"); a host with none still opens its stage to add one. Needs Attention keeps its own chip.
+- **⌃N shifts.** A collapsed host's chips take no ⌃N, so ⌃1…⌃0 number only the visible chips; the jump menu lists them without a shortcut, matching the bar. The machine bar's threshold still counts every shown workspace.
+- **Still visible where it matters (rule/needs-you-is-loudest).** The collapsed name shows the host's loudest state glyph, its workspace count and a needs-you badge; the open workspace's chip stays beside it, without a ⌃N.
+
 ### Settings
 Settings replaces the three zones inside the one main window (no separate window); ⌘, (Polaris → Settings…), the gear at the right of the sidebar's footer and the K menu ("Settings", "Settings: Appearance"…) open it, and esc returns to where you were. Mockups: Settings page, S1 Harnesses (dark), S2 Usage (dark), S3 Appearance (light), S4 Hosts (dark), S5 GitHub accounts (dark, proposed), S6 Add GitHub account (light, proposed), S7 Reviewer (dark, proposed).
 - **Layout.** A 264px nav on the ground ("Back to orchestrate" with an esc keycap, the `title` "Settings", sections General (Appearance, Sessions) / Agents (Harnesses, Usage) / Machines (Hosts, Attachments), About Polaris with the flat mark and version at the foot, which opens About; with an update ready its caption reads "0.4.0 · update ready") and one centred 680px column in a panel (Chrome redesign, Settings). The page title is `title`, never `display`; one `body` line in `text-subtle` says what the page controls.

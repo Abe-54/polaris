@@ -59,6 +59,23 @@ describe("navigation", () => {
     expect([nav.current().hostKey, nav.current().workspaceId]).toEqual(["local", "local0"]);
   });
 
+  test("collapsing a Host shifts ⌃N onto the visible chips, and survives a relaunch", async () => {
+    const storage = memoryStorage();
+    const nav = createNavigation({ app: withData({ local: 2, studio: 2 }), storage });
+
+    nav.actions.toggleHostCollapsed("studio");
+    nav.actions.selectShortcut(0);
+    expect([nav.current().hostKey, nav.current().workspaceId]).toEqual(["local", "local0"]);
+    expect(nav.store.getState().topBar).toBe("workspaces");
+
+    await Bun.sleep(350);
+    expect(loadNav(storage).collapsedHosts).toEqual(["studio"]);
+
+    nav.actions.toggleHostCollapsed("studio");
+    nav.actions.selectShortcut(0);
+    expect([nav.current().hostKey, nav.current().workspaceId]).toEqual(["studio", "studio0"]);
+  });
+
   test("the selection survives a relaunch through storage", async () => {
     const storage = memoryStorage();
     const nav = createNavigation({ app: withData({ local: 3 }), storage });

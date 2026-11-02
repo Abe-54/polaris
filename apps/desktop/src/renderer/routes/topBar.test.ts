@@ -5,6 +5,7 @@ import {
   barHosts,
   barWorkspaces,
   hiddenWorkspaces,
+  keyedWorkspaces,
   edgeFade,
   revealOffset,
   shortcutLabel,
@@ -104,6 +105,32 @@ describe("bar contents", () => {
     expect(chip?.needsYou).toBe(0);
     expect(chip?.state).toBe("working");
     expect(bar[0]?.summary.needsYou).toBe(0);
+  });
+});
+
+describe("collapsed Hosts (ENG-733)", () => {
+  const hosts = [hostView("local"), hostView("studio")];
+
+  const models = {
+    local: hostModel([{ id: "a" }, { id: "b" }]),
+    studio: hostModel([{ id: "s", sessions: [{ id: "n1", state: "needs-you" }] }, { id: "t" }]),
+  };
+
+  test("a collapsed Host's chips take no ⌃N, so ⌃1 lands on the first visible one", () => {
+    const bar = barHosts({ hosts, models, collapsed: ["studio"] });
+
+    expect(keyedWorkspaces(bar).map((w) => w.workspace.name)).toEqual(["a", "b"]);
+  });
+
+  test("collapsing keeps the Host's chips listed and what needs you counted", () => {
+    const [studio] = barHosts({ hosts, models, collapsed: ["studio"] });
+
+    expect([studio?.collapsed, studio?.workspaces.length, studio?.summary.needsYou]).toEqual([
+      true,
+      2,
+      1,
+    ]);
+    expect(barWorkspaces(barHosts({ hosts, models, collapsed: ["studio"] }))).toHaveLength(4);
   });
 });
 

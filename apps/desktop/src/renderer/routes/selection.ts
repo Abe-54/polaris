@@ -93,6 +93,8 @@ export interface NavState {
   readonly lastSession: Readonly<Record<string, SessionId>>;
   /** Machine-mode Workspace groups the user folded or unfolded (`workspaceKey`). */
   readonly folded: Readonly<Record<string, boolean>>;
+  /** Hosts whose Workspace chips are collapsed in the top bar (a Host's name toggles it). */
+  readonly collapsedHosts: ReadonlyArray<string>;
   readonly sessionSort: SessionSort;
   /** Counts New session requests, so a page already open focuses its prompt again. */
   readonly newSessionAsks: number;
@@ -114,6 +116,7 @@ export const initialNav: NavState = {
   recent: [],
   lastSession: {},
   folded: {},
+  collapsedHosts: [],
   sessionSort: "active",
   newSessionAsks: 0,
 };

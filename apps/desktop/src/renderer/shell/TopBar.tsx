@@ -20,7 +20,7 @@ import { plural } from "./copy.ts";
 import { HostBarLabel, HostStateCaption } from "./HostState.tsx";
 import { isSlowLink } from "./hostCopy.ts";
 import { SummaryGlyph } from "./glyphs.tsx";
-import { useApp, useCommands, useSelection, useShellActions } from "./hooks.ts";
+import { useApp, useCommands, useNav, useSelection, useShellActions } from "./hooks.ts";
 import { HostMenu, WorkspaceChipMenu } from "./TopBarMenus.tsx";
 import { commandShortcut } from "../../shared/keymap.ts";
 
@@ -33,11 +33,12 @@ const useBar = () => {
   const hosts = useApp((s) => s.hosts);
   const models = useApp((s) => s.hostModels);
   const quiet = useQuietSessions();
+  const collapsed = useNav((s) => s.collapsedHosts);
   const { hostKey, workspaceId } = useSelection();
 
   return useMemo(
-    () => barHosts({ hosts, models, quiet, open: { hostKey, workspaceId } }),
-    [hosts, models, quiet, hostKey, workspaceId]
+    () => barHosts({ hosts, models, quiet, open: { hostKey, workspaceId }, collapsed }),
+    [hosts, models, quiet, hostKey, workspaceId, collapsed]
   );
 };
 
@@ -149,10 +150,30 @@ const AddWorkspaceChip = ({ hostKey }: { readonly hostKey: string | null }) => {
   );
 };
 
+/** What a collapsed Host still shows: its loudest state, how many chips, and who needs you. */
+const CollapsedSummary = ({ group }: { readonly group: BarHost }) => (
+  <span className="flex items-center gap-1.5 pr-3" data-testid={`collapsed-${group.host.key}`}>
+    <SummaryGlyph summary={group.summary} />
+    <span className="text-caption text-text-subtle tabular">
+      {group.workspaces.filter((w) => !w.hidden).length}
+    </span>
+    {group.summary.needsYou > 0 ? (
+      <Badge tone="needs-you" size="count">
+        {group.summary.needsYou}
+      </Badge>
+    ) : null}
+  </span>
+);
+
+const collapseTitle = (group: BarHost) =>
+  group.collapsed
+    ? `Expand ${group.host.label} · ${plural(group.workspaces.filter((w) => !w.hidden).length, "workspace")}`
+    : `Collapse ${group.host.label}`;
+
 const HostLabel = ({ group }: { readonly group: BarHost }) => {
   const { host } = group;
   const selection = useSelection();
-  const { selectHost, selectWorkspace } = useShellActions();
+  const { selectHost, selectWorkspace, toggleHostCollapsed } = useShellActions();
   const first = group.workspaces[0];
 
   // Its first Workspace, or the Host itself when it has none (the stage to add one).
@@ -162,6 +183,9 @@ const HostLabel = ({ group }: { readonly group: BarHost }) => {
     if (first === undefined) selectHost(host.key, at);
     else selectWorkspace({ hostKey: host.key, workspaceId: first.workspace.id }, at);
   };
+
+  // A Host with Workspaces collapses and expands them; one without opens its stage to add one.
+  const collapsible = first !== undefined;
 
   // Needs Attention is its own bordered chip (a button); the others are a label to select the Host.
   if (host.status.state === "needs-attention") {
@@ -179,13 +203,20 @@ const HostLabel = ({ group }: { readonly group: BarHost }) => {
       <HostMenu host={host}>
         <button
           type="button"
-          aria-pressed={host.key === selection.hostKey && selection.workspaceId === null}
-          onClick={(event) => open(event.timeStamp)}
+          {...(collapsible
+            ? { "aria-expanded": !group.collapsed, title: collapseTitle(group) }
+            : { "aria-pressed": host.key === selection.hostKey && selection.workspaceId === null })}
+          onClick={(event) => {
+            if (!collapsible) return open(event.timeStamp);
+            acknowledgeUpgrade(host.key);
+            toggleHostCollapsed(host.key);
+          }}
           className="hover:bg-fill-hover flex h-[30px] shrink-0 cursor-default items-center rounded-full"
           data-host={host.key}
           data-connection={host.status.state}
         >
           <HostBarLabel host={host} onOpen={() => open()} />
+          {group.collapsed && collapsible ? <CollapsedSummary group={group} /> : null}
         </button>
       </HostMenu>
     </UpgradeHover>
@@ -215,12 +246,15 @@ const WorkspaceBar = ({ bar }: { readonly bar: ReadonlyArray<BarHost> }) => {
             <HostLabel group={group} />
             {group.workspaces.map((item) => {
               const { hostKey, workspace, summary } = item;
-              // A hidden chip (open, or needs you) takes no ⌃N, so the others keep theirs.
-              const shortcut = item.hidden ? undefined : shortcutLabel(index++);
-              const extra: ChipShortcut = {};
 
               const selected =
                 hostKey === selection.hostKey && workspace.id === selection.workspaceId;
+
+              // A collapsed Host keeps only the open chip, so you still see where you are.
+              if (group.collapsed && !selected) return null;
+              // A hidden or collapsed chip takes no ⌃N, so the others shift onto the visible ones.
+              const shortcut = item.hidden || group.collapsed ? undefined : shortcutLabel(index++);
+              const extra: ChipShortcut = {};
 
               if (shortcut !== undefined) extra.shortcut = shortcut;
 

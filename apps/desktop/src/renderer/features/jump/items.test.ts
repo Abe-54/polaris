@@ -21,6 +21,23 @@ describe("jump menu Workspaces", () => {
     ]);
   });
 
+  test("a collapsed Host's Workspaces stay listed without ⌃N, matching the bar", () => {
+    const twoHosts = { ...models, studio: hostModel([{ id: "ledger" }]) };
+    const hosts = [hostView("local"), hostView("studio")];
+
+    const collapsed = {
+      bar: barHosts({ hosts, models: twoHosts, collapsed: ["studio"] }),
+      models: twoHosts,
+      machineBar: false,
+    };
+
+    expect(workspaceItems(collapsed).map((i) => [i.title, i.meta])).toEqual([
+      ["ledger", ""],
+      ["polaris", shortcutLabel(0) ?? ""],
+      ["sightline", "hidden"],
+    ]);
+  });
+
   test("a hidden one is found by name, or by the word hidden", () => {
     const sources = {
       sessions: sessionItems(data),

@@ -23,7 +23,14 @@ import {
 import { type BackForward, createPages, editPlaces, type Page } from "./history.ts";
 import { reviewRoute } from "./review.ts";
 import { timeSwitch } from "./switchTimer.ts";
-import { barHosts, barWorkspaces, type BarHost, isRegistered, topBarMode } from "./topBar.ts";
+import {
+  barHosts,
+  barWorkspaces,
+  type BarHost,
+  isRegistered,
+  keyedWorkspaces,
+  topBarMode,
+} from "./topBar.ts";
 
 export type NavStore = StoreApi<NavState>;
 
@@ -43,6 +50,7 @@ const Persisted = Schema.Struct({
   topBar: Schema.Literals(["workspaces", "machines", "hidden"]),
   lastSession: Schema.Record(Schema.String, Schema.String),
   folded: Schema.Record(Schema.String, Schema.Boolean),
+  collapsedHosts: Schema.optionalKey(Schema.Array(Schema.String)),
   recent: Schema.optionalKey(Schema.Array(Schema.String)),
   sessionSort: Schema.optionalKey(Schema.Literals(["active", "newest"])),
 });
@@ -77,6 +85,7 @@ const persistable = (nav: NavState) => ({
   topBar: nav.topBar,
   lastSession: nav.lastSession,
   folded: nav.folded,
+  collapsedHosts: nav.collapsedHosts,
   recent: nav.recent,
   sessionSort: nav.sessionSort,
 });
@@ -115,6 +124,8 @@ export interface ShellActions {
   readonly startNewSessionIn: (hostKey: string, workspaceId?: WorkspaceId | null) => void;
   readonly closeNewSession: () => void;
   readonly toggleFolded: (key: string, open: boolean) => void;
+  /** Collapses a Host's Workspace chips in the top bar, or expands them again. */
+  readonly toggleHostCollapsed: (hostKey: string) => void;
   readonly setSessionSort: (sort: SessionSort) => void;
   /** Settings over the three zones (⌘,); the last section when none is given. */
   readonly openSettings: (
@@ -137,8 +148,8 @@ export interface Navigation {
   readonly current: () => Selection;
 }
 
-const barOf = (app: AppState): ReadonlyArray<BarHost> =>
-  barHosts({ hosts: app.hosts, models: app.hostModels });
+const barOf = (app: AppState, collapsed: ReadonlyArray<string> = []): ReadonlyArray<BarHost> =>
+  barHosts({ hosts: app.hosts, models: app.hostModels, collapsed });
 
 const sameSelection = (a: Selection, b: Selection) =>
   a.mode === b.mode &&
@@ -325,10 +336,10 @@ export const createNavigation = ({
     selectWorkspace,
     selectHost,
     selectShortcut: (index, inputAt) => {
-      const bar = barOf(app.getState());
+      const bar = barOf(app.getState(), store.getState().collapsedHosts);
 
       if (store.getState().topBar === "workspaces") {
-        const target = barWorkspaces(bar)[index];
+        const target = keyedWorkspaces(bar)[index];
 
         if (target !== undefined) {
           selectWorkspace({ hostKey: target.hostKey, workspaceId: target.workspace.id }, inputAt);
@@ -367,6 +378,15 @@ export const createNavigation = ({
     startNewSessionIn,
     closeNewSession: () => set({ pane: "session" }),
     toggleFolded: (key, open) => set({ folded: { ...store.getState().folded, [key]: !open } }),
+    toggleHostCollapsed: (hostKey) => {
+      const collapsed = store.getState().collapsedHosts;
+
+      set({
+        collapsedHosts: collapsed.includes(hostKey)
+          ? collapsed.filter((key) => key !== hostKey)
+          : [...collapsed, hostKey],
+      });
+    },
     setSessionSort: (sessionSort) => set({ sessionSort }),
     openSettings: (section, options) => {
       lastSection = section ?? lastSection;

@@ -138,10 +138,15 @@ const useSources = () => {
   const hosts = useApp((s) => s.hosts);
   const models = useApp((s) => s.hostModels);
   const { topBar, mode } = useSelection();
+  const collapsed = useNav((s) => s.collapsedHosts);
   const review = useReviewSources(mode);
 
   return useMemo(() => {
-    const data = { bar: barHosts({ hosts, models }), models, machineBar: topBar !== "workspaces" };
+    const data = {
+      bar: barHosts({ hosts, models, collapsed }),
+      models,
+      machineBar: topBar !== "workspaces",
+    };
 
     return {
       sessions: sessionItems(data),
@@ -150,7 +155,7 @@ const useSources = () => {
       hosts: hostItems(data),
       review,
     };
-  }, [hosts, models, topBar, review]);
+  }, [hosts, models, collapsed, topBar, review]);
 };
 
 const Results = ({ onClose }: { readonly onClose: () => void }) => {

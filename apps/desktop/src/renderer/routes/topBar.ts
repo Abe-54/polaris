@@ -128,6 +128,8 @@ export interface BarHost {
   readonly host: HostView;
   readonly workspaces: ReadonlyArray<BarWorkspace>;
   readonly summary: Summary;
+  /** Collapsed in the Workspace bar on this Mac: its chips are folded away and take no ⌃N. */
+  readonly collapsed: boolean;
 }
 
 /** The Workspace in view, which stays listed even while hidden. */
@@ -142,6 +144,8 @@ export interface BarInput {
   /** Sessions dismissed from Needs You on this Mac (`hostKey\u0000sessionId`): not counted. */
   readonly quiet?: ReadonlySet<string>;
   readonly open?: OpenWorkspace;
+  /** Hosts collapsed in the Workspace bar on this Mac. */
+  readonly collapsed?: ReadonlyArray<string>;
 }
 
 /** The local Host's key (main/hosts.ts `LOCAL_HOST_KEY`). */
@@ -187,7 +191,13 @@ export const listedWorkspaces = ({
 };
 
 /** Every Host with its listed Workspaces; the source of both bars. */
-export const barHosts = ({ hosts, models, quiet, open }: BarInput): ReadonlyArray<BarHost> =>
+export const barHosts = ({
+  hosts,
+  models,
+  quiet,
+  open,
+  collapsed = [],
+}: BarInput): ReadonlyArray<BarHost> =>
   barOrder(hosts).map((host) => {
     const model = models[host.key];
 
@@ -199,12 +209,17 @@ export const barHosts = ({ hosts, models, quiet, open }: BarInput): ReadonlyArra
       workspaces:
         model === undefined ? [] : listedWorkspaces({ hostKey: host.key, model, open, isQuiet }),
       summary: summarize(model === undefined ? [] : activeSessions(model), isQuiet),
+      collapsed: collapsed.includes(host.key),
     };
   });
 
 /** The shown Workspace chips in bar order: ⌃1 is the first, ⌃0 the tenth; hidden ones left out. */
 export const barWorkspaces = (hosts: ReadonlyArray<BarHost>): ReadonlyArray<BarWorkspace> =>
   hosts.flatMap((h) => h.workspaces.filter((w) => !w.hidden));
+
+/** The chips that take ⌃N, in order: the shown ones on Hosts that aren't collapsed. */
+export const keyedWorkspaces = (hosts: ReadonlyArray<BarHost>): ReadonlyArray<BarWorkspace> =>
+  barWorkspaces(hosts.filter((h) => !h.collapsed));
 
 /** Whether a Workspace is registered on a Host, shown or hidden. */
 export const isRegistered = (
