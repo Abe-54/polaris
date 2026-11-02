@@ -14,8 +14,8 @@ name: CI
 #   bench             Daemon memory gates: Daemon, Client, protocol or SDK affected.
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
 #   ci                one result for branch protection: passes only if every job passed or was skipped.
-#                     On a PR the macOS jobs (*-macos, build-daemon) run and report but don't count;
-#                     Ubuntu and Windows do. On a push to main every job counts, macOS included.
+#                     On a PR the macOS jobs (*-macos) run and report but don't count; Ubuntu and Windows
+#                     do, and so does build-daemon (macOS), which the smokes need. On main every job counts.
 # Jobs off on a PR are skipped (a skip reports as passing); matrix jobs instead skip their steps,
 # so their expanded names always report.
 
@@ -558,7 +558,7 @@ jobs:
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
           failing=$(jq -r --arg event "$EVENT" '
-            ["platform-checks-macos", "test-macos", "build-daemon"] as $macos
+            ["platform-checks-macos", "test-macos"] as $macos
             | to_entries[]
             | select($event != "pull_request" or (.key | IN($macos[]) | not))
             | select(.value.result != "success" and .value.result != "skipped")
