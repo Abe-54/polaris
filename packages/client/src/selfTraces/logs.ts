@@ -70,19 +70,22 @@ const text = Match.type<ReadonlyArray<unknown>[number]>().pipe(
   Match.orElse((value) => Formatter.format(value))
 );
 
-/** How much of the arguments is read before scrubbing: enough that any cut lies past the clip. */
+/** How much of the arguments is read before scrubbing, as a multiple of the clip. */
 const READ_FACTOR = 4;
 
-/** The arguments as one line, read up to `limit` characters and no further. */
+/**
+ * The arguments as one line of at most `limit` characters. Past the limit it ends at the last
+ * whitespace before it, so a token the limit cuts never reaches the scrubber half-read.
+ */
 const joinArgs = (args: ReadonlyArray<unknown>, limit: number): string => {
   let joined = "";
 
   for (const value of args) {
-    if (joined.length >= limit) break;
+    if (joined.length > limit) break;
     joined += (joined === "" ? "" : " ") + text(value);
   }
 
-  return joined.slice(0, limit);
+  return joined.length > limit ? joined.slice(0, limit).replace(/\s*\S*$/, "") : joined;
 };
 
 const clip = (message: string, max: number) =>

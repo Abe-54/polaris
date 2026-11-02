@@ -150,12 +150,31 @@ describe("log capture", () => {
     expect(message(t.emitted[0])).toHaveLength(LOG_MESSAGE_CHARS);
   });
 
+  test("a secret cut by the read limit never reaches the message, even once redactions shrink it", () => {
+    const emitted: Array<SelfSpan> = [];
+
+    const recorder = makeLogRecorder({
+      enabled: () => true,
+      emit: (span) => emitted.push(span),
+      origin: () => ({ resource: {}, scope: { name: "t", version: "", attributes: {} } }),
+      maxChars: 100,
+    });
+
+    // The bearer token (387 chars) shrinks to "[redacted]", so the cut at 400 falls inside the clip.
+    recorder.record("warn", "console", [
+      `Bearer ${"a".repeat(380)}`,
+      "https://deploy:hunter2hunter2@git.example.com/repo.git",
+    ]);
+
+    expect(message(emitted[0])).toBe("[redacted]");
+  });
+
   test("a secret the length cap cuts in half is scrubbed whole, so none of it survives", () => {
     const t = setup();
     const lead = "x".repeat(LOG_MESSAGE_CHARS - 20);
 
     t.target.warn(lead, "clone https://deploy:hunter2hunter2@git.example.com/repo.git failed");
-    t.target.warn({ password: "hunter2hunter2" }, "x".repeat(LOG_MESSAGE_CHARS * 10));
+    t.target.warn({ password: "hunter2hunter2" }, "word ".repeat(LOG_MESSAGE_CHARS * 2));
 
     const kept = t.emitted.map(message);
 
