@@ -13,7 +13,8 @@ import { polaris } from "../../bridge.ts";
 import { send } from "../../session/dispatch.ts";
 import { runInTerminal } from "../../terminal/actions.ts";
 import { followExit } from "./exit.ts";
-import { cloneCommand, clonePath, cloneUrl } from "./model/clone.ts";
+import { remotesOnHost } from "../../pulls/ui/Publisher.tsx";
+import { cloneCommand, clonePath, cloneTransport, cloneUrls } from "./model/clone.ts";
 import { loginShellArgv } from "./model/run.ts";
 import { rememberHost, repoName } from "./store.ts";
 
@@ -95,6 +96,8 @@ export const cloneOn = async (target: CloneTarget, pull: OpenPull, codeHost: str
   const { owner, name } = pull.repo;
   const path = await freePath(target, name);
   const tabKey = `review-clone:${repo}`;
+  const transport = cloneTransport(remotesOnHost(target.hostKey), codeHost);
+  const urls = cloneUrls(codeHost, owner, name, transport);
 
   rememberHost(repo, target.hostKey);
   setClone(repo, {
@@ -111,7 +114,7 @@ export const cloneOn = async (target: CloneTarget, pull: OpenPull, codeHost: str
       key: tabKey,
       title: `clone ${owner}/${name}`,
       cwd: target.homeDir,
-      argv: loginShellArgv(cloneCommand(cloneUrl(codeHost, owner, name), path)),
+      argv: loginShellArgv(cloneCommand(urls, path)),
     }
   );
 

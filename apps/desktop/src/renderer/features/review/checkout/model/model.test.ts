@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   ReviewCheckout,
   ReviewCheckoutBlock,
@@ -21,7 +24,7 @@ import {
   newCommitsText,
   removedText,
 } from "./chip.ts";
-import { cloneCommand, clonePath, cloneUrl, shellQuote } from "./clone.ts";
+import { cloneCommand, clonePath, cloneTransport, cloneUrls, shellQuote } from "./clone.ts";
 import { loginShellArgv, runCommandOf, runningFact } from "./run.ts";
 import { hostChoices, orderPlaces, type PlaceHost, placeToOpen } from "./hosts.ts";
 import { CLOSED_GRACE_MS, decide, actionKey, watchKey, watchList } from "./watch.ts";
@@ -471,14 +474,42 @@ describe("Clone on…", () => {
     expect(chipAction(failed)).toEqual({ kind: "retry-clone", label: "Retry" });
   });
 
-  test("into ~/code over ssh, quoted for sh", () => {
+  test("into ~/code, quoted for sh", () => {
     expect(clonePath("/home/lucas/", "widgets", 1)).toBe("/home/lucas/code/widgets");
     expect(clonePath("/home/lucas", "widgets", 2)).toBe("/home/lucas/code/widgets-2");
-    expect(cloneUrl("github.com", "acme", "widgets")).toBe("git@github.com:acme/widgets.git");
     expect(shellQuote("it's")).toBe("'it'\\''s'");
-    expect(cloneCommand("git@github.com:acme/widgets.git", "/home/l/code/widgets")).toBe(
-      "mkdir -p '/home/l/code' && git clone 'git@github.com:acme/widgets.git' '/home/l/code/widgets'"
+  });
+
+  test.each([
+    ["an ssh remote on the code host", ["git@github.com:acme/api.git"], "ssh"],
+    ["an ssh:// remote on the code host", ["ssh://git@GitHub.com/acme/api"], "ssh"],
+    ["only https remotes (ENG-724)", ["https://github.com/luxdotdev/polaris.git"], "https"],
+    ["https with a user", ["https://lucas@github.com/acme/api.git"], "https"],
+    ["ssh only to another host", ["git@gitlab.com:acme/api.git"], "https"],
+    ["no remotes", [], "https"],
+  ] as const)("clones over the transport the Host already uses: %s", (_, remotes, transport) => {
+    expect(cloneTransport(remotes, "github.com")).toBe(transport);
+  });
+
+  test("a clone the first transport can't reach falls back to the other (ENG-724)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "clone-"));
+    const path = join(dir, "code", "widgets");
+
+    // A git whose ssh is refused, as with a key for another account.
+    writeFileSync(
+      join(dir, "git"),
+      '#!/bin/sh\ncase "$2" in git@*) exit 128;; esac\nmkdir -p "$3" && echo "$2" > "$3/from"\n'
     );
+    chmodSync(join(dir, "git"), 0o755);
+
+    const command = cloneCommand(cloneUrls("github.com", "acme", "widgets", "ssh"), path);
+    const proc = Bun.spawn(["sh", "-c", command], { env: { PATH: `${dir}:/bin:/usr/bin` } });
+
+    expect(await proc.exited).toBe(0);
+    expect(readFileSync(join(path, "from"), "utf8").trim()).toBe(
+      "https://github.com/acme/widgets.git"
+    );
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 
