@@ -113,7 +113,10 @@ export const Conversation = ({ hostKey, summary }: AskReviewerProps) => {
   const asks = useAsks(summary.id);
   const end = useRef<HTMLDivElement>(null);
 
-  useEffect(() => end.current?.scrollIntoView?.({ block: "end" }), [asks.length]);
+  // Chromium's scrollIntoView returns a Promise: returned here, React would call it as the cleanup.
+  useEffect(() => {
+    end.current?.scrollIntoView?.({ block: "end" });
+  }, [asks.length]);
 
   return (
     <div className="px-panel flex flex-col gap-4 py-3" data-testid="reviewer-asks">
