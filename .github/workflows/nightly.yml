@@ -12,6 +12,9 @@ name: Nightly
 on:
   schedule:
     - cron: "17 7 * * *"
+  # TEMPORARY (ENG-737): workflow_dispatch needs the file on main; this proves the run first.
+  push:
+    branches: ["polaris/*/P2-2-quarantine-file-nightly-workflow-rolling"]
   workflow_dispatch:
     inputs:
       linear_probe:
@@ -218,7 +221,7 @@ jobs:
   linear-probe:
     name: Linear probe
     # By hand only: proves the OAuth app's token, issue creation and comments on a throwaway issue.
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.linear_probe != '' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.linear_probe != '') || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -231,7 +234,7 @@ jobs:
         env:
           LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
           LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
-          PROBE: ${{ inputs.linear_probe }}
+          PROBE: ${{ inputs.linear_probe || 'P2-2 dry run' }}
         run: |
           if [ -z "$LINEAR_CLIENT_ID" ] || [ -z "$LINEAR_CLIENT_SECRET" ]; then
             echo "::error::LINEAR_CLIENT_ID or LINEAR_CLIENT_SECRET is not set"; exit 1
