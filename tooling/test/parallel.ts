@@ -2,32 +2,22 @@
  * The `--parallel` default for local `bun test` runs. CI and explicit flags keep their own;
  * `POLARIS_TEST_PARALLEL=N` overrides it, and `1` runs serially.
  */
-import { availableParallelism, loadavg } from "node:os";
+import { availableParallelism } from "node:os";
 
 /** Flags that already choose how bun schedules files. */
 const SCHEDULING = /^--(?:parallel|isolate|no-isolate)(?:=|$)/;
 
 export interface Machine {
   readonly cores: number;
-  /** The one-minute load average. */
-  readonly load: number;
 }
 
-export const thisMachine = (): Machine => ({
-  cores: availableParallelism(),
-  load: loadavg()[0] ?? 0,
-});
+export const thisMachine = (): Machine => ({ cores: availableParallelism() });
 
 /**
- * Workers for a local run: the idle cores, at least 2 and at most half the cores, so
- * many agents testing at once each get a share instead of all asking for every core.
+ * Workers for a local run: half the cores, at least 2. Fixed: scaling down with load
+ * fell to 2 workers on a busy Mac, where the Daemon's tests then took minutes longer.
  */
-export const defaultWorkers = ({ cores, load }: Machine): number => {
-  const cap = Math.max(2, Math.floor(cores / 2));
-  const idle = Math.floor(cores - load);
-
-  return Math.min(cap, Math.max(2, idle));
-};
+export const defaultWorkers = ({ cores }: Machine): number => Math.max(2, Math.floor(cores / 2));
 
 const parseOverride = (value: string): number => {
   const workers = Number(value);

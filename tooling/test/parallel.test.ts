@@ -1,15 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { defaultWorkers, parallelFlags } from "./parallel.ts";
 
-const mac = { cores: 12, load: 0 };
+const mac = { cores: 12 };
 
 describe("the local --parallel default", () => {
   test.each([
-    ["an idle 12-core Mac uses half its cores", { cores: 12, load: 0.5 }, 6],
-    ["a busy one, its idle cores", { cores: 12, load: 8.2 }, 3],
-    ["an overloaded one still uses 2", { cores: 12, load: 30 }, 2],
-    ["a 4-core VM uses 2", { cores: 4, load: 0 }, 2],
-    ["a single core still uses 2", { cores: 1, load: 0 }, 2],
+    ["a 12-core Mac uses half its cores", { cores: 12 }, 6],
+    ["a 5-core machine rounds down", { cores: 5 }, 2],
+    ["a single core still uses 2", { cores: 1 }, 2],
   ])("%s", (_, machine, workers) => {
     expect(defaultWorkers(machine)).toBe(workers);
   });
