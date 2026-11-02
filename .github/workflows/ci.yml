@@ -1,5 +1,24 @@
 name: CI
 
+# What each job proves, and when it runs. On a push to main everything runs; on a pull request
+# `scope` decides from the PR's merge commit (turbo query affected over HEAD^1..HEAD), and a
+# change to a root file (bun.lock, package.json, turbo.json, tsconfig.base.json, patches/**,
+# tooling/**, .github/**) runs everything.
+#   scope             what changed: the flags every job below reads.
+#   check             lint (oxfmt, the ratchet), typecheck, licences, scripts, release signer; Linux, always.
+#   platform-checks   Windows: the remote-only Client's tests. -macos: scripts, release signer. Always.
+#   test              per package, the Daemon in 3 shards: ubuntu, Windows (Daemon only), and macOS
+#                     (test-macos); `turbo run test --affected` on a PR. An unaffected part passes in seconds.
+#   spec, spec-traces the Quint spec and Engine trace replays: spec, engine, store, verification, resume.ts.
+#   build-daemon, smoke-*, service-windows: the binaries build, start and serve; Daemon or Client affected.
+#   bench             Daemon memory gates: Daemon, Client, protocol or SDK affected.
+#   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
+#   ci                one result for branch protection: passes only if every job passed or was skipped.
+#                     On a PR the macOS jobs (*-macos) run and report but don't count; Ubuntu and Windows
+#                     do, and so does build-daemon (macOS), which the smokes need. On main every job counts.
+# Jobs off on a PR are skipped (a skip reports as passing); matrix jobs instead skip their steps,
+# so their expanded names always report.
+
 on:
   push:
     branches: [main]
@@ -16,15 +35,77 @@ env:
   BUN_VERSION: 1.4.4
 
 jobs:
+  scope:
+    name: Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+      daemon: ${{ steps.scope.outputs.daemon }}
+      others: ${{ steps.scope.outputs.others }}
+      spec-replays: ${{ steps.scope.outputs.spec-replays }}
+      spec: ${{ steps.scope.outputs.spec }}
+      binaries: ${{ steps.scope.outputs.binaries }}
+      bench: ${{ steps.scope.outputs.bench }}
+      desktop: ${{ steps.scope.outputs.desktop }}
+    steps:
+      # A PR's checkout is its merge commit: HEAD^1 is the base it merges into.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: What changed
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          flags=(daemon others spec-replays spec binaries bench desktop)
+          all() { for f in full "${flags[@]}"; do echo "$f=true" >> "$GITHUB_OUTPUT"; done; }
+          if [ "$EVENT" != pull_request ]; then
+            echo "A push to main runs everything." | tee -a "$GITHUB_STEP_SUMMARY"
+            all; exit 0
+          fi
+
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          # turbo's lockfile and workspace-package diffs are narrower than this; these run everything.
+          root=$(grep -E '^(bun\.lock|package\.json|turbo\.json|tsconfig\.base\.json|patches/|tooling/|\.github/)' <<<"$changed" || true)
+          if [ -n "$root" ]; then
+            { echo "Root files changed, so everything runs:"; echo '```'; echo "$root"; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+            all; exit 0
+          fi
+
+          turbo="turbo@$(jq -r .devDependencies.turbo package.json)"
+          query=$(bunx "$turbo" query affected --packages --base HEAD^1 --head HEAD)
+          affected=$(jq -r '.data.affectedPackages.items[].name' <<<"$query" | grep -vx '//' || true)
+          has() { for p in "$@"; do grep -qxF "$p" <<<"$affected" && return 0; done; return 1; }
+          path() { grep -qE "$1" <<<"$changed"; }
+          out() { if "${@:2}"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
+
+          echo "full=false" >> "$GITHUB_OUTPUT"
+          out daemon has @polaris/daemon
+          out others grep -qvxE '(@polaris/(daemon|spec))?' <<<"$affected"
+          out spec-replays has @polaris/spec
+          out spec path '^(packages/spec/|apps/daemon/src/(engine|store|verification)/|packages/client/src/resume\.ts$)'
+          out binaries eval 'has @polaris/daemon @polaris/client || path "^scripts/build-daemon\.ts$"'
+          out bench has @polaris/daemon @polaris/client @polaris/protocol @polaris/sdk
+          out desktop has @polaris/desktop @polaris/daemon
+
+          {
+            echo "Affected packages (\`turbo query affected\`, HEAD^1..HEAD):"
+            echo '```'
+            jq -r '.data.affectedPackages.items[] | "\(.name)  \(.reason.__typename)"' <<<"$query"
+            echo '```'
+            echo '```'
+            cat "$GITHUB_OUTPUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   check:
-    # The tests run in `test` below; Windows runs its Client tests here.
-    name: Lint, typecheck, licences (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        # macOS runs the execve hand-off proof on the platform it matters most on.
-        os: [ubuntu-latest, macos-15, windows-latest]
-    runs-on: ${{ matrix.os }}
+    name: Lint, typecheck, licences
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -34,22 +115,35 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       # oxfmt format check, then oxlint through the ratchet (tooling/lint/baseline.json):
       # fails on new or increased violations. See packages/lint-config/README.md.
-      # Concurrent steps with separate logs on Windows only. On macOS the two took 7.4 min at once
-      # against 3 min in turn; on Ubuntu, parallel tsc runs exhausted runner memory (exit 137, ENG-705).
-      - parallel:
-          - run: bun run lint
-            if: runner.os == 'Windows'
-          - run: bun run typecheck
-            if: runner.os == 'Windows'
       - run: bun run lint
-        if: runner.os != 'Windows'
-      - run: bun run typecheck -- --concurrency=2
-        if: runner.os == 'Linux'
       - run: bun run typecheck
-        if: runner.os == 'macOS'
+      - name: Typecheck and test scripts
+        run: bun check -p scripts && bun test ./scripts
+      # The release signer's checks on crafted hand-offs (standard library only).
+      - name: Release signer tests
+        run: python3 -I -m unittest discover -s tooling/release -p 'test_*.py'
+      - run: bun run licenses:check
+
+  platform-checks:
+    name: Platform checks (${{ matrix.os }})
+    # Lint and typecheck run once, in `check`; the macOS execve hand-off proof is in the Daemon tests.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps: &platform-steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - uses: ./.github/actions/bun-install
       - name: Windows Client tests
         if: runner.os == 'Windows'
         # The runner's TEMP is an 8.3 short path; a Host profile never is.
@@ -71,94 +165,143 @@ jobs:
           packages/client/src/install/windows packages/client/src/windowsPipe
       - name: Typecheck and test scripts
         if: runner.os != 'Windows'
-        run: bunx tsc -p scripts && bun test ./scripts
-      # The release signer's checks on crafted hand-offs (standard library only).
+        run: bun check -p scripts && bun test ./scripts
       - name: Release signer tests
         if: runner.os != 'Windows'
         run: python3 -I -m unittest discover -s tooling/release -p 'test_*.py'
       - name: Typecheck scripts (Windows)
         if: runner.os == 'Windows'
-        run: bunx tsc -p scripts
-      - run: bun run licenses:check
+        run: bun check -p scripts
+
+  platform-checks-macos:
+    name: Platform checks (${{ matrix.os }})
+    # platform-checks' steps; reports on a PR without blocking it (see `ci`).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15]
+    runs-on: ${{ matrix.os }}
+    steps: *platform-steps
 
   test:
     name: Test ${{ matrix.part.name }} (${{ matrix.os }})
+    needs: scope
     # The Daemon's files split into shards, each run in parallel worker processes;
     # the other packages in one job. Wall time is the slowest of these.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15]
-        part:
+        os: [ubuntu-latest]
+        part: &test-parts
           - name: Daemon 1/3
-            run: bunx turbo run test --filter=@polaris/daemon -- --shard=1/3 --parallel=2
+            scope: daemon
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=1/3 --parallel=2
           - name: Daemon 2/3
-            run: bunx turbo run test --filter=@polaris/daemon -- --shard=2/3 --parallel=2
+            scope: daemon
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=2/3 --parallel=2
           - name: Daemon 3/3
-            run: bunx turbo run test --filter=@polaris/daemon -- --shard=3/3 --parallel=2
+            scope: daemon
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=3/3 --parallel=2
           - name: other packages
-            run: bunx turbo run test --filter=!@polaris/daemon --filter=!@polaris/spec
+            scope: others
+            run: bunx turbo run test {0} --filter=!@polaris/daemon --filter=!@polaris/spec
         include:
           # Once, on Linux: they replay runtime traces through the spec, with no
           # platform-specific code under test.
           - os: ubuntu-latest
             part:
               name: spec replays
-              run: bunx turbo run test --filter=@polaris/spec
+              scope: spec-replays
+              run: bunx turbo run test {0} --filter=@polaris/spec
           # The whole Daemon suite on Windows; Windows ships a remote-only Client, whose
-          # tests run in `check`. Tests that don't apply there skip with the gap they name.
+          # tests run in `platform-checks`. Tests that don't apply there skip with the gap they name.
           - os: windows-latest
             part:
               name: Daemon 1/3
-              run: bunx turbo run test --filter=@polaris/daemon -- --shard=1/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
+              scope: daemon
+              run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=1/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
           - os: windows-latest
             part:
               name: Daemon 2/3
-              run: bunx turbo run test --filter=@polaris/daemon -- --shard=2/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
+              scope: daemon
+              run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=2/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
           - os: windows-latest
             part:
               name: Daemon 3/3
-              run: bunx turbo run test --filter=@polaris/daemon -- --shard=3/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
+              scope: daemon
+              run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=3/3 --parallel=3 --timeout=15000 --reporter=junit --reporter-outfile=junit.xml
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    steps:
+    env: &test-env
+      RUN: ${{ needs.scope.outputs[matrix.part.scope] }}
+      # On a PR, turbo compares the merge commit with the base it merges into.
+      AFFECTED: ${{ needs.scope.outputs.full != 'true' && '--affected' || '' }}
+      TURBO_SCM_BASE: HEAD^1
+    steps: &test-steps
+      - name: Not affected, nothing to test
+        if: env.RUN != 'true'
+        run: echo "No package under ${{ matrix.part.scope }} is affected by this change."
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.RUN == 'true'
+        with:
+          fetch-depth: 2
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: env.RUN == 'true'
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: env.RUN == 'true'
         with:
           node-version: 24
       - uses: ./.github/actions/bun-install
+        if: env.RUN == 'true'
       # Quint fetches its evaluator on first use through GitHub's unauthenticated API, which
       # shared runners exhaust; fetch it once, authenticated (tests replay traces through Quint).
       # It ships no Windows build, and no Daemon test runs Quint.
       - name: Fetch the Quint evaluator
-        if: runner.os != 'Windows'
+        if: env.RUN == 'true' && runner.os != 'Windows'
         run: bun packages/spec/scripts/fetch-evaluator.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # The runner's TEMP is the 8.3 short form (C:\Users\RUNNER~1\...), which git reports
       # long; RUNNER_TEMP is long. The runner is elevated, which pipe.test.ts checks it sees.
       - name: Long temp path, elevation expected (Windows)
-        if: runner.os == 'Windows'
+        if: env.RUN == 'true' && runner.os == 'Windows'
         shell: pwsh
         run: |
           "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
           "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
           "POLARIS_EXPECT_ELEVATED=1" >> $env:GITHUB_ENV
+      # {0} takes --affected on a PR. Windows keeps pwsh: under Git Bash its elevation and terminal tests fail.
       - name: Test
-        run: ${{ matrix.part.run }}
+        if: env.RUN == 'true'
+        run: ${{ format(matrix.part.run, env.AFFECTED) }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always() && runner.os == 'Windows'
+        if: always() && env.RUN == 'true' && runner.os == 'Windows'
         with:
           name: junit-windows-${{ strategy.job-index }}
           path: apps/daemon/junit.xml
           if-no-files-found: warn
 
+  test-macos:
+    name: Test ${{ matrix.part.name }} (${{ matrix.os }})
+    # test's parts and steps on macOS; reports on a PR without blocking it (see `ci`).
+    needs: scope
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15]
+        part: *test-parts
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env: *test-env
+    steps: *test-steps
+
   spec:
     name: Spec (Quint)
     # packages/spec/README.md. The model-based tests themselves run in `test`.
+    needs: scope
+    if: needs.scope.outputs.spec == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -166,7 +309,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Fetch the Quint evaluator
         run: bun packages/spec/scripts/fetch-evaluator.ts
         env:
@@ -177,6 +320,8 @@ jobs:
   spec-traces:
     name: Spec trace validation, Apalache
     # Apart from `spec`, whose Quint runs take 3-5 minutes on their own.
+    needs: scope
+    if: needs.scope.outputs.spec == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -184,7 +329,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Fetch the Quint evaluator
         run: bun packages/spec/scripts/fetch-evaluator.ts
         env:
@@ -209,6 +354,8 @@ jobs:
   build-daemon:
     name: Build the Daemon
     # darwin builds must be re-signed with macOS codesign; the Linux targets cross-compile.
+    needs: scope
+    if: needs.scope.outputs.binaries == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -228,6 +375,8 @@ jobs:
   smoke-linux:
     name: Smoke-test ${{ matrix.platform }}
     needs: build-daemon
+    # Runs when build-daemon is skipped too, passing without steps, so the expanded names report.
+    if: ${{ !cancelled() && needs.build-daemon.result != 'failure' }}
     strategy:
       fail-fast: false
       matrix:
@@ -238,11 +387,16 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
+      - name: Daemon not built, nothing to smoke-test
+        if: needs.build-daemon.result != 'success'
+        run: echo "Neither the Daemon nor the Client is affected by this change."
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.build-daemon.result == 'success'
         with:
           name: polaris-daemon
           path: dist
       - name: Run polaris selftest (embedded fff loads) and check the manifest hash
+        if: needs.build-daemon.result == 'success'
         run: |
           chmod +x dist/${{ matrix.platform }}/polaris dist/${{ matrix.platform }}/betterleaks
           dist/${{ matrix.platform }}/polaris version | grep -x "polaris .* ${{ matrix.platform }}"
@@ -286,6 +440,8 @@ jobs:
     # apps/daemon/scripts/e2e-windows-service.ts on the runner: two Daemon builds; install A as
     # the logon task, a real Client over the pipe, kill (the task restarts it), upgrade to B,
     # uninstall. Its throwaway POLARIS_HOME keeps the task apart from any real one.
+    needs: scope
+    if: needs.scope.outputs.binaries == 'true'
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -312,6 +468,8 @@ jobs:
     # runners' results on any CPU model; a runner with another core count reports without
     # gating (--gate-same-machine). Latency and CPU never gate: shared runners are too noisy.
     # To refresh the baseline, see packages/bench/README.md ("CI").
+    needs: scope
+    if: needs.scope.outputs.bench == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -338,6 +496,8 @@ jobs:
     # (apps/desktop/scripts/budgets.ts): a heavy session (25 Turns × 60 items × 6 KB) must
     # keep the app plus the Daemon under 1 GB, a Workspace switch under 100 ms (p95), and
     # streaming frames paced to the display (Xvfb's refresh here, not 120 Hz).
+    needs: scope
+    if: needs.scope.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -367,3 +527,40 @@ jobs:
           name: desktop-budgets
           path: desktop-budgets.json
           if-no-files-found: warn
+
+  ci:
+    name: CI
+    needs:
+      [
+        scope,
+        check,
+        platform-checks,
+        platform-checks-macos,
+        test,
+        test-macos,
+        spec,
+        spec-traces,
+        build-daemon,
+        smoke-linux,
+        smoke-windows,
+        service-windows,
+        bench,
+        desktop-budgets,
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every counted job passed or was skipped by scope
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+        # Failed, cancelled and abandoned (never given a runner) all fail; macOS doesn't count on a PR.
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          failing=$(jq -r --arg event "$EVENT" '
+            ["platform-checks-macos", "test-macos"] as $macos
+            | to_entries[]
+            | select($event != "pull_request" or (.key | IN($macos[]) | not))
+            | select(.value.result != "success" and .value.result != "skipped")
+            | .key' <<<"$NEEDS")
+          if [ -n "$failing" ]; then echo "Not passing: $failing"; exit 1; fi

@@ -8,7 +8,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts",
     "email:dev": "email dev --dir emails --port 3200"
   },

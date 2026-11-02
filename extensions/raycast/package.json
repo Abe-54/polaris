@@ -71,7 +71,7 @@
     "typescript": "7.0.2"
   },
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts",
     "dev": "ray develop",
     "ray:build": "ray build -e dist -o dist",

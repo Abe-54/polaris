@@ -11,7 +11,7 @@
     "package": "bun scripts/package.ts",
     "start": "electron .",
     "smoke": "node scripts/smoke.ts --build",
-    "typecheck": "tsc -p . && tsc -p src/renderer/tsconfig.app.json && tsc -p src/renderer/tsconfig.test.json",
+    "typecheck": "bun check -p . && bun check -p src/renderer/tsconfig.app.json && bun check -p src/renderer/tsconfig.test.json",
     "test": "bun ../../tooling/test/watchdog.ts --pass-with-no-tests"
   },
   "dependencies": {

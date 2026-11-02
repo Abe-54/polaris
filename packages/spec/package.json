@@ -7,7 +7,7 @@
   "scripts": {
     "spec": "bun scripts/check.ts",
     "spec:replay": "bun scripts/replay.ts",
-    "typecheck": "tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts --timeout 120000 scripts/constellation-replay scripts/extensions-replay scripts/language-replay scripts/language-runtime"
   },
   "devDependencies": {

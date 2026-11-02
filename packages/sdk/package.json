@@ -13,7 +13,7 @@
     "./testing": "./src/daemon.testing.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts --pass-with-no-tests",
     "build": "bun scripts/build.ts",
     "pack": "bun scripts/build.ts --pack"

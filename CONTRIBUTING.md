@@ -11,7 +11,7 @@ Thanks for helping. This guide covers what you need to make a change that passes
 
 ## Setup
 
-You need [Bun](https://bun.sh) 1.3.9 or later (the exact version is pinned in `package.json`'s `packageManager`) and git.
+You need [Bun](https://bun.sh) 1.4.4 or later (the exact version is pinned in `package.json`'s `packageManager`) and git.
 
 ```sh
 git clone https://github.com/luxdotdev/polaris.git
@@ -52,7 +52,7 @@ Tests use `bun test` and live next to the code as `*.test.ts`.
 
 - **pre-commit** formats fully staged files with oxfmt and restages them, only checks partially staged ones, and lints staged files through the ratchet.
 - **commit-msg** strips session trailers and session URLs; this repository doesn't record them.
-- **pre-push** re-checks format and lint on the pushed commits, then typechecks and tests the changed packages and their dependents.
+- **pre-push** re-checks format and lint on the pushed commits, then typechecks the changed packages and their dependents and tests the changed packages.
 
 Run the same checks by hand with `bun run quality <files…>` (fixes), or with `--check`, `--dirty`, or `--range <a>..<b>`.
 

@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Shared oxlint and oxfmt configuration and the custom oxlint plugins every workspace extends.",
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts"
   },
   "devDependencies": {

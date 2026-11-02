@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Repo tooling: the lint ratchet, the quality runner behind the git hooks, and the hooks themselves.",
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "bun check -p .",
     "test": "bun test/watchdog.ts"
   },
   "devDependencies": {
