@@ -64,23 +64,36 @@ type Row = typeof Row.Type;
 
 const decodeRows = Schema.decodeUnknownSync(Schema.Array(Row));
 
+/** The rules only ever see this much of a message, so a huge one costs no more than this. */
+const MAX_SCANNED = 1_000;
+
+/** Random ids: eight or more word characters with at least two digits and a letter. */
+const randomId = (token: string) =>
+  (token.match(/\d/g)?.length ?? 0) >= 2 && /[a-z]/i.test(token) ? "<id>" : token;
+
 /** Replacements in order: quoted text first, so paths and ids inside quotes become `<str>`. */
-const RULES: ReadonlyArray<readonly [RegExp, string]> = [
+const RULES: ReadonlyArray<readonly [RegExp, string | ((token: string) => string)]> = [
   [/"[^"]*"|'[^']*'|`[^`]*`/g, "<str>"],
   [/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, "<url>"],
   [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<uuid>"],
   [/(?:~|\.{1,2})?(?:\/[\w.@+-]+){2,}\/?|\b[A-Z]:\\\S+/g, "<path>"],
   [/\b0x[0-9a-f]+\b/gi, "<hex>"],
-  // Random ids: eight or more word characters with at least two digits and a letter.
-  [/\b(?=(?:[a-z_-]*\d){2})(?=[\w-]*[a-z])[\w-]{8,}\b/gi, "<id>"],
+  [/[\w-]{8,}/g, randomId],
   [/\b\d+(?:\.\d+)?\b/g, "<n>"],
 ];
 
-const firstLine = (message: string) => message.trimStart().split(/\r?\n/, 1)[0]!.trim();
+const firstLine = (message: string) =>
+  message.trimStart().slice(0, MAX_SCANNED).split(/\r?\n/, 1)[0]!.trim();
 
 /** The first line with ids, numbers, quoted text and paths replaced, so repeats share one key. */
 export const fingerprint = (message: string): string =>
-  RULES.reduce((text, [pattern, token]) => text.replace(pattern, token), firstLine(message))
+  RULES.reduce(
+    (text, [pattern, token]) =>
+      Schema.is(Schema.String)(token)
+        ? text.replace(pattern, token)
+        : text.replace(pattern, (match) => token(match)),
+    firstLine(message)
+  )
     .replace(/\s+/g, " ")
     .slice(0, MAX_FINGERPRINT);
 

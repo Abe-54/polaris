@@ -35,6 +35,16 @@ test("messages that differ only in ids, paths and numbers share a fingerprint; w
   );
 });
 
+test("a 100 KB single-line message fingerprints quickly to a bounded key", () => {
+  const huge = `Error: ${"a1b2c3d4-".repeat(5_000)}${"x9".repeat(30_000)} "unterminated ${"'".repeat(20_000)}`;
+  const started = performance.now();
+  const key = fingerprint(huge);
+
+  expect(performance.now() - started).toBeLessThan(50);
+  expect(key.length).toBeLessThanOrEqual(200);
+  expect(key).toStartWith("Error: <id>");
+});
+
 const filter: SpanErrorsFilter = { sinceMs: 1_000, limit: 20 };
 
 const database = (rows: ReadonlyArray<{ age: number; message: string; status?: string }>) => {

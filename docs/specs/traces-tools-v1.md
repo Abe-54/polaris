@@ -247,7 +247,7 @@ call. `sinceMinutes`, `name`, `service`, `limit` (fingerprints, 1–100, default
 behave as in `trace_stats`.
 
 The message is the Span's status message, or the first exception event's `exception.message` when
-the status message is empty. Its fingerprint is the first line, trimmed, with, in order: quoted
+the status message is empty. Its fingerprint is the first line of its first 1,000 characters, trimmed, with, in order: quoted
 text (`"…"`, `'…'`, `` `…` ``) → `<str>`, URLs → `<url>`, UUIDs → `<uuid>`, paths of two or more
 segments → `<path>`, `0x…` → `<hex>`, random ids (eight or more word characters with at least two
 digits and a letter, so hex trace ids too) → `<id>`, numbers → `<n>`; whitespace collapses and the
