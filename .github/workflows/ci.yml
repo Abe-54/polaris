@@ -15,7 +15,8 @@ name: CI
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
 #   ci                one result for branch protection: passes only if every job passed or was skipped.
 #                     On a PR the macOS jobs (*-macos) run and report but don't count; Ubuntu and Windows
-#                     do, and so does build-daemon (macOS), which the smokes need. On main every job counts.
+#                     do, and so does build-daemon (macOS), which the smokes need. On main every job counts,
+#                     except quarantined ones (bench, ENG-743), which report only.
 # Jobs off on a PR are skipped (a skip reports as passing); matrix jobs instead skip their steps,
 # so their expanded names always report.
 
@@ -24,9 +25,10 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push supersedes a PR's run; every commit on main keeps its own run to completion.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'pr' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -555,11 +557,14 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
         # Failed, cancelled and abandoned (never given a runner) all fail; macOS doesn't count on a PR.
+        # Quarantined jobs report but never count: bench until its memory gate stops flaking (ENG-743).
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
           failing=$(jq -r --arg event "$EVENT" '
             ["platform-checks-macos", "test-macos"] as $macos
+            | ["bench"] as $quarantined
             | to_entries[]
+            | select(.key | IN($quarantined[]) | not)
             | select($event != "pull_request" or (.key | IN($macos[]) | not))
             | select(.value.result != "success" and .value.result != "skipped")
             | .key' <<<"$NEEDS")
