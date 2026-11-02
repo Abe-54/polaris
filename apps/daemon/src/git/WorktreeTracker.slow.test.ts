@@ -223,8 +223,9 @@ describe("WorktreeTracker", () => {
       await waitFor((list) => list.length === 1);
       await gitText(root, ["worktree", "add", "-q", "-b", "ext", external]);
       await waitFor((list) => list.some((w) => w.branch === "ext"));
-      await gitText(root, ["worktree", "remove", external]);
+      // Counted before the remove: the watch may report the settled list before git returns.
       const count = seen.length;
+      await gitText(root, ["worktree", "remove", external]);
       await waitFor((list) => seen.indexOf(list) >= count && list.length === 1);
     } finally {
       await Effect.runPromise(Fiber.interrupt(fiber));
@@ -261,8 +262,9 @@ describe("WorktreeTracker", () => {
       // Created by the user's own git, not through the tracker.
       await gitText(root, ["worktree", "add", "-q", "-b", "ext", external]);
       await waitFor((list) => list.some((w) => w.branch === "ext"));
-      await gitText(root, ["worktree", "remove", external]);
+      // Counted before the remove: the watch may report the settled list before git returns.
       const count = seen.length;
+      await gitText(root, ["worktree", "remove", external]);
       await waitFor((list) => seen.indexOf(list) >= count && list.length === 1);
     } finally {
       await Effect.runPromise(Fiber.interrupt(fiber));

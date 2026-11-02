@@ -442,8 +442,8 @@ let commandCounter = 0;
 
 export const cid = (label = "cmd"): CommandId => CommandId.make(`${label}-${++commandCounter}`);
 
-/** Poll the read model until `predicate` holds (reactors run after the ack). */
-export const waitFor = (predicate: (model: ReadModel) => boolean, timeout = 2000) =>
+/** Poll the read model until `predicate` holds (reactors run after the ack); `what` names it on timeout. */
+export const waitFor = (predicate: (model: ReadModel) => boolean, timeout = 2000, what = "") =>
   Effect.gen(function* () {
     const store = yield* EventStore;
     const deadline = Date.now() + timeout;
@@ -453,18 +453,24 @@ export const waitFor = (predicate: (model: ReadModel) => boolean, timeout = 2000
 
       if (predicate(model)) return model;
 
-      if (Date.now() > deadline) return yield* Effect.die(new Error("waitFor timed out"));
+      if (Date.now() > deadline)
+        return yield* Effect.die(
+          new Error(`waitFor timed out after ${timeout} ms${what && `: ${what}`}`)
+        );
       yield* Effect.sleep(Duration.millis(5));
     }
   });
 
 /** Wait for a plain condition outside the read model (e.g. a fake's call log). */
-export const waitUntil = (condition: () => boolean, timeout = 2000) =>
+export const waitUntil = (condition: () => boolean, timeout = 2000, what = "") =>
   Effect.gen(function* () {
     const deadline = Date.now() + timeout;
 
     while (!condition()) {
-      if (Date.now() > deadline) return yield* Effect.die(new Error("waitUntil timed out"));
+      if (Date.now() > deadline)
+        return yield* Effect.die(
+          new Error(`waitUntil timed out after ${timeout} ms${what && `: ${what}`}`)
+        );
       yield* Effect.sleep(Duration.millis(5));
     }
   });

@@ -5,11 +5,18 @@ import { tempDir } from "../platform/tempDir.testing.ts";
 import { gitText } from "./git.ts";
 
 export {
+  newTempDir,
   removeTempDir,
   removeTempDirSettled,
   suiteTempDir,
   tempDir,
 } from "../platform/tempDir.testing.ts";
+
+/**
+ * A test budget for suites running dozens of real gits: CI's 15 s, and 60 s on Windows, where
+ * one such test takes 3-12 s alone and more while parallel suites share the runner.
+ */
+export const HEAVY_GIT_MS = process.platform === "win32" ? 60_000 : 15_000;
 
 export const write = (root: string, path: string, content: string): void => {
   mkdirSync(dirname(join(root, path)), { recursive: true });

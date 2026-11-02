@@ -28,6 +28,12 @@ type Env = Engine | EventStore;
 
 const windows = process.platform === "win32";
 
+/**
+ * How long a real shell command may take to run, Git Bash's cold login start on a Windows runner
+ * included (over 2 s under load); the Engine's own steps keep waitFor's default.
+ */
+const SHELL_RUN_MS = 10_000;
+
 /** Git Bash's `pwd` prints an MSYS path (`/tmp/…`); `-W` prints the directory as Windows has it. */
 const PWD = windows ? "pwd -W" : "pwd";
 
@@ -54,7 +60,8 @@ const startSession = (
   Effect.gen(function* () {
     const cwd = fakeRepo();
     yield* dispatch(Command.cases.RegisterWorkspace.make({ path: cwd, name: null }));
-    const workspace = [...(yield* waitFor((m) => m.workspaces.size > 0)).workspaces.values()][0]!;
+    const registered = yield* waitFor((m) => m.workspaces.size > 0, undefined, "workspace");
+    const workspace = [...registered.workspaces.values()][0]!;
 
     yield* dispatch(
       Command.cases.StartSession.make({
@@ -69,7 +76,7 @@ const startSession = (
         attachments: [],
       })
     );
-    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === state);
+    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === state, undefined, state);
 
     return cwd;
   });
@@ -98,7 +105,9 @@ test("a shell command runs in the session's directory, then the Harness reads it
       const model = yield* waitFor(
         (m) =>
           m.sessions.get(sessionId)?.session.state === "idle" &&
-          m.sessions.get(sessionId)?.turns.length === 2
+          m.sessions.get(sessionId)?.turns.length === 2,
+        SHELL_RUN_MS,
+        "the shell command's Turn"
       );
 
       const turn = model.sessions.get(sessionId)!.turns[1]!;
@@ -147,14 +156,15 @@ test("Interrupt stops a running shell command and the Turn ends Interrupted with
       yield* dispatch(
         Command.cases.RunShellCommand.make({ sessionId, command: "touch started; sleep 30" })
       );
-      yield* waitUntil(() => existsSync(join(cwd, "started")), 5000);
+      yield* waitUntil(() => existsSync(join(cwd, "started")), SHELL_RUN_MS, "the shell started");
       yield* dispatch(Command.cases.Interrupt.make({ sessionId }));
 
       const model = yield* waitFor(
         (m) =>
           m.sessions.get(sessionId)?.turns[1]?.status === "interrupted" &&
           m.sessions.get(sessionId)?.session.state === "idle",
-        5000
+        SHELL_RUN_MS,
+        "the interrupted Turn"
       );
 
       expect(driver.latest(sessionId)!.turns.length).toBe(turnsBefore);
@@ -182,14 +192,14 @@ test("a steer sent while the shell command runs reaches the Harness after the co
       const command = "touch started; while [ ! -e go ]; do sleep 0.02; done";
 
       yield* dispatch(Command.cases.RunShellCommand.make({ sessionId, command }));
-      yield* waitUntil(() => existsSync(join(cwd, "started")), 5000);
+      yield* waitUntil(() => existsSync(join(cwd, "started")), SHELL_RUN_MS, "the shell started");
       yield* dispatch(Command.cases.Steer.make({ sessionId, text: "and summarize it" }));
       yield* Effect.sleep(100);
       const harness = driver.latest(sessionId)!;
 
       expect(harness.steers).toEqual([]);
       writeFileSync(join(cwd, "go"), "");
-      yield* waitUntil(() => harness.steers.length === 1, 5000);
+      yield* waitUntil(() => harness.steers.length === 1, SHELL_RUN_MS, "the steer");
 
       expect(harness.turns.at(-1)!.shellCommand?.command).toBe(command);
       expect(harness.steers).toEqual(["and summarize it"]);
