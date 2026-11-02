@@ -171,7 +171,11 @@ export const createActionTraces = ({
     return { trace: action.span.trace, settle: () => release(action) };
   };
 
-  return { run, adopt };
+  /** The open action's Span while it hasn't ended, for warnings to join (ENG-754). */
+  const active = (): RendererSpan | undefined =>
+    open === null || open.done ? undefined : open.span;
+
+  return { run, adopt, active };
 };
 
 export type ActionTraces = ReturnType<typeof createActionTraces>;

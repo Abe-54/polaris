@@ -10,7 +10,12 @@ import type { RequestInput, RequestMethod } from "../../../shared/contract.ts";
 import { Commands } from "../../commands.ts";
 import { standInBridge } from "../bridge.ts";
 import { dispatch } from "../session/dispatch.ts";
-import { connectSelfTraces, createRendererSelfTraces } from "./index.ts";
+import {
+  type ActionTraces,
+  connectSelfTraces,
+  createActionTraces,
+  createRendererSelfTraces,
+} from "./index.ts";
 
 const fakeApi = (enabled: boolean) => {
   const batches: Array<ReadonlyArray<SelfSpan>> = [];
@@ -143,6 +148,43 @@ describe("renderer Self-Traces", () => {
         .map((s) => [s.name, s.status, s.attributes["log.message"], s.resource["service.name"]])
     ).toEqual([
       ["polaris.log", "error", "render failed, token=[redacted]", "polaris-desktop-renderer"],
+    ]);
+  });
+
+  test("a warning during an action is an event on its Span; once it ends, a polaris.log Span", () => {
+    const fake = fakeApi(true);
+    const target: LogConsole = { warn: () => undefined, error: () => undefined };
+    const timers: Array<() => void> = [];
+    let actions: ActionTraces | null = null;
+
+    const local = createRendererSelfTraces({
+      bridge: () => fake.api,
+      console: target,
+      activeSpan: () => actions?.active(),
+    });
+
+    actions = createActionTraces({
+      traces: () => local,
+      setTimeout: (run) => {
+        timers.push(run);
+
+        return () => undefined;
+      },
+    });
+    local.setEnabled(true);
+    actions.run("data.table.open", "Open table", () => target.warn("schema cache stale"));
+
+    for (const run of timers.splice(0)) run();
+    target.warn("after the action");
+    local.flush();
+
+    expect(
+      fake.batches
+        .flat()
+        .map((s) => [s.name, s.events.map((e) => [e.name, e.attributes["log.message"]])])
+    ).toEqual([
+      ["polaris.action.data.table.open", [["log.warn", "schema cache stale"]]],
+      ["polaris.log", []],
     ]);
   });
 

@@ -2,7 +2,12 @@
  * The renderer's Self-Traces (ADR 0095): Spans for what the user starts here, such as a Turn
  * from the composer, handed to main in batches. Off, no Span is made and nothing crosses IPC.
  */
-import { hookConsole, type LogConsole, makeLogRecorder } from "@polaris/client/selfTraces/logs";
+import {
+  hookConsole,
+  type LogConsole,
+  type LogTarget,
+  makeLogRecorder,
+} from "@polaris/client/selfTraces/logs";
 import type { SelfSpan, TraceContext } from "@polaris/protocol";
 import type { PolarisApi } from "../../../shared/api.ts";
 
@@ -15,7 +20,7 @@ const BATCH_SPANS = 1_024;
 /** What a batch of Spans goes through; `selfSpans` is absent in previews and older preloads. */
 type Bridge = Pick<PolarisApi, "selfSpans">;
 
-export interface RendererSpan {
+export interface RendererSpan extends LogTarget {
   /** Pass as the request's `trace`, so main and the Daemon join this Trace. */
   readonly trace: TraceContext;
   /** Ends the Span, now or at `atMs`; a message marks it failed, `attributes` add what was learned. */
@@ -29,8 +34,10 @@ export interface RendererSelfTracesOptions {
   readonly nowMs?: () => number;
   /** Arms a timer; the result cancels it. */
   readonly setTimeout?: (run: () => void, ms: number) => () => void;
-  /** Whose `warn` and `error` become `polaris.log` Spans while on; the window's by default. */
+  /** Whose `warn` and `error` are recorded while on; the window's by default. */
   readonly console?: LogConsole;
+  /** The open action Span a warning joins as an event; else it becomes a `polaris.log` Span. */
+  readonly activeSpan?: () => LogTarget | undefined;
 }
 
 const hex = (bytes: number) =>
@@ -49,6 +56,7 @@ export const createRendererSelfTraces = ({
     return () => globalThis.clearTimeout(handle);
   },
   console: target = globalThis.console,
+  activeSpan = () => undefined,
 }: RendererSelfTracesOptions) => {
   let enabled = false;
   let version = "";
@@ -85,7 +93,7 @@ export const createRendererSelfTraces = ({
   const setEnabled = (on: boolean) => {
     if (on !== enabled) {
       unhook?.();
-      unhook = on ? hookConsole(target, logs) : null;
+      unhook = on ? hookConsole(target, logs, activeSpan) : null;
     }
 
     enabled = on;
@@ -106,8 +114,22 @@ export const createRendererSelfTraces = ({
     const traceId = parent?.traceparent.slice(3, 35) ?? hex(16);
     const id = hex(8);
     const started = nowMs();
+    const events: SelfSpan["events"][number][] = [];
+    let ended = false;
+
+    const event: LogTarget["event"] = (eventName, startTime, eventAttributes = {}) => {
+      if (ended) return;
+      events.push({
+        name: eventName,
+        timeUnixNano: startTime.toString(),
+        attributes: eventAttributes,
+        droppedAttributes: 0,
+      });
+    };
 
     const end = (failure?: string, more?: SpanAttributes, atMs?: number) => {
+      ended = true;
+
       if (!enabled) return;
       push({
         traceId,
@@ -123,7 +145,7 @@ export const createRendererSelfTraces = ({
         attributes: more === undefined ? attributes : { ...attributes, ...more },
         resource: resource(),
         scope: scope(),
-        events: [],
+        events,
         links: [],
         droppedAttributes: 0,
         droppedEvents: 0,
@@ -131,7 +153,7 @@ export const createRendererSelfTraces = ({
       });
     };
 
-    return { trace: { traceparent: `00-${traceId}-${id}-01` }, end };
+    return { trace: { traceparent: `00-${traceId}-${id}-01` }, end, event };
   };
 
   return {
@@ -156,8 +178,11 @@ let current: RendererSelfTraces | null = null;
 export const selfTraces = (): RendererSelfTraces | null => current;
 
 /** Follows main's switch: the state now, then each `self-traces` App event. */
-export const connectSelfTraces = (api: Api): RendererSelfTraces => {
-  const traces = createRendererSelfTraces({ bridge: () => api });
+export const connectSelfTraces = (
+  api: Api,
+  activeSpan: () => LogTarget | undefined = () => undefined
+): RendererSelfTraces => {
+  const traces = createRendererSelfTraces({ bridge: () => api, activeSpan });
   let heard = false;
 
   current = traces;

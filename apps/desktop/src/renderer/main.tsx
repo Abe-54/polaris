@@ -26,7 +26,7 @@ import { shellCommands, shellContext } from "./shell/commands.ts";
 import { workspaceCommands } from "./shell/visibility.ts";
 import { send } from "./features/session/dispatch.ts";
 import { connect } from "./store/store.ts";
-import { connectSelfTraces, traceRequests } from "./features/selfTraces/index.ts";
+import { actionTraces, connectSelfTraces, traceRequests } from "./features/selfTraces/index.ts";
 
 /** Requests join the user action that caused them (features/selfTraces/actions.ts). */
 const api = traceRequests(window.polaris);
@@ -157,7 +157,8 @@ connectHostDeveloperModes(api);
 
 connectUpdates(api);
 
-connectSelfTraces(window.polaris);
+// Warnings in the window join the open action Span, else become polaris.log Spans (ENG-754).
+connectSelfTraces(window.polaris, actionTraces.active);
 
 window.polaris.onAppEvent((event) => {
   if (event.kind === "command") commands.run(event.id);
