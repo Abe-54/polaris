@@ -1,6 +1,5 @@
 import { expect } from "bun:test";
 import { rejects } from "node:assert/strict";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import * as P from "@polaris/protocol";
 import { createProjectDiscovery } from "../discovery/index.ts";
@@ -12,7 +11,8 @@ import { httpsArtifactDownload } from "../install/download.ts";
 import { digest } from "../install/validation.ts";
 import { createManagedDelivery } from "./managedDelivery.ts";
 import { typescriptTool } from "./managedPolicy.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const privateInstallTest = posixTest(
   "language installations require a POSIX-mode private, owned directory (ENG-314)"
@@ -29,7 +29,7 @@ const settings = (automatic = true) =>
   });
 
 async function fixture(corrupt = false, legacy = false) {
-  const root = await realpath(await mkdtemp(shortTemp("slice-1-delivery-")));
+  const root = newTempDir("slice-1-delivery-", { short: true });
   const source = artifactFixture();
   const downloads = new Map<string, number>();
 
@@ -127,7 +127,7 @@ async function fixture(corrupt = false, legacy = false) {
       ledger.dispose();
       await managed.dispose();
       await server.stop(true);
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     },
   };
 }

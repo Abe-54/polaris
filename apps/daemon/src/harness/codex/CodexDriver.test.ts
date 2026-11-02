@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ApprovalDecision, RequestId, TurnId, TurnItem } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
@@ -7,8 +6,8 @@ import { HarnessEvent } from "../HarnessDriver.ts";
 import { makeCodexDriver, probeCodex } from "./CodexDriver.ts";
 import { type ClientAnswer, type Handler, readFixture, replay } from "./testing/FakeAppServer.ts";
 import { cleanup, ofTag, scripted, sessionWith, THREAD, turn } from "./testing/session.ts";
-import { shortTemp } from "../../platform/testing.ts";
 import { shellFake, shPath } from "../testing/shellFake.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const decodeTurnInput = Schema.decodeUnknownSync(
   Schema.Struct({ input: Schema.Array(Schema.Struct({ text: Schema.optional(Schema.String) })) })
@@ -431,7 +430,7 @@ describe("Codex driver against a fake app-server", () => {
                   "resume",
                   THREAD,
                   "--remote",
-                  expect.stringMatching(/^unix:\/\/\/tmp\/pcx-.*\/s\.sock$/),
+                  expect.stringMatching(/^unix:\/\/.*\/pcx-[^/]+\/s\.sock$/),
                 ]
           );
         }),
@@ -681,8 +680,8 @@ describe("Codex driver against a fake app-server", () => {
 
 describe("probe", () => {
   test("only runs `codex --version`", async () => {
-    const dir = mkdtempSync(shortTemp("pcx-"));
-    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const dir = newTempDir("pcx-", { short: true });
+    cleanup.push(() => removeTempDir(dir));
     const log = join(dir, "argv");
     const fake = shellFake(dir, "codex", `echo "$@" >> "${shPath(log)}"\necho "codex-cli 9.8.7"`);
     const probe = await Effect.runPromise(probeCodex(fake));

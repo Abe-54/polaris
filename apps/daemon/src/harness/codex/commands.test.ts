@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { CODEX_BUILTINS, listCodexCommands, readPrompts, toPrompt } from "./commands.ts";
 import { startFakeAppServer } from "./testing/FakeAppServer.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const cleanup: Array<() => void> = [];
 
@@ -14,8 +14,8 @@ afterEach(() => {
 
 /** Socket paths must stay under ~104 bytes, so tests use /tmp directly. */
 const tempDir = () => {
-  const dir = mkdtempSync(shortTemp("pcc-"));
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = newTempDir("pcc-", { short: true });
+  cleanup.push(() => removeTempDir(dir));
 
   return dir;
 };

@@ -7,13 +7,11 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const RECORDER_SOURCE = `import { appendFileSync } from "node:fs";
 appendFileSync(process.execPath + ".ran", process.argv.slice(2).join(" ") + "\\n");
@@ -26,9 +24,9 @@ let compiled: string | undefined;
 const windowsRecorder = () => {
   if (compiled !== undefined) return compiled;
 
-  const dir = mkdtempSync(join(tmpdir(), "polaris-recorder-"));
+  const dir = newTempDir("polaris-recorder-");
   // The compiled program is a whole Bun runtime: never leave it behind.
-  process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
+  process.on("exit", () => removeTempDir(dir));
   const source = join(dir, "recorder.ts");
   const out = join(dir, "recorder.exe");
   writeFileSync(source, RECORDER_SOURCE);

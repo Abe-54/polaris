@@ -1,20 +1,12 @@
-import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-  readdirSync,
-  mkdirSync,
-} from "node:fs";
+import { readFileSync, statSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId, NotFound } from "@polaris/protocol";
 import { Effect, Fiber, Option, Redacted, Stream } from "effect";
 import { SecretStorageError, fileSecrets } from "../secrets/index.ts";
 import { DataSourceAccess } from "./access.ts";
 import { sources } from "./sources.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const sessionId = SessionId.make("one");
 
@@ -37,10 +29,8 @@ const input = {
 } as const;
 
 const fixture = Effect.gen(function* () {
-  const root = mkdtempSync(shortTemp("data-sources-"));
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-  );
+  const root = newTempDir("data-sources-", { short: true });
+  yield* Effect.addFinalizer(() => Effect.sync(() => removeTempDir(root)));
   mkdirSync(join(root, "other"));
   const secrets = fileSecrets(join(root, "secrets"));
   const access = yield* DataSourceAccess.pipe(Effect.provide(DataSourceAccess.layer));

@@ -10,13 +10,13 @@
  * (default `opencode/big-pickle`, free; Zen's free tier needs OpenCode ≥ 1.18).
  */
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ApprovalDecision, SessionId, TurnId, TurnItem } from "@polaris/protocol";
 import { Effect, Schema, Stream } from "effect";
 import { HarnessEvent } from "../HarnessDriver.ts";
 import { makeOpenCodeDriver, scratchXdg } from "./OpenCodeDriver.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const enabled = process.env.POLARIS_E2E_OPENCODE === "1";
 
@@ -29,7 +29,7 @@ const model = process.env.POLARIS_E2E_OPENCODE_MODEL ?? "opencode/big-pickle";
 test.skipIf(!enabled)(
   "a real OpenCode Turn: run one approved command and reply",
   async () => {
-    const root = mkdtempSync(join(tmpdir(), "polaris-opencode-e2e-"));
+    const root = newTempDir("polaris-opencode-e2e-");
     const repo = join(root, "repo");
     mkdirSync(repo);
     await Bun.$`git init -q`.cwd(repo).quiet();
@@ -118,7 +118,7 @@ test.skipIf(!enabled)(
       expect(existsSync(stateFile)).toBe(false);
       expect(() => process.kill(serverPid, 0)).toThrow();
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   },
   180_000

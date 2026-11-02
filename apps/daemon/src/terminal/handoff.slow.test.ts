@@ -5,8 +5,7 @@
  * - a crash ends terminals cleanly: the next Daemon reports them ended.
  */
 import { afterEach, beforeEach, describe, expect } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { Effect, Schema } from "effect";
@@ -14,6 +13,7 @@ import { CommandRunner } from "../service/CommandRunner.ts";
 import { runtimePlatform } from "../service/platform.ts";
 import { requestUpgrade, runningDaemonPid } from "../service/upgrade.ts";
 import { posixTest } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const fixture = join(import.meta.dir, "fixtures", "terminal-daemon.ts");
 
@@ -26,7 +26,7 @@ let daemon: Subprocess | null = null;
 const previousHome = process.env.POLARIS_HOME;
 
 beforeEach(() => {
-  home = realpathSync(mkdtempSync(join(tmpdir(), "polaris-term-up-")));
+  home = newTempDir("polaris-term-up-");
   process.env.POLARIS_HOME = home;
 });
 
@@ -37,7 +37,7 @@ afterEach(async () => {
 
   if (previousHome === undefined) delete process.env.POLARIS_HOME;
   else process.env.POLARIS_HOME = previousHome;
-  rmSync(home, { recursive: true, force: true });
+  await removeTempDirSettled(home);
 });
 
 const socketPath = () => join(home, "daemon.sock");

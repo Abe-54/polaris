@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import assert from "node:assert/strict";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as P from "@polaris/protocol";
@@ -13,7 +13,8 @@ import { LanguageAcquisitionAuthority } from "./acquisitionAuthority.ts";
 import { HostProposalEvidence } from "../preparation/provenance.ts";
 import { ProposalProvenance } from "../preparation/provenanceService.ts";
 import { prepareServerEdit } from "./serverPreparation.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const treeSnapshotTest = posixTest(
   "Windows bug: NTFS file IDs exceed a safe integer for LanguageResourceIdentity.inode in tree snapshots (ENG-296)"
@@ -22,7 +23,7 @@ const treeSnapshotTest = posixTest(
 treeSnapshotTest(
   "server preparation reads canonical closed snapshots and rejects replaced independent ownership",
   async () => {
-    const root = await realpath(await mkdtemp(shortTemp("m31-server-preparation-")));
+    const root = newTempDir("m31-server-preparation-", { short: true });
 
     try {
       const path = join(root, "file.ts");
@@ -186,7 +187,7 @@ treeSnapshotTest(
       await assert.rejects(prepare(edit, proposal, access));
       evidence.dispose();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     }
   }
 );

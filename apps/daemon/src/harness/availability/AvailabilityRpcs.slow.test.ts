@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HARNESS_CATALOGUE } from "@polaris/protocol";
 import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
@@ -8,16 +7,17 @@ import { RpcTest } from "effect/rpc";
 import { Availability } from "./Availability.ts";
 import { AvailabilityRpcs, AvailabilityRpcsLive } from "./AvailabilityRpcs.ts";
 import { shellFake, shPath } from "../testing/shellFake.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 /** A Host with a fake `codex` whose sign-in the test flips; `claude` isn't installed. */
 const fakeHost = () => {
-  const root = mkdtempSync(join(tmpdir(), "polaris-availability-rpc-"));
+  const root = newTempDir("polaris-availability-rpc-");
   dirs.push(root);
   const home = join(root, "home");
   const bin = join(root, "bin");

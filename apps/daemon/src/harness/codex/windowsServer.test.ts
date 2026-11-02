@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isRunning, system32 } from "../../platform/processes.ts";
 import { processCreated, writePrivateFile } from "../../platform/windowsNative.ts";
 import { readAppServerState, stopAppServer, tokenFileOf } from "./AppServer.ts";
 import { ownsListen, serverArgs } from "./windowsServer.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const windowsOnly = test.skipIf(process.platform !== "win32");
 
@@ -15,7 +14,7 @@ const elevated =
   process.platform === "win32" && Bun.spawnSync([system32("net.exe"), "session"]).exitCode === 0;
 
 test.skipIf(!elevated)("a state file another account owns is not trusted", () => {
-  const home = mkdtempSync(join(tmpdir(), "pstate-"));
+  const home = newTempDir("pstate-");
   const stateFile = join(home, "codex-app-server.json");
   const state = { pid: 1, version: null, codexPath: "c", socketPath: "s", startedAt: 0 };
 
@@ -26,7 +25,7 @@ test.skipIf(!elevated)("a state file another account owns is not trusted", () =>
 
     expect(readAppServerState(stateFile)).toBeNull();
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 });
 
@@ -44,7 +43,7 @@ describe("a server a previous Daemon left", () => {
   windowsOnly(
     "is ended only while its listener is that process, running app-server on this home's token",
     async () => {
-      const home = mkdtempSync(join(tmpdir(), "pstale-"));
+      const home = newTempDir("pstale-");
       const stateFile = join(home, "codex-app-server.json");
       const token = tokenFileOf(stateFile);
 
@@ -92,7 +91,7 @@ describe("a server a previous Daemon left", () => {
         });
       } finally {
         for (const child of Object.values(children)) child.kill("SIGKILL");
-        rmSync(home, { recursive: true, force: true });
+        removeTempDir(home);
       }
     }
   );

@@ -6,14 +6,13 @@
  */
 import { afterEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BRIDGE_EXIT_UNTRUSTED_DAEMON } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import { BunSocketStream } from "../bunSocket.ts";
 import { connectOwnPipe, type PipeCalls } from "./client.ts";
 import { WIN32_ERROR } from "./security.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const USER = "S-1-5-21-1-2-3-1001";
 
@@ -75,8 +74,8 @@ const BRIDGE = join(import.meta.dir, "..", "fixtures", "bridge.ts");
 
 const homes: string[] = [];
 
-afterEach(() => {
-  for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
+afterEach(async () => {
+  for (const home of homes.splice(0)) await removeTempDirSettled(home);
 });
 
 /** Whether a `Bun.listen` pipe from this process is owned by Administrators: an elevated token. */
@@ -131,7 +130,7 @@ describe.skipIf(!onWindows)("on Windows", () => {
   test.skipIf(!isElevated)(
     "polaris bridge refuses a squatter's pipe and sends it nothing (needs an elevated process)",
     async () => {
-      const home = mkdtempSync(join(tmpdir(), "polaris-squat-"));
+      const home = newTempDir("polaris-squat-");
       homes.push(home);
       let received = 0;
       let connections = 0;

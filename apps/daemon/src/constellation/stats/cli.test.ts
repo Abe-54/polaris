@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ConstellationStats } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
@@ -7,10 +7,10 @@ import { EventStore } from "../../store/EventStore.ts";
 import { CID } from "../../engine/constellation.testing.ts";
 import { seedStats } from "./store.testing.ts";
 import { localEndpoint } from "@polaris/protocol/endpoint";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 test("the real CLI reads Stats over RPC from an isolated Daemon and emits decodable JSON", async () => {
-  const home = mkdtempSync(shortTemp("polaris-stats-cli-"));
+  const home = newTempDir("polaris-stats-cli-", { short: true });
   const main = resolve(import.meta.dir, "../../main.ts");
 
   const env = {
@@ -70,6 +70,6 @@ test("the real CLI reads Stats over RPC from an isolated Daemon and emits decoda
   } finally {
     daemon.kill("SIGTERM");
     await daemon.exited;
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 }, 20000);

@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { makeBenchDriver } from "./bench/BenchDriver.ts";
@@ -13,6 +11,7 @@ import { HarnessRegistry } from "../services.ts";
 import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
 import { DRIVER_CAPABILITIES, harnessRegistryLayer, lazyDriver } from "./registry.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 describe("lazyDriver", () => {
   test("loads the real driver once, on first probe, not when built", async () => {
@@ -45,7 +44,7 @@ describe("lazyDriver", () => {
   });
 
   test("declared capabilities match the drivers they stand in for", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "polaris-registry-"));
+    const dir = newTempDir("polaris-registry-");
 
     try {
       const codex = await Effect.runPromise(
@@ -69,7 +68,7 @@ describe("lazyDriver", () => {
       expect(makeBenchDriver("claude").capabilities).toEqual(DRIVER_CAPABILITIES.bench);
       expect(makeBenchDriver("codex").capabilities).toEqual(DRIVER_CAPABILITIES.bench);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 });

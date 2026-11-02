@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AgentSession,
@@ -35,6 +33,7 @@ import { Constellations } from "./service.ts";
 import { ConstellationOwner, ConstellationRuntime } from "./runtime.ts";
 import { ConstellationSettings } from "@polaris/protocol";
 import { ConstellationDefaultsPath, setDefaults } from "./defaults.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const user = { kind: "user" as const };
 
@@ -122,7 +121,7 @@ const run = <A, E>(file: string, effect: Effect.Effect<A, E, EventStore | Conste
 
 describe("Constellation store and service", () => {
   test("plan.start snapshots omitted Host defaults without changing existing graphs", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "c1-default-plan-"));
+    const dir = newTempDir("c1-default-plan-");
 
     try {
       await run(
@@ -150,11 +149,11 @@ describe("Constellation store and service", () => {
         }).pipe(Effect.provideService(ConstellationDefaultsPath, join(dir, "settings.json")))
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
   test("restart re-folds graph, questions and messages; rejected command receipts retain findings", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "c1-e-store-"));
+    const dir = newTempDir("c1-e-store-");
     const file = join(dir, "state.sqlite");
 
     try {
@@ -229,7 +228,7 @@ describe("Constellation store and service", () => {
         })
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
   test("concurrent edits serialize against current Task revisions and duplicate IDs commit once", async () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type PlanLimit, SessionId, TurnId } from "@polaris/protocol";
 import { Effect, Schema, Stream } from "effect";
@@ -7,7 +7,7 @@ import { HarnessEvent, type HarnessSession } from "../HarnessDriver.ts";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import { type FakeConnection, startFakeAppServer } from "./testing/FakeAppServer.ts";
 import { THREAD, turn } from "./testing/session.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const realRead = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(
   readFileSync(join(import.meta.dir, "../limits/fixtures/codex-rate-limits-read.json"), "utf8")
@@ -40,8 +40,8 @@ const run = async (
   }) => Promise<void>
 ) => {
   // Socket paths must stay under ~104 bytes.
-  const dir = mkdtempSync(shortTemp("pcl-"));
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = newTempDir("pcl-", { short: true });
+  cleanup.push(() => removeTempDir(dir));
   const path = join(dir, "s.sock");
   let connection: FakeConnection | null = null;
 

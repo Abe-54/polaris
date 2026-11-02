@@ -1,14 +1,6 @@
 import { describe, test } from "bun:test";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 const windows = process.platform === "win32";
-
-/**
- * A `mkdtemp` prefix under a short temp root: `/tmp` on POSIX, where a Unix socket's path
- * must stay short, and the user's temp directory on Windows, which has no `/tmp`.
- */
-export const shortTemp = (prefix: string) => join(windows ? tmpdir() : "/tmp", prefix);
 
 type Test = (
   label: string,

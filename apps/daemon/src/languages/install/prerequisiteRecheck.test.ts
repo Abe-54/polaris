@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Schema } from "effect";
 import { LanguageHostState } from "@polaris/protocol";
@@ -7,7 +7,7 @@ import { Tool } from "../catalog/model.ts";
 import { createHostPrerequisiteProbe } from "./hostStateProbes.ts";
 import { createHostToolStates } from "./hostState.ts";
 import { artifactFixture, hostId, platform } from "./fixture.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 for (const [id, executable] of [
   ["shellcheck", "shellcheck"],
@@ -18,7 +18,7 @@ for (const [id, executable] of [
   ["php", "php"],
 ] as const)
   test(`explicit recheck replaces cached ${id} absence and republishes to the existing watch`, async () => {
-    const home = await realpath(await mkdtemp(shortTemp("prerequisite-recheck-")));
+    const home = newTempDir("prerequisite-recheck-", { short: true });
     const directory = join(home, "bin");
     await mkdir(directory);
 
@@ -80,6 +80,6 @@ for (const [id, executable] of [
       expect(states.stats().subscribers).toBe(0);
     } finally {
       lifetime.abort();
-      await rm(home, { recursive: true, force: true });
+      await removeTempDirSettled(home);
     }
   });

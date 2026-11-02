@@ -1,5 +1,5 @@
 /** Isolated demand measurement; run only under the Lead-released m31-bench lease. */
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { BlobId, LanguageCheckout, WorkspaceId } from "@polaris/protocol";
@@ -7,11 +7,9 @@ import { Effect, Match, Stream } from "effect";
 import { BlobChannel } from "../../services.ts";
 import { readRange, ReadContent } from "../../files/fs.ts";
 import { createHostPreviewMedia, PreviewMediaAuthority } from "./index.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
-const temporary = await mkdtemp(shortTemp("m31-h1-measure-"));
-
-const root = await realpath(temporary);
+const root = newTempDir("m31-h1-measure-", { short: true });
 
 const checkout = LanguageCheckout.cases.Workspace.make({
   workspaceId: WorkspaceId.make("fake-media-measure"),
@@ -134,5 +132,5 @@ try {
     })
   );
 } finally {
-  await rm(temporary, { recursive: true, force: true });
+  await removeTempDirSettled(root);
 }

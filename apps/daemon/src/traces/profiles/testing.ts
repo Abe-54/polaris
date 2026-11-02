@@ -1,5 +1,5 @@
-import { shortTemp } from "../../platform/testing.ts";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import {
@@ -42,7 +42,7 @@ export const withProfiles = async (
   }) => Promise<void>,
   options: ProfileOptions = {}
 ) => {
-  const root = await mkdtemp(shortTemp("p4-"));
+  const root = newTempDir("p4-", { short: true });
   const targets = new TargetRegistry(join(root, "bootstrap"));
   let trusted = true;
   let readOnly = false;
@@ -133,7 +133,7 @@ export const withProfiles = async (
   } finally {
     await runtime.dispose();
     await targets.close();
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

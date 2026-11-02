@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as P from "@polaris/protocol";
@@ -8,16 +8,13 @@ import { connectRpc, socketTransport } from "@polaris/client";
 import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { lazyLanguageHandlers } from "../../transport/lazyLanguages.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 test("real managed SQL and Shell through authenticated RPC, dialect CAS and draft-preserving replacement", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(async () => realpath(await mkdtemp(shortTemp("polaris-sql-shell-live-")))),
-          (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true }))
-        );
+        const root = yield* scopedTempDir("polaris-sql-shell-live-", { short: true });
 
         const project = join(root, "project");
         yield* Effect.promise(async () => {

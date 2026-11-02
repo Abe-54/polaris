@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   Attempt,
@@ -33,6 +33,7 @@ import {
 } from "effect";
 import { fakeHost, connectFake, fixtureSession, testIdentity } from "./fakeHost.testing.ts";
 import { makeRepo, removeTempDir, write, commitAll } from "../../git/testing.ts";
+import { newTempDir } from "../../platform/tempDir.testing.ts";
 import { gitText, resolveCommit } from "../../git/git.ts";
 import { constellationRef } from "../../git/constellationBundles.ts";
 import {
@@ -56,7 +57,6 @@ import { ConstellationRelay } from "../../../../../packages/client/src/constella
 import { HostRegistry } from "../../../../../packages/client/src/HostRegistry.ts";
 import { HostConnector, HostTarget } from "../../../../../packages/client/src/HostConnection.ts";
 import { type ConstellationRuntimeService } from "../runtime.ts";
-import { shortTemp } from "../../platform/testing.ts";
 
 interface RelayTraceBatch {
   hostId: string;
@@ -67,8 +67,8 @@ interface RelayTraceBatch {
 const id = (name: string) => CommandId.make(name);
 
 const roots = () => ({
-  owner: mkdtempSync(shortTemp("c1wo-")),
-  worker: mkdtempSync(shortTemp("c1ww-")),
+  owner: newTempDir("c1wo-", { short: true }),
+  worker: newTempDir("c1ww-", { short: true }),
 });
 
 const seed = Effect.fnUntraced(function* (

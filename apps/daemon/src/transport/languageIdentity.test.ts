@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import * as P from "@polaris/protocol";
@@ -18,7 +18,7 @@ import {
   replayIdentity,
   IdentityTrace,
 } from "../../../../packages/spec/scripts/language-replay/identity.ts";
-import { shortTemp } from "../platform/testing.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const first = Redacted.make("a".repeat(64));
 
@@ -37,10 +37,7 @@ const hello = (languageProof?: Redacted.Redacted<unknown>) => {
   return languageProof === undefined ? payload : { ...payload, languageProof };
 };
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-a0-socket-"))),
-  (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-a0-socket-", { short: true });
 
 const options = (root: string) => ({
   root,

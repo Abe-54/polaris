@@ -1,6 +1,6 @@
 import { pythonSearchPaths } from "./launch.ts";
 import { expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WorkspaceId } from "@polaris/protocol";
 import { cfgVersion, detectPython, interpreterVersion, nameVersion } from "./detection.ts";
@@ -8,16 +8,16 @@ import { createPythonEnvironment, interpreterEntry } from "./environment.ts";
 import { createProjectDiscovery } from "../discovery/index.ts";
 import { LanguageCheckout, HostId } from "@polaris/protocol";
 import { effectiveSettings } from "../discovery/configuration.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-python-detection-")));
+  const root = newTempDir("polaris-python-detection-", { short: true });
   const executable = join(root, "host-python");
   await writeFile(executable, "#!/bin/sh\nexit 99\n");
   await chmod(executable, 0o755);
   const host = { home: join(root, "empty-home"), directories: [join(root, "empty-host")] };
 
-  return { root, executable, host, close: () => rm(root, { recursive: true, force: true }) };
+  return { root, executable, host, close: () => removeTempDirSettled(root) };
 }
 
 test("venv and uv detection preserve the symlink entry and never run it; Host absence is explicit", async () => {

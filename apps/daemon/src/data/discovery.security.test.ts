@@ -1,6 +1,5 @@
-import { shortTemp } from "../platform/testing.ts";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile, rm, symlink, open, realpath } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdir, writeFile, rm, symlink, open } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { Redacted } from "effect";
 import { discover, prisma } from "./discovery.ts";
@@ -8,19 +7,13 @@ import { read } from "./read.ts";
 import { metadata, parseConnection, connectionUrl } from "./connection.ts";
 import { scrubCredentials } from "@polaris/protocol";
 import { knownFromConnection } from "./knownCredentials.ts";
-
-const roots: string[] = [];
+import { tempDir } from "../platform/tempDir.testing.ts";
 
 const fixture = async () => {
-  const root = await mkdtemp(shortTemp("data-hostile-"));
-  roots.push(root);
+  const root = tempDir("data-hostile-", { short: true });
 
   return root;
 };
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-});
 
 const candidate = (url: string) => ({
   name: "app",
@@ -109,9 +102,7 @@ test("R2/F7: config and prisma directory symlinks cannot read another checkout",
   await symlink(join(outside, "config"), join(root, "config"), "junction");
   await symlink(join(outside, "prisma"), join(root, "prisma"), "junction");
   expect(await discover(root)).toEqual([]);
-  expect(
-    await read(await realpath(root), relative(root, join(outside, "config/database.yml")))
-  ).toBe("");
+  expect(await read(root, relative(root, join(outside, "config/database.yml")))).toBe("");
 });
 
 test("F8: an unterminated Prisma block is scanned once; datasource names survive generator blocks", () => {

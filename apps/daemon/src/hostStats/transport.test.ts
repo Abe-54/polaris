@@ -1,15 +1,14 @@
 /** Host stats over the real transport: a Client's watch decodes, and its disconnect stops sampling. */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport, watchHostStats } from "@polaris/client";
 import { DaemonRpcs, HostStatsItem } from "@polaris/protocol";
 import { Effect, Exit, Layer, Scope, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
 import { HostStats, HostStatsRpcsLive } from "./index.ts";
 import type { HostProbe } from "./probe.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
@@ -33,10 +32,8 @@ test("a Client watches History then samples, and closing its connection stops sa
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = mkdtempSync(shortTemp("pl-hoststats-"));
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-        );
+        const root = newTempDir("pl-hoststats-", { short: true });
+        yield* Effect.addFinalizer(() => Effect.promise(() => removeTempDirSettled(root)));
 
         const server = yield* startServer({
           root,

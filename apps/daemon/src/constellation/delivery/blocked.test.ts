@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import {
   CommandId,
   WorkerPlacement,
@@ -143,7 +142,7 @@ test("acceptance waits for the worker's Turn boundary, skips nudging and commits
 });
 
 test("blocked inputs survive a Daemon restart before delivery and cannot unblock twice", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "polaris-blocked-"));
+  const dir = newTempDir("polaris-blocked-");
   const file = join(dir, "store.sqlite");
 
   try {
@@ -221,7 +220,7 @@ test("blocked inputs survive a Daemon restart before delivery and cannot unblock
       })
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -373,7 +372,7 @@ test("peer messages remain queued while blocked and do not start or steer the wo
 });
 
 test("a crash after the unblock commit recovers its Turn without producing another unblock", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "polaris-unblock-commit-"));
+  const dir = newTempDir("polaris-unblock-commit-");
   const file = join(dir, "store.sqlite");
 
   try {
@@ -426,7 +425,7 @@ test("a crash after the unblock commit recovers its Turn without producing anoth
       })
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -434,6 +433,7 @@ import { ConstellationSessionEffects } from "./inputs.ts";
 import { deliverLocalInput } from "./local.ts";
 import { recoverAttempt } from "../recovery.ts";
 import { ConstellationOwner } from "../runtime.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 test("only a Lead message sent after the block resumes it, even within the same clock tick", async () => {
   const w = world();

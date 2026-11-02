@@ -1,12 +1,13 @@
 import { expect } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { connectRpc, type DaemonClient, socketTransport } from "@polaris/client";
 import { CommandId } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import { Effect } from "effect";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { posixTest } from "../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const main = resolve(import.meta.dir, "../main.ts");
 
@@ -22,7 +23,7 @@ const eventually = async (predicate: () => Promise<boolean>) => {
 posixTest("Windows bug: polaris lease gates its command through /bin/sh and fd 3 (ENG-318)")(
   "CLI child leases survive wrapper SIGKILL and Daemon restart, cancel dead waiters and release killed children",
   async () => {
-    const home = mkdtempSync(shortTemp("polaris-lease-cli-"));
+    const home = newTempDir("polaris-lease-cli-", { short: true });
 
     // Poison the parent context with a valid handoff referencing an unavailable descriptor.
     const inheritedEnv = {
@@ -204,7 +205,7 @@ posixTest("Windows bug: polaris lease gates its command through /bin/sh and fd 3
       daemon.kill();
       await daemon.exited;
       await Promise.all(wrappers.map((child) => child.exited));
-      rmSync(home, { recursive: true, force: true });
+      removeTempDir(home);
     }
   },
   30_000

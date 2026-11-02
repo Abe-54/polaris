@@ -1,20 +1,19 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DomainEvent, HostId, SessionId } from "@polaris/protocol";
 import { Effect, Predicate } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { WORKERS_RESOURCE } from "./model.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 test("a queued worker request keeps when it joined the queue, live and after a restart", async () => {
-  const dir = mkdtempSync(shortTemp("queued-at-"));
+  const dir = newTempDir("queued-at-", { short: true });
   dirs.push(dir);
   const filename = join(dir, "state.sqlite");
 

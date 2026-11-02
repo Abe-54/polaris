@@ -1,11 +1,10 @@
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import { ExtensionDaemonRpcs, makeWire, PROTOCOL_VERSION } from "@polaris/protocol";
 import { Effect, Layer, Predicate, Queue, Schema } from "effect";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { webSocketTransport } from "../gateway/client.testing.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { startServer } from "./server.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const Reply = Schema.Struct({
   _tag: Schema.String,
@@ -26,10 +25,7 @@ export const Interrupt = Schema.Struct({ _tag: Schema.tag("Interrupt"), requestI
 
 export const admissionSetup = <R, E>(handlers: Layer.Layer<R, E>) =>
   Effect.gen(function* () {
-    const root = yield* Effect.acquireRelease(
-      Effect.sync(() => mkdtempSync(shortTemp("pl-rpc-cap-"))),
-      (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-    );
+    const root = yield* scopedTempDir("pl-rpc-cap-", { short: true });
 
     const server = yield* startServer({
       root,

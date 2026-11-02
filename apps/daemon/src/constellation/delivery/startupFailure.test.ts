@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { CommandId, MessageTarget, PlanOperation } from "@polaris/protocol";
 import { Effect, Layer, Predicate } from "effect";
 import { A, B, C, CID, HOST, ctx, draft, task } from "../../engine/constellation.testing.ts";
@@ -13,11 +12,11 @@ import { ConstellationDelivery } from "./index.ts";
 import { deliverLocalInput } from "./local.ts";
 import { pendingInputs } from "./messages.ts";
 import { send, setup, STANDALONE, wait, WORKER, world } from "./testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 for (const mode of ["acquire", "start", "resume"] as const)
   test(`${mode} failure rejects later Lead input without stalling another Session`, async () => {
-    const root = mkdtempSync(shortTemp("blocked-startup-failure-"));
+    const root = newTempDir("blocked-startup-failure-", { short: true });
     const previous = process.env.POLARIS_HOME;
     process.env.POLARIS_HOME = root;
     const failures: string[] = [];
@@ -162,6 +161,6 @@ for (const mode of ["acquire", "start", "resume"] as const)
     } finally {
       if (previous === undefined) delete process.env.POLARIS_HOME;
       else process.env.POLARIS_HOME = previous;
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });

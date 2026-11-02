@@ -1,7 +1,5 @@
 import { polarisContextWithoutTools } from "../../constellation/skills/preamble.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ApprovalDecision,
@@ -21,6 +19,7 @@ import { openSession } from "./OpenCodeSession.ts";
 import { events as eventsFor, readFixture } from "./testing/events.ts";
 import { FAKE_SESSION_ID, type FakeServer, makeFakeServer } from "./testing/FakeServer.ts";
 import { shellFake, shPath } from "../testing/shellFake.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 type EventOf<T extends HarnessEvent["_tag"]> = Extract<HarnessEvent, { readonly _tag: T }>;
 
@@ -631,8 +630,8 @@ describe("OpenCode Models and probe", () => {
       ],
       default: { opencode: "big-pickle", openai: "gpt-5.5" },
     }));
-    const dir = mkdtempSync(join(tmpdir(), "polaris-opencode-models-"));
-    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const dir = newTempDir("polaris-opencode-models-");
+    cleanup.push(() => removeTempDir(dir));
 
     const models = await Effect.runPromise(
       Effect.scoped(
@@ -657,8 +656,8 @@ describe("OpenCode Models and probe", () => {
   });
 
   test("probe runs --version only, with throwaway XDG directories", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "polaris-opencode-probe-test-"));
-    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const dir = newTempDir("polaris-opencode-probe-test-");
+    cleanup.push(() => removeTempDir(dir));
 
     const bin = shellFake(
       dir,

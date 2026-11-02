@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import {
@@ -12,17 +12,14 @@ import {
   WorkspaceId,
 } from "@polaris/protocol";
 import { Duration, Effect, Exit, Layer, Option, Scope, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { startServer } from "../transport/server.ts";
 import { developerModeLayer } from "./live.ts";
 import { DeveloperModeRpcHandlers } from "./rpc.ts";
 import { DeveloperModeState } from "./service.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-dm-"))),
-  (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-dm-", { short: true });
 
 const hello = { clientName: "fake", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 

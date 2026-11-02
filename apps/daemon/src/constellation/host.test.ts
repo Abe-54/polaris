@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DomainEvent } from "@polaris/protocol";
 import { Effect, Layer } from "effect";
@@ -11,9 +9,10 @@ import { EventStore } from "../store/EventStore.ts";
 import { ConstellationOwner } from "./runtime.ts";
 import { HOST } from "../engine/constellation.testing.ts";
 import { hostWorkingAttemptsLayer } from "./host.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("Host composition captures persistent MCP tokens and revokes archived sessions on replay", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "c1-host-hooks-"));
+  const dir = newTempDir("c1-host-hooks-");
 
   const resources = HostResources.of({
     get: Effect.die("unused"),
@@ -86,6 +85,6 @@ test("Host composition captures persistent MCP tokens and revokes archived sessi
       )
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

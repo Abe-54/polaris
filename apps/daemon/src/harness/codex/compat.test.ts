@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId, TurnId } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import { startFakeAppServer } from "./testing/FakeAppServer.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const cleanup: Array<() => void> = [];
 
@@ -23,8 +22,8 @@ const readParams = Schema.decodeUnknownSync(Params);
 
 describe("an older Codex app-server", () => {
   test("refusing newer fields gets the request again without them; the Turn runs", async () => {
-    const dir = mkdtempSync(shortTemp("pcc-"));
-    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const dir = newTempDir("pcc-", { short: true });
+    cleanup.push(() => removeTempDir(dir));
     const socketPath = join(dir, "s.sock");
 
     // Like an app-server from before `auto_review` and per-Turn effort.

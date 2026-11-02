@@ -1,8 +1,7 @@
 import { rejects, throws } from "node:assert/strict";
 import { test, expect } from "bun:test";
 import { gzipSync } from "node:zlib";
-import { mkdtemp, mkdir, realpath, rm, writeFile, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { artifactFixture, hostId, platform } from "./fixture.testing.ts";
 import { artifactIdentity } from "./identity.ts";
@@ -14,6 +13,7 @@ import { packagedEvidenceReader } from "./evidence.ts";
 import { gunzip, tarEntries } from "./archive.ts";
 import { webDependencies } from "./webDependencies.ts";
 import { createHash } from "node:crypto";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 function exactFixture(format: "binary" | "tar.gz" = "binary") {
   const source = artifactFixture();
@@ -234,7 +234,7 @@ test("frozen npm decoding accepts old node-tar timestamps with an empty prefix a
 
 test("verified packaged evidence and pure binary decoder retain exact notices and reject tampering/links", async () => {
   const f = exactFixture();
-  const root = await realpath(await mkdtemp(join(tmpdir(), "m31-i1-evidence-")));
+  const root = newTempDir("m31-i1-evidence-");
   const signal = new AbortController().signal;
 
   try {
@@ -266,7 +266,7 @@ test("verified packaged evidence and pure binary decoder retain exact notices an
       { reason: "audit-required" }
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 

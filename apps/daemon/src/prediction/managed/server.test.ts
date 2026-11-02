@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { ManagedServerPhase, type ManagedServerStatus } from "@polaris/protocol";
 import { Match } from "effect";
 import type { ManagedModel, PinnedFile } from "./catalog.ts";
 import { ManagedServer, IDLE_UNLOAD_MS, type Timers } from "./server.ts";
 import type { ManagedProcess, Spawn } from "./process.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const MODEL_BYTES = Buffer.from("tiny next-edit model".repeat(40));
 
@@ -137,7 +137,7 @@ const fakeProcesses = () => {
   return { spawn, health, spawned };
 };
 
-const scratch = () => mkdtempSync(join(tmpdir(), "pl-managed-"));
+const scratch = () => newTempDir("pl-managed-");
 
 /** The build and the model already in the folder, as after a finished setup. */
 const installed = (dir: string) => {
@@ -239,7 +239,7 @@ test("setup downloads the build and the model, then the server is stopped until 
       managed: true,
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -255,7 +255,7 @@ test("a model already in the chosen folder is verified in the background, then c
     expect(status.endpoint?.url).toBe("http://127.0.0.1:43210");
     expect(statuses.map(phase)).toEqual(["Verifying", "Stopped"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -281,7 +281,7 @@ test("a model file with the wrong bytes isn't downloaded, and one changed after 
     expect(processes.spawned).toHaveLength(0);
     expect(failureReason(await server.status())).toBe("checksum-mismatch");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -322,7 +322,7 @@ test("the first request starts the server lazily and idling 15 minutes unloads i
     await again;
     expect(phase(await server.status())).toBe("Serving");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -349,7 +349,7 @@ test("the load time is reported while it serves and forgotten once it unloads", 
     expect(phase(await server.status())).toBe("Stopped");
     expect((await server.status()).loadMs).toBeNull();
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -397,7 +397,7 @@ test("a crash restarts with doubling backoff, then gives up with the server's la
     expect(failureLog(status)).toEqual(["load: ggml_metal_init", "error: out of memory"]);
     expect(processes.spawned).toHaveLength(5);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -424,7 +424,7 @@ test("turning it off stops the process and cancels a pending restart", async () 
     expect(processes.spawned).toHaveLength(1);
     expect(clock.pending()).toBe(0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -440,7 +440,7 @@ test("remove deletes the model and the build and the status is absent again", as
     expect(existsSync(join(dir, "sweep.gguf"))).toBe(false);
     expect(existsSync(join(dir, "llama-b11429"))).toBe(false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -462,7 +462,7 @@ test("Sweep is the default everywhere; Zeta is downloaded only when asked for", 
     // Switching the preference back to Sweep reads that model's own state: not downloaded.
     expect(phase(await server.status(null, null))).toBe("Absent");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -484,6 +484,6 @@ test("a platform without a build, or a machine too small, is unsupported", async
     await pi.setup();
     expect((await pi.status()).phase._tag).toBe("Unsupported");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import {
   CommandId,
   DomainEvent,
@@ -22,7 +21,7 @@ import { ConstellationRuntime } from "../runtime.ts";
 import { workingAttemptsLayer } from "../working.ts";
 import { ConstellationDelivery } from "./index.ts";
 import { finish, send, setup, signal, STANDALONE, wait, WORKER, world } from "./testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const resourceCounts = (store: EventStore["Service"]) =>
   Effect.map(store.model, (model) => ({
@@ -105,7 +104,7 @@ const leadMessage = () =>
   );
 
 const fixture = async (body: (root: string) => Promise<void>) => {
-  const root = mkdtempSync(shortTemp("blocked-slots-test-"));
+  const root = newTempDir("blocked-slots-test-", { short: true });
   const previous = process.env.POLARIS_HOME;
   process.env.POLARIS_HOME = root;
 
@@ -114,7 +113,7 @@ const fixture = async (body: (root: string) => Promise<void>) => {
   } finally {
     if (previous === undefined) delete process.env.POLARIS_HOME;
     else process.env.POLARIS_HOME = previous;
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 };
 

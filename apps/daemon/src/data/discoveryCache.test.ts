@@ -1,13 +1,13 @@
-import { shortTemp } from "../platform/testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { cachedDiscovery } from "./discoveryCache.ts";
 import { parseConnection } from "./connection.ts";
 import { discover } from "./discovery.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 test("unchanged checkouts reuse discovery, while env and compose changes invalidate it", async () => {
-  const root = await mkdtemp(shortTemp("polaris-discovery-cache-"));
+  const root = newTempDir("polaris-discovery-cache-", { short: true });
   let reads = 0;
 
   const cached = cachedDiscovery(async (checkout, signal) => {
@@ -29,6 +29,6 @@ test("unchanged checkouts reuse discovery, while env and compose changes invalid
     await cached(root);
     expect(reads).toBe(3);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });

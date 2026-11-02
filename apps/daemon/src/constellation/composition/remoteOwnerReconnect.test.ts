@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Deferred, Effect, Context, Layer, Stream, Predicate, Option } from "effect";
 import { HostRegistry } from "../../../../../packages/client/src/HostRegistry.ts";
@@ -22,7 +22,7 @@ import {
   startOwnerDelivery,
   type TestHost,
 } from "./remoteOwnerReconnect.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const startClient = Effect.fnUntraced(function* (roots: { owner: string; worker: string }) {
   const services = yield* Layer.build(HostRegistry.layer.pipe(Layer.provide(HostConnector.layer)));
@@ -98,8 +98,8 @@ const recordTrace = Effect.fnUntraced(function* (owner: TestHost, worker: TestHo
 for (const failure of ["owner-reconnect", "assignment", "persistent"] as const) {
   test(`${failure}: remote relay resumes or waits after bounded retries`, async () => {
     const roots = {
-      owner: mkdtempSync(shortTemp("block-cycles-owner-")),
-      worker: mkdtempSync(shortTemp("block-cycles-worker-")),
+      owner: newTempDir("block-cycles-owner-", { short: true }),
+      worker: newTempDir("block-cycles-worker-", { short: true }),
     };
 
     try {
@@ -249,8 +249,8 @@ for (const failure of ["owner-reconnect", "assignment", "persistent"] as const) 
         )
       );
     } finally {
-      rmSync(roots.owner, { recursive: true, force: true });
-      rmSync(roots.worker, { recursive: true, force: true });
+      removeTempDir(roots.owner);
+      removeTempDir(roots.worker);
     }
   }, 15_000);
 }

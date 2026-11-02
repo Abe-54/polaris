@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   HostId,
@@ -11,7 +11,8 @@ import { countTokens } from "@polaris/predict";
 import { ContextAssembler } from "./assemble.ts";
 import { readSource } from "./files.ts";
 import { budgetContext } from "./budget.ts";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { posixTest } from "../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const pinnedReadTest = posixTest(
   "imported sources are read descriptor-relative through POSIX openat (languages/media/native.ts) (ENG-296)"
@@ -20,11 +21,11 @@ const pinnedReadTest = posixTest(
 const roots: string[] = [];
 
 afterEach(async () => {
-  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) await removeTempDirSettled(root);
 });
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(shortTemp("prediction-")));
+  const root = newTempDir("prediction-", { short: true });
   roots.push(root);
   await writeFile(
     join(root, "dep.ts"),

@@ -1,12 +1,13 @@
 import { test, expect } from "bun:test";
 import { rejects } from "node:assert/strict";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runtimeProbeAdapter } from "./probes.ts";
 import { runHostVersion } from "./version-process.ts";
 import { failure } from "../install/validation.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const posixTools = posixTest(
   "the synthetic probe is a POSIX sh child in its own process group (ENG-296)"
@@ -93,7 +94,7 @@ test("unknown version output and missing configured executable remain distinct",
 posixTools(
   "Host version runner bounds synthetic child output and cleans its POSIX process group",
   async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "m31-i1-probe-")));
+    const root = newTempDir("m31-i1-probe-");
 
     try {
       const script = join(root, "synthetic.ts");
@@ -119,7 +120,7 @@ posixTools(
         { reason: "cancelled" }
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await removeTempDirSettled(root);
     }
   }
 );

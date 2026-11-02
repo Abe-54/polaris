@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { acquireServer, type OpenCodeServer } from "./Server.ts";
 import { bunFake } from "../testing/shellFake.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const decodeState = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, url: Schema.String }))
@@ -35,9 +35,9 @@ afterEach(() => {
 });
 
 const setup = () => {
-  const dir = mkdtempSync(join(tmpdir(), "polaris-opencode-server-"));
+  const dir = newTempDir("polaris-opencode-server-");
   const bin = bunFake(dir, "opencode", FAKE_OPENCODE);
-  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  cleanup.push(() => removeTempDir(dir));
 
   return { dir, bin, stateFile: join(dir, "state", "opencode-server.json") };
 };

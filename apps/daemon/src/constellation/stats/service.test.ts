@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { CommandId, DomainEvent, SessionId, UsageReport } from "@polaris/protocol";
 import { Effect, Layer, ManagedRuntime, Predicate, Stream } from "effect";
@@ -9,10 +8,10 @@ import { UsageIndex } from "../../usage/index.ts";
 import { ConstellationStatsService } from "./index.ts";
 import { statsFixture } from "./stats.testing.ts";
 import { seedStats } from "./store.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 test("views reuse history, refresh Usage independently, enforce authority, and write no events or subscriptions", async () => {
-  const home = mkdtempSync(shortTemp("polaris-stats-service-"));
+  const home = newTempDir("polaris-stats-service-", { short: true });
   const fixture = statsFixture();
   let responses = fixture.responses;
   let graphReads = 0;
@@ -147,7 +146,7 @@ test("views reuse history, refresh Usage independently, enforce authority, and w
       }).pipe(Effect.provide(layer))
     );
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 });
 
@@ -184,7 +183,7 @@ test("SQL event-type filtering preserves sequence cuts and empty selection reads
 });
 
 test("a fresh Stats service after restart reconstructs the open owner stale interval", async () => {
-  const home = mkdtempSync(shortTemp("polaris-stats-stale-restart-"));
+  const home = newTempDir("polaris-stats-stale-restart-", { short: true });
 
   const layer = ConstellationStatsService.layer.pipe(
     Layer.provideMerge(EventStore.layerSqlite(join(home, "state.sqlite"))),
@@ -246,6 +245,6 @@ test("a fresh Stats service after restart reconstructs the open owner stale inte
     );
   } finally {
     await runtime.dispose();
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 });

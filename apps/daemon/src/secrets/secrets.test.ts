@@ -1,21 +1,12 @@
-import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { expect, test } from "bun:test";
+import { rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Layer, Option, Redacted } from "effect";
-import { shortTemp } from "../platform/testing.ts";
+import { suiteTempDir } from "../platform/tempDir.testing.ts";
 import { CommandRunner } from "../service/CommandRunner.ts";
 import { fileSecrets, HostSecrets, keychainSecrets } from "./index.ts";
 
-const dirs: Array<string> = [];
-
-const temporary = () => {
-  const dir = mkdtempSync(shortTemp("pl-sec-"));
-  dirs.push(dir);
-
-  return dir;
-};
-
-afterAll(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+const temporary = suiteTempDir("pl-sec-", { short: true });
 
 const VALUE = Redacted.make("0123456789abcdef0123456789abcdef01234567");
 

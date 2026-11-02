@@ -1,5 +1,4 @@
-import { shortTemp } from "../platform/testing.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { TraceCompareSelector, TraceTurn, TurnId } from "@polaris/protocol";
@@ -47,7 +46,7 @@ export const withComparisons = async (
   }) => Promise<void>,
   options: TraceWorkerOptions = {}
 ) => {
-  const root = await mkdtemp(shortTemp("p8-compare-"));
+  const root = newTempDir("p8-compare-", { short: true });
   const now = BigInt(Date.now()) * 1_000_000n;
   compareContext = contextAt(now);
 
@@ -127,6 +126,6 @@ export const withComparisons = async (
       )
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };

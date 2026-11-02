@@ -1,5 +1,5 @@
-import { shortTemp } from "../platform/testing.ts";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentSession, CommandId, DomainEvent, Turn, TurnId, Workspace } from "@polaris/protocol";
 import { Effect, Layer } from "effect";
@@ -75,13 +75,13 @@ export const seed = (root: string) =>
 export const withAuthority = async (
   run: (root: string, layer: ReturnType<typeof authorityLayer>) => Promise<void>
 ) => {
-  const root = await mkdtemp(shortTemp("tf1-authority-"));
+  const root = newTempDir("tf1-authority-", { short: true });
 
   try {
     await mkdir(join(root, "package"));
     await run(root, authorityLayer(root));
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

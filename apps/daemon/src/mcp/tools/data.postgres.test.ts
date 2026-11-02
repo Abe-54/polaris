@@ -1,15 +1,14 @@
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 /** Opt-in native acceptance; the child imports the real Daemon service composition. */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { shortTemp } from "../../platform/testing.ts";
 
 const target = process.env.POLARIS_DATA_POSTGRES_URL;
 
 test.skipIf(target === undefined)(
   "postgres Data tools through the production Engine/MCP composition",
   async () => {
-    const root = mkdtempSync(shortTemp("pl-mx-real-"));
+    const root = newTempDir("pl-mx-real-", { short: true });
 
     try {
       const child = Bun.spawn(
@@ -29,7 +28,7 @@ test.skipIf(target === undefined)(
 
       expect({ exit, stdout, stderr }).toEqual({ exit: 0, stdout: "", stderr: "" });
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   },
   60_000

@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   Attempt,
@@ -26,7 +25,7 @@ import { prepareSession } from "./prepare.ts";
 import { startAttempt, startPendingAttempt } from "./workers.ts";
 
 import { sendBack } from "./sendback.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 test("same-session busy SendBack commits now, skips setup, and delivers once at the boundary", async () => {
   const w = sendbackWorld(":memory:", false);
@@ -95,7 +94,7 @@ test("same-session busy SendBack commits now, skips setup, and delivers once at 
 
 for (const retry of [false, true])
   test(`production Daemon restart delivers pending ${retry ? "SendBack" : "Initial"} over an interrupted prior Turn`, async () => {
-    const root = mkdtempSync(shortTemp("polaris-busy-restart-"));
+    const root = newTempDir("polaris-busy-restart-", { short: true });
 
     try {
       const w = sendbackWorld(join(root, "state.sqlite"), false);
@@ -125,7 +124,7 @@ for (const retry of [false, true])
         })
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   }, 20000);
 

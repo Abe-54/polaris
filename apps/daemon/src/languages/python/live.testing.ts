@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { access, chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as P from "@polaris/protocol";
@@ -8,7 +8,7 @@ import { connectRpc, socketTransport } from "@polaris/client";
 import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { lazyLanguageHandlers } from "../../transport/lazyLanguages.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 const caps: P.Capability[] = [
   "languages",
@@ -23,10 +23,7 @@ test("Python providers run without Trust, preserve drafts on selection, and neve
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.promise(async () => realpath(await mkdtemp(shortTemp("polaris-python-live-")))),
-          (path) => Effect.promise(() => rm(path, { recursive: true, force: true }))
-        );
+        const root = yield* scopedTempDir("polaris-python-live-", { short: true });
 
         const project = join(root, "project");
         const file = join(project, "a.py");

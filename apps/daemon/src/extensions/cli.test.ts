@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   decodePairingString,
@@ -10,8 +9,8 @@ import {
 } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import { Option } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { type ExtensionCommand, formatPaired, formatPairings, parseExtensionArgs } from "./cli.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 test("a terminal still prints the pairing string when it exceeds QR capacity", () => {
   const name = "Phone shortcuts ".repeat(400);
@@ -89,7 +88,7 @@ const cli = async (main: string, env: Record<string, string | undefined>, args: 
 };
 
 test("the real CLI pairs, lists and revokes through an isolated Daemon", async () => {
-  const home = mkdtempSync(shortTemp("polaris-ext-cli-"));
+  const home = newTempDir("polaris-ext-cli-", { short: true });
   const main = resolve(import.meta.dir, "../main.ts");
 
   const env = {
@@ -160,6 +159,6 @@ test("the real CLI pairs, lists and revokes through an isolated Daemon", async (
   } finally {
     daemon.kill("SIGTERM");
     await daemon.exited;
-    rmSync(home, { recursive: true, force: true });
+    await removeTempDirSettled(home);
   }
 }, 30000);

@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { mkdtemp, realpath, rm, access } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { LanguageError } from "@polaris/protocol";
@@ -7,7 +7,8 @@ import { Effect, Layer, Predicate, Redacted, Stream } from "effect";
 import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { DefaultLanguageHostHandlers } from "./defaults.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 const languageHostTest = posixTest(
   "Windows Hosts have no LanguagePlatform, so language services report unsupported-platform (ENG-296)"
@@ -30,10 +31,7 @@ languageHostTest(
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const root = yield* Effect.acquireRelease(
-            Effect.promise(async () => realpath(await mkdtemp(shortTemp("m31-core-mount-")))),
-            (path) => Effect.promise(() => rm(path, { recursive: true, force: true }))
-          );
+          const root = yield* scopedTempDir("m31-core-mount-", { short: true });
 
           const store = yield* EventStore;
 

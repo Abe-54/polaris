@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import {
@@ -15,7 +15,8 @@ import { LanguageBroker } from "../runtime/index.ts";
 import type { createSelectionLedger } from "../install/selection-ledger.ts";
 import { HostLanguageInstallation } from "../availability/service.ts";
 import { HostLanguageResources, languageHostServices } from "./host.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const privateInstallTest = posixTest(
   "language installations require a POSIX-mode private, owned directory (ENG-314)"
@@ -25,7 +26,7 @@ for (const retainLease of [false, true]) {
   privateInstallTest(
     `Host scope closes broker before installation resources, retained lease=${retainLease}`,
     async () => {
-      const root = await realpath(await mkdtemp(shortTemp("m31-j1-host-scope-")));
+      const root = newTempDir("m31-j1-host-scope-", { short: true });
 
       const source = artifactFixture();
 
@@ -149,7 +150,7 @@ for (const retainLease of [false, true]) {
       } finally {
         await held?.release();
         ledger?.dispose();
-        await rm(root, { recursive: true, force: true });
+        await removeTempDirSettled(root);
       }
     }
   );

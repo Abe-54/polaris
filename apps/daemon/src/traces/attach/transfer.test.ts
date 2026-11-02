@@ -1,6 +1,6 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TEST_SESSION } from "../testing.ts";
 import { TargetRegistry, type RegisteredTarget } from "./registry.ts";
@@ -9,7 +9,7 @@ const withPeer = async (
   response: string,
   run: (registry: TargetRegistry, target: RegisteredTarget) => Promise<void>
 ) => {
-  const root = await mkdtemp(shortTemp("p9-transfer-"));
+  const root = newTempDir("p9-transfer-", { short: true });
   const registry = new TargetRegistry(join(root, "bootstrap"));
   const program = join(root, "peer.cjs");
 
@@ -52,7 +52,7 @@ registration.on('data', chunk => {
     child.kill();
     await child.exited;
     await registry.close();
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

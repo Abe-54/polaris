@@ -1,6 +1,6 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile, readdir, stat, symlink, link } from "node:fs/promises";
+import { writeFile, readdir, stat, symlink, link } from "node:fs/promises";
 import { join } from "node:path";
 import { Profile, ProfileError, ProfileId, Timestamp } from "@polaris/protocol";
 import { Schema } from "effect";
@@ -21,7 +21,7 @@ const withWorker = async (
     directory: string;
   }) => Promise<void>
 ) => {
-  const root = await mkdtemp(shortTemp("p4-worker-"));
+  const root = newTempDir("p4-worker-", { short: true });
   const id = ProfileId.make(crypto.randomUUID());
 
   const profile = Profile.make({
@@ -61,7 +61,7 @@ const withWorker = async (
   try {
     await run({ root, job, profile, directory });
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

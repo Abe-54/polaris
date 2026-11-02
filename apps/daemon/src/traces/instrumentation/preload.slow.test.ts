@@ -1,4 +1,4 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -106,13 +106,13 @@ let scratch: string;
 beforeAll(async () => {
   polaris = counter();
   vendor = counter();
-  scratch = await mkdtemp(shortTemp("rp1-p3-"));
+  scratch = newTempDir("rp1-p3-", { short: true });
 });
 
 afterAll(async () => {
   await polaris.stop();
   await vendor.stop();
-  await rm(scratch, { recursive: true, force: true });
+  await removeTempDirSettled(scratch);
 });
 
 const settings = { enabled: true, autoInstrument: "node", autoInstrumentOverride: false } as const;

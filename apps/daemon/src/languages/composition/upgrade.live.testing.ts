@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as P from "@polaris/protocol";
@@ -9,7 +9,7 @@ import { connectRpc, socketTransport } from "@polaris/client";
 import { EventStore } from "../../store/EventStore.ts";
 import { startServer } from "../../transport/server.ts";
 import { lazyLanguageHandlers } from "../../transport/lazyLanguages.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 
 const slice4 = "e935a0b2df579672004ee9c6bef4dfcd8374e3f7";
 
@@ -128,10 +128,7 @@ for (const legacy of ["slice4", "owner-copy"])
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const root = yield* Effect.acquireRelease(
-            Effect.promise(async () => realpath(await mkdtemp(shortTemp("polaris-upgrade-")))),
-            (path) => Effect.promise(() => rm(path, { recursive: true, force: true }))
-          );
+          const root = yield* scopedTempDir("polaris-upgrade-", { short: true });
 
           yield* Effect.promise(() =>
             legacy === "slice4"

@@ -1,14 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readFile, rename, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   LanguageCheckout,
@@ -27,7 +18,8 @@ import {
   type MediaInput,
 } from "./index.ts";
 import type { MediaPhase } from "./files.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const posixMedia = posixTest(
   "Host media reads need descriptor-relative NOFOLLOW opens, /dev/fd and FIFOs (ENG-296)"
@@ -37,8 +29,6 @@ const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=",
   "base64"
 );
-
-let temporary: string;
 
 let root: string;
 
@@ -55,8 +45,7 @@ let blobs: ReturnType<typeof makeFakeBlobChannel>;
 let authority: PreviewMediaAuthority["Service"];
 
 beforeEach(async () => {
-  temporary = await mkdtemp(shortTemp("m31-h1-"));
-  root = await realpath(temporary);
+  root = newTempDir("m31-h1-", { short: true });
   await mkdir(join(root, "docs"));
   await writeFile(join(root, "docs/a.md"), "![image](a.png)");
   await writeFile(join(root, "docs/a.png"), png);
@@ -90,7 +79,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(temporary, { recursive: true, force: true });
+  await removeTempDirSettled(root);
 });
 
 function run(value = input, phase?: (phase: MediaPhase) => Promise<void>) {

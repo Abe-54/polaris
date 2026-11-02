@@ -1,12 +1,12 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { detectFixedExporters, fixedExporterChange, fixedExporterLines } from "./detection.ts";
 
 const fixture = async (run: (root: string) => Promise<void>) => {
-  const root = await mkdtemp(shortTemp("p3-detection-"));
+  const root = newTempDir("p3-detection-", { short: true });
 
   try {
     execFileSync("git", ["init", "--quiet", root]);
@@ -16,7 +16,7 @@ const fixture = async (run: (root: string) => Promise<void>) => {
     );
     await run(root);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 
@@ -52,7 +52,7 @@ test("bounded discovery respects gitignore, regular files and checkout containme
     await mkdir(join(root, "ignored"));
     await writeFile(join(root, "ignored/fixed.ts"), fixed);
     await writeFile(join(root, "large.ts"), fixed + " ".repeat(65536));
-    const outside = await mkdtemp(shortTemp("p3-detection-outside-"));
+    const outside = newTempDir("p3-detection-outside-", { short: true });
 
     try {
       await writeFile(join(outside, "fixed.ts"), fixed);
@@ -62,7 +62,7 @@ test("bounded discovery respects gitignore, regular files and checkout containme
         await detectFixedExporters({ checkout: root, appRan: true, spansArrived: false })
       ).toEqual([]);
     } finally {
-      await rm(outside, { recursive: true, force: true });
+      await removeTempDirSettled(outside);
     }
   }));
 

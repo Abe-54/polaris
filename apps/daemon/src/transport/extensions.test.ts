@@ -6,7 +6,7 @@
  * `scripts/replay-extensions.ts` when `EXTENSIONS_TRACE_OUTPUT` is set.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
@@ -39,7 +39,6 @@ import {
 } from "effect";
 import { DeviceLabel } from "../engine/rpc.ts";
 import { actorOf } from "../extensions/connection.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
 import {
@@ -47,11 +46,9 @@ import {
   ExtensionsTraceEvent,
   replayExtensions,
 } from "../../../../packages/spec/scripts/extensions-replay/index.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-ext-"))),
-  (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-ext-", { short: true });
 
 /** `dispatch` answers with who asked, to prove the annotations reached a handler. */
 const handlers = Layer.mergeAll(

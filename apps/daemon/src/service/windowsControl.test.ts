@@ -1,7 +1,5 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 const windows = process.platform === "win32";
 
@@ -15,12 +13,12 @@ afterEach(() => {
 describe.skipIf(!windows)("the control pipe (Windows only)", () => {
   const serve = async () => {
     const { askDaemon, serveControl } = await import("./windowsControl.ts");
-    const home = mkdtempSync(join(tmpdir(), "polaris-control-"));
+    const home = newTempDir("polaris-control-");
     const stops: Array<string> = [];
     const server = serveControl(home, "9.9.9-test", (reason) => stops.push(reason));
     cleanups.push(() => {
       server.stop();
-      rmSync(home, { recursive: true, force: true });
+      removeTempDir(home);
     });
 
     return { askDaemon, home, stops };
@@ -47,8 +45,8 @@ describe.skipIf(!windows)("the control pipe (Windows only)", () => {
 
   test("with no Daemon, nothing answers", async () => {
     const { askDaemon } = await import("./windowsControl.ts");
-    const home = mkdtempSync(join(tmpdir(), "polaris-control-"));
-    cleanups.push(() => rmSync(home, { recursive: true, force: true }));
+    const home = newTempDir("polaris-control-");
+    cleanups.push(() => removeTempDir(home));
 
     expect(await askDaemon(home, { op: "status" }, 500)).toEqual({ kind: "none" });
   });

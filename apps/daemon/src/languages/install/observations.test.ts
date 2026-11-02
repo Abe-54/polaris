@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { rejects } from "node:assert/strict";
-import { mkdtemp, realpath, writeFile, chmod, rm, mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile, chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { artifactFixture } from "./fixture.testing.ts";
 import { createDemandObservations } from "./observations.ts";
@@ -13,6 +12,7 @@ import { createHostInstallations } from "./host.ts";
 import { hostId, platform } from "./fixture.testing.ts";
 import { HostLanguageInstallation } from "../availability/service.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const privateStorage = posixTest(
   "language storage is checked private by POSIX owner and mode bits; Windows needs ACL checks (ENG-314)"
@@ -45,12 +45,12 @@ function latch() {
 }
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "m31-i1-observe-")));
+  const root = newTempDir("m31-i1-observe-");
   const executable = join(root, "fake");
   await writeFile(executable, "synthetic bytes; never executed");
   await chmod(executable, 0o700);
 
-  return { root, executable, close: () => rm(root, { recursive: true, force: true }) };
+  return { root, executable, close: () => removeTempDirSettled(root) };
 }
 
 test("retry cancellation during prior observation cleanup preserves consumer accounting", async () => {

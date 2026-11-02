@@ -4,16 +4,15 @@
  * provider's snapshots come back through the SDK's async iterator.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport as clientSocket } from "@polaris/client";
 import { createPolarisWith, encodePairing, socketTransport, type Transcript } from "@polaris/sdk";
 import { Effect, Layer, Redacted, Stream } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets, memorySecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
 import { VoiceProvider } from "./provider.ts";
 import { makeVoiceRpcs } from "./VoiceRpcs.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const KEY = "0123456789abcdef0123456789abcdef01234567";
 
@@ -52,7 +51,7 @@ const collect = async (feed: AsyncIterable<Transcript>) => {
 };
 
 test("the SDK streams an audio iterator to the relay and yields its snapshots", async () => {
-  const root = mkdtempSync(shortTemp("pl-sdk-voice-"));
+  const root = newTempDir("pl-sdk-voice-", { short: true });
 
   const snapshots = await Effect.runPromise(
     Effect.gen(function* () {
@@ -102,10 +101,7 @@ test("the SDK streams an audio iterator to the relay and yields its snapshots", 
           await polaris.close();
         }
       });
-    }).pipe(
-      Effect.scoped,
-      Effect.ensuring(Effect.sync(() => rmSync(root, { recursive: true, force: true })))
-    )
+    }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => removeTempDir(root))))
   );
 
   expect(snapshots.map((s) => [s.finalText, s.interimText, s.finished])).toEqual([

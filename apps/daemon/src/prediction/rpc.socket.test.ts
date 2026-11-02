@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { DomainEvent, PredictionError, Workspace, WorkspaceId } from "@polaris/protocol";
@@ -7,7 +7,8 @@ import { Effect, Layer, Redacted } from "effect";
 import { EventStore } from "../store/EventStore.ts";
 import { startServer } from "../transport/server.ts";
 import { lazyLanguageHandlers } from "../transport/lazyLanguages.ts";
-import { posixTest, shortTemp } from "../platform/testing.ts";
+import { posixTest } from "../platform/testing.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const languageHostTest = posixTest(
   "Windows Hosts have no LanguagePlatform, so language services report unsupported-platform (ENG-296)"
@@ -39,10 +40,7 @@ languageHostTest(
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const root = yield* Effect.acquireRelease(
-            Effect.promise(async () => realpath(await mkdtemp(shortTemp("predict-rpc-")))),
-            (path) => Effect.promise(() => rm(path, { recursive: true, force: true }))
-          );
+          const root = yield* scopedTempDir("predict-rpc-", { short: true });
 
           const workspacePath = join(root, "workspace");
           yield* Effect.promise(async () => {

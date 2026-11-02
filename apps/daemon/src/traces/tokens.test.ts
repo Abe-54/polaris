@@ -1,6 +1,6 @@
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId, TurnId, WorkspaceId } from "@polaris/protocol";
 import { TraceBinding, TraceTokenVault } from "./tokens.ts";
@@ -10,7 +10,7 @@ const sessionId = SessionId.make("one");
 const workspaceId = WorkspaceId.make("workspace");
 
 test("saved token hashes survive reload; session revocation does not revoke Workspace authority", () => {
-  const root = mkdtempSync(shortTemp("t1-token-"));
+  const root = newTempDir("t1-token-", { short: true });
   const filename = join(root, "tokens.json");
 
   try {
@@ -33,12 +33,12 @@ test("saved token hashes survive reload; session revocation does not revoke Work
     third.revokeWorkspace(workspaceId);
     expect(new TraceTokenVault(filename).authenticate(workspaceToken)).toBeNull();
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
 test("deleting the private seed invalidates every endpoint on restart", () => {
-  const root = mkdtempSync(shortTemp("tf1-token-"));
+  const root = newTempDir("tf1-token-", { short: true });
   const filename = join(root, "tokens.json");
 
   try {
@@ -53,12 +53,12 @@ test("deleting the private seed invalidates every endpoint on restart", () => {
     expect(next).not.toBe(first);
     expect(new TraceTokenVault(filename).authenticate(next)).toEqual(binding);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
 test("launch endpoints survive reload, reject forged Turns and inherit parent revocation", () => {
-  const root = mkdtempSync(shortTemp("p2-token-"));
+  const root = newTempDir("p2-token-", { short: true });
   const filename = join(root, "tokens.json");
 
   try {
@@ -100,6 +100,6 @@ test("launch endpoints survive reload, reject forged Turns and inherit parent re
 
     expect(reloaded.authenticate(child)).toBeNull();
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

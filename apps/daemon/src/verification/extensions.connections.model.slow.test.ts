@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
@@ -17,9 +16,9 @@ import {
   decodeExtensionsTrace,
   replayExtensions,
 } from "../../../../packages/spec/scripts/extensions-replay/index.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { startServer } from "../transport/server.ts";
 import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const runs = pbtRuns(20);
 
@@ -53,10 +52,7 @@ const exercise = (
   steps: ReadonlyArray<Step>
 ) =>
   Effect.gen(function* () {
-    const root = yield* Effect.acquireRelease(
-      Effect.sync(() => mkdtempSync(shortTemp("pl-ext-pbt-"))),
-      (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true }))
-    );
+    const root = yield* scopedTempDir("pl-ext-pbt-", { short: true });
 
     const server = yield* startServer({
       root,

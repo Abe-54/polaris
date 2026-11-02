@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const isolated = async (mode: string) => {
-  const home = await mkdtemp(join(tmpdir(), "polaris-lazy-optional-"));
+  const home = newTempDir("polaris-lazy-optional-");
 
   try {
     const child = Bun.spawn(
@@ -24,7 +23,7 @@ const isolated = async (mode: string) => {
 
     expect({ code, stderr, stdout }).toMatchObject({ code: 0 });
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await removeTempDirSettled(home);
   }
 };
 

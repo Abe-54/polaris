@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { catalog } from "../catalog/index.ts";
 import manifest from "../catalog/upstream-evidence/phpactor.phar.json";
@@ -12,7 +12,7 @@ import type { InstalledVersion } from "../install/types.ts";
 import { decodeUpstream } from "../install/upstream.ts";
 import { phpactorLaunch, phpactorOptions } from "./launch.ts";
 import { workspaceTools } from "./projectTools.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const phpactor = catalog.tools.find((tool) => tool.id === "phpactor")!;
 
@@ -80,7 +80,7 @@ test("the PHAR installs as one non-executable file beside its notices", async ()
 });
 
 async function project() {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-php-")));
+  const root = newTempDir("polaris-php-", { short: true });
   await mkdir(join(root, "vendor/bin"), { recursive: true });
   await mkdir(join(root, "bin"));
   await writeFile(join(root, ".phpactor.json"), '{"composer.enable": true}');
@@ -116,7 +116,7 @@ test("before Trust no Composer autoloader, project config or tool extension can 
       "language_server_php_cs_fixer.enabled": true,
     });
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 
@@ -128,7 +128,7 @@ test("after Trust php-cs-fixer formats only when the project has it", async () =
     expect(options).not.toHaveProperty("language_server_php_cs_fixer.enabled");
     expect(options).not.toHaveProperty("composer.enable");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 
@@ -168,7 +168,7 @@ test("the launch runs the PHAR on the Host's PHP with Phpactor's own trust store
     expect(await Bun.file(join(root, "php-ran")).exists()).toBe(false);
     expect(await Bun.file(join(root, "vendor/ran")).exists()).toBe(false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 
@@ -196,6 +196,6 @@ test("managed Phpactor needs no Trust to start; the Trust ask names what Trust w
     ]);
     expect(await workspaceTools(root, root, "lua")).toEqual([]);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });

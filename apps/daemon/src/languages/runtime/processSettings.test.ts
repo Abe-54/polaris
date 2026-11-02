@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { realpath, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HostId, LanguageProcessLimit } from "@polaris/protocol";
 import { Schema } from "effect";
 import { createProcessSettings } from "./processSettings.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const hostId = HostId.make("budget-host");
 
@@ -15,7 +15,7 @@ const resources = {
 };
 
 test("Host override persists revision CAS, races one winner, and null restores automatic", async () => {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-process-settings-")));
+  const root = newTempDir("polaris-process-settings-", { short: true });
 
   try {
     const settings = await createProcessSettings(hostId, root, resources);
@@ -39,12 +39,12 @@ test("Host override persists revision CAS, races one winner, and null restores a
     expect(Schema.is(LanguageProcessLimit)(0)).toBe(false);
     expect(Schema.is(LanguageProcessLimit)(33)).toBe(false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 
 test("lost mutation authority leaves Host configuration unchanged; corrupt persisted limits fail closed", async () => {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-process-settings-")));
+  const root = newTempDir("polaris-process-settings-", { short: true });
 
   try {
     const settings = await createProcessSettings(hostId, root, resources);
@@ -69,12 +69,12 @@ test("lost mutation authority leaves Host configuration unchanged; corrupt persi
       )
     ).toBe("rejected");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 
 test("persisted revisions and applied capacity share one serialized lane", async () => {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-process-settings-")));
+  const root = newTempDir("polaris-process-settings-", { short: true });
   const gate = Promise.withResolvers<void>();
 
   try {
@@ -106,6 +106,6 @@ test("persisted revisions and applied capacity share one serialized lane", async
     expect(settings.snapshot()).toMatchObject({ revision: 2, effectiveLimit: 16 });
   } finally {
     gate.resolve();
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });

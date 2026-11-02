@@ -4,19 +4,18 @@
  * Needs swiftc, so it runs on a Mac.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type HostSlice, toBase64Url } from "@polaris/protocol/relay";
 import { Schema } from "effect";
 import { sealSlice } from "./live.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 // CryptoKit is an Apple framework; a Linux Swift toolchain cannot build this driver.
 const swiftc = process.platform === "darwin" ? Bun.which("swiftc") : null;
 
 const mobile = join(import.meta.dir, "../../../mobile");
 
-const directory = mkdtempSync(join(tmpdir(), "polaris-live-open-"));
+const directory = newTempDir("polaris-live-open-");
 
 const driver = join(directory, "driver");
 
@@ -47,7 +46,7 @@ beforeAll(() => {
   if (built.exitCode !== 0) throw new Error(built.stderr.toString());
 }, 300_000);
 
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
+afterAll(() => removeTempDir(directory));
 
 /** What the driver prints per slice: the fields the activity draws, or where opening stopped. */
 const Opened = Schema.Array(

@@ -3,18 +3,17 @@
  * when the test says: the SQLite store, ticket checks and sealing are real.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HostId, HostInfo, type LinkedDevice } from "@polaris/protocol";
 import { type PushMessage, toBase64Url } from "@polaris/protocol/relay";
 import { signPushTicket } from "@polaris/protocol/relay/party";
 import { Effect, Fiber, Layer, Scope } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { pushSuite } from "../push/seal.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { makeDevice, startRelay, type TestDevice } from "./device.testing.ts";
 import { DeviceConnections, RelayRoute } from "./route.ts";
 import { LinkedDevices } from "./store.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 /** Requests the fake push service holds until the test answers them. */
 const held: Array<{ readonly body: string; readonly answer: (outcome: string) => void }> = [];
@@ -127,10 +126,8 @@ const run = <A, E>(body: Effect.Effect<A, E, RelayRoute | Scope.Scope>) =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = mkdtempSync(shortTemp("pl-wake-"));
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-        );
+        const root = newTempDir("pl-wake-", { short: true });
+        yield* Effect.addFinalizer(() => Effect.promise(() => removeTempDirSettled(root)));
 
         return yield* body.pipe(Effect.provide(routeLayer(root)));
       })

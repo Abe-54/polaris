@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId, SubagentId, TurnId } from "@polaris/protocol";
 import { Effect, Predicate, Stream } from "effect";
@@ -7,7 +6,7 @@ import { HarnessEvent } from "../HarnessDriver.ts";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import { agentName, CodexSubagents } from "./subagents.ts";
 import { readFixture, replay, startFakeAppServer } from "./testing/FakeAppServer.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const cleanup: Array<() => void> = [];
 
@@ -23,8 +22,8 @@ describe("Codex Subagents", () => {
   test("a recorded Turn that spawns one agent: its thread's items are the Subagent's", async () => {
     // Recorded from codex-cli 0.158.0 (multi-agent v2), paths and account notifications scrubbed.
     const frames = await readFixture(join(import.meta.dir, "fixtures/subagent-turn.jsonl"));
-    const dir = mkdtempSync(shortTemp("pcs-"));
-    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const dir = newTempDir("pcs-", { short: true });
+    cleanup.push(() => removeTempDir(dir));
     const server = startFakeAppServer(join(dir, "s.sock"), replay(frames));
     cleanup.push(server.stop);
     const events: Array<HarnessEvent> = [];

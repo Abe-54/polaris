@@ -1,12 +1,12 @@
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { materializeInstrumentation } from "./assets.ts";
 import { instrumentationPlugin } from "./build.ts";
 
 test("partial extracted assets are repaired and only the newest three builds remain", async () => {
-  const home = await mkdtemp(shortTemp("uf11-assets-"));
+  const home = newTempDir("uf11-assets-", { short: true });
 
   try {
     const assets = { "register.mjs": "export {};", "sdk.cjs": "module.exports = {};" };
@@ -37,12 +37,12 @@ test("partial extracted assets are repaired and only the newest three builds rem
     ]);
     expect(await readdir(join(home, "node-instrumentation"))).toHaveLength(3);
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await removeTempDirSettled(home);
   }
 });
 
 test("an embedding build that misses embedded.ts is rejected", async () => {
-  const root = await mkdtemp(shortTemp("uf11-embedding-"));
+  const root = newTempDir("uf11-embedding-", { short: true });
 
   try {
     const entry = join(root, "entry.ts");
@@ -52,6 +52,6 @@ test("an embedding build that misses embedded.ts is rejected", async () => {
     expect(result.success).toBe(true);
     expect(() => plugin.assertEmbedded()).toThrow("embedding plugin did not run");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });

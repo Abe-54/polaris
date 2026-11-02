@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { Effect } from "effect";
 import { PredictionCapabilityLive } from "./capability.ts";
 import { startServer } from "../transport/server.ts";
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("Capability RPC discovers configured endpoints, isolates bad responses and negotiates support", async () => {
   let calls = 0;
@@ -22,7 +21,7 @@ test("Capability RPC discovers configured endpoints, isolates bad responses and 
     },
   });
 
-  const root = mkdtempSync(shortTemp("pl-predict-cap-"));
+  const root = newTempDir("pl-predict-cap-", { short: true });
 
   try {
     const results = await Effect.runPromise(
@@ -63,6 +62,6 @@ test("Capability RPC discovers configured endpoints, isolates bad responses and 
     expect(calls).toBe(2);
   } finally {
     await endpoint.stop(true);
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

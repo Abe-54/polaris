@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { spinnerVerbsHandler, parseSetting, settingsFiles } from "./spinnerVerbs.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 const temp = () => {
-  const dir = mkdtempSync(join(tmpdir(), "polaris-verbs-"));
+  const dir = newTempDir("polaris-verbs-");
 
   dirs.push(dir);
 

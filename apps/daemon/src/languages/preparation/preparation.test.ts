@@ -1,6 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtemp, realpath, writeFile, mkdir, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { LanguageCheckout, LanguageTreeEditProposal } from "@polaris/protocol";
@@ -8,6 +7,7 @@ import { Schema } from "effect";
 import { makeProposalPreparation } from "./index.ts";
 import { HostDelivery, type PreparationPort } from "./contracts.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const fileIdentity = posixTest(
   "Windows bug: NTFS file IDs exceed a safe integer, which LanguageResourceIdentity.inode rejects (ENG-296)"
@@ -23,12 +23,12 @@ const fixture = async (run: (f: Awaited<ReturnType<typeof setup>>) => Promise<vo
   try {
     await run(f);
   } finally {
-    await rm(f.root, { recursive: true, force: true });
+    await removeTempDirSettled(f.root);
   }
 };
 
 const setup = async () => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "m31-host-preparation-")));
+  const root = newTempDir("m31-host-preparation-");
   await writeFile(join(root, "a"), "a😀b\r\n");
   const uri = pathToFileURL(join(root, "a")).href;
 

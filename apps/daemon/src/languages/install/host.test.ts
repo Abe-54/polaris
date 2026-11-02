@@ -1,7 +1,6 @@
 import { rejects } from "node:assert/strict";
 import { expect, jest } from "bun:test";
-import { mkdtemp, realpath, rm, readdir, writeFile, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { artifactFixture, hostId, platform } from "./fixture.testing.ts";
 import { createHostInstallations, type HostInstallationOptions } from "./host.ts";
@@ -19,13 +18,14 @@ import {
   LanguageInstallation,
 } from "@polaris/protocol";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const test = posixTest(
   "language storage is checked private by POSIX owner and mode bits; Windows needs ACL checks (ENG-314)"
 );
 
 async function hostFixture(overrides: Partial<HostInstallationOptions> = {}) {
-  const parent = await realpath(await mkdtemp(join(tmpdir(), "m31-i1-host-")));
+  const parent = newTempDir("m31-i1-host-");
   const source = artifactFixture();
   let downloads = 0;
   let probes = 0;
@@ -73,7 +73,7 @@ async function hostFixture(overrides: Partial<HostInstallationOptions> = {}) {
     counts: () => ({ downloads, probes, releases }),
     async close() {
       await registry.dispose();
-      await rm(parent, { recursive: true, force: true });
+      await removeTempDirSettled(parent);
     },
   };
 }

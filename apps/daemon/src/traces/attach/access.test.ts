@@ -1,5 +1,5 @@
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
@@ -14,7 +14,6 @@ import {
   ApprovalDecision,
 } from "@polaris/protocol";
 import { Effect, Layer, Redacted } from "effect";
-import { shortTemp } from "../../platform/testing.ts";
 import { ServerRpcs } from "../../transport/rpcs.ts";
 import { startServer } from "../../transport/server.ts";
 
@@ -46,10 +45,7 @@ test("P9-6: a paired caller without approve cannot start a user capture or answe
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const root = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(shortTemp("uf14-grant-"))),
-          (value) => Effect.sync(() => rmSync(value, { recursive: true, force: true }))
-        );
+        const root = yield* scopedTempDir("uf14-grant-", { short: true });
 
         const server = yield* startServer({
           root,

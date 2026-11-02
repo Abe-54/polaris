@@ -1,17 +1,15 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   copyFileSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readlinkSync,
   realpathSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import {
@@ -76,10 +74,10 @@ const run = <A, E>(effect: Effect.Effect<A, E, CommandRunner>) =>
   Effect.runPromise(effect.pipe(Effect.provide(launchd)));
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "polaris-bundle-"));
+  root = newTempDir("polaris-bundle-");
 });
 
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => removeTempDir(root));
 
 describeBundle("a macOS build installs as an app bundle (ENG-680)", () => {
   test("an upload's flat files go back to their places, and polaris links into the bundle", async () => {

@@ -1,20 +1,13 @@
-import { shortTemp } from "../platform/testing.ts";
-import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Redacted } from "effect";
 import { discover } from "./discovery.ts";
 import { metadata } from "./connection.ts";
-
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
-});
+import { tempDir } from "../platform/tempDir.testing.ts";
 
 const fixture = async (files: Record<string, string>) => {
-  const root = await mkdtemp(shortTemp("data-discovery-"));
-  roots.push(root);
+  const root = tempDir("data-discovery-", { short: true });
   await Promise.all(
     Object.entries(files).map(async ([file, text]) => {
       await mkdir(dirname(join(root, file)), { recursive: true });

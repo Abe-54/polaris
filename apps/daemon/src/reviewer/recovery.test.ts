@@ -1,5 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   DomainEvent,
@@ -18,13 +17,7 @@ import { Effect, Layer } from "effect";
 import { EventStore } from "../store/EventStore.ts";
 import { recoverReviewer, RESTART_NOTE } from "./recovery.ts";
 import { ReviewerSessions } from "./sessions.ts";
-import { shortTemp } from "../platform/testing.ts";
-
-const dirs: Array<string> = [];
-
-afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
+import { tempDir } from "../platform/tempDir.testing.ts";
 
 const summary = (id: string, status: "running" | "completed", sessionId: SessionId | null) =>
   RiskSummary.make({
@@ -56,8 +49,7 @@ const summary = (id: string, status: "running" | "completed", sessionId: Session
   });
 
 test("a restarted Reviewer fails abandoned summaries, keeps completed layers, and restores durable session identities", async () => {
-  const dir = mkdtempSync(shortTemp("rvfix-recovery-"));
-  dirs.push(dir);
+  const dir = tempDir("rvfix-recovery-", { short: true });
   const filename = join(dir, "state.sqlite");
   const done = summary("done", "completed", SessionId.make("old-reviewer"));
   const abandoned = summary("abandoned", "running", null);

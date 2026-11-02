@@ -1,23 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { catalog } from "../catalog/index.ts";
 import { luaLaunch } from "./launch.ts";
 import { luaPlugin, luaServerSettings } from "./settings.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const posixModes = posixTest(
   "the state directory's privacy is POSIX mode 0700; Windows needs ACL checks (ENG-314)"
 );
 
 const withDirectory = async (body: (root: string) => Promise<void>) => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "polaris-lua-")));
+  const root = newTempDir("polaris-lua-");
 
   try {
     await body(root);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };
 

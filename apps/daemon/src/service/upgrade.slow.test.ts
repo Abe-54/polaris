@@ -1,3 +1,4 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 /**
  * Proof of the execve hand-off: a running (miniature) Daemon with a Harness
  * child execs into a new binary in the same PID; the child survives and is
@@ -5,8 +6,7 @@
  * connection afterwards talks to the new version.
  */
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { Effect, Schema } from "effect";
@@ -92,7 +92,7 @@ let daemon: Subprocess | null = null;
 const previousHome = process.env.POLARIS_HOME;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "polaris-upgrade-"));
+  home = newTempDir("polaris-upgrade-");
   process.env.POLARIS_HOME = home;
 });
 
@@ -103,7 +103,7 @@ afterEach(async () => {
 
   if (previousHome === undefined) delete process.env.POLARIS_HOME;
   else process.env.POLARIS_HOME = previousHome;
-  rmSync(home, { recursive: true, force: true });
+  removeTempDir(home);
 });
 
 execveOnly("libc", () => {

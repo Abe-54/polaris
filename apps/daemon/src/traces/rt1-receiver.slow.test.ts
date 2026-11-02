@@ -1,4 +1,4 @@
-import { shortTemp } from "../platform/testing.ts";
+import { tempDir } from "../platform/tempDir.testing.ts";
 // RT1 repros (ENG-656) for the receiver and token lifetime. Expected to FAIL on 08798fa8f.
 import { expect, test } from "bun:test";
 import { connect, type Socket } from "node:net";
@@ -81,7 +81,7 @@ test("a storage failure answers a retryable status, not 400", () =>
   }));
 
 test("trace-tokens.json does not gain a hash per Daemon restart for the same binding", async () => {
-  const filename = shortTemp(`rt1-vault-${crypto.randomUUID()}.json`);
+  const filename = join(tempDir("rt1-vault-"), "trace-tokens.json");
   const binding = { checkout: "/repo", workspaceId: TEST_WORKSPACE, sessionId: null };
 
   const first = new TraceTokenVault(filename).issue(binding);
@@ -102,8 +102,6 @@ test("trace-tokens.json does not gain a hash per Daemon restart for the same bin
     Schema.Struct({ bindings: Schema.Record(Schema.String, Schema.Json) })
   )(await Bun.file(filename).json());
 
-  await Bun.file(filename).delete();
-  await rm(`${filename}.seed`, { force: true });
   expect(Object.keys(saved.bindings)).toHaveLength(1);
 });
 

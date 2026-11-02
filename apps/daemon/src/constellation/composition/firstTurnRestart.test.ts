@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   CommandId,
@@ -14,8 +13,8 @@ import { EventStore } from "../../store/EventStore.ts";
 import { setup } from "../delivery/testing.ts";
 import { sendbackWorld } from "../../mcp/sendback.testing.ts";
 import { restartForRetry } from "../../mcp/sendback.restart.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
 import { startPendingAttempt } from "./workers.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const setupCard = (sessionId: SessionId, status: "running" | "completed") =>
   DomainEvent.cases.SessionSetupChanged.make({
@@ -37,7 +36,7 @@ const setupCard = (sessionId: SessionId, status: "running" | "completed") =>
 // ENG-263: setup finished, the worker sat Dormant with no Turn, then the Daemon restarted.
 for (const started of [false, true])
   test(`restart after setup completed ${started ? "and the first Turn started keeps one first Turn" : "and before the first Turn starts that Turn once"}`, async () => {
-    const root = mkdtempSync(shortTemp("polaris-first-turn-"));
+    const root = newTempDir("polaris-first-turn-", { short: true });
     const file = join(root, "state.sqlite");
 
     try {
@@ -79,6 +78,6 @@ for (const started of [false, true])
         })
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   }, 20000);

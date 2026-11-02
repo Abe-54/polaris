@@ -4,7 +4,6 @@
  * without the Grant, or without a key, it is refused; the key never comes back.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
@@ -17,13 +16,13 @@ import {
 } from "@polaris/protocol";
 import { Deferred, Effect, Exit, Fiber, Layer, Redacted, Scope, Stream } from "effect";
 import type { RpcGroup } from "effect/rpc";
-import { shortTemp } from "../platform/testing.ts";
 import { startServer } from "../transport/server.ts";
 import { HostSecrets, memorySecrets } from "../secrets/index.ts";
 import { VoiceProvider } from "./provider.ts";
 import { makeVoiceRpcs } from "./VoiceRpcs.ts";
 import { NO_KEY_MESSAGE } from "./keys.ts";
 import { deepgramProvider } from "./deepgram.ts";
+import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const KEY = "0123456789abcdef0123456789abcdef01234567";
 
@@ -52,10 +51,7 @@ const countingProvider = VoiceProvider.of({
     ),
 });
 
-const temporary = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(shortTemp("pl-voice-"))),
-  (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-);
+const temporary = scopedTempDir("pl-voice-", { short: true });
 
 const identity = { clientName: "test", clientVersion: "0", deviceLabel: "Test", capabilities: [] };
 

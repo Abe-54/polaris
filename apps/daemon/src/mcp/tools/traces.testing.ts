@@ -1,5 +1,4 @@
-import { shortTemp } from "../../platform/testing.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 import { join } from "node:path";
 import { Effect } from "effect";
 import {
@@ -77,7 +76,7 @@ export const withStoredTools = async (
     sourceCalls: () => number;
   }) => Promise<void>
 ) => {
-  const root = await mkdtemp(shortTemp("t2-traces-"));
+  const root = newTempDir("t2-traces-", { short: true });
 
   try {
     await Effect.runPromise(
@@ -181,6 +180,6 @@ export const withStoredTools = async (
       )
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 };

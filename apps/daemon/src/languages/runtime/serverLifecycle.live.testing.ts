@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Predicate } from "effect";
@@ -7,7 +7,7 @@ import * as P from "@polaris/protocol";
 import { createProjectDiscovery } from "../discovery/index.ts";
 import { createLanguageBroker } from "./index.ts";
 import { spawnLanguageProcess } from "./process.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const required = (key: string) => {
   const path = process.env[key];
@@ -27,7 +27,7 @@ async function until(check: () => boolean | Promise<boolean>) {
 }
 
 test("real TS6 kills exhaust budget; manual recovery, config diagnostics and idle stop retain drafts", async () => {
-  const root = await realpath(await mkdtemp(shortTemp("polaris-lifecycle-live-")));
+  const root = newTempDir("polaris-lifecycle-live-", { short: true });
 
   const checkout = P.LanguageCheckout.cases.Workspace.make({
     workspaceId: P.WorkspaceId.make("live"),
@@ -224,6 +224,6 @@ test("real TS6 kills exhaust budget; manual recovery, config diagnostics and idl
     );
   } finally {
     await broker.close();
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 }, 90000);

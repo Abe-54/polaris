@@ -1,10 +1,10 @@
 import { rejects } from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, link, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, link, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { verifyStoredFile } from "./fileVerification.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const test = posixTest(
   "language storage is checked private by POSIX owner, mode and link counts; Windows needs ACL checks (ENG-314)"
@@ -16,7 +16,7 @@ const integrity = (bytes: Uint8Array, sha512 = false) =>
     : `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 
 test("stored verification hashes bytes across chunk boundaries and refuses tail corruption, truncation and growth", async () => {
-  const root = await mkdtemp(join(tmpdir(), "polaris-stored-file-"));
+  const root = newTempDir("polaris-stored-file-");
   const path = join(root, "runtime");
   const bytes = Buffer.alloc(2 * 1024 * 1024 + 37, 61);
   const expected = { size: bytes.length, mode: 0o600, integrity: integrity(bytes) };
@@ -35,12 +35,12 @@ test("stored verification hashes bytes across chunk boundaries and refuses tail 
     await writeFile(path, Buffer.alloc(0));
     await verifyStoredFile(path, { ...expected, size: 0, integrity: integrity(Buffer.alloc(0)) });
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });
 
 test("stored streaming reads retain final-link, hardlink, mode and malformed-integrity refusal", async () => {
-  const root = await mkdtemp(join(tmpdir(), "polaris-stored-file-"));
+  const root = newTempDir("polaris-stored-file-");
   const path = join(root, "runtime");
   const bytes = Buffer.from("tool");
   const expected = { size: bytes.length, mode: 0o600, integrity: integrity(bytes) };
@@ -58,6 +58,6 @@ test("stored streaming reads retain final-link, hardlink, mode and malformed-int
     await link(path, join(root, "hardlink"));
     await rejects(verifyStoredFile(path, expected), { reason: "too-large" });
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDirSettled(root);
   }
 });

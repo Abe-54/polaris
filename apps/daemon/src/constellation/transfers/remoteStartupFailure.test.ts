@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import {
   CommandId,
   CommandRejected,
@@ -27,11 +26,11 @@ import { DomainEvent } from "@polaris/protocol";
 import { RemoteWorkers } from "./assignments.ts";
 import { TransferStorage } from "./storage.ts";
 import { remoteWorkingAttemptsLayer } from "./remoteWorking.ts";
-import { shortTemp } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 for (const mode of ["acquire", "start", "resume"] as const)
   test(`remote ${mode} failure closes later user and unblock admission without waiting for registration`, async () => {
-    const root = mkdtempSync(shortTemp("remote-startup-failure-"));
+    const root = newTempDir("remote-startup-failure-", { short: true });
     let held = 0;
     let failures = 0;
 
@@ -180,6 +179,6 @@ for (const mode of ["acquire", "start", "resume"] as const)
         }).pipe(Effect.scoped)
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });

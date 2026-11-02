@@ -4,7 +4,6 @@
  * the push service. The test opens each slice with the device's push key, as the widget does.
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HostId, HostInfo, type HostStreamItem, type LinkedDevice } from "@polaris/protocol";
 import {
@@ -20,11 +19,11 @@ import { Context, Effect, Layer, Option, PubSub, Schema, Scope, Stream } from "e
 import { makeDevice, startRelay, type TestDevice } from "../linkedDevices/device.testing.ts";
 import { DeviceConnections, RelayRoute } from "../linkedDevices/route.ts";
 import { LinkedDevices } from "../linkedDevices/store.ts";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { LiveHostEvents, LiveNotifier } from "./liveNotifier.ts";
 import { approvalRequested, session, snapshot, synchronized } from "./push.testing.ts";
 import { pushSuite } from "./seal.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const decodeRequest = Schema.decodeUnknownSync(Schema.fromJsonString(LivePushRequest));
 
@@ -100,10 +99,8 @@ const TOKEN = "d4".repeat(40);
 
 /** A connected route with one Linked Device, the notifier on a fake Host stream, and a feed. */
 const setup = Effect.gen(function* () {
-  const root = mkdtempSync(shortTemp("pl-live-"));
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-  );
+  const root = newTempDir("pl-live-", { short: true });
+  yield* Effect.addFinalizer(() => Effect.promise(() => removeTempDirSettled(root)));
 
   const routeLayer = RelayRoute.layer({ root, hostInfo }).pipe(
     Layer.provide(

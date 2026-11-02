@@ -3,15 +3,14 @@
  * that ends on `away`, when it lapses, or the moment its connection closes.
  */
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import { DaemonRpcs } from "@polaris/protocol";
 import { Effect, Exit, Layer, Scope } from "effect";
-import { shortTemp } from "../platform/testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
 import { HostPresence } from "./index.ts";
+import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
@@ -19,10 +18,10 @@ const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", cap
 const daemon = (leaseMs: number) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
-    const root = mkdtempSync(shortTemp("pl-presence-"));
+    const root = newTempDir("pl-presence-", { short: true });
     yield* Scope.addFinalizer(
       scope,
-      Effect.sync(() => rmSync(root, { recursive: true, force: true }))
+      Effect.promise(() => removeTempDirSettled(root))
     );
     const found: Array<HostPresence["Service"]> = [];
 

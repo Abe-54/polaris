@@ -1,20 +1,19 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AttemptId, DomainEvent, ResourceLease } from "@polaris/protocol";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { CID, HOST } from "../../engine/constellation.testing.ts";
-import { shortTemp } from "../../platform/testing.ts";
 import { WORKERS_RESOURCE } from "../../resources/model.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { ConstellationDelivery } from "./index.ts";
 import { WORKER, setup, wait, world } from "./testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs.splice(0)) removeTempDir(dir);
 });
 
 // After the Attempt's (wall-clock) start, so the slot's grant starts the grace period.
@@ -47,7 +46,7 @@ const pendingTimer = Effect.fnUntraced(function* () {
 });
 
 test("a worker holding a slot with no first Turn is flagged to the Lead once, across restarts", async () => {
-  const dir = mkdtempSync(shortTemp("slot-stall-"));
+  const dir = newTempDir("slot-stall-", { short: true });
   dirs.push(dir);
   const file = join(dir, "state.sqlite");
 

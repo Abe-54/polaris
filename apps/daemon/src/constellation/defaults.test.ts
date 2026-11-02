@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConstellationSettings } from "@polaris/protocol";
 import { Effect } from "effect";
 import { ConstellationDefaultsPath, getDefaults, setDefaults } from "./defaults.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 test("Host defaults round-trip atomically and tolerate missing or invalid settings", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "c1-defaults-"));
+  const dir = newTempDir("c1-defaults-");
   const path = join(dir, "settings.json");
 
   try {
@@ -22,6 +22,6 @@ test("Host defaults round-trip atomically and tolerate missing or invalid settin
       }).pipe(Effect.provideService(ConstellationDefaultsPath, path))
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

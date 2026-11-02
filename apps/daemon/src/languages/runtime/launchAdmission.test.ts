@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeAll, afterAll, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import {
   HostId,
   WorkspaceId,
@@ -17,6 +16,7 @@ import {
 } from "../discovery/index.ts";
 import { LaunchAdmission, type LaunchSelectionLease } from "./launchAdmission.ts";
 import type { ProcessPort } from "../transport/index.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 function deferred<A>() {
   let resolve!: (value: A) => void;
@@ -35,7 +35,7 @@ let facts: DiscoveryFacts;
 let context: LanguageContextIdentity;
 
 beforeAll(async () => {
-  root = await realpath(await mkdtemp(join(tmpdir(), "m31-h1-launch-")));
+  root = newTempDir("m31-h1-launch-");
   await writeFile(join(root, "file.ts"), "saved");
 
   const checkout = LanguageCheckout.cases.Workspace.make({
@@ -74,7 +74,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (root !== "") await rm(root, { recursive: true, force: true });
+  if (root !== "") await removeTempDirSettled(root);
 });
 
 function fixture() {

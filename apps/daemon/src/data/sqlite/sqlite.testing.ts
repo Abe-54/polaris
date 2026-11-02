@@ -1,9 +1,9 @@
 /** A real DataSources and DataQueries over a temp checkout, for SQLite tests. */
 import { Database } from "bun:sqlite";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
-import { shortTemp } from "../../platform/testing.ts";
+import { scopedTempDir } from "../../platform/tempDir.testing.ts";
 import { fileSecrets } from "../../secrets/index.ts";
 import { DataSourceAccess } from "../access.ts";
 import { DataQueries, DataSources } from "../index.ts";
@@ -16,11 +16,7 @@ export const sessionId = started.session.id;
 export const turn = started.turns[0]!.id;
 
 /** A temp directory removed with the scope, as its real path. */
-export const tempDir = (prefix: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => realpathSync(mkdtempSync(shortTemp(prefix)))),
-    (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true }))
-  );
+export const tempDir = (prefix: string) => scopedTempDir(prefix, { short: true });
 
 export const write = (root: string, file: string, text: string) => {
   mkdirSync(dirname(join(root, file)), { recursive: true });

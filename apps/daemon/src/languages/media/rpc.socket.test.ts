@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import * as P from "@polaris/protocol";
@@ -9,7 +9,8 @@ import { BlobChannel } from "../../services.ts";
 import { startServer } from "../../transport/server.ts";
 import { HostPreviewMedia, createHostPreviewMedia } from "./index.ts";
 import { PreviewMediaRpc } from "./rpc.ts";
-import { posixTest, shortTemp } from "../../platform/testing.ts";
+import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const test = posixTest(
   "Host media reads need descriptor-relative NOFOLLOW opens and POSIX paths (ENG-296)"
@@ -37,10 +38,10 @@ const hello = (languageProof?: Redacted.Redacted<unknown>) => {
 
 const fixture = Effect.gen(function* () {
   const root = yield* Effect.acquireRelease(
-    Effect.sync(() => realpathSync(mkdtempSync(shortTemp("pl-h1-rpc-")))),
+    Effect.sync(() => newTempDir("pl-h1-rpc-", { short: true })),
     (path) =>
       Effect.sync(() => {
-        rmSync(path, { recursive: true, force: true });
+        removeTempDir(path);
         expect(existsSync(path)).toBe(false);
       })
   );

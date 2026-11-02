@@ -1,5 +1,6 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ConstellationId, DomainEvent, SessionId, WorkspaceId } from "@polaris/protocol";
 import { McpBinding } from "./binding.ts";
@@ -7,10 +8,9 @@ import { revokeMcpBindings } from "./revoke.ts";
 import { Effect } from "effect";
 import { McpTokens } from "./tokens.ts";
 import { leadBinding, workerBinding } from "./testing.ts";
-import { shortTemp } from "../platform/testing.ts";
 
 test("only token hashes persist; restart keeps credentials and revocation", async () => {
-  const root = mkdtempSync(shortTemp("polaris-mcp-"));
+  const root = newTempDir("polaris-mcp-", { short: true });
   const path = join(root, "tokens.sqlite");
 
   const plainBinding = McpBinding.cases.Plain.make({
@@ -63,12 +63,12 @@ test("only token hashes persist; restart keeps credentials and revocation", asyn
       }).pipe(Effect.provide(McpTokens.layer(path)))
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
 test("committed lifecycle events revoke only matching bindings, keep a closed Lead and replay safely", async () => {
-  const root = mkdtempSync(shortTemp("polaris-mcp-events-"));
+  const root = newTempDir("polaris-mcp-events-", { short: true });
 
   try {
     await Effect.runPromise(
@@ -143,6 +143,6 @@ test("committed lifecycle events revoke only matching bindings, keep a closed Le
       }).pipe(Effect.provide(McpTokens.layer(join(root, "tokens.sqlite"))))
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

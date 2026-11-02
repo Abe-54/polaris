@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { CommandId, type HostResourcesSnapshot } from "@polaris/protocol";
 import { Exit, Fiber, Layer, ManagedRuntime } from "effect";
@@ -8,7 +7,7 @@ import { EventStore } from "../store/EventStore.ts";
 import { HostResources } from "./index.ts";
 import { recordResourceTrace } from "./trace.testing.ts";
 import { processIdentity } from "./process.ts";
-import { shortTemp } from "../platform/testing.ts";
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const waitForRequest = async (
   snapshot: () => Promise<HostResourcesSnapshot>,
@@ -49,7 +48,7 @@ test(
         fc.asyncProperty(
           fc.array(operation, { minLength: 10, maxLength: 35 }),
           async (operations) => {
-            const home = mkdtempSync(shortTemp("polaris-resource-model-"));
+            const home = newTempDir("polaris-resource-model-", { short: true });
             process.env.POLARIS_HOME = home;
 
             const layer = HostResources.layer.pipe(
@@ -152,7 +151,7 @@ test(
             } finally {
               for (const fiber of pending) await runtime.runPromise(Fiber.interrupt(fiber));
               await runtime.dispose();
-              rmSync(home, { recursive: true, force: true });
+              removeTempDir(home);
             }
           }
         ),

@@ -1,8 +1,7 @@
 import { test, expect } from "bun:test";
 import { rejects } from "node:assert/strict";
-import { mkdtemp, realpath, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { Predicate, Schema } from "effect";
 import { LanguageHostState } from "@polaris/protocol";
 import { catalog, Tool } from "../catalog/index.ts";
@@ -11,6 +10,7 @@ import { createHostPrerequisiteProbe } from "./hostStateProbes.ts";
 import { createHostInstallations } from "./host.ts";
 import { fixture, artifactFixture, hostId, platform } from "./fixture.testing.ts";
 import { posixTest } from "../../platform/testing.ts";
+import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
 const privateStorage = posixTest(
   "language storage is checked private by POSIX owner and mode bits; Windows needs ACL checks (ENG-314)"
@@ -204,7 +204,7 @@ privateStorage(
 );
 
 test("Host probes inspect standard Python and Rust locations, never execute their files", async () => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "host-presence-")));
+  const home = newTempDir("host-presence-");
   const directory = join(home, "bin");
   const probe = createHostPrerequisiteProbe({ home, directories: [directory] });
 
@@ -246,7 +246,7 @@ test("Host probes inspect standard Python and Rust locations, never execute thei
     stopped.abort();
     await rejects(probe().probe(requirement, stopped.signal), { reason: "cancelled" });
   } finally {
-    await rm(home, { recursive: true, force: true });
+    await removeTempDirSettled(home);
   }
 });
 

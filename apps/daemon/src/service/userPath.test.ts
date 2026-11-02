@@ -1,16 +1,16 @@
+import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { loginShellPath, mergePathsWith, parseMarkedPath, userPath, which } from "./userPath.ts";
 
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "polaris-userpath-"));
+  dir = newTempDir("polaris-userpath-");
 });
 
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => removeTempDir(dir));
 
 /** These run a `/bin/sh` stand-in for the login shell; Windows has none to ask. */
 const posix = test.skipIf(process.platform === "win32");
@@ -81,7 +81,7 @@ describe("userPath", () => {
 
 describe("which", () => {
   test("finds a binary on the PATH set after start, which a bare Bun.which misses", () => {
-    const dir = mkdtempSync(join(tmpdir(), "polaris-which-"));
+    const dir = newTempDir("polaris-which-");
     // On Windows a `.cmd` shim, as npm installs one, found through PATHEXT.
     const bin = join(dir, windows ? "polaris-which-probe.cmd" : "polaris-which-probe");
     writeFileSync(bin, windows ? "@echo off\r\n" : "#!/bin/sh\n");
@@ -93,7 +93,7 @@ describe("which", () => {
       expect(which("polaris-which-probe")).toBe(bin);
     } finally {
       process.env.PATH = previous;
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 });
