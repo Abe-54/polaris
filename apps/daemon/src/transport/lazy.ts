@@ -1,5 +1,5 @@
 import { ConstellationRpcs, ConstellationTransferRpcs } from "@polaris/protocol";
-import { Context, Effect, Layer, Scope, Stream, type Schema } from "effect";
+import { Context, Effect, Layer, References, Scope, Stream, Tracer, type Schema } from "effect";
 import { RpcGroup, RpcSchema, type Rpc } from "effect/rpc";
 import { HostResources } from "../resources/service.ts";
 import { BlobChannel } from "../services.ts";
@@ -50,11 +50,14 @@ export const lazyRpcLayer = <
 
           const result = handler.handler(payload, options);
 
+          // The build ran in the first request's fiber: keep its Span and stack frame out of this one.
           const context = Context.omit(
             Scope.Scope,
             BlobChannel,
             CurrentLanguageConnection,
-            LanguageConnectionLifetime
+            LanguageConnectionLifetime,
+            Tracer.ParentSpan,
+            References.CurrentStackFrame
           )(handler.context);
 
           return Effect.isEffect(result)

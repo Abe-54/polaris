@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { BlobId } from "@polaris/protocol";
-import { Effect, Fiber, Exit, Layer, Scope, Schema, Stream } from "effect";
+import { Cause, Effect, Fiber, Exit, Layer, Scope, Schema, Stream } from "effect";
 import { Headers } from "effect/http";
 import { Rpc, RpcGroup } from "effect/rpc";
 import { RequestId } from "effect/rpc/RpcMessage";
@@ -282,4 +282,72 @@ test("a failed lazy build fails each request and stream with its typed error, no
     read: Exit.fail(new BuildFailed({ rpc: "test.read" })),
     watch: Exit.fail(new BuildFailed({ rpc: "test.watch" })),
   });
+});
+
+class Refused extends Schema.TaggedError<Refused>()("Refused", {}) {}
+
+const traced = RpcGroup.make(
+  Rpc.make("test.span", { success: Schema.String }),
+  Rpc.make("test.fail", { error: Refused })
+);
+
+test("a lazy handler runs under its own request's Span, not the request that built it", async () => {
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const daemon = yield* Effect.scope;
+        const memo = yield* Layer.makeMemoMap;
+
+        // Built as the Data handlers are: a handler Layer, on first use.
+        const load = yield* cacheDaemonBuild(
+          Layer.buildWithMemoMap(
+            traced.toLayer({
+              "test.span": () =>
+                Effect.currentSpan.pipe(
+                  Effect.map((span) => span.name),
+                  Effect.catch(() => Effect.succeed("no span"))
+                ),
+              "test.fail": () => Effect.fail(new Refused()),
+            }),
+            memo,
+            daemon
+          )
+        );
+
+        const handlers = yield* Layer.buildWithMemoMap(lazyRpcLayer(traced, load), memo, daemon);
+
+        const options = {
+          requestId: RequestId(1),
+          headers: Headers.empty,
+          client: new Rpc.ServerClient(1),
+        };
+
+        const span = (name: string) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              return yield* (yield* traced.accessHandler("test.span"))(undefined, options);
+            })
+          ).pipe(Effect.provide(handlers), Effect.withSpan(name));
+
+        // The first request builds the handlers, as a long-lived feed usually does.
+        const first = yield* span("polaris.rpc.feed.watch");
+        const second = yield* span("polaris.rpc.one.off");
+
+        const failed = yield* Effect.exit(
+          Effect.scoped(
+            Effect.gen(function* () {
+              return yield* (yield* traced.accessHandler("test.fail"))(undefined, options);
+            })
+          ).pipe(Effect.provide(handlers), Effect.withSpan("polaris.rpc.failing"))
+        );
+
+        return { first, second, stack: Exit.isFailure(failed) ? Cause.pretty(failed.cause) : "" };
+      })
+    )
+  );
+
+  expect(result.stack).toContain("at polaris.rpc.failing");
+  expect(result.stack).not.toContain("polaris.rpc.feed.watch");
+  expect(result.first).toBe("polaris.rpc.feed.watch");
+  expect(result.second).toBe("polaris.rpc.one.off");
 });
