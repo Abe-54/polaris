@@ -127,7 +127,9 @@ measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 ENG-673's default-timeout checks, negative control and raw paired measurements
 are in [launch measurements](../../../../packages/bench/measurements/eng-657/launch/README.md).
 
-MCP `traces`, `trace` and `span` share these services on every Data-tool binding.
+MCP `traces`, `trace` and `span` share these services on every Data-tool binding. In the Polaris
+Workspace, while Developer Mode is effective, they also read the Self-Trace scope (`scope: "self"`,
+ENG-731).
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
 over earlier retained traces; fewer than five samples produce no baseline. The read-only helper
 runs inside the existing worker and also returns each Span's actual sample count.
@@ -316,7 +318,7 @@ Self-Spans become OTLP JSON and go through `TraceStore.ingest`: the same decoder
 bounds as the receiver. They are stored under the reserved checkout key `polaris:self`, which is
 not a path. That scope has its own retention of 50 MiB or 24 hours (`self/scope.ts`), separate
 from checkout budgets. `traces.ingestSelf` refuses with `developer-mode-off` unless Developer Mode
-is effective. It drops Spans that end before they start and stamps the batch's `service` as
+is effective, and with `busy` when the store is busy (Clients retry that batch). It drops Spans that end before they start and stamps the batch's `service` as
 `service.name`. The protocol schema bounds a batch to 1,024 Spans and 512 KiB.
 
 `traces.watch/get/span` read the session's checkout and, when its Workspace is

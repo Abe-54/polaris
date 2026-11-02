@@ -8,11 +8,17 @@ block capped at 16,000 characters plus `structuredContent`; errors are `{code, m
 The point is that a trace reaches an agent already read: a 434-span trace becomes a page that
 says where the time went and what failed, not 434 lines.
 
-## `traces {turn?, route?, service?, status?, minMs?, limit?}`
+## `traces {turn?, route?, service?, status?, minMs?, limit?, scope?}`
 
 Traces from the caller's checkout, newest first. `turn`: a Turn number, `"current"` (default) or
 `"all"`; `route` a glob on the root span name (`POST /invoices*`); `status` `"error"` or `"ok"`;
 `minMs` a duration floor; `limit` ≤ 50 (default 20).
+
+`scope: "self"` (ENG-731) lists Polaris's own Self-Traces (the Daemon's, the Desktop App's and the
+Mobile App's, stored under `polaris:self`) instead of the checkout. They carry no Turn, so `turn`
+is ignored and every one is listed. It is refused with `E-TRACE-UNAVAILABLE` unless this Host's
+Developer Mode is effective and the session is in the Polaris Workspace (as the Traces view reads
+them); Self-Traces can hold paths and queries from every Workspace. `scope: "checkout"` is the default.
 
 ```
 Turn 12 · 14 traces (2 shown of 14; add limit)
@@ -33,7 +39,7 @@ Structured values retain their full length.
 JSON reuses protocol types: `services` is an array of service names and `turn` is a nullable
 `TraceTurn {sessionId, id, number}`. Text renders the service count and Turn number.
 
-## `trace {id, focus?}`
+## `trace {id, focus?, scope?}`
 
 One trace as a summarised tree. `id` is a full or unique-prefix trace id (≥ 8 hex). `focus`:
 `"slow"` (default), `"errors"` or `"all"`.
@@ -79,7 +85,11 @@ into a few groups. `folded.count` counts only Spans in undisplayed groups; `unde
 or zero when none are folded. Selection priority and display order are separate: the tree always
 uses start order, with two spaces per visible parent level up to the visual limit.
 
-## `span {trace, span}`
+## `span {trace, span, scope?}`
+
+Under the same condition, `trace` and `span` resolve an id in the checkout first and then
+in the Self-Trace scope, so ids from `traces {scope: "self"}` work without naming it; `scope:
+"self"` reads only that scope.
 
 One span in full: name, kind, service, status, duration, offset, parent, the Turn it ran in and
 the Turn that launched its process; attributes grouped as the span panel shows them (`attributes`,
@@ -171,7 +181,7 @@ These presentation transformations do not change the retained records.
 |---|---|
 | `E-TRACE-NOT-FOUND` | no trace or span by that id in this checkout (expired, sampled out, or another checkout) |
 | `E-TRACE-AMBIGUOUS` | an id prefix matches more than one trace |
-| `E-TRACE-NONE` | nothing has reached the receiver for this checkout; fix names the endpoint and "Set up tracing" |
+| `E-TRACE-NONE` | nothing has reached the receiver for this checkout; fix names the endpoint and "Set up tracing", and points at `scope: "self"` when Self-Traces are readable |
 
 Unavailable services or receiver return `E-TRACE-UNAVAILABLE` with the reason and a fix pointing
 to Traces (⌘5) and Set up tracing. Invalid input returns `E-INPUT` with input-schema guidance, including 8–32 lowercase hex for

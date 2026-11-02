@@ -2,7 +2,15 @@ import { shortTemp } from "../../platform/testing.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { TraceAvailability, TraceTurn, TurnId, type DataSource } from "@polaris/protocol";
+import {
+  DEFAULT_DEVELOPER_MODE,
+  type DataSource,
+  DeveloperMode,
+  TraceAvailability,
+  TraceTurn,
+  TurnId,
+  type WorkspaceId,
+} from "@polaris/protocol";
 import { TraceStore } from "../../traces/index.ts";
 import { spanFixture, traceFixture, TEST_SESSION, TEST_WORKSPACE } from "../../traces/testing.ts";
 import type { TraceRuntime } from "../../traces/index.ts";
@@ -61,6 +69,7 @@ export const withStoredTools = async (
     catalogs: ReadonlyArray<ReadonlyArray<BoundTool>>;
     setAvailable: (value: boolean) => void;
     setSources: (value: ReadonlyArray<DataSource>) => void;
+    setDeveloperMode: (effective: boolean, polarisWorkspaceId?: WorkspaceId) => void;
     sourceCalls: () => number;
   }) => Promise<void>
 ) => {
@@ -74,6 +83,7 @@ export const withStoredTools = async (
           let available = true;
           let sources: ReadonlyArray<DataSource> = [];
           let sourceCalls = 0;
+          let developerMode: DeveloperMode = DEFAULT_DEVELOPER_MODE;
 
           const setup: TraceRuntime["Service"]["setup"] = () =>
             Effect.succeed({
@@ -99,7 +109,8 @@ export const withStoredTools = async (
 
                   return sources;
                 }),
-            }
+            },
+            Effect.sync(() => developerMode)
           );
 
           const catalogs = bindings.map((binding) => {
@@ -128,6 +139,16 @@ export const withStoredTools = async (
                 sources = value;
               },
               sourceCalls: () => sourceCalls,
+              setDeveloperMode: (effective, polarisWorkspaceId = TEST_WORKSPACE) => {
+                developerMode = DeveloperMode.make({
+                  stored: effective,
+                  leases: 0,
+                  fromSource: false,
+                  effective,
+                  polarisWorkspaceId,
+                  polarisWorkspaceSource: "remote",
+                });
+              },
               ingest: async (spans, service = "ledger-api", checkout = context.checkout) => {
                 const batch = traceFixture(spans);
                 batch.resourceSpans[0]!.resource.attributes[0]!.value.stringValue = service;

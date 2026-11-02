@@ -6,6 +6,8 @@ import { context, makeSpan, NOW, turn, withStoredTools } from "./traces.testing.
 import { traceTools } from "./traces.ts";
 import { unavailableSessions } from "../sessions/index.ts";
 import { TEST_SESSION } from "../../traces/testing.ts";
+import { SELF_CHECKOUT } from "../../traces/self/scope.ts";
+import { WorkspaceId } from "@polaris/protocol";
 
 const text = (result: Awaited<ReturnType<ReturnType<typeof traceTools>[number]["call"]>>) =>
   result.content[0]!.text;
@@ -415,4 +417,62 @@ test("collapsed descendants retain their earliest offset and all service names",
     expect(result).toContain(
       "+50 ms  20 ms      ×2 repeated child  fx-rates, ledger-api  p50 10 ms  total 20 ms"
     );
+  }));
+
+test("Polaris's own traces are readable with scope self only from the Polaris Workspace while Developer Mode is on", () =>
+  withStoredTools(async (f) => {
+    const selfTrace = "5".repeat(32);
+    await f.ingest([makeSpan(1)]);
+    await f.ingest(
+      [makeSpan(7, undefined, "polaris.rpc.traces.get", 2, 0, selfTrace)],
+      "polaris-daemon",
+      SELF_CHECKOUT
+    );
+
+    const off = await f.tool("traces").call({ scope: "self" });
+    expect(off.structuredContent?.code).toBe("E-TRACE-UNAVAILABLE");
+    expect(off.structuredContent?.message).toBe(
+      "Polaris's own traces are readable only from the Polaris Workspace while Developer Mode is on."
+    );
+    expect((await f.tool("trace").call({ id: selfTrace })).structuredContent?.code).toBe(
+      "E-TRACE-NOT-FOUND"
+    );
+
+    // On, but this session's Workspace isn't the Polaris Workspace.
+    f.setDeveloperMode(true, WorkspaceId.make("ws_other"));
+    expect((await f.tool("traces").call({ scope: "self" })).structuredContent?.code).toBe(
+      "E-TRACE-UNAVAILABLE"
+    );
+    expect((await f.tool("trace").call({ id: selfTrace })).structuredContent?.code).toBe(
+      "E-TRACE-NOT-FOUND"
+    );
+
+    f.setDeveloperMode(true);
+    const self = await f.tool("traces").call({ scope: "self" });
+    expect(self.structuredContent?.traces).toMatchObject([
+      { id: selfTrace, root: "polaris.rpc.traces.get", service: "polaris-daemon" },
+    ]);
+    expect(text(await f.tool("traces").call({ turn: "all" }))).not.toContain(selfTrace);
+
+    // An id from the self list resolves without naming the scope; scope self skips the checkout.
+    expect(text(await f.tool("trace").call({ id: selfTrace }))).toContain("polaris.rpc.traces.get");
+    expect(text(await f.tool("span").call({ trace: selfTrace, span: sid(7) }))).toContain(
+      "polaris.rpc.traces.get"
+    );
+    expect(
+      (await f.tool("trace").call({ id: TRACE_ID, scope: "self" })).structuredContent?.code
+    ).toBe("E-TRACE-NOT-FOUND");
+  }));
+
+test("an empty checkout points at scope self while Developer Mode is on", () =>
+  withStoredTools(async (f) => {
+    f.setDeveloperMode(true);
+
+    expect((await f.tool("traces").call({})).structuredContent?.fix).toBe(
+      "Set up tracing in Traces (⌘5). Export to http://127.0.0.1:4319/otlp/test-endpoint. For Polaris's own traces, pass scope self."
+    );
+    expect((await f.tool("traces").call({ scope: "self" })).structuredContent).toMatchObject({
+      code: "E-TRACE-NONE",
+      message: "No Self-Traces are kept yet.",
+    });
   }));

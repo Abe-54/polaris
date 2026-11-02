@@ -14,6 +14,10 @@ import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 import { duration, inline, clipped, TRACE_CAP } from "./traceFormat.ts";
 import { compareView } from "./compareFormat.ts";
 import { spanView } from "./spanFormat.ts";
+import type { ReadScopes } from "../../traces/self/reads.ts";
+
+/** `self` reads Polaris's own Self-Traces; allowed only while Developer Mode is on. */
+const TraceScopeInput = Schema.Literals(["checkout", "self"]);
 
 export const TracesInput = Schema.Struct({
   turn: Schema.optionalKey(
@@ -27,12 +31,15 @@ export const TracesInput = Schema.Struct({
   status: Schema.optionalKey(Schema.Literals(["error", "ok"])),
   minMs: Schema.optionalKey(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))),
+  scope: Schema.optionalKey(TraceScopeInput),
 });
 
 export type TracesInput = typeof TracesInput.Type;
 
 export interface TraceToolContext {
   readonly checkout: string;
+  /** Where `trace` and `span` look, first to last; the Self-Trace scope follows while readable. */
+  readonly scopes: ReadScopes;
   readonly endpoint: string | null;
   readonly filter: TraceFilter;
   readonly turn: number | "all" | null;
@@ -58,13 +65,13 @@ export interface TraceSessionTools {
     TraceError
   >;
   readonly view: (
-    checkout: string,
+    context: TraceToolContext,
     id: string,
     focus: "slow" | "errors" | "all"
   ) => Effect.Effect<import("../../traces/workerProtocol.ts").TraceView, TraceError>;
   readonly span: (
     sessionId: SessionId,
-    checkout: string,
+    context: TraceToolContext,
     trace: string,
     span: string
   ) => Effect.Effect<
@@ -159,6 +166,9 @@ const listView = (
   return { text: [title(), ...rows.slice(0, count)].join("\n"), data: { traces } };
 };
 
+const scoped = (scope: "checkout" | "self" | undefined): TracesInput =>
+  scope === undefined ? { turn: "all" } : { turn: "all", scope };
+
 export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundTool[] => {
   const make = <S extends Schema.Decoder<unknown>>(
     name: string,
@@ -202,7 +212,7 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
   return [
     make(
       "traces",
-      "List this checkout's traces, newest first. Defaults to the current turn; turn all includes every turn. Filter by root route glob, service, status or minMs; limit defaults to 20, at most 50.",
+      "List this checkout's traces, newest first. Defaults to the current turn; turn all includes every turn. Filter by root route glob, service, status or minMs; limit defaults to 20, at most 50. scope self lists Polaris's own traces (Daemon and apps) while Developer Mode is on.",
       TracesInput,
       (input, traces) =>
         Effect.gen(function* () {
@@ -213,26 +223,31 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
     ),
     make(
       "trace",
-      "Summarise a trace as a tree with errors, critical path and repeated siblings collapsed. Use a full or unique prefix id (at least 8 hex). Focus slow (default), errors or all.",
+      "Summarise a trace as a tree with errors, critical path and repeated siblings collapsed. Use a full or unique prefix id (at least 8 hex). Focus slow (default), errors or all. Finds Polaris's own traces too while Developer Mode is on; scope self reads only those.",
       Schema.Struct({
         id: TraceIdPrefix,
         focus: Schema.optionalKey(Schema.Literals(["slow", "errors", "all"])),
+        scope: Schema.optionalKey(TraceScopeInput),
       }),
       (input, traces) =>
         Effect.gen(function* () {
-          const context = yield* traces.context(sessionId, { turn: "all" });
+          const context = yield* traces.context(sessionId, scoped(input.scope));
 
-          return viewResult(yield* traces.view(context.checkout, input.id, input.focus ?? "slow"));
+          return viewResult(yield* traces.view(context, input.id, input.focus ?? "slow"));
         })
     ),
     make(
       "span",
-      "Read one full span, grouped attributes, events, exception stack, newest 20 logs, links and code location. Database spans name a matching data source. Both ids take unique prefixes of at least 8 hex.",
-      Schema.Struct({ trace: TraceIdPrefix, span: SpanIdPrefix }),
+      "Read one full span, grouped attributes, events, exception stack, newest 20 logs, links and code location. Database spans name a matching data source. Both ids take unique prefixes of at least 8 hex. Finds Polaris's own spans too while Developer Mode is on; scope self reads only those.",
+      Schema.Struct({
+        trace: TraceIdPrefix,
+        span: SpanIdPrefix,
+        scope: Schema.optionalKey(TraceScopeInput),
+      }),
       (input, traces) =>
         Effect.gen(function* () {
-          const context = yield* traces.context(sessionId, { turn: "all" });
-          const result = yield* traces.span(sessionId, context.checkout, input.trace, input.span);
+          const context = yield* traces.context(sessionId, scoped(input.scope));
+          const result = yield* traces.span(sessionId, context, input.trace, input.span);
 
           return viewResult(spanView(result.detail, result.start, result.dataSource));
         })

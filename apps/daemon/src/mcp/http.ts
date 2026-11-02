@@ -20,6 +20,7 @@ import { sessionTraceTools } from "./sessions/traces.ts";
 import { sessionDataTools } from "./sessions/data.ts";
 import { McpTokens } from "./tokens.ts";
 import { loopbackRequest } from "../transport/loopbackHttp.ts";
+import { DeveloperModeState } from "../developerMode/service.ts";
 
 const Message = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
@@ -112,6 +113,25 @@ const responseFor = async (
   }
 };
 
+/** The agent trace tools, when Traces runs here; Self-Traces read while Developer Mode is on. */
+const traceToolsFromContext = (sources: Parameters<typeof sessionTraceTools>[3]) =>
+  Effect.gen(function* () {
+    const store = yield* Effect.serviceOption(TraceStore);
+    const runtime = yield* Effect.serviceOption(TraceRuntime);
+    const sessions = yield* Effect.serviceOption(TraceSessions);
+    const developerMode = yield* Effect.serviceOption(DeveloperModeState);
+
+    if (Option.isNone(store) || Option.isNone(runtime) || Option.isNone(sessions)) return undefined;
+
+    return sessionTraceTools(
+      store.value,
+      runtime.value,
+      sessions.value,
+      sources,
+      Option.isSome(developerMode) ? developerMode.value.current : undefined
+    );
+  });
+
 /** One listener per Host; JSON responses only, with no SSE connection or per-session process. */
 export const mcpHttp = (
   commands: ConstellationCommands,
@@ -131,7 +151,6 @@ export const mcpHttp = (
     const sources = yield* Effect.serviceOption(DataSources);
     const queries = yield* Effect.serviceOption(DataQueries);
     const traceStore = yield* Effect.serviceOption(TraceStore);
-    const traceRuntime = yield* Effect.serviceOption(TraceRuntime);
     const traceSessions = yield* Effect.serviceOption(TraceSessions);
     const profiles = yield* Effect.serviceOption(Profiles);
 
@@ -143,20 +162,9 @@ export const mcpHttp = (
           ? sessionDataTools(store.value, sources.value, queries.value)
           : undefined;
 
-      if (
-        Option.isSome(traceStore) &&
-        Option.isSome(traceRuntime) &&
-        Option.isSome(traceSessions)
-      ) {
-        Object.assign(sessions, {
-          traces: sessionTraceTools(
-            traceStore.value,
-            traceRuntime.value,
-            traceSessions.value,
-            Option.getOrUndefined(sources)
-          ),
-        });
-      }
+      const traces = yield* traceToolsFromContext(Option.getOrUndefined(sources));
+
+      if (traces !== undefined) Object.assign(sessions, { traces });
 
       if (Option.isSome(profiles) && Option.isSome(traceSessions) && Option.isSome(traceStore))
         Object.assign(sessions, {
