@@ -160,9 +160,46 @@ boundaries and a count of
 omitted routes; retrieve the full rows from compare structuredContent, and use
 `trace` or `span` with the returned ids for detail.
 
+## `trace_stats {sinceMinutes?, name?, service?, status?, by?, sort?, limit?, scope?}` (ENG-746)
+
+Spans aggregated over a time window, so "which spans ran, how often, how many failed, how slow"
+is one call instead of SQL against `traces.sqlite`. A separate tool rather than a mode of
+`traces`: its rows are Span groups, not traces, so each tool keeps one exact input and output shape.
+
+- `sinceMinutes` (1–10,080, default 60) is the window back from now, by Span start. It is always
+  bounded: there is no unbounded mode. `name` is a case-insensitive substring of the Span name
+  (`data` matches `polaris.rpc.data.query`), `service` an exact service name, `status` `"error"`
+  or `"ok"` (`ok` includes unset).
+- `by` is `"name"`, `"service"` or `"both"` (default). `sort` is `"count"` (default), `"errors"`
+  or `"slow"` (p95), with count, then errors, then name breaking ties. `limit` caps groups (1–100,
+  default 20).
+- `scope` follows `traces`: the checkout by default; `"self"` reads only `polaris:self`, refused with
+  the same `E-TRACE-UNAVAILABLE` message unless Developer Mode is effective and the session is in
+  the Polaris Workspace. The checkout read never mixes in Self-Traces.
+
+Per group: `count`, `errors`, nearest-rank `p50Ms`/`p95Ms`, `maxMs`, `latestStart` (ISO) and an
+`example {trace, span}`: the newest errored Span when the group has errors, else its slowest, ready
+for `trace` or `span`.
+
+The scan is newest first over the `spans_retention (checkout, age)` index (`spans_age` with a
+status filter), `age` being the Span start in ms, so the window is an index range and no sort
+runs. At most the newest 20,000 matching Spans are aggregated; past that `truncated` is true and
+`coveredSince` says where the read stopped, and text says to narrow `name`, `service` or
+`sinceMinutes`. A window with no matching Spans is a valid empty result, not `E-TRACE-NONE`.
+
+```
+Spans since 2026-11-02T19:08:00.000Z (last 60 min) · 1234 spans in 12 groups
+polaris.rpc.data.query  polaris-daemon  ×412  3 ERRORS  p50 4.2 ms  p95 31 ms  max 2.1 s  latest 2026-11-02T20:07:59.120Z  error trace 4f1c… span 2d91…
+```
+
+`structuredContent`: `{groups: [{name?, service?, count, errors, p50Ms, p95Ms, maxMs, latestStart,
+example: {trace, span}}], groupCount, spans, truncated, since, coveredSince?}`. `name` is absent
+when grouping by service and `service` when grouping by name. `groupCount` and `spans` count the
+whole read, before `limit` and the text cap.
+
 ## Caps and retrieval
 
-All four tools emit one text block of at most 16,000 characters. `traces` states shown/total and
+All five tools emit one text block of at most 16,000 characters. `traces` states shown/total and
 suggests limit or narrower filters. `trace` counts folded Spans and gives their upper duration
 bound; use `span` for individual details. For `span`, name each omitted section with its omitted
 detail-line count and say to use `span` structuredContent for the full retained data. Older logs

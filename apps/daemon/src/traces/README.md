@@ -127,7 +127,7 @@ measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 ENG-673's default-timeout checks, negative control and raw paired measurements
 are in [launch measurements](../../../../packages/bench/measurements/eng-657/launch/README.md).
 
-MCP `traces`, `trace` and `span` share these services on every Data-tool binding. In the Polaris
+MCP `traces`, `trace`, `span` and `trace_stats` share these services on every Data-tool binding. In the Polaris
 Workspace, while Developer Mode is effective, they also read the Self-Trace scope (`scope: "self"`,
 ENG-731).
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
@@ -139,6 +139,14 @@ the median), and FAST when below a third of a median over 20 ms. Both require fi
 No baseline means no badge or panel line. Folded sums have no per-call verdict.
 The MCP summary retains error paths before the critical path, collapses repeated siblings, and
 counts omitted Spans under the text cap. Its full contract is `docs/specs/traces-tools-v1.md`.
+
+`TraceStore.stats(checkout, filter)` (`stats.ts`, ENG-746) backs MCP `trace_stats`: Spans
+started since `sinceMs`, optionally by name substring, service and status, grouped by name
+and/or service with count, errors, nearest-rank p50/p95, max, latest start and an example Span
+(the newest errored one, else the slowest). It range-scans `spans_retention (checkout, age)`
+newest first, or `spans_age` with a status filter, so no new index or ingest cost; at most
+20,000 matching Spans are read, and a capped result reports where its read stopped. It runs in
+the store worker after the usual prune, and reads one scope: the checkout or `polaris:self`.
 
 ## Phase 2 contracts (ENG-657)
 

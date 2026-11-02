@@ -14,6 +14,7 @@ import type { CompareTurns } from "./compareQuery.ts";
 import type { TraceHistory, TraceView, TraceToolPage, TraceToolSpan } from "./workerProtocol.ts";
 import type { TraceWorkerOptions } from "./workerClient.ts";
 import type { TracePage } from "./store.ts";
+import type { SpanStats, SpanStatsFilter } from "./stats.ts";
 
 export class TraceStore extends Context.Service<
   TraceStore,
@@ -45,6 +46,11 @@ export class TraceStore extends Context.Service<
       traceId: string,
       spanId: string
     ) => Effect.Effect<TraceToolSpan, TraceError>;
+    /** Spans grouped by name and/or service over a bounded window (the `trace_stats` tool). */
+    readonly stats: (
+      checkout: string,
+      filter: SpanStatsFilter
+    ) => Effect.Effect<SpanStats, TraceError>;
     readonly overlapping: (
       checkout: string,
       start: string,

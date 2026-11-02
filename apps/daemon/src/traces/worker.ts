@@ -22,6 +22,7 @@ import {
   overlappingTraces,
 } from "./queries.ts";
 import { compareTraces } from "./compareQuery.ts";
+import { spanStats } from "./stats.ts";
 import { pruneCheckout } from "./retention.ts";
 import { retentionFor, SELF_RETENTION } from "./self/scope.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
@@ -202,6 +203,9 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
       start: summaryFor(db, request.checkout, detail.span.traceId).startTimeUnixNano,
     };
   }),
+  Match.tag("Stats", (request) =>
+    spanStats(prune(request.checkout), request.checkout, request.filter)
+  ),
   Match.tag("Overlap", (request) =>
     overlappingTraces(prune(request.checkout), request.checkout, request.start, request.end)
   ),

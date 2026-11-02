@@ -132,6 +132,7 @@ export const sessionTraceTools = (
         firstScope(context.scopes, (scope) => store.view(scope, id, focus)),
         ([view]) => view
       ),
+    stats: (context, filter) => store.stats(context.checkout, filter),
     span: Effect.fnUntraced(function* (sessionId, context, trace, span) {
       const [result] = yield* firstScope(context.scopes, (scope) =>
         store.toolSpan(scope, trace, span)

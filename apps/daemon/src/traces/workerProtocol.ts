@@ -12,6 +12,7 @@ import {
   Span,
 } from "@polaris/protocol";
 import { IngestContext } from "./ingest.ts";
+import { SpanStats, SpanStatsFilter } from "./stats.ts";
 
 const OnCheckout = { checkout: Schema.String };
 
@@ -52,6 +53,7 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
   },
   ToolList: { ...OnCheckout, filter: TraceFilter },
   ToolSpan: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
+  Stats: { ...OnCheckout, filter: SpanStatsFilter },
   History: { ...OnCheckout, traceId: TraceIdPrefix, includeSpans: Schema.Boolean },
   Span: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
   Link: { ...OnCheckout, traceId: TraceIdPrefix },
@@ -106,6 +108,7 @@ export const TraceWorkerValue = Schema.Union([
   TraceToolPage,
   TraceView,
   TraceToolSpan,
+  SpanStats,
   TracePageSchema,
   TraceDetail,
   SpanDetail,

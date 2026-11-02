@@ -8,13 +8,18 @@ import {
   type TraceFilter,
   type TraceSummary,
 } from "@polaris/protocol";
-import { Effect, Match, Option, Schema } from "effect";
+import { Clock, Effect, Match, Option, Schema } from "effect";
 import type { SessionTools } from "../sessions/index.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 import { duration, inline, clipped, TRACE_CAP } from "./traceFormat.ts";
 import { compareView } from "./compareFormat.ts";
 import { spanView } from "./spanFormat.ts";
+import { statsView } from "./statsFormat.ts";
 import type { ReadScopes } from "../../traces/self/reads.ts";
+import type { SpanStats, SpanStatsFilter } from "../../traces/stats.ts";
+
+/** A week, the trace store's retention: the widest `trace_stats` window. */
+const MAX_STATS_MINUTES = 7 * 24 * 60;
 
 /** `self` reads Polaris's own Self-Traces; allowed only while Developer Mode is on. */
 const TraceScopeInput = Schema.Literals(["checkout", "self"]);
@@ -35,6 +40,21 @@ export const TracesInput = Schema.Struct({
 });
 
 export type TracesInput = typeof TracesInput.Type;
+
+export const TraceStatsInput = Schema.Struct({
+  sinceMinutes: Schema.optionalKey(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_STATS_MINUTES }))
+  ),
+  name: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
+  service: Schema.optionalKey(Schema.String),
+  status: Schema.optionalKey(Schema.Literals(["error", "ok"])),
+  by: Schema.optionalKey(Schema.Literals(["name", "service", "both"])),
+  sort: Schema.optionalKey(Schema.Literals(["count", "errors", "slow"])),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
+  scope: Schema.optionalKey(TraceScopeInput),
+});
+
+export type TraceStatsInput = typeof TraceStatsInput.Type;
 
 export interface TraceToolContext {
   readonly checkout: string;
@@ -69,6 +89,10 @@ export interface TraceSessionTools {
     id: string,
     focus: "slow" | "errors" | "all"
   ) => Effect.Effect<import("../../traces/workerProtocol.ts").TraceView, TraceError>;
+  readonly stats: (
+    context: TraceToolContext,
+    filter: SpanStatsFilter
+  ) => Effect.Effect<SpanStats, TraceError>;
   readonly span: (
     sessionId: SessionId,
     context: TraceToolContext,
@@ -250,6 +274,28 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
           const result = yield* traces.span(sessionId, context, input.trace, input.span);
 
           return viewResult(spanView(result.detail, result.start, result.dataSource));
+        })
+    ),
+    make(
+      "trace_stats",
+      "Count spans by name and/or service over the last sinceMinutes (default 60, at most a week): count, errors, p50/p95/max ms, latest start and an example trace and span (an errored one when there are errors). name matches a case-insensitive substring; filter by service or status; by name, service or both (default); sort count (default), errors or slow (p95); limit groups (default 20, at most 100). Reads at most the newest 20,000 matching spans. scope self reads Polaris's own spans while Developer Mode is on.",
+      TraceStatsInput,
+      (input, traces) =>
+        Effect.gen(function* () {
+          const context = yield* traces.context(sessionId, scoped(input.scope));
+          const minutes = input.sinceMinutes ?? 60;
+          const sinceMs = (yield* Clock.currentTimeMillis) - minutes * 60_000;
+          const { sinceMinutes: _since, scope: _scope, ...filters } = input;
+
+          const stats = yield* traces.stats(context, {
+            ...filters,
+            sinceMs,
+            by: input.by ?? "both",
+            sort: input.sort ?? "count",
+            limit: input.limit ?? 20,
+          });
+
+          return viewResult(statsView(stats, { since: new Date(sinceMs).toISOString(), minutes }));
         })
     ),
     make(

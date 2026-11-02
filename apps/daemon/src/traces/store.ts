@@ -24,6 +24,7 @@ import {
   TraceToolSpan,
 } from "./workerProtocol.ts";
 import { IngestError } from "./ingest.ts";
+import { SpanStats } from "./stats.ts";
 
 const TracePage = Schema.Struct({ traces: Schema.Array(TraceSummary), total: Schema.Number });
 
@@ -135,6 +136,8 @@ export const traceStoreLayerAt = (filename: string, options: TraceWorkerOptions 
             TraceWorkerRequest.cases.ToolSpan.make({ checkout, traceId, spanId }),
             TraceToolSpan
           ),
+        stats: (checkout, filter) =>
+          read(TraceWorkerRequest.cases.Stats.make({ checkout, filter }), SpanStats),
         overlapping: (checkout, start, end) =>
           read(TraceWorkerRequest.cases.Overlap.make({ checkout, start, end }), TracePage),
         get: (checkout, traceId) =>
