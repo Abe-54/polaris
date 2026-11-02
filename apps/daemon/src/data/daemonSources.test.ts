@@ -304,6 +304,7 @@ test("the Daemon's own writes go on while Data reads its WAL database, and nothi
       // A checkpoint by the reader would have moved these frames into the database and reset the log.
       expect(statSync(`${file}-wal`).size).toBeGreaterThan(0);
       expect(writer.query("PRAGMA wal_checkpoint(PASSIVE)").values()[0]![1]).toBeGreaterThan(0);
+      insert.finalize();
       writer.close();
     })
   ));

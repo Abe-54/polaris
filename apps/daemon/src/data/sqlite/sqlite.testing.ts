@@ -44,6 +44,8 @@ export const seedDatabase = (file: string) => {
       new Uint8Array([1, 2, i % 256]),
       i === 1 ? "x".repeat(20000) : "short"
     );
+  // An unfinalized statement keeps the file open after close, and Windows can't remove it.
+  insert.finalize();
   db.close();
 };
 

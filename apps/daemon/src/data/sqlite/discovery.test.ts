@@ -1,6 +1,6 @@
 /** SQLite discovery from env and framework config, manual files and locality, through DataSources. */
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_FILE_SERVER, type DataSource } from "@polaris/protocol";
 import { Effect } from "effect";
@@ -102,9 +102,8 @@ test("a file outside the checkout is Remote and denied to agents; a link out of 
         const elsewhere = yield* tempDir("sq-elsewhere-");
         seedDatabase(join(elsewhere, "shared.db"));
         write(checkout, ".env", `DATABASE_URL=file:${join(elsewhere, "shared.db")}\n`);
-        yield* Effect.promise(() =>
-          Bun.$`ln -s ${join(elsewhere, "shared.db")} ${join(checkout, "linked.db")}`.quiet()
-        );
+        // Bun's shell `ln -s` copies the file on Windows; symlinkSync plants a real link.
+        symlinkSync(join(elsewhere, "shared.db"), join(checkout, "linked.db"));
         write(
           checkout,
           "schema.prisma",

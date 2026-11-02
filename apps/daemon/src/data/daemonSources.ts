@@ -3,7 +3,7 @@
  * only while Developer Mode is effective. Listed per request: no watcher, nothing runs while off.
  */
 import { lstat, readdir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   DataError,
   type DataSource,
@@ -70,7 +70,7 @@ export async function daemonFiles(home: string): Promise<ReadonlyArray<string>> 
 }
 
 const candidate = (file: string): Candidate => {
-  const name = file.slice(file.lastIndexOf("/") + 1);
+  const name = basename(file);
   const engine = { engine: "sqlite", host: "", port: 0, database: "", user: "", path: file };
 
   return {
