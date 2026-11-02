@@ -338,3 +338,28 @@ still authorizes the read, and the first page carries no endpoint.
 `traceparent` header alone, so a handler Span is the child of the Client Span that sent it.
 Effect's own client fields are never trusted. No trace context leaves the Daemon:
 `harnessEnv` is unchanged and still strips `POLARIS_OTEL_*`.
+
+### Source-mapped stacks (ENG-752)
+
+An error Span's `statusMessage` is `Cause.pretty`, stack included. The compiled Daemon embeds a
+sourcemap (`scripts/daemonBundle.ts`: `sourcemap: "linked"` under `--compile`), which Bun 1.4.4
+stores zstd-compressed in the executable and applies to `Error.stack` itself when a stack is
+formatted, so frames read `at m_ (apps/daemon/src/transport/serve.ts:408:14)` instead of
+`at m_ (/$bunfs/root/chunk-pq4mf4p5.js:32:453)`. Nothing in `traces/` maps stacks, and the `span`
+and `trace` MCP tools return what was stored. Function names stay minified (Bun's maps carry no
+names); files, lines and columns are the source's. Paths are relative to the repo root, because
+`buildFromRoot` builds with the cwd there and Bun writes sources relative to the cwd. The builder's
+home never appears. Dependencies read as `node_modules/.bun/<pkg>@<version>/…`. The `.map` files
+Bun also writes beside the binary are deleted, so none ship.
+
+Cost, measured on darwin-arm64 (M2 Max): the binary grows 5.9 MB (128.8 → 134.7 MB, +4.5%;
+Bun can't omit `sourcesContent`). Nothing is decompressed until a stack is formatted: `cold-start`
+and `idle` against `--binary` (quick, 3 runs, A/B both orders) stayed within noise (settled
+footprint 34.9 vs 34.9–36.4 MiB, idle no-Client footprint 41.3 vs 41.5 MiB). The first mapped
+stack costs about 0.5–1 MiB peak RSS.
+
+The Desktop App doesn't need this yet: its Spans (`packages/client/src/selfTraces/span.ts`, the
+renderer's `features/selfTraces`) export the error's message only, never a stack. Electron's main
+process (Node) maps `Error.stack` only with `--enable-source-maps` or `setSourceMapsEnabled`, and
+Chromium never maps a renderer's `Error.stack` (only DevTools does). So when Desktop Spans start
+carrying stacks, main has to map them with the shipped `.map` files before export (ENG-755).

@@ -29,6 +29,7 @@
  * Without `--release` it is a dev build: its version names the commit
  * (`buildVersion.ts`), so a Client upgrades a Host from one dev build to the next.
  * The version is compiled in (`process.env.POLARIS_BUILD_VERSION`, read by `service/platform.ts`).
+ * So is a sourcemap, which Bun applies to `Error.stack` (`daemonBundle.ts`, ENG-752).
  */
 import { createHash } from "node:crypto";
 import {
@@ -55,6 +56,7 @@ import {
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
 import { BETTERLEAKS_VERSION, betterleaksAsset } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { buildVersion } from "./buildVersion.ts";
+import { buildFromRoot, DAEMON_BUILD_OPTIONS } from "./daemonBundle.ts";
 import { instrumentationPlugin } from "../apps/daemon/src/traces/instrumentation/build.ts";
 
 const root = join(import.meta.dir, "..");
@@ -311,7 +313,8 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
 
   const instrumentation = await instrumentationPlugin();
 
-  const result = await Bun.build({
+  const result = await buildFromRoot(root, {
+    ...DAEMON_BUILD_OPTIONS,
     entrypoints: [
       join(daemonDir, "src", "main.ts"),
       // The fff worker (apps/daemon/src/files/search/fff.ts) is its own entrypoint.
@@ -320,11 +323,6 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
       join(daemonDir, "src", "traces", "profiles", "worker.ts"),
     ],
     compile: { target, outfile: binary, autoloadDotenv: false, autoloadBunfig: false },
-    minify: true,
-
-    // Lazily imported commands and Harness drivers become separate chunks, parsed only
-    // when imported: `serve` never parses the Claude Agent SDK, `bridge` not the Daemon.
-    splitting: true,
     define: {
       ...Object.fromEntries(
         define.map((value) => {
