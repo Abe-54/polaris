@@ -144,7 +144,7 @@ jobs:
         run: |
           seed=$(( $(od -An -N4 -tu4 /dev/urandom | tr -d ' ') % 2147483647 ))
           echo "POLARIS_PBT_SEED=$seed POLARIS_PBT_RUNS=500 (replay: cd apps/daemon && POLARIS_PBT_SEED=$seed POLARIS_PBT_RUNS=500 bun test src/verification)" | tee -a "$GITHUB_STEP_SUMMARY"
-          POLARIS_PBT_SEED=$seed bun ../../tooling/test/watchdog.ts --parallel=2 src/verification .model.test. .property.test.
+          POLARIS_PBT_SEED=$seed bun ../../tooling/test/watchdog.ts --parallel=2 src/verification .model. .property.
 
   apalache:
     name: Apalache, bounded

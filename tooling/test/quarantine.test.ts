@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkEntries, currentOs, type Entry, type Os, quarantinePlan } from "./quarantine.ts";
+import { checkEntries, currentOs, type Entry, type Os } from "./quarantine.ts";
 
 const WATCHDOG = join(import.meta.dir, "watchdog.ts");
 
@@ -38,13 +38,19 @@ const entry = (overrides: Partial<Entry> = {}): Entry => ({
   ...overrides,
 });
 
-const repo = (entries: ReadonlyArray<Entry>, twin = false) => {
+const HEAVY = `import { expect, test } from "bun:test";
+test("heavy", () => expect("ran heavy").toBe("passes"));
+`;
+
+const repo = (entries: ReadonlyArray<Entry>, twin = false, slow = false) => {
   const root = mkdtempSync(join(tmpdir(), "quarantine-"));
 
   mkdirSync(join(root, "pkg"));
   writeFileSync(join(root, "pkg/flaky.test.ts"), FLAKY);
 
   if (twin) writeFileSync(join(root, "pkg/twin.test.ts"), TWIN);
+
+  if (slow) writeFileSync(join(root, "pkg/heavy.slow.test.ts"), HEAVY);
   writeFileSync(join(root, "quarantine.json"), JSON.stringify({ $comment: "", entries }));
 
   return root;
@@ -107,6 +113,33 @@ describe("the required lane", () => {
   }, 30_000);
 });
 
+describe("with a tier", () => {
+  const heavy = entry({ file: "pkg/heavy.slow.test.ts", test: "heavy", issue: "ENG-3" });
+
+  test.each(["--tier=fast", "--tier=slow"])(
+    "%s still skips quarantined tests",
+    async (tier) => {
+      const rows = entry({ test: "outer > row %p" });
+      const { output, code } = await watch(repo([entry(), rows, heavy], false, true), [tier]);
+
+      expect(output).toContain("(quarantined) skipped");
+      expect(output).not.toContain('"ran');
+      expect(code).toBe(0);
+    },
+    30_000
+  );
+
+  test("--quarantined ignores --tier=fast, which would drop a quarantined slow file", async () => {
+    const { output, code } = await watch(repo([heavy], false, true), [
+      "--quarantined",
+      "--tier=fast",
+    ]);
+
+    expect(output).toContain('"ran heavy"');
+    expect(code).toBe(1);
+  }, 30_000);
+});
+
 describe("--quarantined", () => {
   test("runs only the quarantined tests, in their files only", async () => {
     const { output, code } = await watch(repo([entry({ os: [here] })], true), ["--quarantined"]);
@@ -126,12 +159,6 @@ describe("--quarantined", () => {
     expect(output).toContain("No quarantined test in this package on this OS.");
     expect(code).toBe(0);
   }, 30_000);
-
-  test("drops a tier filter, which would drop the explicit slow files", () => {
-    const plan = quarantinePlan(["--tier=fast", "--quarantined"], "/r/pkg", [entry()], here, "/r");
-
-    expect(plan.args).toEqual(["./flaky.test.ts"]);
-  });
 });
 
 describe("the check", () => {

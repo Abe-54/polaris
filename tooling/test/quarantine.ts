@@ -83,7 +83,7 @@ export interface QuarantinePlan {
   readonly empty: boolean;
 }
 
-/** P2-1's tier filter ignores explicit paths too, so `--quarantined` runs every tier. */
+/** The tier filter (`tier.ts`) applies to explicit paths too, so `--quarantined` runs every tier. */
 const TIER = /^--tier(?:=|$)/;
 
 export const quarantinePlan = (
