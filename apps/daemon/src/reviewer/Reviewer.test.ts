@@ -5,267 +5,46 @@
  * tests run the scanners.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { join } from "node:path";
 import {
   Command,
   DomainEvent,
-  HarnessAvailability,
-  HostHarnesses,
-  PullRequestRef,
-  type RiskSummary,
-  type RiskSummaryId,
-  ReviewCheckoutId,
-  ReviewContext,
   ReviewerSettings,
   ReviewSubject,
-  RiskSummaryRef,
-  RequestId,
   SessionId,
   SessionPlacement,
   TurnId,
-  TurnItem,
   type Workspace,
   WorkspaceId,
 } from "@polaris/protocol";
 import { Effect, Layer, Option, Predicate, Stream } from "effect";
 import { Engine } from "../engine/Engine.ts";
-import {
-  cid,
-  completesTurns,
-  engineLayer,
-  type FakeHarnessSession,
-  makeFakeDriver,
-  makeFakes,
-  tempDir,
-  waitFor,
-} from "../engine/testing.ts";
-import { CheckpointsLive } from "../git/Checkpoints.ts";
+import { waitFor } from "../engine/testing.ts";
 import { gitText } from "../git/git.ts";
-import { ReviewCheckoutGitLive } from "../git/ReviewCheckoutGit.ts";
-import {
-  BASE_REPO,
-  contributor,
-  createForge,
-  publishPullRequest,
-  userClone,
-} from "../git/review/testing.ts";
-import { commitAll, removeDirSettled, write } from "../git/testing.ts";
-import { Availability } from "../harness/availability/index.ts";
-import { benchReviewReply, isReviewerPrompt } from "../harness/bench/review.ts";
-import { HarnessEvent, type TurnInput } from "../harness/HarnessDriver.ts";
+import { publishPullRequest } from "../git/review/testing.ts";
+import { commitAll, write } from "../git/testing.ts";
 import { Rules } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
-import {
-  automaticRun,
-  Reviewer,
-  ReviewerLive,
-  ReviewerPolicyLive,
-  ReviewerSessions,
-} from "./index.ts";
+import { automaticRun, Reviewer } from "./index.ts";
 import { REVIEWER_MARKER } from "./prompt.ts";
 import { RULES_AFTER_TURN } from "./run.ts";
 import { RULES_ONLY_NOTE } from "./settings.ts";
+import {
+  checkoutId,
+  cleanupReviewerTests,
+  context,
+  dispatch,
+  ended,
+  GIT_WORK_MS,
+  openReview,
+  reviewerLayer,
+  run,
+  scenario,
+  subject,
+  summaryWhen,
+  walked,
+} from "./testing.ts";
 
-type Env = Engine | EventStore | Reviewer;
-
-const cleanup: Array<string> = [];
-
-afterEach(async () => {
-  for (const dir of cleanup.splice(0)) await removeDirSettled(dir);
-});
-
-/** The Reviewer's Turn: two approvals (one allowed, one not), then the bench reply. */
-const reviewerTurn = (input: TurnInput) => [
-  HarnessEvent.CursorAssigned({ cursor: "reviewer-cursor" }),
-  HarnessEvent.TurnStarted({ turnId: input.turnId, prompt: input.prompt }),
-  HarnessEvent.ApprovalRequested({
-    turnId: input.turnId,
-    requestId: RequestId.make(`ok-${input.turnId}`),
-    kind: "command",
-    title: "Show the diff",
-    detail: "git diff HEAD~1 --stat",
-    options: [],
-  }),
-  HarnessEvent.ApprovalRequested({
-    turnId: input.turnId,
-    requestId: RequestId.make(`no-${input.turnId}`),
-    kind: "file-change",
-    title: "Edit a file",
-    detail: "feature.txt",
-    options: [],
-  }),
-  HarnessEvent.ItemCompleted({
-    turnId: input.turnId,
-    item: TurnItem.cases.AssistantMessage.make({
-      id: `msg-${input.turnId}`,
-      text: benchReviewReply(input.prompt),
-    }),
-  }),
-  HarnessEvent.TurnEnded({ turnId: input.turnId, status: "completed", error: null }),
-];
-
-const availability = (ready: boolean) =>
-  Layer.succeed(Availability)({
-    get: () =>
-      Effect.succeed(
-        HostHarnesses.make({
-          harnesses: [
-            HarnessAvailability.make({
-              harness: "claude",
-              status: ready ? "ready" : "not-installed",
-              version: null,
-              minVersion: "0.0.0",
-              olderThanTested: null,
-              signInKind: null,
-              signInArgv: [],
-              detail: null,
-            }),
-          ],
-          checkedAt: new Date(0).toISOString(),
-        })
-      ),
-    changes: Stream.empty,
-  });
-
-const noRules = Layer.succeed(Rules)({
-  run: () => Effect.succeed({ findings: [], notes: [], ok: true }),
-});
-
-/** A user's Turn: "write <file>" writes it in the session's directory first. */
-const userTurn = (input: TurnInput, session: FakeHarnessSession) => {
-  const file = /^write (\S+)/.exec(input.prompt)?.[1];
-
-  if (file !== undefined) write(session.options.cwd, file, `written by ${input.turnId}\n`);
-
-  return completesTurns()(input);
-};
-
-const reviewerLayer = (options: {
-  readonly ready: boolean;
-  readonly checkpoints?: boolean;
-  readonly rules?: Layer.Layer<Rules>;
-  /** The Reviewer's Turns fail with this error. */
-  readonly reviewerFails?: string;
-}) => {
-  const dir = tempDir();
-  cleanup.push(dir);
-
-  const driver = makeFakeDriver("claude", {
-    onTurn: (input, session) =>
-      isReviewerPrompt(input.prompt)
-        ? options.reviewerFails === undefined
-          ? reviewerTurn(input)
-          : [
-              HarnessEvent.TurnStarted({ turnId: input.turnId, prompt: input.prompt }),
-              HarnessEvent.TurnEnded({
-                turnId: input.turnId,
-                status: "failed",
-                error: options.reviewerFails,
-              }),
-            ]
-        : userTurn(input, session),
-  });
-
-  const base = {
-    filename: join(dir, "state.sqlite"),
-    fakes: makeFakes(),
-    drivers: [driver],
-    reviewCheckoutGit: ReviewCheckoutGitLive,
-  };
-
-  const engine = (
-    options.checkpoints === true
-      ? engineLayer({ ...base, checkpoints: CheckpointsLive })
-      : engineLayer(base)
-  ).pipe(Layer.provide(ReviewerPolicyLive), Layer.provideMerge(ReviewerSessions.layer));
-
-  const layer = ReviewerLive({ settingsPath: join(dir, "reviewer-settings.json") }).pipe(
-    Layer.provideMerge(engine),
-    Layer.provide(
-      Layer.mergeAll(options.rules ?? noRules, ReviewCheckoutGitLive, availability(options.ready))
-    )
-  );
-
-  return { layer, driver };
-};
-
-const run = <A, E>(layer: Layer.Layer<Env>, program: Effect.Effect<A, E, Env>) =>
-  Effect.runPromise(program.pipe(Effect.provide(layer)));
-
-const dispatch = (command: Command) =>
-  Effect.flatMap(Engine, (engine) =>
-    engine.dispatch({ commandId: cid(), command, deviceLabel: "MacBook" })
-  );
-
-/** A Turn or a checkout here runs real git (a Turn's checkpoints, ~25 calls on first contact). */
-const GIT_WORK_MS = 15_000;
-
-const checkoutId = ReviewCheckoutId.make("rc-7");
-
-const subject = ReviewSubject.cases.PullRequest.make({
-  pullRequest: new PullRequestRef({ repo: BASE_REPO, number: 7 }),
-  baseRef: "main",
-});
-
-const context = ReviewContext.make({ title: "Add the feature", body: "Adds feature.txt." });
-
-const scenario = async () => {
-  const forge = await createForge();
-  const author = await contributor(forge, forge.mainCommits[1] ?? "main");
-  write(author, "feature.txt", "v1\n");
-  await commitAll(author, "feature v1");
-  const v1 = await publishPullRequest(forge, author, 7);
-  const user = await userClone(forge);
-  cleanup.push(forge.root, user, `${user}.worktrees`, author);
-
-  return { forge, author, user, v1 };
-};
-
-const openReview = (user: string, head: string) =>
-  Effect.gen(function* () {
-    yield* dispatch(Command.cases.RegisterWorkspace.make({ path: user, name: null }));
-
-    const model = yield* waitFor(
-      (m) => [...m.workspaces.values()].some((w) => w.path === user),
-      GIT_WORK_MS
-    );
-
-    // SAFETY: waitFor returned once a Workspace at `user` was registered.
-    const workspace = [...model.workspaces.values()].find((w) => w.path === user) as Workspace;
-    yield* dispatch(
-      Command.cases.OpenReviewCheckout.make({
-        checkoutId,
-        workspaceId: workspace.id,
-        subject,
-        head,
-        base: "",
-      })
-    );
-    yield* waitFor((m) => m.reviewCheckouts.get(checkoutId)?.state === "ready", GIT_WORK_MS);
-
-    return workspace;
-  });
-
-/** The summary once `done` holds, polled from the store. */
-const summaryWhen = (summaryId: RiskSummaryId, done: (summary: RiskSummary) => boolean) =>
-  Effect.gen(function* () {
-    const store = yield* EventStore;
-
-    for (let i = 0; i < 750; i++) {
-      const summary = yield* store.review.riskSummary(
-        RiskSummaryRef.cases.ById.make({ summaryId })
-      );
-
-      if (summary !== null && done(summary)) return summary;
-      yield* Effect.sleep("20 millis");
-    }
-
-    return yield* Effect.die(new Error(`summary ${summaryId} never got there`));
-  });
-
-const ended = (summary: RiskSummary) => summary.status !== "running";
-
-const walked = (summary: RiskSummary) => ended(summary) && summary.walkthrough?.state === "ready";
+afterEach(cleanupReviewerTests);
 
 describe("the Reviewer", () => {
   test("reviews a pull request in its own read-only session, then answers a follow-up", async () => {

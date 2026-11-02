@@ -16,7 +16,7 @@ import { acquireAppServer } from "./AppServer.ts";
 import { openSession } from "./CodexSession.ts";
 import { listCodexCommands } from "./commands.ts";
 import { listCodexModels } from "./models.ts";
-import { codexError } from "./RpcConnection.ts";
+import { codexNotInstalled } from "./RpcConnection.ts";
 import { which } from "../../service/userPath.ts";
 
 export interface CodexDriverOptions {
@@ -106,7 +106,7 @@ export const makeCodexDriver = (
       listCommands: listCodexCommands({ codexPath, socketPath, clientVersion }),
       open: (openOptions) =>
         codexPath === null
-          ? Effect.fail(codexError("codex was not found on PATH; install Codex to use it"))
+          ? Effect.fail(codexNotInstalled())
           : openSession(
               { appServer, codexPath, clientVersion, planLimits, browser: options.browser },
               openOptions

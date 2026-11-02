@@ -28,7 +28,13 @@ import { dirname, join } from "node:path";
 import { Effect, Option, Schema, type Scope, Semaphore } from "effect";
 import type { HarnessError } from "../HarnessDriver.ts";
 import { ThreadLoadedListResponse } from "./protocol.ts";
-import { codexError, connectUnix, connectWebSocket, type RpcConnection } from "./RpcConnection.ts";
+import {
+  codexError,
+  codexNotInstalled,
+  connectUnix,
+  connectWebSocket,
+  type RpcConnection,
+} from "./RpcConnection.ts";
 import { commandLineOf, encodePowershell, powershellQuote } from "../../platform/processes.ts";
 import { which } from "../../service/userPath.ts";
 import { ownerOf, thisUserSid, writePrivateFile } from "../../platform/windowsNative.ts";
@@ -393,8 +399,7 @@ export const acquireAppServer = (
     const spawn = Effect.gen(function* () {
       const codexPath = options.codexPath;
 
-      if (codexPath === null)
-        return yield* codexError("codex was not found on PATH; install Codex to use it");
+      if (codexPath === null) return yield* codexNotInstalled();
       // A recorded server that is alive but not answering is hung: replace it.
       const previous = readAppServerState(stateFile);
 

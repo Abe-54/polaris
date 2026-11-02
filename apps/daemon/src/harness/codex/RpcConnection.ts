@@ -12,6 +12,7 @@ import { type Cause, Data, Deferred, Effect, Option, Queue, Schema, type Scope }
 import { HarnessError } from "../HarnessDriver.ts";
 import { type Outgoing, type RpcId, RpcMessage, type RpcPayload } from "./protocol.ts";
 import { stopChild } from "../../platform/processes.ts";
+import { shortHostName } from "../../service/hostName.ts";
 
 /** A server notification or server→client request; `params` is undefined when the server sent none. */
 export type Incoming = Data.TaggedEnum<{
@@ -50,6 +51,15 @@ interface OutgoingMessage {
 export const codexError = (message: string, cause?: unknown) =>
   new HarnessError(
     cause === undefined ? { harness: "codex", message } : { harness: "codex", message, cause }
+  );
+
+/** No `codex` where the Daemon looked; it looks once at start, so installing needs a restart. */
+export const codexNotInstalled = (
+  path: string = process.env.PATH ?? "",
+  host: string = shortHostName()
+) =>
+  codexError(
+    `Codex isn't installed on ${host}: there's no codex in the daemon's PATH (${path}). Install it there, then restart the daemon.`
   );
 
 const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(RpcMessage));

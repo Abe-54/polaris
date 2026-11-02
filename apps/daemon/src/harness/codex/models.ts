@@ -11,7 +11,12 @@ import { Effect, Option, Schema } from "effect";
 import type { HarnessError } from "../HarnessDriver.ts";
 import * as P from "./protocol.ts";
 import { connectAppServer } from "./AppServer.ts";
-import { codexError, connectStdio, type RpcConnection } from "./RpcConnection.ts";
+import {
+  codexError,
+  codexNotInstalled,
+  connectStdio,
+  type RpcConnection,
+} from "./RpcConnection.ts";
 
 const decodePage = Schema.decodeUnknownOption(P.ModelListResponse);
 
@@ -64,7 +69,7 @@ export const askAppServer = <A>(
   const { codexPath } = config;
 
   if (codexPath === null) {
-    return Effect.fail(codexError("codex was not found on PATH; install Codex to use it"));
+    return Effect.fail(codexNotInstalled());
   }
 
   return Effect.scoped(

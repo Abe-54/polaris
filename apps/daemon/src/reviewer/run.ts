@@ -44,6 +44,7 @@ import { shortHostName } from "../service/hostName.ts";
 import { type ReviewRange, resolveRange } from "./range.ts";
 import { askFirst, changedLines, switchedOff } from "./when.ts";
 import { continueReviewerSession, startReviewerSession, type TurnOutcome } from "./session.ts";
+import { turnFailure } from "./launch.ts";
 
 export interface RunRequest {
   readonly workspaceId: WorkspaceId;
@@ -323,15 +324,10 @@ const askReviewer = Effect.fn("askReviewer")(function* (input: AgentInput) {
           ...(yield* continueReviewerSession(previous.sessionId, prompt)),
         };
 
-  if (outcome.reply === null) {
-    return {
-      sessionId: outcome.sessionId,
-      output: null,
-      note: `The Reviewer's Turn ${outcome.status === "interrupted" ? "was interrupted" : "failed"}${
-        outcome.error === null ? "." : `: ${outcome.error}`
-      }`,
-    } satisfies AgentResult;
-  }
+  const failure = turnFailure(choice.harness, outcome);
+
+  if (failure !== null)
+    return { sessionId: outcome.sessionId, output: null, note: failure } satisfies AgentResult;
 
   const decoded = yield* decodeWithRepair(outcome.sessionId, outcome);
 

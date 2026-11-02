@@ -21,6 +21,7 @@ import { Engine } from "../engine/Engine.ts";
 import { finalReply } from "../engine/fork.ts";
 import { ServiceError } from "../services.ts";
 import { EventStore } from "../store/EventStore.ts";
+import { sandboxLaunchFailure } from "./launch.ts";
 import { ReviewerSessions } from "./sessions.ts";
 import type { LiveItem } from "../store/hub.ts";
 
@@ -37,6 +38,8 @@ export interface TurnOutcome {
   readonly reply: string | null;
   /** Why it didn't complete, as the session recorded it; null when it completed. */
   readonly error: string | null;
+  /** A command's line saying the Harness's sandbox didn't start; null when none said so. */
+  readonly sandboxFailure: string | null;
 }
 
 /** The reason of the session's last state change after `after`: why a Turn failed. */
@@ -157,10 +160,13 @@ const runTurn = <E>(
         upTo: model.sequence,
       });
 
+      const turnItems = items.get(turn.value.id);
+
       return {
         turnId: turn.value.id,
         status: turn.value.status,
-        reply: finalReply(items.get(turn.value.id)),
+        reply: finalReply(turnItems),
+        sandboxFailure: sandboxLaunchFailure(turnItems ?? []),
         error: turn.value.status === "completed" ? null : yield* failureReason(sessionId, sentAt),
       } satisfies TurnOutcome;
     })
