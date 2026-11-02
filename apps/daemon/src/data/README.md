@@ -18,6 +18,9 @@ four compose filenames. Environment precedence, lowest first: `.env`, `.env.loca
 source; an env reference from Prisma/Drizzle does not duplicate it. DATABASE_URL is named `app`;
 other keys and compose services are lowercased. Manual sources shadow discovery by name.
 
+A manual server source may carry a TLS mode (ENG-728, libpq's `sslmode` names); it is stored with
+the source, becomes the URL's `sslmode`, and `DataSource.tls` reports it. Absent connects without TLS.
+
 Monorepos (ENG-726): the same files are read in each package directory (`packages.ts`). Packages
 are directories holding a manifest (`package.json`, `pyproject.toml`, `go.mod`…) or a known
 framework/compose file, taken from `git ls-files --cached --others --exclude-standard` (safe git

@@ -79,6 +79,18 @@ export const DataSourceLabel = Schema.Struct({
 
 export type DataSourceLabel = typeof DataSourceLabel.Type;
 
+/** A server source's TLS mode, as libpq's `sslmode` names it; absent connects without TLS. */
+export const DataTls = Schema.Literals([
+  "disable",
+  "allow",
+  "prefer",
+  "require",
+  "verify-ca",
+  "verify-full",
+]);
+
+export type DataTls = typeof DataTls.Type;
+
 /** SAFETY for readers: for `sqlite`, host/port/database are `DATA_FILE_SERVER`; use `path`. */
 const DataSourceFields = Schema.Struct({
   /** Stable hash of checkout path and source name, assigned by discovery. */
@@ -97,6 +109,7 @@ const DataSourceFields = Schema.Struct({
   port: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
   database: Name,
   user: Schema.optionalKey(Schema.String),
+  tls: Schema.optionalKey(DataTls),
   /** The database file on the Host: present exactly when `engine` is `sqlite`. */
   path: Schema.optionalKey(DataFilePath),
   foundIn: Schema.Struct({
@@ -360,6 +373,7 @@ export const SaveDataSource = Rpc.make("data.source.save", {
     database: Name,
     user: Schema.String,
     password: Schema.optionalKey(Schema.RedactedFromValue(Schema.String)),
+    tls: Schema.optionalKey(DataTls),
     label: DataSourceLabel,
   }).check(
     Schema.makeFilter(

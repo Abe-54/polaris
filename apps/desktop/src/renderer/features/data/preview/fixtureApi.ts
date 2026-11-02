@@ -244,6 +244,7 @@ const savedSource = (input: SaveSourceInput) =>
     writes: "ask",
     label: input.label,
     reachable: true,
+    ...(input.tls === undefined ? undefined : { tls: input.tls }),
   });
 
 /** A saved SQLite file is Local, as a file inside the fixture checkout would be. */

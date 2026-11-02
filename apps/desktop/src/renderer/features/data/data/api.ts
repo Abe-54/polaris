@@ -8,6 +8,7 @@ import type {
   DataWriteResult,
   DataValue,
   DataSourceLabel,
+  DataTls,
   QueryLogEntry,
   QueryResult,
   SchemaTree,
@@ -81,6 +82,8 @@ export interface SaveSourceInput {
   readonly password?: string;
   /** Removes the saved password; sent without one. */
   readonly passwordAction?: "clear";
+  /** Absent connects without TLS. */
+  readonly tls?: DataTls;
   readonly label: DataSourceLabel;
 }
 

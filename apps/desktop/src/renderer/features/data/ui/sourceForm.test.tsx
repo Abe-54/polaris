@@ -139,13 +139,13 @@ describe("Add data source", () => {
     expect(saved.map((s) => s.label)).toEqual([{ text: "DW PROD", colour: "red" }]);
   });
 
-  test("a connection string pasted into Host fills the form, password included", async () => {
+  test("a connection string pasted into Host fills the form, password and TLS included", async () => {
     const { api, saved } = saving(fixtureDataApi());
 
     mountData(api);
     await openAdd();
     fill({ Name: "shop" });
-    paste(field("Host"), "mysql://reader:p%40ss@[::1]/orders");
+    paste(field("Host"), "mysql://reader:p%40ss@[::1]/orders?ssl-mode=REQUIRED");
     await submit();
 
     expect(saved).toEqual([
@@ -158,6 +158,7 @@ describe("Add data source", () => {
         user: "reader",
         password: "p@ss",
         label: { text: "", colour: "red" },
+        tls: "require",
       },
     ]);
   });

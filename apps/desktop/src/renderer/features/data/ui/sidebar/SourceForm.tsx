@@ -2,7 +2,7 @@
  * Add data source (DESIGN.md, Data → Sidebar): a server posted with `data.source.save`, a SQLite
  * file with `data.source.saveFile`. The password is write-only: never shown, never read back.
  */
-import type { DataEngine, DataSourceLabel, ServerDataEngine } from "@polaris/protocol";
+import type { DataEngine, DataSourceLabel, DataTls, ServerDataEngine } from "@polaris/protocol";
 import {
   Button,
   Dialog,
@@ -13,6 +13,11 @@ import {
   DialogTitle,
   Input,
   SegmentedControl,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@polaris/ui";
 import {
   type ClipboardEvent,
@@ -43,6 +48,8 @@ export interface Draft {
   readonly port: string;
   readonly database: string;
   readonly user: string;
+  /** Server sources: the TLS mode, "" for none. */
+  readonly tls: DataTls | "";
   /** null until the user picks one (`MANUAL_LABEL`); its text as typed, uppercased on save. */
   readonly label: DataSourceLabel | null;
   /** Editing only: Save removes the saved password (`passwordAction: "clear"`). */
@@ -59,6 +66,7 @@ const draftOf = (form: Form): Draft =>
         port: "",
         database: "",
         user: "",
+        tls: "",
         label: null,
         clearPassword: false,
       }
@@ -71,6 +79,7 @@ const draftOf = (form: Form): Draft =>
         port: form.source.engine === "sqlite" ? "" : String(form.source.port),
         database: form.source.engine === "sqlite" ? "" : form.source.database,
         user: form.source.user ?? "",
+        tls: form.source.tls === undefined || form.source.tls === "disable" ? "" : form.source.tls,
         label: form.source.label,
         clearPassword: false,
       };
@@ -193,6 +202,60 @@ const PasswordField = ({ draft, set, editing, password }: FieldsProps) => (
   </div>
 );
 
+const TLS_MODES: ReadonlyArray<{ value: DataTls | ""; name: string; hint: string }> = [
+  { value: "", name: "Off", hint: "Connects without TLS. Most hosted databases need Require." },
+  { value: "prefer", name: "Prefer", hint: "Uses TLS when the server offers it." },
+  { value: "require", name: "Require", hint: "Always uses TLS, without checking the certificate." },
+  { value: "verify-ca", name: "Verify CA", hint: "Always uses TLS, with a trusted certificate." },
+  {
+    value: "verify-full",
+    name: "Verify full",
+    hint: "Always uses TLS, with a trusted certificate for this host.",
+  },
+];
+
+/** `allow` stays selectable only on a source already saved with it. */
+const tlsModes = (current: DataTls | "") =>
+  current === "allow"
+    ? [
+        ...TLS_MODES,
+        {
+          value: "allow" as const,
+          name: "Allow",
+          hint: "Uses TLS only when the server requires it.",
+        },
+      ]
+    : TLS_MODES;
+
+const TlsField = ({ draft, set }: FieldsProps) => {
+  const modes = tlsModes(draft.tls);
+  const NONE = "off";
+
+  return (
+    <Field label="TLS" hint={modes.find((mode) => mode.value === draft.tls)?.hint}>
+      <Select
+        value={draft.tls === "" ? NONE : draft.tls}
+        onValueChange={(value) => {
+          const mode = modes.find((m) => (m.value === "" ? NONE : m.value) === value);
+
+          if (mode !== undefined) set({ tls: mode.value });
+        }}
+      >
+        <SelectTrigger data-testid="data-source-tls">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {modes.map((mode) => (
+            <SelectItem key={mode.value || NONE} value={mode.value === "" ? NONE : mode.value}>
+              {mode.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+};
+
 const ServerFields = ({ draft, set, ...props }: FieldsProps & { engine: ServerDataEngine }) => (
   <>
     <div className="grid grid-cols-[1fr_96px] gap-2">
@@ -222,6 +285,7 @@ const ServerFields = ({ draft, set, ...props }: FieldsProps & { engine: ServerDa
       </Field>
     </div>
     <PasswordField draft={draft} set={set} {...props} />
+    <TlsField draft={draft} set={set} {...props} />
   </>
 );
 
@@ -317,6 +381,7 @@ const saveInput = (draft: Draft & { engine: ServerDataEngine }, password: string
     database: draft.database.trim(),
     user: draft.user.trim(),
     label: { ...label, text: label.text.toUpperCase() },
+    ...(draft.tls === "" ? undefined : { tls: draft.tls }),
   };
 
   if (draft.clearPassword) return { ...input, passwordAction: "clear" as const };
@@ -334,6 +399,7 @@ const patchOf = (pasted: PastedConnection): Partial<Draft> =>
         port: String(pasted.port),
         database: pasted.database,
         user: pasted.user,
+        tls: pasted.tls ?? "",
       };
 
 /** A pasted password waits here until its field is mounted (pasting into File switches engine). */

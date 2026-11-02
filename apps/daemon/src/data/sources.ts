@@ -112,6 +112,12 @@ async function checkSqliteFile(path: string) {
   }
 }
 
+const TLS_RANK = ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] as const;
+
+/** A kept password never moves to a weaker TLS mode than it was saved with. */
+const tlsRank = (tls: (typeof TLS_RANK)[number] | undefined) =>
+  tls === undefined ? 0 : TLS_RANK.indexOf(tls);
+
 /** Public construction goes through DataSources.layer; options supply boundary fakes in fixture tests. */
 export const sources = Effect.fnUntraced(function* (options: {
   readonly path: string;
@@ -399,6 +405,7 @@ export const sources = Effect.fnUntraced(function* (options: {
           port: input.port,
           database: input.database,
           user: input.user,
+          tls: input.tls,
         };
 
         const validated = yield* Effect.try({
@@ -421,6 +428,7 @@ export const sources = Effect.fnUntraced(function* (options: {
           port: validated.port,
           database: validated.database,
           user: validated.user ?? "",
+          ...(validated.tls === undefined ? undefined : { tls: validated.tls }),
         };
 
         const previous = yield* claimName(checkout, name, input.previousName, discovered);
@@ -432,11 +440,12 @@ export const sources = Effect.fnUntraced(function* (options: {
           (previous.engine !== item.engine ||
             previous.host !== item.host ||
             previous.port !== item.port ||
-            previous.user !== item.user)
+            previous.user !== item.user ||
+            tlsRank(item.tls) < tlsRank(previous.tls))
         )
           return yield* new DataError({
             code: "E-DATA-DENIED",
-            message: "A changed server or user needs an explicit password choice.",
+            message: "A changed server, user or weaker TLS mode needs an explicit password choice.",
             fix: "Set a password or choose to clear it.",
           });
         const before = yield* secret(passwords.get(id));

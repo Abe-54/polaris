@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { DataTls } from "@polaris/protocol";
 import { parseConnectionString } from "./connectionString.ts";
 
 describe("parseConnectionString", () => {
@@ -14,7 +15,27 @@ describe("parseConnectionString", () => {
       database: "warehouse",
       user: "reader",
       password: "p@ss:w0rd",
+      tls: "require",
     });
+  });
+
+  test.each<[string, DataTls | undefined]>([
+    ["postgres://u@h/d?sslmode=verify-full", "verify-full"],
+    ["postgres://u@h/d?sslmode=prefer", "prefer"],
+    ["mysql://u@h/d?ssl-mode=VERIFY_IDENTITY", "verify-full"],
+    ["mysql://u@h/d?ssl-mode=REQUIRED", "require"],
+    ["postgres://u@h/d?ssl=true", "require"],
+    ["postgres://u@h/d?sslmode=disable", undefined],
+    ["postgres://u@h/d", undefined],
+  ])("%s pastes TLS %s", (text, tls) => {
+    const parsed = parseConnectionString(text);
+
+    expect(parsed).toMatchObject({ host: "h" });
+    expect(parsed !== undefined && "tls" in parsed ? parsed.tls : undefined).toBe(tls);
+  });
+
+  test("an unknown TLS mode isn't filled in as no TLS", () => {
+    expect(parseConnectionString("postgres://u@h/d?sslmode=sometimes")).toBeUndefined();
   });
 
   test("takes an IPv6 host out of its brackets", () => {

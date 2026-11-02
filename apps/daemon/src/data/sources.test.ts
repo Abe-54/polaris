@@ -355,3 +355,40 @@ test("missing session checkouts fail with the Data contract code instead of NotF
       })
     )
   ));
+
+test("a manual source keeps its TLS mode through save and restart; a weaker mode needs a password choice", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { options } = yield* fixture;
+
+        const first = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const service = yield* sources(options);
+            const saved = yield* service.save({ ...input, tls: "verify-full" });
+
+            return { saved, resolved: yield* service.resolve({ sessionId, source: "manual" }) };
+          })
+        );
+
+        expect(first.saved.tls).toBe("verify-full");
+        expect(first.resolved.connection.tls).toBe("verify-full");
+
+        const service = yield* sources(options);
+        expect((yield* service.list({ sessionId }))[0]?.tls).toBe("verify-full");
+        const { password: _password, ...rest } = input;
+
+        const keep = { ...rest, previousName: "manual", passwordAction: "keep" } as const;
+        const downgrade = yield* Effect.flip(service.save(keep));
+
+        expect(downgrade.message).toContain("weaker TLS mode");
+        expect(
+          (yield* service.save({ ...keep, tls: "require" }).pipe(Effect.flip)).message
+        ).toContain("weaker TLS mode");
+        yield* service.save({ ...keep, passwordAction: "clear" });
+        const plain = yield* service.resolve({ sessionId, source: "manual" });
+        expect(plain.source.tls).toBeUndefined();
+        expect(plain.connection.tls).toBe(false);
+      })
+    )
+  ));

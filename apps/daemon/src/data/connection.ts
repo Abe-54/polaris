@@ -217,9 +217,11 @@ export const metadata = (
       writes: "ask",
     } as const;
 
-    if (branch) return new DataSource({ ...details, branch });
+    const secured = connection.tls === false ? details : { ...details, tls: connection.tls };
 
-    return new DataSource(details);
+    if (branch) return new DataSource({ ...secured, branch });
+
+    return new DataSource(secured);
   } catch {
     return undefined;
   }
@@ -233,6 +235,7 @@ export const connectionUrl = (
     database: string;
     user: string;
     path?: string | undefined;
+    tls?: DataConnection["tls"] | undefined;
   },
   password: string
 ) => {
@@ -258,6 +261,8 @@ export const connectionUrl = (
 
   if (input.host.startsWith("/"))
     url.searchParams.set(input.engine === "mysql" ? "socket" : "host", input.host);
+
+  if (input.tls) url.searchParams.set("sslmode", input.tls);
 
   return Redacted.make(url.href);
 };
