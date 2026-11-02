@@ -29,7 +29,7 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
 
 ## Stack and conventions
 
-- Bun ≥ 1.3.9 (pinned in `packageManager`), Turborepo, TypeScript 7, oxfmt (formatting), oxlint (linting).
+- Bun ≥ 1.4.4 (pinned in `packageManager`), Turborepo, TypeScript 7, oxfmt (formatting), oxlint (linting).
 - **Effect 4** (`effect@4.0.0-rc.118`, pinned exactly; the `@effect/*` packages must match). APIs differ from Effect 3: read `node_modules/effect/AGENTS.md` and `node_modules/effect/ai-docs/` rather than relying on memory. RPC is `effect/rpc`, SQL is `effect/sql`, sockets `effect/socket`.
 - Services use `Context.Service`; functions use `Effect.fn`; errors are `Schema.TaggedError`.
 - Tests use `bun test`, next to the code as `*.test.ts`. Every test must fail if the behaviour it names breaks; before adding one, ask what bug it would catch. Don't write tautological tests:

@@ -70,7 +70,7 @@ Close the app, lose your connection or restart a machine: your agent sessions ar
 npx skills add luxdotdev/polaris --skill polaris-tracing -a claude-code codex -y -g
 ```
 
-**Build from source.** You need [Bun](https://bun.sh) 1.3.9 or later, and git.
+**Build from source.** You need [Bun](https://bun.sh) 1.4.4 or later, and git.
 
 ```sh
 git clone https://github.com/luxdotdev/polaris.git

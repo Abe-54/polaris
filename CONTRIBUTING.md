@@ -11,7 +11,7 @@ Thanks for helping. This guide covers what you need to make a change that passes
 
 ## Setup
 
-You need [Bun](https://bun.sh) 1.3.9 or later (the exact version is pinned in `package.json`'s `packageManager`) and git.
+You need [Bun](https://bun.sh) 1.4.4 or later (the exact version is pinned in `package.json`'s `packageManager`) and git.
 
 ```sh
 git clone https://github.com/luxdotdev/polaris.git
