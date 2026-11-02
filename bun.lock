@@ -16,7 +16,7 @@
     },
     "apps/daemon": {
       "name": "@polaris/daemon",
-      "version": "0.8.2",
+      "version": "0.8.3",
       "bin": {
         "polaris": "./src/main.ts",
       },
@@ -78,7 +78,7 @@
     },
     "apps/desktop": {
       "name": "@polaris/desktop",
-      "version": "0.8.2",
+      "version": "0.8.3",
       "dependencies": {
         "@codemirror/autocomplete": "6.20.3",
         "@codemirror/commands": "^6.11.1",
