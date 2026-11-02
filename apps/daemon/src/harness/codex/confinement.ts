@@ -4,10 +4,12 @@
  * and with no tool that runs outside it. See docs/adr/0055-the-reviewer-reads-only-its-checkout.md.
  */
 import { Effect, Option, Schema } from "effect";
+import { isWithin } from "../../files/fs.ts";
 import { type ReadConfinement, readConfinement } from "../confinement.ts";
 import type * as Gen from "./generated/index.ts";
 import type { HarnessError } from "../HarnessDriver.ts";
 import { codexError } from "./RpcConnection.ts";
+import { appServerExecutable } from "./executable.ts";
 
 export const REVIEWER_PROFILE = "polaris_reviewer";
 
@@ -48,11 +50,21 @@ const outsideTools = ({ config }: Effective) => ({
   web_search: "disabled",
 });
 
+/**
+ * Codex's own binary, which its Linux sandbox runs first inside bubblewrap; often under home
+ * (`~/.codex/packages`, `~/.npm-global`), which the profile closes. Only the file, never its dir.
+ */
+const readableExecutable = (confinement: ReadConfinement, executable: string | null) =>
+  executable === null || confinement.hidden.some((path) => isWithin(path, executable))
+    ? []
+    : [executable];
+
 /** `thread/start`'s `config` for a read-only thread: the profile, chosen by default. */
 export const reviewerConfig = (
   confinement: ReadConfinement,
   effective: Effective,
-  traceEnvironment: Readonly<Record<string, string>> = {}
+  traceEnvironment: Readonly<Record<string, string>> = {},
+  executable: string | null = null
 ) => ({
   ...outsideTools(effective),
   default_permissions: REVIEWER_PROFILE,
@@ -64,7 +76,11 @@ export const reviewerConfig = (
         ":slash_tmp": "deny",
         ":tmpdir": "deny",
         ...Object.fromEntries(
-          [confinement.root, ...confinement.shellRoots].map((path) => [path, "read"])
+          [
+            confinement.root,
+            ...confinement.shellRoots,
+            ...readableExecutable(confinement, executable),
+          ].map((path) => [path, "read"])
         ),
         ...Object.fromEntries(confinement.hidden.map((path) => [path, "deny"])),
       },
@@ -102,6 +118,8 @@ export const threadSandboxing = (options: {
   readonly userAgent: string;
   readonly cwd: string;
   readonly traceEnvironment?: Readonly<Record<string, string>>;
+  /** Where the app-server's pid is recorded: on Linux its sandbox runs that process's binary. */
+  readonly appServerState?: string;
   /** `config/read` for `cwd`: the user's and the project's layers, merged. */
   readonly readConfig: Effect.Effect<unknown, HarnessError>;
 }) =>
@@ -127,6 +145,11 @@ export const threadSandboxing = (options: {
 
     return {
       mode: {},
-      config: reviewerConfig(confinement, effective.value, options.traceEnvironment),
+      config: reviewerConfig(
+        confinement,
+        effective.value,
+        options.traceEnvironment,
+        options.appServerState === undefined ? null : appServerExecutable(options.appServerState)
+      ),
     } satisfies ThreadSandboxing;
   });

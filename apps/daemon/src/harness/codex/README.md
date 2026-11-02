@@ -10,6 +10,7 @@ Implements `HarnessDriver` (`../HarnessDriver.ts`) for Codex by driving the user
 | `AppServer.ts` | The one app-server per Host: `codex app-server --listen unix://<socket>`, started lazily on the first `open`, **detached** so it outlives the Daemon (see "App-server lifecycle" below). |
 | `RpcConnection.ts` | JSON-RPC 2.0 over app-server's Unix-socket transport, which is **WebSocket over the socket** (HTTP Upgrade, one message per text frame). Bun's WebSocket client speaks it as `ws+unix://<path>`. |
 | `CodexSession.ts` | One Agent Session = one connection + one Codex thread. Translates notifications and server→client requests into `HarnessEvent`s. |
+| `confinement.ts`, `executable.ts` | A read-only thread's permission profile (ADR 0055); on Linux it also reads the app-server's own binary (from `/proc`), which Codex's bubblewrap runs first. |
 | `mapping.ts` | Pure translations: permission modes, turn input, thread items → `TurnItem`s, approval decisions. |
 | `models.ts` | `listModels`: `model/list` (every page, hidden Models left out) on the shared app-server when it's running, else on a private `codex app-server` over stdio that exits right after (`connectStdio` in `RpcConnection.ts`). |
 | `protocol.ts` | Effect Schemas that validate the fields the driver reads, each checked at compile time against the generated type. |

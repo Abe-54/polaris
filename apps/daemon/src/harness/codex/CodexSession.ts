@@ -188,21 +188,17 @@ export const openSession = (
     let permissionMode: PermissionMode = options.permissionMode;
     const policy = policyFor(permissionMode, options.readOnly);
 
-    const traceEnv = yield* sessionTraceEnvironment(options.sessionId, {
-      ...process.env,
-      ...options.environment,
-    });
+    const env = { ...process.env, ...options.environment };
+    const traceEnv = yield* sessionTraceEnvironment(options.sessionId, env);
 
     const sandboxing = yield* threadSandboxing({
       readOnly: options.readOnly,
       sandbox: policy.sandbox,
       userAgent: decodeInitialize(initialized)?.userAgent ?? "",
       cwd: options.cwd,
-      traceEnvironment: {
-        ...traceEndpointEnvironment({ ...process.env, ...options.environment }),
-        ...traceEnv,
-      },
+      traceEnvironment: { ...traceEndpointEnvironment(env), ...traceEnv },
       readConfig: conn.request("config/read", { cwd: options.cwd, includeLayers: false }),
+      appServerState: config.appServer.stateFile,
     });
 
     const common: Pick<

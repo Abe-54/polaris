@@ -108,6 +108,21 @@ start. Directories older than a day are removed when the next one is made. On ma
   only Codex's `core` variables, so Codex's own key stays out. Verified with
   `codex sandbox` under the profile on codex-cli 0.162.1: git works, the
   repository's config, home and a link out are unreadable, no network.
+- **Codex on Linux** (ENG-758): Codex's bubblewrap sandbox starts by running
+  Codex's own binary inside it (`/proc/self/exe`, to apply seccomp), and the
+  profile starts from an empty root. A binary under home
+  (`~/.codex/packages/standalone`, `~/.npm-global`, `~/.local`) was invisible
+  there, so every command failed with `bwrap: execvp …/codex: No such file or
+  directory`, and the Reviewer still replied. The profile now also reads that
+  one file, the shared app-server's binary as `/proc` names it (an npm
+  launcher's native child), never its directory, and never inside a hidden
+  path. bubblewrap binds just the file, so the directories above it show
+  only the path to it. On a system bubblewrap older than 0.9 (no `--argv0`)
+  Codex runs its own `argv[0]` instead, which this doesn't cover. Either
+  way, a command whose output starts with bubblewrap's, Codex's or
+  `sandbox-exec`'s own error fails the Risk Summary's agent layer with that
+  line, whatever the Reviewer replied: it read the diff without running
+  anything.
 - **OpenCode**: unchanged. Its supervised ruleset asks for
   `external_directory`, and the Reviewer's policy denies every ask.
 - **ACP agents** read with their own tools, which Polaris can't confine: a
