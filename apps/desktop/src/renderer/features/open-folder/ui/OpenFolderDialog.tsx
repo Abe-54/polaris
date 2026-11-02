@@ -46,7 +46,9 @@ const Browser = ({ host, hosts, onHost, onHighlight }: BrowserProps) => {
   const first = groups[0]?.rows[0]?.id ?? "";
 
   // A listing arrives after the Finder row: ↵ must mean the first row, never a stale one.
-  useEffect(() => onHighlight(first), [first, onHighlight]);
+  useEffect(() => {
+    onHighlight(first);
+  }, [first, onHighlight]);
 
   const run = (target: Target, direct: boolean) => {
     if (target.kind === "finder") return void open.finder();

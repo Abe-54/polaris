@@ -24,7 +24,9 @@ export const InboxProvider = ({ children }: { readonly children: ReactNode }) =>
   const [isOpen, setOpen] = useState(false);
   const top = useNavigation().top;
 
-  useEffect(() => setOpen(false), [top]);
+  useEffect(() => {
+    setOpen(false);
+  }, [top]);
 
   const controls = useMemo<InboxControls>(
     () => ({ open: () => setOpen(true), close: () => setOpen(false), count: inbox.count }),

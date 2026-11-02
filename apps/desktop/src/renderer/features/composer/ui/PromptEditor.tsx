@@ -266,7 +266,9 @@ export default function PromptEditor(props: PromptEditorProps) {
     handle.setText(props.value);
   }, [handle, props.value]);
 
-  useEffect(() => handle.editor.setEditable(!props.disabled), [handle, props.disabled]);
+  useEffect(() => {
+    handle.editor.setEditable(!props.disabled);
+  }, [handle, props.disabled]);
 
   useEffect(() => {
     if (props.focusKey !== undefined) handle.focusEnd();

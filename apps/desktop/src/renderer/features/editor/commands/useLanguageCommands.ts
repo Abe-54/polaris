@@ -273,8 +273,7 @@ export const useLanguageCommands = (
   const commands = useCommands();
   const connection = useConnection();
 
-  useEffect(
-    () => languageCommands(commands, connection, { hostKey, workspaceId, active }),
-    [commands, connection, hostKey, workspaceId, active]
-  );
+  useEffect(() => {
+    return languageCommands(commands, connection, { hostKey, workspaceId, active });
+  }, [commands, connection, hostKey, workspaceId, active]);
 };

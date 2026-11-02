@@ -20,28 +20,26 @@ export interface ActiveEditor {
 export const useInlineCommands = (active: () => ActiveEditor | null) => {
   const commands = useCommands();
 
-  useEffect(
-    () =>
-      commands.register({
-        "editor.inlineChat": {
-          run: () => {
-            const editor = active();
+  useEffect(() => {
+    return commands.register({
+      "editor.inlineChat": {
+        run: () => {
+          const editor = active();
 
-            if (editor !== null) openInlineCard(editor.view);
-          },
-          enabled: () => active() !== null,
+          if (editor !== null) openInlineCard(editor.view);
         },
-        "editor.addToSession": {
-          run: () => {
-            const editor = active();
+        enabled: () => active() !== null,
+      },
+      "editor.addToSession": {
+        run: () => {
+          const editor = active();
 
-            if (editor !== null) addSelectionToSession(editor.view.state, editor.file);
-          },
-          enabled: () => active()?.view.state.selection.main.empty === false,
+          if (editor !== null) addSelectionToSession(editor.view.state, editor.file);
         },
-      }),
-    [commands, active]
-  );
+        enabled: () => active()?.view.state.selection.main.empty === false,
+      },
+    });
+  }, [commands, active]);
 };
 
 const inlineFileOf = (file: EditorFile): InlineFile => ({
@@ -58,6 +56,8 @@ const activeEditor = (): ActiveEditor | null => {
 
 /** In the app: the bar and card in every editor, ⌘I and ⌘L on the active one. */
 export const useInlineInstall = () => {
-  useEffect(() => registerEditorExtensions((file) => inlineExtensions(inlineFileOf(file))), []);
+  useEffect(() => {
+    return registerEditorExtensions((file) => inlineExtensions(inlineFileOf(file)));
+  }, []);
   useInlineCommands(activeEditor);
 };

@@ -63,7 +63,9 @@ export const FilterWell = ({ engine, columns, value, onApply }: FilterWellProps)
   const input = useRef<HTMLInputElement>(null);
   const mirror = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
 
   const suggest = (text: string, caret: number) => {
     const at = complete(text, caret, columns, engine);

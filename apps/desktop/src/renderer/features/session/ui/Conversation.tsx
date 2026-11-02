@@ -155,7 +155,9 @@ export const Conversation = ({
     });
   }, [pin, virtualizer]);
 
-  useEffect(() => jump?.bind({ run: pin.jump, available: () => !pin.on() }), [jump, pin]);
+  useEffect(() => {
+    return jump?.bind({ run: pin.jump, available: () => !pin.on() });
+  }, [jump, pin]);
 
   // An approval asked to show itself (Approve from elsewhere): release the end, its row on top.
   useEffect(() => {

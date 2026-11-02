@@ -5,5 +5,7 @@ import type { Navigation } from "../app/navigation.tsx";
 import { followWidgetLinks } from "./followLinks.ts";
 
 export const useWidgetLinks = (open: Navigation["open"]): void => {
-  useEffect(() => followWidgetLinks(Linking, open), [open]);
+  useEffect(() => {
+    return followWidgetLinks(Linking, open);
+  }, [open]);
 };

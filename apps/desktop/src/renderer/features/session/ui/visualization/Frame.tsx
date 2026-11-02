@@ -115,16 +115,14 @@ export const Frame = (props: FrameProps) => {
   }, [id]);
 
   // A live theme change reaches the frame without a remount.
-  useEffect(
-    () =>
-      onFrameTheme(({ tokens, scheme }) => {
-        const message: HostMessage = { type: "pv:theme", tokens, scheme };
+  useEffect(() => {
+    return onFrameTheme(({ tokens, scheme }) => {
+      const message: HostMessage = { type: "pv:theme", tokens, scheme };
 
-        // An opaque origin has no name to address: "*" is the only target that reaches it.
-        ref.current?.contentWindow?.postMessage(message, "*");
-      }),
-    []
-  );
+      // An opaque origin has no name to address: "*" is the only target that reaches it.
+      ref.current?.contentWindow?.postMessage(message, "*");
+    });
+  }, []);
 
   if (source === null) return null;
 

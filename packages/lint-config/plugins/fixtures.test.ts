@@ -106,6 +106,23 @@ describe("custom oxlint plugins", () => {
   );
 
   test(
+    "polaris/effect-cleanup-return reports effects that may return a non-function",
+    () => {
+      const lines = lintFixtures("polaris")
+        .filter((d) => d.code === "polaris(effect-cleanup-return)")
+        .map((d) => `${d.filename}:${d.labels?.[0]?.span.line ?? 0}`);
+
+      expect(lines).toEqual([
+        "fixtures/effect-cleanup.tsx:9",
+        "fixtures/effect-cleanup.tsx:10",
+        "fixtures/effect-cleanup.tsx:11",
+        "fixtures/effect-cleanup.tsx:12",
+      ]);
+    },
+    SPAWN_TIMEOUT_MS
+  );
+
+  test(
     "sonarjs/cognitive-complexity reports only the tangled function",
     () => {
       const diagnostics = lintFixtures("sonarjs");

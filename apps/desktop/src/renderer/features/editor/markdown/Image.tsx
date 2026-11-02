@@ -20,7 +20,9 @@ export const PreviewImage = ({
   } | null>(null);
 
   const [failed, setFailed] = useState(false);
-  useEffect(() => shown?.(), [shown]);
+  useEffect(() => {
+    return shown?.();
+  }, [shown]);
   useEffect(() => {
     setFailed(false);
 

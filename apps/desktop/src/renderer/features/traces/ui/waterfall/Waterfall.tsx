@@ -152,7 +152,9 @@ export const Waterfall = ({ trace, mark = null, spanId, onSelect }: WaterfallPro
   });
 
   // A density change resizes every row.
-  useEffect(() => virtualizer.measure(), [virtualizer, height]);
+  useEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer, height]);
 
   const actions: RowActions = useMemo(
     () => ({

@@ -87,13 +87,11 @@ const useAddProfile = (
     add(profileReference(detail, node === undefined ? null : node, checkout), "profile");
   }, [add, detail, frame, checkout]);
 
-  useEffect(
-    () =>
-      detail === null || !active
-        ? undefined
-        : commands.register({ "traces.addToSession": { run } }),
-    [commands, detail, active, run]
-  );
+  useEffect(() => {
+    return detail === null || !active
+      ? undefined
+      : commands.register({ "traces.addToSession": { run } });
+  }, [commands, detail, active, run]);
 
   return run;
 };

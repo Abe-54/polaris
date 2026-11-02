@@ -58,30 +58,28 @@ export const LinkedPullsPublisher = () => {
     };
   }, [linked]);
 
-  useEffect(
-    () =>
-      polaris().subscribe(
-        "github.checkouts",
-        {},
-        {
-          items: (items) => {
-            const states = items.at(-1) ?? [];
+  useEffect(() => {
+    return polaris().subscribe(
+      "github.checkouts",
+      {},
+      {
+        items: (items) => {
+          const states = items.at(-1) ?? [];
 
-            for (const l of toArchive(states, current.current, asked.current)) {
-              asked.current.add(l.key);
-              void dispatch(
-                l.hostKey,
-                Commands.ArchiveSession({
-                  sessionId: SessionId.make(l.sessionId),
-                  deleteMergedBranch: settingsStore.getState().sessions.deleteMergedBranch,
-                })
-              );
-            }
-          },
-        }
-      ),
-    []
-  );
+          for (const l of toArchive(states, current.current, asked.current)) {
+            asked.current.add(l.key);
+            void dispatch(
+              l.hostKey,
+              Commands.ArchiveSession({
+                sessionId: SessionId.make(l.sessionId),
+                deleteMergedBranch: settingsStore.getState().sessions.deleteMergedBranch,
+              })
+            );
+          }
+        },
+      }
+    );
+  }, []);
 
   return null;
 };

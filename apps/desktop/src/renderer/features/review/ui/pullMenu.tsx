@@ -25,24 +25,22 @@ export const pullUrlOf = (pull: PullRef) =>
 export const usePullCommands = (number: number, url: string) => {
   const registry = useCommands();
 
-  useEffect(
-    () =>
-      registry.contribute([
-        {
-          id: "review.openInGitHub",
-          title: `Open #${number} in GitHub`,
-          palette: { group: "workspace", keywords: ["pull request", "browser", "web", "github"] },
-          handler: { run: () => openInGitHub(url) },
-        },
-        {
-          id: "review.copyPullLink",
-          title: `Copy link to #${number}`,
-          palette: { group: "workspace", keywords: ["pull request", "url", "github"] },
-          handler: { run: () => copyWithToast(url, "link") },
-        },
-      ]),
-    [registry, number, url]
-  );
+  useEffect(() => {
+    return registry.contribute([
+      {
+        id: "review.openInGitHub",
+        title: `Open #${number} in GitHub`,
+        palette: { group: "workspace", keywords: ["pull request", "browser", "web", "github"] },
+        handler: { run: () => openInGitHub(url) },
+      },
+      {
+        id: "review.copyPullLink",
+        title: `Copy link to #${number}`,
+        palette: { group: "workspace", keywords: ["pull request", "url", "github"] },
+        handler: { run: () => copyWithToast(url, "link") },
+      },
+    ]);
+  }, [registry, number, url]);
 };
 
 export const pullMenuEntries = (url: string): ReadonlyArray<MenuAction> => [

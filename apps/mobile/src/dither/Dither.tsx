@@ -98,7 +98,9 @@ export const Dither = memo(function Dither({
   const { reduceMotion, value } = useSyncExternalStore(clock.subscribe, clock.snapshot);
   const opacity = useFade(moving, leaving, reduceMotion);
 
-  useEffect(() => (moving ? clock.acquire() : undefined), [moving]);
+  useEffect(() => {
+    return moving ? clock.acquire() : undefined;
+  }, [moving]);
 
   const strip = moving && value !== null ? value : null;
 

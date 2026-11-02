@@ -171,7 +171,9 @@ const DenyField = ({
   const decision = denyDecision(draft);
 
   // Opened here or asked from the inbox, ⌘⇧D or a notification: the field takes focus.
-  useEffect(() => field.current?.focus(), [asked]);
+  useEffect(() => {
+    field.current?.focus();
+  }, [asked]);
 
   const keys = (event: KeyboardEvent) => {
     if (event.key === "Escape") closeDeny(requestId);

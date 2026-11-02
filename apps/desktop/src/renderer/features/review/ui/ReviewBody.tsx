@@ -199,7 +199,9 @@ const Ready = ({
 
   const paths = useMemo(() => model.files.map((f) => f.file.path), [model.files]);
 
-  useEffect(() => updateSurface(subjectKey, { paths }), [subjectKey, paths]);
+  useEffect(() => {
+    updateSurface(subjectKey, { paths });
+  }, [subjectKey, paths]);
 
   useEffect(() => {
     const diffs = new Map(

@@ -64,7 +64,9 @@ const LeadIntent = ({
   const turns = useApp((s) => s.sessions[sessionKey(hostKey, sessionId)]?.turns) ?? NO_TURNS;
 
   // A Lead's Output holds its Constellation: open it unless the user chose otherwise.
-  useEffect(() => offerOutput(hostKey, sessionId), [hostKey, sessionId]);
+  useEffect(() => {
+    offerOutput(hostKey, sessionId);
+  }, [hostKey, sessionId]);
 
   if (ui.focus?.kind === "task")
     return (

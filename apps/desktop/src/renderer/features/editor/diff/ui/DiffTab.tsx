@@ -130,15 +130,13 @@ const useDiffCommands = (
 ) => {
   const commands = useCommands();
 
-  useEffect(
-    () =>
-      commands.register({
-        "diff.nextChange": { run: () => go(1), enabled: () => stops.length > 0 },
-        "diff.previousChange": { run: () => go(-1), enabled: () => stops.length > 0 },
-        "diff.openFile": { run: () => onOpenFile?.(), enabled: () => onOpenFile !== null },
-      }),
-    [commands, stops, go, onOpenFile]
-  );
+  useEffect(() => {
+    return commands.register({
+      "diff.nextChange": { run: () => go(1), enabled: () => stops.length > 0 },
+      "diff.previousChange": { run: () => go(-1), enabled: () => stops.length > 0 },
+      "diff.openFile": { run: () => onOpenFile?.(), enabled: () => onOpenFile !== null },
+    });
+  }, [commands, stops, go, onOpenFile]);
 };
 
 const Body = ({ tab, root }: DiffTabBodyProps) => {
@@ -156,7 +154,9 @@ const Body = ({ tab, root }: DiffTabBodyProps) => {
     [composed]
   );
 
-  useEffect(() => setAt(-1), [stops]);
+  useEffect(() => {
+    setAt(-1);
+  }, [stops]);
 
   const go = useMemo(
     () => (direction: 1 | -1) => {

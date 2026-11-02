@@ -46,7 +46,9 @@ const useNow = (everyMs: number) => {
 const useThrottled = <T,>(value: T, now: number): T => {
   const [held, setHeld] = useState(value);
 
-  useEffect(() => setHeld(value), [now]);
+  useEffect(() => {
+    setHeld(value);
+  }, [now]);
 
   return held;
 };

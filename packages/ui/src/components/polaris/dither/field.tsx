@@ -292,7 +292,9 @@ export function DitherField({
     if (bloom !== undefined) controller.current?.bloom();
   }, [hue, seed, bloom]);
 
-  useEffect(() => controller.current?.clock.set({ active }), [hue, seed, active]);
+  useEffect(() => {
+    controller.current?.clock.set({ active });
+  }, [hue, seed, active]);
 
   const vars: CssVars = {
     "--dither-hue": hueVar(hue),

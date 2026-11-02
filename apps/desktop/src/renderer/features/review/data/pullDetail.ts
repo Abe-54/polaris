@@ -41,19 +41,17 @@ const repoOf = (repo: string) => {
  * Overview's timeline, commits and checks follow GitHub without fetching per view.
  */
 export const useDetailsFeed = () => {
-  useEffect(
-    () =>
-      polaris().subscribe(
-        "github.details",
-        {},
-        {
-          items: (batches) => {
-            for (const batch of batches) for (const detail of batch) store(detail);
-          },
-        }
-      ),
-    []
-  );
+  useEffect(() => {
+    return polaris().subscribe(
+      "github.details",
+      {},
+      {
+        items: (batches) => {
+          for (const batch of batches) for (const detail of batch) store(detail);
+        },
+      }
+    );
+  }, []);
 };
 
 /**

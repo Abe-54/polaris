@@ -89,7 +89,9 @@ export const InstrumentSheet = (props: InstrumentSheetProps) => {
   const host = useHost();
   const id = useId();
 
-  useLayoutEffect(() => host.show(id, props));
+  useLayoutEffect(() => {
+    host.show(id, props);
+  });
   useLayoutEffect(() => () => host.show(id, null), [host, id]);
 
   return null;

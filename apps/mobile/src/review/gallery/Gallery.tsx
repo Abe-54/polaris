@@ -150,7 +150,9 @@ const Review = ({ data }: { readonly data: GalleryData }) => {
 };
 
 const Shown = ({ part, data }: { readonly part: Part; readonly data: GalleryData }) => {
-  useEffect(() => chooseDevHomeData(data === "demo" ? "paper" : data), [data]);
+  useEffect(() => {
+    chooseDevHomeData(data === "demo" ? "paper" : data);
+  }, [data]);
 
   if (part === "queue")
     return <ReviewTab tabBarHeight={0} onOpen={noop} onLink={noop} onHosts={noop} />;
@@ -169,7 +171,9 @@ export const ReviewGallery = () => {
   const [hidden, setHidden] = useState(false);
 
   // Once: setTheme is new each render, and the tap to switch must stick.
-  useEffect(() => setTheme(THEME === "moonlit" ? "moonlit" : "midnight"), []);
+  useEffect(() => {
+    setTheme(THEME === "moonlit" ? "moonlit" : "midnight");
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: colours.ground }}>

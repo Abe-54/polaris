@@ -100,15 +100,13 @@ const useInView = (
 ) => {
   const [inView, setInView] = useState(InView);
 
-  useEffect(
-    () =>
-      range.subscribe((start, end) => {
-        const next = turnsInView(rows, start, end, turnIndex) ?? InView;
+  useEffect(() => {
+    return range.subscribe((start, end) => {
+      const next = turnsInView(rows, start, end, turnIndex) ?? InView;
 
-        setInView((prev) => (prev.first === next.first && prev.last === next.last ? prev : next));
-      }),
-    [range, rows, turnIndex]
-  );
+      setInView((prev) => (prev.first === next.first && prev.last === next.last ? prev : next));
+    });
+  }, [range, rows, turnIndex]);
 
   return inView;
 };

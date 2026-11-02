@@ -10,7 +10,9 @@ import { InlineLayers } from "./ui/InlineLayers.tsx";
 
 const Installed = () => {
   useInlineInstall();
-  useEffect(() => setFileFinder(openFileFinder), []);
+  useEffect(() => {
+    setFileFinder(openFileFinder);
+  }, []);
 
   return <InlineLayers />;
 };

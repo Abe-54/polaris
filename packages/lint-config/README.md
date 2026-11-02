@@ -18,6 +18,7 @@ All at `error`. Type-aware rules run through `oxlint-tsgolint`, which uses the T
 - **`sonarjs/cognitive-complexity`**: 15 per function.
 - **`polaris/no-long-comment`**: at most two lines of prose per comment.
 - **`polaris/await-expect-promise`**: an `expect(…).rejects` / `.resolves` statement must be awaited. bun types the matcher as `void`, so write `await Promise.resolve(expect(p).rejects.toThrow(…))`; unawaited, the assertions after it run before the promise settles.
+- **`polaris/effect-cleanup-return`**: a `useEffect` / `useLayoutEffect` / `useInsertionEffect` callback is never `async` and has a block body, unless its expression body is a function, an identifier (a cleanup) or `void …`. React calls whatever an effect returns as its cleanup; Chromium's scroll methods return a Promise though the DOM types say `void`, so `() => el.scrollIntoView()` threw on unmount and blanked the window (ENG-756). Write `{ return subscribe(); }` when the call returns a cleanup.
 - **anti-slop**: every generic rule, the native companion `oxc/no-accumulating-spread`, and every Effect rule.
 - **security**: the guards from the October 2026 security audit (see below and `docs/security/README.md`).
 

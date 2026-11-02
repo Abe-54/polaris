@@ -14,13 +14,11 @@ export const useNewSqlTab = (at: DataSessionKey, active: DataTab | null) => {
   const source = sqlSource ?? active?.sourceId ?? first;
   const { hostKey, sessionId } = at;
 
-  useEffect(
-    () =>
-      source === undefined
-        ? undefined
-        : commands.register({
-            "data.newSqlTab": { run: () => openSqlTab("", source, { hostKey, sessionId }) },
-          }),
-    [commands, source, hostKey, sessionId]
-  );
+  useEffect(() => {
+    return source === undefined
+      ? undefined
+      : commands.register({
+          "data.newSqlTab": { run: () => openSqlTab("", source, { hostKey, sessionId }) },
+        });
+  }, [commands, source, hostKey, sessionId]);
 };

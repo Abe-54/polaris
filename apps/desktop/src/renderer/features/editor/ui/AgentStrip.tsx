@@ -107,13 +107,11 @@ export const AgentStrip = ({ hostKey, edit }: AgentStripProps) => {
   const open = () => selectSession({ hostKey, sessionId });
 
   // ⌘O opens the session while the strip shows (the K menu's Add workspace… stays one step away).
-  useEffect(
-    () =>
-      commands.register({
-        "workspace.add": { run: () => selectSession({ hostKey, sessionId }) },
-      }),
-    [commands, selectSession, hostKey, sessionId]
-  );
+  useEffect(() => {
+    return commands.register({
+      "workspace.add": { run: () => selectSession({ hostKey, sessionId }) },
+    });
+  }, [commands, selectSession, hostKey, sessionId]);
 
   return (
     <div

@@ -132,7 +132,9 @@ export const ConstellationGallery = () => {
   const host = useGalleryHost();
 
   // Once: setTheme is new each render, and the tap to switch must stick.
-  useEffect(() => setTheme(THEME === "moonlit" ? "moonlit" : "midnight"), []);
+  useEffect(() => {
+    setTheme(THEME === "moonlit" ? "moonlit" : "midnight");
+  }, []);
 
   const data = useMemo(() => {
     if (host === null) return null;

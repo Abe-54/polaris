@@ -30,38 +30,36 @@ const signatureOf = (detail: PullDetailView | null) =>
 const usePaletteCommands = (number: number, merge: boolean, request: boolean) => {
   const registry = useCommands();
 
-  useEffect(
-    () =>
-      registry.contribute([
-        ...(merge
-          ? [
-              {
-                id: "review.merge",
-                title: `Merge #${number}…`,
-                palette: {
-                  group: "workspace" as const,
-                  keywords: ["pull request", "squash", "rebase", "github"],
-                },
-                handler: { run: () => openPanel("merge") },
+  useEffect(() => {
+    return registry.contribute([
+      ...(merge
+        ? [
+            {
+              id: "review.merge",
+              title: `Merge #${number}…`,
+              palette: {
+                group: "workspace" as const,
+                keywords: ["pull request", "squash", "rebase", "github"],
               },
-            ]
-          : []),
-        ...(request
-          ? [
-              {
-                id: "review.requestReviewers",
-                title: `Request reviewers on #${number}…`,
-                palette: {
-                  group: "workspace" as const,
-                  keywords: ["pull request", "reviewer", "ask", "github"],
-                },
-                handler: { run: () => openPanel("reviewers") },
+              handler: { run: () => openPanel("merge") },
+            },
+          ]
+        : []),
+      ...(request
+        ? [
+            {
+              id: "review.requestReviewers",
+              title: `Request reviewers on #${number}…`,
+              palette: {
+                group: "workspace" as const,
+                keywords: ["pull request", "reviewer", "ask", "github"],
               },
-            ]
-          : []),
-      ]),
-    [registry, number, merge, request]
-  );
+              handler: { run: () => openPanel("reviewers") },
+            },
+          ]
+        : []),
+    ]);
+  }, [registry, number, merge, request]);
 };
 
 export interface HeaderActionsProps {

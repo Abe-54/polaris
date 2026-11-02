@@ -92,7 +92,9 @@ export interface MarkdownHostProps {
 export const MarkdownHost = ({ bufferKey, ...props }: MarkdownHostProps) => {
   const source = useSource(bufferKey);
   const host = useRef<HTMLDivElement>(null);
-  useEffect(() => host.current?.focus({ preventScroll: true }), []);
+  useEffect(() => {
+    host.current?.focus({ preventScroll: true });
+  }, []);
 
   return (
     <div

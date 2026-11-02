@@ -202,7 +202,9 @@ export const TableView = ({
     overscan: 16,
   });
 
-  useEffect(() => virtualizer.measure(), [virtualizer, height]);
+  useEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer, height]);
 
   const select = useMemo(
     () => (node: SpanNode) => onSelect(node.spans[0]?.span.id ?? null),

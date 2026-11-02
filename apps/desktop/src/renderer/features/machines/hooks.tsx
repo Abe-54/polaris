@@ -15,11 +15,13 @@ import { polaris } from "../bridge.ts";
 export const useMachines = (): ReadonlyArray<MachineView> | null => {
   const [machines, setMachines] = useState<ReadonlyArray<MachineView> | null>(null);
 
-  useEffect(
-    () =>
-      polaris().subscribe("machines", {}, { items: (lists) => setMachines(lists.at(-1) ?? null) }),
-    []
-  );
+  useEffect(() => {
+    return polaris().subscribe(
+      "machines",
+      {},
+      { items: (lists) => setMachines(lists.at(-1) ?? null) }
+    );
+  }, []);
 
   return machines;
 };

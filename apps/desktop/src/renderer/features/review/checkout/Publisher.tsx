@@ -153,24 +153,22 @@ export const CheckoutPublisher = () => {
     void polaris().request("github.checkouts.watch", { checkouts: [...checkouts] });
   }, [watchSignature]);
 
-  useEffect(
-    () =>
-      polaris().subscribe(
-        "github.checkouts",
-        {},
-        {
-          items: (items) => {
-            const views = items.at(-1);
+  useEffect(() => {
+    return polaris().subscribe(
+      "github.checkouts",
+      {},
+      {
+        items: (items) => {
+          const views = items.at(-1);
 
-            if (views === undefined) return;
-            const state = store.getState();
+          if (views === undefined) return;
+          const state = store.getState();
 
-            for (const action of decide(views, held, sent, Date.now())) run(action, state);
-          },
-        }
-      ),
-    [store]
-  );
+          for (const action of decide(views, held, sent, Date.now())) run(action, state);
+        },
+      }
+    );
+  }, [store]);
 
   return null;
 };

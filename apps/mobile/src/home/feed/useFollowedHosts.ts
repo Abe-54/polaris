@@ -29,7 +29,9 @@ export const FollowedHostsProvider = ({ children }: { readonly children: ReactNo
   const connections = useHosts();
   const [store] = useState(followedHostsStore);
 
-  useEffect(() => store.follow(connections), [store, connections]);
+  useEffect(() => {
+    store.follow(connections);
+  }, [store, connections]);
   useEffect(() => () => store.follow([]), [store]);
 
   return createElement(FollowedHosts.Provider, { value: store }, children);

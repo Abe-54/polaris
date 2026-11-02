@@ -88,20 +88,18 @@ export const TableData = (props: TableDataProps) => {
 
   latest.current = { addChosen, count: plan.rows, commit, staged };
 
-  useEffect(
-    () =>
-      commands.register({
-        "data.addRowsToSession": {
-          run: () => latest.current.addChosen(),
-          enabled: () => latest.current.count > 0,
-        },
-        "data.commitEdits": {
-          run: () => latest.current.commit(),
-          enabled: () => latest.current.staged > 0,
-        },
-      }),
-    [commands]
-  );
+  useEffect(() => {
+    return commands.register({
+      "data.addRowsToSession": {
+        run: () => latest.current.addChosen(),
+        enabled: () => latest.current.count > 0,
+      },
+      "data.commitEdits": {
+        run: () => latest.current.commit(),
+        enabled: () => latest.current.staged > 0,
+      },
+    });
+  }, [commands]);
 
   // ⌘S in an open editor stages its draft first, then commits what the store holds by then.
   const editing = useMemo(

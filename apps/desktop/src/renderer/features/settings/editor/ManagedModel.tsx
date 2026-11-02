@@ -190,7 +190,9 @@ export const ManagedModel = ({
     return watchManaged(polaris(), hostKey, side);
   }, [hostKey, side, connected]);
 
-  useEffect(() => setFolder(preferences.modelsDir ?? ""), [preferences.modelsDir]);
+  useEffect(() => {
+    setFolder(preferences.modelsDir ?? "");
+  }, [preferences.modelsDir]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);

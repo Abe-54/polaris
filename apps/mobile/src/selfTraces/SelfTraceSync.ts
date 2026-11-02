@@ -7,7 +7,9 @@ import { syncSelfTraces } from "./sync.ts";
 export const SelfTraceSync = (): null => {
   const hosts = useHosts();
 
-  useEffect(() => syncSelfTraces(hosts, selfTracer), [hosts]);
+  useEffect(() => {
+    return syncSelfTraces(hosts, selfTracer);
+  }, [hosts]);
 
   return null;
 };

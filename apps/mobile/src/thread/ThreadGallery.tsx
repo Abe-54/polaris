@@ -151,8 +151,12 @@ export const ThreadGallery = () => {
   useScript(host, setOffline);
 
   // Once: setTheme is new each render, and the tap to switch must stick.
-  useEffect(() => setTheme(MOONLIT ? "moonlit" : "midnight"), []);
-  useEffect(() => host?.setLive(!offline), [host, offline]);
+  useEffect(() => {
+    setTheme(MOONLIT ? "moonlit" : "midnight");
+  }, []);
+  useEffect(() => {
+    host?.setLive(!offline);
+  }, [host, offline]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colours.ground }}>

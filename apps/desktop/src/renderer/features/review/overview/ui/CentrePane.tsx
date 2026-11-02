@@ -83,14 +83,12 @@ const useRevealShowsChanges = (subjectKey: string) => {
 const useTabKeys = (subjectKey: string, tabs: ReadonlyArray<TabId>, current: TabId) => {
   const commands = useCommands();
 
-  useEffect(
-    () =>
-      commands.register({
-        "review.nextTab": { run: () => setTab(subjectKey, cycleTab(tabs, current, 1)) },
-        "review.previousTab": { run: () => setTab(subjectKey, cycleTab(tabs, current, -1)) },
-      }),
-    [commands, subjectKey, tabs, current]
-  );
+  useEffect(() => {
+    return commands.register({
+      "review.nextTab": { run: () => setTab(subjectKey, cycleTab(tabs, current, 1)) },
+      "review.previousTab": { run: () => setTab(subjectKey, cycleTab(tabs, current, -1)) },
+    });
+  }, [commands, subjectKey, tabs, current]);
 };
 
 const ScopeStrip = ({ subjectKey }: { readonly subjectKey: string }) => {

@@ -121,6 +121,44 @@ const AWAIT_MESSAGE =
   "Await `expect(…).rejects` / `.resolves` (as `await Promise.resolve(expect(…)…)`, since " +
   "bun types the matcher as void): unawaited, later assertions run before it settles.";
 
+const EFFECT_HOOKS = new Set(["useEffect", "useLayoutEffect", "useInsertionEffect"]);
+
+/** Expression bodies that can only be a cleanup or nothing. */
+const CLEANUP_BODIES = new Set(["ArrowFunctionExpression", "FunctionExpression", "Identifier"]);
+
+const EFFECT_MESSAGE =
+  "An effect's expression body is its return value, which React calls as the cleanup: a " +
+  "Promise (Chromium's scrollIntoView, an async call) throws on unmount and blanks the window " +
+  "(ENG-756). Use a block body, with `return` only for a cleanup.";
+
+/** The hook a call names: `useEffect(…)` or `React.useEffect(…)`. */
+function hookName(callee) {
+  if (callee.type === "Identifier") return callee.name;
+
+  if (callee.type === "MemberExpression" && callee.property.type === "Identifier") {
+    return callee.property.name;
+  }
+
+  return null;
+}
+
+/** Whether an effect callback may return something React can't call as a cleanup. */
+function returnsNonCleanup(callback) {
+  if (callback?.type !== "ArrowFunctionExpression" && callback?.type !== "FunctionExpression") {
+    return false;
+  }
+
+  if (callback.async) return true;
+
+  if (callback.body.type === "BlockStatement") return false;
+
+  const body = callback.body;
+
+  if (body.type === "UnaryExpression" && body.operator === "void") return false;
+
+  return !CLEANUP_BODIES.has(body.type);
+}
+
 export default {
   meta: { name: "polaris" },
   rules: {
@@ -151,6 +189,28 @@ export default {
 
             if (call.type === "CallExpression" && isSettlingExpect(call)) {
               context.report({ node, message: AWAIT_MESSAGE });
+            }
+          },
+        };
+      },
+    },
+    "effect-cleanup-return": {
+      meta: {
+        type: "problem",
+        docs: {
+          description:
+            "Effects return a cleanup function or nothing: no expression bodies or async.",
+        },
+      },
+      create(context) {
+        return {
+          CallExpression(node) {
+            if (!EFFECT_HOOKS.has(hookName(node.callee))) return;
+
+            const callback = node.arguments[0];
+
+            if (returnsNonCleanup(callback)) {
+              context.report({ node: callback, message: EFFECT_MESSAGE });
             }
           },
         };

@@ -145,7 +145,9 @@ export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
   // Rows read again hold what a commit wrote; the written overlay only bridges until then.
   const { hostKey, sessionId } = at;
 
-  useEffect(() => forgetWritten({ hostKey, sessionId }, tab.id), [hostKey, sessionId, tab.id, key]);
+  useEffect(() => {
+    forgetWritten({ hostKey, sessionId }, tab.id);
+  }, [hostKey, sessionId, tab.id, key]);
 
   const columns = useMemo((): ReadonlyArray<GridColumn> => {
     const typed = detail?.columns ?? [];

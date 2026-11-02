@@ -104,37 +104,35 @@ const useEditorCommands = (
 ) => {
   const commands = useCommands();
 
-  useEffect(
-    () =>
-      commands.register({
-        "editor.markdownPreview": {
-          run: () => openMarkdownPreview(hostKey, workspaceId),
-          enabled: () => active !== null && languageFor(active) === "markdown",
+  useEffect(() => {
+    return commands.register({
+      "editor.markdownPreview": {
+        run: () => openMarkdownPreview(hostKey, workspaceId),
+        enabled: () => active !== null && languageFor(active) === "markdown",
+      },
+      "editor.save": {
+        run: () => void (active === null ? null : saveFile(hostKey, active)),
+        enabled: () => active !== null,
+      },
+      "tab.close": {
+        run: () => {
+          if (current === null) window.close();
+          else tabActions(hostKey, workspaceId).close(current);
         },
-        "editor.save": {
-          run: () => void (active === null ? null : saveFile(hostKey, active)),
-          enabled: () => active !== null,
-        },
-        "tab.close": {
-          run: () => {
-            if (current === null) window.close();
-            else tabActions(hostKey, workspaceId).close(current);
-          },
-        },
-        "tab.closeOthers": {
-          run: () => {
-            closeOtherTabs(hostKey, workspaceId, current);
+      },
+      "tab.closeOthers": {
+        run: () => {
+          closeOtherTabs(hostKey, workspaceId, current);
 
-            for (const { id } of extraTabs)
-              if (id !== current) tabActions(hostKey, workspaceId).close(id);
-          },
-          enabled: () => current !== null,
+          for (const { id } of extraTabs)
+            if (id !== current) tabActions(hostKey, workspaceId).close(id);
         },
-        "editor.nextTab": { run: () => cycleTabs(hostKey, workspaceId, 1) },
-        "editor.previousTab": { run: () => cycleTabs(hostKey, workspaceId, -1) },
-      }),
-    [commands, hostKey, workspaceId, active, current, extraTabs]
-  );
+        enabled: () => current !== null,
+      },
+      "editor.nextTab": { run: () => cycleTabs(hostKey, workspaceId, 1) },
+      "editor.previousTab": { run: () => cycleTabs(hostKey, workspaceId, -1) },
+    });
+  }, [commands, hostKey, workspaceId, active, current, extraTabs]);
 };
 
 type Shown =

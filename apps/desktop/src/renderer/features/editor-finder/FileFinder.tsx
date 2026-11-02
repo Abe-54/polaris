@@ -161,13 +161,11 @@ export const FileFinder = () => {
   const scope = useFinderScope();
   const commands = useCommands();
 
-  useEffect(
-    () =>
-      commands.register({
-        "editor.findFile": { run: () => openFileFinder(), enabled: () => scope !== null },
-      }),
-    [commands, scope]
-  );
+  useEffect(() => {
+    return commands.register({
+      "editor.findFile": { run: () => openFileFinder(), enabled: () => scope !== null },
+    });
+  }, [commands, scope]);
 
   if (!open || scope === null) return null;
 

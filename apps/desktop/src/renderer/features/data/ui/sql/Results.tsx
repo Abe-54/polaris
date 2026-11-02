@@ -80,11 +80,11 @@ const Done = ({ at, source, sql, result }: DoneProps) => {
   const copyCsv = () => copy(toCsv(columns, rows));
 
   // ⌘L adds them while these results show.
-  useEffect(
-    () =>
-      rows.length === 0 ? undefined : commands.register({ "data.addRowsToSession": { run: add } }),
-    [commands, rows.length, add]
-  );
+  useEffect(() => {
+    return rows.length === 0
+      ? undefined
+      : commands.register({ "data.addRowsToSession": { run: add } });
+  }, [commands, rows.length, add]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="data-sql-results">

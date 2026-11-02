@@ -134,10 +134,9 @@ export const useAvailability = (hostKey: string): Availability => {
   const canWatch = connected && has(host, "harness.availability");
   const report = useStore(live, (s) => s.reports[hostKey]);
 
-  useEffect(
-    () => (canWatch ? hold(`availability:${hostKey}`, openAvailability(hostKey)) : undefined),
-    [canWatch, hostKey]
-  );
+  useEffect(() => {
+    return canWatch ? hold(`availability:${hostKey}`, openAvailability(hostKey)) : undefined;
+  }, [canWatch, hostKey]);
 
   return {
     options: harnessOptions(canWatch ? (report ?? null) : null, host?.status.capabilities ?? []),
@@ -176,10 +175,9 @@ export const usePlanLimits = (hostKey: string): ReadonlyArray<LimitData> => {
   const host = useHostView(hostKey);
   const canWatch = host?.status.state === "connected" && has(host, "usage");
 
-  useEffect(
-    () => (canWatch ? hold(`limits:${hostKey}`, openLimits(hostKey)) : undefined),
-    [canWatch, hostKey]
-  );
+  useEffect(() => {
+    return canWatch ? hold(`limits:${hostKey}`, openLimits(hostKey)) : undefined;
+  }, [canWatch, hostKey]);
 
   return useStore(live, (s) => s.limits[hostKey]) ?? NO_LIMITS;
 };

@@ -85,8 +85,12 @@ export const Celestial = memo(function Celestial({
   const { value } = useSyncExternalStore(clock.subscribe, clock.snapshot);
   const moving = working && !reduced;
 
-  useEffect(() => clock.setReduceMotion(reduced), [reduced]);
-  useEffect(() => (moving ? clock.acquire() : undefined), [moving]);
+  useEffect(() => {
+    clock.setReduceMotion(reduced);
+  }, [reduced]);
+  useEffect(() => {
+    return moving ? clock.acquire() : undefined;
+  }, [moving]);
 
   const strip = moving ? value : null;
   const palette = celestialPalette(bodyHue(body) ?? harnessColour(colours, harness));

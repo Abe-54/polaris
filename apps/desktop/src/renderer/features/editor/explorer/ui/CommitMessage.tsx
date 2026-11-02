@@ -134,16 +134,14 @@ export const MessageField = ({
   const blocked = suggestBlock(staged, committing, suggestion);
   const write = () => (blocked === null ? suggest(place, place.root, choice) : undefined);
 
-  useEffect(
-    () =>
-      commands.register({
-        "git.writeMessage": {
-          run: () => (blocked === null ? suggest(place, place.root, choice) : undefined),
-          enabled: () => blocked === null,
-        },
-      }),
-    [commands, blocked, place, choice]
-  );
+  useEffect(() => {
+    return commands.register({
+      "git.writeMessage": {
+        run: () => (blocked === null ? suggest(place, place.root, choice) : undefined),
+        enabled: () => blocked === null,
+      },
+    });
+  }, [commands, blocked, place, choice]);
 
   return (
     <div

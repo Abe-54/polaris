@@ -61,8 +61,7 @@ export const useSelection = (): Selection => {
 export const useSessionFeed = (hostKey: string, sessionId: SessionId | null) => {
   const { openSession } = useConnection();
 
-  useEffect(
-    () => (sessionId === null ? undefined : openSession(hostKey, sessionId)),
-    [openSession, hostKey, sessionId]
-  );
+  useEffect(() => {
+    return sessionId === null ? undefined : openSession(hostKey, sessionId);
+  }, [openSession, hostKey, sessionId]);
 };

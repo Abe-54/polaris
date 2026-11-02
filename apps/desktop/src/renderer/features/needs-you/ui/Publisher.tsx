@@ -79,9 +79,13 @@ export const NeedsYouPublisher = () => {
     });
   }, [inbox, pane, mode, settings, hostKey, sessionId, turns, notifications, subject]);
 
-  useEffect(() => publishSummary(summary), [summary]);
+  useEffect(() => {
+    publishSummary(summary);
+  }, [summary]);
   // Dismissals whose session changed since are dropped, so the item stays back.
-  useEffect(() => pruneDismissed(current), [current]);
+  useEffect(() => {
+    pruneDismissed(current);
+  }, [current]);
 
   return null;
 };

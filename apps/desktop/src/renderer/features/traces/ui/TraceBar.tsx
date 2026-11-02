@@ -45,13 +45,11 @@ export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
   // The open Profile takes ⌘L while focus is in it, however often this re-registers.
   const profileFocused = useProfileFocused(at);
 
-  useEffect(
-    () =>
-      detail === null || profileFocused
-        ? undefined
-        : commands.register({ "traces.addToSession": { run: add } }),
-    [commands, detail, add, profileFocused]
-  );
+  useEffect(() => {
+    return detail === null || profileFocused
+      ? undefined
+      : commands.register({ "traces.addToSession": { run: add } });
+  }, [commands, detail, add, profileFocused]);
 
   if (detail === null) return null;
   const { summary } = detail;

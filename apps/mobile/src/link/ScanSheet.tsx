@@ -367,7 +367,9 @@ export const ScanSheetView = ({
   const body = measured.kind === step.kind ? measured.height : 0;
   const height = fittedSheetHeight(step, titled, body, bottom, fontScale);
 
-  useEffect(() => onHeight?.(height), [height, onHeight]);
+  useEffect(() => {
+    onHeight?.(height);
+  }, [height, onHeight]);
 
   const content = (() => {
     switch (step.kind) {

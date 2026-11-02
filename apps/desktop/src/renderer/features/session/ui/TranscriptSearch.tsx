@@ -199,7 +199,9 @@ export const TranscriptSearch = ({
   }, [focusNonce]);
 
   // A new query starts from the first match.
-  useEffect(() => setIndex(0), [deferred, matchCase]);
+  useEffect(() => {
+    setIndex(0);
+  }, [deferred, matchCase]);
 
   // Only a different match scrolls; a streaming Turn changing `hits` must not.
   const currentKey = current === null ? null : `${current.rowKey}#${current.occurrence}`;

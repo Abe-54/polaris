@@ -24,20 +24,18 @@ const useFind = (host: RefObject<HTMLDivElement | null>, jump: JumpControl) => {
   const commands = useCommands();
   const [finding, setFinding] = useState<number | null>(null);
 
-  useEffect(
-    () =>
-      commands.register({
-        "transcript.find": {
-          run: () => setFinding((n) => (n ?? 0) + 1),
-          enabled: () => host.current?.checkVisibility() ?? false,
-        },
-        "transcript.jumpToEnd": {
-          run: jump.run,
-          enabled: () => jump.available() && (host.current?.checkVisibility() ?? false),
-        },
-      }),
-    [commands, host, jump]
-  );
+  useEffect(() => {
+    return commands.register({
+      "transcript.find": {
+        run: () => setFinding((n) => (n ?? 0) + 1),
+        enabled: () => host.current?.checkVisibility() ?? false,
+      },
+      "transcript.jumpToEnd": {
+        run: jump.run,
+        enabled: () => jump.available() && (host.current?.checkVisibility() ?? false),
+      },
+    });
+  }, [commands, host, jump]);
 
   return { finding, close: () => setFinding(null) };
 };
@@ -92,13 +90,11 @@ export const Transcript = (props: TranscriptProps) => {
   const visualizations = useVisualizationScope(props);
 
   // Reaching the top loads the Turns before the first one shown.
-  useEffect(
-    () =>
-      range.subscribe((start) => {
-        if (start === 0 && older.state === "idle") older.load();
-      }),
-    [range, older]
-  );
+  useEffect(() => {
+    return range.subscribe((start) => {
+      if (start === 0 && older.state === "idle") older.load();
+    });
+  }, [range, older]);
 
   const revealRow = (key: string, align: "center" | "start") =>
     setReveal((r) => ({ key, nonce: (r?.nonce ?? 0) + 1, align }));

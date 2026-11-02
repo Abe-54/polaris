@@ -256,16 +256,14 @@ export const WorkspaceSearch = () => {
   const scope = useFinderScope();
   const commands = useCommands();
 
-  useEffect(
-    () =>
-      commands.register({
-        "editor.findInWorkspace": {
-          run: () => openWorkspaceSearch(),
-          enabled: () => scope !== null,
-        },
-      }),
-    [commands, scope]
-  );
+  useEffect(() => {
+    return commands.register({
+      "editor.findInWorkspace": {
+        run: () => openWorkspaceSearch(),
+        enabled: () => scope !== null,
+      },
+    });
+  }, [commands, scope]);
 
   if (!open || scope === null) return null;
 

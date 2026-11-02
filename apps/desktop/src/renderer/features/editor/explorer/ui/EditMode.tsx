@@ -67,7 +67,9 @@ export const EditMode = () => {
   const { hostKey, workspaceId } = useSelection();
 
   // The git gutter rides on every tab's editor while Edit is open.
-  useEffect(() => registerEditorExtensions(gitGutter), []);
+  useEffect(() => {
+    return registerEditorExtensions(gitGutter);
+  }, []);
 
   return (
     <>
