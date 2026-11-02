@@ -293,6 +293,47 @@ Error spans since 2026-11-02T19:08:00.000Z (last 60 min) · 848 spans in 11 fing
 [{value, count}], names: [{value, count}], nameCount, example: {trace, span}}], groupCount, spans,
 truncated, since, coveredSince?}`.
 
+## `trace_compare {a?, b?, name?, service?, attributes?, limit?, scope?}` (ENG-751)
+
+Span groups (name and service) diffed between two sides, so "what changed since the last hour" or
+"what changed between 0.8.3 and 0.8.4" is one call. Unlike `compare`, which compares routes between
+Turns or traces, its sides are time windows and builds.
+
+- Each side is `{sinceMinutes?, untilMinutes?, version?}`: the spans that started between
+  `sinceMinutes` (1–10,080) and `untilMinutes` (0–10,080, default 0, now) minutes ago and, with
+  `version`, whose resource `service.version` is that build. `sinceMinutes` defaults to 60, or to
+  the week of retention with `version`. `b` defaults to `{}`, the last hour. Omitting `a` compares
+  `b` with the window of the same length just before it; that needs `b` without `version` and the
+  earlier window inside the week. A side with `untilMinutes` ≥ `sinceMinutes` is `E-INPUT`.
+- `name`, `service` and `attributes` apply to both sides, as in `trace_stats`; `limit` caps listed
+  changes (1–100, default 20); `scope` follows `trace_stats`.
+
+A group present on one side only `appeared` or `disappeared` (score 1). On both it `changed` when
+its score, the largest of the relative change in its share of the side's spans, the absolute change
+in error rate and the relative change in p95, is at least 0.1; relative means |x − y| / max(x, y).
+Shares rather than raw counts keep unequal windows and builds comparable. Groups under 0.1 are only
+counted as `unchanged`. Changes sort by score, then the groups' total count, then name. Each side is
+one `trace_stats` scan (same index range and 20,000-span cap, `truncated` and `coveredSince` per
+side), and the version filter is `json_extract(value,'$.resource."service.version"') = ?`.
+
+The Daemon (`polaris-daemon`, from its build version), the Desktop App's main and renderer
+processes, the Client runtime's Self-Traces and the Mobile App (`polaris-mobile`, from `app.json`'s
+`expo.version`) put `service.version` on their resource. Spans exported by a user's own app carry
+whatever version it sets.
+
+```
+A: 2026-11-02T18:08:00.000Z → 2026-11-02T19:08:00.000Z · 1180 spans in 12 groups
+B: 2026-11-02T19:08:00.000Z → now · 1234 spans in 13 groups
+1 appeared, 0 disappeared, 2 changed by 10% or more, 10 unchanged
+data.export  polaris-daemon  APPEARED  B ×4  0 errors  p95 1.2 s  e.g. trace 4f1c… span 2d91…
+polaris.rpc.data.query  polaris-daemon  CHANGED  ×412 → ×420  errors 0% → 3%  p95 31 ms → 88 ms  e.g. trace … span …
+```
+
+`structuredContent`: `{a: {since, until, version?, spans, groups, truncated, coveredSince}, b: {…},
+changes: [{name, service, change, a: {count, errors, errorRate, p95Ms} | null, b: {…} | null, score,
+example: {trace, span}}], appeared, disappeared, changed, unchanged}`. `until` is null for now; the
+example comes from B when the group is there, else from A.
+
 ## Caps and retrieval
 
 Every tool here emits one text block of at most 16,000 characters. `traces` states shown/total and

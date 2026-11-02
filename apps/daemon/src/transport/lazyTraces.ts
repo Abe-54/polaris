@@ -155,6 +155,7 @@ export const lazyTracesAt = (options: Omit<ReceiverOptions, "handler"> = {}) =>
             stats: (...args) => Effect.flatMap(store, (s) => s.stats(...args)),
             capture: (...args) => Effect.flatMap(store, (s) => s.capture(...args)),
             errors: (...args) => Effect.flatMap(store, (s) => s.errors(...args)),
+            spanCompare: (...args) => Effect.flatMap(store, (s) => s.spanCompare(...args)),
             overlapping: (...args) => Effect.flatMap(store, (s) => s.overlapping(...args)),
             get: (...args) => Effect.flatMap(store, (s) => s.get(...args)),
             span: (...args) => Effect.flatMap(store, (s) => s.span(...args)),

@@ -127,7 +127,7 @@ measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 ENG-673's default-timeout checks, negative control and raw paired measurements
 are in [launch measurements](../../../../packages/bench/measurements/eng-657/launch/README.md).
 
-MCP `traces`, `trace`, `span`, `trace_stats`, `trace_capture` and `trace_errors` share these services on every Data-tool binding. In the Polaris
+MCP `traces`, `trace`, `span`, `trace_stats`, `trace_capture`, `trace_errors` and `trace_compare` share these services on every Data-tool binding. In the Polaris
 Workspace, while Developer Mode is effective, they also read the Self-Trace scope (`scope: "self"`,
 ENG-731).
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
@@ -168,6 +168,13 @@ JSON path is a bound parameter; keys are limited to `[A-Za-z0-9_.:-]` so the pat
 In `stats` they and the `attribute` group key ride the same window scan. `toolList(checkout,
 filter, attributes)` has no window, so it matches only the checkout's newest 20,000 Spans, read off
 `spans_retention` before the filter, and its page carries `coveredSince` when that cut anything.
+
+`TraceStore.spanCompare(checkout, filter)` (`spanCompare.ts`, ENG-751) backs MCP `trace_compare`:
+two `scanGroups` reads (the `stats` scan without its group limit, each side under its own cap, with
+`untilMs` as `age<?` and `version` matched against the resource's `service.version`), diffed by
+name and service into appeared, disappeared and changed groups, scored on share of spans, error
+rate and p95. Self-Traces carry `service.version` from each process's build (`self/tracer.ts` for
+the Daemon).
 
 ## Phase 2 contracts (ENG-657)
 

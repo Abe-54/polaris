@@ -18,6 +18,7 @@ import type { SpanStats, SpanStatsFilter } from "./stats.ts";
 import type { SpanCapture, SpanCaptureFilter } from "./capture.ts";
 import type { SpanErrors, SpanErrorsFilter } from "./errors.ts";
 import type { AttributeFilters } from "./attributes.ts";
+import type { SpanCompare, SpanCompareFilter } from "./spanCompare.ts";
 
 export class TraceStore extends Context.Service<
   TraceStore,
@@ -65,6 +66,11 @@ export class TraceStore extends Context.Service<
       checkout: string,
       filter: SpanErrorsFilter
     ) => Effect.Effect<SpanErrors, TraceError>;
+    /** Span groups diffed between two windows or builds (the `trace_compare` tool). */
+    readonly spanCompare: (
+      checkout: string,
+      filter: SpanCompareFilter
+    ) => Effect.Effect<SpanCompare, TraceError>;
     readonly overlapping: (
       checkout: string,
       start: string,

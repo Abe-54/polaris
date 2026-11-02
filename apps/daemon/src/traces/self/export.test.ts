@@ -8,6 +8,7 @@ import { withTraceFixture } from "../testing.ts";
 import { selfTraceExportFor } from "./export.ts";
 import { SELF_CHECKOUT } from "./scope.ts";
 import { SelfTracer } from "./tracer.ts";
+import { VERSION } from "../../service/platform.ts";
 
 const leased = modeOf({ leases: 1 });
 
@@ -62,6 +63,15 @@ test("Daemon Spans are stored as polaris-daemon Self-Traces only while Developer
           ]);
           // Self-Traces never join a checkout's own Traces.
           expect((yield* f.store.list(f.root)).total).toBe(0);
+
+          // The build's version rides on the resource, so trace_compare can compare builds.
+          const [newest] = (yield* f.store.list(SELF_CHECKOUT)).traces;
+          const detail = yield* f.store.get(SELF_CHECKOUT, newest!.id);
+
+          expect(detail.spans[0]!.resource).toEqual({
+            "service.name": "polaris-daemon",
+            "service.version": VERSION,
+          });
         })
       )
     );

@@ -16,6 +16,7 @@ import { SpanCapture, SpanCaptureFilter } from "./capture.ts";
 import { SpanStats, SpanStatsFilter } from "./stats.ts";
 import { SpanErrors, SpanErrorsFilter } from "./errors.ts";
 import { AttributeFilters } from "./attributes.ts";
+import { SpanCompare, SpanCompareFilter } from "./spanCompare.ts";
 
 const OnCheckout = { checkout: Schema.String };
 
@@ -63,6 +64,7 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
   Stats: { ...OnCheckout, filter: SpanStatsFilter },
   Capture: { ...OnCheckout, filter: SpanCaptureFilter },
   Errors: { ...OnCheckout, filter: SpanErrorsFilter },
+  SpanCompare: { ...OnCheckout, filter: SpanCompareFilter },
   History: { ...OnCheckout, traceId: TraceIdPrefix, includeSpans: Schema.Boolean },
   Span: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
   Link: { ...OnCheckout, traceId: TraceIdPrefix },
@@ -127,6 +129,7 @@ export const TraceWorkerValue = Schema.Union([
   SpanDetail,
   TraceHistory,
   TraceComparison,
+  SpanCompare,
 ]);
 
 export type TraceWorkerValue = typeof TraceWorkerValue.Type;

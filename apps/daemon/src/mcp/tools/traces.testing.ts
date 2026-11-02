@@ -65,7 +65,8 @@ export const withStoredTools = async (
     ingest: (
       spans: ReturnType<typeof makeSpan>[],
       service?: string,
-      checkout?: string
+      checkout?: string,
+      version?: string
     ) => Promise<void>;
     store: TraceStore["Service"];
     tool: (name: string) => BoundTool;
@@ -153,9 +154,18 @@ export const withStoredTools = async (
                   polarisWorkspaceSource: "remote",
                 });
               },
-              ingest: async (spans, service = "ledger-api", checkout = context.checkout) => {
+              ingest: async (
+                spans,
+                service = "ledger-api",
+                checkout = context.checkout,
+                version
+              ) => {
                 const batch = traceFixture(spans);
-                batch.resourceSpans[0]!.resource.attributes[0]!.value.stringValue = service;
+                const { attributes } = batch.resourceSpans[0]!.resource;
+                attributes[0]!.value.stringValue = service;
+
+                if (version !== undefined)
+                  attributes.push({ key: "service.version", value: { stringValue: version } });
                 await Effect.runPromise(
                   store.ingest({
                     signal: "traces",

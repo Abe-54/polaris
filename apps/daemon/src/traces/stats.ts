@@ -9,6 +9,10 @@ export const STATS_SCAN_CAP = 20_000;
 export const SpanStatsFilter = Schema.Struct({
   /** Epoch milliseconds; Spans that started earlier are not read. */
   sinceMs: Schema.Number,
+  /** Epoch milliseconds; Spans that started at or after it are not read. */
+  untilMs: Schema.optionalKey(Schema.Number),
+  /** Only Spans whose resource's `service.version` is this build. */
+  version: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
   /** Case-insensitive substring of the Span name. */
   name: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
   service: Schema.optionalKey(Schema.String),
@@ -24,6 +28,9 @@ export const SpanStatsFilter = Schema.Struct({
 });
 
 export type SpanStatsFilter = typeof SpanStatsFilter.Type;
+
+/** A scan without the group limit: every group comes back. */
+export type ScanFilter = Omit<SpanStatsFilter, "limit">;
 
 const AttributeValue = Schema.NullOr(Schema.Union([Schema.String, Schema.Number]));
 
@@ -73,19 +80,28 @@ const decodeRows = Schema.decodeUnknownSync(Schema.Array(Row));
 export const likeSubstring = (value: string) =>
   `%${value.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 
-const statsQuery = (checkout: string, filter: SpanStatsFilter, cap: number) => {
-  const clauses = ["checkout=?", "age>=?"];
-  const bindings: SQLQueryBindings[] = [checkout, Math.floor(filter.sinceMs)];
+type Clause = readonly [sql: string, binding: SQLQueryBindings];
 
-  if (filter.name !== undefined) {
-    clauses.push("name LIKE ? ESCAPE '\\'");
-    bindings.push(likeSubstring(filter.name));
-  }
+/** A one-parameter clause when its filter is set, else nothing. */
+const clause = <A>(value: A | undefined, sql: string, bind: (value: A) => SQLQueryBindings) =>
+  value === undefined ? [] : [[sql, bind(value)] satisfies Clause];
 
-  if (filter.service !== undefined) {
-    clauses.push("service=?");
-    bindings.push(filter.service);
-  }
+const optionalClauses = (filter: ScanFilter): ReadonlyArray<Clause> => [
+  ...clause(filter.untilMs, "age<?", Math.ceil),
+  ...clause(filter.name, "name LIKE ? ESCAPE '\\'", likeSubstring),
+  ...clause(filter.service, "service=?", String),
+  ...clause(filter.version, `json_extract(value,'$.resource."service.version"')=?`, String),
+];
+
+const statsQuery = (checkout: string, filter: ScanFilter, cap: number) => {
+  const optional = optionalClauses(filter);
+  const clauses = ["checkout=?", "age>=?", ...optional.map(([clause]) => clause)];
+
+  const bindings: SQLQueryBindings[] = [
+    checkout,
+    Math.floor(filter.sinceMs),
+    ...optional.map(([, binding]) => binding),
+  ];
 
   if (filter.status !== undefined)
     clauses.push(filter.status === "error" ? "status='error'" : "status<>'error'");
@@ -111,18 +127,18 @@ interface Bucket {
   slowest: Row;
 }
 
-const byName = (filter: SpanStatsFilter) => filter.by === "name" || filter.by === "both";
+const byName = (filter: ScanFilter) => filter.by === "name" || filter.by === "both";
 
-const byService = (filter: SpanStatsFilter) => filter.by === "service" || filter.by === "both";
+const byService = (filter: ScanFilter) => filter.by === "service" || filter.by === "both";
 
-const keyOf = (filter: SpanStatsFilter, row: Row) =>
+const keyOf = (filter: ScanFilter, row: Row) =>
   JSON.stringify([
     byName(filter) ? row.name : null,
     byService(filter) ? row.service : null,
     filter.attribute === undefined ? null : row.attribute,
   ]);
 
-const add = (buckets: Map<string, Bucket>, filter: SpanStatsFilter, row: Row) => {
+const add = (buckets: Map<string, Bucket>, filter: ScanFilter, row: Row) => {
   const key = keyOf(filter, row);
   const bucket = buckets.get(key);
 
@@ -153,7 +169,7 @@ const add = (buckets: Map<string, Bucket>, filter: SpanStatsFilter, row: Row) =>
 const nearestRank = (sorted: ReadonlyArray<number>, rank: number) =>
   sorted[Math.max(0, Math.ceil(sorted.length * rank) - 1)]!;
 
-const groupOf = (filter: SpanStatsFilter, bucket: Bucket): SpanStatsGroup => {
+const groupOf = (filter: ScanFilter, bucket: Bucket): SpanStatsGroup => {
   const sorted = bucket.durations.toSorted((a, b) => a - b);
   const example = bucket.error ?? bucket.slowest;
 
@@ -194,6 +210,18 @@ export const spanStats = (
   filter: SpanStatsFilter,
   cap = STATS_SCAN_CAP
 ): SpanStats => {
+  const scan = scanGroups(db, checkout, filter, cap);
+
+  return { ...scan, groups: scan.groups.slice(0, filter.limit) };
+};
+
+/** Every group of one window scan, sorted; `trace_compare` diffs two of these. */
+export const scanGroups = (
+  db: Database,
+  checkout: string,
+  filter: ScanFilter,
+  cap = STATS_SCAN_CAP
+): SpanStats => {
   const query = statsQuery(checkout, filter, cap);
   const rows = decodeRows(db.query(query.sql).all(...query.bindings));
   const truncated = rows.length > cap;
@@ -207,7 +235,7 @@ export const spanStats = (
     .toSorted(order(filter.sort));
 
   return {
-    groups: groups.slice(0, filter.limit),
+    groups,
     groupCount: groups.length,
     spans: read.length,
     truncated,

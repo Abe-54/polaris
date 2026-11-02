@@ -22,6 +22,7 @@ import { NotConnected } from "../runtime/hostConnection.ts";
 import type { SelfTraceClient, SelfTraceHost } from "./developerMode.ts";
 import { syncSelfTraces } from "./sync.ts";
 import { openSelfTracer, MOBILE_SERVICE, type SelfTracer } from "./tracer.ts";
+import app from "../../app.json";
 
 class FakeHostRpcs extends RpcGroup.make(Dispatch, IngestSelfTraces, WatchDeveloperMode) {}
 
@@ -213,7 +214,11 @@ describe("Mobile Self-Traces against a Host", () => {
       expect(context?.traceparent).toBe(`00-${dispatch?.traceId}-${dispatch?.id}-01`);
       expect(dispatch?.parentId).toBe(connect?.id ?? "missing");
       expect(dispatch?.traceId).toBe(connect?.traceId ?? "missing");
-      expect(dispatch?.resource).toEqual({ "service.name": MOBILE_SERVICE });
+      // The release in app.json, so the Daemon can compare spans across builds.
+      expect(dispatch?.resource).toEqual({
+        "service.name": MOBILE_SERVICE,
+        "service.version": app.expo.version,
+      });
     }));
 
   test("turning Developer Mode off drops the buffer, stops the timer and the propagation", () =>

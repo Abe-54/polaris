@@ -23,6 +23,8 @@ import type { CaptureOptions, CaptureResult } from "../sessions/capture.ts";
 import { CAPTURE_SPAN_CAP } from "../../traces/capture.ts";
 import type { SpanErrors, SpanErrorsFilter } from "../../traces/errors.ts";
 import { AttributeFilters, AttributeKey, TRACES_ATTRIBUTE_SCAN } from "../../traces/attributes.ts";
+import type { SpanCompare, SpanCompareFilter } from "../../traces/spanCompare.ts";
+import { compareSidesView, resolveSides, TraceCompareInput } from "./traceCompare.ts";
 
 /** A week, the trace store's retention: the widest `trace_stats` window. */
 const MAX_STATS_MINUTES = 7 * 24 * 60;
@@ -139,6 +141,10 @@ export interface TraceSessionTools {
     context: TraceToolContext,
     filter: SpanErrorsFilter
   ) => Effect.Effect<SpanErrors, TraceError>;
+  readonly spanCompare: (
+    context: TraceToolContext,
+    filter: SpanCompareFilter
+  ) => Effect.Effect<SpanCompare, TraceError>;
   readonly span: (
     sessionId: SessionId,
     context: TraceToolContext,
@@ -405,6 +411,25 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
               matched: result.matched,
             })
           );
+        })
+    ),
+    make(
+      "trace_compare",
+      "Compare span groups (name and service) between two sides, a and b: count, error rate and p95, listing groups that appeared, disappeared or changed by 10% or more, largest change first (counts as each side's share of spans, so unequal windows compare). A side is sinceMinutes..untilMinutes ago (default the last 60 minutes) and/or a build version (the resource's service.version; then sinceMinutes defaults to a week). Omit a to compare b with the window of the same length just before it. Filter by name substring, service or attributes; limit changes (default 20, at most 100). Each side reads at most the newest 20,000 matching spans. scope self reads Polaris's own spans while Developer Mode is on.",
+      TraceCompareInput,
+      (input, traces) =>
+        Effect.gen(function* () {
+          const context = yield* traces.context(sessionId, scoped(input.scope));
+          const sides = yield* resolveSides(input, yield* Clock.currentTimeMillis);
+          const { a: _a, b: _b, scope: _scope, ...filters } = input;
+
+          const result = yield* traces.spanCompare(context, {
+            ...filters,
+            ...sides,
+            limit: input.limit ?? 20,
+          });
+
+          return viewResult(compareSidesView(result, sides));
         })
     ),
     make(

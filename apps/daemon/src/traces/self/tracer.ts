@@ -4,6 +4,7 @@
  */
 import type { SelfSpan, TraceAttributes } from "@polaris/protocol";
 import { Cause, Exit, Option, Predicate, Schema, Tracer } from "effect";
+import { VERSION } from "../../service/platform.ts";
 
 export const DAEMON_SERVICE = "polaris-daemon";
 
@@ -49,8 +50,8 @@ export const selfSpanOf = (span: Tracer.NativeSpan): SelfSpan | null => {
     startTimeUnixNano: startTime.toString(),
     endTimeUnixNano: (endTime < startTime ? startTime : endTime).toString(),
     attributes: attributesOf(span.attributes),
-    resource: {},
-    scope: { name: "polaris", version: "", attributes: {} },
+    resource: { "service.version": VERSION },
+    scope: { name: "polaris", version: VERSION, attributes: {} },
     events: span.events.map(([name, time, attributes]) => ({
       name,
       timeUnixNano: time.toString(),

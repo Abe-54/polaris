@@ -13,8 +13,12 @@ import {
 import { Cause, Context, Effect, Exit } from "effect";
 import { RpcClient } from "effect/rpc";
 import { openSpanBuffer, type SpanBuffer, type SpanBufferLimits } from "./buffer.ts";
+import app from "../../app.json";
 
 export const MOBILE_SERVICE = "polaris-mobile";
+
+/** The app release (app.json), so Self-Traces can be compared across builds. */
+export const MOBILE_VERSION: string = app.expo.version;
 
 /** How often buffered Spans are sent while on. */
 export const FLUSH_INTERVAL_MS = 5_000;
@@ -77,9 +81,12 @@ export const CurrentSelfSpan = Context.Reference<SelfSpanHandle | null>(
 
 const OFF_SPAN: SelfSpanHandle = { context: null, end: () => undefined };
 
-const RESOURCE: TraceAttributes = { "service.name": MOBILE_SERVICE };
+const RESOURCE: TraceAttributes = {
+  "service.name": MOBILE_SERVICE,
+  "service.version": MOBILE_VERSION,
+};
 
-const SCOPE = { name: MOBILE_SERVICE, version: "1", attributes: {} };
+const SCOPE = { name: MOBILE_SERVICE, version: MOBILE_VERSION, attributes: {} };
 
 const nanos = (ms: number) => `${Math.max(0, Math.round(ms))}000000`;
 
