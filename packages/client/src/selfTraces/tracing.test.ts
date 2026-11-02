@@ -89,12 +89,16 @@ const sentRequest = (on: boolean | undefined, headers: Record<string, string> = 
         caller.traceId = (yield* Effect.currentSpan).traceId;
         yield* connection.client["developerMode.get"]({}).pipe(RpcClient.withHeaders(headers));
       }).pipe(Effect.withSpan("composer.send"), Effect.withTracer(tracer), Effect.forkScoped);
-      yield* Effect.sleep(50);
 
-      return {
-        request: received.find((message): boolean => Predicate.isTagged(message, "Request")),
-        caller,
-      };
+      const sent = () =>
+        received.find((message): boolean => Predicate.isTagged(message, "Request"));
+
+      // Wait for the Request itself: a fixed sleep raced slow CI runners.
+      for (let waited = 0; sent() === undefined && waited < 5000; waited += 10) {
+        yield* Effect.sleep(10);
+      }
+
+      return { request: sent(), caller };
     })
   );
 

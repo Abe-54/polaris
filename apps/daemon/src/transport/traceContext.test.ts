@@ -55,7 +55,8 @@ const parentOf = (headers: Record<string, string>) =>
             name: "polaris-test",
             version: "0.0.0",
             deviceLabel: "Test",
-            capabilities: [],
+            // A Windows Host refuses a Client without host.any-platform (ADR 0059).
+            capabilities: ["host.any-platform"],
           },
         });
 
