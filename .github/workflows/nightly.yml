@@ -23,7 +23,7 @@ on:
         default: ""
 
 concurrency:
-  group: nightly-${{ github.ref }}
+  group: nightly-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:

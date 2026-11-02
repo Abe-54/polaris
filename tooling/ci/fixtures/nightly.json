@@ -38,7 +38,7 @@
     "3": ""
   },
   "linear": {
-    "teams": { "nodes": [{ "id": "team-eng" }] },
+    "teams": { "nodes": [{ "id": "team-eng", "key": "ENG", "name": "Engineering" }] },
     "projects": { "nodes": [{ "id": "project-polaris" }] },
     "issueLabels": { "nodes": [] },
     "issues": {

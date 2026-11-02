@@ -47,6 +47,8 @@ const Nodes = <S extends Schema.Top>(node: S) => Schema.Struct({ nodes: Schema.A
 
 const Id = Schema.Struct({ id: Schema.String });
 
+const Team = Schema.Struct({ id: Schema.String, key: Schema.String, name: Schema.String });
+
 const Comment = Schema.Struct({ body: Schema.String, createdAt: Schema.String });
 
 const Issue = Schema.Struct({
@@ -58,7 +60,7 @@ const Issue = Schema.Struct({
 });
 
 export const ContextData = Schema.Struct({
-  teams: Nodes(Id),
+  teams: Nodes(Team),
   projects: Nodes(Id),
   issueLabels: Nodes(Id),
   issues: Nodes(Issue),
@@ -77,7 +79,7 @@ const decodeMutation = Schema.decodeUnknownSync(
 );
 
 const CONTEXT = `query CiRedContext($team: String!, $project: String!, $label: String!, $prefix: String!) {
-  teams(filter: { key: { eq: $team } }) { nodes { id } }
+  teams(filter: { key: { eq: $team } }) { nodes { id key name } }
   projects(filter: { name: { eq: $project } }) { nodes { id } }
   issueLabels(filter: { name: { eq: $label } }) { nodes { id } }
   issues(first: 100, filter: {
@@ -107,12 +109,13 @@ const latest = (comments: ReadonlyArray<typeof Comment.Type>) =>
   comments.toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.body;
 
 export const toContext = (data: ContextData): LinearContext => {
-  const teamId = data.teams.nodes[0]?.id;
+  const team = data.teams.nodes.find((node) => node.key === TEAM_KEY);
 
-  if (!teamId) throw new Error(`Linear: no team with key ${TEAM_KEY} is visible to the app`);
+  if (!team) throw new Error(`Linear: no team with key ${TEAM_KEY} is visible to the app`);
+  console.log(`Linear team ${team.key} (${team.name}): ${team.id}`);
 
   return {
-    teamId,
+    teamId: team.id,
     projectId: data.projects.nodes[0]?.id,
     labelId: data.issueLabels.nodes[0]?.id,
     open: data.issues.nodes.map(({ comments, ...issue }) => ({
