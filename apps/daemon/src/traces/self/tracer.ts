@@ -3,8 +3,16 @@
  * as `polaris-daemon` Self-Traces while Developer Mode is effectively on.
  */
 import type { SelfSpan, TraceAttributes } from "@polaris/protocol";
+import {
+  currentFiberSpan,
+  hookConsole,
+  type LogConsole,
+  type LogRecorder,
+  makeLogRecorder,
+} from "@polaris/client";
 import { Cause, Exit, Option, Predicate, Schema, Tracer } from "effect";
 import { VERSION } from "../../service/platform.ts";
+import { redactText } from "../redact.ts";
 
 export const DAEMON_SERVICE = "polaris-daemon";
 
@@ -96,8 +104,22 @@ export class SelfTracer implements Tracer.Tracer {
   private sink: SelfTraceSink | null = null;
   private buffer: SelfSpan[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private unhook: (() => void) | null = null;
 
   dropped = 0;
+
+  /** Warnings and errors, recorded while exporting (ENG-754); also the Effect logger's. */
+  readonly logs: LogRecorder;
+
+  /** `console` is hooked exactly while exporting. */
+  constructor(private readonly console: LogConsole = globalThis.console) {
+    this.logs = makeLogRecorder({
+      enabled: () => this.exporting,
+      emit: (span) => this.push(span),
+      origin: () => ({ resource: {}, scope: { name: "polaris", version: "", attributes: {} } }),
+      scrub: redactText,
+    });
+  }
 
   get exporting(): boolean {
     return this.sink !== null;
@@ -112,14 +134,20 @@ export class SelfTracer implements Tracer.Tracer {
   /** Spans recorded so far go to the previous sink; with null, exporting stops. */
   setSink(sink: SelfTraceSink | null): void {
     this.flush();
+    this.unhook?.();
     this.sink = sink;
+    this.unhook = sink === null ? null : hookConsole(this.console, this.logs, currentFiberSpan);
   }
 
   record(span: Tracer.NativeSpan): void {
     if (this.sink === null) return;
     const self = selfSpanOf(span);
 
-    if (self === null) return;
+    if (self !== null) this.push(self);
+  }
+
+  private push(self: SelfSpan): void {
+    if (this.sink === null) return;
 
     if (this.buffer.length >= MAX_BUFFERED_SPANS) {
       this.dropped++;

@@ -2,10 +2,13 @@
  * The renderer's Self-Traces (ADR 0095): Spans for what the user starts here, such as a Turn
  * from the composer, handed to main in batches. Off, no Span is made and nothing crosses IPC.
  */
+import { hookConsole, type LogConsole, makeLogRecorder } from "@polaris/client/selfTraces/logs";
 import type { SelfSpan, TraceContext } from "@polaris/protocol";
 import type { PolarisApi } from "../../../shared/api.ts";
 
 const FLUSH_MS = 1_000;
+
+const RENDERER_SERVICE = "polaris-desktop-renderer";
 
 const BATCH_SPANS = 1_024;
 
@@ -26,6 +29,8 @@ export interface RendererSelfTracesOptions {
   readonly nowMs?: () => number;
   /** Arms a timer; the result cancels it. */
   readonly setTimeout?: (run: () => void, ms: number) => () => void;
+  /** Whose `warn` and `error` become `polaris.log` Spans while on; the window's by default. */
+  readonly console?: LogConsole;
 }
 
 const hex = (bytes: number) =>
@@ -43,6 +48,7 @@ export const createRendererSelfTraces = ({
 
     return () => globalThis.clearTimeout(handle);
   },
+  console: target = globalThis.console,
 }: RendererSelfTracesOptions) => {
   let enabled = false;
   let version = "";
@@ -58,7 +64,30 @@ export const createRendererSelfTraces = ({
     if (pending.length > 0) cancelTimer = arm(flush, 0);
   };
 
+  const resource = () => ({ "service.name": RENDERER_SERVICE, "service.version": version });
+  const scope = () => ({ name: "@polaris/desktop/renderer", version, attributes: {} });
+
+  const push = (span: SelfSpan) => {
+    pending.push(span);
+
+    if (cancelTimer === null) cancelTimer = arm(flush, FLUSH_MS);
+  };
+
+  const logs = makeLogRecorder({
+    enabled: () => enabled,
+    emit: push,
+    origin: () => ({ resource: resource(), scope: scope() }),
+    nowMs,
+  });
+
+  let unhook: (() => void) | null = null;
+
   const setEnabled = (on: boolean) => {
+    if (on !== enabled) {
+      unhook?.();
+      unhook = on ? hookConsole(target, logs) : null;
+    }
+
     enabled = on;
 
     if (on) return;
@@ -80,7 +109,7 @@ export const createRendererSelfTraces = ({
 
     const end = (failure?: string, more?: SpanAttributes, atMs?: number) => {
       if (!enabled) return;
-      pending.push({
+      push({
         traceId,
         id,
         parentId: parent?.traceparent.slice(36, 52) ?? null,
@@ -92,16 +121,14 @@ export const createRendererSelfTraces = ({
         startTimeUnixNano: nanos(started),
         endTimeUnixNano: nanos(Math.max(started, atMs ?? nowMs())),
         attributes: more === undefined ? attributes : { ...attributes, ...more },
-        resource: { "service.name": "polaris-desktop-renderer", "service.version": version },
-        scope: { name: "@polaris/desktop/renderer", version, attributes: {} },
+        resource: resource(),
+        scope: scope(),
         events: [],
         links: [],
         droppedAttributes: 0,
         droppedEvents: 0,
         droppedLinks: 0,
       });
-
-      if (cancelTimer === null) cancelTimer = arm(flush, FLUSH_MS);
     };
 
     return { trace: { traceparent: `00-${traceId}-${id}-01` }, end };

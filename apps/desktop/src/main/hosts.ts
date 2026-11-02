@@ -30,7 +30,6 @@ import {
   Schema,
   Stream,
   SubscriptionRef,
-  Tracer,
 } from "effect";
 import type { ConnectionStatusView, HostKind, HostView, IpcError } from "../shared/api.ts";
 import type { GitHub } from "./github/index.ts";
@@ -442,14 +441,13 @@ export const startClientRuntime = (
   input: HostDirectoryInput,
   machines: Layer.Layer<Machines, never, HostDirectory>,
   github: Layer.Layer<GitHub>,
-  tracer?: Tracer.Tracer
+  /** The Self-Trace Tracer and loggers. */
+  observability?: Layer.Layer<never>
 ): ClientRuntime => {
   const services = Layer.mergeAll(Layer.provideMerge(machines, HostDirectory.layer(input)), github);
 
   return ManagedRuntime.make(
-    tracer === undefined
-      ? services
-      : Layer.provideMerge(services, Layer.succeed(Tracer.Tracer, tracer))
+    observability === undefined ? services : Layer.provideMerge(services, observability)
   );
 };
 

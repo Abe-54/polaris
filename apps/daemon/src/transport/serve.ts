@@ -13,7 +13,8 @@ import { PredictionServerLive } from "../prediction/server.ts";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
-import { Deferred, Effect, Layer } from "effect";
+import { selfTraceLoggers } from "@polaris/client";
+import { Deferred, Effect, Layer, Logger } from "effect";
 import { AttachmentRpcsLive } from "../attachments/AttachmentRpcs.ts";
 import { AttachmentStoreLive } from "../attachments/AttachmentStore.ts";
 import { ConstellationLiveness } from "../constellation/liveness.ts";
@@ -392,6 +393,8 @@ export const serveProgram = Effect.scoped(
 ).pipe(
   // Every Daemon Span goes through the Self-Trace Tracer, which is native while it is off.
   Effect.withTracer(selfTracer),
+  // Warnings and errors also land on Self-Traces while they are on (ENG-754).
+  Effect.provideService(Logger.CurrentLoggers, selfTraceLoggers(selfTracer.logs)),
   // A requested stop ends the scope gracefully; then nothing may keep the process alive.
   Effect.andThen(() => Effect.sync(() => process.exit(SERVE_EXIT_STOPPED))),
   Effect.catchTag("DaemonAlreadyRunning", (error) =>

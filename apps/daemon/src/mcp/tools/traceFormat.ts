@@ -89,6 +89,29 @@ export const exceptionLines = (span: Span) => {
   return events;
 };
 
+const LOG_EVENTS = new Set(["log.warn", "log.error", "log.dropped"]);
+
+/** The first warning or error recorded on a span (ENG-754), or a `polaris.log` span's own. */
+export const logLines = (span: Span) => {
+  const logs = span.events.filter((event) => LOG_EVENTS.has(event.name));
+  const own = span.name === "polaris.log" ? [{ name: "log", attributes: span.attributes }] : [];
+  const [head, ...rest] = [...own, ...logs];
+
+  if (head === undefined) return [];
+  const { attributes } = head;
+
+  const text =
+    head.name === "log.dropped"
+      ? `${attributeValue(attributes["log.dropped"])} log records dropped by the rate limit`
+      : `${attributeValue(attributes["log.severity"], "log")}: ${attributeValue(attributes["log.message"])}`;
+
+  const lines = [clipped(inline(text), 600, "log message", "span")];
+
+  if (rest.length > 0) lines.push(`… ${rest.length} more log events; use span for details.`);
+
+  return lines;
+};
+
 /** Bound each section and line so attributes cannot crowd out exceptions and logs. */
 export const capSections = (lines: ReadonlyArray<string>, tool: string) => {
   const kept: string[] = [];
@@ -399,6 +422,7 @@ const groupBlock = (
 ) => [
   groupLine(group, detail, history, prefixes, depth),
   ...(first(group).status === "error" ? exceptionLines(first(group)).map((s) => `  ${s}`) : []),
+  ...logLines(first(group)).map((s) => `  ${s}`),
 ];
 
 const selectGroups = (

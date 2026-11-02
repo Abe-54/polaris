@@ -3,12 +3,17 @@
  * renderer's, sent to the Polaris Workspace's Host while its Developer Mode is effective.
  */
 import {
+  currentFiberSpan,
   gatedTracer,
   DEFAULT_FLUSH_DELAY_MS,
+  hookConsole,
+  type LogConsole,
+  makeLogRecorder,
   makeSelfTraceExporter,
   type SelfTraceClock,
   type SelfTraceSendOutcome,
   selfSpanOf,
+  selfTraceLoggers,
   systemClock,
   traceParentIds,
 } from "@polaris/client";
@@ -18,7 +23,7 @@ import {
   type SelfTraceBatch,
   type TraceContext,
 } from "@polaris/protocol";
-import { Effect, Schema, Tracer } from "effect";
+import { Effect, Layer, Logger, Schema, Tracer } from "effect";
 import { RpcClient } from "effect/rpc";
 import type { DeveloperModeSource } from "./source.ts";
 
@@ -42,11 +47,15 @@ export interface DesktopSelfTracesOptions {
   readonly source: DeveloperModeSource;
   readonly clock?: SelfTraceClock;
   readonly flushDelayMs?: number;
+  /** Whose `warn` and `error` are recorded while on; the process's console by default. */
+  readonly console?: LogConsole;
 }
 
 export interface DesktopSelfTraces {
   /** The main process's Tracer: records only while on. */
   readonly tracer: Tracer.Tracer;
+  /** The Tracer and the loggers that record Warning and above, for the Client runtime. */
+  readonly layer: Layer.Layer<never>;
   readonly enabled: () => boolean;
   /** Spans the renderer sent over IPC, decoded; ignored while off. */
   readonly ingestRenderer: (spans: ReadonlyArray<SelfSpan>) => void;
@@ -89,9 +98,24 @@ export const createDesktopSelfTraces = (options: DesktopSelfTracesOptions): Desk
     },
   });
 
+  const logs = makeLogRecorder({
+    enabled: exporter.enabled,
+    emit: (span) => exporter.record(MAIN_SERVICE, span),
+    origin: () => ({
+      resource: { "service.name": MAIN_SERVICE, "service.version": options.version },
+      scope: { name: origin.scope, version: options.version, attributes: {} },
+    }),
+    nowMs: (options.clock ?? systemClock).now,
+  });
+
+  const target = options.console ?? globalThis.console;
+  let unhook: (() => void) | null = null;
+
   const follow = (enabled: boolean) => {
     if (enabled === exporter.enabled()) return;
     exporter.setEnabled(enabled);
+    unhook?.();
+    unhook = enabled ? hookConsole(target, logs, currentFiberSpan) : null;
 
     for (const listener of listeners) listener(enabled);
   };
@@ -121,6 +145,10 @@ export const createDesktopSelfTraces = (options: DesktopSelfTracesOptions): Desk
 
   return {
     tracer,
+    layer: Layer.mergeAll(
+      Layer.succeed(Tracer.Tracer, tracer),
+      Layer.succeed(Logger.CurrentLoggers, selfTraceLoggers(logs))
+    ),
     enabled: exporter.enabled,
     ingestRenderer,
     withRendererTrace,
@@ -135,6 +163,10 @@ export const createDesktopSelfTraces = (options: DesktopSelfTracesOptions): Desk
       sender = send;
     },
     flush: exporter.flush,
-    dispose: unsubscribe,
+    dispose: () => {
+      unsubscribe();
+      unhook?.();
+      unhook = null;
+    },
   };
 };

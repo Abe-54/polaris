@@ -454,7 +454,7 @@ const start = async () => {
       localHost: Layer.succeed(LocalHost, local),
     }),
     githubLayer({ userData, env, secureStorage }),
-    selfTraces.tracer
+    selfTraces.layer
   );
   const clientRuntime = runtime;
 

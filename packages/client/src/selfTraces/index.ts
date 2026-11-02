@@ -10,3 +10,7 @@ export * from "./span.ts";
 export * from "./tracer.ts";
 
 export * from "./wire.ts";
+
+export * from "./logger.ts";
+
+export * from "./logs.ts";

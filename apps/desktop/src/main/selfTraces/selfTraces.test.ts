@@ -124,6 +124,55 @@ describe("Desktop Self-Traces", () => {
     ]);
   });
 
+  test("main's console warnings become Spans and events only while on, through the runtime's layer", async () => {
+    const mode = testDeveloperModeSource({ hostKey: "studio", enabled: false });
+    const printed: Array<unknown> = [];
+
+    const target = {
+      warn: (...args: Array<unknown>) => printed.push(args),
+      error: () => undefined,
+    };
+
+    const traces = createDesktopSelfTraces({
+      version: "1.0.0",
+      source: mode.source,
+      flushDelayMs: 0,
+      console: target,
+    });
+
+    const host = recordingHost();
+
+    traces.bind(host.send);
+
+    target.warn("while off");
+    mode.set({ hostKey: "studio", enabled: true });
+    target.warn("outside a Span");
+    await Effect.runPromise(
+      Effect.logWarning("inside").pipe(
+        Effect.withSpan("hosts.connect"),
+        Effect.provide(traces.layer)
+      )
+    );
+    await settle();
+    mode.set({ hostKey: "studio", enabled: false });
+    target.warn("off again");
+    await settle();
+
+    const spans = host.sent.flatMap(({ batch }) => batch.spans);
+
+    expect(
+      spans.map((span) => [
+        span.name,
+        span.attributes["log.message"] ?? span.events.map((e) => e.attributes["log.message"]),
+      ])
+    ).toEqual([
+      ["polaris.log", "outside a Span"],
+      ["hosts.connect", ["inside"]],
+    ]);
+    expect(printed).toHaveLength(3);
+    traces.dispose();
+  });
+
   test("an IPC request joins the renderer's Trace while on, and starts none while off", async () => {
     const { mode, traces } = setup();
 

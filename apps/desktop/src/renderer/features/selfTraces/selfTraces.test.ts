@@ -3,6 +3,7 @@
  * a request's `trace`) while on, and that nothing does while off.
  */
 import { afterEach, describe, expect, test } from "bun:test";
+import type { LogConsole } from "@polaris/client/selfTraces/logs";
 import { type SelfSpan, SessionId } from "@polaris/protocol";
 import type { AppEvent, PolarisApi, RequestOptions } from "../../../shared/api.ts";
 import type { RequestInput, RequestMethod } from "../../../shared/contract.ts";
@@ -119,6 +120,28 @@ describe("renderer Self-Traces", () => {
     expect(traces.enabled()).toBe(false);
     expect(local.start("off")).toBeNull();
     expect(fake.batches).toHaveLength(0);
+  });
+
+  test("a console warning in the window becomes a polaris.log Span only while on", () => {
+    const fake = fakeApi(true);
+    const target: LogConsole = { warn: () => undefined, error: () => undefined };
+    const local = createRendererSelfTraces({ bridge: () => fake.api, console: target });
+
+    target.warn("before");
+    local.setVersion("1.2.3");
+    local.setEnabled(true);
+    target.error("render failed");
+    local.flush();
+    local.setEnabled(false);
+    target.warn("after");
+    local.setEnabled(true);
+    local.flush();
+
+    expect(
+      fake.batches
+        .flat()
+        .map((s) => [s.name, s.status, s.attributes["log.message"], s.resource["service.name"]])
+    ).toEqual([["polaris.log", "error", "render failed", "polaris-desktop-renderer"]]);
   });
 
   test("a child Span stays in its parent's Trace", () => {
