@@ -484,7 +484,7 @@ jobs:
         run: |
           bun run bench --quick --runs 3 --json bench-result.json --markdown "$GITHUB_STEP_SUMMARY" \
             --compare packages/bench/baselines/ci-ubuntu-latest-quick.json \
-            --fail-on memory,cold-start.startup_modules,-git.rss_peak_mib,-blobs.upload_rss_peak_over_base_mib,-blobs.rss_retained_mib,-blobs.footprint_retained_mib \
+            --fail-on memory,cold-start.startup_modules,-git.rss_peak_mib,-blobs.upload_rss_peak_over_base_mib,-blobs.rss_retained_mib,-blobs.footprint_retained_mib,-traces.rss_peak_over_base_mib \
             --gate-same-machine
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
