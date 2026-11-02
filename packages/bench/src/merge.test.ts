@@ -42,7 +42,7 @@ const runner = (cpu: string, values: Record<string, number>, cores = 4): BenchRe
   },
 });
 
-test("a merged baseline holds each metric's median and gates memory on any CPU of its class", () => {
+test("a merged baseline holds each metric's median and gates memory on the CPUs it covers", () => {
   const merged = mergeResults([
     runner("epyc-7763", { rss_before_mib: 113, peak: 170 }),
     runner("epyc-9v74", { rss_before_mib: 111 }),
@@ -51,9 +51,10 @@ test("a merged baseline holds each metric's median and gates memory on any CPU o
 
   expect(merged.scenarios.sessions?.metrics.rss_before_mib?.value).toBe(113);
   expect(merged.scenarios.sessions?.metrics.peak?.value).toBe(172);
-  expect(gatingKinds(merged, runner("xeon", {}), new Set(["memory", "time"]), true)).toEqual(
-    new Set(["memory"])
-  );
+  const gates = new Set(["memory", "time"]);
+
+  expect(gatingKinds(merged, runner("epyc-9v74", {}), gates, true)).toEqual(new Set(["memory"]));
+  expect(gatingKinds(merged, runner("xeon", {}), gates, true).size).toBe(0);
 });
 
 test("results from different core counts are refused", () => {

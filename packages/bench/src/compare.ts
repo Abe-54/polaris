@@ -15,6 +15,36 @@ import type {
   ScenarioResult,
 } from "./types.ts";
 
+export const ALL_KINDS: ReadonlyArray<MetricKind> = [
+  "memory",
+  "cpu",
+  "latency",
+  "time",
+  "throughput",
+  "count",
+];
+
+const isMetricKind = (kind: string): kind is MetricKind => ALL_KINDS.some((k) => k === kind);
+
+const isMetricName = (gate: string) => /^[\w-]+\.[\w.-]+$/.test(gate);
+
+/** `--fail-on memory,cold-start.startup_modules,-git.rss_peak_mib` (or `none`): kinds and metrics that gate `--compare`; `-` drops one. */
+export const parseFailOn = (value: string): Set<string> => {
+  const gates = value
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  for (const gate of gates) {
+    const excluded = gate.startsWith("-") && isMetricName(gate.slice(1));
+
+    if (!isMetricKind(gate) && !isMetricName(gate) && !excluded && gate !== "none")
+      throw new Error(`unknown kind ${gate}`);
+  }
+
+  return new Set(gates.filter((gate) => gate !== "none"));
+};
+
 export const DEFAULT_TOLERANCE: Record<MetricKind, { relative: number; absolute: number }> = {
   memory: { relative: 0.1, absolute: 5 },
   cpu: { relative: 0.5, absolute: 2 },
@@ -101,11 +131,34 @@ export const memoryClass = (env: Environment): string => {
   return `${kernel}-${env.arch}-${env.cores}c`.toLowerCase();
 };
 
+/** The CPU models a result was taken on: `merge.ts` joins several with ` | `. */
+export const cpusOf = (env: Environment): ReadonlyArray<string> => env.cpu.split(" | ");
+
+/** Whether every CPU model behind `current` is one the baseline was taken on. */
+export const coversCpus = (baseline: Environment, current: Environment): boolean =>
+  cpusOf(current).every((cpu) => cpusOf(baseline).includes(cpu));
+
+/**
+ * Why `--gate-same-machine` gates nothing for this pair, or null when it gates: another OS, arch
+ * or core count, or a CPU model none of the baseline's runs had (peaks moved 28% on one).
+ */
+export const ungatedReason = (baseline: Environment, current: Environment): string | null => {
+  if (memoryClass(baseline) !== memoryClass(current))
+    return `the baseline is ${memoryClass(baseline)}, this run ${memoryClass(current)}`;
+
+  if (!coversCpus(baseline, current))
+    return `the baseline covers ${cpusOf(baseline).join(", ")}, not ${cpusOf(current).join(", ")}`;
+
+  return null;
+};
+
+const singleCpu = (env: Environment) => cpusOf(env).length === 1;
+
 /**
  * What gates a comparison: `failOn` (metric kinds, or `scenario.metric` names), narrowed with
  * `sameMachineOnly` when the results come from different machines. CI uses it: memory, counts
- * and named metrics gate on the baseline's OS, arch and core count; CPU, latency, time and
- * throughput only on its CPU model.
+ * and named metrics gate on the baseline's OS, arch, core count and CPU models; CPU, latency,
+ * time and throughput only on its single CPU model.
  */
 export const gatingKinds = (
   baseline: BenchResult,
@@ -113,9 +166,17 @@ export const gatingKinds = (
   failOn: ReadonlySet<string>,
   sameMachineOnly: boolean
 ): ReadonlySet<string> => {
-  if (!sameMachineOnly || baseline.env.machineSlug === current.env.machineSlug) return failOn;
+  if (!sameMachineOnly) return failOn;
 
-  if (memoryClass(baseline.env) !== memoryClass(current.env)) return new Set();
+  // Timings gate only between single runs on one CPU model, never against a merged result.
+  if (
+    baseline.env.machineSlug === current.env.machineSlug &&
+    singleCpu(baseline.env) &&
+    singleCpu(current.env)
+  )
+    return failOn;
+
+  if (ungatedReason(baseline.env, current.env) !== null) return new Set();
 
   return new Set([...failOn].filter((gate) => !CPU_BOUND_KINDS.has(gate)));
 };
@@ -150,6 +211,10 @@ const environmentWarnings = (baseline: BenchResult, current: BenchResult): Array
   if (memoryClass(baseline.env) !== memoryClass(current.env)) {
     warnings.push(
       `baseline is from ${baseline.env.machineSlug}, this run is ${current.env.machineSlug}: numbers are not comparable`
+    );
+  } else if (!coversCpus(baseline.env, current.env)) {
+    warnings.push(
+      `baseline ran on ${cpusOf(baseline.env).join(", ")}, this run on ${current.env.cpu}: --gate-same-machine gates nothing`
     );
   } else if (baseline.env.machineSlug !== current.env.machineSlug) {
     warnings.push(

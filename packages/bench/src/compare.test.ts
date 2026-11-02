@@ -216,15 +216,34 @@ describe("gatingKinds", () => {
     );
   });
 
-  test("on another CPU model with the same OS, arch and cores, memory and counts gate, timings don't", () => {
-    expect(gatingKinds(runner("epyc-7763"), runner("epyc-9v74"), requested, true)).toEqual(
+  const mixed = (...cpus: Array<string>) => {
+    const base = runner(cpus.join(" | "));
+
+    return { ...base, env: { ...base.env, machineSlug: "linux-x64-4c-mixed" } };
+  };
+
+  test("on a CPU model a mixed baseline covers, memory and counts gate, timings don't", () => {
+    const base = mixed("epyc-7763", "epyc-9v74");
+
+    expect(gatingKinds(base, runner("epyc-9v74"), requested, true)).toEqual(
       new Set(["memory", "count"])
     );
     expect(
-      compare(runner("epyc-7763"), runner("epyc-9v74"), new Set()).warnings.some((w) =>
+      compare(base, runner("epyc-9v74"), new Set()).warnings.some((w) =>
         w.includes("memory and counts compare")
       )
     ).toBe(true);
+  });
+
+  test("a CPU model the baseline doesn't cover gates nothing with --gate-same-machine", () => {
+    for (const base of [runner("epyc-7763"), mixed("epyc-7763", "epyc-9v74")]) {
+      expect(gatingKinds(base, runner("xeon-6973p"), requested, true).size).toBe(0);
+      expect(
+        compare(base, runner("xeon-6973p"), new Set()).warnings.some((w) =>
+          w.includes("gates nothing")
+        )
+      ).toBe(true);
+    }
   });
 
   test("another core count, OS or arch gates nothing with --gate-same-machine; without it, all", () => {
