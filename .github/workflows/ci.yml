@@ -117,10 +117,9 @@ jobs:
       # oxfmt format check, then oxlint through the ratchet (tooling/lint/baseline.json):
       # fails on new or increased violations. See packages/lint-config/README.md.
       - run: bun run lint
-      # Parallel tsc runs exhausted the runner's memory (exit 137, ENG-705).
-      - run: bun run typecheck -- --concurrency=2
+      - run: bun run typecheck
       - name: Typecheck and test scripts
-        run: bunx tsc -p scripts && bun test ./scripts
+        run: bun check -p scripts && bun test ./scripts
       # The release signer's checks on crafted hand-offs (standard library only).
       - name: Release signer tests
         run: python3 -I -m unittest discover -s tooling/release -p 'test_*.py'
@@ -164,13 +163,13 @@ jobs:
           packages/client/src/install/windows packages/client/src/windowsPipe
       - name: Typecheck and test scripts
         if: runner.os != 'Windows'
-        run: bunx tsc -p scripts && bun test ./scripts
+        run: bun check -p scripts && bun test ./scripts
       - name: Release signer tests
         if: runner.os != 'Windows'
         run: python3 -I -m unittest discover -s tooling/release -p 'test_*.py'
       - name: Typecheck scripts (Windows)
         if: runner.os == 'Windows'
-        run: bunx tsc -p scripts
+        run: bun check -p scripts
 
   test:
     name: Test ${{ matrix.part.name }} (${{ matrix.os }})
