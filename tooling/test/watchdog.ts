@@ -13,6 +13,8 @@
  *
  * `--tier=fast|slow|all` (default all) picks the test files by tier (`tier.ts`). Runs that include
  * the fast tier end by listing the fast files over their 2 s budget (`budget.ts`).
+ *
+ * Tests in `quarantine.json` are skipped, and named; `--quarantined` runs only them (`quarantine.ts`).
  */
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -20,6 +22,7 @@ import { createInterface } from "node:readline";
 import { reportBudget, timingsFor } from "./budget.ts";
 import { PROGRESS_MARKER } from "./marker.ts";
 import { parallelFlags } from "./parallel.ts";
+import { currentOs, quarantinePlan, readQuarantine } from "./quarantine.ts";
 import { parseTier, tierFlags } from "./tier.ts";
 
 /** What the run has shown so far, read from bun's per-file reporter and the progress markers. */
@@ -161,8 +164,19 @@ const tieredArgs = (given: ReadonlyArray<string>) => {
   };
 };
 
-const run = async (given: ReadonlyArray<string>): Promise<number> => {
-  const tiered = tieredArgs(given);
+const run = async (requested: ReadonlyArray<string>): Promise<number> => {
+  // Quarantine first: in --quarantined mode it drops --tier, whose filter would drop slow files.
+  const quarantine = quarantinePlan(requested, process.cwd(), readQuarantine(), currentOs());
+
+  for (const line of quarantine.notice) console.error(line);
+
+  if (quarantine.empty) {
+    console.log("No quarantined test in this package on this OS.");
+
+    return 0;
+  }
+
+  const tiered = tieredArgs(quarantine.args);
   const args = [...parallelFlags(tiered.args, process.env), ...tiered.args];
   const stallSeconds = Number(process.env.POLARIS_TEST_STALL_S ?? 300);
   const isolated = args.some((arg) => ISOLATING.test(arg));
@@ -170,7 +184,12 @@ const run = async (given: ReadonlyArray<string>): Promise<number> => {
 
   for (const name of AGENT_ENV) delete env[name];
 
-  const preload = isolated ? ["--preload", join(import.meta.dir, "progress.ts")] : [];
+  if (quarantine.mode) env.POLARIS_TEST_QUARANTINE = quarantine.mode;
+
+  const preload = [
+    ...(isolated ? ["--preload", join(import.meta.dir, "progress.ts")] : []),
+    ...(quarantine.mode ? ["--preload", join(import.meta.dir, "quarantinePreload.ts")] : []),
+  ];
 
   const child = spawn("bun", ["test", ...preload, ...args], {
     env,

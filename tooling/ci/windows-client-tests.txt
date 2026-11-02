@@ -1,0 +1,18 @@
+# The Client tests Windows runs (CI's platform-checks and the nightly). Windows ships a
+# remote-only Client; native Daemon, SSH shell fixtures, launchd, PTYs and Mac packaging are POSIX-only.
+packages/protocol
+apps/site
+apps/desktop/src/shared
+apps/desktop/src/renderer/features/settings/updates/model.test.ts
+apps/desktop/src/main/updates
+apps/desktop/scripts/packaging/windows.test.ts
+packages/client/src/connection.test.ts
+packages/client/src/access/access.test.ts
+apps/desktop/src/main/machines/access.test.ts
+packages/client/src/process/process.test.ts
+apps/desktop/src/main/local/local.test.ts
+packages/client/src/constellation/connections.test.ts
+packages/client/src/languages/access.test.ts
+packages/client/src/languages/context.test.ts
+packages/client/src/install/windows
+packages/client/src/windowsPipe
