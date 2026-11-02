@@ -26,9 +26,12 @@ import { shellCommands, shellContext } from "./shell/commands.ts";
 import { workspaceCommands } from "./shell/visibility.ts";
 import { send } from "./features/session/dispatch.ts";
 import { connect } from "./store/store.ts";
-import { connectSelfTraces } from "./features/selfTraces/index.ts";
+import { connectSelfTraces, traceRequests } from "./features/selfTraces/index.ts";
 
-const connection = connect(window.polaris);
+/** Requests join the user action that caused them (features/selfTraces/actions.ts). */
+const api = traceRequests(window.polaris);
+
+const connection = connect(api);
 
 const storage = (() => {
   try {
@@ -38,7 +41,7 @@ const storage = (() => {
   }
 })();
 
-const onboarding = createOnboarding({ api: window.polaris, store: connection.store });
+const onboarding = createOnboarding({ api, store: connection.store });
 
 const navigation = createNavigation({
   app: connection.store,
@@ -148,11 +151,11 @@ settingsStore.subscribe((state, prev) => {
   if (state.appearance !== prev.appearance) appearance(state.appearance);
 });
 
-connectSettings(window.polaris);
+connectSettings(api);
 
-connectHostDeveloperModes(window.polaris);
+connectHostDeveloperModes(api);
 
-connectUpdates(window.polaris);
+connectUpdates(api);
 
 connectSelfTraces(window.polaris);
 
@@ -171,7 +174,7 @@ window.polaris.onAppEvent((event) => {
     onDeepLinkEvent(event.link, connection.store, navigation.actions);
   else if (event.kind === "agent-banner") recordBanner(bannerEntry(event));
   else if (event.kind === "proof") {
-    void startProofSession({ api: window.polaris, store: connection.store, hostKey: event.hostKey })
+    void startProofSession({ api, store: connection.store, hostKey: event.hostKey })
       .then((sessionId) => navigation.actions.selectSession({ hostKey: event.hostKey, sessionId }))
       .catch((cause: unknown) => console.error("polaris: proof session failed", cause));
   }

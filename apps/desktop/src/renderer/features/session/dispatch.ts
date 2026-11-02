@@ -9,13 +9,19 @@ import { createElement } from "react";
 import type { IpcError } from "../../../shared/api.ts";
 import { Commands, newCommandId } from "../../commands.ts";
 import { polaris } from "../bridge.ts";
-import { selfTraces } from "../selfTraces/index.ts";
+import { actionTraces, selfTraces } from "../selfTraces/index.ts";
 
 export type Sent = { readonly ok: true } | { readonly ok: false; readonly error: IpcError };
 
-/** While Self-Traces are on, a command (a Turn from the composer) starts its Trace here. */
+/** While Self-Traces are on, a command (a Turn from the composer) has a Span, in its action's Trace. */
 export const dispatch = async (hostKey: string, command: Command): Promise<Sent> => {
-  const span = selfTraces()?.start(`dispatch ${command._tag}`, { "polaris.command": command._tag });
+  const action = actionTraces.adopt();
+
+  const span = selfTraces()?.start(
+    `dispatch ${command._tag}`,
+    { "polaris.command": command._tag },
+    action?.trace
+  );
 
   const result = await polaris().request(
     "dispatch",
@@ -24,6 +30,7 @@ export const dispatch = async (hostKey: string, command: Command): Promise<Sent>
   );
 
   span?.end(result.ok ? undefined : result.error.message);
+  action?.settle();
 
   return result.ok ? { ok: true } : { ok: false, error: result.error };
 };

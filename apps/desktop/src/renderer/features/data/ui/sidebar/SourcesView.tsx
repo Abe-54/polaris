@@ -13,6 +13,7 @@ import { openSourceForm, toggleTreeRow, useSidebar } from "../../model/sidebar.t
 import { type DataSessionKey, openTable } from "../../model/store.ts";
 import { type DataTab, type TableRef, tableTabId } from "../../model/tabs.ts";
 import { openSources, treeRows } from "../../model/tree.ts";
+import { tracedAction } from "../../../selfTraces/actions.ts";
 import { TreeRow } from "./TreeRow.tsx";
 import { useSchemaTrees } from "./useSchemaTrees.ts";
 import { useTreeFocus } from "./useTreeFocus.ts";
@@ -24,6 +25,13 @@ const INITIAL_RECT = { width: 246, height: 800 };
 const ROW = { calm: 28, balanced: 24, compact: 22 } as const;
 
 const NO_CHANGES = [] as const;
+
+// The tree's user actions (selfTraces/actions.ts), by click or by key; their loads join them.
+const toggleRow = tracedAction("data.tree.toggle", "Expand or collapse a tree row", toggleTreeRow);
+
+const openTableRow = tracedAction("data.table.open", "Open table", openTable);
+
+const addSource = tracedAction("data.source.add", "Add data source", openSourceForm);
 
 export interface SourcesViewProps {
   readonly at: DataSessionKey;
@@ -44,7 +52,7 @@ const AddSource = ({ at, canAdd }: AddProps) => (
     type="button"
     disabled={!canAdd}
     data-testid="data-add-source"
-    onClick={() => openSourceForm(at, { mode: "add" })}
+    onClick={() => addSource(at, { mode: "add" })}
     className="h-tree-row text-label text-text-subtle hover:text-text-default mt-1.5 flex w-full cursor-default items-center gap-2 rounded-[8px] pr-2.5 pl-2 text-left disabled:opacity-(--opacity-dimmed)"
   >
     <span className="flex w-3 shrink-0 justify-center">
@@ -63,11 +71,7 @@ const NoSources = ({ at, canAdd }: AddProps) => (
     title="No data sources found"
     fact="Searched this checkout's .env files, framework config (Prisma, Drizzle, Rails, Django) and compose files"
     action={
-      <Button
-        variant="secondary"
-        disabled={!canAdd}
-        onClick={() => openSourceForm(at, { mode: "add" })}
-      >
+      <Button variant="secondary" disabled={!canAdd} onClick={() => addSource(at, { mode: "add" })}>
         Add data source
       </Button>
     }
@@ -148,7 +152,7 @@ const Tree = ({
     selected: rows.find((r) => r.kind === "table" && selected(r))?.key ?? null,
     scroller,
     virtualizer,
-    onToggle: (row) => "open" in row && toggleTreeRow(at, row.key, row.open),
+    onToggle: (row) => "open" in row && toggleRow(at, row.key, row.open),
   });
 
   return (
@@ -187,8 +191,8 @@ const Tree = ({
                       ? (busy.get(busyKey(row.source, row.summary.name)) ?? null)
                       : null
                   }
-                  onToggle={(key, open) => toggleTreeRow(at, key, open)}
-                  onOpenTable={(source, ref, title) => openTable(source, ref, at, title)}
+                  onToggle={(key, open) => toggleRow(at, key, open)}
+                  onOpenTable={(source, ref, title) => openTableRow(source, ref, at, title)}
                 />
               )}
             </div>

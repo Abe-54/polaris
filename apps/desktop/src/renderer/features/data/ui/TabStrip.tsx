@@ -5,10 +5,14 @@
  */
 import { cn, CloseIcon } from "@polaris/ui";
 import { type KeyboardEvent, useRef } from "react";
+import { tracedAction } from "../../selfTraces/actions.ts";
 import { type DataSessionKey, focusDataTab } from "../model/store.ts";
 import type { DataTabs } from "../model/tabs.ts";
 import { tabTitle } from "./tabKinds.tsx";
 import { CloseStaged, requestCloseTab } from "./table/edits/CloseStaged.tsx";
+
+// Selecting a tab is a user action (selfTraces/actions.ts); a load it starts joins it.
+const selectTab = tracedAction("data.tab.select", "Select tab", focusDataTab);
 
 /** The tab index a key moves to from `at`, wrapping at the ends; null for other keys. */
 export const tabKeyTarget = (count: number, at: number, key: string): number | null => {
@@ -38,7 +42,7 @@ export const TabStrip = ({ at, state }: { at: DataSessionKey; state: DataTabs })
 
     if (target === null || tab === undefined) return;
     event.preventDefault();
-    focusDataTab(tab.id, at);
+    selectTab(tab.id, at);
     strip.current?.querySelectorAll<HTMLElement>('[role="tab"]')[target]?.focus();
   };
 
@@ -65,7 +69,7 @@ export const TabStrip = ({ at, state }: { at: DataSessionKey; state: DataTabs })
               onMouseDown={(event) => {
                 if (event.button === 1) requestCloseTab(at, tab.id);
               }}
-              onClick={() => focusDataTab(tab.id, at)}
+              onClick={() => selectTab(tab.id, at)}
               onKeyDown={(event) => onKeyDown(event, index, tab.id)}
               className={cn(
                 "group/tab flex h-[30px] max-w-[240px] shrink-0 cursor-default items-center gap-2 rounded-full pr-2.5 pl-3 text-label select-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-starlight",

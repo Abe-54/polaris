@@ -29,6 +29,7 @@ import {
   type PaletteEntry,
   paletteEntry,
 } from "../../shared/keymap.ts";
+import { runAction } from "../features/selfTraces/actions.ts";
 
 /** One answer to a command's follow-up ("Use the bundled TypeScript"). */
 export interface FollowUpChoice {
@@ -141,6 +142,9 @@ const boundOn = (platform: KeyPlatform): ReadonlyArray<Bound> => {
 
 const WHEN = new Map<string, Condition | undefined>(KEYMAP.map((b) => [b.id, b.when]));
 
+/** A command's template title ("Restart {language} server"): a label with no user content. */
+const TITLE = new Map<string, string>(KEYMAP.map((b) => [b.id, b.title]));
+
 export interface RegistryInput {
   /** Whose keys it runs and shows (⌘ on macOS, Ctrl elsewhere); default: this Client's. */
   readonly platform?: KeyPlatform;
@@ -238,7 +242,7 @@ export const createCommandRegistry = ({
 
   const enabled = (id: CommandId) => usable(handler(id), WHEN.get(id));
 
-  const execute = (found: CommandHandler) => {
+  const perform = (found: CommandHandler) => {
     if ("run" in found) {
       found.run();
 
@@ -250,11 +254,15 @@ export const createCommandRegistry = ({
     if (followUp !== null) for (const listener of followUps) listener(followUp);
   };
 
+  // Each run is a user action: a root Span while Self-Traces are on.
+  const execute = (id: string, title: string, found: CommandHandler) =>
+    runAction(id, title, () => perform(found), "command");
+
   const run = (id: CommandId) => {
     const found = handler(id);
 
     if (found === undefined || !usable(found, WHEN.get(id))) return false;
-    execute(found);
+    execute(id, TITLE.get(id) ?? id, found);
 
     return true;
   };
@@ -289,7 +297,7 @@ export const createCommandRegistry = ({
       const found = contribution(id);
 
       if (found === undefined || !usable(found.handler, found.when)) return false;
-      execute(found.handler);
+      execute(id, found.title, found.handler);
 
       return true;
     },

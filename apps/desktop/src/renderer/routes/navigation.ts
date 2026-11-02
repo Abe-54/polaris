@@ -7,6 +7,7 @@ import type { SessionId, WorkspaceId } from "@polaris/protocol";
 import { Option, Schema } from "effect";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { Route } from "../../shared/api.ts";
+import { tracedAction } from "../features/selfTraces/actions.ts";
 import type { AppState, AppStore } from "../store/store.ts";
 import {
   initialNav,
@@ -443,5 +444,16 @@ export const createNavigation = ({
     }, 300);
   });
 
-  return { store, actions, current };
+  // Moving around is a user action (features/selfTraces/actions.ts); what it loads joins its Span.
+  const traced: ShellActions = {
+    ...actions,
+    setMode: tracedAction("nav.mode", "Switch mode", actions.setMode),
+    selectSession: tracedAction("nav.session", "Select session", actions.selectSession),
+    selectWorkspace: tracedAction("nav.workspace", "Select workspace", actions.selectWorkspace),
+    selectHost: tracedAction("nav.host", "Select host", actions.selectHost),
+    back: tracedAction("nav.back", "Back", actions.back),
+    forward: tracedAction("nav.forward", "Forward", actions.forward),
+  };
+
+  return { store, actions: traced, current };
 };

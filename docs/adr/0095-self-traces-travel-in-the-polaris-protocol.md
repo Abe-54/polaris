@@ -22,6 +22,13 @@ W3C trace context, so one Turn is one Trace from the composer to the Harness.**
   scope. Its own Spans go straight to the store.
 - **Propagation.** Frames carry `traceparent` (and `tracestate`) as optional wire metadata, so a
   Daemon Span is a child of the Client Span that sent the command.
+- **Action Spans.** In the Desktop App each user action (a command run, a tracked click, a
+  navigation) is a root Span, `polaris.action.<id>`, labelled with no user content. While it is
+  open, renderer IPC requests without a trace of their own carry its trace, so main's `ipc.*` Span
+  and the Daemon's Spans nest under it. It ends when its handler has returned and its requests
+  have settled, plus 50 ms of quiet so the requests a click's React effects start still join; a
+  3 s bound ends it regardless, so a slow load or a stuck request can't hold it. Requests unrelated
+  to the action that land in that window join it too; that is accepted for one place to look.
 - **Bounds.** A Client buffers at most 1 MiB or 5 minutes of Spans while the Host is unreachable
   and drops the oldest past that. Self-Traces have their own retention, smaller than a
   checkout's.
