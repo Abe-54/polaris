@@ -13,7 +13,7 @@ name: CI
 #   build-daemon, smoke-*, service-windows: the binaries build, start and serve; Daemon or Client affected.
 #   bench             Daemon memory gates: Daemon, Client, protocol or SDK affected.
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
-#   ci                one result for branch protection: fails if any job failed or was cancelled.
+#   ci                one result for branch protection: passes only if every job passed or was skipped.
 # Jobs off on a PR are skipped (a skip reports as passing); matrix jobs instead skip their steps,
 # so their expanded names always report.
 
@@ -527,4 +527,7 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           echo "$RESULTS"
-          if grep -qE 'failure|cancelled' <<<"$RESULTS"; then exit 1; fi
+          # Anything else fails: failure, cancelled, and abandoned (a runner never acquired the job).
+          for result in $RESULTS; do
+            case "$result" in success | skipped) ;; *) exit 1 ;; esac
+          done
