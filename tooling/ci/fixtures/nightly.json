@@ -1,0 +1,65 @@
+{
+  "jobs": {
+    "total_count": 5,
+    "jobs": [
+      {
+        "id": 1,
+        "name": "Test (ubuntu-latest)",
+        "status": "completed",
+        "conclusion": "failure",
+        "html_url": "https://github.com/o/r/actions/runs/9/job/1"
+      },
+      {
+        "id": 2,
+        "name": "Test (macos-15)",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/o/r/actions/runs/9/job/2"
+      },
+      {
+        "id": 3,
+        "name": "Apalache",
+        "status": "completed",
+        "conclusion": "timed_out",
+        "html_url": "https://github.com/o/r/actions/runs/9/job/3"
+      },
+      {
+        "id": 4,
+        "name": "Quarantined (windows-latest)",
+        "status": "completed",
+        "conclusion": "skipped",
+        "html_url": null
+      },
+      { "id": 5, "name": "ci-red", "status": "in_progress", "conclusion": null, "html_url": null }
+    ]
+  },
+  "logs": {
+    "1": "2026-11-02T03:00:00.0000000Z @polaris/daemon:test: (pass) store > appends\n2026-11-02T03:00:01.0000000Z @polaris/daemon:test: (fail) store > replays after a crash [12.30ms]\n2026-11-02T03:00:02.0000000Z bun test stalled: no output for 300s, in src/engine/engine.test.ts\n",
+    "3": ""
+  },
+  "linear": {
+    "teams": { "nodes": [{ "id": "team-eng", "key": "ENG", "name": "Engineering" }] },
+    "projects": { "nodes": [{ "id": "project-polaris" }] },
+    "issueLabels": { "nodes": [] },
+    "issues": {
+      "nodes": [
+        {
+          "id": "issue-macos",
+          "identifier": "ENG-900",
+          "title": "CI red: Nightly / Test (macos-15)",
+          "url": "https://linear.app/luxdev/issue/ENG-900",
+          "comments": {
+            "nodes": [{ "body": "Red again: ...", "createdAt": "2026-11-01T03:00:00.000Z" }]
+          }
+        },
+        {
+          "id": "issue-apalache",
+          "identifier": "ENG-901",
+          "title": "CI red: Nightly / Apalache",
+          "url": "https://linear.app/luxdev/issue/ENG-901",
+          "comments": { "nodes": [] }
+        }
+      ]
+    }
+  }
+}

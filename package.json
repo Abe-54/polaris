@@ -20,7 +20,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "bench": "turbo run bench --log-prefix=none --",
-    "lint": "oxfmt --check && bun tooling/lint/ratchet.ts",
+    "lint": "oxfmt --check && bun tooling/lint/ratchet.ts && bun tooling/test/quarantine.ts --check",
     "lint:baseline": "bun tooling/lint/ratchet.ts --update-baseline",
     "format": "oxfmt",
     "spec": "bun --cwd packages/spec scripts/check.ts",

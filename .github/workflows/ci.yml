@@ -16,6 +16,7 @@ name: CI
 #   bench             Daemon memory gates (bench-shards runs it 3 times in parallel): Daemon, Client,
 #                     protocol or SDK affected.
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
+#   ci-red            on a push to main, a Linear issue per red job (tooling/ci/ciRed.ts); not counted.
 #   ci                one result for branch protection: passes only if every job passed or was skipped.
 #                     On a PR the macOS jobs (*-macos) run and report but don't count; Ubuntu and Windows
 #                     do, and so does build-daemon (macOS), which the smokes need. On main every job counts.
@@ -154,19 +155,8 @@ jobs:
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
-        # Native Daemon, SSH shell fixtures, launchd, PTYs and Mac packaging argv are POSIX-only.
-        # Windows ships a remote-only Client; retain their complete suites on Linux and macOS.
-        run: >-
-          bun test packages/protocol apps/site apps/desktop/src/shared
-          apps/desktop/src/renderer/features/settings/updates/model.test.ts apps/desktop/src/main/updates
-          apps/desktop/scripts/packaging/windows.test.ts
-          packages/client/src/connection.test.ts
-          packages/client/src/access/access.test.ts apps/desktop/src/main/machines/access.test.ts
-          packages/client/src/process/process.test.ts
-          apps/desktop/src/main/local/local.test.ts
-          packages/client/src/constellation/connections.test.ts
-          packages/client/src/languages/access.test.ts packages/client/src/languages/context.test.ts
-          packages/client/src/install/windows packages/client/src/windowsPipe
+        # Windows ships a remote-only Client: tooling/ci/windows-client-tests.txt lists what runs there.
+        run: bun test @(Get-Content tooling/ci/windows-client-tests.txt | Where-Object { $_ -and -not $_.StartsWith('#') })
       - name: Typecheck and test scripts
         if: runner.os != 'Windows'
         run: bun check -p scripts && bun test ./scripts
@@ -603,3 +593,27 @@ jobs:
             | select(.value.result != "success" and .value.result != "skipped")
             | .key' <<<"$NEEDS")
           if [ -n "$failing" ]; then echo "Not passing: $failing"; exit 1; fi
+
+  ci-red:
+    name: ci-red
+    # Files or comments on a Linear issue per red job and says when one recovers; warns and
+    # passes without LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET.
+    needs: ci
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: File or update ci-red issues
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
+          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
+        run: bun tooling/ci/ciRed.ts --workflow CI --ignore CI --ignore ci-red

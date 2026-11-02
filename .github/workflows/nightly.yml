@@ -1,0 +1,239 @@
+name: Nightly
+
+# What CI leaves out, once a night on main (and by hand: gh workflow run nightly.yml --ref <branch>).
+#   test         every package, both tiers, on ubuntu and macOS; Windows runs what CI runs there
+#                (the Daemon and the remote-only Client's tests). Quarantined tests are skipped.
+#   quarantined  only the tests in tooling/test/quarantine.json, on each OS; report only.
+#   pbt          the Daemon's property and model-based tests at 500 runs, on a random seed it prints.
+#   apalache     the spec's bounded Apalache check, which only reports in CI.
+#   bypass       merges to main in the last day whose message has `ci-bypass:`, in the summary.
+#   ci-red       a Linear issue per red job (tooling/ci/ciRed.ts); a dry run off main.
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      linear_probe:
+        description: "Also file, comment on and recover a throwaway issue (CI red: test / <this>) in Linear"
+        type: string
+        default: ""
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.4
+
+jobs:
+  test:
+    name: Test ${{ matrix.part.name }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+        part:
+          - name: Daemon 1/3
+            run: bunx turbo run test --force --filter=@polaris/daemon -- --shard=1/3 --parallel=2
+          - name: Daemon 2/3
+            run: bunx turbo run test --force --filter=@polaris/daemon -- --shard=2/3 --parallel=2
+          - name: Daemon 3/3
+            run: bunx turbo run test --force --filter=@polaris/daemon -- --shard=3/3 --parallel=2
+          - name: other packages
+            run: bunx turbo run test --force --filter=!@polaris/daemon
+        include:
+          - os: windows-latest
+            part:
+              name: Daemon 1/3
+              run: bunx turbo run test --force --filter=@polaris/daemon -- --shard=1/3 --parallel=3 --timeout=15000
+          - os: windows-latest
+            part:
+              name: Daemon 2/3
+              run: bunx turbo run test --force --filter=@polaris/daemon -- --shard=2/3 --parallel=3 --timeout=15000
+          - os: windows-latest
+            part:
+              name: Daemon 3/3
+              run: bunx turbo run test --force --filter=@polaris/daemon -- --shard=3/3 --parallel=3 --timeout=15000
+          # Windows ships a remote-only Client: CI's platform-checks list (tooling/ci/windows-client-tests.txt).
+          - os: windows-latest
+            part:
+              name: Client
+              run: bun tooling/test/watchdog.ts @(Get-Content tooling/ci/windows-client-tests.txt | Where-Object { $_ -and -not $_.StartsWith('#') })
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps: &test-steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - uses: ./.github/actions/bun-install
+      - name: Fetch the Quint evaluator
+        if: runner.os != 'Windows'
+        run: bun packages/spec/scripts/fetch-evaluator.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      # As in CI: the runner's TEMP is an 8.3 short path, and pipe.test.ts expects elevation.
+      - name: Long temp path, elevation expected (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "POLARIS_EXPECT_ELEVATED=1" >> $env:GITHUB_ENV
+      # Windows keeps pwsh: under Git Bash its elevation and terminal tests fail.
+      - name: Test
+        run: ${{ matrix.part.run }}
+
+  quarantined:
+    name: Quarantined (${{ matrix.os }})
+    # Expected to fail now and then: these report, and their issues track them.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - uses: ./.github/actions/bun-install
+      - name: Quarantined tests
+        id: quarantined
+        continue-on-error: true
+        run: bunx turbo run test --force -- --quarantined
+      - name: Report
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.quarantined.outcome }}
+        run: |
+          entries=$(jq '.entries | length' tooling/test/quarantine.json)
+          echo "Quarantined tests on ${{ runner.os }}: $OUTCOME ($entries entries in quarantine.json)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  pbt:
+    name: Property and model-based tests (500 runs, random seed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: Fetch the Quint evaluator
+        run: bun packages/spec/scripts/fetch-evaluator.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      # pbt.ts reads POLARIS_PBT_SEED; files with a fixed seed keep it. A failure replays with the seed.
+      - name: Seeded run
+        working-directory: apps/daemon
+        env:
+          POLARIS_PBT_RUNS: "500"
+          POLARIS_TEST_STALL_S: "1200"
+        run: |
+          seed=$(( $(od -An -N4 -tu4 /dev/urandom | tr -d ' ') % 2147483647 ))
+          echo "POLARIS_PBT_SEED=$seed POLARIS_PBT_RUNS=500 (replay: cd apps/daemon && POLARIS_PBT_SEED=$seed POLARIS_PBT_RUNS=500 bun test src/verification)" | tee -a "$GITHUB_STEP_SUMMARY"
+          POLARIS_PBT_SEED=$seed bun ../../tooling/test/watchdog.ts --parallel=2 src/verification .model. .property.
+
+  apalache:
+    name: Apalache, bounded
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: Fetch the Quint evaluator
+        run: bun packages/spec/scripts/fetch-evaluator.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      # CI's command, which only reports there; here it counts.
+      - name: quint verify (small, safety, 3 steps)
+        working-directory: packages/spec
+        run: ./node_modules/.bin/quint verify polaris.qnt --main=small --invariant=safety --max-steps=3 --verbosity=1
+
+  bypass:
+    name: CI bypasses in the last day
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Merges to main with ci-bypass
+        run: |
+          {
+            echo "### Merges to main in the last day with \`ci-bypass:\`"
+            found=0
+            for sha in $(git log --merges --since="24 hours ago" --format=%H -i --grep='ci-bypass:'); do
+              found=1
+              echo "- $(git show -s --format='%h %s (%an)' "$sha")"
+              git show -s --format=%B "$sha" | grep -i 'ci-bypass:' | sed 's/^/  - /'
+            done
+            [ "$found" = 1 ] || echo "None."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  ci-red:
+    name: ci-red
+    needs: [test, quarantined, pbt, apalache, bypass]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      # Off main it only prints what it would file, so a dispatch on a branch files nothing.
+      - name: File or update ci-red issues
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
+          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
+          DRY_RUN: ${{ github.ref != 'refs/heads/main' && '--dry-run' || '' }}
+        run: bun tooling/ci/ciRed.ts --workflow Nightly --ignore ci-red $DRY_RUN
+
+  linear-probe:
+    name: Linear probe
+    # By hand only: proves the OAuth app's token, issue creation and comments on a throwaway issue.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.linear_probe != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: Probe
+        env:
+          LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
+          LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
+          PROBE: ${{ inputs.linear_probe }}
+        run: |
+          if [ -z "$LINEAR_CLIENT_ID" ] || [ -z "$LINEAR_CLIENT_SECRET" ]; then
+            echo "::error::LINEAR_CLIENT_ID or LINEAR_CLIENT_SECRET is not set"; exit 1
+          fi
+          bun tooling/ci/ciRed.ts --workflow test --probe "$PROBE"
