@@ -146,7 +146,7 @@ describe("SDK on npm", () => {
     expect(run.indexOf("sha256sum --check")).toBeGreaterThanOrEqual(0);
     expect(run.indexOf("sha256sum --check")).toBeLessThan(run.indexOf("npm publish"));
     expect(run).toMatch(
-      /npm publish handoff\/polaris-sdk\.tgz --provenance --access public --ignore-scripts /
+      /npm publish \.\/handoff\/polaris-sdk\.tgz --provenance --access public --ignore-scripts /
     );
   });
 
