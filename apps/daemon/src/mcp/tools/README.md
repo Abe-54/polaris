@@ -50,7 +50,7 @@ A remote source without approval opens X's needs-you card. The call's deadline s
 
 `bun test apps/daemon/src/mcp/tools/data.postgres.test.ts apps/daemon/src/mcp/tools/data.mysql.test.ts` enables the native tests with `POLARIS_DATA_POSTGRES_URL` / `POLARIS_DATA_MYSQL_URL`. Use disposable loopback Postgres 16 and MySQL 8.4. Each child owns an isolated `POLARIS_HOME` and random schema/table prefix, mounts the production Engine service composition, and calls real MCP HTTP. The tests cover discovery, describe/sample, parameters, exact numerics, bare passwords in a cell and a SQL error, Query Log attribution, and the Engine's outside-command reactor. The MySQL test also verifies the agreed `E-DATA-SQL` SHOW refusal with guidance mentioning `describe` (ENG-667). Boundary fakes, broken-source isolation and real HTTP cancellation remain in `data.http.test.ts`.
 
-`traces`, `trace`, `span`, `trace_stats` and `trace_capture` are read-only on the same shared tail as Data. They resolve checkout
+`traces`, `trace`, `span`, `trace_stats`, `trace_capture` and `trace_errors` are read-only on the same shared tail as Data. They resolve checkout
 and current Turn through the Host's existing trace services; tools never accept a session or path.
 The summary keeps error paths, then the critical chain, and collapses repeated siblings.
 SLOW requires five earlier samples, over 20 ms and over three times the median. Text caps name

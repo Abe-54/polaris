@@ -51,6 +51,7 @@ test("Constellation command tools take requestId; direct and read tools don't", 
           "span",
           "trace_stats",
           "trace_capture",
+          "trace_errors",
           "compare",
           // Each call requests a recording; Profiles submits no Constellation command.
           "profile",

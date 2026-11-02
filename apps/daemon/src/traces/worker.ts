@@ -24,6 +24,7 @@ import {
 import { compareTraces } from "./compareQuery.ts";
 import { spanCapture } from "./capture.ts";
 import { spanStats } from "./stats.ts";
+import { spanErrors } from "./errors.ts";
 import { pruneCheckout } from "./retention.ts";
 import { retentionFor, SELF_RETENTION } from "./self/scope.ts";
 import { TraceWorkerMessage, TraceWorkerReply, TraceWorkerRequest } from "./workerProtocol.ts";
@@ -209,6 +210,9 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
   ),
   Match.tag("Capture", (request) =>
     spanCapture(prune(request.checkout), request.checkout, request.filter)
+  ),
+  Match.tag("Errors", (request) =>
+    spanErrors(prune(request.checkout), request.checkout, request.filter)
   ),
   Match.tag("Overlap", (request) =>
     overlappingTraces(prune(request.checkout), request.checkout, request.start, request.end)

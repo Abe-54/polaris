@@ -240,9 +240,43 @@ traces: [{id, root, service, action, startedAt, durationMs, spanCount, errors, s
 depth, name, service, offsetMs, durationMs, error}]}]}`. `spans` and `traceCount` count the whole
 read; under the text cap, lines are trimmed from the end and `traces` keeps only what the text shows.
 
+## `trace_errors {sinceMinutes?, name?, service?, limit?, scope?}` (ENG-750)
+
+Error Spans in a window grouped by fingerprint, so "what is failing, how often, since when" is one
+call. `sinceMinutes`, `name`, `service`, `limit` (fingerprints, 1–100, default 20) and `scope`
+behave as in `trace_stats`.
+
+The message is the Span's status message, or the first exception event's `exception.message` when
+the status message is empty. Its fingerprint is the first line, trimmed, with, in order: quoted
+text (`"…"`, `'…'`, `` `…` ``) → `<str>`, URLs → `<url>`, UUIDs → `<uuid>`, paths of two or more
+segments → `<path>`, `0x…` → `<hex>`, random ids (eight or more word characters with at least two
+digits and a letter, so hex trace ids too) → `<id>`, numbers → `<n>`; whitespace collapses and the
+result is cut at 200 characters. `branch 7mmvvc5m9g0t does not exist` → `branch <id> does not
+exist`; `syntax error at or near "'User'"` → `syntax error at or near <str>`. Plain words are kept,
+so `table users does not exist` and `table invoices does not exist` stay apart.
+
+Per fingerprint: `message` (the newest raw first line, up to 500 characters), `count`, `firstSeen`
+and `lastSeen` (ISO), `services` and the top three `names` as `{value, count}` most frequent first
+(`nameCount` counts every name), and `example {trace, span}`, the newest Span. Fingerprints sort
+by count, then newest. The scan is newest first over `spans_age (checkout, status, age)` with
+`status='error'`; the cap, `truncated` and `coveredSince` are `trace_stats`'s.
+
+```
+Error spans since 2026-11-02T19:08:00.000Z (last 60 min) · 848 spans in 11 fingerprints
+×342  FileError: ENOENT: no such file or directory, stat <str>
+  e.g. FileError: ENOENT: no such file or directory, stat '/Users/me/code/next.js/.git'
+  2026-11-02T19:10:02.000Z → 2026-11-02T20:07:41.000Z  services polaris-daemon ×342
+  spans files.read ×171, polaris.rpc.files.read ×171
+  newest trace 4f1c… span 2d91…
+```
+
+`structuredContent`: `{fingerprints: [{fingerprint, message, count, firstSeen, lastSeen, services:
+[{value, count}], names: [{value, count}], nameCount, example: {trace, span}}], groupCount, spans,
+truncated, since, coveredSince?}`.
+
 ## Caps and retrieval
 
-All six tools emit one text block of at most 16,000 characters. `traces` states shown/total and
+Every tool here emits one text block of at most 16,000 characters. `traces` states shown/total and
 suggests limit or narrower filters. `trace` counts folded Spans and gives their upper duration
 bound; use `span` for individual details. For `span`, name each omitted section with its omitted
 detail-line count and say to use `span` structuredContent for the full retained data. Older logs

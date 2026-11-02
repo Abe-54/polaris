@@ -142,6 +142,7 @@ export const sessionTraceTools = (
         context.checkout,
         captureGraceMs === undefined ? options : { ...options, graceMs: captureGraceMs }
       ),
+    errors: (context, filter) => store.errors(context.checkout, filter),
     span: Effect.fnUntraced(function* (sessionId, context, trace, span) {
       const [result] = yield* firstScope(context.scopes, (scope) =>
         store.toolSpan(scope, trace, span)

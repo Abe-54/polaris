@@ -16,10 +16,12 @@ import { compareView } from "./compareFormat.ts";
 import { spanView } from "./spanFormat.ts";
 import { statsView } from "./statsFormat.ts";
 import { captureView } from "./captureFormat.ts";
+import { errorsView } from "./errorsFormat.ts";
 import type { ReadScopes } from "../../traces/self/reads.ts";
 import type { SpanStats, SpanStatsFilter } from "../../traces/stats.ts";
 import type { CaptureOptions, CaptureResult } from "../sessions/capture.ts";
 import { CAPTURE_SPAN_CAP } from "../../traces/capture.ts";
+import type { SpanErrors, SpanErrorsFilter } from "../../traces/errors.ts";
 
 /** A week, the trace store's retention: the widest `trace_stats` window. */
 const MAX_STATS_MINUTES = 7 * 24 * 60;
@@ -74,6 +76,16 @@ export const TraceCaptureInput = Schema.Struct({
 
 export type TraceCaptureInput = typeof TraceCaptureInput.Type;
 
+export const TraceErrorsInput = Schema.Struct({
+  sinceMinutes: TraceStatsInput.fields.sinceMinutes,
+  name: TraceStatsInput.fields.name,
+  service: TraceStatsInput.fields.service,
+  limit: TraceStatsInput.fields.limit,
+  scope: Schema.optionalKey(TraceScopeInput),
+});
+
+export type TraceErrorsInput = typeof TraceErrorsInput.Type;
+
 export interface TraceToolContext {
   readonly checkout: string;
   /** Where `trace` and `span` look, first to last; the Self-Trace scope follows while readable. */
@@ -116,6 +128,10 @@ export interface TraceSessionTools {
     context: TraceToolContext,
     options: CaptureOptions
   ) => Effect.Effect<CaptureResult, TraceError>;
+  readonly errors: (
+    context: TraceToolContext,
+    filter: SpanErrorsFilter
+  ) => Effect.Effect<SpanErrors, TraceError>;
   readonly span: (
     sessionId: SessionId,
     context: TraceToolContext,
@@ -213,6 +229,14 @@ const listView = (
   return { text: [title(), ...rows.slice(0, count)].join("\n"), data: { traces } };
 };
 
+/** The window's start for a `sinceMinutes` input, default an hour. */
+const windowOf = Effect.fnUntraced(function* (sinceMinutes: number | undefined) {
+  const minutes = sinceMinutes ?? 60;
+  const sinceMs = (yield* Clock.currentTimeMillis) - minutes * 60_000;
+
+  return { minutes, sinceMs, since: new Date(sinceMs).toISOString() };
+});
+
 const scoped = (scope: "checkout" | "self" | undefined): TracesInput =>
   scope === undefined ? { turn: "all" } : { turn: "all", scope };
 
@@ -306,19 +330,37 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
       (input, traces) =>
         Effect.gen(function* () {
           const context = yield* traces.context(sessionId, scoped(input.scope));
-          const minutes = input.sinceMinutes ?? 60;
-          const sinceMs = (yield* Clock.currentTimeMillis) - minutes * 60_000;
+          const window = yield* windowOf(input.sinceMinutes);
           const { sinceMinutes: _since, scope: _scope, ...filters } = input;
 
           const stats = yield* traces.stats(context, {
             ...filters,
-            sinceMs,
+            sinceMs: window.sinceMs,
             by: input.by ?? "both",
             sort: input.sort ?? "count",
             limit: input.limit ?? 20,
           });
 
-          return viewResult(statsView(stats, { since: new Date(sinceMs).toISOString(), minutes }));
+          return viewResult(statsView(stats, window));
+        })
+    ),
+    make(
+      "trace_errors",
+      "Group error spans over the last sinceMinutes (default 60, at most a week) by fingerprint: the message's first line with ids, numbers, quoted text, paths and URLs replaced. Each fingerprint has one raw example message, count, first and last seen, services, its top span names and the newest trace and span. name matches a case-insensitive substring; filter by service; limit fingerprints (default 20, at most 100). Reads at most the newest 20,000 error spans. scope self reads Polaris's own spans while Developer Mode is on.",
+      TraceErrorsInput,
+      (input, traces) =>
+        Effect.gen(function* () {
+          const context = yield* traces.context(sessionId, scoped(input.scope));
+          const window = yield* windowOf(input.sinceMinutes);
+          const { sinceMinutes: _since, scope: _scope, ...filters } = input;
+
+          const errors = yield* traces.errors(context, {
+            ...filters,
+            sinceMs: window.sinceMs,
+            limit: input.limit ?? 20,
+          });
+
+          return viewResult(errorsView(errors, window));
         })
     ),
     make(

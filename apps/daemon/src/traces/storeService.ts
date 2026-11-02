@@ -16,6 +16,7 @@ import type { TraceWorkerOptions } from "./workerClient.ts";
 import type { TracePage } from "./store.ts";
 import type { SpanStats, SpanStatsFilter } from "./stats.ts";
 import type { SpanCapture, SpanCaptureFilter } from "./capture.ts";
+import type { SpanErrors, SpanErrorsFilter } from "./errors.ts";
 
 export class TraceStore extends Context.Service<
   TraceStore,
@@ -57,6 +58,11 @@ export class TraceStore extends Context.Service<
       checkout: string,
       filter: SpanCaptureFilter
     ) => Effect.Effect<SpanCapture, TraceError>;
+    /** Error Spans grouped by message fingerprint over a bounded window (the `trace_errors` tool). */
+    readonly errors: (
+      checkout: string,
+      filter: SpanErrorsFilter
+    ) => Effect.Effect<SpanErrors, TraceError>;
     readonly overlapping: (
       checkout: string,
       start: string,

@@ -14,6 +14,7 @@ import {
 import { IngestContext } from "./ingest.ts";
 import { SpanCapture, SpanCaptureFilter } from "./capture.ts";
 import { SpanStats, SpanStatsFilter } from "./stats.ts";
+import { SpanErrors, SpanErrorsFilter } from "./errors.ts";
 
 const OnCheckout = { checkout: Schema.String };
 
@@ -56,6 +57,7 @@ export const TraceWorkerRequest = Schema.TaggedUnion({
   ToolSpan: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
   Stats: { ...OnCheckout, filter: SpanStatsFilter },
   Capture: { ...OnCheckout, filter: SpanCaptureFilter },
+  Errors: { ...OnCheckout, filter: SpanErrorsFilter },
   History: { ...OnCheckout, traceId: TraceIdPrefix, includeSpans: Schema.Boolean },
   Span: { ...OnCheckout, traceId: TraceIdPrefix, spanId: SpanIdPrefix },
   Link: { ...OnCheckout, traceId: TraceIdPrefix },
@@ -112,6 +114,7 @@ export const TraceWorkerValue = Schema.Union([
   TraceToolSpan,
   SpanStats,
   SpanCapture,
+  SpanErrors,
   TracePageSchema,
   TraceDetail,
   SpanDetail,

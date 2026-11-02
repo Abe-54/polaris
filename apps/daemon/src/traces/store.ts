@@ -26,6 +26,7 @@ import {
 import { IngestError } from "./ingest.ts";
 import { SpanCapture } from "./capture.ts";
 import { SpanStats } from "./stats.ts";
+import { SpanErrors } from "./errors.ts";
 
 const TracePage = Schema.Struct({ traces: Schema.Array(TraceSummary), total: Schema.Number });
 
@@ -141,6 +142,8 @@ export const traceStoreLayerAt = (filename: string, options: TraceWorkerOptions 
           read(TraceWorkerRequest.cases.Stats.make({ checkout, filter }), SpanStats),
         capture: (checkout, filter) =>
           read(TraceWorkerRequest.cases.Capture.make({ checkout, filter }), SpanCapture),
+        errors: (checkout, filter) =>
+          read(TraceWorkerRequest.cases.Errors.make({ checkout, filter }), SpanErrors),
         overlapping: (checkout, start, end) =>
           read(TraceWorkerRequest.cases.Overlap.make({ checkout, start, end }), TracePage),
         get: (checkout, traceId) =>
