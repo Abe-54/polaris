@@ -13,7 +13,7 @@ import { PredictionServerLive } from "../prediction/server.ts";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
-import { selfTraceLoggers } from "@polaris/client";
+import { selfTraceLoggers } from "@polaris/client/selfTraces/logger";
 import { Deferred, Effect, Layer, Logger } from "effect";
 import { AttachmentRpcsLive } from "../attachments/AttachmentRpcs.ts";
 import { AttachmentStoreLive } from "../attachments/AttachmentStore.ts";

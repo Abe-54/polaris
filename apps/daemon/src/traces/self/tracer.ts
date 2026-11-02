@@ -3,13 +3,14 @@
  * as `polaris-daemon` Self-Traces while Developer Mode is effectively on.
  */
 import type { SelfSpan, TraceAttributes } from "@polaris/protocol";
+// Subpaths, not the root: it would load the whole Client runtime at the Daemon's start.
+import { currentFiberSpan } from "@polaris/client/selfTraces/logger";
 import {
-  currentFiberSpan,
   hookConsole,
   type LogConsole,
   type LogRecorder,
   makeLogRecorder,
-} from "@polaris/client";
+} from "@polaris/client/selfTraces/logs";
 import { Cause, Exit, Option, Predicate, Schema, Tracer } from "effect";
 import { VERSION } from "../../service/platform.ts";
 
