@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Workspace } from "@polaris/protocol";
 import { Effect } from "effect";
+import { probeClaudeSandbox, unsandboxedReviewerNote } from "../harness/claude/sandbox.ts";
 import { makeCodexDriver } from "../harness/codex/CodexDriver.ts";
 import { shortHostName } from "../service/hostName.ts";
 import { Reviewer } from "./index.ts";
@@ -113,7 +114,8 @@ describe("a Reviewer that couldn't run", () => {
           const done = yield* summaryWhen((yield* reviewer.run(openRequest(workspace))).id, ended);
 
           expect(done.layers.agent.status).toBe("completed");
-          expect(done.layers.agent.note).toBeNull();
+          // Only this Host's own shell note, if any: Linux without socat and Windows have one.
+          expect(done.layers.agent.note).toBe(unsandboxedReviewerNote(probeClaudeSandbox(), host));
           expect(done.findings).toHaveLength(1);
         })
       );
