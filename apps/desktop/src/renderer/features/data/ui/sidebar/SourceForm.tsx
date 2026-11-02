@@ -14,10 +14,19 @@ import {
   Input,
   SegmentedControl,
 } from "@polaris/ui";
-import { type FormEvent, type ReactNode, type RefObject, useRef, useState } from "react";
+import {
+  type ClipboardEvent,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { IpcError } from "../../../../../shared/api.ts";
 import { useDataApi } from "../../data/hooks.tsx";
 import { closeSourceForm, type SourceForm as Form, useSourceForm } from "../../model/sidebar.ts";
+import { type PastedConnection, parseConnectionString } from "../../model/connectionString.ts";
 import { MANUAL_LABEL } from "../../model/source.ts";
 import type { DataSessionKey } from "../../model/store.ts";
 import { LabelSwatches } from "../connection/LabelSwatches.tsx";
@@ -187,8 +196,13 @@ const PasswordField = ({ draft, set, editing, password }: FieldsProps) => (
 const ServerFields = ({ draft, set, ...props }: FieldsProps & { engine: ServerDataEngine }) => (
   <>
     <div className="grid grid-cols-[1fr_96px] gap-2">
-      <Field label="Host">
-        <Input value={draft.host} onChange={(e) => set({ host: e.target.value })} />
+      <Field label="Host" hint="Or paste a connection string">
+        <Input
+          value={draft.host}
+          data-testid="data-source-host"
+          onPaste={props.onPaste}
+          onChange={(e) => set({ host: e.target.value })}
+        />
       </Field>
       <Field label="Port">
         <Input
@@ -211,7 +225,7 @@ const ServerFields = ({ draft, set, ...props }: FieldsProps & { engine: ServerDa
   </>
 );
 
-const FileField = ({ draft, set }: FieldsProps) => (
+const FileField = ({ draft, set, onPaste }: FieldsProps) => (
   <Field label="File" hint="The database file's full path on the Host. Polaris opens it read-only.">
     <Input
       className="font-mono"
@@ -219,6 +233,7 @@ const FileField = ({ draft, set }: FieldsProps) => (
       placeholder="/path/to/checkout/dev.db"
       spellCheck={false}
       data-testid="data-source-path"
+      onPaste={onPaste}
       onChange={(e) => set({ path: e.target.value })}
     />
   </Field>
@@ -229,6 +244,8 @@ interface FieldsProps {
   readonly set: (patch: Partial<Draft>) => void;
   readonly editing: boolean;
   readonly password: RefObject<HTMLInputElement | null>;
+  /** Fills the form from a pasted connection string; anything else pastes as typed. */
+  readonly onPaste: (event: ClipboardEvent<HTMLInputElement>) => void;
 }
 
 const Fields = (props: FieldsProps) => {
@@ -307,6 +324,33 @@ const saveInput = (draft: Draft & { engine: ServerDataEngine }, password: string
   return password === "" ? input : { ...input, password };
 };
 
+/** The draft fields a connection string names; its password goes to the uncontrolled field. */
+const patchOf = (pasted: PastedConnection): Partial<Draft> =>
+  pasted.engine === "sqlite"
+    ? { engine: "sqlite", path: pasted.path }
+    : {
+        engine: pasted.engine,
+        host: pasted.host,
+        port: String(pasted.port),
+        database: pasted.database,
+        user: pasted.user,
+      };
+
+/** A pasted password waits here until its field is mounted (pasting into File switches engine). */
+const usePastedPassword = (password: RefObject<HTMLInputElement | null>) => {
+  const pending = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (pending.current === null || password.current === null) return;
+    password.current.value = pending.current;
+    pending.current = null;
+  });
+
+  return (value: string) => {
+    pending.current = value;
+  };
+};
+
 const Body = ({ at, form }: { readonly at: DataSessionKey; readonly form: Form }) => {
   const api = useDataApi();
   const [draft, setDraft] = useState(() => draftOf(form));
@@ -315,6 +359,21 @@ const Body = ({ at, form }: { readonly at: DataSessionKey; readonly form: Form }
   const password = useRef<HTMLInputElement>(null);
   const editing = form.mode === "edit";
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const pastePassword = usePastedPassword(password);
+
+  const onPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = parseConnectionString(event.clipboardData.getData("text"));
+
+    if (pasted === undefined) return;
+    event.preventDefault();
+    setError(null);
+    set(patchOf(pasted));
+
+    if (pasted.engine !== "sqlite" && pasted.password !== "") {
+      pastePassword(pasted.password);
+      set({ clearPassword: false });
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -348,7 +407,7 @@ const Body = ({ at, form }: { readonly at: DataSessionKey; readonly form: Form }
             : "Agents in this checkout can query it by name. A remote one needs your approval first."}
         </DialogDescription>
       </DialogHeader>
-      <Fields draft={draft} set={set} editing={editing} password={password} />
+      <Fields draft={draft} set={set} editing={editing} password={password} onPaste={onPaste} />
       <DialogFooter>
         {error === null ? null : (
           <p role="alert" className="text-caption text-failed-text mr-auto min-w-0">

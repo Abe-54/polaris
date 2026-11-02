@@ -39,6 +39,17 @@ const fill = (values: Readonly<Record<string, string>>) => {
   for (const [name, value] of Object.entries(values)) type(field(name), value);
 };
 
+/** A paste into `input`; false when the form took it over (the event's default was prevented). */
+const paste = (input: HTMLInputElement, text: string) => {
+  let typed = false;
+
+  act(() => {
+    typed = fireEvent.paste(input, { clipboardData: { getData: () => text } });
+  });
+
+  return typed;
+};
+
 const submit = () =>
   act(async () => {
     fireEvent.submit(form());
@@ -126,6 +137,45 @@ describe("Add data source", () => {
     expect(field("Label").value).toBe("dw prod");
     await submit();
     expect(saved.map((s) => s.label)).toEqual([{ text: "DW PROD", colour: "red" }]);
+  });
+
+  test("a connection string pasted into Host fills the form, password included", async () => {
+    const { api, saved } = saving(fixtureDataApi());
+
+    mountData(api);
+    await openAdd();
+    fill({ Name: "shop" });
+    paste(field("Host"), "mysql://reader:p%40ss@[::1]/orders");
+    await submit();
+
+    expect(saved).toEqual([
+      {
+        name: "shop",
+        engine: "mysql",
+        host: "::1",
+        port: 3306,
+        database: "orders",
+        user: "reader",
+        password: "p@ss",
+        label: { text: "", colour: "red" },
+      },
+    ]);
+  });
+
+  test("a SQLite URL pasted into Host switches to SQLite with its file", async () => {
+    mountData(fixtureDataApi());
+    await openAdd();
+    paste(field("Host"), "file:///srv/app/dev.db");
+
+    expect(page().getByTestId<HTMLInputElement>("data-source-path").value).toBe("/srv/app/dev.db");
+  });
+
+  test("text that isn't a connection string pastes as typed", async () => {
+    mountData(fixtureDataApi());
+    await openAdd();
+
+    expect(paste(field("Host"), "db.internal")).toBe(true);
+    expect(field("Database").value).toBe("");
   });
 
   test("the Host's no-such-source answer reads as what the user did", async () => {
