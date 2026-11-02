@@ -9,6 +9,7 @@ import type { Facts, WorkerFacts } from "./facts.ts";
 import type { WorkerPhase } from "@polaris/protocol";
 import { phaseOf } from "./phase.ts";
 import { userQuestions } from "./questions.ts";
+import { waitingWords } from "./waiting.ts";
 import { currentSetup, type SetupRun } from "./setup.ts";
 import type { AttemptData, ConstellationData, ProjectionData, TaskData } from "./types.ts";
 
@@ -122,7 +123,9 @@ const attentionOf = (
 
   if (projection.state !== "working") return null;
 
-  if (worker.stoppedWithoutClaiming) return { kind: "stopped" };
+  // Waiting on Background Work is never stopped, whatever the session's idle state says.
+  if (worker.stoppedWithoutClaiming && phase?.kind !== "waiting-on-background")
+    return { kind: "stopped" };
 
   return phase?.kind === "stalled" ? { kind: "stalled", since: phase.since } : null;
 };
@@ -225,6 +228,13 @@ const quietLook = (
 ): TaskLook | null => {
   if (worker.activity?.kind === "slot")
     return waitingLook(`waiting · ${span(worker.activity.since, now)}`, "working");
+
+  // Its Harness has work out: neutral, counted as working (ENG-742).
+  if (phase?.kind === "waiting-on-background")
+    return waitingLook(
+      `${waitingWords(phase.waiting)} · ${span(phase.waiting.since, now)}`,
+      "working"
+    );
 
   // No first Turn yet: on its way to work, not waiting on anyone (ENG-264).
   if (phase?.kind === "starting")

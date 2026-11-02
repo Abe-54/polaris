@@ -4,6 +4,7 @@ import {
   CommandId,
   ConstellationSettings,
   DomainEvent,
+  type HarnessKind,
   PlanOperation,
   SessionId,
   type Turn,
@@ -34,11 +35,11 @@ export const WORKER = SessionId.make("worker");
 
 export const STANDALONE = SessionId.make("standalone");
 
-export const session = (id: SessionId) =>
+export const session = (id: SessionId, harness: HarnessKind = "codex") =>
   new AgentSession({
     id,
     workspaceId: WS,
-    harness: "codex",
+    harness,
     title: id,
     cwd: "/tmp",
     worktreeId: null,
@@ -82,7 +83,8 @@ export const send = Effect.fnUntraced(function* (id: SessionId, text: string = "
 
 export const finish = Effect.fnUntraced(function* (
   id: SessionId,
-  status: "completed" | "interrupted" | "failed" = "completed"
+  status: "completed" | "interrupted" | "failed" = "completed",
+  at: string = AT
 ) {
   const store = yield* EventStore;
   const turn = (yield* store.model).sessions.get(id)?.turns.find((t) => t.status === "working");
@@ -93,7 +95,7 @@ export const finish = Effect.fnUntraced(function* (
     type: "harness.turnEnded",
     turnId: turn.id,
     status,
-    at: AT,
+    at,
     checkpoint: null,
     error: status === "failed" ? "Harness failed" : null,
   });
@@ -109,7 +111,8 @@ export const wait = Effect.fnUntraced(function* (predicate: () => Effect.Effect<
 });
 
 export const setup = Effect.fnUntraced(function* (
-  settings: ConstellationSettings = ConstellationSettings.make({})
+  settings: ConstellationSettings = ConstellationSettings.make({}),
+  workerHarness: HarnessKind = "codex"
 ) {
   const store = yield* EventStore;
   yield* store.commit({
@@ -128,7 +131,9 @@ export const setup = Effect.fnUntraced(function* (
           }),
         }),
         ...[LEAD, WORKER, STANDALONE].map((id) =>
-          DomainEvent.cases.SessionCreated.make({ session: session(id) })
+          DomainEvent.cases.SessionCreated.make({
+            session: session(id, id === WORKER ? workerHarness : "codex"),
+          })
         ),
       ]),
   });

@@ -17,6 +17,7 @@ import type { SessionRecord } from "../../store/model.ts";
 import { pendingInputs, type PendingInput } from "./messages.ts";
 import { newTurn, startedTurn, takesDelivery } from "./turns.ts";
 import { unblocksAttempt } from "../blocked.ts";
+import { heldWait } from "../waiting.ts";
 
 const deliverInput = Effect.fn("Constellation.deliverLocalInput")(function* (
   id: ConstellationId,
@@ -253,6 +254,7 @@ const nudge = Effect.fn("Constellation.nudgeSilentWorker")(function* (
   const store = yield* EventStore;
   const effects = yield* ConstellationSessionEffects;
   const owner = yield* ConstellationOwner;
+  const now = yield* Clock.currentTimeMillis;
 
   const result = yield* store.commit({
     commandId: null,
@@ -276,7 +278,9 @@ const nudge = Effect.fn("Constellation.nudgeSilentWorker")(function* (
         [...graph.questions.values()].some(
           (q) => q.attemptId === attempt.id && q.answer === null && q.question.blocking
         ) ||
-        graph.graph.state !== "running"
+        graph.graph.state !== "running" ||
+        // Waiting on Background Work: its Harness wakes it, or its wait runs out first.
+        heldWait(graph, attempt, record, now) !== null
       )
         return Effect.succeed([]);
 
@@ -297,7 +301,7 @@ const nudge = Effect.fn("Constellation.nudgeSilentWorker")(function* (
         return Effect.succeed(d.events);
       }
 
-      const prompt = `Your Attempt isn't claimed: claim it, ask for a decision or answer, or call block with the Tasks and reason you are waiting on. Continue ${attempt.taskId} if work remains.`;
+      const prompt = `Your Attempt isn't claimed: claim it, ask for a decision or answer, call block with the Tasks and reason you are waiting on, or call waiting_on if background work you started will wake you. Continue ${attempt.taskId} if work remains.`;
       const turn = newTurn(record.session, prompt, new Date().toISOString());
 
       if (!takesDelivery(record, turn)) return Effect.succeed([]);

@@ -213,6 +213,10 @@ _Avoid_: Retry, run
 **Blocked**:
 An Attempt waiting on other Tasks, or on the Lead when no Tasks are named. Acceptance of every named Task or a Lead message starts its next Turn. This is distinct from Needs You, the Session State for user input.
 
+**Waiting on Background Work**:
+A working Attempt whose worker ended its Turn with its own background work out: background tasks its Harness wakes it for, or a wait it declared with `waiting_on`. It is derived from the log, not a Session State or an Attempt state; it isn't stopped or stalled, nobody nudges it, and it never Needs You. It ends with the worker's next Turn or its Claim; if no Turn starts by the time the wait runs out, the worker is nudged as after any silent end.
+_Avoid_: Blocked (that waits on Tasks or the Lead), idle
+
 **Claim**:
 A worker's typed statement that its Attempt is done, carrying its report (branch, head, checks run, what isn't done, questions); it puts the Attempt in review until the Lead or the user accepts it or sends it back.
 _Avoid_: Report ready, done (a claim isn't done until it's accepted)

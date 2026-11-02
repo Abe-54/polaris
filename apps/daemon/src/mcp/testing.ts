@@ -24,6 +24,7 @@ export const leadBinding = McpBinding.cases.Lead.make({
 export const WORKER_TOOL_NAMES = [
   "block",
   "progress",
+  "waiting_on",
   "ask",
   "claim",
   "propose",

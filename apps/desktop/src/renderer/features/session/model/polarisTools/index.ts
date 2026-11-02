@@ -49,6 +49,7 @@ const BUILDERS = new Map<string, Builder>([
   ["message", tool(inputs.MessageInput, worker.message)],
   ["block", tool(inputs.BlockInput, worker.block)],
   ["progress", tool(inputs.ProgressInput, worker.progress)],
+  ["waiting_on", tool(inputs.WaitingOnInput, worker.waitingOn)],
   ["ask", tool(inputs.AskInput, worker.ask)],
   ["claim", tool(inputs.ClaimInput, worker.claim)],
   ["propose", tool(inputs.ProposeInput, worker.propose)],

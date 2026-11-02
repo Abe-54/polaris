@@ -2,7 +2,7 @@ import type { McpBinding } from "../../mcp/binding.ts";
 import { Match } from "effect";
 import { m2Examples } from "./examples.ts";
 
-export const CONSTELLATION_SKILL_VERSION = 7;
+export const CONSTELLATION_SKILL_VERSION = 8;
 
 const shared = [
   "Use Polaris tools for this Constellation. Read the repository's AGENTS.md before changing code; repository-specific rules stay there.",
@@ -29,6 +29,7 @@ const worker = [
   "Read the assignment in the first Turn: brief, Area, criteria, branch, base, accepted dependency Claims and any send-back feedback. Stay within the Area or record each outside path and its reason.",
   "Ask instead of guessing when a decision is the Lead's or user's. Use ask { question: { id: base, to: lead, text: Which base should I use?, blocking: true } }. Continue only unblocked work. Use progress for useful facts with optional completed/total, not liveness estimates.",
   "Use block { on: [A2], reason: Waiting for the feed contract } when no independent work remains and another Task must be accepted. Acceptance resumes you with its head. Use on: [] for a reason-only wait on the Lead; a Lead message resumes you. Use ask for a decision or answer and continue unblocked work. End the Turn after block, without claiming unfinished work.",
+  "Before ending a Turn to wait on background work you started (a background command, a Monitor, a background subagent, a long pre-push hook), call waiting_on { what: pre-push hook on lucas/eng-742, minutes: 10 } with about how long it takes. Polaris then doesn't nudge you or tell the Lead you stopped; it clears when your next Turn starts or you claim, and if no Turn starts by then you are nudged. Never use block for this: block is for other Tasks and the Lead.",
   "Commit on the assigned branch. Before claiming, leave no uncommitted changes and ensure the Claim matches the current head of that branch.",
   "If additional work changes your branch head while your Claim is in review, commit it and claim again on the same Attempt. The new Claim supersedes the old one, advances the revision and requires a fresh review. An unchanged head cannot be re-claimed, and a head that was sent back on an earlier Attempt is refused unless one of your decisions names that head and says why it stands. Repeat identical still-open questions with the same id, recipient, text and blocking value; answered or changed questions need a new id.",
   "Call claim with every field: branch, head, commits, receipts, notDone, followups, questions, outsideArea, decisions and summary. Verified receipts contain label and item { hostId, sessionId, turnId, itemId } referencing a completed Daemon-recorded command; Reported receipts contain label and text. Disclose failures, skipped checks and fake-service limits. A Claim goes to review; it is not acceptance.",

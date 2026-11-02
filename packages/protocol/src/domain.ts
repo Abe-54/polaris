@@ -298,6 +298,8 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   state: SessionState,
   /** Live non-ambient background tasks; Idle with a nonempty list is waiting on them. */
   backgroundTasks: optionalArray(BackgroundTask),
+  /** When `backgroundTasks` last changed; null before it ever did, or from an older Daemon. */
+  backgroundChangedAt: optionalNullable(Timestamp),
   permissionMode: PermissionMode,
   /** The Model the next Turn runs on; null for the Harness's default. Changed by `SetModel`. */
   model: Schema.NullOr(ModelId),

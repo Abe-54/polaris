@@ -150,6 +150,7 @@ const progress = (
         note: command.note,
         completed: command.completed,
         total: command.total,
+        waiting: command.waiting,
       })
     );
 };

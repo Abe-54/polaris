@@ -26,6 +26,8 @@ export interface ConstellationLivenessDelegate {
     queuedInput?: number
   ) => Effect.Effect<void>;
   readonly queued: (sessionId: SessionId, count: number) => Effect.Effect<void>;
+  /** Republish a worker's liveness after a graph fact it reads changed (a declared wait). */
+  readonly touch: (sessionId: SessionId) => Effect.Effect<void>;
 }
 
 export interface ConstellationLivenessService extends ConstellationLivenessDelegate {
@@ -38,6 +40,7 @@ const makeLivenessProxy = (): ConstellationLivenessService => {
     subscribe: () => Effect.succeed(Stream.empty),
     observe: () => Effect.void,
     queued: () => Effect.void,
+    touch: () => Effect.void,
   };
 
   return {
@@ -50,6 +53,7 @@ const makeLivenessProxy = (): ConstellationLivenessService => {
     observe: (id, event, at, queued) =>
       Effect.suspend(() => delegate.observe(id, event, at, queued)),
     queued: (id, count) => Effect.suspend(() => delegate.queued(id, count)),
+    touch: (id) => Effect.suspend(() => delegate.touch(id)),
   };
 };
 

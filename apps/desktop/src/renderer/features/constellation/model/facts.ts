@@ -2,7 +2,7 @@
  * What the tab knows about each worker beyond the graph: its session (Harness, Model, Host),
  * liveness from session events (never the model), and attention signals.
  */
-import type { HarnessKind, ToolCallReference } from "@polaris/protocol";
+import type { HarnessKind, PhaseWaiting, ToolCallReference } from "@polaris/protocol";
 import type { Plain } from "../../../store/plain.ts";
 import type { SetupFact } from "./setup.ts";
 import type { AttemptData } from "./types.ts";
@@ -46,6 +46,8 @@ export interface WorkerFacts {
   readonly firstTurn: boolean | null;
   /** Since when the worker has held its Host's worker slot (`__workers` lease), if it does. */
   readonly slotHeldSince: string | null;
+  /** The Daemon's Waiting on Background Work (`WorkerLiveness.waiting`); null when it isn't. */
+  readonly waiting: PhaseWaiting | null;
   /** Subagents still working in the worker's session (rail nodes under its Attempt). */
   readonly subagents: ReadonlyArray<SubagentFact>;
 }
@@ -72,6 +74,7 @@ export const NO_FACTS: WorkerFacts = {
   activeTurn: null,
   firstTurn: null,
   slotHeldSince: null,
+  waiting: null,
   subagents: [],
 };
 

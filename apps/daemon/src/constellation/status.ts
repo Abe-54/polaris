@@ -12,6 +12,7 @@ import { capacityBlocked, failureKindLabel } from "./failureKind.ts";
 import { childTasks, isParent } from "./parents.ts";
 import { activeAttempt, latestAttempt, projectTask } from "./projections.ts";
 import { type HostSlots, phaseOf, phaseText, slotLine, workerLine } from "./slots.ts";
+import { heldWait } from "./waiting.ts";
 
 export const proposalDetails = (task: TaskDefinition): ReadonlyArray<string> => [
   `  Kind: ${task.kind} · parent: ${task.parent ?? "none"} · group: ${task.group ?? "none"}`,
@@ -63,13 +64,14 @@ const reviewLines = (
   if (
     attempt.state === "working" &&
     attempt.nudgedAt !== null &&
+    heldWait(record, attempt, session, host?.now ?? Date.now()) === null &&
     session !== undefined &&
     (session.session.state === "idle" || session.session.state === "dormant") &&
     session.session.updatedAt > attempt.nudgedAt
   )
     lines.push("  Stopped without claiming · nudged once.");
   else if (attempt.state === "working" && session !== undefined)
-    lines.push(`  ${workerLine(record.graph.id, attempt, session, host)}`);
+    lines.push(`  ${workerLine(record, attempt, session, host)}`);
 
   if (attempt.state === "blocked")
     lines.push(
@@ -315,7 +317,7 @@ export const statusSince = (
     const session = sessions?.get(a.sessionId);
 
     if (a.state !== "working" || session === undefined) return [];
-    const phase = phaseOf(graph.id, a, session, host);
+    const phase = phaseOf(record, a, session, host);
 
     return phase.kind === "working" ? [] : [`${a.taskId} (${phaseText(phase, host?.now ?? null)})`];
   });

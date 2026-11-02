@@ -4,11 +4,17 @@ import {
   type ConstellationResult,
   type ConstellationRejected,
 } from "@polaris/protocol";
-import { Effect, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import type { McpBinding } from "../binding.ts";
 import type { toolFactory, BoundTool } from "./shared.ts";
 
 const C = ConstellationCommand.cases;
+
+/** `waiting_on`: what the worker waits on and about how long; `waiting.ts` caps it at 60 minutes. */
+const WaitingOnInput = Schema.Struct({
+  what: Schema.NonEmptyString,
+  minutes: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 60 })),
+});
 
 export const workerTools = (
   bound: Extract<McpBinding, { _tag: "Worker" }>,
@@ -56,6 +62,32 @@ export const workerTools = (
       mutates: true,
       summary: "Progress recorded.",
       next: "Continue the assignment; report the next useful milestone.",
+    }
+  ),
+  define(
+    "waiting_on",
+    "Say this Attempt is waiting on background work you started (a background command, a Monitor, a background subagent, a long hook) before you end your Turn, so Polaris doesn't nudge you or tell the Lead you stopped. Give what you wait on and about how many minutes it takes (at most 60). It clears when your next Turn starts or you claim; if no Turn starts by then, you are nudged. Don't use block for this.",
+    WaitingOnInput,
+    (input) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        submit(
+          C.WorkerProgress.make({
+            constellationId: bound.constellationId,
+            attemptId: bound.attemptId,
+            note: `Waiting on ${input.what}`,
+            completed: null,
+            total: null,
+            waiting: {
+              on: input.what,
+              until: new Date(now + input.minutes * 60_000).toISOString(),
+            },
+          })
+        )
+      ),
+    {
+      mutates: true,
+      summary: "Waiting recorded; Polaris won't nudge you while it holds.",
+      next: "End this Turn. Your Harness wakes you when the work reports, or Polaris nudges you after the time you gave.",
     }
   ),
   define(

@@ -7,6 +7,18 @@
 /** A worker holding a slot this long with no first Turn is stalled, not starting. */
 export const STALL_AFTER_MS = 60_000;
 
+/** A worker's Waiting on Background Work (`WorkerWaiting`), as `workerPhase` reads it. */
+export interface PhaseWaiting {
+  readonly tasks: ReadonlyArray<{
+    readonly kind: "subagent" | "command";
+    readonly description: string;
+  }>;
+  readonly on: string | null;
+  readonly since: string;
+  /** Unix epoch milliseconds; at and past it the wait no longer holds. */
+  readonly until: number;
+}
+
 export interface WorkerPhaseInput {
   /** This Attempt's worktree setup, when one ran for it or ahead of it (a deferred setup). */
   readonly setup: {
@@ -26,6 +38,8 @@ export interface WorkerPhaseInput {
   /** The Attempt's own `startedAt`. */
   readonly startedAt: string;
   readonly now: number;
+  /** The Daemon's `WorkerLiveness.waiting`; absent or null when it isn't waiting. */
+  readonly waiting?: PhaseWaiting | null;
 }
 
 export type WorkerPhase =
@@ -42,6 +56,8 @@ export type WorkerPhase =
   /** Holds a slot with no first Turn and nothing running, past the grace period. */
   | { readonly kind: "stalled"; readonly since: string; readonly setupDone: boolean }
   | { readonly kind: "working" }
+  /** Its Turn ended with background work out, and the wait still holds (ENG-742). */
+  | { readonly kind: "waiting-on-background"; readonly waiting: PhaseWaiting }
   /** Its first Turn ran; no Turn is in flight now. */
   | { readonly kind: "idle" }
   /** An older Daemon that doesn't report the first Turn. */
@@ -61,6 +77,15 @@ const notStarted = (input: WorkerPhaseInput, setupDone: boolean): WorkerPhase =>
     : { kind: "starting", since, setupDone, afterTurn: false };
 };
 
+const afterFirstTurn = (input: WorkerPhaseInput): WorkerPhase => {
+  if (input.turnInFlight !== false) return { kind: "working" };
+  const { waiting } = input;
+
+  return waiting != null && input.now < waiting.until
+    ? { kind: "waiting-on-background", waiting }
+    : { kind: "idle" };
+};
+
 /** The phase of a working Attempt's worker; callers decide copy, glyph and actions. */
 export const workerPhase = (input: WorkerPhaseInput): WorkerPhase => {
   const { setup, slot } = input;
@@ -73,8 +98,7 @@ export const workerPhase = (input: WorkerPhaseInput): WorkerPhase => {
 
   if (slot?.kind === "queued") return { kind: "waiting-for-slot", since: slot.since };
 
-  if (input.firstTurn === true)
-    return input.turnInFlight === false ? { kind: "idle" } : { kind: "working" };
+  if (input.firstTurn === true) return afterFirstTurn(input);
 
   if (input.firstTurn === null) return { kind: "unknown" };
 

@@ -11,6 +11,7 @@ import type {
   Task,
   TaskProjection,
   TaskState,
+  WorkerWaiting,
 } from "@polaris/protocol";
 import { liveQuestions } from "@polaris/protocol";
 import { Match } from "effect";
@@ -191,6 +192,23 @@ const workerOf = (task: Task): string | null => {
     : `${suggested.harness} · ${suggested.model}`;
 };
 
+/** "waiting on a command", "waiting on 2 subagents", or what the worker said it waits on. */
+const waitingWords = (waiting: WorkerWaiting): string => {
+  const commands = waiting.tasks.filter((t) => t.kind === "command").length;
+  const subagents = waiting.tasks.length - commands;
+  const mixed = commands > 0 && subagents > 0;
+
+  const counted = (noun: string, n: number) =>
+    n === 1 && !mixed ? `a ${noun}` : `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+  const parts = [
+    ...(subagents > 0 ? [counted("subagent", subagents)] : []),
+    ...(commands > 0 ? [counted("command", commands)] : []),
+  ];
+
+  return `waiting on ${parts.length > 0 ? parts.join(" and ") : (waiting.on ?? "background work")}`;
+};
+
 const secondLine = (
   task: Task,
   p: TaskProjection,
@@ -201,6 +219,20 @@ const secondLine = (
 
   if (p.state === "working" && current !== null)
     return { kind: "activity", command: current.command, elapsed: elapsed(current.startedAt, now) };
+
+  const waiting = p.liveness?.waiting ?? null;
+
+  // Waiting on Background Work (ENG-742): neutral, what it waits on and for how long.
+  if (
+    p.state === "working" &&
+    p.liveness?.activeTurn === false &&
+    waiting !== null &&
+    now < waiting.until
+  )
+    return {
+      kind: "note",
+      text: `${waitingWords(waiting)} · ${elapsed(Date.parse(waiting.since), now)}`,
+    };
 
   if (p.state === "working" && attempt !== null)
     return { kind: "note", text: `started ${elapsed(Date.parse(attempt.startedAt), now)} ago` };

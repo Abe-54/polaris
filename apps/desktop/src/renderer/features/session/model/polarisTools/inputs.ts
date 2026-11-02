@@ -101,6 +101,8 @@ export const RequestSecretInput = Schema.Struct({ label: opt(Str) });
 
 export const BlockInput = Schema.Struct({ on: List(Str), reason: opt(Str) });
 
+export const WaitingOnInput = Schema.Struct({ what: opt(Str), minutes: opt(Schema.Number) });
+
 export const ProgressInput = Schema.Struct({
   note: opt(Str),
   completed: opt(Schema.NullOr(Schema.Number)),

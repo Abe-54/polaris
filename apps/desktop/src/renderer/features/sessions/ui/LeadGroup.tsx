@@ -24,7 +24,13 @@ import {
   type WorkerSection,
   workerSections,
 } from "../model/leadGroups.ts";
-import { blockedHover, setupHover, shownWorker, TONE_CLASS } from "../model/workerCopy.ts";
+import {
+  blockedHover,
+  setupHover,
+  shownWorker,
+  TONE_CLASS,
+  waitingHover,
+} from "../model/workerCopy.ts";
 import { ConstellationPeek, useSpacePeek } from "../../constellation/ui/peek.tsx";
 import { WaveBar } from "../../constellation/ui/waves.tsx";
 import { RenameField, SessionMenu, useRenaming } from "./SessionMenu.tsx";
@@ -192,7 +198,11 @@ const AttemptMeta = ({
   readonly hostLabel: string;
   readonly now: number;
 }) =>
-  row.slotSince === null ? (
+  row.waiting !== null ? (
+    <span className={tone} title={waitingHover(row.waiting, age(row.waiting.since, now))}>
+      waiting · {age(row.waiting.since, now)}
+    </span>
+  ) : row.slotSince === null ? (
     <span className={tone} title={row.state === "blocked" ? blockedHover(row.attempt) : undefined}>
       {word ?? age(row.attempt.startedAt, now)}
     </span>

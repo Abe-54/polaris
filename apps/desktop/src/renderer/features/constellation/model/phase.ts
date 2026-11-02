@@ -30,5 +30,6 @@ export const phaseOf = (
     turnInFlight: worker.activeTurn,
     startedAt: attempt.startedAt,
     now,
+    waiting: worker.waiting,
   });
 };

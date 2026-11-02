@@ -6,6 +6,7 @@ import {
   type SessionId,
   ConstellationStreamItem,
   WorkerLiveness,
+  type WorkerWaiting,
 } from "@polaris/protocol";
 import { type Cause, Effect, Queue, Stream } from "effect";
 import {
@@ -18,6 +19,8 @@ import {
 import { EventStore } from "../../store/EventStore.ts";
 import type { ReadModel } from "../../store/model.ts";
 import { latestAttempt } from "../projections.ts";
+import { workerWait } from "../waiting.ts";
+import type { ConstellationRecord } from "../../store/constellation.ts";
 import type { ConstellationLivenessDelegate } from "../liveness.ts";
 
 type Update = Extract<ConstellationStreamItem, { _tag: "LivenessChanged" }>;
@@ -44,7 +47,12 @@ export const livenessProvider = Effect.gen(function* () {
     return seen;
   });
 
-  const wire = (attemptId: AttemptId, activeTurn: boolean, first: boolean) => {
+  const wire = (
+    attemptId: AttemptId,
+    activeTurn: boolean,
+    first: boolean,
+    waiting: WorkerWaiting | null
+  ) => {
     const projected = projectLiveness(
       facts.get(attemptId) ?? emptyLiveness(),
       Date.now(),
@@ -69,7 +77,15 @@ export const livenessProvider = Effect.gen(function* () {
       queuedInput: projected.queuedInput,
       activeTurn,
       firstTurn: first,
+      waiting,
     });
+  };
+
+  /** Waiting on Background Work, from the Session fold and the graph's declared waits. */
+  const waitingOf = (model: ReadModel, record: ConstellationRecord, attempt: Attempt) => {
+    const session = model.sessions.get(attempt.sessionId);
+
+    return session === undefined ? null : workerWait(record, attempt, session);
   };
 
   /** True only when no Attempt has ever run in the Session (the store indexes them as they start). */
@@ -102,7 +118,12 @@ export const livenessProvider = Effect.gen(function* () {
 
     const item = ConstellationStreamItem.cases.LivenessChanged.make({
       attemptId: attempt.id,
-      liveness: wire(attempt.id, turnInFlight(model, attempt), yield* firstTurn(model, attempt)),
+      liveness: wire(
+        attempt.id,
+        turnInFlight(model, attempt),
+        yield* firstTurn(model, attempt),
+        waitingOf(model, record, attempt)
+      ),
     });
 
     for (const queue of subscribers.get(record.graph.id) ?? []) Queue.offerUnsafe(queue, item);
@@ -142,7 +163,12 @@ export const livenessProvider = Effect.gen(function* () {
 
         result.set(
           attempt.id,
-          wire(attempt.id, turnInFlight(model, attempt), yield* firstTurn(model, attempt))
+          wire(
+            attempt.id,
+            turnInFlight(model, attempt),
+            yield* firstTurn(model, attempt),
+            waitingOf(model, record, attempt)
+          )
         );
       }
 
@@ -178,6 +204,8 @@ export const livenessProvider = Effect.gen(function* () {
               if (queuedInput !== undefined) queued.set(attempt.id, queuedInput);
             })
       ),
+    touch: (sessionId) =>
+      Effect.suspend(() => (neverAssigned(sessionId) ? Effect.void : publish(sessionId, () => {}))),
     queued: (sessionId, count) =>
       Effect.suspend(() =>
         neverAssigned(sessionId)

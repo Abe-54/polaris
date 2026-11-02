@@ -8,11 +8,13 @@ import {
   type WorkerLiveness,
   type WorkerPhase,
   type WorkerPhaseInput,
+  type PhaseWaiting,
   workerPhase,
 } from "@polaris/protocol";
 import { RECENT_TURNS, type SessionRecord } from "../store/model.ts";
 import { WORKERS_RESOURCE, type LeaseWaiter, type ResourcesModel } from "../resources/model.ts";
 import type { ConstellationRecord } from "../store/constellation.ts";
+import { workerWait } from "./waiting.ts";
 
 /** One Host's `__workers` fold and the time it is read at; all folded state. */
 export interface SlotSource {
@@ -62,12 +64,13 @@ export const slotOf = (
 
 /** A working Attempt's phase through the shared `workerPhase`, as the Desktop App reads it. */
 export const phaseOf = (
-  constellationId: ConstellationId,
+  record: ConstellationRecord,
   attempt: Attempt,
   session: SessionRecord,
   host?: SlotSource
 ): WorkerPhase => {
   const run = session.session.worktreeSetup;
+  const constellationId = record.graph.id;
 
   return workerPhase({
     setup:
@@ -79,7 +82,27 @@ export const phaseOf = (
     turnInFlight: session.turns.some((t) => t.status === "working"),
     startedAt: attempt.startedAt,
     now: host?.now ?? Date.now(),
+    waiting: workerWait(record, attempt, session),
   });
+};
+
+/** "a command", "2 subagents", "1 subagent and 1 command", or what the worker said it waits on. */
+export const waitingOnText = (waiting: PhaseWaiting): string => {
+  const commands = waiting.tasks.filter((t) => t.kind === "command").length;
+  const subagents = waiting.tasks.length - commands;
+  const mixed = commands > 0 && subagents > 0;
+
+  const counted = (noun: string, n: number) =>
+    n === 1 && !mixed ? `a ${noun}` : `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+  const parts = [
+    ...(subagents > 0 ? [counted("subagent", subagents)] : []),
+    ...(commands > 0 ? [counted("command", commands)] : []),
+  ];
+
+  if (parts.length > 0) return parts.join(" and ");
+
+  return waiting.on ?? "background work";
 };
 
 /** "40s", "12m", "1h05m": enough to spot an idle holder, short enough for every status. */
@@ -112,6 +135,8 @@ export const phaseText = (phase: WorkerPhase, now: number | null): string => {
       return aged("stalled", phase.since);
     case "working":
       return "Turn running";
+    case "waiting-on-background":
+      return aged(`waiting on ${waitingOnText(phase.waiting)}`, phase.waiting.since);
     case "idle":
       return "idle";
     case "unknown":
@@ -142,14 +167,28 @@ const heldFor = (attempt: Attempt, host: SlotSource | undefined) => {
     : "";
 };
 
+/** What it waits on, by name, and who ends the wait: its Harness, or the time it gave. */
+const waitDetail = (waiting: PhaseWaiting, host: SlotSource | undefined) => {
+  const named = waiting.tasks.map((t) => t.description).filter((d) => d !== "");
+  const what = named.length === 0 ? "" : ` (${named.join("; ")})`;
+  const declared = waiting.on !== null && waiting.tasks.length > 0 ? ` · said: ${waiting.on}` : "";
+
+  const ends =
+    host === undefined
+      ? ""
+      : ` · not stalled before ${new Date(waiting.until).toISOString().slice(11, 16)} UTC`;
+
+  return `${what}${declared}${ends}`;
+};
+
 /** `Worker: <phase>` plus what tells it apart: queue place, last Turn, how long a slot is held. */
 export const workerLine = (
-  constellationId: ConstellationId,
+  record: ConstellationRecord,
   attempt: Attempt,
   session: SessionRecord,
   host?: SlotSource
 ): string => {
-  const phase = phaseOf(constellationId, attempt, session, host);
+  const phase = phaseOf(record, attempt, session, host);
   const head = `Worker: ${phaseText(phase, host?.now ?? null)}`;
 
   switch (phase.kind) {
@@ -157,6 +196,8 @@ export const workerLine = (
       return `${head}${queuePlace(attempt, host)}`;
     case "stalled":
       return `${head} · holds a slot, no Turn yet`;
+    case "waiting-on-background":
+      return `${head}${waitDetail(phase.waiting, host)}`;
     case "idle":
       return `${head}${lastTurn(attempt, session)}${heldFor(attempt, host)}`;
     default:
@@ -210,7 +251,7 @@ const holderState = (host: HostSlots, owner: Owner | undefined, sessionId: Sessi
   if (session?.turns.some((t) => t.status === "working") === true) return "running";
 
   if (owner?.attempt.state === "working" && session !== undefined) {
-    const phase = phaseOf(owner.record.graph.id, owner.attempt, session, host);
+    const phase = phaseOf(owner.record, owner.attempt, session, host);
 
     if (phase.kind === "stalled" || phase.kind === "starting" || phase.kind === "idle")
       return phase.kind;

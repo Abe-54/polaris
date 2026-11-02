@@ -2,6 +2,8 @@
 import type { TaskGlyphKind } from "../glyphs.tsx";
 import { failedText, neutralFailure } from "../../constellation/model/failure.ts";
 import { setupExit } from "../../constellation/model/setup.ts";
+import { waitingDetail, waitingWords } from "../../constellation/model/waiting.ts";
+import type { PhaseWaiting } from "@polaris/protocol";
 import type { LeadWorker, WorkerState } from "./leadGroups.ts";
 
 export type WorkerTone = "needs-you" | "accepted" | "failed" | "subtle";
@@ -22,6 +24,7 @@ const SHOWN: Readonly<Record<WorkerState, Shown>> = {
   "handed-up": { glyph: "review", word: "handed to you", tone: "needs-you" },
   working: { glyph: "working", word: null, tone: "subtle" },
   "waiting-slot": { glyph: "waiting", word: "waiting", tone: "subtle" },
+  "waiting-background": { glyph: "waiting", word: "waiting", tone: "subtle" },
   "sent-back": { glyph: "waiting", word: "sent back", tone: "subtle" },
   failed: { glyph: "failed", word: "failed", tone: "failed" },
   lost: { glyph: "stopped", word: "lost", tone: "subtle" },
@@ -63,6 +66,18 @@ export const TONE_CLASS: Readonly<Record<WorkerTone, string>> = {
   accepted: "text-accepted-text",
   failed: "text-failed-text",
   subtle: "text-text-subtle",
+};
+
+/** A waiting worker's hover: "Waiting on a command · bench.sh · 4m" (ENG-742). */
+export const waitingHover = (waiting: PhaseWaiting, age: string) => {
+  const words = waitingWords(waiting);
+  const { text } = waitingDetail(waiting);
+
+  return [
+    `${words.charAt(0).toUpperCase()}${words.slice(1)}`,
+    ...(waiting.tasks.length > 0 ? [text] : []),
+    age,
+  ].join(" · ");
 };
 
 /** A blocked worker's hover: "blocked by F1b · reason", or "waiting on the lead · reason". */

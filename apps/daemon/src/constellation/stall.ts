@@ -12,18 +12,23 @@ import type { SessionRecord } from "../store/model.ts";
 import { pendingInputs } from "./delivery/messages.ts";
 import { isParent } from "./parents.ts";
 import { activeAttempt, latestAttempt, projectTask } from "./projections.ts";
+import { heldWait, workerWait } from "./waiting.ts";
 
 type Sessions = ReadonlyMap<Attempt["sessionId"], SessionRecord>;
 
 const hasWorkingTurn = (sessions: Sessions, sessionId: Attempt["sessionId"]) =>
   sessions.get(sessionId)?.turns.some((t) => t.status === "working") === true;
 
-/** The brief ran, the last Turn ended cleanly, the nudge is spent, and nothing is queued. */
-const silentWorker = (record: ConstellationRecord, sessions: Sessions, a: Attempt) => {
+/**
+ * The brief ran, the last Turn ended cleanly, the nudge is spent, nothing is queued, and it
+ * isn't Waiting on Background Work.
+ */
+const silentWorker = (record: ConstellationRecord, sessions: Sessions, a: Attempt, now: number) => {
   const session = sessions.get(a.sessionId);
   const last = session?.turns.at(-1);
 
   return (
+    heldWait(record, a, session, now) === null &&
     a.state === "working" &&
     a.nudgedAt !== null &&
     a.sessionId !== record.graph.leadSessionId &&
@@ -38,12 +43,37 @@ const silentWorker = (record: ConstellationRecord, sessions: Sessions, a: Attemp
   );
 };
 
-const silentWorkers = (record: ConstellationRecord, sessions: Sessions): ReadonlyArray<TaskId> => {
+const silentWorkers = (
+  record: ConstellationRecord,
+  sessions: Sessions,
+  now: number
+): ReadonlyArray<TaskId> => {
   const queued = new Set(pendingInputs(record).map((i) => i.sessionId));
 
   return record.graph.attempts
-    .filter((a) => !queued.has(a.sessionId) && silentWorker(record, sessions, a))
+    .filter((a) => !queued.has(a.sessionId) && silentWorker(record, sessions, a, now))
     .map((a) => a.taskId);
+};
+
+/**
+ * When the next held wait of a local working Attempt runs out, so the runner wakes to nudge
+ * the worker or name it stalled; null while no wait holds.
+ */
+export const nextWaitExpiry = (
+  record: ConstellationRecord,
+  sessions: Sessions,
+  host: SlotSource
+): number | null => {
+  const due = record.graph.attempts.flatMap((a) => {
+    const session = sessions.get(a.sessionId);
+
+    if (a.hostId !== host.hostId || session === undefined) return [];
+    const wait = workerWait(record, a, session);
+
+    return wait !== null && wait.until > host.now ? [wait.until] : [];
+  });
+
+  return due.length === 0 ? null : Math.min(...due);
 };
 
 /** A promoted Gate nobody is carrying: ready work with no owner. */
@@ -96,7 +126,7 @@ const localPhases = (record: ConstellationRecord, sessions: Sessions, host: Slot
       record.stale.has(a.id) ||
       latestAttempt(record.graph, a.taskId)?.id !== a.id
       ? []
-      : [{ attempt: a, phase: phaseOf(record.graph.id, a, session, host) }];
+      : [{ attempt: a, phase: phaseOf(record, a, session, host) }];
   });
 
 /** Slot holders with no first Turn past the grace period that no audit has named yet. */
@@ -142,7 +172,7 @@ export const stallAudit = (
   host?: SlotSource
 ): StallAudit | null => {
   if (record.graph.state !== "running") return null;
-  const working = silentWorkers(record, sessions);
+  const working = silentWorkers(record, sessions, host?.now ?? Date.now());
   const gates = stalledGates(record);
   const lead = silentLead(record, sessions, gates.length);
   const slots = newSlotStalls(record, sessions, host);

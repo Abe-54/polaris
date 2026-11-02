@@ -6,6 +6,7 @@ import type {
   MessageInput,
   ProgressInput,
   ProposeInput,
+  WaitingOnInput,
 } from "./inputs.ts";
 import type { Built, FieldRow, Segment } from "./types.ts";
 import { checkOf, clip, count, ids, quote, shortHead } from "./words.ts";
@@ -71,6 +72,21 @@ export const progress = ({ note, completed, total }: typeof ProgressInput.Type):
     links: [],
   };
 };
+
+/** `waiting_on` (ENG-742): "Waiting on pre-push hook", "for about 10m". */
+export const waitingOn = ({ what, minutes }: typeof WaitingOnInput.Type): Built => ({
+  head: {
+    verbs: ["Waiting on", "Waiting on", "wait on"],
+    subject:
+      what === undefined
+        ? { text: "background work", mono: false }
+        : { text: clip(what), mono: false },
+    detail: [],
+    caption: minutes === undefined ? null : `for about ${minutes}m`,
+  },
+  well: null,
+  links: [],
+});
 
 export const ask = ({ question }: typeof AskInput.Type): Built => {
   const user = question?.to === "user";

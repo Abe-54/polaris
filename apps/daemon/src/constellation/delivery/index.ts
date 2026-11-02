@@ -26,6 +26,8 @@ import { deliverDigest, deliverLocalInput, nudgeSilentWorker } from "./local.ts"
 import { settleFailedWorker } from "./failures.ts";
 import { acceptedBlockInput, unblocksAttempt } from "../blocked.ts";
 import { pendingInputs } from "./messages.ts";
+import { expiredWaits } from "./waits.ts";
+import { nextWaitExpiry } from "../stall.ts";
 import {
   ConstellationSessionEffects,
   ConstellationRemoteDelivery,
@@ -58,6 +60,10 @@ const make = Effect.gen(function* () {
 
   const gate = yield* Semaphore.make(1);
   const timers = new Map<ConstellationId, Timer>();
+  /** One wake per Constellation, when its next held wait runs out (ENG-742). */
+  const waitTimers = new Map<ConstellationId, Timer>();
+  /** Expired waits already handed to the nudge, by `[attemptId, turnId]`. */
+  const expired = new Set<string>();
   const handovers = new Map<ConstellationId, Job>();
   const inputs = new Set<string>();
   let running = false;
@@ -156,6 +162,54 @@ const make = Effect.gen(function* () {
     }
   });
 
+  /** A wait that ran out with no Turn after it gets the silent-end nudge, or its Stopped. */
+  const nudgeExpired = Effect.fnUntraced(function* (id: ConstellationId, now: number) {
+    const model = yield* store.model;
+    const record = model.constellations.get(id);
+
+    if (record === undefined || record.graph.state !== "running") return;
+
+    for (const wait of expiredWaits(record, model.sessions, owner, now)) {
+      const key = JSON.stringify([wait.attemptId, wait.turnId]);
+
+      if (expired.has(key)) continue;
+      expired.add(key);
+      yield* nudgeSilentWorker(id, wait.sessionId, wait.turnId).pipe(
+        Effect.provide(dependencies),
+        Effect.catchCause((cause) => Effect.logError("Expired wait nudge failed", cause)),
+        Effect.forkIn(scope)
+      );
+    }
+  });
+
+  const armWait = Effect.fnUntraced(function* (
+    id: ConstellationId,
+    at: number | null,
+    now: number
+  ) {
+    const existing = waitTimers.get(id);
+
+    if (existing?.at === at) return;
+    waitTimers.delete(id);
+
+    if (existing?.fiber !== undefined) yield* Fiber.interrupt(existing.fiber);
+
+    if (at === null) return;
+    const timer: Timer = { at, due: false };
+    waitTimers.set(id, timer);
+    timer.fiber = yield* Effect.sleep(Math.max(0, at - now)).pipe(
+      Effect.andThen(
+        Effect.gen(function* () {
+          if (waitTimers.get(id) !== timer) return;
+          waitTimers.delete(id);
+          yield* gate.withPermits(1)(refresh(id));
+        })
+      ),
+      Effect.catchCause((cause) => Effect.logError("Constellation wait wake failed", cause)),
+      Effect.forkIn(scope)
+    );
+  });
+
   const refreshHandover = Effect.fnUntraced(function* (id: ConstellationId) {
     const request = (yield* store.model).constellations.get(id)?.handoverRequest;
     const job = handovers.get(id);
@@ -201,12 +255,15 @@ const make = Effect.gen(function* () {
     yield* sendInputs(id).pipe(Effect.provide(dependencies));
     const model = yield* store.model;
     const now = yield* Clock.currentTimeMillis;
+    const source = { hostId: owner, resources: model.hostResources ?? emptyResources(), now };
+    yield* nudgeExpired(id, now);
 
-    const delay = digestDelay(record, model.sessions, {
-      hostId: owner,
-      resources: model.hostResources ?? emptyResources(),
-      now,
-    });
+    yield* armWait(
+      id,
+      record.graph.state === "running" ? nextWaitExpiry(record, model.sessions, source) : null,
+      now
+    );
+    const delay = digestDelay(record, model.sessions, source);
 
     if (delay === null || record.graph.state !== "running" || record.handoverRequest !== null) {
       yield* cancelTimer(id);
@@ -248,7 +305,18 @@ const make = Effect.gen(function* () {
       yield* refresh(record.graph.id);
   }, gate.withPermits(1));
 
+  /** A declared wait changes what the worker's row shows before any Harness event does. */
+  const touchWaiting = Effect.fnUntraced(function* (event: DomainEvent) {
+    if (!Predicate.isTagged(event, "AttemptProgressed") || event.waiting == null) return;
+    const record = (yield* store.model).constellations.get(event.constellationId);
+    const attempt = record?.graph.attempts.find((a) => a.id === event.attemptId);
+
+    if (attempt !== undefined) yield* liveness.touch(attempt.sessionId);
+  });
+
   const committed = Effect.fnUntraced(function* (event: DomainEvent) {
+    yield* touchWaiting(event);
+
     if (Predicate.isTagged(event, "TurnEnded") && event.turn.status === "completed") {
       for (const record of (yield* store.model).constellations.values())
         if (
@@ -287,6 +355,8 @@ const make = Effect.gen(function* () {
               Predicate.isTagged(i.envelope.event, "SessionStateChanged") ||
               // A worker slot granted with no Turn arms the stall wake (`nextSlotStall`).
               Predicate.isTagged(i.envelope.event, "ResourceLeased") ||
+              // Background work ending starts a waiting worker's grace (`waiting.ts`).
+              Predicate.isTagged(i.envelope.event, "SessionBackgroundTasksChanged") ||
               Predicate.isTagged(i.envelope.event, "TurnEnded")),
         });
 
@@ -326,7 +396,7 @@ const make = Effect.gen(function* () {
     flush,
     acknowledge: (id: string, sessionId: SessionId) =>
       acknowledge(id, sessionId).pipe(Effect.provide(dependencies), Effect.andThen(flush)),
-    pendingTimers: Effect.sync(() => timers.size),
+    pendingTimers: Effect.sync(() => timers.size + waitTimers.size),
   };
 });
 

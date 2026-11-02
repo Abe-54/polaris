@@ -19,6 +19,7 @@ import {
 } from "./look.ts";
 import type { WorkerPhase } from "@polaris/protocol";
 import { phaseOf } from "./phase.ts";
+import { waitingDetail } from "./waiting.ts";
 import { currentSetup, type SetupFact } from "./setup.ts";
 import type {
   AttemptData,
@@ -229,6 +230,12 @@ const failedLine = (attempt: AttemptData): Line | null => {
   };
 };
 
+/** "bench.sh · wakes when it ends", or a declared wait's "pre-push hook · back by 14:20". */
+const waitingLine = (phase: WorkerPhase): Line | null =>
+  phase.kind === "waiting-on-background"
+    ? { kind: "note", tone: "neutral", ...waitingDetail(phase.waiting) }
+    : null;
+
 /** "setup done · starting its first turn", or a stalled worker's "holds a slot, no turn yet". */
 const startupLine = (phase: WorkerPhase): Line | null => {
   if (phase.kind !== "starting" && phase.kind !== "stalled") return null;
@@ -283,11 +290,15 @@ const lineFor = (input: LineInput): Line | null => {
 
   if (row.projection.state === "review") return reviewLine(input);
 
-  if (row.projection.state === "working" && row.attempt !== null)
+  if (row.projection.state === "working" && row.attempt !== null) {
+    const phase = phaseOf(row.attempt, worker, facts.setup(row.task.id), facts.now);
+
     return (
-      startupLine(phaseOf(row.attempt, worker, facts.setup(row.task.id), facts.now)) ??
+      startupLine(phase) ??
+      waitingLine(phase) ??
       liveness(worker, record.progress.get(row.attempt.id), facts.now)
     );
+  }
 
   if (row.projection.state === "failed" && row.attempt !== null) return failedLine(row.attempt);
 

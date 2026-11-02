@@ -575,6 +575,47 @@ describe("rail", () => {
     expect(rowFor(rows, "B1")?.promoted).toBe(true);
   });
 
+  test("ENG-742: a worker waiting on background work is neutral and working, never stopped", () => {
+    const now = Date.parse("2026-10-01T12:10:00Z");
+
+    const waiting = (until: number) =>
+      plainFacts({
+        now,
+        worker: (a) => ({
+          ...facts.worker(a),
+          activeTurn: a.taskId === "B5" ? false : facts.worker(a).activeTurn,
+          firstTurn: true,
+          // The session went idle after the nudge: without the wait, this reads stopped.
+          stoppedWithoutClaiming: a.taskId === "B5",
+          waiting:
+            a.taskId === "B5"
+              ? {
+                  tasks: [{ kind: "command", description: "bench.sh" }],
+                  on: null,
+                  since: "2026-10-01T12:06:00Z",
+                  until,
+                }
+              : null,
+        }),
+      });
+
+    const b5 = rowFor(buildRail(c1Record(), waiting(now + 60_000)).rows, "B5");
+
+    expect(b5?.look).toMatchObject({
+      word: "waiting on a command · 4m",
+      glyph: "waiting",
+      wordTone: "neutral",
+      attention: null,
+      bucket: "working",
+    });
+    expect(b5?.line).toMatchObject({ text: "bench.sh", detail: "wakes when it ends" });
+
+    // Once the wait runs out, the silent end is the worker's again.
+    const expired = rowFor(buildRail(c1Record(), waiting(now)).rows, "B5");
+
+    expect(expired?.look).toMatchObject({ word: "needs you", glyph: "needs-you" });
+  });
+
   test("approving a handed-up Claim settles the user's part: no longer handed or promoted", () => {
     const attempts = handedUpAttempts().map((a) =>
       a.taskId === "B1" ? merged(a, { approvedByUserAt: "2026-10-01T12:00:00Z" }) : a

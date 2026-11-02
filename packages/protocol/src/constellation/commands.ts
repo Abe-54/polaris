@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { HostId, SessionId, WorkspaceId } from "../ids.ts";
+import { HostId, SessionId, Timestamp, WorkspaceId } from "../ids.ts";
 import { optionalArray, optionalNullable } from "../models.ts";
 import {
   AttemptId,
@@ -14,6 +14,17 @@ import {
   TaskDefinition,
   TaskId,
 } from "./domain.ts";
+
+/**
+ * A worker's declared wait on its own background work (the `wait` tool, ENG-742): it holds
+ * off nudges and stall audits until `until`, or until its next Turn or Claim.
+ */
+export const AttemptWaiting = Schema.Struct({
+  on: Schema.NonEmptyString,
+  until: Timestamp,
+});
+
+export type AttemptWaiting = typeof AttemptWaiting.Type;
 
 export const PlanOperation = Schema.TaggedUnion({
   Add: { task: TaskDefinition },
@@ -139,6 +150,7 @@ export const ConstellationCommand = Schema.TaggedUnion({
     note: Schema.String,
     completed: optionalNullable(Revision),
     total: optionalNullable(Revision),
+    waiting: optionalNullable(AttemptWaiting),
   },
   WorkerPropose: { constellationId: ConstellationId, attemptId: AttemptId, task: TaskDefinition },
   WorkerMessage: {

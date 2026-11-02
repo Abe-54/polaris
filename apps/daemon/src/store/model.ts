@@ -75,10 +75,7 @@ export const emptyModel: ReadModel = {
   reviewCheckouts: new Map(),
 };
 
-/**
- * How many Turns per session the read model keeps in memory. The Turn in flight
- * is always the latest, so it is always among them.
- */
+/** Turns kept per session in memory; the Turn in flight is the latest, so always among them. */
 export const RECENT_TURNS = 32;
 
 // ── Stream classification ───────────────────────────────────────────────────
@@ -376,6 +373,7 @@ export const patchSession = (session: AgentSession, patch: SessionPatch): AgentS
     contextUsage: session.contextUsage,
     lastCompaction: session.lastCompaction,
     backgroundTasks: session.backgroundTasks,
+    backgroundChangedAt: session.backgroundChangedAt,
     worktreeSetup: session.worktreeSetup,
     lastError: session.lastError,
     acceptedThroughIndex: session.acceptedThroughIndex,
@@ -721,7 +719,9 @@ const apply: (event: DomainEvent) => Reducer = DomainEvent.match<Reducer>({
   SessionContextUsed: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({ session: { contextUsage: event.usage } })),
   SessionBackgroundTasksChanged: (event) => (fold) =>
-    updateSession(fold, event.sessionId, () => ({ session: { backgroundTasks: event.tasks } })),
+    updateSession(fold, event.sessionId, () => ({
+      session: { backgroundTasks: event.tasks, backgroundChangedAt: fold.at },
+    })),
   SessionCompacted: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({ session: { lastCompaction: event.compaction } })),
   /** Only Clients act on it; the read model keeps nothing. */

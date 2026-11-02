@@ -14,6 +14,13 @@ const base: WorkerPhaseInput = {
   now: NOW,
 };
 
+const WAITING = {
+  tasks: [{ kind: "command" as const, description: "bun test" }],
+  on: null,
+  since: ago(4),
+  until: NOW + 60_000,
+};
+
 test.each<[string, Partial<WorkerPhaseInput>, ReturnType<typeof workerPhase>]>([
   // ENG-263's incident: setup done 22m ago, a slot held 12m, no Turn ever.
   ["stalled on a held slot", {}, { kind: "stalled", since: ago(12), setupDone: true }],
@@ -50,6 +57,21 @@ test.each<[string, Partial<WorkerPhaseInput>, ReturnType<typeof workerPhase>]>([
   ["working", { firstTurn: true, turnInFlight: true }, { kind: "working" }],
   ["idle between Turns", { firstTurn: true }, { kind: "idle" }],
   ["an older Daemon", { firstTurn: null }, { kind: "unknown" }],
+  [
+    "waiting on a background command while the wait holds",
+    { firstTurn: true, waiting: WAITING },
+    { kind: "waiting-on-background", waiting: WAITING },
+  ],
+  [
+    "idle once the wait has run out",
+    { firstTurn: true, waiting: { ...WAITING, until: NOW } },
+    { kind: "idle" },
+  ],
+  [
+    "working when the Harness's own Turn starts",
+    { firstTurn: true, turnInFlight: true, waiting: WAITING },
+    { kind: "working" },
+  ],
 ])("%s", (_name, patch, expected) => {
   expect(workerPhase({ ...base, ...patch })).toEqual(expected);
 });

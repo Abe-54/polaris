@@ -60,6 +60,7 @@ const observedOver = (derived: WorkerFacts, observed: ProjectionData["liveness"]
     quietSince: observed.lastOutputAt === null ? null : iso(observed.lastOutputAt),
     activeTurn: observed.activeTurn ?? derived.activeTurn,
     firstTurn: observed.firstTurn ?? derived.firstTurn,
+    waiting: observed.waiting ?? null,
   };
 };
 

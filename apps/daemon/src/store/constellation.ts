@@ -22,6 +22,13 @@ import { attemptData, graphData, taskData } from "../constellation/data.ts";
 import { projectTasks } from "../constellation/projections.ts";
 import { Predicate } from "effect";
 
+/** A wait a worker declared with the `wait` tool, folded with when it arrived (ENG-742). */
+export interface DeclaredWait {
+  readonly on: string;
+  readonly until: string;
+  readonly at: string;
+}
+
 export interface GraphQuestion {
   readonly attemptId: AttemptId;
   readonly question: ConstellationQuestion;
@@ -58,6 +65,8 @@ export interface ConstellationRecord {
     AttemptId,
     Extract<ConstellationEvent, { _tag: "AttemptProgressed" }>
   >;
+  /** Each Attempt's latest declared wait; `constellation/waiting.ts` decides whether it holds. */
+  readonly waits: ReadonlyMap<AttemptId, DeclaredWait>;
   /** When each proposal, progress note and operator message arrived, by `kindKey`. */
   readonly stamps: ReadonlyMap<string, string>;
   /** Every notification queued, so a digest can carry its items after delivery. */
@@ -179,6 +188,7 @@ const started = (graph: Constellation): ConstellationRecord => ({
   interruptions: new Map(),
   handoverStopped: new Set(),
   progress: new Map(),
+  waits: new Map(),
   stamps: new Map(),
   notifications: new Map(),
   digests: [],
@@ -276,6 +286,10 @@ export const foldConstellation = (
         ...next,
         progress: new Map([...next.progress, [e.attemptId, e]]),
         stamps: stamped(next, stampKey("progress", e.attemptId), at),
+        waits:
+          e.waiting == null
+            ? next.waits
+            : new Map([...next.waits, [e.attemptId, { ...e.waiting, at }]]),
       };
     },
     AttemptClaimed: (e) => {

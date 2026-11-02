@@ -1,7 +1,12 @@
 import { Effect, Schema } from "effect";
 import { HostId, SessionId, TurnId, Timestamp } from "../ids.ts";
 import { optionalNullable } from "../models.ts";
-import { ConstellationCommand, MessageAuthority, MessageTarget } from "./commands.ts";
+import {
+  AttemptWaiting,
+  ConstellationCommand,
+  MessageAuthority,
+  MessageTarget,
+} from "./commands.ts";
 import {
   Attempt,
   HarnessSelection,
@@ -72,6 +77,7 @@ export const constellationEventFields = {
     note: Schema.String,
     completed: optionalNullable(Revision),
     total: optionalNullable(Revision),
+    waiting: optionalNullable(AttemptWaiting),
   },
   AttemptClaimed: { ...attempt, claim: Schema.suspend(() => Claim) },
   ClaimApproved: { ...attempt, by: Schema.Literal("user"), at: Timestamp },

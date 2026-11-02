@@ -221,6 +221,7 @@ const POLARIS_VERBS = new Map<string, readonly [running: string, done: string]>(
   ["status", ["Checking the constellation", "Checked the constellation"]],
   ["set_state", ["Setting a task's state", "Set a task's state"]],
   ["progress", ["Reporting progress", "Reported progress"]],
+  ["waiting_on", ["Saying what it waits on", "Said what it waits on"]],
   ["ask", ["Asking the lead", "Asked the lead"]],
   ["claim", ["Claiming", "Claimed"]],
   ["propose", ["Proposing a task", "Proposed a task"]],

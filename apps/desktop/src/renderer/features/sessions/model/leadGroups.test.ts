@@ -17,6 +17,7 @@ import {
   workerSections,
   workerState,
 } from "./leadGroups.ts";
+import { waitingHover } from "./workerCopy.ts";
 
 const lookup = lookupIn(HOSTS, MODELS);
 
@@ -100,6 +101,46 @@ describe("workerRows", () => {
     expect(b2(ago(0.1))).toBe("starting");
     expect(b2(ago(12))).toBe("stalled");
     expect(workerRows(view, lookup).find((r) => r.taskId === "B2")?.state).toBe("starting");
+  });
+
+  test("ENG-742: a worker waiting on background work reads waiting, not stopped, until the wait runs out", () => {
+    const now = Date.now();
+
+    const view = (until: number) => ({
+      ...C1,
+      projections: C1.projections.map((p) =>
+        p.taskId === "B5"
+          ? {
+              ...p,
+              liveness: {
+                current: null,
+                lastOutputAt: null,
+                contextPercent: null,
+                queuedInput: 0,
+                activeTurn: false,
+                firstTurn: true,
+                waiting: {
+                  tasks: [{ id: "t", kind: "subagent" as const, description: "Research" }],
+                  on: null,
+                  since: new Date(now - 4 * 60_000).toISOString(),
+                  until,
+                },
+              },
+            }
+          : p
+      ),
+    });
+
+    const b5 = (until: number) =>
+      workerRows(view(until), lookup, now).find((r) => r.taskId === "B5");
+
+    expect(b5(now + 60_000)?.state).toBe("waiting-background");
+    expect(b5(now + 60_000)?.waiting?.tasks).toHaveLength(1);
+    expect(waitingHover(b5(now + 60_000)!.waiting!, "4m")).toBe(
+      "Waiting on a subagent · Research · 4m"
+    );
+    // B5's fixture session is idle after its nudge: once the wait runs out it stopped again.
+    expect(b5(now)?.state).toBe("unclaimed");
   });
 
   test("a pending approval outranks the Attempt's state", () => {

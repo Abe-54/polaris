@@ -3,7 +3,14 @@
  * session row with its workers nested under it, needs-you first, accepted ones folded into
  * one line; worker sessions leave the plain list. Pure, so it is tested.
  */
-import { type Attempt, type SessionId, type TaskId, workerPhase } from "@polaris/protocol";
+import {
+  type Attempt,
+  type PhaseWaiting,
+  type SessionId,
+  type TaskId,
+  type WorkerPhase,
+  workerPhase,
+} from "@polaris/protocol";
 import { Match } from "effect";
 import { needsYou } from "../../../routes/topBar.ts";
 import type { HostView } from "../../../../shared/api.ts";
@@ -40,7 +47,9 @@ export type WorkerState =
   /** No first Turn yet (ENG-264): "starting" until it has held its slot past the grace period… */
   | "starting"
   /** …then "stalled": it holds a slot with nothing running, and needs you to start it. */
-  | "stalled";
+  | "stalled"
+  /** Its Turn ended with background work out (ENG-742): neutral, never needs you. */
+  | "waiting-background";
 
 /** A parent Task a worker nests under in the sidebar. */
 export interface ParentRef {
@@ -69,6 +78,8 @@ export interface WorkerRow {
   readonly slotSince: string | null;
   /** Since when it has held its slot there; null when it doesn't. */
   readonly slotHeldSince: string | null;
+  /** Its Waiting on Background Work while it holds; null otherwise. */
+  readonly waiting: PhaseWaiting | null;
 }
 
 /**
@@ -164,6 +175,7 @@ const RANK: Readonly<Record<WorkerState, number>> = {
   working: 2,
   blocked: 2,
   "waiting-slot": 2,
+  "waiting-background": 2,
   "sent-back": 3,
   failed: 3,
   lost: 3,
@@ -177,7 +189,7 @@ const workingState = (
   entry: SessionEntry | null,
   stale: boolean,
   slotSince: string | null,
-  startup: "starting" | "stalled" | null
+  startup: "starting" | "stalled" | "waiting-background" | null
 ): WorkerState => {
   if (entry !== null && needsYou(entry)) return "needs-you";
 
@@ -202,7 +214,7 @@ export const workerState = (
   entry: SessionEntry | null,
   stale: boolean,
   slotSince: string | null = null,
-  startup: "starting" | "stalled" | null = null
+  startup: "starting" | "stalled" | "waiting-background" | null = null
 ): WorkerState =>
   Match.value(attempt.state).pipe(
     Match.when("working", () => workingState(attempt, entry, stale, slotSince, startup)),
@@ -227,8 +239,11 @@ const placeOf = (byId: ReadonlyMap<string, TaskData>, task: TaskData) => ({
     .map((t) => ({ id: t.id, title: t.title })),
 });
 
-/** A working Attempt with no first Turn yet, from the Daemon's liveness and its slot (ENG-264). */
-const startupOf = (
+/**
+ * A working Attempt with no first Turn yet (ENG-264), or Waiting on Background Work (ENG-742),
+ * from the Daemon's liveness and its slot.
+ */
+const phaseFor = (
   attempt: Plain<Attempt>,
   liveness: ConstellationView["projections"][number]["liveness"] | undefined,
   found: ReturnType<WorkerLookup>,
@@ -236,14 +251,19 @@ const startupOf = (
 ) => {
   const held = found?.slotHeldSince ?? null;
 
-  const phase = workerPhase({
+  return workerPhase({
     setup: null,
     slot: held === null ? null : { kind: "held", since: held },
     firstTurn: liveness?.firstTurn ?? null,
     turnInFlight: liveness?.activeTurn ?? null,
     startedAt: attempt.startedAt,
     now,
+    waiting: liveness?.waiting ?? null,
   });
+};
+
+const startupOf = (phase: WorkerPhase) => {
+  if (phase.kind === "waiting-on-background") return "waiting-background";
 
   return phase.kind === "starting" || phase.kind === "stalled" ? phase.kind : null;
 };
@@ -269,6 +289,7 @@ export const workerRows = (
     if (attempt.sessionId === constellation.leadSessionId) return [];
     const found = lookup(attempt);
     const entry = found?.entry ?? null;
+    const phase = phaseFor(attempt, liveness.get(task.id), found, now);
 
     return [
       {
@@ -284,12 +305,13 @@ export const workerRows = (
           entry,
           stale.has(task.id),
           found?.slotSince ?? null,
-          startupOf(attempt, liveness.get(task.id), found, now)
+          startupOf(phase)
         ),
         attempt,
         fetched: !unfetched.has(task.id),
         slotSince: found?.slotSince ?? null,
         slotHeldSince: found?.slotHeldSince ?? null,
+        waiting: phase.kind === "waiting-on-background" ? phase.waiting : null,
       },
     ];
   });

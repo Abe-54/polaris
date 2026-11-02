@@ -30,6 +30,7 @@ const BUSY_WORKERS: ReadonlySet<WorkerState> = new Set([
   "starting",
   "setting-up",
   "waiting-slot",
+  "waiting-background",
 ]);
 
 /** A session's tier; an Idle one still waiting on background tasks counts as working. */
