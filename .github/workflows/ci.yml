@@ -25,9 +25,10 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push supersedes a PR's run; every commit on main keeps its own run to completion.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'pr' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
