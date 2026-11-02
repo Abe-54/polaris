@@ -81,11 +81,28 @@ describe("menuTemplate", () => {
     expect(file.at(-1)?.label).toBe("Exit and update");
   });
 
-  test("Windows ends Help with the update check and About", () => {
+  test("Windows ends Help with the update check, About, then developer tools", () => {
     const help = submenu(menuTemplate(input("win32")), "&Help");
 
-    expect(labels(help.slice(-2))).toEqual(["Check for updates…", "About Polaris"]);
+    expect(labels(help.slice(-4))).toEqual([
+      "Check for updates…",
+      "About Polaris",
+      "separator",
+      "Toggle developer tools",
+    ]);
   });
+
+  test.each(["darwin", "win32", "linux"] as const)(
+    "a packaged build on %s can open developer tools from Help",
+    (platform) => {
+      const template = menuTemplate(input(platform));
+      const help = template.find((item) => item.role === "help" || item.label === "&Help");
+      // SAFETY: the template builds every submenu as an array of options.
+      const items = (help?.submenu ?? []) as ReadonlyArray<MenuItemConstructorOptions>;
+
+      expect(items.at(-1)).toMatchObject({ role: "toggleDevTools" });
+    }
+  );
 
   test("accelerators follow the platform's keymap", () => {
     const accelerator = (platform: "darwin" | "win32" | "linux", menu: string, id: string) =>

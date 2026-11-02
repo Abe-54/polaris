@@ -78,9 +78,14 @@ const develop = ({ proofHostKey, send }: TemplateInput): MenuItemConstructorOpti
     },
     { type: "separator" },
     { role: "reload" },
-    { role: "toggleDevTools" },
   ],
 });
+
+/** In packaged builds too, so a blank window can still be inspected (ENG-757). */
+const devTools: MenuItemConstructorOptions = {
+  role: "toggleDevTools",
+  label: "Toggle developer tools",
+};
 
 export const updateMenuItem = (
   input: Pick<MenuInput, "updates" | "checkUpdates" | "restartToUpdate">
@@ -195,7 +200,10 @@ const macTemplate = (input: TemplateInput): Items => [
   { label: "Session", submenu: commandItems("Session", input) },
   { role: "windowMenu" },
   ...developMenu(input),
-  { role: "help", submenu: commandItems("Help", input) },
+  {
+    role: "help",
+    submenu: [...commandItems("Help", input), { type: "separator" }, devTools],
+  },
 ];
 
 /** Windows has no app menu or Window menu: Settings… and Exit end File, About ends Help. */
@@ -222,6 +230,8 @@ const windowsTemplate = (input: TemplateInput): Items => [
       { type: "separator" },
       updateMenuItem(input),
       about(input.send),
+      { type: "separator" },
+      devTools,
     ],
   },
 ];
