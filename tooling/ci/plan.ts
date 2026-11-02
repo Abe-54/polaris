@@ -114,18 +114,20 @@ export const plan = (
   });
 };
 
-const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z /;
+/** GitHub's timestamp, then turbo's `@pkg:task: ` prefix, both optional. */
+const PREFIX = /^(?:\d{4}-\d{2}-\d{2}T[\d:.]+Z )?(?:\S+:\S+: )?/;
 
-const FAIL = /\(fail\) (.+?)(?: \[[\d.]+m?s\])?$/;
+/** Anchored, so output quoting a failure (a printed issue body, a test's own logs) doesn't count. */
+const FAIL = /^\(fail\) (.+?)(?: \[[\d.]+m?s\])?$/;
 
-const STALL = /bun test stalled: .*/;
+const STALL = /^bun test stalled: .*/;
 
 /** The failing tests a job log names: bun's `(fail)` lines and the watchdog's stall reports. */
 export const failingTestsIn = (log: string): ReadonlyArray<string> => {
   const found = new Set<string>();
 
   for (const raw of log.split(/\r?\n/)) {
-    const line = raw.replace(TIMESTAMP, "");
+    const line = raw.replace(PREFIX, "");
     const failed = FAIL.exec(line)?.[1] ?? STALL.exec(line)?.[0];
 
     if (failed) found.add(failed.trim());

@@ -74,12 +74,14 @@ describe("plan", () => {
   });
 });
 
-test("reads failing tests from a job log, through timestamps, turbo prefixes and timings", () => {
+test("reads failing tests from a job log, through prefixes and timings, ignoring quoted ones", () => {
   const log = [
     "2026-11-02T03:00:00.1Z @polaris/client:test: (pass) ok",
     "2026-11-02T03:00:00.2Z @polaris/client:test: (fail) resume > replays [3.10ms]",
     "2026-11-02T03:00:00.3Z (fail) resume > replays [1.00s]",
     "2026-11-02T03:00:00.4Z bun test stalled: no output for 300s, in a.test.ts",
+    "2026-11-02T03:00:00.5Z - `bun test stalled: no output for 300s, in quoted.test.ts`",
+    "2026-11-02T03:00:00.6Z Failing tests: - `(fail) quoted`",
   ].join("\n");
 
   expect(failingTestsIn(log)).toEqual([
