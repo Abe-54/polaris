@@ -265,49 +265,54 @@ test("execute, grid edits and write statements are refused in the Daemon; the fi
     })
   ));
 
-test("the Daemon's own writes go on while Data reads its WAL database, and nothing checkpoints", () =>
-  withDaemon(({ queries, set, home }) =>
-    Effect.gen(function* () {
-      yield* set(on);
-      const file = join(home, "state.sqlite");
-      const writer = new Database(file);
-      writer.exec("PRAGMA journal_mode = WAL");
-      writer.exec("PRAGMA wal_autocheckpoint = 0");
-      writer.exec("PRAGMA busy_timeout = 0");
-      const insert = writer.prepare("INSERT INTO events (body) VALUES (?)");
-      // The writer's open transaction is held across a read; a lock taken by the reader would fail it.
-      writer.exec("BEGIN IMMEDIATE");
-      insert.run("during");
+// Each query starts a SQLite child process, which takes seconds on CI's macOS and Windows runners.
+test(
+  "the Daemon's own writes go on while Data reads its WAL database, and nothing checkpoints",
+  () =>
+    withDaemon(({ queries, set, home }) =>
+      Effect.gen(function* () {
+        yield* set(on);
+        const file = join(home, "state.sqlite");
+        const writer = new Database(file);
+        writer.exec("PRAGMA journal_mode = WAL");
+        writer.exec("PRAGMA wal_autocheckpoint = 0");
+        writer.exec("PRAGMA busy_timeout = 0");
+        const insert = writer.prepare("INSERT INTO events (body) VALUES (?)");
+        // The writer's open transaction is held across a read; a lock taken by the reader would fail it.
+        writer.exec("BEGIN IMMEDIATE");
+        insert.run("during");
 
-      const read = yield* queries.query({
-        ...agent,
-        source: "Daemon · state",
-        sql: "SELECT count(*) FROM events",
-      });
-
-      writer.exec("COMMIT");
-
-      expect(read.rows).toEqual([[1]]);
-
-      for (let i = 0; i < 20; i++) {
-        insert.run(`write ${i}`);
-
-        const after = yield* queries.query({
+        const read = yield* queries.query({
           ...agent,
           source: "Daemon · state",
           sql: "SELECT count(*) FROM events",
         });
 
-        expect(after.rows).toEqual([[i + 3]]);
-      }
+        writer.exec("COMMIT");
 
-      // A checkpoint by the reader would have moved these frames into the database and reset the log.
-      expect(statSync(`${file}-wal`).size).toBeGreaterThan(0);
-      expect(writer.query("PRAGMA wal_checkpoint(PASSIVE)").values()[0]![1]).toBeGreaterThan(0);
-      insert.finalize();
-      writer.close();
-    })
-  ));
+        expect(read.rows).toEqual([[1]]);
+
+        for (let i = 0; i < 5; i++) {
+          insert.run(`write ${i}`);
+
+          const after = yield* queries.query({
+            ...agent,
+            source: "Daemon · state",
+            sql: "SELECT count(*) FROM events",
+          });
+
+          expect(after.rows).toEqual([[i + 3]]);
+        }
+
+        // A checkpoint by the reader would have moved these frames into the database and reset the log.
+        expect(statSync(`${file}-wal`).size).toBeGreaterThan(0);
+        expect(writer.query("PRAGMA wal_checkpoint(PASSIVE)").values()[0]![1]).toBeGreaterThan(0);
+        insert.finalize();
+        writer.close();
+      })
+    ),
+  30_000
+);
 
 test("a user's SQLite file outside the checkout is still denied to agents, even in the Daemon's home", () =>
   withDaemon(({ queries, sources, set, home, checkout }) =>

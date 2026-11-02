@@ -1,5 +1,5 @@
 /** A handler Span's parent comes from the request's `traceparent` header through the real server. */
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { HostTarget, makeHostConnection } from "@polaris/client";
@@ -11,13 +11,19 @@ import { shortTemp } from "../platform/testing.ts";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
 
-let home: string;
+const homes: string[] = [];
 
-beforeEach(() => {
-  home = mkdtempSync(shortTemp("tctx-"));
+// Each server gets its own home: Windows releases a closed pipe's name only after a while.
+const freshHome = () => {
+  const home = mkdtempSync(shortTemp("tctx-"));
+  homes.push(home);
+
+  return home;
+};
+
+afterEach(() => {
+  for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
 });
-
-afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
@@ -40,6 +46,7 @@ const parentOf = (headers: Record<string, string>) =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
+        const home = freshHome();
         yield* startServer({
           socketPath: localEndpoint(home),
           lockPath: join(home, "daemon.lock"),
