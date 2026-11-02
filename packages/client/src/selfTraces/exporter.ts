@@ -18,6 +18,9 @@ export interface SelfTraceClock {
 
 export const DEFAULT_FLUSH_DELAY_MS = 1_000;
 
+/** A send still unanswered after this is treated as unreachable, so one lost reply can't stall export. */
+export const DEFAULT_SEND_TIMEOUT_MS = 30_000;
+
 export interface SelfTraceExporterOptions {
   readonly send: (batch: SelfTraceBatch) => Promise<SelfTraceSendOutcome>;
   readonly clock?: SelfTraceClock;
@@ -25,6 +28,9 @@ export interface SelfTraceExporterOptions {
   readonly flushDelayMs?: number;
   readonly retryMs?: { readonly initial: number; readonly max: number };
   readonly limits?: SelfTraceBufferLimits;
+  readonly sendTimeoutMs?: number;
+  /** Told when sending starts failing (once per run of failures) and when a batch is refused. */
+  readonly log?: (message: string) => void;
 }
 
 export interface SelfTraceExporter {
@@ -55,12 +61,15 @@ export const makeSelfTraceExporter = ({
   flushDelayMs = DEFAULT_FLUSH_DELAY_MS,
   retryMs = RETRY,
   limits,
+  sendTimeoutMs = DEFAULT_SEND_TIMEOUT_MS,
+  log = () => undefined,
 }: SelfTraceExporterOptions): SelfTraceExporter => {
   const buffer = new SelfTraceBuffer(limits);
   let on = false;
   let cancelTimer: CancelTimer | null = null;
   let inFlight = false;
   let retry = retryMs.initial;
+  let failing = false;
 
   const cancel = () => {
     cancelTimer?.();
@@ -75,13 +84,39 @@ export const makeSelfTraceExporter = ({
     }, ms);
   };
 
-  const deliver = async (batch: BufferedBatch): Promise<SelfTraceSendOutcome> => {
-    try {
-      return await send({ service: batch.service, spans: batch.spans });
-    } catch {
-      return "unreachable";
-    }
+  const unreachable = (reason: string): SelfTraceSendOutcome => {
+    if (!failing) log(`the Host is unreachable (${reason}); Spans are kept and retried`);
+    failing = true;
+
+    return "unreachable";
   };
+
+  const attempt = (batch: BufferedBatch): Promise<SelfTraceSendOutcome> =>
+    Promise.resolve()
+      .then(() => send({ service: batch.service, spans: batch.spans }))
+      .then(
+        (outcome) => (outcome === "unreachable" ? unreachable("not connected") : outcome),
+        (cause: unknown) => unreachable(String(cause))
+      );
+
+  const deliver = (batch: BufferedBatch): Promise<SelfTraceSendOutcome> =>
+    new Promise((resolve) => {
+      let settled = false;
+
+      const settle = (outcome: SelfTraceSendOutcome) => {
+        if (settled) return;
+        settled = true;
+        cancelTimeout();
+        resolve(outcome);
+      };
+
+      const cancelTimeout = clock.setTimeout(
+        () => settle(unreachable(`no answer in ${sendTimeoutMs} ms`)),
+        sendTimeoutMs
+      );
+
+      void attempt(batch).then(settle);
+    });
 
   const flush = async (): Promise<void> => {
     cancel();
@@ -103,6 +138,8 @@ export const makeSelfTraceExporter = ({
       return;
     }
 
+    if (outcome === "dropped") log(`the Host refused ${batch.spans.length} Spans`);
+    failing = false;
     retry = retryMs.initial;
     buffer.ack(batch);
     schedule(0);

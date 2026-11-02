@@ -90,7 +90,8 @@ export const sendSelfTraces =
         client["traces.ingestSelf"](batch).pipe(
           Effect.as<SendOutcome>("sent"),
           Effect.catchTags({
-            SelfTraceRejected: () => Effect.succeed<SendOutcome>("dropped"),
+            SelfTraceRejected: (error) =>
+              Effect.succeed<SendOutcome>(error.reason === "busy" ? "retry" : "dropped"),
             Unsupported: () => Effect.succeed<SendOutcome>("dropped"),
             RpcClientError: () => Effect.succeed<SendOutcome>("retry"),
           })

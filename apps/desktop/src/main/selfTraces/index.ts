@@ -75,6 +75,7 @@ export const createDesktopSelfTraces = (options: DesktopSelfTracesOptions): Desk
       sender === null ? Promise.resolve("unreachable") : sender(source.current().hostKey, batch),
     clock: options.clock ?? systemClock,
     flushDelayMs: options.flushDelayMs ?? DEFAULT_FLUSH_DELAY_MS,
+    log: (message) => console.warn("[self-traces]", message),
   });
 
   const origin = { service: MAIN_SERVICE, version: options.version, scope: "@polaris/desktop" };

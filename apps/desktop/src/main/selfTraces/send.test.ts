@@ -1,7 +1,7 @@
 /** `ingestOn` against a stand-in Host directory with a recording `traces.ingestSelf`. */
 import { describe, expect, test } from "bun:test";
 import type { HostConnection, LiveSession } from "@polaris/client";
-import type { Capability, SelfTraceBatch } from "@polaris/protocol";
+import { type Capability, type SelfTraceBatch, SelfTraceRejected } from "@polaris/protocol";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import type { HostView } from "../../shared/api.ts";
 import { HostDirectory, UnknownHost } from "../hosts.ts";
@@ -10,16 +10,19 @@ import { ingestOn } from "./send.ts";
 
 interface FakeHost {
   readonly capabilities?: ReadonlyArray<Capability>;
+  readonly rejects?: SelfTraceRejected["reason"];
   readonly ingested?: Array<SelfTraceBatch>;
 }
 
 const fakeClient = (host: FakeHost) => ({
   "traces.ingestSelf": (batch: SelfTraceBatch) =>
-    Effect.sync(() => {
-      host.ingested?.push(batch);
+    host.rejects === undefined
+      ? Effect.sync(() => {
+          host.ingested?.push(batch);
 
-      return { accepted: batch.spans.length };
-    }),
+          return { accepted: batch.spans.length };
+        })
+      : Effect.fail(new SelfTraceRejected({ reason: host.rejects, message: "refused" })),
 });
 
 const fakeSession = (host: FakeHost): LiveSession => {
@@ -94,5 +97,10 @@ describe("ingestOn", () => {
   test("drops for a Host that can't take them, and waits for one that isn't there", async () => {
     expect(await send(fakeSession({ capabilities: [] }))).toBe("dropped");
     expect(await send(null)).toBe("unreachable");
+  });
+
+  test("a busy trace store keeps the batch for a retry; a refusal drops it", async () => {
+    expect(await send(fakeSession({ rejects: "busy" }))).toBe("unreachable");
+    expect(await send(fakeSession({ rejects: "storage" }))).toBe("dropped");
   });
 });

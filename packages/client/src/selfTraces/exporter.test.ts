@@ -129,6 +129,65 @@ describe("Self-Trace exporter", () => {
     expect(host.batches).toHaveLength(0);
   });
 
+  test("a send that never answers times out and the Spans go on the next try", async () => {
+    const { clock, advance } = fakeClock();
+    const batches: Array<SelfTraceBatch> = [];
+    const logs: Array<string> = [];
+    let calls = 0;
+
+    const exporter = makeSelfTraceExporter({
+      send: (batch) => {
+        calls += 1;
+
+        if (calls === 1) return new Promise(() => undefined);
+        batches.push(batch);
+
+        return Promise.resolve("sent");
+      },
+      clock,
+      flushDelayMs: 0,
+      sendTimeoutMs: 5_000,
+      retryMs: { initial: 100, max: 1_000 },
+      log: (message) => logs.push(message),
+    });
+
+    exporter.setEnabled(true);
+    exporter.record("svc", testSpan(1));
+    await advance(0);
+    await advance(5_000);
+    exporter.record("svc", testSpan(2));
+    await advance(100);
+
+    expect(batches.map((batch) => batch.spans)).toEqual([[testSpan(1), testSpan(2)]]);
+    expect(logs).toEqual([
+      "the Host is unreachable (no answer in 5000 ms); Spans are kept and retried",
+    ]);
+  });
+
+  test("a run of failed sends is logged once, and again after a success", async () => {
+    const { clock, advance } = fakeClock();
+    const host = fakeHost(["unreachable", "unreachable", "sent", "unreachable"]);
+    const logs: Array<string> = [];
+
+    const exporter = makeSelfTraceExporter({
+      send: host.send,
+      clock,
+      flushDelayMs: 0,
+      retryMs: { initial: 100, max: 100 },
+      log: (message) => logs.push(message),
+    });
+
+    exporter.setEnabled(true);
+    exporter.record("svc", testSpan(1));
+    await advance(0);
+    await advance(100);
+    await advance(100);
+    exporter.record("svc", testSpan(2));
+    await advance(0);
+
+    expect(logs).toHaveLength(2);
+  });
+
   test("a refused batch is dropped rather than retried", async () => {
     const { clock, advance, armed } = fakeClock();
     const host = fakeHost(["dropped"]);

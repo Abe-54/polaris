@@ -65,8 +65,11 @@ export type SelfTraceBatch = typeof SelfTraceBatch.Type;
 export class SelfTraceRejected extends Schema.TaggedError<SelfTraceRejected>()(
   "SelfTraceRejected",
   {
-    /** `developer-mode-off`: the Host neither stores Developer Mode nor holds a lease. */
-    reason: Schema.Literals(["developer-mode-off", "storage"]),
+    /**
+     * `developer-mode-off`: the Host neither stores Developer Mode nor holds a lease. `busy`: the
+     * trace store is busy; retry the batch later.
+     */
+    reason: Schema.Literals(["developer-mode-off", "storage", "busy"]),
     message: Schema.String,
   }
 ) {}

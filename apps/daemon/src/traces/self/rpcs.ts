@@ -29,15 +29,16 @@ export const SelfTraceRpcsLive = SelfTraceRpcs.toLayer(
             spans,
             workspaceId: mode.polarisWorkspaceId,
           }).pipe(
-            Effect.mapError(
-              (error) =>
-                new SelfTraceRejected({
-                  reason: "storage",
-                  message:
-                    error.status === 429
-                      ? "The trace store is busy; retry the batch."
-                      : "The trace store refused the batch.",
-                })
+            Effect.mapError((error) =>
+              error.status === 429
+                ? new SelfTraceRejected({
+                    reason: "busy",
+                    message: "The trace store is busy; retry the batch.",
+                  })
+                : new SelfTraceRejected({
+                    reason: "storage",
+                    message: "The trace store refused the batch.",
+                  })
             )
           );
 

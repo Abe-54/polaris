@@ -23,7 +23,8 @@ export const ingestOn = (
       NotConnected: outcome("unreachable"),
       RpcClientError: outcome("unreachable"),
       Unsupported: outcome("dropped"),
-      SelfTraceRejected: outcome("dropped"),
+      SelfTraceRejected: (error) =>
+        Effect.succeed<SelfTraceSendOutcome>(error.reason === "busy" ? "unreachable" : "dropped"),
     }),
     Effect.withTracerEnabled(false)
   );
