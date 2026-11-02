@@ -464,11 +464,11 @@ jobs:
 
   bench:
     name: Daemon benchmarks (quick; memory gated)
-    # Runs the real Daemon (from source) through every scenario at --quick sizes and posts the
-    # numbers to the job summary. Memory and the start-up module count (noise-free) gate
-    # against packages/bench/baselines/ci-ubuntu-latest-quick.json, the median of several 4-core
-    # runners' results on any CPU model; a runner with another core count reports without
-    # gating (--gate-same-machine). Latency and CPU never gate: shared runners are too noisy.
+    # Runs the real Daemon (from source) through every scenario at --quick sizes, three times,
+    # and posts the medians to the job summary. Memory and the start-up module count (noise-free)
+    # gate against packages/bench/baselines/ci-ubuntu-latest-quick.json, the median of 12 4-core
+    # runners' results; a runner with another core count or a CPU model the baseline lacks reports
+    # without gating (--gate-same-machine). Latency and CPU never gate: shared runners are too noisy.
     # To refresh the baseline, see packages/bench/README.md ("CI").
     needs: scope
     if: needs.scope.outputs.bench == 'true'
@@ -482,9 +482,10 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Run benchmarks
         run: |
-          bun run bench --quick --json bench-result.json --markdown "$GITHUB_STEP_SUMMARY" \
+          bun run bench --quick --runs 3 --json bench-result.json --markdown "$GITHUB_STEP_SUMMARY" \
             --compare packages/bench/baselines/ci-ubuntu-latest-quick.json \
-            --fail-on memory,cold-start.startup_modules,-git.rss_peak_mib,-blobs.upload_rss_peak_over_base_mib --gate-same-machine
+            --fail-on memory,cold-start.startup_modules,-git.rss_peak_mib,-blobs.upload_rss_peak_over_base_mib,-blobs.rss_retained_mib,-blobs.footprint_retained_mib \
+            --gate-same-machine
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

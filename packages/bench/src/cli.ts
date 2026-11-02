@@ -13,36 +13,24 @@
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
+  ALL_KINDS,
   BUSY_BACKGROUND_CORES,
+  parseFailOn,
   type Comparison,
   compare,
   gatingKinds,
-  memoryClass,
+  ungatedReason,
 } from "./compare.ts";
 import { type DeveloperModeSetting, REPO_ROOT, type TransportKind } from "./daemon.ts";
 import { environment, measureBackgroundCores } from "./env.ts";
 import { renderComparison, renderMarkdown, renderResult } from "./report.ts";
 import { runScenario } from "./runner.ts";
 import { SCENARIOS } from "./scenarios/index.ts";
-import {
-  type BenchResult,
-  type MetricKind,
-  parseBenchResult,
-  type ScenarioResult,
-} from "./types.ts";
+import { type BenchResult, parseBenchResult, type ScenarioResult } from "./types.ts";
 
 import { takeScriptLease } from "../../../tooling/leases.ts";
 
 await takeScriptLease("bench");
-
-const ALL_KINDS: ReadonlyArray<MetricKind> = [
-  "memory",
-  "cpu",
-  "latency",
-  "time",
-  "throughput",
-  "count",
-];
 
 export const BENCH_DIR = resolve(import.meta.dir, "..");
 
@@ -87,27 +75,6 @@ interface Args {
   clientSelfTraces: boolean;
   list: boolean;
 }
-
-const isMetricKind = (kind: string): kind is MetricKind => ALL_KINDS.some((k) => k === kind);
-
-const isMetricName = (gate: string) => /^[\w-]+\.[\w.-]+$/.test(gate);
-
-/** `--fail-on memory,cold-start.startup_modules,-git.rss_peak_mib` (or `none`): kinds and metrics that gate `--compare`; `-` drops one. */
-const parseFailOn = (value: string): Set<string> => {
-  const gates = value
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean);
-
-  for (const gate of gates) {
-    const excluded = gate.startsWith("-") && isMetricName(gate.slice(1));
-
-    if (!isMetricKind(gate) && !isMetricName(gate) && !excluded && gate !== "none")
-      throw new Error(`unknown kind ${gate}`);
-  }
-
-  return new Set(gates.filter((gate) => gate !== "none"));
-};
 
 const parseTransport = (value: string): TransportKind => {
   if (value !== "bridge" && value !== "socket") throw new Error(`unknown transport ${value}`);
@@ -261,9 +228,11 @@ const compareWithBaseline = (
   const ungated = [...args.failOn].filter((kind) => !failOn.has(kind));
 
   if (ungated.length > 0) {
-    console.log(
-      `\nnot gating ${ungated.join(", ")}: the baseline is from ${baseline.env.machineSlug} (${memoryClass(baseline.env)}), this run is ${result.env.machineSlug} (${memoryClass(result.env)})`
-    );
+    const reason =
+      ungatedReason(baseline.env, result.env) ??
+      `the baseline is from ${baseline.env.cpu}, this run ${result.env.cpu}`;
+
+    console.log(`\nnot gating ${ungated.join(", ")}: ${reason}`);
   }
 
   const comparison = compare(baseline, result, failOn);
