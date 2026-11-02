@@ -40,7 +40,7 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
   - `toBeDefined`/`toBeTruthy` on a value that can't be missing, or no assertion at all;
   - repeating a behaviour another test already covers at the same level (parametrize instead).
   Assert observable outcomes through the real code, with fakes only at the boundary (the fake GitHub, fake Harnesses, test Layers). Product copy is a real requirement and may be asserted; incidental output is not. When you fix a bug, add the test that fails without the fix.
-- Each package's `test` script runs `bun test` through `tooling/test/watchdog.ts`: a run silent for `POLARIS_TEST_STALL_S` seconds (default 300) is killed and the stuck file named. Keep new packages on it.
+- Each package's `test` script runs `bun test` through `tooling/test/watchdog.ts`: a run silent for `POLARIS_TEST_STALL_S` seconds (default 300) is killed and the stuck file named. Local runs are parallel (`--parallel=N`, N from the idle cores, 2 to half the cores); `POLARIS_TEST_PARALLEL=N` overrides it, 1 is serial; CI keeps its own flags. Keep new packages on it.
 - Never use node-pty; terminals use `Bun.Terminal`.
 - **Lifecycle changes go through the state machines**, never ad-hoc `if (state === …)` code: Session States through the Agent Session machine (`apps/daemon/src/engine/session.ts`, the engine's pure decider; see its README), Connection States through `packages/client/src/connection.ts`. They use XState v6 (`xstate@6.0.0-alpha.61`, an alpha, pinned exactly): read the bundled types in `node_modules/xstate/dist/declarations` rather than v5 docs or memory. The event log stays the source of truth: a machine snapshot is always derived from folded events, never kept only in an actor. Update the model-based tests (`*.testing.ts`, `*.graph.test.ts`) and the Mermaid diagrams with the machine.
 - Run `bun run typecheck && bun run test && bun run lint` before committing.
@@ -69,7 +69,7 @@ Repo-wide formatting commits are listed in `.git-blame-ignore-revs`, GitHub's bl
 
 - **pre-commit**: formats fully staged files with oxfmt and restages them, only checks partially staged ones, and lints staged files through the ratchet.
 - **commit-msg**: strips `Claude-Session:` trailers and claude.ai session URLs; this repo doesn't record them.
-- **pre-push**: re-checks format and lint on the files in the pushed commits, then typechecks and tests the changed packages and their dependents (`turbo --filter=...[base...head]`).
+- **pre-push**: re-checks format and lint on the files in the pushed commits, then typechecks the changed packages and their dependents (`turbo --filter=...[base...head]`) and tests only the changed packages (`--filter=[base...head]`); dependents' tests are CI's job.
 - **By hand**: `bun run quality <files…>` (fix), `--check`, `--dirty`, or `--range <a>..<b>`.
 
 Never bypass a hook with `--no-verify`. If one is broken, fix it or say so.
