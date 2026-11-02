@@ -9,6 +9,8 @@ name: CI
 #   platform-checks   Windows: the remote-only Client's tests. -macos: scripts, release signer. Always.
 #   test              per package, the Daemon in 3 shards: ubuntu, Windows (Daemon only), and macOS
 #                     (test-macos); `turbo run test --affected` on a PR. An unaffected part passes in seconds.
+#                     Both test tiers (fast and *.slow.test.ts, ADR 0096); fast files over 2 s are listed in
+#                     the job summary.
 #   spec, spec-traces the Quint spec and Engine trace replays: spec, engine, store, verification, resume.ts.
 #   build-daemon, smoke-*, service-windows: the binaries build, start and serve; Daemon or Client affected.
 #   bench             Daemon memory gates (bench-shards runs it 3 times in parallel): Daemon, Client,
@@ -339,7 +341,7 @@ jobs:
       - name: Trace validation (Engine runs replayed through the spec)
         run: |
           (cd apps/daemon && POLARIS_TRACE_DIR="$RUNNER_TEMP/traces" POLARIS_PBT_RUNS=30 \
-            bun test src/verification/engine.model.test.ts)
+            bun test src/verification/engine.model.slow.test.ts)
           (cd packages/spec && bun scripts/replay.ts "$RUNNER_TEMP/traces")
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:

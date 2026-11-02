@@ -3,7 +3,7 @@
 import AppIntents
 import SwiftUI
 
-/// Copy the activity shows; widgets.live.test.ts checks it through the driver.
+/// Copy the activity shows; widgets.live.slow.test.ts checks it through the driver.
 enum LiveCopy {
   static func working(_ count: Int) -> String { count == 0 ? "Nothing working" : "\(count) working" }
 

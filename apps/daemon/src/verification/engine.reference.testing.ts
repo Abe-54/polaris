@@ -1,5 +1,5 @@
 /**
- * The Engine model-based test's reference side (`engine.model.test.ts`): the
+ * The Engine model-based test's reference side (`engine.model.slow.test.ts`): the
  * committed log abstracted to comparable events, a fold of it into per-session
  * views, and a reference decider for the Client commands the test sends.
  */

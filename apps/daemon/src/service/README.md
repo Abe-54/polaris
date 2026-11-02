@@ -109,7 +109,7 @@ The Client uploads the new build and runs `<uploaded path> upgrade <uploaded pat
 
 The running Daemon (`serveUpgrades`) validates the binary again, collects the fds to keep, clears close-on-exec on them, and `execve`s into the new binary in the same PID. It passes the hand-off in `POLARIS_HANDOFF` (listener fd, named fds, child PIDs, and the version it came from). launchd and systemd see nothing change. SQLite needs nothing special: an exec is like a crash to it, and committed transactions are durable.
 
-### What Bun can and cannot do (proven in `upgrade.test.ts`, on macOS and Linux arm64)
+### What Bun can and cannot do (proven in `upgrade.slow.test.ts`, on macOS and Linux arm64)
 
 | Question | Answer |
 |---|---|

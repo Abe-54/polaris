@@ -40,7 +40,7 @@ fails the transcription rather than dropping final text or accumulating an unbou
 
 ## Tests
 
-`voice.socket.test.ts` runs the real server and Wire with a fake provider; `deepgram.test.ts`
+`voice.socket.slow.test.ts` runs the real server and Wire with a fake provider; `deepgram.test.ts`
 runs the client against a local fake of Deepgram's API. `socket.test.ts` injects the WebSocket
 send boundary to exercise backpressure deterministically. The real-Deepgram smoke runs on
 macOS with a key (it speaks with `say`), and remains skipped without it:

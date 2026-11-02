@@ -2,7 +2,7 @@
  * A fake remote Host for tests: a temporary HOME that commands "sent over
  * ssh" run in, and a Daemon build whose `polaris` is a shell stand-in that
  * installs, upgrades and (optionally) bridges to a real Daemon from source.
- * Used by `service.test.ts` and the smoke test; not shipped.
+ * Used by `service.slow.test.ts` and the smoke test; not shipped.
  */
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";

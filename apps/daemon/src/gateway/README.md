@@ -48,4 +48,4 @@ GET and OPTIONS return 405. The challenge must be canonical, unpadded base64url 
 
 ## Tests
 
-`request.test.ts` (the checks), `config.test.ts` (settings, record, secret), `transport.test.ts` (a 1 MiB blob there and back through the real listener, a text frame), `gateway.test.ts` (end to end against `startServer`: token and range required, mismatch messages, an Extension's Grant and actor, revoke cutting the connection, browsers refused, 1001 on stop, handshake expiry, voice-sized blob limits); `identity.test.ts` (challenge-response), `limits.test.ts` (capacity, rate, message and body limits).
+`request.test.ts` (the checks), `config.test.ts` (settings, record, secret), `transport.test.ts` (a 1 MiB blob there and back through the real listener, a text frame), `gateway.slow.test.ts` (end to end against `startServer`: token and range required, mismatch messages, an Extension's Grant and actor, revoke cutting the connection, browsers refused, 1001 on stop, handshake expiry, voice-sized blob limits); `identity.test.ts` (challenge-response), `limits.slow.test.ts` (capacity, rate, message and body limits).

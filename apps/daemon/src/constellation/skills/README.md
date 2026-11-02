@@ -4,7 +4,7 @@
 
 `examples.ts` paraphrases the checked-in M2 accept → fix round → gate loop. Its source paths point to briefs and reports in `.dagr`; those reports contain the lead's review and gate decisions. Raw M2 transcripts were not available, so these are report-derived examples. The cleanup omission, follow-up commits, outside-Area calls, failing regression experiment and disclosed gate failures are taken from those reports. Historical check prose remains Reported evidence; live Verified receipts require the store's recorded command output.
 
-Version 2 adds concrete friendly tool inputs, the distinction between graph, Task and Attempt revisions, send-back placement, user-only decisions, complete Claims and Gate acceptance. The eval is `../../mcp/tools/eval.test.ts` and exercises this loop on the scripted bench Harness and real Constellations service/store.
+Version 2 adds concrete friendly tool inputs, the distinction between graph, Task and Attempt revisions, send-back placement, user-only decisions, complete Claims and Gate acceptance. The eval is `../../mcp/tools/eval.slow.test.ts` and exercises this loop on the scripted bench Harness and real Constellations service/store.
 
 `preamble.ts` is the versioned Polaris context source. It names the exact tools actually attached to the Session, retains Lead/worker skills, and gives read-only Sessions general context without tools. Codex receives developer instructions; Claude receives a system-prompt append. OpenCode uses its prompt `system` field; ACP sends one context block on the first Turn after start/resume, while normalized prompt text remains only the user's message. Their context says Constellations need Codex or Claude Code; new MCP transports remain a follow-up.
 

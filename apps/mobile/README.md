@@ -47,7 +47,7 @@ Only `__DEV__` builds read the variable; the bridge itself is a script and never
 `HostConnection`, so a Host offline at launch is followed once it connects) and folds it
 (`fold.ts`); `model/` turns the folded Hosts into Home's sections, lines and replies; `ui/` draws
 them. An approval whose command runs past four lines is answered in the agent session, never
-inline. `scripts/home.daemon.test.ts` approves, denies and answers against a real Daemon.
+inline. `scripts/home.daemon.slow.test.ts` approves, denies and answers against a real Daemon.
 `src/hosts/` is Paper M7: each Host's Connection State and route, read only.
 
 The shell is `src/App.tsx` with `src/app/` (navigation, tab bar, back bar). `src/app/routes.tsx`
@@ -124,12 +124,12 @@ devDependency, its config plugin only) adds to the Xcode project at prebuild.
 - **Links.** `polaris://home` opens Home; `polaris://session/<hostId>/<sessionId>` opens the
   agent session (`src/widgets/links.ts`, handled by `useWidgetLinks`). W2's rows each link to
   their agent session, the rest of the widget to Home; W1 opens Home.
-- **Checks.** `scripts/widgets.swift.test.ts` compiles `Snapshot.swift` with `swiftc` and feeds
+- **Checks.** `scripts/widgets.swift.slow.test.ts` compiles `Snapshot.swift` with `swiftc` and feeds
   it the app's real snapshot, so the Swift reader, its merge of pushes, its ages and its links
   can't drift from the TypeScript (skipped where there is no `swiftc`).
-  `scripts/widgets.render.test.ts` draws W2 on macOS through `scripts/widgetsDriver/render.swift`
+  `scripts/widgets.render.slow.test.ts` draws W2 on macOS through `scripts/widgetsDriver/render.swift`
   and checks it takes each theme's colours; `render.swift <midnight|moonlit> <out.png>` saves a
-  render to look at. That one, `widgets.live.test.ts` and `widgets.theme.test.ts`'s Swift run need
+  render to look at. That one, `widgets.live.slow.test.ts` and `widgets.theme.test.ts`'s Swift run need
   Apple's frameworks (SwiftUI, CryptoKit, `os`), so they run only on macOS; Linux CI runs the rest.
 
 ## The Live Activity and Dynamic Island
@@ -154,7 +154,7 @@ module `modules/polaris-live-activity` and `src/live/`.
   A question opens its agent session.
 - **Looks.** The lock screen follows the app's theme (`Theme.swift`); the island is system black
   in Midnight's text colours. The celestials are generated: `bun scripts/liveCelestials.ts`.
-- **Checks.** `scripts/widgets.live.test.ts` folds the app's slices with `LiveSlices.swift` and
+- **Checks.** `scripts/widgets.live.slow.test.ts` folds the app's slices with `LiveSlices.swift` and
   checks the generated celestials. `bun scripts/liveRender.ts <simulator udid> <out dir>` renders
   every state in both themes to PNGs, for review without a lock screen.
 - **Probe.** A Debug build launched with `-PolarisLiveActivityProbe` seals two Hosts' slices,

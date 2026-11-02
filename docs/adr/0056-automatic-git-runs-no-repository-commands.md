@@ -133,7 +133,7 @@ command-line) config, never a repository's, and setting it would turn it on.
 A Review fetch in a Workspace the user trusts on this Host (`config: "trusted-fetch"`) is the
 same, except that the repository's own `core.sshCommand`, `core.gitProxy` and credential
 helpers stay: `git config core.sshCommand "ssh -i <key>"` is how a repository uses its deploy
-key, and `fetch.test.ts` keeps that working. Trust is the Host's Workspace Trust that worktree
+key, and `fetch.slow.test.ts` keeps that working. Trust is the Host's Workspace Trust that worktree
 setup also requires (`WorkspaceTrust`, on `WorktreeSetupTrust`'s records); untrusted, or in any
 doubt, the fetch runs with the Host's ssh command and helpers only, since opening a pull
 request in Review must not run what a prepared Workspace's config names. They run only for

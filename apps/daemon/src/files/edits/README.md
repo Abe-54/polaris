@@ -84,7 +84,7 @@ Fault fixtures use temporary checkouts/private journals and fake owners. Tests
 cover intent/mutation/receipt crashes for every move of an overwrite chain,
 reverse-intent/reverse-mutation crashes, actual subprocess SIGKILL, cancellation,
 partial failures, stale/ambiguous inputs, retry payload conflicts and intervening
-versions. `model.test.ts` projects real journal/file observations to
+versions. `model.slow.test.ts` projects real journal/file observations to
 `packages/spec/file-edits.qnt`; replay rejects a corrupted ownership observation.
 The single-move model composes with ordered chain fixtures; finite simulations
 are not a proof of arbitrary filesystem concurrency or platform behavior.

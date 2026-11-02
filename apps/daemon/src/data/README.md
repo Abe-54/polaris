@@ -131,7 +131,7 @@ access change asked for. Never SQL, params, row values, hosts, users or credenti
 ### Execution checks
 
 ```sh
-bun test apps/daemon/src/data apps/daemon/src/verification/dataApprovals.model.test.ts
+bun test apps/daemon/src/data apps/daemon/src/verification/dataApprovals.model.slow.test.ts
 bun run spec
 ```
 

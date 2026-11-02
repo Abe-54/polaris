@@ -2,7 +2,7 @@
 /**
  * Trace validation: replay logs the real Engine committed against polaris.qnt.
  *
- *   POLARIS_TRACE_DIR=/tmp/traces bun test apps/daemon/src/verification/engine.model.test.ts
+ *   POLARIS_TRACE_DIR=/tmp/traces bun test apps/daemon/src/verification/engine.model.slow.test.ts
  *   bun packages/spec/scripts/replay.ts /tmp/traces
  *
  * The Engine's model-based test writes, per run, the committed log (abstracted),

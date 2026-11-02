@@ -40,7 +40,7 @@ The server must outlive the Daemon, or a Daemon restart, crash or upgrade would 
 
 Servers recorded before environment filtering have no `sanitizedEnv` marker. They may retain an old hand-off envelope even after the Daemon consumes its own copy. A later `open` replaces an idle legacy server, without requiring a Codex version change. Live or uninspectable servers are kept, with one environment-migration log per Daemon lifetime; the next idle `open` retries. Externally managed servers are never migrated. New Daemons validate inherited hand-off descriptors so a child of a retained legacy server still starts fresh safely.
 
-Tests: `AppServer.test.ts` runs the real lifecycle against a fake `codex` executable (`testing/fakeCodex.ts`, which serves `FakeAppServer`): detached and not our child, adopted by a second "Daemon", replaced after a version change only when no thread is loaded, a dead server replaced, stop, and pid-reuse safety.
+Tests: `AppServer.slow.test.ts` runs the real lifecycle against a fake `codex` executable (`testing/fakeCodex.ts`, which serves `FakeAppServer`): detached and not our child, adopted by a second "Daemon", replaced after a version change only when no thread is loaded, a dead server replaced, stop, and pid-reuse safety.
 
 ### Event mapping
 

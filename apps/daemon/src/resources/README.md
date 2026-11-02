@@ -79,11 +79,11 @@ lease, and the next check asks again. An unknown identity never counts as an exi
 
 `resources.test.ts` checks capacity, FIFO, cancellation, warning/Release, live and
 reused-PID recovery, worker scopes and externally committed Lead declarations.
-`cli.test.ts` uses only throwaway Daemons and test processes to exercise wrapper
+`cli.slow.test.ts` uses only throwaway Daemons and test processes to exercise wrapper
 SIGKILL, child SIGKILL, FIFO after restart, dead waiters and command exit codes.
 The protocol tests decode old records and round-trip cancellation/removal.
 The C1-P Quint resource model and trace replayer map these same Host events.
-`resources.model.test.ts` compares the real broker with an independent queue across
+`resources.model.slow.test.ts` compares the real broker with an independent queue across
 randomized capacity edits, cancellation and restart. Set `POLARIS_RESOURCE_TRACE_DIR`
 to capture its durable batches for `packages/spec/scripts/replay-constellation.ts`.
 
@@ -94,5 +94,5 @@ Turn ends or the Harness goes Dormant/fails; empty membership alone is insuffici
 Acceptance and Lead delivery await and pin a new FIFO grant before committing the
 unblock Turn. A stopped queued resume closes its scope and cancels the wait.
 Restart rebuilds blocked bindings without acquiring an idle slot. Idle unclaimed
-working Attempts keep their existing policy. `workerAdmission.model.test.ts` checks
+working Attempts keep their existing policy. `workerAdmission.model.slow.test.ts` checks
 an independent FIFO against real worker leases across randomized blocks/wakes/stops.

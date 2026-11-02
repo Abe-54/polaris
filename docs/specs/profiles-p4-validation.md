@@ -45,7 +45,7 @@ All final broad checks, builds and benchmarks ran serially under the existing Ho
 
 The full root test attempt was **not green**: 17/19 tasks succeeded before Turbo
 stopped. Daemon reported 3,220 pass, 87 skip, eight failures and six between-test
-errors. Seven failures were unchanged `git/log.test.ts` and `git/sync.test.ts`
+errors. Seven failures were unchanged `git/log.test.ts` and `git/sync.slow.test.ts`
 five-second timeouts during a Host load burst (53.87 on 12 cores). Their unchanged
 isolated rerun under the same lease passed 23/23, 52 assertions, with load 9.62.
 The eighth failure was the shared catalog's assumption that every direct tool

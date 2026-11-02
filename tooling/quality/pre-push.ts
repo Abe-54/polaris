@@ -2,7 +2,7 @@
 /**
  * pre-push: for each pushed ref, checks formatting and lint on the changed files
  * (without writing), then through turbo typechecks the changed packages and their
- * dependents and tests the changed packages. Git passes `<local ref> <local sha> <remote ref> <remote sha>`
+ * dependents and runs the changed packages' fast-tier tests. Git passes `<local ref> <local sha> <remote ref> <remote sha>`
  * lines on stdin.
  */
 import { join } from "node:path";
@@ -20,12 +20,13 @@ const git = (...args: ReadonlyArray<string>) => {
 const baseOf = (localSha: string, remoteSha: string) =>
   ZERO.test(remoteSha) ? git("merge-base", localSha, "origin/main") : remoteSha;
 
-const turbo = (task: string, filter: string) => [
+const turbo = (task: string, filter: string, ...args: ReadonlyArray<string>) => [
   join(ROOT, "node_modules/.bin/turbo"),
   "run",
   task,
   filter,
   "--output-logs=errors-only",
+  ...(args.length > 0 ? ["--", ...args] : []),
 ];
 
 const stepsFor = (base: string, head: string): ReadonlyArray<Step> => {
@@ -50,8 +51,11 @@ const stepsFor = (base: string, head: string): ReadonlyArray<Step> => {
       label: "typecheck the changed packages and their dependents",
       command: turbo("typecheck", `--filter=...[${base}...${head}]`),
     },
-    // Dependents' tests are CI's job; a push tests only the packages it changed.
-    { label: "test the changed packages", command: turbo("test", `--filter=[${base}...${head}]`) },
+    // Dependents' tests and the slow tier are CI's job; a push tests the changed packages' fast tier.
+    {
+      label: "test the changed packages (fast tier)",
+      command: turbo("test", `--filter=[${base}...${head}]`, "--tier=fast"),
+    },
     ...scripts,
   ];
 };
