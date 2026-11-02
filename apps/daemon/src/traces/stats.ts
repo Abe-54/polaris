@@ -59,7 +59,8 @@ type Row = typeof Row.Type;
 
 const decodeRows = Schema.decodeUnknownSync(Schema.Array(Row));
 
-const likeSubstring = (value: string) => `%${value.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+export const likeSubstring = (value: string) =>
+  `%${value.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 
 const statsQuery = (checkout: string, filter: SpanStatsFilter, cap: number) => {
   const clauses = ["checkout=?", "age>=?"];

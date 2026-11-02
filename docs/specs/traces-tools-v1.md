@@ -197,9 +197,52 @@ example: {trace, span}}], groupCount, spans, truncated, since, coveredSince?}`. 
 when grouping by service and `service` when grouping by name. `groupCount` and `spans` count the
 whole read, before `limit` and the text cap.
 
+## `trace_capture {seconds?, until?, scope?}` (ENG-748)
+
+Capture what happens next: start the call, do the action (or let the agent's own command run),
+and read every Span it caused, across services, in one result. The window starts when the call
+starts.
+
+- `seconds` (1–300, default 30) bounds the window. Codex stops a tool call at 60 s, so a Codex
+  session stays under 50, as with `wait_for_command`.
+- `until` (1–256 characters) is a case-insensitive Span name substring: the window closes as soon
+  as a matching Span that started in it has ended (Spans are stored when they end), or when
+  `seconds` runs out. Matches from before the window don't count.
+- `scope` follows `traces`, with the same refusal: `"self"` captures `polaris:self` only while
+  Developer Mode is effective and the session is in the Polaris Workspace, and is refused at once
+  with `E-TRACE-UNAVAILABLE` otherwise, without waiting.
+
+The call blocks like `wait_for_command`: it subscribes to the trace store's writes before the first
+`until` check, wakes on each write (at most one check per 100 ms while writes keep coming) and runs
+no timer outside a call. After the window closes it waits a grace for late batches, because exporters
+batch: 2.5 s for `self` (the renderer's 1 s flush to main, then main's 1 s flush to the Host, plus
+transport; the Daemon's own Spans reach the store within 250 ms) and 5.5 s for a checkout (the
+OpenTelemetry batch processor's 5 s default). It then reads the Spans whose start is within the
+window, oldest first, over `spans_retention (checkout, age)` with no sort, at most 500; past that
+`truncated` is true and the oldest 500 are kept.
+
+The result groups Spans by trace, traces in order of their first Span, and each trace as a tree in
+start order. A Span whose parent wasn't captured (it started before the window, or hasn't arrived)
+is a root, marked. In `self`, a Desktop App user action is a `polaris.action.<id>` root (ADR 0095)
+with the IPC, Client and Daemon Spans it caused beneath it; its trace is marked `ACTION`. An empty
+window is a valid result, not `E-TRACE-NONE`.
+
+```
+Capture (self) from 2026-11-02T20:07:58.120Z for 1.4s, until "data.describe" matched · 3 spans in 1 traces
+trace 4f1c…  polaris.action.data.table.open  polaris-desktop-renderer  3 spans  3 services  120 ms  ACTION
+  +0 ms  polaris.action.data.table.open  polaris-desktop-renderer  120 ms  span 2d91…
+    +5 ms  ipc.data.describe  polaris-desktop-main  80 ms  span 7a02…
+      +10 ms  data.describe  polaris-daemon  60 ms  span c3e8…
+```
+
+`structuredContent`: `{window: {start, end, scope, until?, matched?}, spans, traceCount, truncated,
+traces: [{id, root, service, action, startedAt, durationMs, spanCount, errors, spans: [{id, parent,
+depth, name, service, offsetMs, durationMs, error}]}]}`. `spans` and `traceCount` count the whole
+read; under the text cap, lines are trimmed from the end and `traces` keeps only what the text shows.
+
 ## Caps and retrieval
 
-All five tools emit one text block of at most 16,000 characters. `traces` states shown/total and
+All six tools emit one text block of at most 16,000 characters. `traces` states shown/total and
 suggests limit or narrower filters. `trace` counts folded Spans and gives their upper duration
 bound; use `span` for individual details. For `span`, name each omitted section with its omitted
 detail-line count and say to use `span` structuredContent for the full retained data. Older logs

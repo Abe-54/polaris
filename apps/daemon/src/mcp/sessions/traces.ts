@@ -12,6 +12,7 @@ import { compareForSession } from "../../traces/compare.ts";
 import { firstScope } from "../../traces/self/reads.ts";
 import { SELF_CHECKOUT } from "../../traces/self/scope.ts";
 import { matchingSource } from "../tools/spanFormat.ts";
+import { captureSpans } from "./capture.ts";
 
 const selfOff = () =>
   new TraceError({
@@ -40,7 +41,9 @@ export const sessionTraceTools = (
   runtime: Pick<TraceRuntime["Service"], "setup">,
   sessions: Pick<TraceSessions["Service"], "session">,
   sources?: Pick<DataSources["Service"], "list">,
-  developerMode?: Effect.Effect<DeveloperMode>
+  developerMode?: Effect.Effect<DeveloperMode>,
+  /** Overrides `trace_capture`'s wait for late batches (tests). */
+  captureGraceMs?: number
 ): TraceSessionTools => {
   /** As the Traces view's `readScopes`: only a session in the Polaris Workspace, while on. */
   const selfReadable = (workspaceId: WorkspaceId) =>
@@ -133,6 +136,12 @@ export const sessionTraceTools = (
         ([view]) => view
       ),
     stats: (context, filter) => store.stats(context.checkout, filter),
+    capture: (context, options) =>
+      captureSpans(
+        store,
+        context.checkout,
+        captureGraceMs === undefined ? options : { ...options, graceMs: captureGraceMs }
+      ),
     span: Effect.fnUntraced(function* (sessionId, context, trace, span) {
       const [result] = yield* firstScope(context.scopes, (scope) =>
         store.toolSpan(scope, trace, span)

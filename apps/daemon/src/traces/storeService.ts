@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, type Stream } from "effect";
+import { Context, Effect, Layer, type Scope, type Stream } from "effect";
 import { join } from "node:path";
 import { polarisHome } from "../paths.ts";
 import type {
@@ -15,6 +15,7 @@ import type { TraceHistory, TraceView, TraceToolPage, TraceToolSpan } from "./wo
 import type { TraceWorkerOptions } from "./workerClient.ts";
 import type { TracePage } from "./store.ts";
 import type { SpanStats, SpanStatsFilter } from "./stats.ts";
+import type { SpanCapture, SpanCaptureFilter } from "./capture.ts";
 
 export class TraceStore extends Context.Service<
   TraceStore,
@@ -51,6 +52,11 @@ export class TraceStore extends Context.Service<
       checkout: string,
       filter: SpanStatsFilter
     ) => Effect.Effect<SpanStats, TraceError>;
+    /** The Spans that started in a window, oldest first (the `trace_capture` tool). */
+    readonly capture: (
+      checkout: string,
+      filter: SpanCaptureFilter
+    ) => Effect.Effect<SpanCapture, TraceError>;
     readonly overlapping: (
       checkout: string,
       start: string,
@@ -72,6 +78,8 @@ export class TraceStore extends Context.Service<
       checkout: string,
       filter?: TraceFilter
     ) => Stream.Stream<TracePage, TraceError>;
+    /** Subscribes now, in the scope; the stream then wakes on each later write or `notify`. */
+    readonly changes: Effect.Effect<Stream.Stream<void>, never, Scope.Scope>;
     readonly flush: Effect.Effect<void, TraceError>;
     /** Receiver/configuration changes wake existing watches without a polling loop. */
     readonly notify: Effect.Effect<void>;

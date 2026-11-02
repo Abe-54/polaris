@@ -127,7 +127,7 @@ measuring ingest throughput, RSS, concurrent RPC latency and worker retirement.
 ENG-673's default-timeout checks, negative control and raw paired measurements
 are in [launch measurements](../../../../packages/bench/measurements/eng-657/launch/README.md).
 
-MCP `traces`, `trace`, `span` and `trace_stats` share these services on every Data-tool binding. In the Polaris
+MCP `traces`, `trace`, `span`, `trace_stats` and `trace_capture` share these services on every Data-tool binding. In the Polaris
 Workspace, while Developer Mode is effective, they also read the Self-Trace scope (`scope: "self"`,
 ENG-731).
 `TraceStore.history(checkout, tracePrefix)` batches root and Span-name/parent-name duration medians
@@ -147,6 +147,15 @@ and/or service with count, errors, nearest-rank p50/p95, max, latest start and a
 newest first, or `spans_age` with a status filter, so no new index or ingest cost; at most
 20,000 matching Spans are read, and a capped result reports where its read stopped. It runs in
 the store worker after the usual prune, and reads one scope: the checkout or `polaris:self`.
+
+`TraceStore.capture(checkout, filter)` (`capture.ts`, ENG-748) backs MCP `trace_capture`: the
+Spans that started between `sinceMs` and `untilMs`, optionally by name substring, oldest first
+over `spans_retention (checkout, age)` with no sort, at most 500 (more is `truncated`).
+`TraceStore.changes` subscribes in the caller's scope and wakes on each worker write or
+`notify`; the tool's `until` check waits on it rather than polling, so nothing runs outside a
+call. The blocking, the grace for late batches (2.5 s self, 5.5 s checkout) and the trace trees are
+in `mcp/sessions/capture.ts` and `mcp/tools/captureFormat.ts`; the contract is
+`docs/specs/traces-tools-v1.md`.
 
 ## Phase 2 contracts (ENG-657)
 

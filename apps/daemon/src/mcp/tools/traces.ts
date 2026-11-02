@@ -15,8 +15,11 @@ import { duration, inline, clipped, TRACE_CAP } from "./traceFormat.ts";
 import { compareView } from "./compareFormat.ts";
 import { spanView } from "./spanFormat.ts";
 import { statsView } from "./statsFormat.ts";
+import { captureView } from "./captureFormat.ts";
 import type { ReadScopes } from "../../traces/self/reads.ts";
 import type { SpanStats, SpanStatsFilter } from "../../traces/stats.ts";
+import type { CaptureOptions, CaptureResult } from "../sessions/capture.ts";
+import { CAPTURE_SPAN_CAP } from "../../traces/capture.ts";
 
 /** A week, the trace store's retention: the widest `trace_stats` window. */
 const MAX_STATS_MINUTES = 7 * 24 * 60;
@@ -56,6 +59,21 @@ export const TraceStatsInput = Schema.Struct({
 
 export type TraceStatsInput = typeof TraceStatsInput.Type;
 
+/** The longest `trace_capture` window; Codex stops a tool call at 60 s, so stay under 50 there. */
+export const CAPTURE_LIMIT_SECONDS = 300;
+
+const DEFAULT_CAPTURE_SECONDS = 30;
+
+export const TraceCaptureInput = Schema.Struct({
+  seconds: Schema.optionalKey(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: CAPTURE_LIMIT_SECONDS }))
+  ),
+  until: Schema.optionalKey(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+  scope: Schema.optionalKey(TraceScopeInput),
+});
+
+export type TraceCaptureInput = typeof TraceCaptureInput.Type;
+
 export interface TraceToolContext {
   readonly checkout: string;
   /** Where `trace` and `span` look, first to last; the Self-Trace scope follows while readable. */
@@ -93,6 +111,11 @@ export interface TraceSessionTools {
     context: TraceToolContext,
     filter: SpanStatsFilter
   ) => Effect.Effect<SpanStats, TraceError>;
+  /** Blocks for the window (or until a matching Span ends), then reads what started in it. */
+  readonly capture: (
+    context: TraceToolContext,
+    options: CaptureOptions
+  ) => Effect.Effect<CaptureResult, TraceError>;
   readonly span: (
     sessionId: SessionId,
     context: TraceToolContext,
@@ -296,6 +319,30 @@ export const traceTools = (sessionId: SessionId, sessions: SessionTools): BoundT
           });
 
           return viewResult(statsView(stats, { since: new Date(sinceMs).toISOString(), minutes }));
+        })
+    ),
+    make(
+      "trace_capture",
+      `Capture what happens next: block for seconds (default ${DEFAULT_CAPTURE_SECONDS}, at most ${CAPTURE_LIMIT_SECONDS}; under Codex stay below 50), or less with until, a case-insensitive span name substring that returns once a matching span has ended. Then, after a short wait for late batches, returns every span that started in the window across all services, grouped by trace in time order as trees, with span ids for span. In Polaris's own traces a Desktop App user action is a polaris.action.<id> root. At most ${CAPTURE_SPAN_CAP} spans. scope self captures Polaris's own spans while Developer Mode is on.`,
+      TraceCaptureInput,
+      (input, traces) =>
+        Effect.gen(function* () {
+          const context = yield* traces.context(sessionId, scoped(input.scope));
+
+          const result = yield* traces.capture(context, {
+            seconds: input.seconds ?? DEFAULT_CAPTURE_SECONDS,
+            ...(input.until === undefined ? undefined : { until: input.until }),
+          });
+
+          return viewResult(
+            captureView(result.capture, {
+              startMs: result.startMs,
+              endMs: result.endMs,
+              scope: input.scope ?? "checkout",
+              until: input.until ?? null,
+              matched: result.matched,
+            })
+          );
         })
     ),
     make(

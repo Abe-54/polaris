@@ -23,6 +23,9 @@ import { traceTools } from "./traces.ts";
 
 export const NOW = BigInt(Date.now()) * 1_000_000n;
 
+/** `trace_capture`'s wait for late batches here: the test ingests each batch itself. */
+export const CAPTURE_TEST_GRACE_MS = 50;
+
 export const turn = TraceTurn.make({
   sessionId: TEST_SESSION,
   id: TurnId.make("turn-12"),
@@ -110,7 +113,8 @@ export const withStoredTools = async (
                   return sources;
                 }),
             },
-            Effect.sync(() => developerMode)
+            Effect.sync(() => developerMode),
+            CAPTURE_TEST_GRACE_MS
           );
 
           const catalogs = bindings.map((binding) => {

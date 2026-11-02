@@ -24,6 +24,7 @@ import {
   TraceToolSpan,
 } from "./workerProtocol.ts";
 import { IngestError } from "./ingest.ts";
+import { SpanCapture } from "./capture.ts";
 import { SpanStats } from "./stats.ts";
 
 const TracePage = Schema.Struct({ traces: Schema.Array(TraceSummary), total: Schema.Number });
@@ -138,6 +139,8 @@ export const traceStoreLayerAt = (filename: string, options: TraceWorkerOptions 
           ),
         stats: (checkout, filter) =>
           read(TraceWorkerRequest.cases.Stats.make({ checkout, filter }), SpanStats),
+        capture: (checkout, filter) =>
+          read(TraceWorkerRequest.cases.Capture.make({ checkout, filter }), SpanCapture),
         overlapping: (checkout, start, end) =>
           read(TraceWorkerRequest.cases.Overlap.make({ checkout, start, end }), TracePage),
         get: (checkout, traceId) =>
@@ -152,6 +155,7 @@ export const traceStoreLayerAt = (filename: string, options: TraceWorkerOptions 
         link: (checkout, traceId) =>
           Effect.asVoid(request(TraceWorkerRequest.cases.Link.make({ checkout, traceId }))),
         watch,
+        changes: Effect.map(PubSub.subscribe(changes), Stream.fromSubscription),
         notify,
         flush: Effect.suspend(() =>
           worker.running
