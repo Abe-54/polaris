@@ -119,10 +119,14 @@ start. Directories older than a day are removed when the next one is made. On ma
   path. bubblewrap binds just the file, so the directories above it show
   only the path to it. On a system bubblewrap older than 0.9 (no `--argv0`)
   Codex runs its own `argv[0]` instead, which this doesn't cover. Either
-  way, a command whose output starts with bubblewrap's, Codex's or
-  `sandbox-exec`'s own error fails the Risk Summary's agent layer with that
-  line, whatever the Reviewer replied: it read the diff without running
-  anything.
+  way, when every command the Reviewer ran printed nothing but bubblewrap's,
+  Codex's or `sandbox-exec`'s own one-line error and exited as that tool does
+  (1; `sandbox-exec` 65 or 71), the sandbox never started, and the Risk
+  Summary's agent layer fails with that line. The reviewed change controls its
+  scripts' output and can print the same line, so one such command beside a
+  command that ran fails nothing, and a failed layer still keeps the Findings
+  the Reviewer returned from the diff: mimicking the error can mark the layer
+  failed but can't hide a Finding.
 - **OpenCode**: unchanged. Its supervised ruleset asks for
   `external_directory`, and the Reviewer's policy denies every ask.
 - **ACP agents** read with their own tools, which Polaris can't confine: a

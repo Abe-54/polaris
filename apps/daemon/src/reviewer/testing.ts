@@ -57,28 +57,33 @@ export const cleanupReviewerTests = async () => {
   for (const dir of cleanup.splice(0)) await removeDirSettled(dir);
 };
 
-/** A command the Reviewer ran that printed `output` and failed. */
-export const failedCommand = (input: TurnInput, output: string) =>
+/** A command the Reviewer ran: what it printed and how it exited. */
+export interface ReviewerCommand {
+  readonly output: string;
+  readonly exitCode: number;
+}
+
+const commandRan = (input: TurnInput, { output, exitCode }: ReviewerCommand, i: number) =>
   HarnessEvent.ItemCompleted({
     turnId: input.turnId,
     item: TurnItem.cases.CommandExecution.make({
-      id: `cmd-${input.turnId}`,
+      id: `cmd-${input.turnId}-${i}`,
       command: "git log --oneline -5",
       cwd: "/repo",
       output,
-      exitCode: 1,
-      status: "failed",
+      exitCode,
+      status: exitCode === 0 ? "completed" : "failed",
     }),
   });
 
 /**
- * The Reviewer's Turn: two approvals (one allowed, one not), then the bench reply; with
- * `commandFails`, a failed command's output before it.
+ * The Reviewer's Turn: two approvals (one allowed, one not), then the bench reply; `commands`
+ * ran before it.
  */
-export const reviewerTurn = (input: TurnInput, commandFails?: string) => [
+export const reviewerTurn = (input: TurnInput, commands: ReadonlyArray<ReviewerCommand> = []) => [
   HarnessEvent.CursorAssigned({ cursor: "reviewer-cursor" }),
   HarnessEvent.TurnStarted({ turnId: input.turnId, prompt: input.prompt }),
-  ...(commandFails === undefined ? [] : [failedCommand(input, commandFails)]),
+  ...commands.map((command, i) => commandRan(input, command, i)),
   HarnessEvent.ApprovalRequested({
     turnId: input.turnId,
     requestId: RequestId.make(`ok-${input.turnId}`),
@@ -147,8 +152,8 @@ export const reviewerLayer = (options: {
   readonly rules?: Layer.Layer<Rules>;
   /** The Reviewer's Turns fail with this error. */
   readonly reviewerFails?: string;
-  /** The Reviewer runs a command that prints this and fails, then replies as usual. */
-  readonly reviewerCommandFails?: string;
+  /** Commands the Reviewer runs before it replies as usual. */
+  readonly reviewerCommands?: ReadonlyArray<ReviewerCommand>;
   /** Opens sessions in place of the fake's: another driver's, which may fail. */
   readonly open?: HarnessDriver["open"];
 }) => {
@@ -159,7 +164,7 @@ export const reviewerLayer = (options: {
     onTurn: (input, session) =>
       isReviewerPrompt(input.prompt)
         ? options.reviewerFails === undefined
-          ? reviewerTurn(input, options.reviewerCommandFails)
+          ? reviewerTurn(input, options.reviewerCommands)
           : [
               HarnessEvent.TurnStarted({ turnId: input.turnId, prompt: input.prompt }),
               HarnessEvent.TurnEnded({

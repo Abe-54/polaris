@@ -1,26 +1,59 @@
 /**
  * When the Reviewer's Harness couldn't run anything: its sandbox didn't start, so every command
- * it tried failed before running. Whatever it then replied, the layer fails.
+ * it tried failed before running. The layer fails; the Findings it still returned are kept.
  */
 import { harnessEntry, type HarnessKind, type TurnItem } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { shortHostName } from "../service/hostName.ts";
 import type { TurnOutcome } from "./session.ts";
 
-/** The sandbox's own diagnostics, never the command's: bubblewrap's, Codex's, macOS's. */
-const LAUNCH_FAILURE = /^(?:bwrap: |error building bubblewrap command: |sandbox-exec: ).+$/m;
+/**
+ * A sandbox's own setup error and the exit code it dies with: bubblewrap's `die()` and Codex's
+ * bubblewrap builder exit 1, `sandbox-exec` 65 (a bad profile) or 71 (it couldn't apply or exec).
+ */
+const SETUP_FAILURES: ReadonlyArray<{
+  readonly prefix: string;
+  readonly exitCodes: ReadonlyArray<number>;
+}> = [
+  { prefix: "bwrap: ", exitCodes: [1] },
+  { prefix: "error building bubblewrap command: ", exitCodes: [1] },
+  { prefix: "sandbox-exec: ", exitCodes: [65, 71] },
+];
 
-/** The first line in which a failed command says its sandbox didn't start; null when none did. */
+type Command = Extract<TurnItem, { readonly _tag: "CommandExecution" }>;
+
+/**
+ * The sandbox's line when it is all the command printed and it exited as the sandbox does. A
+ * reviewed script can mimic that, so the layer keeps its Findings (ADR 0055).
+ */
+const setupFailure = (command: Command): string | null => {
+  const output = command.output.trim();
+
+  if (output === "" || output.includes("\n") || command.exitCode === null) return null;
+  const exitCode = command.exitCode;
+
+  return SETUP_FAILURES.some(
+    ({ prefix, exitCodes }) => output.startsWith(prefix) && exitCodes.includes(exitCode)
+  )
+    ? output
+    : null;
+};
+
+/**
+ * The sandbox's line when every command the Turn ran failed to start in it; null when any ran,
+ * or none was tried. One command that ran means the sandbox worked.
+ */
 export const sandboxLaunchFailure = (items: ReadonlyArray<TurnItem>): string | null => {
-  for (const item of items) {
-    if (!Predicate.isTagged(item, "CommandExecution")) continue;
-    const failed = item.status === "failed" || (item.exitCode !== null && item.exitCode !== 0);
-    const line = failed ? LAUNCH_FAILURE.exec(item.output)?.[0] : undefined;
+  const ran = items.filter(
+    (item): item is Command =>
+      Predicate.isTagged(item, "CommandExecution") &&
+      (item.status === "completed" || item.status === "failed")
+  );
 
-    if (line !== undefined) return line.trim();
-  }
+  const failures = ran.map(setupFailure);
+  const first = failures[0];
 
-  return null;
+  return first === undefined || failures.some((line) => line === null) ? null : first;
 };
 
 const nameOf = (harness: HarnessKind) => harnessEntry(harness)?.name ?? harness;
@@ -45,21 +78,31 @@ export const sandboxFailureNote = (options: {
   }`;
 };
 
+/** The note that fails the layer when its sandbox never started; null when it did. */
+export const sandboxNote = (
+  harness: HarnessKind,
+  outcome: Pick<TurnOutcome, "sandboxFailure">,
+  host: string = shortHostName()
+): string | null =>
+  outcome.sandboxFailure === null
+    ? null
+    : sandboxFailureNote({ harness, host, line: outcome.sandboxFailure });
+
 /**
- * Why a Turn gave no review: its sandbox didn't start (whatever it replied, it ran nothing), or
- * the Turn ended without a reply. Null when its reply can be read.
+ * Why a Turn gave no reply: its sandbox didn't start, or the Turn failed or was interrupted.
+ * Null when it replied.
  */
 export const turnFailure = (
   harness: HarnessKind,
   outcome: Pick<TurnOutcome, "reply" | "status" | "error" | "sandboxFailure">,
   host: string = shortHostName()
 ): string | null => {
-  if (outcome.sandboxFailure !== null)
-    return sandboxFailureNote({ harness, host, line: outcome.sandboxFailure });
-
   if (outcome.reply !== null) return null;
 
-  return `The Reviewer's Turn ${outcome.status === "interrupted" ? "was interrupted" : "failed"}${
-    outcome.error === null ? "." : `: ${outcome.error}`
-  }`;
+  return (
+    sandboxNote(harness, outcome, host) ??
+    `The Reviewer's Turn ${outcome.status === "interrupted" ? "was interrupted" : "failed"}${
+      outcome.error === null ? "." : `: ${outcome.error}`
+    }`
+  );
 };

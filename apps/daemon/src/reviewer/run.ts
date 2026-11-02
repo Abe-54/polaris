@@ -44,7 +44,7 @@ import { shortHostName } from "../service/hostName.ts";
 import { type ReviewRange, resolveRange } from "./range.ts";
 import { askFirst, changedLines, switchedOff } from "./when.ts";
 import { continueReviewerSession, startReviewerSession, type TurnOutcome } from "./session.ts";
-import { turnFailure } from "./launch.ts";
+import { sandboxNote, turnFailure } from "./launch.ts";
 
 export interface RunRequest {
   readonly workspaceId: WorkspaceId;
@@ -267,6 +267,8 @@ interface AgentResult {
   readonly sessionId: SessionId | null;
   readonly output: ReviewerOutput | null;
   readonly note: string | null;
+  /** The layer fails even with Findings: its sandbox never started, so it ran nothing. */
+  readonly failed: boolean;
 }
 
 const askReviewer = Effect.fn("askReviewer")(function* (input: AgentInput) {
@@ -327,16 +329,20 @@ const askReviewer = Effect.fn("askReviewer")(function* (input: AgentInput) {
   const failure = turnFailure(choice.harness, outcome);
 
   if (failure !== null)
-    return { sessionId: outcome.sessionId, output: null, note: failure } satisfies AgentResult;
+    return { sessionId: outcome.sessionId, output: null, note: failure, failed: true };
 
   const decoded = yield* decodeWithRepair(outcome.sessionId, outcome);
+  const blind = sandboxNote(choice.harness, outcome);
 
   return {
     sessionId: outcome.sessionId,
     output: Result.isSuccess(decoded) ? decoded.success : null,
-    note: Result.isSuccess(decoded)
-      ? shellNote
-      : "The Reviewer's reply couldn't be read, even after asking again.",
+    note:
+      blind ??
+      (Result.isSuccess(decoded)
+        ? shellNote
+        : "The Reviewer's reply couldn't be read, even after asking again."),
+    failed: blind !== null,
   } satisfies AgentResult;
 });
 
@@ -352,6 +358,7 @@ const runAgentLayer = (input: AgentInput) =>
           sessionId: null,
           output: null,
           note: `The Reviewer couldn't run: ${causeMessage(cause)}`,
+          failed: true,
         } satisfies AgentResult)
       )
     );
@@ -389,7 +396,7 @@ const runAgentLayer = (input: AgentInput) =>
         summaryId: summary.id,
         layer: "agent",
         run: LayerRun.make({
-          status: "completed",
+          status: result.failed ? "failed" : "completed",
           note: [dropped, result.note].filter((n) => n !== null).join(" ") || null,
         }),
       }),

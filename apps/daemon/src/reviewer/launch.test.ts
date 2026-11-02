@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { TurnItem } from "@polaris/protocol";
 import { sandboxLaunchFailure } from "./launch.ts";
 
-const command = (output: string, exitCode: number | null, status: "completed" | "failed") =>
+const command = (
+  output: string,
+  exitCode: number | null,
+  status: "completed" | "failed" | "declined" = "failed"
+) =>
   TurnItem.cases.CommandExecution.make({
     id: "cmd",
     command: "git log",
@@ -12,43 +16,54 @@ const command = (output: string, exitCode: number | null, status: "completed" | 
     status,
   });
 
+const NOT_FOUND = "bwrap: execvp /x/codex: No such file or directory";
+
 describe("a sandbox that didn't start", () => {
   test.each([
-    [
-      "bubblewrap couldn't run the Harness",
-      "bwrap: execvp /x/codex: No such file or directory\n",
-      1,
-      "failed",
-      "bwrap: execvp /x/codex: No such file or directory",
-    ],
+    ["bubblewrap couldn't run the Harness", `${NOT_FOUND}\n`, 1, NOT_FOUND],
     [
       "Codex couldn't build the bubblewrap command",
       "error building bubblewrap command: bad path",
       1,
-      "completed",
       "error building bubblewrap command: bad path",
     ],
     [
-      "macOS's sandbox refused to apply",
-      "sandbox-exec: sandbox_apply: Operation not permitted",
+      "macOS's sandbox couldn't exec",
+      "sandbox-exec: execvp() of '/x/git' failed: No such file or directory",
       71,
-      "completed",
-      "sandbox-exec: sandbox_apply: Operation not permitted",
+      "sandbox-exec: execvp() of '/x/git' failed: No such file or directory",
     ],
-  ] as const)("is read from a failed command: %s", (_, output, exitCode, status, line) => {
-    expect(sandboxLaunchFailure([command(output, exitCode, status)])).toBe(line);
+  ] as const)(
+    "is read from a command that printed only its error: %s",
+    (_, output, exitCode, line) => {
+      expect(sandboxLaunchFailure([command(output, exitCode)])).toBe(line);
+    }
+  );
+
+  test("is read when every command failed that way, declined ones aside", () => {
+    expect(
+      sandboxLaunchFailure([
+        command(NOT_FOUND, 1),
+        command("", null, "declined"),
+        command(NOT_FOUND, 1),
+      ])
+    ).toBe(NOT_FOUND);
   });
 
+  // A reviewed change controls what its scripts print; mimicking bwrap must not fail the review.
   test.each([
-    ["a command that failed on its own", "fatal: not a git repository", 128, "failed"],
+    ["a command that failed on its own", [command("fatal: not a git repository", 128)]],
+    ["bwrap's words and an exit 0", [command(NOT_FOUND, 0, "completed")]],
+    ["bwrap's words and another exit code", [command(NOT_FOUND, 2)]],
+    ["bwrap's line followed by more output", [command(`${NOT_FOUND}\nnpm ERR! test failed`, 1)]],
+    ["bwrap's line after other output", [command(`> test\n${NOT_FOUND}`, 1)]],
+    ["a mention mid-line", [command("grep found: bwrap: setting up uid map", 1)]],
     [
-      "a command that succeeded while printing bwrap's words",
-      "bwrap: execvp is mentioned in this README",
-      0,
-      "completed",
+      "one launch failure beside a command that ran",
+      [command(NOT_FOUND, 1), command("ok", 0, "completed")],
     ],
-    ["a mention mid-line", "grep found: bwrap: setting up uid map", 1, "failed"],
-  ] as const)("isn't %s", (_, output, exitCode, status) => {
-    expect(sandboxLaunchFailure([command(output, exitCode, status)])).toBeNull();
+    ["no command at all", []],
+  ] as const)("isn't %s", (_, items) => {
+    expect(sandboxLaunchFailure(items)).toBeNull();
   });
 });

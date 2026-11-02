@@ -49,10 +49,17 @@ describe("a Reviewer that couldn't run", () => {
       `sandbox didn't start on ${host} (bwrap: setting up uid map: Permission denied). Check that \`bwrap --ro-bind / / true\` runs there`,
     ],
   ])(
-    "fails when its sandbox didn't start, even though it replied: %s",
+    "fails when its sandbox didn't start, keeping what it found: %s",
     async (_, output, note) => {
       const s = await scenario();
-      const { layer } = reviewerLayer({ ready: true, reviewerCommandFails: output });
+
+      const { layer } = reviewerLayer({
+        ready: true,
+        reviewerCommands: [
+          { output, exitCode: 1 },
+          { output, exitCode: 1 },
+        ],
+      });
 
       await run(
         layer,
@@ -66,8 +73,48 @@ describe("a Reviewer that couldn't run", () => {
             "The reviewer couldn't run commands: Claude Code's "
           );
           expect(done.layers.agent.note).toContain(note);
-          // Findings from a review that couldn't run anything aren't kept.
-          expect(done.findings).toHaveLength(0);
+          // What it found from the diff alone still shows.
+          expect(done.findings).toHaveLength(1);
+        })
+      );
+    },
+    60_000
+  );
+
+  // The reviewed change controls its scripts' output: printing bwrap's words mustn't fail the review.
+  test.each([
+    [
+      "bwrap's line followed by the script's own output",
+      [
+        {
+          output: `bwrap: execvp ${CODEX}: No such file or directory\nnpm ERR! test failed`,
+          exitCode: 1,
+        },
+      ],
+    ],
+    [
+      "bwrap's line beside a command that ran",
+      [
+        { output: `bwrap: execvp ${CODEX}: No such file or directory`, exitCode: 1 },
+        { output: "a1b2c3d Add the feature", exitCode: 0 },
+      ],
+    ],
+  ])(
+    "completes when a command only looks like a sandbox failure: %s",
+    async (_, commands) => {
+      const s = await scenario();
+      const { layer } = reviewerLayer({ ready: true, reviewerCommands: commands });
+
+      await run(
+        layer,
+        Effect.gen(function* () {
+          const reviewer = yield* Reviewer;
+          const workspace = yield* openReview(s.user, s.v1);
+          const done = yield* summaryWhen((yield* reviewer.run(openRequest(workspace))).id, ended);
+
+          expect(done.layers.agent.status).toBe("completed");
+          expect(done.layers.agent.note).toBeNull();
+          expect(done.findings).toHaveLength(1);
         })
       );
     },
