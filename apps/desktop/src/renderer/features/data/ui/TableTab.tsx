@@ -42,6 +42,7 @@ import { TableData } from "./table/TableData.tsx";
 import { forgetWritten } from "./table/edits/store.ts";
 import { useTableEdits } from "./table/edits/useTableEdits.ts";
 import { usePages } from "./table/usePages.ts";
+import { useLoadTrace } from "./table/useLoadTrace.ts";
 
 type TableTab = Extract<DataTab, { kind: "table" }>;
 
@@ -125,6 +126,19 @@ export const TableTabBody = ({ at, tab }: DataTabProps<TableTab>) => {
   }, [key, detail, engine, tab.sourceId, tab.ref, where]);
 
   const { pages, more } = usePages(at, request);
+
+  useLoadTrace(
+    known === null
+      ? null
+      : { source: tab.sourceId, table: `${tab.ref.schema}.${tab.ref.name}`, engine: known },
+    {
+      described: described.status,
+      describeError: described.status === "failed" ? described.error.message : null,
+      detail: detail !== null,
+      problem,
+      pages,
+    }
+  );
   const [selection, setSelection] = useState({ key, value: emptySelection });
   const current = selection.key === key ? selection.value : emptySelection;
 

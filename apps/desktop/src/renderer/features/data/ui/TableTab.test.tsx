@@ -1,7 +1,7 @@
 import "../../../test/dom.testing.ts";
 import { Toaster, TooltipProvider } from "@polaris/ui";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MAX_DRAFT_LENGTH } from "@polaris/protocol";
+import { MAX_DRAFT_LENGTH, type SelfSpan } from "@polaris/protocol";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { createStore } from "zustand/vanilla";
 import { createCommandRegistry } from "../../../routes/commands.ts";
@@ -22,7 +22,10 @@ import {
   FIXTURE_SESSIONS,
   FIXTURE_SOURCES,
 } from "../preview/fixtures.ts";
+import type { PolarisApi } from "../../../../shared/api.ts";
+import { connectSelfTraces } from "../../selfTraces/index.ts";
 import { tableViews } from "./table/state.ts";
+import { NO_DETAIL, TABLE_LOAD_SPAN } from "./table/useLoadTrace.ts";
 import { TableTabBody } from "./TableTab.tsx";
 
 const SIZES = { offsetWidth: 1400, offsetHeight: 800 } as const;
@@ -248,3 +251,98 @@ test("past the draft's limit, ⌘L offers the first rows that fit and the draft 
   expect(draft().length).toBeLessThanOrEqual(MAX_DRAFT_LENGTH);
   expect(draft()).toContain("The first ");
 });
+
+/** Self-Traces switched on against a fake main; `spans()` flushes and returns the loads' Spans. */
+const tracing = async () => {
+  const batches: Array<ReadonlyArray<SelfSpan>> = [];
+
+  const api: PolarisApi = {
+    // SAFETY: Self-Traces request only `selfTraces.state`, answered here.
+    request: (async () => ({
+      ok: true,
+      value: { enabled: true, version: "1" },
+    })) as PolarisApi["request"],
+    selfSpans: (spans) => void batches.push(spans),
+    onAppEvent: () => () => undefined,
+    subscribe: () => () => undefined,
+  };
+
+  const traces = connectSelfTraces(api);
+
+  await waitFor(() => expect(traces.enabled()).toBe(true));
+
+  return {
+    off: () => traces.setEnabled(false),
+    spans: () => {
+      traces.flush();
+
+      return batches.flat().filter((span) => span.name === TABLE_LOAD_SPAN);
+    },
+  };
+};
+
+test("a table's load is one Span from its describe to the first page, naming the table", async () => {
+  const traces = await tracing();
+
+  mount();
+  await waitFor(() => expect(traces.spans().length).toBe(1));
+  const spans = traces.spans();
+  traces.off();
+
+  expect(spans.map((span) => [span.status, span.attributes])).toEqual([
+    [
+      "unset",
+      {
+        "polaris.data.source": "app",
+        "polaris.data.table": "public.invoices",
+        "polaris.data.engine": "postgres",
+        "polaris.data.outcome": "rows",
+        "polaris.data.rows": FIXTURE_INVOICES.length,
+      },
+    ],
+  ]);
+});
+
+const noDetail = async () => ({ ok: true as const, value: FIXTURE_SCHEMA });
+
+const describeFailed = async () => ({
+  ok: false as const,
+  error: { code: "E-DATA-DENIED", message: "Not allowed" },
+});
+
+test.each([
+  ["answers without the table's detail", noDetail, "no-detail", NO_DETAIL],
+  ["fails", describeFailed, "describe-failed", "Not allowed"],
+])(
+  "when the describe %s, the load's Span fails without asking for rows",
+  async (_, describe, outcome, failure) => {
+    const traces = await tracing();
+    const api = fixtureDataApi();
+    let reads = 0;
+
+    mount({
+      ...api,
+      describe,
+      query: (...args) => {
+        reads++;
+
+        return api.query(...args);
+      },
+      queryStream: (...args) => {
+        reads++;
+
+        return api.queryStream?.(...args) ?? (() => undefined);
+      },
+    });
+    await waitFor(() => expect(traces.spans().length).toBe(1));
+    const [span] = traces.spans();
+    traces.off();
+
+    expect(reads).toBe(0);
+    expect([span?.status, span?.statusMessage, span?.attributes["polaris.data.outcome"]]).toEqual([
+      "error",
+      failure,
+      outcome,
+    ]);
+  }
+);

@@ -15,9 +15,11 @@ type Bridge = Pick<PolarisApi, "selfSpans">;
 export interface RendererSpan {
   /** Pass as the request's `trace`, so main and the Daemon join this Trace. */
   readonly trace: TraceContext;
-  /** Ends the Span; a message marks it failed. */
-  readonly end: (failure?: string) => void;
+  /** Ends the Span; a message marks it failed. `attributes` add what was learned on the way. */
+  readonly end: (failure?: string, attributes?: SpanAttributes) => void;
 }
+
+type SpanAttributes = Record<string, string | number | boolean>;
 
 export interface RendererSelfTracesOptions {
   readonly bridge: () => Bridge;
@@ -68,7 +70,7 @@ export const createRendererSelfTraces = ({
   /** A Span that has started now, or null while Self-Traces are off. */
   const start = (
     name: string,
-    attributes: Record<string, string | number | boolean> = {},
+    attributes: SpanAttributes = {},
     parent?: TraceContext
   ): RendererSpan | null => {
     if (!enabled) return null;
@@ -76,7 +78,7 @@ export const createRendererSelfTraces = ({
     const id = hex(8);
     const started = nowMs();
 
-    const end = (failure?: string) => {
+    const end = (failure?: string, more?: SpanAttributes) => {
       if (!enabled) return;
       pending.push({
         traceId,
@@ -89,7 +91,7 @@ export const createRendererSelfTraces = ({
         traceState: "",
         startTimeUnixNano: nanos(started),
         endTimeUnixNano: nanos(Math.max(started, nowMs())),
-        attributes,
+        attributes: more === undefined ? attributes : { ...attributes, ...more },
         resource: { "service.name": "polaris-desktop-renderer", "service.version": version },
         scope: { name: "@polaris/desktop/renderer", version, attributes: {} },
         events: [],
