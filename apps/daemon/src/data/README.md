@@ -18,6 +18,16 @@ four compose filenames. Environment precedence, lowest first: `.env`, `.env.loca
 source; an env reference from Prisma/Drizzle does not duplicate it. DATABASE_URL is named `app`;
 other keys and compose services are lowercased. Manual sources shadow discovery by name.
 
+Monorepos (ENG-726): the same files are read in each package directory (`packages.ts`). Packages
+are directories holding a manifest (`package.json`, `pyproject.toml`, `go.mod`…) or a known
+framework/compose file, taken from `git ls-files --cached --others --exclude-standard` (safe git
+config), so ignored trees like `node_modules` never count while a package's ignored `.env` is still
+read by name. Outside git, a bounded walk skips dot, dependency and build directories and symlinks.
+At most 64 packages, four segments deep, shallowest first. A package's env files sit over the
+root's for its framework config; only its own files yield env sources. Root names are unchanged;
+a package's are `<dir>/<name>` (its basename, or its whole path when two share one), and a package
+source whose URL another source already has is dropped. The cache stamp covers every package's files.
+
 Framework discovery reads literals only; it never imports or executes a checkout's code. Django
 and Drizzle targets with dynamic fields are skipped. Rails supports YAML aliases and literal
 `ENV["KEY"]` interpolation from checkout env files, but does not run ERB. Compose requires a

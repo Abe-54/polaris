@@ -1,11 +1,12 @@
 import { readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Option, Redacted, Schema } from "effect";
 import { connectionUrl, metadata, sourceName, type Candidate } from "./connection.ts";
 import { blocks, namedBlocks, literalTarget, unquote } from "./literals.ts";
 import { composeSources, throughCompose } from "./formats.ts";
 import { isSqliteUrl, sqliteFile } from "./sqlite/files.ts";
 
+import { findPackages } from "./packages.ts";
 import { read } from "./read.ts";
 
 const envValues = (text: string) => {
@@ -185,27 +186,83 @@ const rails = (text: string, file: string, env: Record<string, string>) => {
   return frameworkObject("rails", fields, file);
 };
 
-/** Reads only known configuration files and one directory level for Django projects. No code is loaded. */
-export const discover = async (checkout: string, signal?: AbortSignal): Promise<Candidate[]> => {
-  const entries = await readdir(checkout, { withFileTypes: true }).catch(() => []);
-  const env: Record<string, string> = {};
+const ENV_FILES = [".env", ".env.local", ".env.development", ".env.development.local"];
+
+const STAGES = ["production", "staging", "test"];
+
+const COMPOSE = ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"];
+
+const FRAMEWORK_FILES = [
+  "schema.prisma",
+  "prisma/schema.prisma",
+  "drizzle.config.ts",
+  "drizzle.config.js",
+  "drizzle.config.mjs",
+  "config/database.yml",
+  "settings.py",
+];
+
+/** Every file discovery reads in one directory, `settings.py` one directory deep included. */
+export const discoveryFiles = async (checkout: string, dir: string) => {
+  const entries = await readdir(join(checkout, dir), { withFileTypes: true }).catch(() => []);
+
+  const settings = entries
+    .filter(
+      (e) =>
+        e.isDirectory() && !e.name.startsWith(".") && !["node_modules", "vendor"].includes(e.name)
+    )
+    .map((e) => `${e.name}/settings.py`);
+
+  return [
+    ...ENV_FILES,
+    ...STAGES.map((stage) => `.env.${stage}`),
+    ...COMPOSE,
+    ...FRAMEWORK_FILES,
+    ...settings,
+  ].map((file) => at(dir, file));
+};
+
+const at = (dir: string, file: string) => (dir ? `${dir}/${file}` : file);
+
+const framework = (file: string, text: string, env: Record<string, string>, base: string) => {
+  if (file.endsWith(".prisma"))
+    // Prisma resolves a SQLite file: path against the schema's directory, even through env().
+    return prisma(text, file, env).flatMap((item) =>
+      fileCandidate(item, join(base, dirname(file)))
+    );
+
+  if (/(^|\/)drizzle\.config\.[mjt]s$/.test(file)) return drizzle(text, file, env);
+
+  if (file.endsWith(".yml")) return rails(text, file, env);
+
+  return django(text, file);
+};
+
+/** One directory's candidates. A package's env files sit over the root's, as its own tools load them. */
+const discoverIn = async (
+  checkout: string,
+  dir: string,
+  inherited: Record<string, string>,
+  signal?: AbortSignal
+) => {
+  const env = { ...inherited };
+  const own: Record<string, string> = {};
   const origins = new Map<string, string>();
 
-  const envFiles = [".env", ".env.local", ".env.development", ".env.development.local"];
-
-  for (const file of envFiles) {
+  for (const file of ENV_FILES.map((name) => at(dir, name))) {
     signal?.throwIfAborted();
 
     for (const [key, value] of Object.entries(envValues(await read(checkout, file)))) {
       env[key] = value;
+      own[key] = value;
       origins.set(key, file);
     }
   }
 
-  const found = envCandidates(env, (key) => origins.get(key) ?? ".env");
+  const found = envCandidates(own, (key) => origins.get(key) ?? at(dir, ".env"));
 
-  for (const environment of ["production", "staging", "test"]) {
-    const file = `.env.${environment}`;
+  for (const environment of STAGES) {
+    const file = at(dir, `.env.${environment}`);
     found.push(
       ...envCandidates(envValues(await read(checkout, file)), () => file).map((item) => ({
         ...item,
@@ -214,57 +271,83 @@ export const discover = async (checkout: string, signal?: AbortSignal): Promise<
     );
   }
 
-  const frameworkFiles = [
-    "schema.prisma",
-    "prisma/schema.prisma",
-    "drizzle.config.ts",
-    "drizzle.config.js",
-    "drizzle.config.mjs",
-    "config/database.yml",
-    "settings.py",
-    ...entries
-      .filter(
-        (e) =>
-          e.isDirectory() && !e.name.startsWith(".") && !["node_modules", "vendor"].includes(e.name)
-      )
-      .map((e) => `${e.name}/settings.py`),
-  ];
+  const files = (await discoveryFiles(checkout, dir)).filter(
+    (file) => !/(^|\/)\.env|compose\.ya?ml$/.test(file)
+  );
 
-  for (const file of frameworkFiles) {
+  for (const file of files) {
     signal?.throwIfAborted();
-    const text = await read(checkout, file);
+    const items = framework(file, await read(checkout, file), env, checkout);
 
     if (file.endsWith(".prisma")) {
-      // Prisma resolves a SQLite file: path against the schema's directory, even through env().
-      const items = prisma(text, file, env).flatMap((item) =>
-        fileCandidate(item, join(checkout, dirname(file)))
-      );
-
-      const files = new Set(
+      const sqlite = new Set(
         items.filter((item) => isSqliteUrl(Redacted.value(item.url))).map((item) => item.name)
       );
 
-      found.splice(0, found.length, ...found.filter((item) => !files.has(item.name)), ...items);
-    } else if (file.startsWith("drizzle")) found.push(...drizzle(text, file, env));
-    else if (file.endsWith(".yml")) found.push(...rails(text, file, env));
-    else found.push(...django(text, file));
+      found.splice(0, found.length, ...found.filter((item) => !sqlite.has(item.name)), ...items);
+    } else found.push(...items);
   }
 
   const composed: Candidate[] = [];
 
-  for (const file of ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"])
+  for (const file of COMPOSE.map((name) => at(dir, name)))
     composed.push(...composeSources(await read(checkout, file), file, env));
 
-  const mapped = found
-    .flatMap((item) => fileCandidate(item, checkout))
-    .map((item) => (isSqliteUrl(Redacted.value(item.url)) ? item : throughCompose(item, composed)));
+  return {
+    env,
+    composed,
+    found: found.flatMap((item) => fileCandidate(item, join(checkout, dir))),
+  };
+};
+
+/** A package's sources are named after its directory, or its whole path when two share a name. */
+const labels = (packages: ReadonlyArray<string>) => {
+  const counts = new Map<string, number>();
+
+  for (const dir of packages) counts.set(basename(dir), (counts.get(basename(dir)) ?? 0) + 1);
+
+  return (dir: string) => (counts.get(basename(dir)) === 1 ? basename(dir) : dir);
+};
+
+/**
+ * Reads only known configuration files, at the root and in each package directory (`findPackages`).
+ * No code is loaded. Root names are unchanged; a package's are prefixed with its label.
+ */
+export const discover = async (
+  checkout: string,
+  signal?: AbortSignal,
+  packages?: ReadonlyArray<string>
+): Promise<Candidate[]> => {
+  const dirs = packages ?? (await findPackages(checkout, signal));
+  const root = await discoverIn(checkout, "", {}, signal);
+  const label = labels(dirs);
+  const found = root.found;
+  const composed = [...root.composed];
+
+  for (const dir of dirs) {
+    const nested = await discoverIn(checkout, dir, root.env, signal);
+    found.push(...nested.found.map((item) => ({ ...item, name: `${label(dir)}/${item.name}` })));
+    composed.push(
+      ...nested.composed.map((item) => ({ ...item, name: `${label(dir)}/${item.name}` }))
+    );
+  }
+
+  const mapped = found.map((item) =>
+    isSqliteUrl(Redacted.value(item.url)) ? item : throughCompose(item, composed)
+  );
 
   mapped.push(...composed);
   const names = new Set<string>();
+  const targets = new Set<string>();
 
   return mapped.filter((item) => {
-    if (!metadata(checkout, item) || names.has(item.name)) return false;
+    const target = Redacted.value(item.url);
+    const nested = item.name.includes("/");
+
+    if (!metadata(checkout, item) || names.has(item.name) || (nested && targets.has(target)))
+      return false;
     names.add(item.name);
+    targets.add(target);
 
     return true;
   });
