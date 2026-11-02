@@ -205,6 +205,31 @@ test("describe reads the schema tree and a table's keys, foreign keys and indexe
     })
   ));
 
+test.each(['"main"."notes"', '"notes"', 'main."notes"', "MAIN.notes"])(
+  "describe finds a table named as the Desktop App and agents quote it: %s",
+  (table) =>
+    withApp((queries) =>
+      Effect.gen(function* () {
+        const detail = yield* queries.describe({ ...agent, tool: "describe", table });
+
+        if (!(detail instanceof TableDetail)) throw new Error("expected a table");
+        expect(detail.name).toBe("notes");
+      })
+    )
+);
+
+test.each(['"other"."notes"', '"main"."notes"x', '"main".', '"notes'])(
+  "describe refuses a name that isn't one of this file's tables: %s",
+  (table) =>
+    withApp((queries) =>
+      Effect.gen(function* () {
+        const missing = yield* Effect.flip(queries.describe({ ...agent, tool: "describe", table }));
+
+        expect(missing).toMatchObject({ code: "E-DATA-SQL" });
+      })
+    )
+);
+
 test("a runaway query is stopped at its deadline", () =>
   Effect.runPromise(
     Effect.scoped(

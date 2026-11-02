@@ -203,7 +203,34 @@ export function runCatalog(db: Database, job: CatalogJob): CatalogOutput {
   };
 }
 
-/** An exact name first, then `main.`-qualified; SQLite allows dots inside names. */
+/** One identifier: `"quoted"` (`""` is a quote) or bare; returns it and what follows. */
+const identifier = (text: string): [string, string] | undefined => {
+  if (!text.startsWith('"')) {
+    const dot = text.indexOf(".");
+
+    return dot === -1 ? [text, ""] : [text.slice(0, dot), text.slice(dot)];
+  }
+
+  const match = /^"((?:[^"]|"")*)"/.exec(text);
+
+  return match ? [match[1]!.replaceAll('""', '"'), text.slice(match[0].length)] : undefined;
+};
+
+/** `name`, `"name"`, `main.name` or `"main"."name"` as the relation's name; undefined otherwise. */
+const parsedName = (table: string) => {
+  const first = identifier(table);
+
+  if (first === undefined || first[0] === "") return undefined;
+
+  if (first[1] === "") return first[0];
+
+  if (!first[1].startsWith(".") || first[0].toLowerCase() !== "main") return undefined;
+  const second = identifier(first[1].slice(1));
+
+  return second === undefined || second[1] !== "" || second[0] === "" ? undefined : second[0];
+};
+
+/** An exact name first (SQLite allows dots and quotes inside names), then as an identifier. */
 function relationName(db: Database, table: string, filter: string) {
   const find = (name: string) =>
     db.query(`SELECT name FROM sqlite_schema WHERE ${filter} AND name=?`).values(name)[0]?.[0];
@@ -211,11 +238,10 @@ function relationName(db: Database, table: string, filter: string) {
   const exact = find(table);
 
   if (exact !== undefined) return String(exact);
+  const name = parsedName(table);
+  const parsed = name === undefined || name === table ? undefined : find(name);
 
-  if (!table.toLowerCase().startsWith("main.")) return undefined;
-  const plain = find(table.slice(5));
-
-  return plain === undefined ? undefined : String(plain);
+  return parsed === undefined ? undefined : String(parsed);
 }
 
 function relation(

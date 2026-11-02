@@ -62,9 +62,9 @@ const Failed = ({ title, fact }: { readonly title: string; readonly fact: string
   </div>
 );
 
-/** The name `data.describe` resolves: Postgres's regclass, quoted per part; MySQL's in its database. */
+/** The name `data.describe` resolves: Postgres's regclass, quoted per part; MySQL's and SQLite's plain. */
 export const describeName = (engine: Engine, ref: TableRef) =>
-  engine === "mysql" ? ref.name : qualifiedName(engine, ref);
+  engine === "postgres" ? qualifiedName(engine, ref) : ref.name;
 
 /**
  * The source and its engine once the sources are read, so the table is described once, in its
