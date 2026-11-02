@@ -12,7 +12,6 @@ import {
 } from "@polaris/client";
 import { Cause, Exit, Option, Predicate, Schema, Tracer } from "effect";
 import { VERSION } from "../../service/platform.ts";
-import { redactText } from "../redact.ts";
 
 export const DAEMON_SERVICE = "polaris-daemon";
 
@@ -117,7 +116,6 @@ export class SelfTracer implements Tracer.Tracer {
       enabled: () => this.exporting,
       emit: (span) => this.push(span),
       origin: () => ({ resource: {}, scope: { name: "polaris", version: "", attributes: {} } }),
-      scrub: redactText,
     });
   }
 

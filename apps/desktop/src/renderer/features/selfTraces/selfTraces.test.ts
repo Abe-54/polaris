@@ -130,7 +130,7 @@ describe("renderer Self-Traces", () => {
     target.warn("before");
     local.setVersion("1.2.3");
     local.setEnabled(true);
-    target.error("render failed");
+    target.error("render failed, token=abc123");
     local.flush();
     local.setEnabled(false);
     target.warn("after");
@@ -141,7 +141,9 @@ describe("renderer Self-Traces", () => {
       fake.batches
         .flat()
         .map((s) => [s.name, s.status, s.attributes["log.message"], s.resource["service.name"]])
-    ).toEqual([["polaris.log", "error", "render failed", "polaris-desktop-renderer"]]);
+    ).toEqual([
+      ["polaris.log", "error", "render failed, token=[redacted]", "polaris-desktop-renderer"],
+    ]);
   });
 
   test("a child Span stays in its parent's Trace", () => {

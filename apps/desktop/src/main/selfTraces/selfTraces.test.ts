@@ -146,7 +146,7 @@ describe("Desktop Self-Traces", () => {
 
     target.warn("while off");
     mode.set({ hostKey: "studio", enabled: true });
-    target.warn("outside a Span");
+    target.warn("outside a Span", "Bearer sk-abc123");
     await Effect.runPromise(
       Effect.logWarning("inside").pipe(
         Effect.withSpan("hosts.connect"),
@@ -166,7 +166,7 @@ describe("Desktop Self-Traces", () => {
         span.attributes["log.message"] ?? span.events.map((e) => e.attributes["log.message"]),
       ])
     ).toEqual([
-      ["polaris.log", "outside a Span"],
+      ["polaris.log", "outside a Span [redacted]"],
       ["hosts.connect", ["inside"]],
     ]);
     expect(printed).toHaveLength(3);

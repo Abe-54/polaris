@@ -150,6 +150,19 @@ describe("log capture", () => {
     expect(message(t.emitted[0])).toHaveLength(LOG_MESSAGE_CHARS);
   });
 
+  test("a secret the length cap cuts in half is scrubbed whole, so none of it survives", () => {
+    const t = setup();
+    const lead = "x".repeat(LOG_MESSAGE_CHARS - 20);
+
+    t.target.warn(lead, "clone https://deploy:hunter2hunter2@git.example.com/repo.git failed");
+    t.target.warn({ password: "hunter2hunter2" }, "x".repeat(LOG_MESSAGE_CHARS * 10));
+
+    const kept = t.emitted.map(message);
+
+    expect(kept.join("\n")).not.toMatch(/hunt|deploy:|r2h/);
+    expect(kept.map((line) => line.length)).toEqual([LOG_MESSAGE_CHARS, LOG_MESSAGE_CHARS]);
+  });
+
   test("unhooking restores the console", () => {
     const t = setup();
     const hooked = t.target.warn;

@@ -19,6 +19,7 @@
     "./prediction/probe": "./src/prediction/probe.ts",
     "./prediction/score": "./src/prediction/score.ts",
     "./prediction/server": "./src/prediction/server.ts",
+    "./redact": "./src/redact.ts",
     "./relay": "./src/relay/index.ts",
     "./restart": "./src/restart/index.ts",
     "./rpc": "./src/rpc.ts",
