@@ -2,8 +2,17 @@
  * The app's navigation: a stack of screens over the tabs (Sessions, Review, Settings) and New.
  * Screens push routes; the shell in App.tsx draws the top of the stack.
  */
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
-import { Platform, Settings } from "react-native";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { BackHandler, Platform, Settings } from "react-native";
 
 import {
   type HomeTab,
@@ -53,6 +62,21 @@ const launchedNavigation = (): NavigationState => {
 
 export const NavigationProvider = ({ children }: { readonly children: ReactNode }) => {
   const [state, setState] = useState<NavigationState>(launchedNavigation);
+  const current = useRef(state);
+  current.current = state;
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (current.current.stack.length <= 1) return false;
+      setState(wentBack);
+
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   const open = useCallback((route: Route) => setState((current) => opened(current, route)), []);
 
