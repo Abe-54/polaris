@@ -1,5 +1,7 @@
 export { LongPressMenu } from "./LongPressMenu.tsx";
 
+export { ChoiceSheetHost } from "./ChoiceSheetHost.tsx";
+
 export {
   constellationMenu,
   hostMenu,

@@ -22,6 +22,7 @@ import { DuoShell } from "./duo/DuoShell.tsx";
 import { FollowedHostsProvider } from "./home/feed/useFollowedHosts.ts";
 import { useHomeHosts } from "./home/feed/useHomeHosts.ts";
 import { HomeScreen } from "./home/HomeScreen.tsx";
+import { ChoiceSheetHost } from "./menus/index.ts";
 import { ComposerGallery, composerGalleryOn } from "./composer/Gallery.tsx";
 import {
   ConstellationGallery,
@@ -243,6 +244,7 @@ const Shell = () => {
 
   return (
     <SheetHost>
+      <ChoiceSheetHost />
       <InboxProvider>
         <View style={styles.fill}>
           <DuoShell>

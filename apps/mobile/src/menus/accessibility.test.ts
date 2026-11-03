@@ -4,6 +4,8 @@ import { nativeProbe } from "../app/nativeProbe.testing.ts";
 test("Android menu actions and rename controls are labelled buttons with their disabled state", () => {
   nativeProbe(`
 let longPress;
+mock.module("./motion/haptics.ts", () => ({ haptics: { send: () => {} } }));
+mock.module("./menus/MenuSymbol.tsx", () => ({ MenuSymbol: "MenuSymbol" }));
 mock.module("react-native-gesture-handler", () => ({
   GestureDetector: "GestureDetector",
   Gesture: { LongPress: () => ({ runOnJS() { return this; }, onStart(callback) { longPress = callback; return this; } }) },

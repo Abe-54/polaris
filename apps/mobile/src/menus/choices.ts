@@ -1,6 +1,7 @@
-import { ActionSheetIOS, Alert, Platform } from "react-native";
+import { ActionSheetIOS, Platform } from "react-native";
+import { showChoice } from "./choiceStore.ts";
 
-/** Short native choices. Android's dialog supports at most three choices; Back cancels. */
+/** Short choices; Android's ChoiceSheetHost must be mounted inside the app's SheetHost. */
 export const choose = (
   title: string | undefined,
   options: ReadonlyArray<string>,
@@ -17,10 +18,5 @@ export const choose = (
     return;
   }
 
-  Alert.alert(
-    title,
-    message,
-    options.map((text, index) => ({ text, onPress: () => onChoose(index) })),
-    { cancelable: true, onDismiss: onCancel }
-  );
+  showChoice({ title, message, options: [...options], onChoose, onCancel });
 };
