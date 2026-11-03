@@ -26,6 +26,7 @@
       }
     },
     "plugins": [
+      "./plugins/withWindowsNativeBuild.mjs",
       "expo-secure-store",
       "./plugins/android-dark-theme.ts",
       "@bacons/apple-targets",
