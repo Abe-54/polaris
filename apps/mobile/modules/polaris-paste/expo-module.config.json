@@ -1,6 +1,9 @@
 {
-  "platforms": ["ios"],
+  "platforms": ["ios", "android"],
   "ios": {
     "modules": ["PolarisPasteModule"]
+  },
+  "android": {
+    "modules": ["dev.lux.polaris.paste.PolarisPasteModule"]
   }
 }
