@@ -1,0 +1,4 @@
+{
+  "extends": "../../../scripts/tsconfig.json",
+  "include": [".", "../../../src/sodium/sodium-native.d.ts"]
+}
