@@ -57,6 +57,9 @@
           "mode": "development"
         }
       ]
-    ]
+    ],
+    "android": {
+      "package": "dev.lux.polaris.mobile"
+    }
   }
 }
