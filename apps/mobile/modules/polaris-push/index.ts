@@ -1,6 +1,7 @@
 /** The native half of push: the push key in the shared Keychain group and the APNs environment. */
 import type { PushEnvironment } from "@polaris/protocol/relay";
 import { requireNativeModule } from "expo";
+import { Platform } from "react-native";
 
 interface PolarisPushNative {
   /** The push key's public half (X9.63, base64url); made on first use. */
@@ -13,4 +14,5 @@ interface PolarisPushNative {
   endAnswer(id: string): Promise<void>;
 }
 
-export const PolarisPush = requireNativeModule<PolarisPushNative>("PolarisPush");
+export const PolarisPush =
+  Platform.OS === "ios" ? requireNativeModule<PolarisPushNative>("PolarisPush") : null;

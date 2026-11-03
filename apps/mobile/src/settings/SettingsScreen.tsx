@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { PolarisPush } from "../../modules/polaris-push/index.ts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFollowedHosts } from "../home/feed/useFollowedHosts.ts";
 import { HORIZON_INSET } from "../horizon";
@@ -217,8 +218,8 @@ export const SettingsScreen = ({
           <Row
             Glyph={NotificationsGlyph}
             title="Notifications"
-            line={notificationsLine(constellations)}
-            onPress={() => chooseNotifications(constellations)}
+            line={PolarisPush === null ? "Not available on this device" : notificationsLine(constellations)}
+            {...(PolarisPush === null ? {} : { onPress: () => chooseNotifications(constellations) })}
           />
           <Row
             Glyph={MotionGlyph}

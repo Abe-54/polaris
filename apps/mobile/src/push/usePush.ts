@@ -31,6 +31,8 @@ const setCategories = () =>
 
 /** The device's push identity, or null when notifications aren't allowed. */
 const pushDevice = async (identity: RelayIdentity): Promise<PushDevice | null> => {
+  if (PolarisPush === null) return null;
+
   const permission = await Notifications.requestPermissionsAsync({
     ios: { allowAlert: true, allowSound: true, allowBadge: false },
   });
@@ -77,6 +79,10 @@ const useAnswers = (loaded: boolean) => {
   const ready = useLoaded(loaded);
 
   useEffect(() => {
+    const native = PolarisPush;
+
+    if (native === null) return;
+
     const answer = async (response: Notifications.NotificationResponse) => {
       const found = answerOf({
         actionIdentifier: response.actionIdentifier,
@@ -86,7 +92,7 @@ const useAnswers = (loaded: boolean) => {
 
       if (found === null) return;
       const id = String(found.dispatch.commandId);
-      await PolarisPush.beginAnswer(id);
+      await native.beginAnswer(id);
 
       try {
         const hosts = () => current.current.map(answerHost);
@@ -101,7 +107,7 @@ const useAnswers = (loaded: boolean) => {
         if (notice !== null)
           await Notifications.scheduleNotificationAsync({ content: notice, trigger: null });
       } finally {
-        await PolarisPush.endAnswer(id);
+        await native.endAnswer(id);
         Notifications.clearLastNotificationResponse();
       }
     };
@@ -133,6 +139,8 @@ const useRegistrations = (
   const hadIdentity = useRef(false);
 
   useEffect(() => {
+    if (PolarisPush === null) return;
+
     if (identity === null) {
       // Unlinked: a new push key, so a Host that still holds the old one can't be read here.
       if (hadIdentity.current) void PolarisPush.rotatePushKey();
@@ -194,6 +202,8 @@ export const usePush = (
 /** Mount under NavigationProvider: tapping a notification opens its session or Constellation. */
 export const usePushLinks = (open: (route: Route) => void) => {
   useEffect(() => {
+    if (PolarisPush === null) return;
+
     const follow = (response: Notifications.NotificationResponse | null) => {
       if (response === null) return;
 
