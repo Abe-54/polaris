@@ -6,7 +6,7 @@ import { Match } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { NavigationProvider, type Route, useNavigation } from "./app/navigation.tsx";
 import {
@@ -54,17 +54,15 @@ import { useWidgetLinks } from "./widgets/useWidgetLinks.ts";
 import { WidgetSync } from "./widgets/WidgetSync.ts";
 import { SelfTraceSync } from "./selfTraces/SelfTraceSync.ts";
 import { ThemeProvider, themedStyles } from "./theme/index.ts";
+import { tabBottomInset } from "./theme/tabInset.ts";
 
 const TAB_BAR = 58;
-
-/** MX-C: the pill's foot sits 30pt up on a 34pt home-indicator inset, a little into it. */
-const INTO_INSET = 4;
 
 const Tabs = () => {
   const styles = useStyles();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const bottom = Math.max(insets.bottom - INTO_INSET, 20);
+  const bottom = tabBottomInset(insets.bottom, Platform.OS);
   const readyCount = useReadyToReview().rows.length;
   const noHosts = useHomeHosts().length === 0;
   const tabBarHeight = TAB_BAR + bottom;

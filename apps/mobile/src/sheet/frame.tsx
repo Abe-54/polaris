@@ -1,5 +1,6 @@
 /** One sheet as the host draws it: the scrim, the sheet at its detent, and its parts. */
 import { useEffect } from "react";
+import { sheetShadow } from "../theme/shadows.ts";
 import {
   type AccessibilityActionEvent,
   BackHandler,
@@ -197,10 +198,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     borderTopWidth: 1,
     borderColor: SHEET_EDGE,
-    shadowColor: "#000000",
-    shadowOpacity: 0.6,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -12 },
+    ...sheetShadow,
   },
   content: { paddingTop: 8, paddingHorizontal: 10, gap: 10 },
   grabberRow: { alignItems: "center", paddingBottom: 4 },
