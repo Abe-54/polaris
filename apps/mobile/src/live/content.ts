@@ -92,8 +92,12 @@ export const hostSlice = (host: LiveHost): HostSlice => {
 
 const isBusy = (slice: HostSlice) => slice.working > 0 || slice.needs > 0;
 
-/** Every Host's slice; past MAX_LIVE_HOSTS, those with work or Needs You stay, as at the Relay. */
-export const liveContent = (hosts: ReadonlyArray<LiveHost>): LiveContent => {
+/**
+ * Every Host's slice; past MAX_LIVE_HOSTS, those with work or Needs You stay, as at the Relay.
+ * `fit` cuts each to the sealed push budget the iOS activity shares with APNs updates; Android's
+ * notification is drawn on the device from the slice itself, so it takes them whole.
+ */
+export const liveContent = (hosts: ReadonlyArray<LiveHost>, fit = true): LiveContent => {
   const slices = hosts.map((host) => ({ address: host.hostAddress, slice: hostSlice(host) }));
 
   const kept = [...slices]
@@ -102,7 +106,7 @@ export const liveContent = (hosts: ReadonlyArray<LiveHost>): LiveContent => {
     .sort((a, b) => a.address.localeCompare(b.address));
 
   return {
-    slices: kept.map(({ slice }) => encodeHostSlice(fitSlice(slice))),
+    slices: kept.map(({ slice }) => encodeHostSlice(fit ? fitSlice(slice) : slice)),
     busy: slices.some(({ slice }) => isBusy(slice)),
   };
 };
