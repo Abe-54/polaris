@@ -63,6 +63,9 @@
           "initialOrientation": "PORTRAIT_UP"
         }
       ]
-    ]
+    ],
+    "android": {
+      "package": "dev.lux.polaris.mobile"
+    }
   }
 }
