@@ -96,6 +96,10 @@ export const RelayProvider = ({ children }: { readonly children: ReactNode }) =>
 
       if (secrets !== null && !stopped) {
         const opened = await deviceKeys(secrets);
+
+        // Unmounted while the keys opened: a device made now would never be closed, and its
+        // socket would keep replacing the next mount's under the same identity (relay 4409).
+        if (stopped) return;
         device.current = makeRelayDevice(opened);
         setKeys(opened);
         setHosts(stored);
