@@ -1,6 +1,9 @@
 {
-  "platforms": ["ios"],
+  "platforms": ["ios", "android"],
   "ios": {
     "modules": ["PolarisWidgetsModule"]
+  },
+  "android": {
+    "modules": ["dev.lux.polaris.widgets.PolarisWidgetsModule"]
   }
 }
