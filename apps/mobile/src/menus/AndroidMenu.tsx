@@ -3,9 +3,11 @@ import { mobileType } from "@polaris/ui/tokens";
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { haptics } from "../motion/haptics.ts";
 import { InstrumentSheet, SheetHeader } from "../sheet/index.tsx";
 import { useTheme } from "../theme/index.ts";
 import type { Menu, MenuAction, MenuItem } from "./model.ts";
+import { MenuSymbol } from "./MenuSymbol.tsx";
 
 export const AndroidMenu = ({
   menu,
@@ -22,6 +24,13 @@ export const AndroidMenu = ({
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<Extract<MenuAction, { kind: "rename" }> | null>(null);
   const [text, setText] = useState("");
+  const groups = menu.filter((group) => group.length > 0);
+
+  const show = () => {
+    if (open || groups.length === 0) return;
+    haptics.send();
+    setOpen(true);
+  };
 
   const close = () => {
     setOpen(false);
@@ -58,19 +67,22 @@ export const AndroidMenu = ({
     close();
   };
 
-  const gesture = Gesture.LongPress()
-    .runOnJS(true)
-    .onStart(() => setOpen(true));
+  const gesture = Gesture.LongPress().runOnJS(true).onStart(show);
 
   const label = [styles.label, { color: colours.textStrong }];
+
+  if (groups.length === 0) return children;
 
   return (
     <>
       <GestureDetector gesture={gesture}>
         <View
           collapsable={false}
+          importantForAccessibility={open ? "no-hide-descendants" : "auto"}
           accessibilityActions={[{ name: "longpress", label: "Show actions" }]}
-          onAccessibilityAction={() => setOpen(true)}
+          onAccessibilityAction={({ nativeEvent }) => {
+            if (nativeEvent.actionName === "longpress") show();
+          }}
         >
           {children}
         </View>
@@ -79,11 +91,15 @@ export const AndroidMenu = ({
         <InstrumentSheet open onClose={close}>
           <SheetHeader
             title={renaming === null ? title || "Actions" : "Rename agent session"}
+            titleLines={3}
             onClose={close}
           />
           {renaming === null ? (
-            menu.map((group, index) => (
-              <View key={index} style={[styles.group, { borderColor: colours.hairline }]}>
+            groups.map((group, index) => (
+              <View
+                key={index}
+                style={[index > 0 && styles.group, { borderColor: colours.hairline }]}
+              >
                 {group.map((item) => (
                   <Pressable
                     key={item.id}
@@ -95,12 +111,17 @@ export const AndroidMenu = ({
                     onPress={() => select(item)}
                     style={[styles.item, { opacity: item.disabled ? 0.5 : 1 }]}
                   >
-                    <Text style={label}>{item.title}</Text>
-                    {item.subtitle === null ? null : (
-                      <Text style={[styles.subtitle, { color: colours.textSubtle }]}>
-                        {item.subtitle}
-                      </Text>
-                    )}
+                    <View style={styles.row}>
+                      <MenuSymbol symbol={item.symbol} color={colours.textStrong} />
+                      <View style={styles.description}>
+                        <Text style={label}>{item.title}</Text>
+                        {item.subtitle == null ? null : (
+                          <Text style={[styles.subtitle, { color: colours.textSubtle }]}>
+                            {item.subtitle}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -135,7 +156,9 @@ export const AndroidMenu = ({
 };
 
 const styles = StyleSheet.create({
-  group: { borderBottomWidth: 1 },
+  group: { borderTopWidth: 1 },
+  row: { flexDirection: "row", alignItems: "center", gap: 16 },
+  description: { flex: 1 },
   item: { minHeight: 48, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 10 },
   label: { ...mobileType.body },
   subtitle: { ...mobileType.footnote },
