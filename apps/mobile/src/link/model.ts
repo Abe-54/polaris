@@ -2,6 +2,7 @@
  * Linking as a pure model (DESIGN.md, Mobile chrome redesign · phase 3; Paper MX-AH to MX-AM):
  * each step of the scan sheet, how an event moves it, and the star's light in each.
  */
+import { type DeviceCopy, deviceCopyFor } from "../app/deviceCopy.ts";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 
 /** What a scanned or pasted text named: the Host it came from, then every Host it shares. */
@@ -30,7 +31,10 @@ export type LinkEvent =
 export const NOT_A_LINK = "That isn't a Polaris link.";
 
 /** The Keychain refused the keys; the link itself was used. */
-export const NOT_SAVED = "Couldn't save the link on this iPhone. Make a new one and try again.";
+export const notSavedMessage = ({ phone }: DeviceCopy): string =>
+  `Couldn't save the link on this ${phone}. Make a new one and try again.`;
+
+export const NOT_SAVED = notSavedMessage(deviceCopyFor("ios"));
 
 export const FIRST_STEP: LinkStep = { kind: "scan" };
 
