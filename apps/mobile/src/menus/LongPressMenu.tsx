@@ -4,7 +4,8 @@
  */
 import { requireNativeView, requireOptionalNativeModule } from "expo";
 import type { ComponentType, ReactNode } from "react";
-import { type NativeSyntheticEvent, StyleSheet } from "react-native";
+import { Clipboard, type NativeSyntheticEvent, Platform, StyleSheet } from "react-native";
+import { AndroidMenu } from "./AndroidMenu.tsx";
 import { useTheme } from "../theme/index.ts";
 import type { Menu, MenuAction } from "./model.ts";
 
@@ -30,6 +31,12 @@ const NativeMenu: ComponentType<NativeProps> | null =
 
 /** Copies to the pasteboard; false where the module isn't built in. */
 export const copyText = async (text: string): Promise<boolean> => {
+  if (Platform.OS === "android") {
+    Clipboard.setString(text);
+
+    return true;
+  }
+
   if (native === null) return false;
   await native.copy(text);
 
@@ -68,6 +75,13 @@ export const LongPressMenu = ({
   readonly children: ReactNode;
 }) => {
   const { colours } = useTheme();
+
+  if (Platform.OS === "android" && menu.length > 0)
+    return (
+      <AndroidMenu menu={menu} title={title} onAction={onAction}>
+        {children}
+      </AndroidMenu>
+    );
 
   if (NativeMenu === null || menu.length === 0) return children;
 
