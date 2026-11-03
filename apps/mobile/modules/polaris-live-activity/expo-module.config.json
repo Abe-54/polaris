@@ -1,4 +1,5 @@
 {
-  "platforms": ["apple"],
-  "apple": { "modules": ["PolarisLiveActivityModule"] }
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["PolarisLiveActivityModule"] },
+  "android": { "modules": ["dev.lux.polaris.liveactivity.PolarisLiveActivityModule"] }
 }
