@@ -32,6 +32,7 @@ import {
 } from "./queue.ts";
 import { useQueueTurns } from "./useQueueTurns.tsx";
 import { CleanWell, LaneHead, QueueWell } from "./Wells.tsx";
+import { DEVICE_COPY } from "../../app/platformCopy.ts";
 
 interface Ready {
   readonly hosts: ReadonlyArray<HomeHost>;
@@ -90,8 +91,8 @@ const Empty = ({
     Match.when("no-hosts", () => (
       <StatePanel
         title="No hosts yet"
-        line="Link this iPhone from Polaris on your Mac. Agent sessions ready to review appear here."
-        action={{ label: "Link this iPhone", onPress: onLink, primary: true }}
+        line={`Link this ${DEVICE_COPY.phone} from Polaris on your ${DEVICE_COPY.computer}. Agent sessions ready to review appear here.`}
+        action={{ label: `Link this ${DEVICE_COPY.phone}`, onPress: onLink, primary: true }}
       />
     )),
     Match.when("unreachable", () => (

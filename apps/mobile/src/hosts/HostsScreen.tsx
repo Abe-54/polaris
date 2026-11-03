@@ -8,6 +8,7 @@ import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-na
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackBar } from "../app/BackBar.tsx";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 import { type FollowedHostState, useFollowedHosts } from "../home/feed/useFollowedHosts.ts";
 import { EdgeFade, HORIZON_CLEAR, HorizonScreen } from "../horizon";
 import { LINK_ANOTHER_COPY, ScanSheet } from "../link/ScanSheet.tsx";
@@ -212,7 +213,7 @@ const LinkAnotherRow = ({ onLink }: { readonly onLink: () => void }) => {
 
 const LINK_ANOTHER_CAPTION = "Its hosts join this list";
 
-const LINK_ANOTHER_FOOTNOTE = "On that Mac, open Polaris → Settings → Devices for the code.";
+const LINK_ANOTHER_FOOTNOTE = `On that ${DEVICE_COPY.computer}, open Polaris → Settings → Devices for the code.`;
 
 /** The list ends above the moon (DESIGN.md: no row sits on the horizon); this lifts its last row past the fade. */
 const LIST_FOOT = 40;
@@ -258,9 +259,14 @@ export const HostsScreen = ({ onBack }: { readonly onBack: () => void }) => {
     setOpenId(null);
 
     if (dev !== null) return;
-    void relay
-      .unlinkHost(hostId)
-      .then((kept) => setUnlinkLeft(unlinkNote(kept.map((host) => host.hostName))));
+    void relay.unlinkHost(hostId).then((kept) =>
+      setUnlinkLeft(
+        unlinkNote(
+          kept.map((host) => host.hostName),
+          DEVICE_COPY
+        )
+      )
+    );
   };
 
   return (

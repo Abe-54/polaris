@@ -7,6 +7,7 @@ import { mobileType } from "@polaris/ui/tokens";
 import { useState } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 import { HORIZON_HEIGHT } from "../horizon/index.tsx";
 import { RIDGE_TOP } from "../horizon/scene.ts";
 import { useRelay } from "../relay/RelayProvider.tsx";
@@ -87,10 +88,11 @@ export const Pairing = ({ linking, onCancel }: PairingProps) => {
             style={styles.title}
             accessibilityRole="header"
           >
-            Link this iPhone
+            Link this {DEVICE_COPY.phone}
           </Text>
           <Text maxFontSizeMultiplier={CHROME_TEXT_SCALE} style={styles.lead}>
-            Your agent sessions run on your Mac. Link it to follow them and answer from here.
+            Your agent sessions run on your {DEVICE_COPY.computer}. Link it to follow them and
+            answer from here.
           </Text>
         </View>
       </ScrollView>

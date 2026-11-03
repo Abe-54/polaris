@@ -71,6 +71,7 @@ import { InboxBadge } from "../inbox/index.ts";
 import { ReconnectingLine } from "../states/thread.tsx";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { liveVisualizations, revisedIds } from "../visualization/index.ts";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 
 export interface ThreadScreenProps {
   readonly hostId: string;
@@ -460,7 +461,7 @@ export const ThreadScreen = ({
         onBack={onBack}
         header={header}
         belowHeader={belowHeader}
-        text="This host isn't linked to this iPhone"
+        text={`This host isn't linked to this ${DEVICE_COPY.phone}`}
       />
     );
 

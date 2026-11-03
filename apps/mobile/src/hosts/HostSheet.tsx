@@ -6,6 +6,7 @@ import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import { PolarisPush } from "../../modules/polaris-push/index.ts";
 import { Alert, Pressable, Switch, Text, View } from "react-native";
 import { hostNotifications, useHostNotifications } from "../push/hostNotifications.ts";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 import { InstrumentSheet, SheetHeader, Well } from "../sheet/index.tsx";
 import { themedStyles, useTheme } from "../theme/index.ts";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
@@ -61,6 +62,7 @@ const Notifications = ({ hostId }: { readonly hostId: string }) => {
         </Text>
         <Text style={styles.switchCaption} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
           {HOST_NOTIFICATIONS_CAPTION}
+
         </Text>
       </View>
       <Switch
@@ -78,8 +80,8 @@ const Notifications = ({ hostId }: { readonly hostId: string }) => {
 
 const confirmUnlink = (name: string, onUnlink: () => void) =>
   Alert.alert(
-    `Unlink this iPhone from ${name}?`,
-    `${name} forgets this iPhone, and its agent sessions leave this list. Your other hosts stay linked; link again from your Mac.`,
+    `Unlink this ${DEVICE_COPY.phone} from ${name}?`,
+    `${name} forgets this ${DEVICE_COPY.phone}, and its agent sessions leave this list. Your other hosts stay linked; link again from your ${DEVICE_COPY.computer}.`,
     [
       { text: "Cancel", style: "cancel" },
       { text: "Unlink", style: "destructive", onPress: onUnlink },
@@ -147,7 +149,7 @@ export const HostSheet = ({
                   numberOfLines={2}
                   maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
                 >
-                  Unlink this iPhone from {shortHostName(details.name)}…
+                  Unlink this {DEVICE_COPY.phone} from {shortHostName(details.name)}…
                 </Text>
               </Pressable>
             </>

@@ -4,6 +4,7 @@
  */
 import type { ConnectionState } from "@polaris/protocol";
 import { Match } from "effect";
+import { type DeviceCopy, deviceCopyFor } from "../app/deviceCopy.ts";
 import type { HostRoute } from "../runtime/hostConnection.ts";
 import { age, counted, grouped, shortHostName } from "../home/model/format.ts";
 
@@ -180,9 +181,12 @@ export const hostDetails = (host: HostInput, now: number): HostDetails => ({
 });
 
 /** What to say when Unlink left this iPhone trusted somewhere (RX1-3); null when it didn't. */
-export const unlinkNote = (kept: ReadonlyArray<string>): string | null => {
+export const unlinkNote = (
+  kept: ReadonlyArray<string>,
+  { phone, computer }: DeviceCopy = deviceCopyFor("ios")
+): string | null => {
   if (kept.length === 0) return null;
   const one = kept.length === 1;
 
-  return `Still linked to ${kept.join(", ")}: ${one ? "it" : "they"} didn't answer. Unlink again when ${one ? "it's" : "they're"} online, or unlink this iPhone on your Mac in Settings → Devices.`;
+  return `Still linked to ${kept.join(", ")}: ${one ? "it" : "they"} didn't answer. Unlink again when ${one ? "it's" : "they're"} online, or unlink this ${phone} on your ${computer} in Settings → Devices.`;
 };

@@ -20,6 +20,7 @@ import { NotReadyPanel } from "./NotReadyPanel.tsx";
 import { type NewSession, type NewSessionInput, useNewSession } from "./useNewSession.ts";
 import { useStartSheet } from "./useStartSheet.ts";
 import { WorkspaceSheet } from "./WorkspaceSheet.tsx";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 
 export interface NewSessionScreenProps extends NewSessionInput {
   readonly onBack: () => void;
@@ -93,7 +94,9 @@ const PlaceLine = ({
     >
       {host === null || workspace === null ? (
         <Text style={styles.placeHost} maxFontSizeMultiplier={CONTROL_TEXT_SCALE}>
-          {host === null ? "Add a workspace on the Mac first" : "Choose a workspace"}
+          {host === null
+            ? `Add a workspace on the ${DEVICE_COPY.computer} first`
+            : "Choose a workspace"}
         </Text>
       ) : (
         <>

@@ -45,7 +45,8 @@ export const reviewSlot = {
   verdict: (summaryId: string, findingId: string) => `verdict:${summaryId}:${findingId}`,
 };
 
-export const reviewSubmissions = (): ReviewSubmissions => {
+/** `phone` names this device in failure copy. */
+export const reviewSubmissions = (phone = "iPhone"): ReviewSubmissions => {
   const inFlight = new Map<string, Promise<string | null>>();
   const held = new Map<string, Held>();
   const states = new Map<string, SubmissionState>();
@@ -95,7 +96,7 @@ export const reviewSubmissions = (): ReviewSubmissions => {
 
     const sent = Effect.runPromise(dispatch(build(ids.itemId), ids.commandId).pipe(settle(slot)))
       .catch(() => {
-        const message = "Something went wrong on this iPhone";
+        const message = `Something went wrong on this ${phone}`;
 
         set(slot, { kind: "failed", message, refused: false });
 
@@ -121,17 +122,14 @@ export const reviewSubmissions = (): ReviewSubmissions => {
 };
 
 /** Slots per Host, above the screens: Review and the Duo context pane share them across remounts. */
-export const hostSubmissions = () => {
+export const hostSubmissions = (phone = "iPhone") => {
   const byHost = new Map<string, ReviewSubmissions>();
 
   return (hostId: string) => {
-    const kept = byHost.get(hostId) ?? reviewSubmissions();
+    const kept = byHost.get(hostId) ?? reviewSubmissions(phone);
 
     byHost.set(hostId, kept);
 
     return kept;
   };
 };
-
-/** The running app's slots. */
-export const submissionsFor = hostSubmissions();

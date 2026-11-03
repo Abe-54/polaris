@@ -9,26 +9,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 import { Dither } from "../dither/index.ts";
 import { InstrumentSheet, SheetHeader, SheetKicker } from "../sheet/index.tsx";
 import { CHROME_TEXT_SCALE, CONTENT_TEXT_SCALE, CONTROL_TEXT_SCALE } from "../theme/textScale.ts";
 import { themedStyles, useTheme } from "../theme/index.ts";
 import { hostsLine, type LinkOutcome, type LinkStep, type Linking, linking } from "./linking.ts";
-import { fittedSheetHeight } from "./model.ts";
+import { fittedSheetHeight, notSavedMessage } from "./model.ts";
 import { Viewfinder } from "./Viewfinder.tsx";
 
 /** The pairing sheet's copy (MX-AH, MX-AJ): the Mac is the user's own. */
 export const PAIRING_COPY = {
-  kicker: "Scan from your Mac",
-  instruction: "On your Mac, open Polaris → Settings → Devices and scan the code.",
-  pasteInstruction: "On your Mac, open Polaris → Settings → Devices and copy the link.",
+  kicker: `Scan from your ${DEVICE_COPY.computer}`,
+  instruction: `On your ${DEVICE_COPY.computer}, open Polaris → Settings → Devices and scan the code.`,
+  pasteInstruction: `On your ${DEVICE_COPY.computer}, open Polaris → Settings → Devices and copy the link.`,
 } as const;
 
 /** Link another Mac's copy (MX-AU). */
 export const LINK_ANOTHER_COPY = {
-  title: "Link another Mac",
-  instruction: "On that Mac, open Polaris → Settings → Devices and scan the code.",
-  pasteInstruction: "On that Mac, open Polaris → Settings → Devices and copy the link.",
+  title: `Link another ${DEVICE_COPY.computer}`,
+  instruction: `On that ${DEVICE_COPY.computer}, open Polaris → Settings → Devices and scan the code.`,
+  pasteInstruction: `On that ${DEVICE_COPY.computer}, open Polaris → Settings → Devices and copy the link.`,
 } as const;
 
 export interface ScanSheetCopy {
@@ -176,7 +177,7 @@ const StatusRow = ({
           {hostsLine(step.hosts.length, step.hostName)}
         </Text>
         <Text maxFontSizeMultiplier={CONTENT_TEXT_SCALE} style={styles.statusDetail}>
-          {linked ? "Linked this iPhone" : "Linking through the Polaris Relay…"}
+          {linked ? `Linked this ${DEVICE_COPY.phone}` : "Linking through the Polaris Relay…"}
         </Text>
       </View>
     </View>
@@ -289,6 +290,7 @@ export const useLinking = ({
         onLink: (link) => latest.current.onLink(link),
         onLinked: (hosts) => latest.current.onLinked?.(hosts),
         onStep: setStep,
+        notSaved: notSavedMessage(DEVICE_COPY),
       }),
     []
   );
@@ -309,7 +311,7 @@ const ScanStep = ({
 
   return (
     <>
-      {titled ? null : <SheetKicker parts={[copy.kicker ?? "Scan from your Mac"]} />}
+      {titled ? null : <SheetKicker parts={[copy.kicker ?? PAIRING_COPY.kicker]} />}
       <Viewfinder scanning={step.kind === "scan"} onCode={submit} />
       <Text maxFontSizeMultiplier={CONTENT_TEXT_SCALE} style={styles.instruction}>
         {copy.instruction}
