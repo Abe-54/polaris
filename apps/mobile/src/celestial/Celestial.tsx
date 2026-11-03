@@ -10,7 +10,7 @@ import {
   CELESTIAL_GRID,
 } from "@polaris/ui/celestial";
 import { memo, useEffect, useMemo, useSyncExternalStore } from "react";
-import { Animated, AppState, View } from "react-native";
+import { Animated, AppState, Platform, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useReducedMotion, useTheme } from "../theme";
 import { type CelestialArt, celestialSteps, celestialStill, celestialStrip } from "./art.ts";
@@ -111,7 +111,11 @@ export const Celestial = memo(function Celestial({
         pointerEvents: "none",
       }}
     >
-      <Animated.View style={{ transform }}>
+      <Animated.View
+        // Android's native driver can leave the strip's translation on a reused still view.
+        key={Platform.OS === "android" ? (strip === null ? "still" : "strip") : undefined}
+        style={{ transform }}
+      >
         <Art
           art={strip === null ? celestialStill(body) : celestialStrip(body)}
           palette={palette}
