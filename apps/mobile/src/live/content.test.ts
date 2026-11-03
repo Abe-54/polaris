@@ -182,6 +182,17 @@ describe("a Host's slice", () => {
     );
     expect(opened(slice ?? "").host).toBe("Mac Studio");
   });
+
+  test("unfitted, as Android's local notification takes it, a long step stays whole", () => {
+    const line = "x".repeat(2000);
+
+    const [slice] = liveContent(
+      [host("a", [snapshot({ sessions: [summary(working("s1", 1))] }), command("s1", line)])],
+      { budget: "local" }
+    ).slices;
+
+    expect(opened(slice ?? "").step?.line).toContain(line);
+  });
 });
 
 describe("every Host", () => {

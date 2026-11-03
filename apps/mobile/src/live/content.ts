@@ -98,8 +98,15 @@ export const hostSlice = (host: LiveHost): HostSlice => {
 
 const isBusy = (slice: HostSlice) => slice.working > 0 || slice.needs > 0;
 
-/** Every Host's slice; past MAX_LIVE_HOSTS, those with work or Needs You stay, as at the Relay. */
-export const liveContent = (hosts: ReadonlyArray<LiveHost>): LiveContent => {
+/**
+ * Every Host's slice; past MAX_LIVE_HOSTS, those with work or Needs You stay, as at the Relay.
+ * `budget: "push"` cuts each to the sealed budget the iOS activity shares with APNs updates. Android's
+ * notification, drawn on the device from the slice itself, uses `budget: "local"` and takes them whole.
+ */
+export const liveContent = (
+  hosts: ReadonlyArray<LiveHost>,
+  policy: { readonly budget: "push" | "local" } = { budget: "push" }
+): LiveContent => {
   const slices = hosts.map((host) => ({ address: host.hostAddress, slice: hostSlice(host) }));
 
   const kept = [...slices]
@@ -108,7 +115,9 @@ export const liveContent = (hosts: ReadonlyArray<LiveHost>): LiveContent => {
     .sort((a, b) => a.address.localeCompare(b.address));
 
   return {
-    slices: kept.map(({ slice }) => encodeHostSlice(fitSlice(slice))),
+    slices: kept.map(({ slice }) =>
+      encodeHostSlice(policy.budget === "push" ? fitSlice(slice) : slice)
+    ),
     busy: slices.some(({ slice }) => isBusy(slice)),
   };
 };

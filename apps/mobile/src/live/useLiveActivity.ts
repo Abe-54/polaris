@@ -102,7 +102,10 @@ const useEndOnUnlink = (linkedNow: boolean, running: { current: boolean }) => {
 
 const useDriver = (hosts: ReadonlyArray<LiveHost>, linkedNow: boolean) => {
   const foreground = useForeground();
-  const content = useMemo(() => liveContent(hosts), [hosts]);
+  const content = useMemo(
+    () => liveContent(hosts, { budget: Platform.OS === "android" ? "local" : "push" }),
+    [hosts]
+  );
   // One may be showing from before this launch: update and end find it, or do nothing.
   const running = useRef(Platform.OS !== "android");
   const idleSince = useRef<number | null>(null);
