@@ -1,0 +1,13 @@
+diff --git a/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/BundleHermesCTask.kt b/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/BundleHermesCTask.kt
+index 1ed09caa17de36a8eef8dc1eb44b3dba1ce5b3ca..b29741b6203d3aa93bb1558376713b07c5f98c1d 100644
+--- a/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/BundleHermesCTask.kt
++++ b/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/BundleHermesCTask.kt
+@@ -178,7 +178,7 @@ abstract class BundleHermesCTask : DefaultTask() {
+       bundleFile: File,
+   ): List<Any> {
+     val rootFile = root.get().asFile
+-    return windowsAwareCommandLine(
++    return listOf(
+         hermesCommand,
+         "-w",
+         "-emit-binary",
