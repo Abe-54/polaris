@@ -1,0 +1,5 @@
+<resources>
+  <string name="polaris_widget_name">Agent sessions</string>
+  <string name="polaris_widget_description">What needs you first, then what’s working.</string>
+  <string name="polaris_widget_open">Open Polaris to follow your agent sessions here</string>
+</resources>
