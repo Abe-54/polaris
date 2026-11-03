@@ -152,7 +152,9 @@ const useRegistrations = (
   const registered = useRef(new Map<string, string>());
 
   useEffect(() => {
-    if (native === null || identity === null) {
+    const push = PolarisPush;
+
+    if (native === null || push === null || identity === null) {
       registered.current.clear();
       setDevice(null);
 
@@ -160,10 +162,10 @@ const useRegistrations = (
     }
 
     const adopt = (token: string) =>
-      void PolarisPush.pushKey().then((pushKey) =>
+      void push.pushKey().then((pushKey) =>
         setDevice({
           token: token.toLowerCase(),
-          environment: PolarisPush.apnsEnvironment(),
+          environment: push.apnsEnvironment(),
           pushKey,
           identity,
         })
