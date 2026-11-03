@@ -88,6 +88,9 @@ export const AndroidMenu = ({
                   <Pressable
                     key={item.id}
                     accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                    accessibilityHint={item.subtitle ?? undefined}
+                    accessibilityState={{ disabled: item.disabled }}
                     disabled={item.disabled}
                     onPress={() => select(item)}
                     style={[styles.item, { opacity: item.disabled ? 0.5 : 1 }]}
@@ -115,6 +118,8 @@ export const AndroidMenu = ({
               />
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Save"
+                accessibilityState={{ disabled: text.trim() === "" }}
                 disabled={text.trim() === ""}
                 onPress={rename}
                 style={styles.item}
