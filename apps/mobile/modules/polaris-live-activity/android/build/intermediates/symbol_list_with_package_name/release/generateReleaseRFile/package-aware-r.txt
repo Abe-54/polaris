@@ -1,2 +1,0 @@
-dev.lux.polaris.liveactivity
-drawable polaris_live_star

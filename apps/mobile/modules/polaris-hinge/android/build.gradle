@@ -1,0 +1,16 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.lux.polaris'
+version = '1.0.0'
+
+android {
+  namespace 'dev.lux.polaris.hinge'
+}
+
+dependencies {
+  implementation 'androidx.window:window:1.5.1'
+  implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.10.0'
+}

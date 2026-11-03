@@ -1,5 +1,8 @@
 {
-  "platforms": ["ios"],
+  "platforms": ["ios", "android"],
+  "android": {
+    "modules": ["dev.lux.polaris.hinge.PolarisHingeModule"]
+  },
   "ios": {
     "modules": ["PolarisHingeModule"]
   }

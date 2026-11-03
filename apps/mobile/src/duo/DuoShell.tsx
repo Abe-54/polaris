@@ -15,6 +15,7 @@ import {
 } from "react";
 import {
   Keyboard,
+  Platform,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -49,11 +50,15 @@ const useKeyboardHeight = () => {
   const [height, setHeight] = useState(0);
 
   useEffect(() => {
-    const shown = Keyboard.addListener("keyboardWillShow", (e) =>
-      setHeight(e.endCoordinates.height)
+    const shown = Keyboard.addListener(
+      Platform.OS === "android" ? "keyboardDidShow" : "keyboardWillShow",
+      (e) => setHeight(e.endCoordinates.height)
     );
 
-    const hidden = Keyboard.addListener("keyboardWillHide", () => setHeight(0));
+    const hidden = Keyboard.addListener(
+      Platform.OS === "android" ? "keyboardDidHide" : "keyboardWillHide",
+      () => setHeight(0)
+    );
 
     return () => {
       shown.remove();
