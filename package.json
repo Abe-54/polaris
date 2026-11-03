@@ -47,6 +47,7 @@
   },
   "patchedDependencies": {
     "sodium-native@5.2.0": "patches/sodium-native@5.2.0.patch",
-    "@react-native/gradle-plugin@0.88.0": "patches/@react-native%2Fgradle-plugin@0.88.0.patch"
+    "@react-native/gradle-plugin@0.88.0": "patches/@react-native%2Fgradle-plugin@0.88.0.patch",
+    "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch"
   }
 }
