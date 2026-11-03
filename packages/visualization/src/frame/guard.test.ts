@@ -46,6 +46,14 @@ test("poisoning Element.remove cannot preserve a nested browsing context", async
   expect(frame.evaluate("document.querySelectorAll('iframe').length")).toBe(0);
 });
 
+test("a frame's poisoned Element.remove doesn't reach the next frame's guard", async () => {
+  frameFor().run(`Element.prototype.remove = function() {};`);
+  const next = frameFor();
+  next.run(`document.body.appendChild(document.createElement('object'));`);
+  await Bun.sleep(0);
+  expect(next.evaluate("document.querySelectorAll('object').length")).toBe(0);
+});
+
 test("cloning a host cannot copy an unobserved closed shadow tree", () => {
   const frame = frameFor();
   frame.run(`const host = document.getElementById('host');
