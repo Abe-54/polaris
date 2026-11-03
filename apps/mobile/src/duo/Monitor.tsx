@@ -5,6 +5,7 @@
  */
 import type { ApprovalRequest } from "@polaris/protocol";
 import { mobileFont, mobileType, mobileWeight } from "@polaris/ui/tokens";
+import { heroShadow } from "../theme/shadows.ts";
 import { Match } from "effect";
 import { useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Settings, Text, View } from "react-native";
@@ -34,8 +35,6 @@ import { useEdgeInsets } from "./useEdgeInsets.ts";
 
 /** MX-AF's hero edge and lift, as Home's (MX-C). */
 const HERO_EDGE = "#ffffff1f";
-
-const HERO_SHADOW = "#000000a0";
 
 /** A development build launched with `-polarisDevNight 1|0` forces the night dimming on or off. */
 const DEV_NIGHT: boolean | null = (() => {
@@ -409,10 +408,7 @@ const useStyles = themedStyles((c) => ({
     borderWidth: 1,
     borderColor: HERO_EDGE,
     backgroundColor: c.raised,
-    shadowColor: HERO_SHADOW,
-    shadowOpacity: 1,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
+    ...heroShadow,
   },
   well: {
     gap: 10,

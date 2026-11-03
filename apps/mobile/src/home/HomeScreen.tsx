@@ -3,6 +3,7 @@
  * then working and recent rows as wells on the ground, over the horizon.
  */
 import { mobileFont, mobileType, mobileWeight } from "@polaris/ui/tokens";
+import { heroShadow } from "../theme/shadows.ts";
 import { type ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
@@ -62,8 +63,6 @@ export interface HomeActions {
 /** MX-C's hero edge and lift, the same in both themes. */
 const HERO_EDGE = "#ffffff1f";
 
-const HERO_SHADOW = "#000000a0";
-
 /** Beyond this many pages the kicker's "3 of 12" carries the place alone. */
 const MAX_DOTS = 7;
 
@@ -91,10 +90,7 @@ const useStyles = themedStyles((c) => ({
     borderWidth: 1,
     borderColor: HERO_EDGE,
     backgroundColor: c.raised,
-    shadowColor: HERO_SHADOW,
-    shadowOpacity: 1,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
+    ...heroShadow,
   },
   heroHead: { flexDirection: "row", alignItems: "center", gap: 7 },
   heroKicker: { flex: 1, color: c.needsYouText },
