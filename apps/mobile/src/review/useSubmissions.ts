@@ -3,7 +3,11 @@ import type { Command } from "@polaris/protocol";
 import { useCallback, useSyncExternalStore } from "react";
 import type { LiveHost } from "../runtime/hostConnection.ts";
 import { dispatchReview } from "./actions.ts";
-import { type SubmissionState, submissionsFor } from "./submissions.ts";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
+import { hostSubmissions, type SubmissionState } from "./submissions.ts";
+
+/** The running app's slots. */
+const submissionsFor = hostSubmissions(DEVICE_COPY.phone);
 
 export interface ReviewSubmit {
   /** Answers why it failed, or null; "The host isn't connected" when there's no connection. */
