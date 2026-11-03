@@ -40,7 +40,7 @@
         "expo-audio",
         {
           "microphonePermission": "Polaris listens while you dictate a prompt; your host turns it into text.",
-          "recordAudioAndroid": false
+          "recordAudioAndroid": true
         }
       ],
       [
@@ -65,7 +65,12 @@
       ]
     ],
     "android": {
-      "package": "dev.lux.polaris.mobile"
+      "package": "dev.lux.polaris.mobile",
+      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
+      }
     }
   }
 }
