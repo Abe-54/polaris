@@ -8,7 +8,7 @@ import {
   launchImageLibraryAsync,
   UIImagePickerPreferredAssetRepresentationMode,
 } from "expo-image-picker";
-import { ActionSheetIOS } from "react-native";
+import { choose } from "../menus/choices.ts";
 import type { Picked, ReadBytes } from "./attach.ts";
 
 const OCTET_STREAM = "application/octet-stream";
@@ -53,19 +53,20 @@ export const pickFiles = async (): Promise<ReadonlyArray<Picked>> => {
   });
 };
 
-const CHOICES = ["Photo library", "Files", "Cancel"] as const;
-
 /** Attach's sheet: a photo or a file; nothing when cancelled. */
 export const pickAttachments = (): Promise<ReadonlyArray<Picked>> =>
   new Promise((resolve, reject) => {
-    ActionSheetIOS.showActionSheetWithOptions(
-      { options: [...CHOICES], cancelButtonIndex: CHOICES.length - 1 },
+    choose(
+      undefined,
+      ["Photo library", "Files"],
       (index) => {
         const pick = [pickPhotos, pickFiles][index];
 
         if (pick === undefined) resolve([]);
         else pick().then(resolve, reject);
-      }
+      },
+      undefined,
+      () => resolve([])
     );
   });
 
