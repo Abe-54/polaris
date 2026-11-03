@@ -1,7 +1,7 @@
 #!/bin/sh
 # Backstop for commits that skipped pre-commit: re-checks the files changed in the
 # pushed commits without writing, then typechecks and tests the changed packages.
-if [ ! -x node_modules/.bin/oxfmt ] || [ ! -x node_modules/.bin/turbo ]; then
+if { [ ! -x node_modules/.bin/oxfmt ] && [ ! -x node_modules/.bin/oxfmt.exe ]; } || { [ ! -x node_modules/.bin/turbo ] && [ ! -x node_modules/.bin/turbo.exe ]; }; then
   echo "pre-push: dependencies aren't installed in $(pwd). Run bun install there, then push again." >&2
   exit 1
 fi
