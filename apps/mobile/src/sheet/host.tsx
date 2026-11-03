@@ -12,7 +12,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import type { Detent } from "./detents.ts";
 import { SheetFrame } from "./frame.tsx";
 
@@ -58,20 +58,44 @@ export const SheetHost = ({ children }: { readonly children: ReactNode }) => {
   }, []);
 
   const host = useMemo(() => ({ show }), [show]);
+  const top = [...sheets].filter(([, sheet]) => sheet.open).at(-1)?.[0];
+  const android = Platform.OS === "android";
 
   return (
     <HostContext.Provider value={host}>
-      {children}
+      {android ? (
+        <View
+          style={styles.fill}
+          importantForAccessibility={top === undefined ? "auto" : "no-hide-descendants"}
+        >
+          {children}
+        </View>
+      ) : (
+        children
+      )}
       {sheets.size === 0 ? null : (
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-          {[...sheets].map(([id, sheet]) => (
-            <SheetFrame key={id} {...sheet} />
-          ))}
+          {[...sheets].map(([id, sheet]) => {
+            if (!android) return <SheetFrame key={id} {...sheet} />;
+
+            return (
+              <View
+                key={id}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="box-none"
+                importantForAccessibility={id === top ? "auto" : "no-hide-descendants"}
+              >
+                <SheetFrame {...sheet} />
+              </View>
+            );
+          })}
         </View>
       )}
     </HostContext.Provider>
   );
 };
+
+const styles = StyleSheet.create({ fill: { flex: 1 } });
 
 const useHost = (): Host => {
   const host = useContext(HostContext);
