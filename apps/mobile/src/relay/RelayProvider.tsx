@@ -15,6 +15,7 @@ import {
   readLink,
 } from "@polaris/client/relay";
 import { Effect } from "effect";
+import { Platform } from "react-native";
 import {
   createContext,
   type ReactNode,
@@ -38,7 +39,7 @@ import { relayTransport } from "./transport.ts";
 import { unlinkFrom } from "./unlink.ts";
 
 /** Shown to the Host in its Linked Devices; iOS gives apps no user-set device name. */
-const DEVICE_NAME = "iPhone";
+const DEVICE_NAME = Platform.OS === "android" ? "Android" : "iPhone";
 
 /** Every Host the link named, the linking one first; or the screen's copy for why not. */
 export type LinkOutcome =
