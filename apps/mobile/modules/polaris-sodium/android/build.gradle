@@ -1,0 +1,30 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.lux.polaris'
+version = '1.0.0'
+
+android {
+  namespace 'dev.lux.polaris.sodium'
+  if (rootProject.ext.has('ndkVersion')) {
+    ndkVersion rootProject.ext.ndkVersion
+  }
+
+  defaultConfig {
+    consumerProguardFiles 'consumer-rules.pro'
+    externalNativeBuild {
+      cmake {
+        arguments '-DANDROID_STL=none'
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path 'CMakeLists.txt'
+      version '3.22.1'
+    }
+  }
+}

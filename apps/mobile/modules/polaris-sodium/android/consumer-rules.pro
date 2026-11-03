@@ -1,0 +1,2 @@
+-keep class dev.lux.polaris.sodium.Sodium { *; }
+-keep class dev.lux.polaris.sodium.SodiumException { *; }
