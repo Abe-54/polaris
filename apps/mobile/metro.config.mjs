@@ -6,7 +6,7 @@ import expoMetroConfig from "expo/metro-config";
 
 const config = expoMetroConfig.getDefaultConfig(import.meta.dirname);
 
-const sodium = new URL("src/sodium/universal.ts", import.meta.url).pathname;
+const sodium = fileURLToPath(new URL("src/sodium/universal.ts", import.meta.url));
 
 // Pierre's index pulls in Shiki and the DOM renderer; the app only parses patches (src/review/patch.ts).
 const pierreParser = join(
