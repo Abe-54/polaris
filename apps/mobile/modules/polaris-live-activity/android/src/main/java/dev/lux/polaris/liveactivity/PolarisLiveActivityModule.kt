@@ -117,7 +117,10 @@ class PolarisLiveActivityModule : Module() {
     } ?: builder.setShowWhen(false)
     if (need == null) builder.setLargeIcon(LiveCelestialArt.draw(summary.celestials))
     if (Build.VERSION.SDK_INT >= 36) {
-      builder.setRequestPromotedOngoing(true)
+      // Promotion arrived in an Android 16 update (API 36.1); on 36.0 the method is missing.
+      try {
+        builder.setRequestPromotedOngoing(true)
+      } catch (_: NoSuchMethodError) {}
       if (need == null && summary.working > 0) {
         builder.setStyle(Notification.ProgressStyle().setProgressIndeterminate(true)
           .setStyledByProgress(false))
