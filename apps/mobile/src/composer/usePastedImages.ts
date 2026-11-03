@@ -1,6 +1,6 @@
 /**
  * Pasting images into a composer: give its TextInput the returned `nativeID`, and each image
- * pasted there is staged as if picked. Off iOS, or in builds before `modules/polaris-paste`, none.
+ * pasted there is staged as if picked. In builds without `modules/polaris-paste`, none.
  */
 import { type NativeModule, requireOptionalNativeModule } from "expo";
 import { useEffect, useId, useRef } from "react";
