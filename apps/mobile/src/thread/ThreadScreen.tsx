@@ -25,6 +25,7 @@ import {
 import {
   AppState,
   FlatList,
+  Platform,
   KeyboardAvoidingView,
   type LayoutRectangle,
   Pressable,
@@ -63,6 +64,8 @@ import { ReconnectingLine } from "../states/thread.tsx";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { liveVisualizations, revisedIds } from "../visualization/index.ts";
 import { DEVICE_COPY } from "../app/platformCopy.ts";
+
+const KEYBOARD_DISMISS_MODE = Platform.OS === "android" ? "on-drag" : "interactive";
 
 export interface ThreadScreenProps {
   readonly hostId: string;
@@ -548,7 +551,7 @@ export const ThreadScreen = ({
             removeClippedSubviews
             onViewableItemsChanged={onViewable.current}
             viewabilityConfig={VIEWABILITY}
-            keyboardDismissMode="interactive"
+            keyboardDismissMode={KEYBOARD_DISMISS_MODE}
           />
         </View>
         <View

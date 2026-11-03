@@ -16,6 +16,26 @@ export interface Picked {
   readonly isImage: boolean;
 }
 
+/** Keep compatible photos; replace other encodings and their metadata together. */
+export const compatiblePhoto = async (
+  picked: Picked,
+  jpeg: () => Promise<{ readonly uri: string; readonly size: number }>
+): Promise<Picked> => {
+  if (
+    ["image/jpeg", "image/png"].includes(picked.mimeType.toLowerCase()) &&
+    !/\.(heic|heif|avif|webp)$/i.test(picked.name)
+  )
+    return picked;
+  const output = await jpeg();
+
+  return {
+    ...picked,
+    ...output,
+    name: `${picked.name.replace(/\.[^.]+$/, "")}.jpg`,
+    mimeType: "image/jpeg",
+  };
+};
+
 /** Where a pick is staged: the Host, its Workspace, and the session once it exists. */
 export interface StageTarget {
   readonly connection: HostConnection;

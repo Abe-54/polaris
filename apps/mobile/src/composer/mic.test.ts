@@ -1,6 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { openMic, type MicDeps } from "./mic.ts";
+import { nativeProbe } from "../app/nativeProbe.testing.ts";
+import { microphonePermissionCopy, NO_MICROPHONE, openMic, type MicDeps } from "./mic.ts";
 import type { DictationCallbacks, Heard } from "./voice.ts";
+
+test("microphone recovery gives the device's settings path", () => {
+  expect(microphonePermissionCopy("android")).toContain("Settings → Apps → Polaris → Permissions");
+  expect(microphonePermissionCopy("ios")).toBe(NO_MICROPHONE);
+});
+
+test("Android microphone denial offers app settings and does not start audio", () => {
+  nativeProbe(`
+let alert;
+let opened = false;
+rn.Alert = { alert: (...args) => { alert = args; } };
+rn.Linking = { openSettings: async () => { opened = true; } };
+const { openMic } = await import("./composer/mic.ts");
+let state;
+const mic = openMic({
+  permitted: async () => false,
+  startAudio: async () => { throw new Error("must not start"); },
+  stopAudio: () => {}, dictate: () => { throw new Error("must not dictate"); },
+  field: () => "", write: () => {}, changed: next => { state = next; },
+});
+mic.toggle();
+await new Promise(resolve => setTimeout(resolve, 0));
+assert.match(state.failure, /Settings → Apps → Polaris → Permissions/);
+alert[2].find(button => button.text === "Open Settings").onPress();
+assert.equal(opened, true);
+`);
+});
 
 /** The mic over a fake permission prompt, audio stream and Host dictation, and a field to type in. */
 const rig = (field = "") => {
