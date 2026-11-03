@@ -5,6 +5,7 @@
 import { type Command, CommandId } from "@polaris/protocol";
 import { Effect, Predicate } from "effect";
 import { uniqueId } from "./actions.ts";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 
 /** Sends a command under its id; a `ReviewRefused` failure is definite, any other may have landed. */
 export type ReviewDispatch = (
@@ -95,7 +96,7 @@ export const reviewSubmissions = (): ReviewSubmissions => {
 
     const sent = Effect.runPromise(dispatch(build(ids.itemId), ids.commandId).pipe(settle(slot)))
       .catch(() => {
-        const message = "Something went wrong on this iPhone";
+        const message = `Something went wrong on this ${DEVICE_COPY.phone}`;
 
         set(slot, { kind: "failed", message, refused: false });
 

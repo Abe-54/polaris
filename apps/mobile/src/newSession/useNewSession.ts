@@ -29,6 +29,7 @@ import {
   usePermissionChoice,
 } from "./permissionModes.ts";
 import { type HarnessChoice, useHarnessChoice } from "./useHarnessChoice.ts";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 
 export interface NewSessionInput {
   readonly hosts: ReadonlyArray<SheetHost>;
@@ -74,7 +75,7 @@ const harnessBlocker = (choice: HarnessChoice): string | null => {
 };
 
 const sendBlocker = (host: SheetHost | null, prompt: string, choice: HarnessChoice) => {
-  if (host === null) return "Add a workspace on the Mac first";
+  if (host === null) return `Add a workspace on the ${DEVICE_COPY.computer} first`;
 
   if (!host.connected) return `${host.hostName} isn't connected`;
 

@@ -28,6 +28,7 @@ import { starChartOf } from "./stars.ts";
 import { TaskSheet } from "./TaskSheet.tsx";
 import { TasksSheet } from "./TasksSheet.tsx";
 import { chipReading, claimNotice, completes } from "./wiring.ts";
+import { DEVICE_COPY } from "../../app/platformCopy.ts";
 
 /** Re-render elapsed times while the screen is open; nothing runs on the Host for it. */
 const useNow = (everyMs: number) => {
@@ -240,7 +241,7 @@ export const ConstellationScreen = ({
   const connection = useHost(hostId);
 
   return connection === null ? (
-    <Waiting text="This host isn't linked to this iPhone." />
+    <Waiting text={`This host isn't linked to this ${DEVICE_COPY.phone}.`} />
   ) : (
     <Live connection={connection} constellationId={constellationId} onBack={onBack} />
   );

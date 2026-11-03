@@ -30,6 +30,7 @@ import { paperSpan } from "./paperSpan.testing.ts";
 import type { Rect } from "./posture.ts";
 import { useEdgeInsets } from "./useEdgeInsets.ts";
 import { chartRows, claimPane, firstChosen, spanChart, spanSummary } from "./span.ts";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 
 const DEV_SPAN =
   __DEV__ && Platform.OS === "ios"
@@ -262,7 +263,7 @@ export const ConstellationSpan = ({ hostId, constellationId, ...view }: Constell
   return (
     <View style={styles.screen}>
       {connection === null ? (
-        <Text style={styles.note}>This host isn't linked to this iPhone.</Text>
+        <Text style={styles.note}>This host isn't linked to this {DEVICE_COPY.phone}.</Text>
       ) : (
         <Live connection={connection} constellationId={constellationId} {...view} />
       )}
