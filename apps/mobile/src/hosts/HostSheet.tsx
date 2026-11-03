@@ -3,6 +3,7 @@
  * trip, route, agent sessions, this iPhone's notification switch, and Unlink for relay Hosts.
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
+import { PolarisPush } from "../../modules/polaris-push/index.ts";
 import { Alert, Pressable, Switch, Text, View } from "react-native";
 import {
   constellationNotifications,
@@ -133,7 +134,7 @@ export const HostSheet = ({
           </Well>
           {onUnlink === null ? null : (
             <>
-              <Notifications />
+              {PolarisPush === null ? null : <Notifications />}
               <Pressable
                 accessibilityRole="button"
                 onPress={() => confirmUnlink(details.name, onUnlink)}

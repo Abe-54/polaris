@@ -4,7 +4,6 @@
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import {
-  ActionSheetIOS,
   Linking,
   Pressable,
   ScrollView,
@@ -13,6 +12,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { choose } from "../menus/choices.ts";
+import { PolarisPush } from "../../modules/polaris-push/index.ts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFollowedHosts } from "../home/feed/useFollowedHosts.ts";
 import { HORIZON_INSET } from "../horizon";
@@ -103,12 +104,9 @@ const Row = ({
 };
 
 const chooseMotion = (setMotion: (motion: (typeof MOTION_CHOICES)[number]["motion"]) => void) =>
-  ActionSheetIOS.showActionSheetWithOptions(
-    {
-      title: "Motion",
-      options: [...MOTION_CHOICES.map((choice) => choice.label), "Cancel"],
-      cancelButtonIndex: MOTION_CHOICES.length,
-    },
+  choose(
+    "Motion",
+    MOTION_CHOICES.map((choice) => choice.label),
     (index) => {
       const choice = MOTION_CHOICES[index];
 
@@ -185,8 +183,8 @@ export const SettingsScreen = ({
           <Row
             Glyph={NotificationsGlyph}
             title="Notifications"
-            line="In iOS Settings"
-            onPress={() => void Linking.openSettings()}
+            line={PolarisPush === null ? "Not available on this device" : "In iOS Settings"}
+            {...(PolarisPush === null ? {} : { onPress: () => void Linking.openSettings() })}
           />
           <Row
             Glyph={MotionGlyph}
