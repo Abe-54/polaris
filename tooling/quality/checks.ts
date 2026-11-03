@@ -21,7 +21,8 @@ export interface Failure {
   readonly output: string;
 }
 
-const bin = (name: string) => join(ROOT, "node_modules/.bin", name);
+export const bin = (name: string) =>
+  join(ROOT, "node_modules/.bin", process.platform === "win32" ? `${name}.exe` : name);
 
 /** Whether this checkout has its dependencies installed; hooks refuse to run without them. */
 export const installed = () => existsSync(bin("oxfmt")) && existsSync(bin("oxlint"));

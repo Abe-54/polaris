@@ -1,7 +1,7 @@
 #!/bin/sh
 # Formats and lints staged files with the rules CI uses (tooling/quality/checks.ts).
 # Don't bypass it with --no-verify: fix the errors.
-if [ ! -x node_modules/.bin/oxfmt ] || [ ! -x node_modules/.bin/oxlint ]; then
+if { [ ! -x node_modules/.bin/oxfmt ] && [ ! -x node_modules/.bin/oxfmt.exe ]; } || { [ ! -x node_modules/.bin/oxlint ] && [ ! -x node_modules/.bin/oxlint.exe ]; }; then
   echo "pre-commit: dependencies aren't installed in $(pwd). Run bun install there, then commit again." >&2
   exit 1
 fi

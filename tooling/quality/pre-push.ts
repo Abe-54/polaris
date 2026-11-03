@@ -5,8 +5,7 @@
  * dependents and runs the changed packages' fast-tier tests. Git passes `<local ref> <local sha> <remote ref> <remote sha>`
  * lines on stdin.
  */
-import { join } from "node:path";
-import { formatFailure, installed, planChecks, ROOT, runSteps, type Step } from "./checks.ts";
+import { bin, formatFailure, installed, planChecks, ROOT, runSteps, type Step } from "./checks.ts";
 
 const ZERO = /^0+$/;
 
@@ -21,7 +20,7 @@ const baseOf = (localSha: string, remoteSha: string) =>
   ZERO.test(remoteSha) ? git("merge-base", localSha, "origin/main") : remoteSha;
 
 const turbo = (task: string, filter: string, ...args: ReadonlyArray<string>) => [
-  join(ROOT, "node_modules/.bin/turbo"),
+  bin("turbo"),
   "run",
   task,
   filter,
