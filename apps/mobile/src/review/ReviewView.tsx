@@ -6,8 +6,10 @@
  */
 import type { RiskFinding, RiskSummary, VerdictReason } from "@polaris/protocol";
 import { mobileType } from "@polaris/ui/tokens";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BackHandler,
+  Platform,
   KeyboardAvoidingView,
   ScrollView,
   type ScrollViewInstance,
@@ -116,6 +118,18 @@ const useOverlays = () => {
   const [asking, setAsking] = useState<RiskFinding | null>(null);
   const [walkthrough, setWalkthrough] = useState(false);
   const [file, setFile] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || file === null) return;
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setFile(null);
+
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [file]);
 
   return { asking, setAsking, walkthrough, setWalkthrough, file, setFile };
 };
