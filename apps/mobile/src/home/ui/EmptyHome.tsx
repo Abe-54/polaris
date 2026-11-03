@@ -9,6 +9,7 @@ import { Pressable, Text, View } from "react-native";
 import { themedStyles } from "../../theme/index.ts";
 import { StatePanel } from "../../states/StatePanel.tsx";
 import type { HomeEmpty, Unreachable } from "../model/home.ts";
+import { DEVICE_COPY } from "../../app/platformCopy.ts";
 
 interface Copy {
   readonly title: string;
@@ -121,8 +122,8 @@ export const EmptyHome = ({
       <View style={styles.bleed}>
         <StatePanel
           title="No hosts yet"
-          line="Link this iPhone from Polaris on your Mac. Its hosts and their agent sessions appear here."
-          action={{ label: "Link this iPhone", onPress: onLink, primary: true }}
+          line={`Link this ${DEVICE_COPY.phone} from Polaris on your ${DEVICE_COPY.computer}. Its hosts and their agent sessions appear here.`}
+          action={{ label: `Link this ${DEVICE_COPY.phone}`, onPress: onLink, primary: true }}
         />
       </View>
     );
@@ -138,7 +139,7 @@ export const EmptyHome = ({
     Match.when("loading", () => null),
     Match.when("no-sessions", (): Copy => ({
       title: "No agent sessions yet",
-      body: "Start one with New, or from Polaris on your Mac.",
+      body: `Start one with New, or from Polaris on your ${DEVICE_COPY.computer}.`,
       action: null,
     })),
     Match.when("filtered", (): Copy => ({

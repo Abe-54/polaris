@@ -5,6 +5,7 @@
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import { PolarisPush } from "../../modules/polaris-push/index.ts";
 import { Alert, Pressable, Switch, Text, View } from "react-native";
+import { DEVICE_COPY } from "../app/platformCopy.ts";
 import {
   constellationNotifications,
   useConstellationNotifications,
@@ -59,7 +60,7 @@ const Notifications = () => {
           When a constellation needs you
         </Text>
         <Text style={styles.switchCaption} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
-          On this iPhone, for every host
+          On this {DEVICE_COPY.phone}, for every host
         </Text>
       </View>
       <Switch
@@ -76,8 +77,8 @@ const Notifications = () => {
 
 const confirmUnlink = (name: string, onUnlink: () => void) =>
   Alert.alert(
-    `Unlink this iPhone from ${name}?`,
-    `${name} forgets this iPhone, and its agent sessions leave this list. Your other hosts stay linked; link again from your Mac.`,
+    `Unlink this ${DEVICE_COPY.phone} from ${name}?`,
+    `${name} forgets this ${DEVICE_COPY.phone}, and its agent sessions leave this list. Your other hosts stay linked; link again from your ${DEVICE_COPY.computer}.`,
     [
       { text: "Cancel", style: "cancel" },
       { text: "Unlink", style: "destructive", onPress: onUnlink },
@@ -145,7 +146,7 @@ export const HostSheet = ({
                   numberOfLines={2}
                   maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
                 >
-                  Unlink this iPhone from {shortHostName(details.name)}…
+                  Unlink this {DEVICE_COPY.phone} from {shortHostName(details.name)}…
                 </Text>
               </Pressable>
             </>
