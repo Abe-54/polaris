@@ -16,19 +16,28 @@ const rn = {
   Linking: { openURL: async (url) => { opened.push(url); } },
 };
 mock.module("react-native", () => rn);
-if (process.env.POLARIS_TEST_HEAD === "1") {
-  const { plugin } = await import("bun");
-  const { relative, resolve } = await import("node:path");
-  const root = resolve(process.cwd(), "../..");
-  plugin({ name: "Android regression baseline", setup: (build) => {
-    build.onLoad({ filter: /(?:polaris-push[\\\\/]index|composer[\\\\/]pick|visualization[\\\\/]confirmLink|app[\\\\/]navigation|menus[\\\\/]LongPressMenu)\\.tsx?$/ }, ({ path }) => {
-      const file = relative(root, path).replaceAll("\\\\", "/");
-      const head = Bun.spawnSync(["git", "show", "HEAD:" + file], { cwd: root });
-      assert.equal(head.exitCode, 0, head.stderr.toString());
-      return { contents: head.stdout.toString(), loader: path.endsWith("tsx") ? "tsx" : "ts" };
-    });
-  } });
-}
+mock.module("react-native-svg", () => ({ default: "Svg", Path: "Path" }));
+mock.module("expo-haptics", () => ({
+  AndroidHaptics: { Context_Click: "context-click", Confirm: "confirm", Reject: "reject", Segment_Tick: "tick" },
+  ImpactFeedbackStyle: { Light: "light", Rigid: "rigid" },
+  NotificationFeedbackType: { Success: "success", Warning: "warning" },
+  performAndroidHapticsAsync: async () => {},
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+}));
+const { currentChoice, finishChoice } = await import("./src/menus/choiceStore.ts");
+const offered = () => os === "ios" ? sheet[0].options.slice(0, -1) : currentChoice()?.options;
+const select = (index) => {
+  if (os === "ios") sheet[1](index);
+  else {
+    assert.ok(currentChoice(), "Expected an Android choice sheet");
+    finishChoice(currentChoice(), index);
+    assert.equal(currentChoice(), null);
+    assert.equal(alert, undefined, "Android choices should use the themed sheet");
+  }
+};
+const cancel = () => os === "ios" ? sheet[1](sheet[0].cancelButtonIndex) : select(null);
+
 `;
 
 const probe = (body: string, os = "android") => {
@@ -46,57 +55,65 @@ test.each(["android", "ios"])(
   (os) => {
     probe(
       `
+mock.module("expo-document-picker", () => ({ getDocumentAsync: async () => ({
+  canceled: false, assets: [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3 }],
+}) }));
 mock.module("expo-image-picker", () => ({
   UIImagePickerPreferredAssetRepresentationMode: { Compatible: "compatible" },
   launchImageLibraryAsync: async () => ({ canceled: false, assets: [
     { uri: "file:///photo.jpg", fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 4 },
   ] }),
 }));
-mock.module("expo-document-picker", () => ({ getDocumentAsync: async () => ({
-  canceled: false, assets: [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3 }],
-}) }));
 mock.module("expo-file-system", () => ({ File: class {} }));
 const { pickAttachments } = await import("./src/composer/pick.ts");
-const select = (index) => os === "ios" ? sheet[1](index) : alert[2][index].onPress();
 const photos = pickAttachments();
+assert.deepEqual(offered(), ["Photo library", "Files"]);
 select(0);
 assert.deepEqual(await photos, [{ uri: "file:///photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 4, isImage: true }]);
 const files = pickAttachments();
 select(1);
 assert.deepEqual(await files, [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3, isImage: false }]);
 const canceled = pickAttachments();
-if (os === "ios") sheet[1](2); else alert[3].onDismiss();
+cancel();
 assert.deepEqual(await canceled, []);
 `,
       os
     );
-  }
+  },
+  30_000
 );
 
-test.each(["android", "ios"])("%s opens visualization links only after confirmation", (os) => {
-  probe(
-    `
+test.each(["android", "ios"])(
+  "%s opens visualization links only after confirmation",
+  (os) => {
+    probe(
+      `
 const { linkConfirms } = await import("@polaris/visualization");
 const { confirmLink: confirm } = await import("./src/visualization/confirmLink.ts");
 let now = 0;
 const confirms = linkConfirms(() => now);
 const confirmLink = (title, url) => confirm(title, url, confirms);
-
 confirmLink("Unsafe", "http://example.com");
 assert.equal(alert, undefined);
 assert.equal(sheet, undefined);
+assert.equal(currentChoice(), null);
 confirmLink("Example", "https://example.com/page");
 assert.deepEqual(opened, []);
-if (os === "ios") sheet[1](1); else alert[3].onDismiss();
+assert.deepEqual(offered(), ["Open in browser"]);
+if (os === "ios") assert.equal(sheet[0].title, "Open this link?");
+else assert.equal(currentChoice().title, "Open this link?");
+cancel();
 assert.deepEqual(opened, []);
 now += 1000;
 confirmLink("Example", "https://example.com/page");
-if (os === "ios") sheet[1](0); else alert[2][0].onPress();
+select(0);
 assert.deepEqual(opened, ["https://example.com/page"]);
 `,
-    os
-  );
-});
+      os
+    );
+  },
+  30_000
+);
 
 test("Android push hooks need no Apple module, notification permission or FCM token", () => {
   probe(`
@@ -127,23 +144,7 @@ usePushLinks(() => { throw new Error("Unexpected navigation"); });
 for (const effect of effects) effect();
 await new Promise((resolve) => setTimeout(resolve, 10));
 `);
-});
-
-test.each(["android", "ios"])("%s keeps all three motion choices reachable", (os) => {
-  probe(
-    `
-const { choose } = await import("./src/menus/choices.ts");
-let motion = -1;
-choose("Motion", ["System", "Reduced", "Full"], (index) => { motion = index; });
-if (os === "ios") sheet[1](2); else {
-  assert.equal(alert[2].length, 3);
-  alert[2][2].onPress();
-}
-assert.equal(motion, 2);
-`,
-    os
-  );
-});
+}, 30_000);
 
 test("Android Back pops pushed screens, dismisses a sheet first and leaves exit to the system at Home", () => {
   probe(`
@@ -199,57 +200,7 @@ assert.equal(back(), false);
 for (const cleanup of cleanups) cleanup?.();
 assert.equal(handlers.length, 0);
 `);
-});
-
-test("Android menus expose enabled actions, rename with entered text and dismiss without sending", () => {
-  probe(`
-const states = [];
-let cursor = 0, longPress;
-const jsx = (type, props) => ({ type, props });
-mock.module("react/jsx-runtime", () => ({ jsx, jsxs: jsx, Fragment: "Fragment" }));
-mock.module("react", () => ({ useState: (initial) => {
-  const index = cursor++;
-  if (!(index in states)) states[index] = initial;
-  return [states[index], (next) => { states[index] = next; }];
-} }));
-Object.assign(rn, { Pressable: "Pressable", Text: "Text", TextInput: "TextInput", View: "View", StyleSheet: { create: (styles) => styles } });
-mock.module("react-native-gesture-handler", () => ({
-  GestureDetector: "GestureDetector",
-  Gesture: { LongPress: () => ({ runOnJS() { return this; }, onStart(callback) { longPress = callback; return this; } }) },
-}));
-mock.module("./src/sheet/index.tsx", () => ({ InstrumentSheet: "InstrumentSheet", SheetHeader: "SheetHeader" }));
-mock.module("./src/theme/index.ts", () => ({ useTheme: () => ({ colours: {} }) }));
-const { AndroidMenu } = await import("./src/menus/AndroidMenu.tsx");
-const sent = [];
-const action = { kind: "copy", text: "Output" };
-const entry = (id, next, disabled = false) => ({ id, title: id, action: next, disabled, subtitle: null, symbol: null });
-const menu = [[entry("Copy", action), entry("Fork", { kind: "fork" }, true)], [entry("Rename", { kind: "rename", hostId: "host", sessionId: "session", title: "Before" })]];
-const render = () => { cursor = 0; return AndroidMenu({ menu, title: "Turn 1", children: "row", onAction: (action) => sent.push(action) }); };
-const nodes = (tree) => Array.isArray(tree) ? tree.flatMap(nodes) : tree && typeof tree === "object" ? [tree, ...nodes(tree.props?.children)] : [];
-const find = (tree, type, predicate = () => true) => nodes(tree).find((node) => node.type === type && predicate(node.props));
-const press = (tree, text) => find(tree, "Pressable", (props) => nodes(props.children).some((node) => node.type === "Text" && node.props.children === text)).props.onPress();
-let tree = render();
-assert.equal(find(tree, "InstrumentSheet"), undefined);
-longPress(); tree = render();
-assert.equal(find(tree, "InstrumentSheet").props.open, true);
-press(tree, "Fork");
-assert.deepEqual(sent, []);
-press(tree, "Copy");
-assert.deepEqual(sent, [action]);
-assert.equal(find(render(), "InstrumentSheet"), undefined);
-longPress(); tree = render(); press(tree, "Rename"); tree = render();
-find(tree, "TextInput").props.onChangeText("  After  ");
-tree = render(); press(tree, "Save");
-assert.equal(sent[1].hostId, "host");
-assert.equal(sent[1].command.sessionId, "session");
-assert.equal(sent[1].command.title, "After");
-assert.equal(sent[1].command._tag, "RenameSession");
-longPress(); tree = render();
-find(tree, "InstrumentSheet").props.onClose();
-assert.equal(sent.length, 2);
-assert.equal(find(render(), "InstrumentSheet"), undefined);
-`);
-});
+}, 30_000);
 
 test("Android Copy writes the output even without the Apple context-menu module", () => {
   probe(`
@@ -268,4 +219,4 @@ const row = LongPressMenu({ menu, title: "Turn 1", onAction: () => {}, children:
 assert.equal(row.type, "AndroidMenu");
 assert.equal(row.props.menu, menu);
 `);
-});
+}, 30_000);

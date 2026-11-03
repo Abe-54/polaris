@@ -6,7 +6,7 @@ import { Match } from "effect";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { NavigationProvider, type Route, useNavigation } from "./app/navigation.tsx";
 import {
@@ -22,6 +22,7 @@ import { DuoShell } from "./duo/DuoShell.tsx";
 import { FollowedHostsProvider } from "./home/feed/useFollowedHosts.ts";
 import { useHomeHosts } from "./home/feed/useHomeHosts.ts";
 import { HomeScreen } from "./home/HomeScreen.tsx";
+import { ChoiceSheetHost } from "./menus/index.ts";
 import { ComposerGallery, composerGalleryOn } from "./composer/Gallery.tsx";
 import {
   ConstellationGallery,
@@ -251,6 +252,7 @@ const Shell = () => {
 
   return (
     <SheetHost>
+      {Platform.OS === "android" ? <ChoiceSheetHost /> : null}
       <InboxProvider>
         <View style={styles.fill}>
           <DuoShell>

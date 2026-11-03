@@ -19,6 +19,7 @@ export const confirmLink = (title: string, url: string, confirms: LinkConfirms) 
 
       if (index === 0) void Linking.openURL(link.href).catch(() => undefined);
     },
-    `“${title}” wants to open a page in your browser.\n\n${link.host}\n${link.href}`
+    `“${title}” wants to open a page in your browser.\n\n${link.host}\n${link.href}`,
+    () => confirms.settled(false)
   );
 };
