@@ -1,0 +1,21 @@
+if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+    subprojects { subproject ->
+        ["com.android.application", "com.android.library"].each { pluginId ->
+            subproject.plugins.withId(pluginId) {
+                subproject.androidComponents.finalizeDsl { android ->
+                    def architectures = rootProject.findProperty("reactNativeArchitectures").split(",").toList()
+                    android.defaultConfig.ndk.abiFilters.clear()
+                    android.defaultConfig.ndk.abiFilters.addAll(architectures)
+                    android.defaultConfig.externalNativeBuild.cmake.abiFilters.clear()
+                    android.defaultConfig.externalNativeBuild.cmake.abiFilters.addAll(architectures)
+                    android.externalNativeBuild.cmake.version = "3.31.6"
+                    android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
+                        "-DCMAKE_JOB_POOLS=compile=2;link=1",
+                        "-DCMAKE_JOB_POOL_COMPILE=compile",
+                        "-DCMAKE_JOB_POOL_LINK=link"
+                    ])
+                }
+            }
+        }
+    }
+}

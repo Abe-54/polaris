@@ -22,6 +22,29 @@ bench Harness (the SDK's test Daemon), registers a Workspace and starts two agen
 prompt such as `bench:{"approvalEvery":1,"approvalQuestion":{"question":"…","choices":["A","B"]}}`
 makes a session ask for approval or answer, to try Home's inline replies.
 
+## Build Android on Windows
+
+From PowerShell, with the Android SDK, SDK CMake 3.31.6, and JDK 17 installed:
+
+```powershell
+Set-Location 'D:\Development Projects\polaris\apps\mobile'
+bunx expo prebuild -p android --no-install
+Set-Location android
+$env:NODE_ENV = 'production'
+.\gradlew.bat assembleRelease --console=plain
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`. The native project is
+generated and ignored by Git. Keep native build changes in config plugins or Bun patches.
+
+`plugins/withWindowsNativeBuild.mjs` applies `plugins/windows-native-build.gradle`. On Windows,
+it selects SDK CMake 3.31.6, whose Ninja supports paths over 260 characters in Bun's nested
+dependencies. It also limits Windows builds to two Gradle workers and two compiler jobs per
+Ninja build to avoid exhausting the paging file. Windows APKs target arm64 phones and the x86_64
+emulator, without compiling the two 32-bit ABIs. Other platforms retain their default settings.
+The Bun patch for `@react-native/gradle-plugin` launches `hermesc` directly so `cmd` cannot split
+the executable path at a space.
+
 ## Hosts and the dev bridge
 
 The app is a Client, not an Extension: every screen shares one `HostConnection` per Host
