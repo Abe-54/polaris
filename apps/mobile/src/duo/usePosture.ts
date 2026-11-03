@@ -1,6 +1,6 @@
 /**
  * The posture as React state, from `modules/polaris-hinge`: its first answer, then each change,
- * each a JSON report parsed here. Off a Duo, off iOS 27.1, or in older builds, it stays folded.
+ * each a JSON report parsed here. Without a separating fold or a supported module, it stays folded.
  * A development build launched with `-polarisDevPosture unfolded|halfFolded` fakes the hinge.
  */
 import { Schema } from "effect";
