@@ -40,6 +40,14 @@ const root = join(import.meta.dir, "..");
 
 const noticesPath = join(root, "THIRD_PARTY_NOTICES.md");
 
+const LIBSODIUM = {
+  name: "libsodium",
+  version: "1.0.21",
+  license: "ISC",
+  shippedBy:
+    "The Android and iOS builds of the Mobile App link it statically. Android uses the pinned tarball in `apps/mobile/modules/polaris-sodium/android/CMakeLists.txt`.",
+};
+
 const exceptionsPath = join(import.meta.dir, "license-exceptions.json");
 
 /** The licence audit of the Go modules inside the shipped Betterleaks binary (`scripts/betterleaks.ts`). */
@@ -537,7 +545,18 @@ const main = () => {
     failed = true;
   }
 
-  const notices = `${renderNotices(verdicts)}\n${renderGoNotices(goAudit)}\n${renderSimulatorNotices(simulatorAudit)}`;
+  const sodiumNotices = [
+    `## ${LIBSODIUM.name}@${LIBSODIUM.version} (${LIBSODIUM.license})`,
+    "",
+    LIBSODIUM.shippedBy,
+    "",
+    "```text",
+    readFileSync(join(root, "docs/licenses/libsodium.txt"), "utf8").trimEnd(),
+    "```",
+    "",
+  ].join("\n");
+
+  const notices = `${renderNotices(verdicts)}\n${renderGoNotices(goAudit)}\n${renderSimulatorNotices(simulatorAudit)}\n${sodiumNotices}`;
 
   if (check) {
     const current = existsSync(noticesPath) ? readFileSync(noticesPath, "utf8") : "";
