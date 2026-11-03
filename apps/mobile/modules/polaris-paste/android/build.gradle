@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.lux.polaris'
+version = '1.0.0'
+
+android {
+  namespace 'dev.lux.polaris.paste'
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-android'
+}
