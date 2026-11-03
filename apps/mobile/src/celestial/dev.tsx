@@ -4,6 +4,7 @@
  */
 import { CELESTIAL_MOONS, CELESTIAL_PLANETS, CELESTIAL_STARS } from "@polaris/protocol";
 import { Predicate } from "effect";
+import { celestialLabelFont } from "../theme/fonts.ts";
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, type ScrollViewInstance, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -22,7 +23,7 @@ const fixed = (theme: ThemeName): AppearanceStore => ({
   write: async () => undefined,
 });
 
-const label = { color: "#9a9ca4", fontSize: 10, fontFamily: "Menlo" } as const;
+const label = { color: "#9a9ca4", fontSize: 10, fontFamily: celestialLabelFont } as const;
 
 const Column = () => {
   const { name, colours } = useTheme();
