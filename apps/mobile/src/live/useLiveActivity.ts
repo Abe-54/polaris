@@ -31,7 +31,7 @@ import {
 } from "./content.ts";
 import { type LiveDevice, registerLiveActivity } from "./registration.ts";
 
-const native = Platform.OS === "ios" ? PolarisLiveActivity : null;
+const native = Platform.OS === "ios" || Platform.OS === "android" ? PolarisLiveActivity : null;
 
 /** Feed changes are coalesced: one local update at most this often. */
 const UPDATE_EVERY_MS = 2_000;
