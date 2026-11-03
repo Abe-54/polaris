@@ -9,6 +9,7 @@ test.each(["android", "ios"])(
 let alert;
 Object.assign(rn, { Switch: "Switch", Alert: { alert: (...args) => { alert = args; } } });
 mock.module("../modules/polaris-push/index.ts", () => ({ PolarisPush: null }));
+mock.module("./notifications/android.ts", () => ({ openAndroidNotificationSettings: async () => {} }));
 mock.module("./push/constellations.ts", () => ({ constellationNotifications: { set: () => {} }, useConstellationNotifications: () => true }));
 mock.module("./sheet/index.tsx", () => ({ InstrumentSheet: "InstrumentSheet", SheetHeader: "SheetHeader", Well: "Well" }));
 mock.module("./hosts/StateDot.tsx", () => ({ StateDot: "StateDot", stateLineColour: () => "white" }));
