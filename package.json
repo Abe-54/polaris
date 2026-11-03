@@ -46,6 +46,7 @@
     "@types/node": "26.6.3"
   },
   "patchedDependencies": {
-    "sodium-native@5.2.0": "patches/sodium-native@5.2.0.patch"
+    "sodium-native@5.2.0": "patches/sodium-native@5.2.0.patch",
+    "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch"
   }
 }
