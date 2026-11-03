@@ -12,6 +12,24 @@ import {
 
 export const NO_MICROPHONE = "Polaris can't use the microphone. Allow it in Settings → Polaris.";
 
+export const microphonePermissionCopy = (platform: string) =>
+  platform === "android"
+    ? "Polaris can't use the microphone. Allow the microphone in Settings → Apps → Polaris → Permissions."
+    : NO_MICROPHONE;
+
+const microphoneDenied = async (current: () => boolean) => {
+  const { Alert, Linking, Platform } = await import("react-native");
+  const message = microphonePermissionCopy(Platform.OS);
+
+  if (current() && Platform.OS === "android")
+    Alert.alert("Microphone permission", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Open Settings", onPress: () => void Linking.openSettings() },
+    ]);
+
+  return message;
+};
+
 export interface MicState {
   readonly listening: boolean;
   readonly failure: string | null;
@@ -90,9 +108,12 @@ export const openMic = (deps: MicDeps): Mic => {
     if (!owns(op)) return;
 
     if (!granted) {
+      const failure = await microphoneDenied(() => owns(op));
+
+      if (!owns(op)) return;
       current = null;
 
-      return emit({ failure: NO_MICROPHONE });
+      return emit({ failure });
     }
 
     op.dictation = listen(op);
@@ -101,9 +122,16 @@ export const openMic = (deps: MicDeps): Mic => {
     try {
       await deps.startAudio();
     } catch {
+      const { Platform } = await import("react-native");
+
       if (!owns(op)) return;
       release();
-      emit({ failure: NO_MICROPHONE });
+      emit({
+        failure:
+          Platform.OS === "android"
+            ? "Polaris couldn't start audio recording. Try the microphone again."
+            : NO_MICROPHONE,
+      });
 
       return;
     }

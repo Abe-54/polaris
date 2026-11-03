@@ -14,6 +14,7 @@ import { type FollowedHostState, useFollowedHosts } from "../home/feed/useFollow
 import { ANSWER_WAIT_MS, answerHost, deliverAnswer, unsentNotice } from "../push/deliver.ts";
 import type { PushLinkedHost } from "../push/usePush.ts";
 import { useHosts } from "../runtime/hosts.tsx";
+import { useAndroidLiveUpdatePermission } from "../notifications/android.ts";
 import {
   confirmedBy,
   decodeLiveAnswer,
@@ -103,7 +104,7 @@ const useDriver = (hosts: ReadonlyArray<LiveHost>, linkedNow: boolean) => {
   const foreground = useForeground();
   const content = useMemo(() => liveContent(hosts), [hosts]);
   // One may be showing from before this launch: update and end find it, or do nothing.
-  const running = useRef(true);
+  const running = useRef(Platform.OS !== "android");
   const idleSince = useRef<number | null>(null);
   const lastRun = useRef(0);
   const [tick, setTick] = useState(0);
@@ -314,7 +315,8 @@ export const useLiveActivity = (
   loaded: boolean
 ) => {
   const hosts = useLiveHosts(linked);
-  useDriver(hosts, identity !== null);
+  const allowed = useAndroidLiveUpdatePermission(identity !== null);
+  useDriver(hosts, identity !== null && allowed);
   useRegistrations(identity, linked);
   useAnswers(loaded);
 };

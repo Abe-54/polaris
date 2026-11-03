@@ -2,7 +2,7 @@
  * The sheet's motion on the UI thread: its visible height as a shared value, springs between
  * detents carrying the finger's velocity, and short fades instead under Reduce Motion.
  */
-import { impactAsync, ImpactFeedbackStyle } from "expo-haptics";
+import { haptics } from "../motion/haptics.ts";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelAnimation,
@@ -43,7 +43,7 @@ const settleSpring = (velocity: number) => {
 };
 
 // A detent catching is one light tap; a device without a Taptic Engine rejects it.
-const tapDetent = () => void impactAsync(ImpactFeedbackStyle.Light).catch(() => undefined);
+const tapDetent = haptics.detent;
 
 export interface SheetMotion {
   /** The sheet's visible height in points; zero is closed. */

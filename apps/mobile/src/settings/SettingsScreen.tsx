@@ -5,6 +5,7 @@
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import {
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,7 @@ import { useDeveloperMode } from "./useDeveloperMode.ts";
 import { ThemeCard } from "./ThemeCard.tsx";
 import { ACCESSIBILITY_SCALE, CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { InboxBadge } from "../inbox/index.ts";
+import { openAndroidNotificationSettings } from "../notifications/android.ts";
 
 const Row = ({
   Glyph,
@@ -183,8 +185,18 @@ export const SettingsScreen = ({
           <Row
             Glyph={NotificationsGlyph}
             title="Notifications"
-            line={PolarisPush === null ? "Not available on this device" : "In iOS Settings"}
-            {...(PolarisPush === null ? {} : { onPress: () => void Linking.openSettings() })}
+            line={
+              Platform.OS === "android"
+                ? "Live updates · In Android settings"
+                : PolarisPush === null
+                  ? "Not available on this device"
+                  : "In iOS Settings"
+            }
+            {...(Platform.OS === "android"
+              ? { onPress: () => void openAndroidNotificationSettings() }
+              : PolarisPush === null
+                ? {}
+                : { onPress: () => void Linking.openSettings() })}
           />
           <Row
             Glyph={MotionGlyph}
