@@ -9,6 +9,7 @@ const opened = [];
 const rn = {
   Platform: { OS: os },
   Settings: { get: () => null },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
   Alert: { alert: (...args) => { alert = args; } },
   ActionSheetIOS: { showActionSheetWithOptions: (...args) => {
     assert.equal(os, "ios", "Android called ActionSheetIOS"); sheet = args;
@@ -16,19 +17,45 @@ const rn = {
   Linking: { openURL: async (url) => { opened.push(url); } },
 };
 mock.module("react-native", () => rn);
+mock.module("react-native-svg", () => ({ default: "Svg", Path: "Path" }));
+mock.module("expo-haptics", () => ({
+  AndroidHaptics: { Context_Click: "context-click", Confirm: "confirm", Reject: "reject", Segment_Tick: "tick" },
+  ImpactFeedbackStyle: { Light: "light", Rigid: "rigid" },
+  NotificationFeedbackType: { Success: "success", Warning: "warning" },
+  performAndroidHapticsAsync: async () => {},
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+}));
+mock.module("expo-notifications", () => ({ requestPermissionsAsync: async () => ({ granted: false }) }));
+let baselineLoads = 0;
 if (process.env.POLARIS_TEST_HEAD === "1") {
   const { plugin } = await import("bun");
   const { relative, resolve } = await import("node:path");
   const root = resolve(process.cwd(), "../..");
   plugin({ name: "Android regression baseline", setup: (build) => {
-    build.onLoad({ filter: /(?:polaris-push[\\\\/]index|composer[\\\\/]pick|visualization[\\\\/]confirmLink|app[\\\\/]navigation|menus[\\\\/]LongPressMenu)\\.tsx?$/ }, ({ path }) => {
+    build.onLoad({ filter: /(?:polaris-push[\\\\/]index|composer[\\\\/]pick|visualization[\\\\/]confirmLink|hosts[\\\\/]HostSheet|app[\\\\/]navigation|menus[\\\\/](?:LongPressMenu|choices|choiceStore|AndroidMenu|MenuSymbol))\\.tsx?$/ }, ({ path }) => {
       const file = relative(root, path).replaceAll("\\\\", "/");
       const head = Bun.spawnSync(["git", "show", "HEAD:" + file], { cwd: root });
       assert.equal(head.exitCode, 0, head.stderr.toString());
+      baselineLoads++;
       return { contents: head.stdout.toString(), loader: path.endsWith("tsx") ? "tsx" : "ts" };
     });
   } });
 }
+const { currentChoice, finishChoice } = await import("./src/menus/choiceStore.ts");
+if (process.env.POLARIS_TEST_HEAD === "1") assert.ok(baselineLoads > 0, "HEAD plugin did not load the choice store");
+const offered = () => os === "ios" ? sheet[0].options.slice(0, -1) : currentChoice()?.options;
+const select = (index) => {
+  if (os === "ios") sheet[1](index);
+  else {
+    assert.ok(currentChoice(), "Expected an Android choice sheet");
+    finishChoice(currentChoice(), index);
+    assert.equal(currentChoice(), null);
+    assert.equal(alert, undefined, "Android choices should use the themed sheet");
+  }
+};
+const cancel = () => os === "ios" ? sheet[1](sheet[0].cancelButtonIndex) : select(null);
+
 `;
 
 const probe = (body: string, os = "android") => {
@@ -46,51 +73,93 @@ test.each(["android", "ios"])(
   (os) => {
     probe(
       `
+let photoOptions, heic = false;
+const writes = [];
 mock.module("expo-image-picker", () => ({
   UIImagePickerPreferredAssetRepresentationMode: { Compatible: "compatible" },
-  launchImageLibraryAsync: async () => ({ canceled: false, assets: [
-    { uri: "file:///photo.jpg", fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 4 },
-  ] }),
+  launchImageLibraryAsync: async (options) => {
+    photoOptions = options;
+    return { canceled: false, assets: [
+      heic
+        ? { uri: "file:///photo.heic", fileName: "photo.HEIC", mimeType: "image/heic", fileSize: 4, base64: "/9j/2Q==" }
+        : { uri: "file:///photo.jpg", fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 4 },
+    ] };
+  },
 }));
 mock.module("expo-document-picker", () => ({ getDocumentAsync: async () => ({
   canceled: false, assets: [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3 }],
 }) }));
-mock.module("expo-file-system", () => ({ File: class {} }));
+mock.module("expo-file-system", () => ({
+  Paths: { cache: "file:///cache" },
+  File: class {
+    constructor(...parts) { this.uri = parts.join("/"); }
+    size = 4;
+    async write(data, options) { writes.push({ uri: this.uri, data, options }); }
+  },
+}));
 const { pickAttachments } = await import("./src/composer/pick.ts");
-const select = (index) => os === "ios" ? sheet[1](index) : alert[2][index].onPress();
 const photos = pickAttachments();
+assert.deepEqual(offered(), ["Photo library", "Files"]);
 select(0);
 assert.deepEqual(await photos, [{ uri: "file:///photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 4, isImage: true }]);
+assert.deepEqual(photoOptions.mediaTypes, ["images"]);
+assert.equal(photoOptions.allowsMultipleSelection, true);
+assert.equal(photoOptions.selectionLimit, 10);
+assert.equal(photoOptions.preferredAssetRepresentationMode, "compatible");
+if (os === "android") {
+  assert.equal(photoOptions.base64, true);
+  assert.equal(photoOptions.quality, 0.99);
+  heic = true;
+  const converted = pickAttachments();
+  select(0);
+  const [photo] = await converted;
+  assert.equal(photo.uri.startsWith("file:///cache/photo-"), true);
+  assert.equal(photo.uri.endsWith("-0.jpg"), true);
+  assert.deepEqual(photo, { uri: photo.uri, name: "photo.jpg", mimeType: "image/jpeg", size: 4, isImage: true });
+  assert.deepEqual(writes, [{ uri: photo.uri, data: "/9j/2Q==", options: { encoding: "base64" } }]);
+} else {
+  assert.equal(photoOptions.base64, undefined);
+  assert.equal(photoOptions.quality, undefined);
+}
 const files = pickAttachments();
 select(1);
 assert.deepEqual(await files, [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3, isImage: false }]);
 const canceled = pickAttachments();
-if (os === "ios") sheet[1](2); else alert[3].onDismiss();
+cancel();
 assert.deepEqual(await canceled, []);
 `,
       os
     );
-  }
+  },
+  30_000
 );
 
-test.each(["android", "ios"])("%s opens visualization links only after confirmation", (os) => {
-  probe(
-    `
+test.each(["android", "ios"])(
+  "%s opens visualization links only after confirmation",
+  (os) => {
+    probe(
+      `
 const { confirmLink } = await import("./src/visualization/confirmLink.ts");
 confirmLink("Unsafe", "http://example.com");
 assert.equal(alert, undefined);
 assert.equal(sheet, undefined);
+assert.equal(currentChoice(), null);
 confirmLink("Example", "https://example.com/page");
 assert.deepEqual(opened, []);
-if (os === "ios") sheet[1](1); else alert[3].onDismiss();
+assert.deepEqual(offered(), ["Open in browser"]);
+if (os === "ios") assert.equal(sheet[0].title, "Open this link?");
+else assert.equal(currentChoice().title, "Open this link?");
+cancel();
 assert.deepEqual(opened, []);
 confirmLink("Example", "https://example.com/page");
-if (os === "ios") sheet[1](0); else alert[2][0].onPress();
+select(0);
 assert.deepEqual(opened, ["https://example.com/page"]);
 `,
-    os
-  );
-});
+      os
+    );
+  },
+  30_000
+);
 
 test("Android push hooks need no Apple module, notification permission or FCM token", () => {
   probe(`
@@ -120,23 +189,27 @@ usePushLinks(() => { throw new Error("Unexpected navigation"); });
 for (const effect of effects) effect();
 await new Promise((resolve) => setTimeout(resolve, 10));
 `);
-});
+}, 30_000);
 
-test.each(["android", "ios"])("%s keeps all three motion choices reachable", (os) => {
-  probe(
-    `
+test.each(["android", "ios"])(
+  "%s keeps all three motion choices reachable",
+  (os) => {
+    probe(
+      `
 const { choose } = await import("./src/menus/choices.ts");
 let motion = -1;
-choose("Motion", ["System", "Reduced", "Full"], (index) => { motion = index; });
-if (os === "ios") sheet[1](2); else {
-  assert.equal(alert[2].length, 3);
-  alert[2][2].onPress();
+for (const index of [0, 1, 2]) {
+  choose("Motion", ["System", "Reduced", "Full"], (index) => { motion = index; });
+  assert.deepEqual(offered(), ["System", "Reduced", "Full"]);
+  select(index);
+  assert.equal(motion, index);
 }
-assert.equal(motion, 2);
 `,
-    os
-  );
-});
+      os
+    );
+  },
+  30_000
+);
 
 test("Android Back pops pushed screens, dismisses a sheet first and leaves exit to the system at Home", () => {
   probe(`
@@ -186,7 +259,7 @@ assert.equal(back(), false);
 for (const cleanup of cleanups) cleanup?.();
 assert.equal(handlers.length, 0);
 `);
-});
+}, 30_000);
 
 test("Android menus expose enabled actions, rename with entered text and dismiss without sending", () => {
   probe(`
@@ -231,12 +304,13 @@ assert.equal(sent[1].hostId, "host");
 assert.equal(sent[1].command.sessionId, "session");
 assert.equal(sent[1].command.title, "After");
 assert.equal(sent[1].command._tag, "RenameSession");
+tree = render();
 longPress(); tree = render();
 find(tree, "InstrumentSheet").props.onClose();
 assert.equal(sent.length, 2);
 assert.equal(find(render(), "InstrumentSheet"), undefined);
 `);
-});
+}, 30_000);
 
 test("Android Copy writes the output even without the Apple context-menu module", () => {
   probe(`
@@ -255,4 +329,57 @@ const row = LongPressMenu({ menu, title: "Turn 1", onAction: () => {}, children:
 assert.equal(row.type, "AndroidMenu");
 assert.equal(row.props.menu, menu);
 `);
+}, 30_000);
+
+test.each(["android", "ios"])(
+  "%s confirms Host unlink with device wording",
+  (os) => {
+    probe(
+      `
+const jsx = (type, props) => ({ type, props });
+mock.module("react/jsx-runtime", () => ({ jsx, jsxs: jsx, Fragment: "Fragment" }));
+mock.module("expo", () => ({ requireOptionalNativeModule: () => null }));
+mock.module("./src/push/constellations.ts", () => ({
+  useConstellationNotifications: () => true,
+  constellationNotifications: { set: () => {} },
+}));
+mock.module("./src/sheet/index.tsx", () => ({
+  InstrumentSheet: "InstrumentSheet", SheetHeader: "SheetHeader", Well: "Well",
+}));
+mock.module("./src/theme/index.ts", () => ({
+  useTheme: () => ({ colours: {} }),
+  themedStyles: (build) => () => build({}),
+}));
+Object.assign(rn, { Pressable: "Pressable", Switch: "Switch", Text: "Text", View: "View" });
+const { HostSheet } = await import("./src/hosts/HostSheet.tsx");
+let unlinked = 0;
+const tree = HostSheet({
+  details: { name: "Work Mac", state: "connected", status: "Connected", failure: null,
+    roundTrip: "10 ms", route: "Relay", sessionsLabel: "Agent sessions", sessions: "2" },
+  onClose: () => {},
+  onUnlink: () => { unlinked++; },
 });
+const nodes = (tree) => Array.isArray(tree) ? tree.flatMap(nodes) : tree && typeof tree === "object" ? [tree, ...nodes(tree.props?.children)] : [];
+const unlink = nodes(tree).find((node) => node.type === "Pressable");
+assert.ok(unlink);
+const phone = os === "ios" ? "iPhone" : "phone";
+const computer = os === "ios" ? "Mac" : "computer";
+const label = nodes(unlink).find((node) => node.type === "Text").props.children.flat().join("");
+assert.equal(label, "Unlink this " + phone + " from Work Mac\u2026");
+unlink.props.onPress();
+assert.equal(unlinked, 0);
+assert.equal(alert[0], "Unlink this " + phone + " from Work Mac?");
+assert.equal(alert[1], "Work Mac forgets this " + phone + ", and its agent sessions leave this list. Your other hosts stay linked; link again from your " + computer + ".");
+assert.deepEqual(alert[2].map(({ text, style }) => ({ text, style })), [
+  { text: "Cancel", style: "cancel" }, { text: "Unlink", style: "destructive" },
+]);
+alert[2][0].onPress?.();
+assert.equal(unlinked, 0);
+alert[2][1].onPress();
+assert.equal(unlinked, 1);
+`,
+      os
+    );
+  },
+  30_000
+);
