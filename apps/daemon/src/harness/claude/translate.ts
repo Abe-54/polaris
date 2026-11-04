@@ -492,7 +492,7 @@ export class ClaudeTranslator {
 
     if (event.type === "message_start") {
       this.streamMessageIds.set(key, event.message.id);
-      this.replies.started(key, event.message.id);
+      this.replies.started(key, event.message.id, this.nowMs());
 
       return [];
     }
@@ -515,7 +515,6 @@ export class ClaudeTranslator {
       }
 
       case "content_block_delta": {
-        this.replies.token(key, this.nowMs());
         const text = deltaText(event.delta);
         const itemId = `${messageId}:${event.index}`;
 

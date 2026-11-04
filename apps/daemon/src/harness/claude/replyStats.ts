@@ -1,8 +1,8 @@
 /**
  * Times Claude's model calls for `ReplyStats` (ENG-678), per scope (the Turn's own, `""`, or a
  * Subagent's). A call's request starts when the Turn begins, a Subagent starts, or tool results
- * go back; its first token is its first streamed delta; it ends with `message_delta`, whose
- * usage holds the call's final output tokens. A call whose request the driver didn't see (a
+ * go back; it starts answering at `message_start`, not its first delta, since hidden thinking
+ * streams nothing (ENG-778); it ends with `message_delta`, whose usage holds its output tokens. A call whose request the driver didn't see (a
  * hook's retry, say) gets no latency rather than a guess.
  */
 import { ReplyStats } from "@polaris/protocol";
@@ -10,7 +10,7 @@ import { ReplyStats } from "@polaris/protocol";
 interface Call<T> {
   readonly messageId: string;
   readonly requestedAt: number | null;
-  firstTokenAt: number | null;
+  readonly startedAt: number;
   stats: ReplyStats | null;
   /** The call's last reply block so far. */
   reply: T | null;
@@ -25,23 +25,16 @@ export class ReplyTimer<T> {
     this.requests.set(key, at);
   }
 
-  /** `message_start`: the request in flight has begun answering. */
-  started(key: string, messageId: string): void {
+  /** `message_start`: the request in flight has begun answering now. */
+  started(key: string, messageId: string, at: number): void {
     this.calls.set(key, {
       messageId,
       requestedAt: this.requests.get(key) ?? null,
-      firstTokenAt: null,
+      startedAt: at,
       stats: null,
       reply: null,
     });
     this.requests.delete(key);
-  }
-
-  /** Any streamed delta: the first one is the call's first token. */
-  token(key: string, at: number): void {
-    const call = this.calls.get(key);
-
-    if (call !== undefined && call.firstTokenAt === null) call.firstTokenAt = at;
   }
 
   /**
@@ -62,12 +55,12 @@ export class ReplyTimer<T> {
     const call = this.calls.get(key);
 
     if (call === undefined || call.stats !== null) return null;
-    const first = call.firstTokenAt;
+    const { requestedAt, startedAt } = call;
 
     call.stats = new ReplyStats({
       outputTokens,
-      latencyMs: first === null || call.requestedAt === null ? null : first - call.requestedAt,
-      durationMs: first === null ? null : at - first,
+      latencyMs: requestedAt === null ? null : startedAt - requestedAt,
+      durationMs: at - startedAt,
     });
 
     return call.reply === null ? null : { reply: call.reply, stats: call.stats };
