@@ -183,3 +183,19 @@ export const unlinkNote = (kept: ReadonlyArray<string>): string | null => {
 
   return `Still linked to ${kept.join(", ")}: ${one ? "it" : "they"} didn't answer. Unlink again when ${one ? "it's" : "they're"} online, or unlink this iPhone on your Mac in Settings → Devices.`;
 };
+
+const stillTrusts = (names: ReadonlyArray<string>) =>
+  `${names.join(", ")} still ${names.length === 1 ? "trusts" : "trust"} this iPhone. To end that, unlink it on your Mac in Settings → Devices.`;
+
+/** Forgetting Hosts that didn't answer Unlink: the button, its confirmation, and the note after. */
+export const forgetCopy = (names: ReadonlyArray<string>) => {
+  const one = names.length === 1;
+
+  return {
+    button: "Forget on this iPhone…",
+    title: `Forget ${names.join(", ")} on this iPhone?`,
+    message: `${one ? "Its" : "Their"} agent sessions leave this list, and you can link ${one ? "it" : "them"} again. ${stillTrusts(names)}`,
+    confirm: "Forget",
+    done: `Forgot ${names.join(", ")} on this iPhone. ${stillTrusts(names)}`,
+  };
+};

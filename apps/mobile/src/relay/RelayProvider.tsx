@@ -25,6 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { HostConnection } from "../runtime/hostConnection.ts";
 import { type HostRegistry, useHostRegistry } from "../runtime/hosts.tsx";
 import {
   forgetLink,
@@ -35,7 +36,7 @@ import {
   secretsForLinking,
 } from "./store.ts";
 import { relayTransport } from "./transport.ts";
-import { unlinkFrom } from "./unlink.ts";
+import { leaving, unlinkFrom } from "./unlink.ts";
 
 /** Shown to the Host in its Linked Devices; iOS gives apps no user-set device name. */
 const DEVICE_NAME = "iPhone";
@@ -63,6 +64,11 @@ export interface Relay {
    * with that Host when it didn't answer (it still trusts the keys), else empty.
    */
   readonly unlinkHost: (hostId: string) => Promise<ReadonlyArray<LinkedHost>>;
+  /**
+   * Forgets these Hosts on this device without their answer, for a Host that never answers.
+   * They still trust its keys until unlinked on the Mac; they can be linked again.
+   */
+  readonly forgetHosts: (hostIds: ReadonlyArray<string>) => Promise<void>;
 }
 
 const RelayContext = createContext<Relay | null>(null);
@@ -141,24 +147,23 @@ export const RelayProvider = ({ children }: { readonly children: ReactNode }) =>
     return outcome;
   }, []);
 
-  const unlinkSome = useCallback(
-    async (targets: ReadonlySet<string>) => {
-      // A Host no longer linked has nothing to revoke; never forget the keys over it.
-      if (!hosts.some((host) => targets.has(host.hostId))) return [];
+  /** Drops the `gone` Hosts on this device: their connections, then the stored list or the keys. */
+  const leave = useCallback(
+    async (gone: ReadonlySet<string>, connections: ReadonlyArray<HostConnection>) => {
       const open = device.current;
-      const linked = registryRef.current.hosts.filter((h) => targets.has(h.hostId));
-      const { revoked, kept, stillTrusting } = await unlinkFrom(hosts, linked, targets);
 
       // Only these connections: a Host linked again meanwhile has a new one.
-      for (const host of linked)
-        if (revoked.has(host.hostId) && registryRef.current.hosts.includes(host))
+      for (const host of connections)
+        if (gone.has(host.hostId) && registryRef.current.hosts.includes(host))
           registryRef.current.removeHost(host.hostId);
 
-      if (kept.length > 0) {
+      const { kept, forgetKeys } = leaving(hosts, gone);
+
+      if (!forgetKeys) {
         await keepHosts(kept);
         setHosts(kept);
 
-        return stillTrusting;
+        return;
       }
 
       device.current = null;
@@ -166,10 +171,25 @@ export const RelayProvider = ({ children }: { readonly children: ReactNode }) =>
       setHosts([]);
       await forgetLink();
       open?.close();
+    },
+    [hosts]
+  );
+
+  const connectionsOf = (targets: ReadonlySet<string>) =>
+    registryRef.current.hosts.filter((host) => targets.has(host.hostId));
+
+  const unlinkSome = useCallback(
+    async (targets: ReadonlySet<string>) => {
+      // A Host no longer linked has nothing to revoke; never forget the keys over it.
+      if (!hosts.some((host) => targets.has(host.hostId))) return [];
+      const linked = connectionsOf(targets);
+      const { revoked, stillTrusting } = await unlinkFrom(hosts, linked, targets);
+
+      await leave(revoked, linked);
 
       return stillTrusting;
     },
-    [hosts]
+    [hosts, leave]
   );
 
   const unlink = useCallback(
@@ -178,6 +198,15 @@ export const RelayProvider = ({ children }: { readonly children: ReactNode }) =>
   );
 
   const unlinkHost = useCallback((hostId: string) => unlinkSome(new Set([hostId])), [unlinkSome]);
+
+  const forgetHosts = useCallback(
+    async (hostIds: ReadonlyArray<string>) => {
+      const gone = new Set(hostIds.filter((id) => hosts.some((host) => host.hostId === id)));
+
+      if (gone.size > 0) await leave(gone, connectionsOf(gone));
+    },
+    [hosts, leave]
+  );
 
   const value = useMemo<Relay>(
     () => ({
@@ -188,8 +217,9 @@ export const RelayProvider = ({ children }: { readonly children: ReactNode }) =>
       link,
       unlink,
       unlinkHost,
+      forgetHosts,
     }),
-    [loaded, keys, hosts, link, unlink, unlinkHost]
+    [loaded, keys, hosts, link, unlink, unlinkHost, forgetHosts]
   );
 
   return <RelayContext.Provider value={value}>{children}</RelayContext.Provider>;
