@@ -258,8 +258,13 @@ describe("relay reconnects", () => {
 });
 
 test("the relay's runtime code never imports the end-to-end channel or its keys", async () => {
-  const runtime = [...new Bun.Glob("src/**/*.ts").scanSync(`${import.meta.dir}/..`)].filter(
-    (path) => !path.endsWith(".test.ts") && !path.includes("/testing/")
+  // Windows scans with backslashes.
+  const runtime = [...new Bun.Glob("src/**/*.ts").scanSync(`${import.meta.dir}/..`)].flatMap(
+    (scanned) => {
+      const path = scanned.replaceAll("\\", "/");
+
+      return path.endsWith(".test.ts") || path.includes("/testing/") ? [] : [path];
+    }
   );
 
   expect(runtime).toContain("src/server.ts");

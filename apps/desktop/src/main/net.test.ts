@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ const Seen = Schema.fromJsonString(
   Schema.Array(Schema.Struct({ url: Schema.String, cache: Schema.NullOr(Schema.String) }))
 );
 
-const here = (path: string) => JSON.stringify(new URL(path, import.meta.url).pathname);
+const here = (path: string) => JSON.stringify(fileURLToPath(new URL(path, import.meta.url)));
 
 /**
  * Runs `body` in a child Bun with `electron` mocked: `net.fetch` records each request and
@@ -37,7 +38,7 @@ const throughElectron = (body: string) => {
 
   try {
     const child = Bun.spawnSync([process.execPath, "-e", source], {
-      cwd: new URL(".", import.meta.url).pathname,
+      cwd: fileURLToPath(new URL(".", import.meta.url)),
       stdout: "pipe",
       stderr: "pipe",
     });

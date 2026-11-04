@@ -1,7 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { Glob } from "bun";
 
-const RENDERER = new URL("..", import.meta.url).pathname;
+const RENDERER = fileURLToPath(new URL("..", import.meta.url));
 
 /** Every class string in the renderer's own UI that paints `bg-bg` on something other than a field. */
 const bgBgSurfaces = async () => {

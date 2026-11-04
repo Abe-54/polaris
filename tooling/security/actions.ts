@@ -60,6 +60,6 @@ const yamlFiles = (dir: string): ReadonlyArray<string> =>
 export const unpinnedActions = (root: string): ReadonlyArray<string> =>
   yamlFiles(join(root, ".github")).flatMap((file) =>
     usesIn(readFileSync(file, "utf8")).flatMap((uses) =>
-      isPinned(uses) ? [] : [`${relative(root, file)}: ${uses}`]
+      isPinned(uses) ? [] : [`${relative(root, file).replaceAll("\\", "/")}: ${uses}`]
     )
   );
