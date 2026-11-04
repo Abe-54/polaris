@@ -142,6 +142,9 @@ export const stampAll = ({ paths, heads }: Stamped): string | null => {
   return JSON.stringify(stamps);
 };
 
+/** What `~` and the global config depend on (`gitHome`). */
+const HOME_ENV = new Set(["HOME", "XDG_CONFIG_HOME", "HOMEDRIVE", "HOMEPATH", "USERPROFILE"]);
+
 /** The cache key, or null when the call's options or environment move git's discovery. */
 export const cacheKey = (
   cwd: string,
@@ -159,12 +162,37 @@ export const cacheKey = (
   if (DISCOVERY_ENV.some((name) => (base[name] ?? "") !== "")) return null;
 
   const env = Object.entries(base)
-    .filter(
-      ([name]) => name.startsWith("GIT_CONFIG") || name === "HOME" || name === "XDG_CONFIG_HOME"
-    )
+    .filter(([name]) => name.startsWith("GIT_CONFIG") || HOME_ENV.has(name))
     .sort(([a], [b]) => a.localeCompare(b));
 
   return JSON.stringify([cwd, options, env]);
+};
+
+const isDirectory = (path: string) => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Where git takes `~` from: HOME, or on Windows without it, as Git for Windows sets it up,
+ * %HOMEDRIVE%%HOMEPATH% when that folder exists, else %USERPROFILE%.
+ */
+export const gitHome = (
+  env: Readonly<Record<string, string | undefined>>,
+  platform: string = process.platform,
+  isDir: (path: string) => boolean = isDirectory
+): string | undefined => {
+  if (env.HOME !== undefined || platform !== "win32") return env.HOME;
+
+  const share =
+    env.HOMEDRIVE === undefined || env.HOMEPATH === undefined
+      ? undefined
+      : env.HOMEDRIVE + env.HOMEPATH;
+
+  return share !== undefined && isDir(share) ? share : env.USERPROFILE;
 };
 
 /** Git for Windows prints `C:/forward/slashes`; stamps and comparisons need native paths. */

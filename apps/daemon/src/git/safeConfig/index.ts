@@ -10,6 +10,7 @@ import { groupFor, startSignal, stopOnAbort, uninterrupted } from "../interrupt.
 import {
   cacheKey,
   discoveryPaths,
+  gitHome,
   hostCandidates,
   listedFiles,
   type Located,
@@ -197,7 +198,7 @@ const listAndCache = async (
   const stamps = stampAll(before);
   const listing = await listConfig(cwd, options, base);
 
-  const extra = stamps === null ? null : listedFiles(found, listing, candidates, base.HOME);
+  const extra = stamps === null ? null : listedFiles(found, listing, candidates, gitHome(base));
 
   if (extra === null) return listing;
   const again = await locate(cwd, options, base);
