@@ -4,6 +4,7 @@
  * Client (as the Desktop App) that pairs Extensions and registers Workspaces.
  */
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import {
@@ -17,10 +18,41 @@ import {
   Sequence,
   SessionId,
 } from "@polaris/protocol";
+import { localEndpoint } from "@polaris/protocol/endpoint";
 import { Effect, Exit, Match, Option, Predicate, Redacted, Scope, Stream } from "effect";
 import { encodePairing } from "./pairing.ts";
 
 const DAEMON_MAIN = resolve(import.meta.dir, "..", "..", "..", "apps", "daemon", "src", "main.ts");
+
+const CONTROL = resolve(DAEMON_MAIN, "..", "service", "windowsControl.ts");
+
+/** Stops it gracefully: SIGTERM, or on Windows, which has none to send, its control pipe (ADR 0060). */
+const stopGracefully = async (child: ReturnType<typeof Bun.spawn>, home: string) => {
+  if (process.platform !== "win32") {
+    child.kill("SIGTERM");
+    await child.exited;
+
+    return;
+  }
+
+  const request = JSON.stringify({ op: "stop", reason: "restart" });
+  await Bun.spawn(
+    [
+      process.execPath,
+      "--eval",
+      `const { askDaemon } = await import(${JSON.stringify(CONTROL)}); await askDaemon(${JSON.stringify(home)}, ${request});`,
+    ],
+    { stdio: ["ignore", "ignore", "ignore"] }
+  ).exited;
+
+  const stopped = await Promise.race([
+    child.exited.then(() => true),
+    Bun.sleep(10_000).then(() => false),
+  ]);
+
+  if (!stopped) child.kill();
+  await child.exited;
+};
 
 export interface TestDaemon {
   readonly home: string;
@@ -97,9 +129,9 @@ export interface LaunchOptions {
 
 export const launchDaemon = async (options: LaunchOptions = {}): Promise<TestDaemon> => {
   const main = options.main ?? DAEMON_MAIN;
-  // A Unix socket path must stay short.
-  const home = mkdtempSync("/tmp/pl-sdk-");
-  const socketPath = join(home, "daemon.sock");
+  // A Unix socket path must stay short; Windows listens on a pipe named after the home.
+  const home = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "pl-sdk-"));
+  const socketPath = localEndpoint(home);
   const gatewayPort = freePort();
   const gatewayUrl = `ws://127.0.0.1:${gatewayPort}/polaris/rpc`;
   let child = spawnDaemon(home, gatewayPort, main);
@@ -245,8 +277,7 @@ export const launchDaemon = async (options: LaunchOptions = {}): Promise<TestDae
     },
     restart: async () => {
       await Effect.runPromise(Scope.close(adminScope, Exit.void));
-      child.kill("SIGTERM");
-      await child.exited;
+      await stopGracefully(child, home);
       child = spawnDaemon(home, gatewayPort, main);
       adminScope = Effect.runSync(Scope.make());
       admin = await connectWithRetry(adminScope);
@@ -254,8 +285,7 @@ export const launchDaemon = async (options: LaunchOptions = {}): Promise<TestDae
     },
     stop: async () => {
       await Effect.runPromise(Scope.close(adminScope, Exit.void));
-      child.kill("SIGTERM");
-      await child.exited;
+      await stopGracefully(child, home);
 
       if (process.env.POLARIS_SDK_KEEP_HOME === undefined)
         rmSync(home, { recursive: true, force: true });

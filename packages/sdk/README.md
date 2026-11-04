@@ -152,7 +152,8 @@ Every `hello` presents the pairing's token and the protocol versions the SDK spe
 
 A pairing with a `url` (`ws://127.0.0.1:7477/polaris/rpc` on the Host itself,
 `wss://<host>.<tailnet>.ts.net/polaris/rpc` over Tailscale) uses the gateway; one without uses
-`$POLARIS_HOME/daemon.sock` (`~/.polaris/daemon.sock`). Several pairings for one Host (say, the
+`$POLARIS_HOME/daemon.sock` (`~/.polaris/daemon.sock`), or on Windows the Daemon's named pipe
+for that home. Several pairings for one Host (say, the
 socket and the gateway) are tried in order. In a browser the package resolves to its browser
 build, which has the gateway only. `createPolarisWith` and `openPolarisWith` take a transport of
 your own.

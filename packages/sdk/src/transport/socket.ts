@@ -1,16 +1,17 @@
 /**
  * The local transport (Node and Bun only): the Daemon's Unix socket, at
- * `$POLARIS_HOME/daemon.sock` (`~/.polaris/daemon.sock` by default).
+ * `$POLARIS_HOME/daemon.sock` (`~/.polaris/daemon.sock` by default), or on Windows its named pipe.
  */
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type ByteTransport, readEvents, writeEvents } from "@polaris/protocol";
+import { localEndpoint } from "@polaris/protocol/endpoint";
 import { Effect, type Scope } from "effect";
 import { HostUnreachable } from "../errors.ts";
 
 export const defaultSocketPath = (): string =>
-  join(process.env.POLARIS_HOME ?? join(homedir(), ".polaris"), "daemon.sock");
+  localEndpoint(process.env.POLARIS_HOME ?? join(homedir(), ".polaris"));
 
 const opened = (socket: ReturnType<typeof connect>, path: string, hostId: string) =>
   Effect.callback<void, HostUnreachable>((resume) => {
