@@ -45,8 +45,8 @@ describe("the shell a shell command runs in on Windows", () => {
     const shell = shellArgv("pwd; exit 3", "win32", windows(files, env, git));
 
     expect(shell.argv).toEqual([bash, "-l", "-c", "pwd; exit 3"]);
-    // MSYS's login profile would otherwise start it in the home directory.
-    expect(shell.env).toEqual({ CHERE_INVOKING: "1" });
+    // MSYS's login profile would otherwise start it in the home directory, and clear on `exit`.
+    expect(shell.env).toEqual({ CHERE_INVOKING: "1", TERM: "dumb" });
   });
 
   test.each([
