@@ -2,15 +2,15 @@
  * Writes targets/widgets/LiveCelestials.swift: each planet at rest from @polaris/ui's cells, the
  * Death Star mid-shot, and each hued Harness's tones as the app mixes them. widgets.live.slow.test.ts checks.
  */
+import { fileURLToPath } from "node:url";
 import { CELESTIAL_PLANETS, CELESTIAL_RARE, HARNESS_CATALOGUE } from "@polaris/protocol";
 import { bodyHue, type Cell, celestialCells, type Tone } from "@polaris/ui/celestial";
 import { celestialPalette, harnessColour } from "../src/celestial/tones.ts";
 import { themes } from "../src/theme/appearance.ts";
 
-export const LIVE_CELESTIALS_PATH = new URL(
-  "../targets/widgets/LiveCelestials.swift",
-  import.meta.url
-).pathname;
+export const LIVE_CELESTIALS_PATH = fileURLToPath(
+  new URL("../targets/widgets/LiveCelestials.swift", import.meta.url).href
+);
 
 export const TONES: ReadonlyArray<Tone> = ["light", "hue", "shade", "glint", "laser"];
 
