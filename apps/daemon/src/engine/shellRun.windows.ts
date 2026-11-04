@@ -77,7 +77,8 @@ const UTF8_OUTPUT =
 
 /**
  * How `command` runs on Windows. Git Bash runs it as `-l -c` (Claude Code's own flags), and
- * `CHERE_INVOKING` keeps MSYS's login profile from moving it to the home directory.
+ * `CHERE_INVOKING` keeps MSYS's login profile from moving it to the home directory. Its output is
+ * a pipe, so `TERM=dumb`: Git's bash.bash_logout would otherwise append a screen clear on `exit`.
  */
 export const windowsShellArgv = (
   command: string,
@@ -89,7 +90,7 @@ export const windowsShellArgv = (
     return {
       argv: [bash, "-l", "-c", command],
       windowsVerbatimArguments: false,
-      env: { CHERE_INVOKING: "1" },
+      env: { CHERE_INVOKING: "1", TERM: "dumb" },
     };
 
   const pwsh = powershell(sources);
