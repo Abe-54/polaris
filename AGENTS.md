@@ -75,7 +75,7 @@ Every change reaches main through a PR, so the required lane runs on it; none is
 
 - **pre-commit**: formats fully staged files with oxfmt and restages them, only checks partially staged ones, and lints staged files through the ratchet.
 - **commit-msg**: strips `Claude-Session:` trailers and claude.ai session URLs; this repo doesn't record them.
-- **pre-push**: re-checks format and lint on the files in the pushed commits, then typechecks the changed packages and their dependents (`turbo --filter=...[base...head]`) and runs only the changed packages' fast tier (`--filter=[base...head]`, `--tier=fast`); dependents' tests and the slow tier are CI's job.
+- **pre-push**: re-checks format and lint on the files in the pushed commits, then typechecks the changed packages and their dependents (`turbo --filter=...[base...head]`) and runs only the changed packages' fast tier (`--filter=[base...head]`, `--tier=fast`); dependents' tests and the slow tier are CI's job. On Windows it leaves the POSIX-only packages in `tooling/ci/windows-skipped-packages.txt` to CI and runs their Windows-safe files instead (ADR 0098).
 - **By hand**: `bun run quality <files…>` (fix), `--check`, `--dirty`, or `--range <a>..<b>`.
 
 Never bypass a hook with `--no-verify`. If one is broken, fix it or say so.

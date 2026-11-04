@@ -1,0 +1,7 @@
+# Packages whose tests are POSIX-only, which pre-push on Windows doesn't run; CI runs them on
+# Linux and macOS. Their Windows-safe files still run there, from windows-client-tests.txt.
+@polaris/client    # native Daemon installs, SSH shell fixtures, launchd
+@polaris/desktop   # Mac packaging and signing, POSIX shell fixtures
+@polaris/bench     # samples processes through /proc and ps
+@polaris/relay     # a Linux server, stopped with SIGTERM
+@polaris/tooling   # the release signer in Python, notice delivery under /tmp
