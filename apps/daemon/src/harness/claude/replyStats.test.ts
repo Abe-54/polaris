@@ -85,7 +85,7 @@ describe("reply stats", () => {
       {
         id: "m1:0",
         text: "Done.",
-        stats: { outputTokens: 100, latencyMs: 1_500, durationMs: 2_000 },
+        stats: { outputTokens: 100, latencyMs: 1_000, durationMs: 2_500 },
       },
     ]);
   });
@@ -109,8 +109,21 @@ describe("reply stats", () => {
     at(7_300, assistant("m3", textBlock("Again.")));
     const unseen = replies(at(7_400, end(5)));
 
-    expect(afterTool[0]?.stats).toMatchObject({ latencyMs: 400, durationMs: 1_000 });
-    expect(unseen[0]?.stats).toMatchObject({ outputTokens: 5, latencyMs: null, durationMs: 200 });
+    expect(afterTool[0]?.stats).toMatchObject({ latencyMs: 100, durationMs: 1_300 });
+    expect(unseen[0]?.stats).toMatchObject({ outputTokens: 5, latencyMs: null, durationMs: 400 });
+  });
+
+  test("hidden thinking counts as generation, not latency, when the text then arrives in a burst", () => {
+    const { translator, at } = harness();
+    translator.beginTurn(TurnId.make("t"));
+
+    at(2_800, start("m1"));
+    at(4_600, delta);
+    at(4_605, delta);
+    at(4_610, assistant("m1", textBlock("Done.")));
+    const [reply] = replies(at(4_611, end(208)));
+
+    expect(reply?.stats).toMatchObject({ outputTokens: 208, latencyMs: 2_800, durationMs: 1_811 });
   });
 
   test("a recorded Turn's final reply carries its call's output tokens", () => {
