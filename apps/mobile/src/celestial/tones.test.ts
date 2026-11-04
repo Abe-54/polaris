@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { CELESTIAL_LASER } from "@polaris/ui/celestial";
@@ -5,7 +6,7 @@ import { midnight } from "@polaris/ui/tokens";
 import { celestialPalette, harnessColour, mixOklab, TONE_MIX } from "./tones.ts";
 
 const css = readFileSync(
-  new URL("../../../../packages/ui/src/styles/celestial.css", import.meta.url).pathname,
+  fileURLToPath(new URL("../../../../packages/ui/src/styles/celestial.css", import.meta.url).href),
   "utf8"
 );
 

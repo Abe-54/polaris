@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { Schema } from "effect";
 
@@ -9,7 +10,7 @@ const Outcome = Schema.fromJsonString(
   })
 );
 
-const here = (path: string) => JSON.stringify(new URL(path, import.meta.url).pathname);
+const here = (path: string) => JSON.stringify(fileURLToPath(new URL(path, import.meta.url)));
 
 /**
  * Runs `electronViews` in a child Bun with `electron` mocked, through `scenario`. The page records
@@ -53,7 +54,7 @@ const throughViews = (scenario: string) => {
   `;
 
   const child = Bun.spawnSync([process.execPath, "-e", source], {
-    cwd: new URL(".", import.meta.url).pathname,
+    cwd: fileURLToPath(new URL(".", import.meta.url)),
     stdout: "pipe",
     stderr: "pipe",
   });

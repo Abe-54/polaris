@@ -3,6 +3,7 @@
  * can stop and start again at the same URL, and a real Daemon whose secrets stay off the
  * Keychain with the Relay route on.
  */
+import { fileURLToPath } from "node:url";
 import { connectRpc, type DaemonClient } from "@polaris/client/rpc";
 import { relayBinary } from "@polaris/relay/testing/binary";
 import { socketTransport } from "@polaris/sdk";
@@ -12,7 +13,9 @@ import { Effect, Exit, Redacted, Scope } from "effect";
 // Built here, as the file loads, so no test's timeout pays for a cold build.
 const RELAY = relayBinary();
 
-const TEST_DAEMON_MAIN = new URL("../../daemon/src/main.testing.ts", import.meta.url).pathname;
+const TEST_DAEMON_MAIN = fileURLToPath(
+  new URL("../../daemon/src/main.testing.ts", import.meta.url)
+);
 
 const freePort = (): number => {
   const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });

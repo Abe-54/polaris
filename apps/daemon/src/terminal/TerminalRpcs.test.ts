@@ -144,8 +144,12 @@ describe("terminal.open", () => {
     for (const output of [inside!, nested!, linked!]) {
       for (const value of Object.values(AMBIENT)) expect(output).not.toContain(value);
 
-      // ConPTY wraps a long PATH at the terminal's width, so Windows checks a short base key.
-      if (windows) expect(output).toContain(`SystemRoot=${process.env.SystemRoot}`);
+      // ConPTY wraps a long PATH at the terminal's width, so Windows checks a short base key;
+      // its names ignore case, and under Git Bash MSYS upper-cases them (SYSTEMROOT).
+      if (windows)
+        expect(output.toLowerCase()).toContain(
+          `systemroot=${process.env.SystemRoot}`.toLowerCase()
+        );
       else {
         expect(output).toContain(`PATH=${process.env.PATH}`);
         expect(output).toContain(`HOME=${process.env.HOME}`);

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test } from "bun:test";
 import { Schema } from "effect";
 
@@ -15,7 +16,7 @@ test("a fresh FIM consumer loads no edit diff code until an Edit Prediction is c
     import { createEditPredictor, createPredictor } from "./src/index.ts";
     import { Effect, Stream } from "effect";
     createPredictor();
-    const loaded = () => Object.keys(require.cache).filter(p => p.includes("syntax-diff/src/"));
+    const loaded = () => Object.keys(require.cache).filter(p => p.replaceAll("\\\\", "/").includes("syntax-diff/src/"));
     const frame = { choices: [{ text: "<|marker_1|>abc\\n<|marker_2|>", finish_reason: "stop" }] };
     const predictor = createEditPredictor(async () => new Response("data: " + JSON.stringify(frame) + "\\n\\n"));
     const before = loaded();
@@ -27,7 +28,7 @@ test("a fresh FIM consumer loads no edit diff code until an Edit Prediction is c
     console.log(JSON.stringify({before, after: loaded()}));
   `,
     ],
-    { cwd: new URL("../../", import.meta.url).pathname, stdout: "pipe", stderr: "pipe" }
+    { cwd: fileURLToPath(new URL("../../", import.meta.url)), stdout: "pipe", stderr: "pipe" }
   );
 
   const [stdout, stderr, code] = await Promise.all([

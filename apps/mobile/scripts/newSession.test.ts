@@ -120,5 +120,8 @@ test("the first send makes a real agent session on a new worktree with the chose
     permissionMode: "plan",
     model: model?.id ?? null,
   });
-  expect(session.cwd.endsWith(branchFromPrompt(prompt, sessionId))).toBe(true);
+  // The worktree path holds the branch, with Windows separators on Windows.
+  expect(session.cwd.replaceAll("\\", "/").endsWith(branchFromPrompt(prompt, sessionId))).toBe(
+    true
+  );
 }, 60_000);

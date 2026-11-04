@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test } from "bun:test";
 import {
   chmodSync,
@@ -94,7 +95,7 @@ for (const failureAt of [1, 2]) {
   test(`actual private write fsync fault ${failureAt} preserves committed ownership`, () =>
     privateRoot((root) => {
       const dir = join(root, "private");
-      const module = new URL("./credential.ts", import.meta.url).pathname;
+      const module = fileURLToPath(new URL("./credential.ts", import.meta.url));
 
       const source = `
         import { mock } from "bun:test";

@@ -322,7 +322,12 @@ describe("relay reconnects", () => {
 
 test("the relay's code never names the end-to-end channel or a cipher for it", async () => {
   const root = `${import.meta.dir}/..`;
-  const sources = [...new Bun.Glob("src/**/*.rs").scanSync(root), "Cargo.toml"];
+
+  // Windows scans with backslashes.
+  const sources = [
+    ...[...new Bun.Glob("src/**/*.rs").scanSync(root)].map((path) => path.replaceAll("\\", "/")),
+    "Cargo.toml",
+  ];
 
   expect(sources).toContain("src/server.rs");
 
