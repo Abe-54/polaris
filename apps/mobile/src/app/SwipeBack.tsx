@@ -3,7 +3,14 @@
  * edge, uncovering the screen beneath as on iOS, and goes back when the swipe commits.
  */
 import { type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
-import { Animated, PanResponder, StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { themedStyles } from "../theme/index.ts";
 import type { Layer, Route } from "./navigation.tsx";
 import { commitsSwipeBack, startsSwipeBack } from "./swipeBack.ts";
@@ -13,6 +20,9 @@ const PARALLAX = 0.3;
 
 /** The dim over the screen beneath while covered. */
 const SCRIM = 0.25;
+
+/** Android keeps a native-driven offset on the screen beneath after it comes back on top. */
+const NATIVE_DRIVER = Platform.OS !== "android";
 
 export const SwipeBack = ({
   layers,
@@ -48,15 +58,21 @@ export const SwipeBack = ({
           const { onBack: back, width: w } = latest.current;
 
           if (!commitsSwipeBack(g.dx, g.vx, w)) {
-            Animated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
+            Animated.spring(x, {
+              toValue: 0,
+              useNativeDriver: NATIVE_DRIVER,
+              bounciness: 0,
+            }).start();
 
             return;
           }
 
-          Animated.timing(x, { toValue: w, duration: 180, useNativeDriver: true }).start(back);
+          Animated.timing(x, { toValue: w, duration: 180, useNativeDriver: NATIVE_DRIVER }).start(
+            back
+          );
         },
         onPanResponderTerminate: () =>
-          Animated.spring(x, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start(),
+          Animated.spring(x, { toValue: 0, useNativeDriver: NATIVE_DRIVER, bounciness: 0 }).start(),
       }),
     [x]
   );
