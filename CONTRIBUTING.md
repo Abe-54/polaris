@@ -155,7 +155,7 @@ A test that flakes goes into quarantine the first time, and CI never retries it.
 | Where | What runs | Budget |
 |---|---|---|
 | pre-commit | Format and lint on staged files: fully staged files are formatted and restaged, partially staged ones only checked | under 10 s |
-| pre-push | Format and lint on the pushed commits' files without writing, typecheck of the changed packages and their dependents, the changed packages' fast tier, and when `scripts/` changed, its typecheck and tests | under 90 s |
+| pre-push | Format and lint on the pushed commits' files without writing, typecheck of the changed packages and their dependents, the changed packages' fast tier, and when `scripts/` changed, its typecheck and tests. On Windows, POSIX-only packages in `tooling/ci/windows-skipped-packages.txt` are left to CI and their Windows-safe files run instead (ADR 0111) | under 90 s |
 | Required lane | The table above | under 8 min |
 
 The budgets are targets: nothing fails when one is exceeded. Open an issue when you see a hook or the required lane go over. Dependents' tests and the slow tier are CI's job.
