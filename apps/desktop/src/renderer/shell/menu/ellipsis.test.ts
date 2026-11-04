@@ -1,12 +1,13 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { ellipsisProblem } from "@polaris/ui";
 import { KEYMAP, paletteEntry } from "../../../shared/keymap.ts";
 import { labelProblem, menuLabels } from "./ellipsisScan.ts";
 
 const ROOTS = [
-  new URL("../../", import.meta.url).pathname,
-  new URL("../../../../../../packages/ui/src/", import.meta.url).pathname,
-  new URL("../../../../../../packages/ui/gallery/", import.meta.url).pathname,
+  fileURLToPath(new URL("../../", import.meta.url)),
+  fileURLToPath(new URL("../../../../../../packages/ui/src/", import.meta.url)),
+  fileURLToPath(new URL("../../../../../../packages/ui/gallery/", import.meta.url)),
 ];
 
 const sources = ROOTS.flatMap((root) =>

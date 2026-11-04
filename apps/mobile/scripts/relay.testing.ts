@@ -3,14 +3,17 @@
  * can stop and start again at the same URL, and a real Daemon whose secrets stay off the
  * Keychain with the Relay route on.
  */
+import { fileURLToPath } from "node:url";
 import { connectRpc, type DaemonClient } from "@polaris/client/rpc";
 import { socketTransport } from "@polaris/sdk";
 import { launchDaemon, type TestDaemon } from "@polaris/sdk/testing";
 import { Effect, Exit, Scope } from "effect";
 
-const RELAY_DIR = new URL("../../relay/", import.meta.url).pathname;
+const RELAY_DIR = fileURLToPath(new URL("../../relay/", import.meta.url));
 
-const TEST_DAEMON_MAIN = new URL("../../daemon/src/main.testing.ts", import.meta.url).pathname;
+const TEST_DAEMON_MAIN = fileURLToPath(
+  new URL("../../daemon/src/main.testing.ts", import.meta.url)
+);
 
 const freePort = (): number => {
   const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
