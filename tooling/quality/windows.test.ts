@@ -10,6 +10,9 @@ test("on Windows a push tests the changed packages but the POSIX-only ones, whos
       { name: "@polaris/mobile", directory: "apps/mobile" },
       { name: "@polaris/client", directory: "packages/client" },
       { name: "@polaris/desktop", directory: "apps/desktop" },
+      // turbo lists a package once per task.
+      { name: "@polaris/client", directory: "packages/client" },
+      { name: "@polaris/mobile", directory: "apps/mobile" },
     ],
     posixOnly,
     windowsFiles

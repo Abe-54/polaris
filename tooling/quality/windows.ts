@@ -37,10 +37,12 @@ export const planWindowsTests = (
   posixOnly: ReadonlySet<string>,
   windowsFiles: ReadonlyArray<string>
 ): WindowsTests => {
-  const skipped = affected.filter((pkg) => posixOnly.has(pkg.name));
+  // turbo lists a package once per task it runs there.
+  const unique = [...new Map(affected.map((pkg) => [pkg.name, pkg])).values()];
+  const skipped = unique.filter((pkg) => posixOnly.has(pkg.name));
 
   return {
-    packages: affected.flatMap((pkg) => (posixOnly.has(pkg.name) ? [] : [pkg.name])),
+    packages: unique.flatMap((pkg) => (posixOnly.has(pkg.name) ? [] : [pkg.name])),
     skipped: skipped.map((pkg) => pkg.name),
     files: windowsFiles.filter((file) => skipped.some((pkg) => within(file, pkg.directory))),
   };
