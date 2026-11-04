@@ -1,6 +1,7 @@
 /**
  * Unlink on the phone (RX1-3): each Host revokes this iPhone's key over its own session
- * before the Keychain forgets it. A Host that doesn't answer keeps trusting the key.
+ * before the Keychain forgets it. A Host that doesn't answer keeps trusting the key, and
+ * the user may forget it on this iPhone anyway (`leaving`); it trusts the key until unlinked on the Mac.
  */
 import { Effect } from "effect";
 import { unregisterLiveActivity } from "../live/registration.ts";
@@ -43,6 +44,26 @@ export interface Unlinked<H> {
   readonly stillTrusting: ReadonlyArray<H>;
 }
 
+export interface Left<H> {
+  /** The Hosts this iPhone still follows. */
+  readonly kept: ReadonlyArray<H>;
+  /** True when none are left: the keys go too, so the next link starts as a new device. */
+  readonly forgetKeys: boolean;
+}
+
+/**
+ * What this iPhone keeps once the `gone` Hosts leave it, revoked or forgotten without an answer.
+ * A forgotten Host can be linked again; one still kept is refused a new key (`checkLinkedHosts`).
+ */
+export const leaving = <H extends { readonly hostId: string }>(
+  hosts: ReadonlyArray<H>,
+  gone: ReadonlySet<string>
+): Left<H> => {
+  const kept = hosts.filter((host) => !gone.has(host.hostId));
+
+  return { kept, forgetKeys: kept.length === 0 };
+};
+
 /** Unlinks this iPhone from the `targets` among the linked `hosts`; the others stay linked. */
 export const unlinkFrom = async <H extends { readonly hostId: string }>(
   hosts: ReadonlyArray<H>,
@@ -64,7 +85,7 @@ export const unlinkFrom = async <H extends { readonly hostId: string }>(
 
   return {
     revoked,
-    kept: hosts.filter((host) => !revoked.has(host.hostId)),
+    kept: leaving(hosts, revoked).kept,
     stillTrusting: hosts.filter((host) => targets.has(host.hostId) && !revoked.has(host.hostId)),
   };
 };

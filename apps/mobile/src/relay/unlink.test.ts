@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { revokeOnHosts, type RevokingHost, unlinkFrom } from "./unlink.ts";
+import { checkLinkedHosts, type LinkedHost } from "@polaris/client/relay";
+import { RelayAddress } from "@polaris/protocol/relay";
+import { Effect, Schema } from "effect";
+import { leaving, revokeOnHosts, type RevokingHost, unlinkFrom } from "./unlink.ts";
 
 // SAFETY: these fakes answer `run` without a client, as a Host that revoked, refused or hung.
 const host = (hostId: string, run: () => Promise<void>) => ({ hostId, run }) as RevokingHost;
@@ -55,4 +58,36 @@ test("a targeted Host that doesn't answer stays linked, and is named as still tr
 
   expect(result.kept.map((h) => h.hostId)).toEqual(["studio", "pi"]);
   expect(result.stillTrusting.map((h) => h.hostId)).toEqual(["pi"]);
+});
+
+const linkedHost = (hostId: string, hostNoiseKey: string): LinkedHost => ({
+  hostId,
+  hostName: hostId,
+  relayUrl: "wss://relay.example",
+  hostAddress: Schema.decodeSync(RelayAddress)(hostId.padEnd(22, "a")),
+  hostNoiseKey,
+});
+
+const linkAccepted = (linked: ReadonlyArray<LinkedHost>, named: LinkedHost) =>
+  Effect.runPromise(
+    checkLinkedHosts(linked, [named]).pipe(
+      Effect.as(true),
+      Effect.catchTag("LinkFailed", () => Effect.succeed(false))
+    )
+  );
+
+test("a Host forgotten without answering can be linked again; one still kept is refused a new key", async () => {
+  const studio = linkedHost("studio", "studio-key");
+  const pi = linkedHost("pi", "pi-key");
+  const { kept, forgetKeys } = leaving([studio, pi], new Set(["pi"]));
+
+  expect(kept).toEqual([studio]);
+  expect(forgetKeys).toBe(false);
+  expect(await linkAccepted([studio, pi], linkedHost("pi", "pi-new-key"))).toBe(false);
+  expect(await linkAccepted(kept, linkedHost("pi", "pi-new-key"))).toBe(true);
+  expect(await linkAccepted(kept, linkedHost("studio", "studio-new-key"))).toBe(false);
+});
+
+test("forgetting the last Host forgets the keys too", () => {
+  expect(leaving([{ hostId: "pi" }], new Set(["pi"]))).toEqual({ kept: [], forgetKeys: true });
 });

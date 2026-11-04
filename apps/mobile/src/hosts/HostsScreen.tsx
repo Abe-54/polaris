@@ -33,9 +33,9 @@ import {
   type HostInput,
   type HostRowModel,
   type HostSection,
-  unlinkNote,
 } from "./model.ts";
 import { StateDot, stateLineColour } from "./StateDot.tsx";
+import { UnlinkLeft, type UnlinkLeftState } from "./UnlinkLeft.tsx";
 
 /** Re-renders each second while a Host reconnects, so "42s" counts. */
 const useTicking = (active: boolean) => {
@@ -245,7 +245,7 @@ export const HostsScreen = ({ onBack }: { readonly onBack: () => void }) => {
   const dev = useDevHosts();
   const hosts = dev ?? followed.map(toInput);
   const [openId, setOpenId] = useState<string | null>(DEV_HOST_SHEET);
-  const [unlinkLeft, setUnlinkLeft] = useState<string | null>(null);
+  const [unlinkLeft, setUnlinkLeft] = useState<UnlinkLeftState | null>(null);
   const linkAnother = useLinkAnother(DEV_HOST_LINK);
   const now = useTicking(hosts.some(({ state }) => state === "reconnecting"));
   const model = buildHosts(hosts, now);
@@ -258,9 +258,20 @@ export const HostsScreen = ({ onBack }: { readonly onBack: () => void }) => {
     setOpenId(null);
 
     if (dev !== null) return;
-    void relay
-      .unlinkHost(hostId)
-      .then((kept) => setUnlinkLeft(unlinkNote(kept.map((host) => host.hostName))));
+    void relay.unlinkHost(hostId).then((kept) =>
+      setUnlinkLeft({
+        names: kept.map((host) => host.hostName),
+        hostIds: kept.map((host) => host.hostId),
+        forgotten: false,
+      })
+    );
+  };
+
+  const forget = () => {
+    if (unlinkLeft === null) return;
+    const left = unlinkLeft;
+
+    void relay.forgetHosts(left.hostIds).then(() => setUnlinkLeft({ ...left, forgotten: true }));
   };
 
   return (
@@ -296,7 +307,7 @@ export const HostsScreen = ({ onBack }: { readonly onBack: () => void }) => {
                 />
               ))}
               <LinkAnotherRow onLink={linkAnother.open} />
-              {unlinkLeft === null ? null : <Text style={styles.note}>{unlinkLeft}</Text>}
+              <UnlinkLeft left={unlinkLeft} onForget={forget} />
             </View>
           </ScrollView>
           <EdgeFade />
@@ -389,5 +400,4 @@ const useStyles = themedStyles((colours) => ({
     color: colours.textFaint,
     paddingHorizontal: 14,
   },
-  note: { ...mobileType.footnote, color: colours.textFaint, paddingHorizontal: 14 },
 }));
