@@ -48,6 +48,7 @@ import {
   Worktree,
 } from "@polaris/protocol";
 import { Schema } from "effect";
+import { externalUrl } from "./externalUrl.ts";
 
 import {
   ConstellationDefaultsInputs,
@@ -308,9 +309,9 @@ export const RequestInputs = {
     value: Schema.NullOr(SessionDefault),
   }),
   "settings.setSessions": Schema.Struct({ patch: SessionPrefsPatch }),
-  /** Opens a URL in the user's browser; https only (a catalogue `docsUrl`). */
+  /** Opens an absolute HTTP or HTTPS URL in the user's browser. */
   "shell.openExternal": Schema.Struct({
-    url: Schema.String.check(Schema.isPattern(/^https:\/\//)),
+    url: Schema.String.check(Schema.makeFilter((value) => externalUrl(value) !== null)),
   }),
   /** A Visualization's frame document (`@polaris/visualization`), to load in its sandboxed frame. */
   "visualization.serve": Schema.Struct({

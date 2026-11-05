@@ -6,7 +6,7 @@
 import { Option, Schema } from "effect";
 import {
   each,
-  fileUrlPath,
+  sanitizableHostPath,
   hostPathOf,
   type MutableElement,
   type PropertyValue,
@@ -35,10 +35,10 @@ const eachLink = (tree: Node, visit: (link: MutableElement, href: string) => voi
     if (Option.isSome(link)) visit(element, link.value.href);
   });
 
-/** Before sanitizing, which drops `file:` links: a local `file://` link becomes its path. */
+/** Before sanitizing, preserve file URLs and Windows drives as paths rather than URL schemes. */
 export const rehypeFileHrefs = () => (tree: Node) =>
   eachLink(tree, (link, href) => {
-    const path = fileUrlPath(href);
+    const path = sanitizableHostPath(href);
 
     if (path !== null && link.properties !== undefined) link.properties["href"] = path;
   });

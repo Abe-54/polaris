@@ -60,7 +60,7 @@ const COMPONENTS: Components = {
     );
   },
   // `path:line` (rehypeFileLinks) opens in the editor, a Host path as `HostLink` says, other
-  // links in the user's browser (https only).
+  // web links in the user's browser (HTTP or HTTPS, including localhost).
   a: ({ href, children, node }) => {
     const target = editorLinkOf(node?.properties);
     const hostPath = hostLinkOf(node?.properties);

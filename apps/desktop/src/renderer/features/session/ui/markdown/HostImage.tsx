@@ -76,7 +76,7 @@ export const HostImage = ({ path, alt, className }: HostImageProps) => {
   const view = useHostImage(place?.hostKey ?? null, full);
   const [broken, setBroken] = useState<string | null>(null);
   const [viewing, setViewing] = useState(false);
-  const label = alt.trim() || (path.split("/").at(-1) ?? path);
+  const label = alt.trim() || (path.split(/[\\/]/).at(-1) ?? path);
 
   if (full === null) return <Status label={label} text="Image unavailable" />;
 

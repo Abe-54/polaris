@@ -7,11 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@polaris/
 import { useEffect, useState } from "react";
 import { useEditorPlace } from "../../editor-links/index.ts";
 import { readHostImage } from "../../host-images/index.ts";
-
-const absolute = (root: string | null, path: string) =>
-  root === null || path.startsWith("/") || path.startsWith("~")
-    ? path
-    : `${root.replace(/\/$/, "")}/${path}`;
+import { onHost } from "./markdown/hostImages.ts";
 
 type Loaded =
   | { readonly kind: "loading" }
@@ -64,7 +60,7 @@ const kilobytes = (bytes: number) =>
 const Body = ({ hostKey, path }: { readonly hostKey: string; readonly path: string }) => {
   const image = useImage(hostKey, path);
   const [size, setSize] = useState<string | null>(null);
-  const name = path.split("/").at(-1) ?? path;
+  const name = path.split(/[\\/]/).at(-1) ?? path;
 
   const detail = [size, image.kind === "ready" ? kilobytes(image.size) : null]
     .filter((p) => p !== null)
@@ -119,7 +115,7 @@ export const ImageViewer = ({ path, onClose }: ImageViewerProps) => {
         className="w-auto max-w-[min(90vw,1200px)] gap-0 p-0"
         data-testid="image-viewer"
       >
-        <Body hostKey={place.hostKey} path={absolute(place.root, path)} />
+        <Body hostKey={place.hostKey} path={onHost(place.root, path) ?? path} />
       </DialogContent>
     </Dialog>
   );

@@ -89,7 +89,12 @@ test("a link to an HTML page outside every Workspace says so instead of doing no
   expect(await page().findByText("Not in a workspace on this host")).not.toBeNull();
 });
 
-test("a link to an image opens it in the viewer, read from the session's Host", async () => {
+test.each([
+  ["/home/ubuntu/shots/before.png", "/home/ubuntu/shots/before.png"],
+  ["C:/Users/Developer/shots/before.png", "C:/Users/Developer/shots/before.png"],
+  ["<C:\\Users\\Example User\\shots\\before.png>", "C:/Users/Example User/shots/before.png"],
+  ["file:///C:/Users/Example%20User/shots/before.png", "C:/Users/Example User/shots/before.png"],
+])("an image link %s opens in the viewer from the session's Host", async (source, path) => {
   const bridge = installFakeBridge();
 
   bridge.answerOk("files.read", {
@@ -97,16 +102,14 @@ test("a link to an image opens it in the viewer, read from the session's Host", 
     mimeType: "image/png",
     content: { kind: "bytes", bytes: png(16, 16) },
   });
-  const view = message("Before: [before.png](/home/ubuntu/shots/before.png)");
+  const view = message(`Before: [before.png](${source})`);
 
   fireEvent.click(view.getByRole("button", { name: "before.png" }));
   await act(async () => {
     await Bun.sleep(5);
   });
 
-  expect(bridge.sent("files.read")).toMatchObject([
-    { hostKey: HOST, path: "/home/ubuntu/shots/before.png" },
-  ]);
+  expect(bridge.sent("files.read")).toMatchObject([{ hostKey: HOST, path }]);
   expect(page().getByTestId("image-viewer").querySelector("img")?.getAttribute("src")).toStartWith(
     "blob:"
   );
