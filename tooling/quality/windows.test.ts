@@ -7,12 +7,13 @@ const { posixOnly, windowsFiles } = windowsLists(join(import.meta.dir, "..", "..
 test("on Windows a push tests the changed packages but the POSIX-only ones, whose listed files run", () => {
   const plan = planWindowsTests(
     [
-      { name: "@polaris/mobile", directory: "apps/mobile" },
-      { name: "@polaris/client", directory: "packages/client" },
-      { name: "@polaris/desktop", directory: "apps/desktop" },
-      // turbo lists a package once per task.
-      { name: "@polaris/client", directory: "packages/client" },
-      { name: "@polaris/mobile", directory: "apps/mobile" },
+      { task: "test", name: "@polaris/mobile", directory: "apps/mobile" },
+      { task: "test", name: "@polaris/client", directory: "packages/client" },
+      { task: "test", name: "@polaris/desktop", directory: "apps/desktop" },
+      // An unchanged package whose build a test needs, and a package listed once per task.
+      { task: "build", name: "@polaris/sdk", directory: "packages/sdk" },
+      { task: "test", name: "@polaris/client", directory: "packages/client" },
+      { task: "test", name: "@polaris/mobile", directory: "apps/mobile" },
     ],
     posixOnly,
     windowsFiles
@@ -28,7 +29,7 @@ test("on Windows a push tests the changed packages but the POSIX-only ones, whos
 
 test("a changed package that only shares a prefix with a POSIX-only one is tested", () => {
   const plan = planWindowsTests(
-    [{ name: "@polaris/client-extra", directory: "packages/client-extra" }],
+    [{ task: "test", name: "@polaris/client-extra", directory: "packages/client-extra" }],
     posixOnly,
     windowsFiles
   );
