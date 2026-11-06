@@ -73,13 +73,17 @@ this records why.
 
 - A quarantine entry going past 30 days fails `bun run lint`, and so the required lane of every
   open PR, whatever it changed. That is deliberate: the expiry has to cost something.
+- On the PR that made this change, `CI` reported at 8.2, 8.3 and 6.8 min with macOS jobs still queued,
+  and failed on a failed counted job. The Linux build took 1.5 min.
 - `CI` on main doesn't include macOS: a green `CI` beside a red `CI (macOS)` means main is red,
   and the run says so. Nothing reads `CI` on main; branch protection reads it on the PR.
 - A darwin build break, like a Mac-only test failure, lands on main. CI's smokes also run binaries
   cross-compiled on Linux, while a release builds on macOS, so a fault only that build has first
   shows at release.
 - A macOS job cancelled on its own now files a `ci-red` issue, as main's run 41862561967 (six macOS
-  jobs cancelled, nothing filed) should have. Cancelling a whole run still files nothing.
+  jobs cancelled, nothing filed) should have. Queued macOS jobs were cancelled after 20 to 32 min
+  without a runner on this change's PR, so a queue can file these too. Cancelling a whole run
+  still files nothing.
 - PR macOS jobs keep their place in the queue after the PR merges, and report on a closed PR.
 - The budgets (pre-commit 10 s, pre-push 90 s, the required lane 8 min) are targets that nothing
   enforces; a miss needs someone to notice it and open an issue.
