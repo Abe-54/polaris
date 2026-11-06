@@ -253,11 +253,54 @@ describe("requests", () => {
     );
   });
 
-  test("only https URLs open in the browser", async () => {
-    const open = requestRunner(handlers, "shell.openExternal");
+  test.each([
+    "http://localhost:3001/review?project=demo&view=review",
+    "https://opencode.ai/docs",
+    "http://example.com/docs",
+    "http://localhost:3000/",
+    "http://127.0.0.1:5173/",
+    "http://[::1]:3000/",
+  ])("opens a web URL through the browser IPC: %s", async (url) => {
+    const opened: Array<string> = [];
 
-    expect(Exit.isSuccess(await run(open({ url: "https://opencode.ai/docs" })))).toBe(true);
-    expect(Exit.isFailure(await run(open({ url: "file:///etc/passwd" })))).toBe(true);
+    const open = requestRunner(
+      requestHandlers({
+        ...context,
+        openExternal: async (target) => {
+          opened.push(target);
+        },
+      }),
+      "shell.openExternal"
+    );
+
+    expect(Exit.isSuccess(await run(open({ url })))).toBe(true);
+    expect(opened).toEqual([url]);
+  });
+
+  test.each([
+    "file:///C:/notes.html",
+    "javascript:alert(1)",
+    "data:text/html,test",
+    "polaris://session/a/b",
+    "about:blank",
+    "https://user:secret@example.com/",
+    "http://",
+    "localhost:3000",
+  ])("refuses an unsafe URL before calling the browser: %s", async (url) => {
+    const opened: Array<string> = [];
+
+    const open = requestRunner(
+      requestHandlers({
+        ...context,
+        openExternal: async (target) => {
+          opened.push(target);
+        },
+      }),
+      "shell.openExternal"
+    );
+
+    expect(Exit.isFailure(await run(open({ url })))).toBe(true);
+    expect(opened).toEqual([]);
   });
 
   test("Reveal in Finder works for this Mac's Host and a WSL distro's, never over ssh", async () => {

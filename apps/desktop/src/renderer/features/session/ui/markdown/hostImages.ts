@@ -34,6 +34,11 @@ const markOf = Schema.decodeUnknownOption(HostImageMark);
 
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 
+const WINDOWS_ABSOLUTE = /^\/?[A-Za-z]:[\\/]/;
+
+const windowsPath = (path: string) =>
+  path.replace(/^\/(?=[A-Za-z]:[\\/])/, "").replaceAll("\\", "/");
+
 const isElement = (node: Node): node is MutableElement => node.type === "element";
 
 export const each = (node: Node, visit: (element: MutableElement) => void) => {
@@ -76,21 +81,40 @@ const decoded = (path: string): string => {
   }
 };
 
+/** A file URL or Windows drive path made safe to carry through Markdown's URL sanitizer. */
+export const sanitizableHostPath = (source: string): string | null => {
+  const file = fileUrlPath(source);
+
+  if (file !== null) return file;
+
+  return /^[A-Za-z]:[\\/]/.test(decoded(source)) ? `/${source}` : null;
+};
+
 /** The Host path an image source names, decoded; null for a URL, a fragment or nothing. */
 export const hostPathOf = (src: string): string | null => {
   const file = fileUrlPath(src);
+  const path = decoded(file ?? src);
 
-  if (file !== null) return decoded(file);
+  if (WINDOWS_ABSOLUTE.test(path)) return windowsPath(path);
 
-  if (src === "" || src.startsWith("//") || src.startsWith("#") || SCHEME.test(src)) return null;
+  if (file !== null) return path;
 
-  return decoded(src);
+  if (
+    src === "" ||
+    path.startsWith("//") ||
+    path.startsWith("\\\\") ||
+    src.startsWith("#") ||
+    SCHEME.test(src)
+  )
+    return null;
+
+  return path;
 };
 
-/** Before sanitizing, which drops `file:` sources: a local `file://` image becomes its path. */
+/** Before sanitizing, preserve file URLs and Windows drives as paths rather than URL schemes. */
 export const rehypeFileImages = () => (tree: Node) =>
   eachImage(tree, (image, src) => {
-    const path = fileUrlPath(src);
+    const path = sanitizableHostPath(src);
 
     if (path !== null && image.properties !== undefined) image.properties["src"] = path;
   });
@@ -116,9 +140,15 @@ export const hostImageOf = (
 
 /** The path on the Host: as written when absolute or under `~`, else under `root`; null without one. */
 export const onHost = (root: string | null, path: string): string | null => {
+  if (WINDOWS_ABSOLUTE.test(path)) return windowsPath(path);
+
   if (path.startsWith("/") || path === "~" || path.startsWith("~/")) return path;
 
   if (root === null) return null;
 
-  return `${root.replace(/\/+$/, "")}/${path.replace(/^(\.\/)+/, "")}`;
+  const windows = WINDOWS_ABSOLUTE.test(root);
+  const directory = windows ? windowsPath(root) : root;
+  const relative = windows ? path.replaceAll("\\", "/") : path;
+
+  return `${directory.replace(/\/+$/, "")}/${relative.replace(/^(\.\/)+/, "")}`;
 };

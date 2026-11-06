@@ -8,6 +8,7 @@ import { clientPlatform, PLATFORM_ARG } from "../shared/platform.ts";
 import { FRAME_WEB_PREFERENCES, subframeMayLoad } from "./frames.ts";
 import { chromeOptions, menuKeys, titleBarOverlay, WM_ENTERMENULOOP } from "./chrome.ts";
 import { popupAppMenu } from "./menu.ts";
+import { externalWindowOpenHandler } from "./externalLinks.ts";
 import { placeWindow, type Placement, type WindowState } from "./windowPlacement.ts";
 
 export interface MainWindowInput {
@@ -131,11 +132,7 @@ export const createMainWindow = (input: MainWindowInput) => {
   }
 
   // A Visualization frame's sandbox has no `allow-popups`, so it never reaches this.
-  win.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (target.startsWith("https://")) void shell.openExternal(target);
-
-    return { action: "deny" };
-  });
+  win.webContents.setWindowOpenHandler(externalWindowOpenHandler((url) => shell.openExternal(url)));
   win.webContents.on("will-navigate", (event, target) => {
     if (!trusted(target)) event.preventDefault();
   });
