@@ -77,15 +77,15 @@ const steering = (steer: (session: HarnessSession) => Effect.Effect<void, unknow
 
   return withSession(
     handler,
-    ({ session }) =>
+    ({ session, waitFor }) =>
       Effect.gen(function* () {
         send("turn/started", { turn: turn(T) });
         send("item/started", { startedAtMs: 0, item: userMessage("u1", "fix it") });
-        yield* Effect.sleep("10 millis");
+        // The first the Engine hears of a Turn from elsewhere, so the soonest a user can steer it.
+        yield* waitFor("TurnStarted");
         yield* steer(session);
-        yield* Effect.sleep("10 millis");
         send("turn/completed", { turn: turn(T, "completed") });
-        yield* Effect.sleep("10 millis");
+        yield* waitFor("TurnEnded");
       }),
     { resumeCursor: THREAD }
   );
