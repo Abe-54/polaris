@@ -27,7 +27,6 @@ const submission = (
 
 function fixture(env: EmailEnv = configured) {
   const sent: SendEmailCommand[] = [];
-  let logs = 0;
 
   const handler = createEmailHandler({
     validator: fakeValidator,
@@ -42,9 +41,6 @@ function fixture(env: EmailEnv = configured) {
       })),
     ...createAdmission({ store: memoryStore(), vercel: true }),
     preview: previewOnly(env),
-    requested: () => {
-      logs += 1;
-    },
   });
 
   const run = async (input: Request) => {
@@ -55,7 +51,7 @@ function fixture(env: EmailEnv = configured) {
     return response;
   };
 
-  return { handler: run, sent, logs: () => logs };
+  return { handler: run, sent };
 }
 
 const from = (ip: string, email = "ada@example.com") =>
@@ -67,7 +63,6 @@ describe("email endpoint", () => {
     const response = await f.handler(submission({ email: " ada+mac@example.com ", website: "" }));
     expect(response.status).toBe(202);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(f.logs()).toBe(1);
     expect(f.sent).toHaveLength(1);
     expect(f.sent[0]).toBeInstanceOf(SendEmailCommand);
     expect(f.sent[0]?.input).toMatchObject({
@@ -94,14 +89,13 @@ describe("email endpoint", () => {
     { email: "x@@example.com", website: "" },
     { email: "x@-bad.com", website: "" },
     { email: "x".repeat(2049), website: "" },
-  ])("rejects malformed submission %# without sending or telemetry", async (input) => {
+  ])("rejects malformed submission %# without sending", async (input) => {
     const f = fixture();
     expect((await f.handler(submission(input))).status).toBe(400);
     expect(f.sent).toHaveLength(0);
-    expect(f.logs()).toBe(0);
   });
 
-  test("honeypot gets the same reply as a delivery without transport or telemetry", async () => {
+  test("honeypot gets the same reply as a delivery without transport", async () => {
     const f = fixture();
     const delivered = await fixture().handler(submission());
 
@@ -112,7 +106,6 @@ describe("email endpoint", () => {
     expect(trapped.status).toBe(delivered.status);
     expect(await trapped.text()).toBe(await delivered.text());
     expect(f.sent).toHaveLength(0);
-    expect(f.logs()).toBe(0);
   });
 
   test("a fourth request from one IP sends nothing, another IP is separate", async () => {
@@ -138,7 +131,6 @@ describe("email endpoint", () => {
     const f = fixture({ NODE_ENV: "production" });
     expect((await f.handler(submission())).status).toBe(202);
     expect(f.sent).toHaveLength(0);
-    expect(f.logs()).toBe(1);
   });
 
   test("cross-origin and non-JSON browser submissions cannot send", async () => {

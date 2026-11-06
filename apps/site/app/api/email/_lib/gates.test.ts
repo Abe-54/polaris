@@ -45,9 +45,6 @@ describe("BotID gate", () => {
 
         return "admitted";
       },
-      requested: () => {
-        calls.push("telemetry");
-      },
       transport: () => {
         calls.push("SES");
 
@@ -69,7 +66,6 @@ describe("BotID gate", () => {
       admit: async () => {
         throw new Error("must not run");
       },
-      requested: () => {},
       transport: () => null,
     });
 
@@ -118,7 +114,6 @@ describe("recipient validator seam", () => {
 
         return admitted ? ("admitted" as const) : ("recipient_cooldown" as const);
       },
-      requested: () => {},
       transport: () => ({
         preview: false,
         send: async () => {
