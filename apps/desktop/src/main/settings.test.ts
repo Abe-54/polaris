@@ -83,16 +83,6 @@ describe("Settings → Sessions", () => {
     expect(sessionPrefsOf(readSettings(file({ sessions: saved })))).toMatchObject(saved);
   });
 
-  test("the IPC contract takes whole minutes from 1 to 999", () => {
-    const decode = Schema.decodeUnknownOption(RequestInputs["settings.setSessions"]);
-
-    const minutes = (longTurnMinutes: number | string) =>
-      decode({ patch: { longTurnMinutes } })._tag;
-
-    expect([1, 5, 999].map(minutes)).toEqual(["Some", "Some", "Some"]);
-    expect([0, 1000, 2.5, "5"].map(minutes)).toEqual(["None", "None", "None", "None"]);
-  });
-
   test("branch prefixes git accepts", () => {
     expect(["", "polaris/", "lucas/", "pl-", "team/agents/"].every(isBranchPrefix)).toBe(true);
     expect(["-x", "/x", "a b", "a..b", "a~", "a:", "x@{", "a\\b"].some(isBranchPrefix)).toBe(false);

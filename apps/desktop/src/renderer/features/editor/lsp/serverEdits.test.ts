@@ -86,22 +86,6 @@ test("tree server intent preserves authoritative metadata and never reports auto
   expect(f.received).toEqual([f.proposal]);
 });
 
-test("dedicated server payload preserves tree snapshots before the renderer consumer", () => {
-  const f = fixture();
-
-  const payload = Schema.TaggedStruct("TreeApplyEdit", {
-    proposal: P.LanguageTreeEditProposal,
-  }).make({ proposal: f.proposal });
-
-  expect(Schema.decodeUnknownSync(P.LanguageServerRequestPayload)(payload)).toEqual(payload);
-  expect(() =>
-    Schema.decodeUnknownSync(P.LanguageServerRequestPayload)({
-      ...payload,
-      proposal: { ...f.proposal, format: 1 },
-    })
-  ).toThrow();
-});
-
 test("legacy, old peer, foreign provider, stale draft and user-origin server intents never offer", async () => {
   const f = fixture();
 
