@@ -8,7 +8,7 @@ status: accepted
 
 pre-push tests every changed package's fast tier (ADR 0096). On Windows that can't pass: the
 Client's native Daemon installs and SSH shell fixtures, the Desktop App's Mac packaging, the
-bench's `/proc` samplers, the relay's SIGTERM stop and the release tooling's Python signer are
+bench's `/proc` samplers, the relay's SIGTERM stop and the language catalog's notice delivery under `/tmp` are
 POSIX-only, and CI runs them only on Linux and macOS. A change to a root file (`bun.lock`,
 `package.json`) makes every package changed, so no such push from Windows could pass, and
 `--no-verify` is not an option.
