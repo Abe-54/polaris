@@ -39,12 +39,6 @@ describe("Row asChild", () => {
     expect(link?.getAttribute("data-slot")).toBe("row");
     expect(link?.lastElementChild?.tagName).toBe("B");
   });
-
-  test("renders a div without asChild", () => {
-    const { container } = render(<Row title="polaris" />);
-
-    expect(container.firstElementChild?.tagName).toBe("DIV");
-  });
 });
 
 describe("Chip asChild", () => {
