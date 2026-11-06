@@ -301,7 +301,7 @@ privateInstallTest(
 
 for (const automatic of [true, false])
   privateInstallTest(
-    `an older same-version catalog binding with automatic downloads ${automatic}`,
+    `an older same-version catalog binding ${automatic ? "is replaced when automatic downloads are on" : "stays selected when automatic downloads are off"}`,
     async () => {
       const f = await fixture(false, true);
       const previous = await f.host.current("node");

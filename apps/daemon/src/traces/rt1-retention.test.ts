@@ -7,7 +7,7 @@ import { postTraces, spanFixture, traceFixture, withTraceFixture } from "./testi
 
 const MAX_BYTES = 20_000;
 
-test("a checkout emitting only error Spans stays within a hard multiple of its budget", () =>
+test("error Spans past the age limit are pruned, not kept forever", () =>
   withTraceFixture(
     async (f) => {
       const monthAgo = (BigInt(Date.now() - 31 * 86400_000) * 1_000_000n).toString();

@@ -135,7 +135,7 @@ describe("watchGitState", () => {
     expect(await watch.next()).toBe(true);
   });
 
-  test("the first commit in a fresh repository arms HEAD's reflog", async () => {
+  test("an empty commit, which moves only HEAD's reflog and the branch ref, is seen", async () => {
     const root = await makeRepo({});
     cleanup.push(() => removeTempDir(root));
     write(root, "a.txt", "one\n");

@@ -127,7 +127,7 @@ test("observations and queued input publish live facts without changing revision
   );
 });
 
-test("resume seeds current liveness and older Clients receive only graph frames", async () => {
+test("resume seeds current liveness after Synchronized, and a subscriber with no cursor gets Snapshot, Synchronized, then liveness", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

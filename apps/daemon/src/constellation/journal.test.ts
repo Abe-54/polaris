@@ -251,7 +251,7 @@ describe("Constellation delivery journal", () => {
         ?.findings[0]?.code
     ).toBe("E-RECOVERY-LIMIT");
   });
-  test("questions and in-transit messages survive folds and questions cannot be answered twice", () => {
+  test("a failed settle keeps the Attempt's questions, and a second settle commits nothing", () => {
     const record = dispatched();
     const attempt = record.graph.attempts[0]!;
 

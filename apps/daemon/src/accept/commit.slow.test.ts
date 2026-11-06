@@ -250,7 +250,7 @@ describe("branch, remote and push", () => {
   );
 
   test(
-    "a push git refuses fails with git's words",
+    "a push git refuses fails naming the remote",
     async () => {
       const root = await repo();
       await gitText(root, ["remote", "add", "origin", join(root, "nowhere")]);

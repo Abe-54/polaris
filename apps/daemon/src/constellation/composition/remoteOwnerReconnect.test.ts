@@ -95,162 +95,176 @@ const recordTrace = Effect.fnUntraced(function* (owner: TestHost, worker: TestHo
   );
 });
 
-for (const failure of ["owner-reconnect", "assignment", "persistent"] as const) {
-  test(`${failure}: remote relay resumes or waits after bounded retries`, async () => {
-    const roots = {
-      owner: newTempDir("block-cycles-owner-", { short: true }),
-      worker: newTempDir("block-cycles-worker-", { short: true }),
-    };
+for (const [failure, name] of [
+  [
+    "owner-reconnect",
+    "an owner reconnect during a busy Turn acknowledges on the new session, never the stale one",
+  ],
+  ["assignment", "a retryable E-ASSIGNMENT refusal is retried until one Turn is delivered"],
+  [
+    "persistent",
+    "a persistent E-ASSIGNMENT refusal stops after two applies per relay pass and stays blocked until relay.retry",
+  ],
+] as const) {
+  test(
+    name,
+    async () => {
+      const roots = {
+        owner: newTempDir("block-cycles-owner-", { short: true }),
+        worker: newTempDir("block-cycles-worker-", { short: true }),
+      };
 
-    try {
-      await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const arrived = yield* Deferred.make<void>();
-            let applications = 0;
-            let turns = 0;
-            let staleAcks = 0;
-            let currentAcks = 0;
+      try {
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const arrived = yield* Deferred.make<void>();
+              let applications = 0;
+              let turns = 0;
+              let staleAcks = 0;
+              let currentAcks = 0;
 
-            const effects = ConstellationSessionEffects.of({
-              canSteer: () => Effect.succeed(true),
-              runTurn: (turn) =>
-                Effect.gen(function* () {
-                  turns++;
-                  yield* signal(turn.sessionId, { type: "harness.opened" }).pipe(
-                    Effect.provideService(EventStore, worker.store),
-                    Effect.orDie
-                  );
-                }),
-              steer: () => Effect.void,
-              interrupt: () => Effect.void,
-              retire: () => Effect.void,
-            });
-
-            const worker: TestHost = yield* fakeHost(roots.worker, {
-              delivery: {
-                apply: (packet) =>
+              const effects = ConstellationSessionEffects.of({
+                canSteer: () => Effect.succeed(true),
+                runTurn: (turn) =>
                   Effect.gen(function* () {
-                    applications++;
-
-                    if (
-                      failure === "persistent" ||
-                      (failure === "assignment" && applications === 1)
-                    )
-                      return yield* transferError(
-                        "E-ASSIGNMENT",
-                        "Assignment mirror is not ready",
-                        true
-                      );
-                    yield* applyWorkerDelivery(packet, (p, model) =>
-                      Effect.gen(function* () {
-                        yield* validateRemoteDelivery(
-                          p,
-                          model,
-                          yield* worker.storage.assignments.pipe(Effect.orDie)
-                        );
-                        yield* Deferred.succeed(arrived, undefined);
-                      })
-                    ).pipe(
+                    turns++;
+                    yield* signal(turn.sessionId, { type: "harness.opened" }).pipe(
                       Effect.provideService(EventStore, worker.store),
-                      Effect.provideService(ConstellationSessionEffects, effects),
-                      Effect.mapError((error) => transferError("E-DELIVERY", error.message))
+                      Effect.orDie
                     );
                   }),
-              },
-            });
+                steer: () => Effect.void,
+                interrupt: () => Effect.void,
+                retire: () => Effect.void,
+              });
 
-            const owner = yield* fakeHost(roots.owner);
-            yield* blockedPair(owner, worker);
-            const delivery = yield* startOwnerDelivery(owner);
-            yield* acceptFeed(owner);
-            const { registry, relay } = yield* startClient(roots);
+              const worker: TestHost = yield* fakeHost(roots.worker, {
+                delivery: {
+                  apply: (packet) =>
+                    Effect.gen(function* () {
+                      applications++;
 
-            if (failure === "persistent") {
-              yield* wait(() => Effect.succeed(applications === 2));
-              yield* Effect.promise(() => Bun.sleep(30));
-              expect(applications).toBe(2);
-              yield* relay.retry;
-              yield* wait(() => Effect.succeed(applications === 4));
-              yield* Effect.promise(() => Bun.sleep(30));
-              expect(applications).toBe(4);
+                      if (
+                        failure === "persistent" ||
+                        (failure === "assignment" && applications === 1)
+                      )
+                        return yield* transferError(
+                          "E-ASSIGNMENT",
+                          "Assignment mirror is not ready",
+                          true
+                        );
+                      yield* applyWorkerDelivery(packet, (p, model) =>
+                        Effect.gen(function* () {
+                          yield* validateRemoteDelivery(
+                            p,
+                            model,
+                            yield* worker.storage.assignments.pipe(Effect.orDie)
+                          );
+                          yield* Deferred.succeed(arrived, undefined);
+                        })
+                      ).pipe(
+                        Effect.provideService(EventStore, worker.store),
+                        Effect.provideService(ConstellationSessionEffects, effects),
+                        Effect.mapError((error) => transferError("E-DELIVERY", error.message))
+                      );
+                    }),
+                },
+              });
+
+              const owner = yield* fakeHost(roots.owner);
+              yield* blockedPair(owner, worker);
+              const delivery = yield* startOwnerDelivery(owner);
+              yield* acceptFeed(owner);
+              const { registry, relay } = yield* startClient(roots);
+
+              if (failure === "persistent") {
+                yield* wait(() => Effect.succeed(applications === 2));
+                yield* Effect.promise(() => Bun.sleep(30));
+                expect(applications).toBe(2);
+                yield* relay.retry;
+                yield* wait(() => Effect.succeed(applications === 4));
+                yield* Effect.promise(() => Bun.sleep(30));
+                expect(applications).toBe(4);
+                expect(
+                  (yield* owner.store.model).constellations.get(CID)!.graph.attempts[0]!.state
+                ).toBe("blocked");
+
+                return;
+              }
+
+              yield* Deferred.await(arrived).pipe(Effect.timeout(3000));
               expect(
                 (yield* owner.store.model).constellations.get(CID)!.graph.attempts[0]!.state
               ).toBe("blocked");
 
-              return;
-            }
+              if (failure === "owner-reconnect") {
+                const old = Option.getOrThrow(yield* registry.get("owner"));
+                const prior = yield* old.awaitSession;
+                watchAcks(prior, () => staleAcks++);
+                yield* registry.remove("owner");
 
-            yield* Deferred.await(arrived).pipe(Effect.timeout(3000));
-            expect(
-              (yield* owner.store.model).constellations.get(CID)!.graph.attempts[0]!.state
-            ).toBe("blocked");
+                const next = yield* registry.add({
+                  key: "owner",
+                  name: "owner",
+                  target: HostTarget.Local({ socketPath: join(roots.owner, "daemon.sock") }),
+                  identity: testIdentity,
+                });
 
-            if (failure === "owner-reconnect") {
-              const old = Option.getOrThrow(yield* registry.get("owner"));
-              const prior = yield* old.awaitSession;
-              watchAcks(prior, () => staleAcks++);
-              yield* registry.remove("owner");
+                const current = yield* next.awaitSession;
+                expect(current).not.toBe(prior);
+                watchAcks(current, () => currentAcks++);
+                yield* Effect.yieldNow;
+              }
 
-              const next = yield* registry.add({
-                key: "owner",
-                name: "owner",
-                target: HostTarget.Local({ socketPath: join(roots.owner, "daemon.sock") }),
-                identity: testIdentity,
+              yield* finish(WORKER).pipe(Effect.provideService(EventStore, worker.store));
+              yield* wait(() =>
+                Effect.map(
+                  owner.store.model,
+                  (m) => m.constellations.get(CID)!.graph.attempts[0]!.state === "working"
+                )
+              );
+              expect(turns).toBe(1);
+
+              if (failure === "owner-reconnect") {
+                expect(staleAcks).toBe(0);
+                expect(currentAcks).toBe(1);
+              }
+
+              const events = yield* owner.store.readConstellationEvents({
+                constellationId: CID,
+                after: 0,
+                upTo: (yield* owner.store.model).sequence,
               });
 
-              const current = yield* next.awaitSession;
-              expect(current).not.toBe(prior);
-              watchAcks(current, () => currentAcks++);
-              yield* Effect.yieldNow;
-            }
+              expect(
+                events.filter((e) => Predicate.isTagged(e.event, "AttemptUnblocked"))
+              ).toHaveLength(1);
+              expect(
+                events.filter((e) => Predicate.isTagged(e.event, "WorkerInputDelivered"))
+              ).toHaveLength(1);
+              expect(
+                (yield* owner.deliveries.watch.pipe(Stream.take(1), Stream.runCollect))[0]
+              ).toEqual([]);
 
-            yield* finish(WORKER).pipe(Effect.provideService(EventStore, worker.store));
-            yield* wait(() =>
-              Effect.map(
-                owner.store.model,
-                (m) => m.constellations.get(CID)!.graph.attempts[0]!.state === "working"
-              )
-            );
-            expect(turns).toBe(1);
+              if (failure === "assignment") expect(applications).toBeGreaterThanOrEqual(2);
+              yield* delivery.flush();
+              expect(turns).toBe(1);
+              expect(
+                (yield* owner.store.model).constellations
+                  .get(CID)!
+                  .graph.attempts.find((a) => a.id === draft().id)!.blockedOn
+              ).toEqual([]);
 
-            if (failure === "owner-reconnect") {
-              expect(staleAcks).toBe(0);
-              expect(currentAcks).toBe(1);
-            }
-
-            const events = yield* owner.store.readConstellationEvents({
-              constellationId: CID,
-              after: 0,
-              upTo: (yield* owner.store.model).sequence,
-            });
-
-            expect(
-              events.filter((e) => Predicate.isTagged(e.event, "AttemptUnblocked"))
-            ).toHaveLength(1);
-            expect(
-              events.filter((e) => Predicate.isTagged(e.event, "WorkerInputDelivered"))
-            ).toHaveLength(1);
-            expect(
-              (yield* owner.deliveries.watch.pipe(Stream.take(1), Stream.runCollect))[0]
-            ).toEqual([]);
-
-            if (failure === "assignment") expect(applications).toBeGreaterThanOrEqual(2);
-            yield* delivery.flush();
-            expect(turns).toBe(1);
-            expect(
-              (yield* owner.store.model).constellations
-                .get(CID)!
-                .graph.attempts.find((a) => a.id === draft().id)!.blockedOn
-            ).toEqual([]);
-
-            if (failure === "owner-reconnect") yield* recordTrace(owner, worker);
-          })
-        )
-      );
-    } finally {
-      removeTempDir(roots.owner);
-      removeTempDir(roots.worker);
-    }
-  }, 15_000);
+              if (failure === "owner-reconnect") yield* recordTrace(owner, worker);
+            })
+          )
+        );
+      } finally {
+        removeTempDir(roots.owner);
+        removeTempDir(roots.worker);
+      }
+    },
+    15_000
+  );
 }

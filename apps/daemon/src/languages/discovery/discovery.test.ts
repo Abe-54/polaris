@@ -202,7 +202,7 @@ test("bounded cache, explicit refresh, detached result mutation and invalidation
   }
 });
 
-test("checkout paths, project config and SDK symlinks cannot cross canonical roots", async () => {
+test("checkout paths and project config symlinks cannot cross canonical roots", async () => {
   const f = await fixture();
 
   try {

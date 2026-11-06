@@ -231,7 +231,7 @@ describe("Constellation store and service", () => {
       removeTempDir(dir);
     }
   });
-  test("concurrent edits serialize against current Task revisions and duplicate IDs commit once", async () => {
+  test("concurrent edits at one Task revision: exactly one commits and the other is rejected", async () => {
     await run(
       ":memory:",
       Effect.gen(function* () {
@@ -267,7 +267,7 @@ describe("Constellation store and service", () => {
       })
     );
   });
-  test("stream sends snapshot, cut and live events; replay isolates each Constellation", async () => {
+  test("stream sends snapshot, cut and live events; resuming from the snapshot replays the later event, then the cut", async () => {
     await run(
       ":memory:",
       Effect.gen(function* () {

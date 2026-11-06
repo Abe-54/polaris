@@ -83,7 +83,7 @@ for (const input of [
   "postgres://app:other'private@host/db",
   "postgres://app:other private@host/db",
 ])
-  test(`RM F6: generic credential syntax ${input.split("other")[0]}`, () => {
+  test(`RM F6: a credential value in ${JSON.stringify(input)} is scrubbed from text`, () => {
     expect(safeDataText(input)).not.toContain("private");
     expect(safeDataText(input)).not.toContain("other");
   });
@@ -144,7 +144,7 @@ test("RM F10: ANSI and controls disappear; newlines in identifiers remain escape
   expect(view.data.rows).toEqual([[String.raw`ab\nnext`]]);
 });
 
-test("RM F11: singular rows and distinct limit vs width hints", () => {
+test('RM F11: a one-row result says "1 row", and a result cut by the limit hints at the limit, not the columns', () => {
   const single = queryView(
     new QueryResult({ ...resultFields, returned: 1, rows: [[1]], truncated: true })
   );

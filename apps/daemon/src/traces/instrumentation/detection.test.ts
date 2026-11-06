@@ -93,7 +93,7 @@ test.each<[string, string, ReadonlyArray<number>]>([
   expect(fixedExporterLines(source)).toEqual([...lines]);
 });
 
-test("discovery caps exporter evidence without recording URL content", () =>
+test("discovery keeps the first 32 exporter locations", () =>
   fixture(async (root) => {
     await writeFile(join(root, "many.ts"), `${fixed}\n`.repeat(80));
 
