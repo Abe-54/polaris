@@ -6,8 +6,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** A package turbo would test: its name and its directory, relative to the root. */
+/** A task turbo would run: its package's name and directory, relative to the root. */
 export interface Affected {
+  readonly task: string;
   readonly name: string;
   readonly directory: string;
 }
@@ -37,8 +38,9 @@ export const planWindowsTests = (
   posixOnly: ReadonlySet<string>,
   windowsFiles: ReadonlyArray<string>
 ): WindowsTests => {
-  // turbo lists a package once per task it runs there.
-  const unique = [...new Map(affected.map((pkg) => [pkg.name, pkg])).values()];
+  // turbo also lists the builds a test needs, and a package once per task.
+  const tested = affected.filter((pkg) => pkg.task === "test");
+  const unique = [...new Map(tested.map((pkg) => [pkg.name, pkg])).values()];
   const skipped = unique.filter((pkg) => posixOnly.has(pkg.name));
 
   return {

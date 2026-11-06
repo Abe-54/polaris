@@ -31,7 +31,9 @@ const turbo = (task: string, filters: ReadonlyArray<string>, ...args: ReadonlyAr
 ];
 
 const DryRun = Schema.Struct({
-  tasks: Schema.Array(Schema.Struct({ package: Schema.String, directory: Schema.String })),
+  tasks: Schema.Array(
+    Schema.Struct({ task: Schema.String, package: Schema.String, directory: Schema.String })
+  ),
 });
 
 /** The packages `turbo run test <filter>` would test. */
@@ -40,6 +42,7 @@ const affected = (filter: string): ReadonlyArray<Affected> => {
   const { tasks } = Schema.decodeUnknownSync(Schema.fromJsonString(DryRun))(dry.stdout.toString());
 
   return tasks.map((task) => ({
+    task: task.task,
     name: task.package,
     directory: task.directory.replaceAll("\\", "/"),
   }));
