@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect, Stream } from "effect";
 import {
   postTraces,
+  until,
   spanFixture,
   traceFixture,
   TRACE_ID,
@@ -72,7 +73,7 @@ test("age retention keeps explicitly linked traces, and never mixes checkouts or
       expect(
         (await Effect.runPromise(Effect.flip(f.store.get("another-checkout", TRACE_ID)))).code
       ).toBe("E-TRACE-NOT-FOUND");
-      await Bun.sleep(1100);
+      await until(async () => (await Effect.runPromise(f.store.list(f.root))).traces.length === 1);
       const result = await Effect.runPromise(f.store.list(f.root));
       expect(result.traces.map((trace) => trace.id)).toEqual([TRACE_ID]);
       expect(result.traces[0]?.linked).toBe(true);
@@ -88,8 +89,7 @@ test("worker starts on demand, flushes before quiet exit, and reopens persisted 
       expect(await Effect.runPromise(f.store.workerRunning)).toBe(false);
       expect((await postTraces(f.endpoint!)).status).toBe(200);
       expect(await Effect.runPromise(f.store.workerRunning)).toBe(true);
-      await Bun.sleep(200);
-      expect(await Effect.runPromise(f.store.workerRunning)).toBe(false);
+      await until(async () => !(await Effect.runPromise(f.store.workerRunning)));
       expect((await Effect.runPromise(f.store.get(f.root, TRACE_ID))).summary.spans).toBe(1);
     },
     { quietMs: 80, flushMs: 500 }
@@ -118,7 +118,7 @@ test("watch coalesces a continuous ingest stream to at most four snapshots per s
         await Bun.sleep(10);
       }
 
-      await Bun.sleep(600);
+      await until(() => events.at(-1)?.total === 30);
       expect(events[0]?.total).toBe(0);
       expect(events.at(-1)?.total).toBe(30);
       expect(events.length).toBeLessThan(8);

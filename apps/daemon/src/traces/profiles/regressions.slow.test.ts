@@ -28,7 +28,11 @@ for (const binary of ["node", "bun"])
     () =>
       withProfiles(async ({ root, runtime }) => {
         const script = join(root, "server.js");
-        await writeFile(script, `${cpuWork} setInterval(()=>{},1000);`);
+        const burnt = join(root, "burnt");
+        await writeFile(
+          script,
+          `${cpuWork} require("fs").writeFileSync(${JSON.stringify(burnt)}, ""); setInterval(()=>{},1000);`
+        );
         const profiles = await runtime.runPromise(Profiles);
 
         const original = await runtime.runPromise(
@@ -37,7 +41,7 @@ for (const binary of ["node", "bun"])
 
         expect(original.status).toBe("recording");
         // Let the burn run so the old recording has real samples.
-        await Bun.sleep(600);
+        await until(() => existsSync(burnt));
         const next = await runtime.runPromise(profiles.restart(TEST_SESSION, original.pid));
         expect(next.status).toBe("recording");
 
@@ -198,14 +202,18 @@ for (const binary of ["node", "bun"])
     () =>
       withProfiles(async ({ root, runtime }) => {
         const script = join(root, "server.js");
-        await writeFile(script, `${cpuWork} setInterval(()=>{},1000);`);
+        const burnt = join(root, "burnt");
+        await writeFile(
+          script,
+          `${cpuWork} require("fs").writeFileSync(${JSON.stringify(burnt)}, ""); setInterval(()=>{},1000);`
+        );
         const profiles = await runtime.runPromise(Profiles);
 
         const original = await runtime.runPromise(
           profiles.capture(TEST_SESSION, [binary, script], 0.01)
         );
 
-        await Bun.sleep(600);
+        await until(() => existsSync(burnt));
         await runtime.dispose();
         expect(isRunning(original.pid)).toBe(false);
         const { realpath, readFile } = await import("node:fs/promises");

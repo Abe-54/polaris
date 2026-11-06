@@ -437,9 +437,11 @@ test("a cancelled, replaced or abandoned link no longer links (RX1-2)", async ()
           desktop["devices.awaitLink"]({ linkId: current.linkId })
         );
 
-        yield* Effect.sleep("100 millis");
+        // Frames on one connection stay in order: an answer means the Daemon handled what came before.
+        yield* Effect.yieldNow;
+        yield* desktop["devices.list"]();
         yield* Fiber.interrupt(waiting);
-        yield* Effect.sleep("100 millis");
+        yield* desktop["devices.list"]();
         expect((yield* linkWith(current.linkString)).linked).toBe(false);
 
         expect(yield* desktop["devices.list"]()).toEqual([]);
@@ -471,7 +473,8 @@ test("a phone that unlinks itself is refused from then on (RX1-3)", async () => 
         expect((yield* desktop["devices.list"]()).map((d) => d.unlinkedAt === null)).toEqual([
           false,
         ]);
-        yield* Effect.sleep("500 millis");
+        // Refused while the old session is still open, then again once its drop has run (a refusal takes 1 s).
+        expect(yield* openSession(status, phone, phone.noise, 1)).toBeNull();
         expect(yield* openSession(status, phone, phone.noise, 1)).toBeNull();
         open.socket.close();
       })

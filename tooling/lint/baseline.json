@@ -58,9 +58,6 @@
     "apps/daemon/src/languages/runtime/lifecycleDemand.slow.test.ts": {
       "polaris/no-fixed-sleep": 4
     },
-    "apps/daemon/src/linkedDevices/route.slow.test.ts": {
-      "polaris/no-fixed-sleep": 3
-    },
     "apps/daemon/src/linkedDevices/wake.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
@@ -106,26 +103,14 @@
     "apps/daemon/src/traces/attach/lifecycle.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
-    "apps/daemon/src/traces/attach/regressions.slow.test.ts": {
-      "polaris/no-fixed-sleep": 2
-    },
     "apps/daemon/src/traces/forwarding.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
     "apps/daemon/src/traces/forwardQueue.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
-    "apps/daemon/src/traces/instrumentation/preload.slow.test.ts": {
-      "polaris/no-fixed-sleep": 2
-    },
     "apps/daemon/src/traces/profiles/regressions.slow.test.ts": {
-      "polaris/no-fixed-sleep": 6
-    },
-    "apps/daemon/src/traces/rt1-receiver.slow.test.ts": {
-      "polaris/no-fixed-sleep": 2
-    },
-    "apps/daemon/src/traces/store.slow.test.ts": {
-      "polaris/no-fixed-sleep": 3
+      "polaris/no-fixed-sleep": 4
     },
     "apps/daemon/src/transport/byteStreams.test.ts": {
       "polaris/no-fixed-sleep": 2
