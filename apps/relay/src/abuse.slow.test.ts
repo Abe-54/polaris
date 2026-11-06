@@ -13,36 +13,21 @@ const endedBy = (reason: string) =>
   relay.events.some((e) => e.event === "relay.connection" && e.endedBy === reason);
 
 describe("relay key proof", () => {
-  test("a signature by another key is refused", async () => {
+  test.each([
+    ["a signature by another key is refused", true, "device"],
+    ["a proof made for the host role does not admit a device", false, "host"],
+  ] as const)("%s", async (_, impostor, provenRole) => {
     relay = startTestRelay();
     const party = await TestParty.open(relay.url);
     const challenge = await party.control("challenge");
-    const impostor = generateRelayIdentity();
+    const signer = impostor ? generateRelayIdentity() : party.identity;
     party.sendText(
       encodeControl({
         t: "auth",
         role: "device",
         key: toBase64Url(party.identity.publicKey),
         sig: toBase64Url(
-          proveRelayKey(impostor, Buffer.from(challenge.nonce, "base64url"), "device")
-        ),
-      })
-    );
-
-    expect(await party.closed).toEqual({ code: 4401, reason: "auth-failed" });
-  });
-
-  test("a proof made for the host role does not admit a device", async () => {
-    relay = startTestRelay();
-    const party = await TestParty.open(relay.url);
-    const challenge = await party.control("challenge");
-    party.sendText(
-      encodeControl({
-        t: "auth",
-        role: "device",
-        key: toBase64Url(party.identity.publicKey),
-        sig: toBase64Url(
-          proveRelayKey(party.identity, Buffer.from(challenge.nonce, "base64url"), "host")
+          proveRelayKey(signer, Buffer.from(challenge.nonce, "base64url"), provenRole)
         ),
       })
     );

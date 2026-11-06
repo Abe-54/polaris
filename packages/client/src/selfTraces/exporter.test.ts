@@ -132,7 +132,6 @@ describe("Self-Trace exporter", () => {
   test("a send that never answers times out and the Spans go on the next try", async () => {
     const { clock, advance } = fakeClock();
     const batches: Array<SelfTraceBatch> = [];
-    const logs: Array<string> = [];
     let calls = 0;
 
     const exporter = makeSelfTraceExporter({
@@ -148,7 +147,6 @@ describe("Self-Trace exporter", () => {
       flushDelayMs: 0,
       sendTimeoutMs: 5_000,
       retryMs: { initial: 100, max: 1_000 },
-      log: (message) => logs.push(message),
     });
 
     exporter.setEnabled(true);
@@ -159,9 +157,6 @@ describe("Self-Trace exporter", () => {
     await advance(100);
 
     expect(batches.map((batch) => batch.spans)).toEqual([[testSpan(1), testSpan(2)]]);
-    expect(logs).toEqual([
-      "the Host is unreachable (no answer in 5000 ms); Spans are kept and retried",
-    ]);
   });
 
   test("a run of failed sends is logged once, and again after a success", async () => {

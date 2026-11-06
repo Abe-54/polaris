@@ -114,7 +114,7 @@ describe("spawn failures", () => {
 });
 
 describe("callers on the scripted Layer", () => {
-  test("an install command gets its output and exit code, with stdin streamed", async () => {
+  test("an install command gets its output and exit code", async () => {
     const requests: Array<SpawnRequest> = [];
 
     const processes = scripted((request) => {

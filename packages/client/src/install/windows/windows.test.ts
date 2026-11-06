@@ -126,7 +126,7 @@ describe("command lines", () => {
 });
 
 describe("the Windows probe", () => {
-  test("is chosen when sh is missing, or is Git for Windows'", () => {
+  test("recognises the unames of Git for Windows' sh, not Linux or macOS", () => {
     expect(isWindowsUname("MINGW64_NT-10.0-26200")).toBe(true);
     expect(isWindowsUname("MSYS_NT-10.0")).toBe(true);
     expect(isWindowsUname("Linux")).toBe(false);

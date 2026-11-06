@@ -81,27 +81,33 @@ describe("classifyWslExit", () => {
     expect(stub.reason).toBe("wsl-missing");
   });
 
-  test("wsl.exe's own message arrives on stdout with exit -1, as real WSL 2.7 writes it", () => {
-    const message =
-      "There is no distribution with the supplied name.\r\nError code: Wsl/Service/WSL_E_DISTRO_NOT_FOUND\r\n";
+  const WSL_NOT_FOUND =
+    "There is no distribution with the supplied name.\r\nError code: Wsl/Service/WSL_E_DISTRO_NOT_FOUND\r\n";
 
-    for (const code of [255, 4294967295]) {
-      const missing = classifyWslExit({ code, signal: null, stderr: "", stdout: message });
-      expect(missing.reason).toBe("wsl-distro-missing");
-      expect(missing.detail).toBe("There is no distribution with the supplied name.");
-    }
-  });
-
-  test("a localized missing distro classifies by WSL's error code", () => {
-    const missing = classifyWslExit({
-      code: 255,
-      signal: null,
-      stderr: "",
-      stdout: FAKE_WSL_MESSAGES.de.notFound,
-    });
+  test.each([
+    [
+      "wsl.exe's own message arrives on stdout with exit 255",
+      255,
+      WSL_NOT_FOUND,
+      "There is no distribution with the supplied name.",
+    ],
+    [
+      "wsl.exe's own message arrives on stdout with exit -1, as real WSL 2.7 writes it",
+      4294967295,
+      WSL_NOT_FOUND,
+      "There is no distribution with the supplied name.",
+    ],
+    [
+      "a localized missing distro classifies by WSL's error code",
+      255,
+      FAKE_WSL_MESSAGES.de.notFound,
+      "Es ist keine Distribution mit dem angegebenen Namen vorhanden.",
+    ],
+  ])("%s", (_, code, stdout, detail) => {
+    const missing = classifyWslExit({ code, signal: null, stderr: "", stdout });
 
     expect(missing.reason).toBe("wsl-distro-missing");
-    expect(missing.detail).toBe("Es ist keine Distribution mit dem angegebenen Namen vorhanden.");
+    expect(missing.detail).toBe(detail);
   });
 
   test("a Linux command's stdout is not mistaken for wsl.exe's message", () => {

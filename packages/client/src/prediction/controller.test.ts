@@ -55,7 +55,7 @@ test("Cancellation never degrades a side; explicit override never falls back", a
   expect(controller.state.value).toBe("off");
 });
 
-test("A late probe cannot undo Off or overwrite newer settings", async () => {
+test("A late probe cannot undo Off", async () => {
   const controller = new PlacementController();
   let resolve: (value: ReturnType<typeof input>) => void = () => {};
 

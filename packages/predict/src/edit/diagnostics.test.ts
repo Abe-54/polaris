@@ -96,21 +96,20 @@ describe("standing in for an importable name", () => {
     });
   });
 
-  test("importing it is allowed", () => {
-    const edits = [{ from: 0, to: 0, text: 'import { helper } from "./helper.ts";\n' }];
-
-    expect(verifyDiagnostics({ buffer, edits, before, after: [], importable: before }).allow).toBe(
-      true
-    );
-  });
-
-  test("renaming the reference is allowed", () => {
-    const from = buffer.indexOf("helper");
-    const edits = [{ from, to: from + "helper".length, text: "a" }];
-
-    expect(verifyDiagnostics({ buffer, edits, before, after: [], importable: before }).allow).toBe(
-      true
-    );
+  test.each([
+    ["importing it", { from: 0, to: 0, text: 'import { helper } from "./helper.ts";\n' }],
+    [
+      "renaming the reference",
+      {
+        from: buffer.indexOf("helper"),
+        to: buffer.indexOf("helper") + "helper".length,
+        text: "a",
+      },
+    ],
+  ])("%s is allowed", (_, edit) => {
+    expect(
+      verifyDiagnostics({ buffer, edits: [edit], before, after: [], importable: before }).allow
+    ).toBe(true);
   });
 
   test("finishing the declaration the user is typing is allowed", () => {

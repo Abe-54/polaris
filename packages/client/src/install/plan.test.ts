@@ -341,17 +341,12 @@ describe("delivery", () => {
   });
 
   test.each([
-    ["no curl or wget", { ...allTools, fetch: null }],
-    ["no tar", { ...allTools, tar: false }],
-    ["no sha256sum or shasum", { ...allTools, sha256: false }],
-  ] as const)("with %s, this machine downloads and uploads", (_, tools) => {
-    expect(deliveryFor(published("linux-x64"), { ...linux(), tools })).toEqual(
-      Delivery.ClientFetch()
-    );
-  });
-
-  test("an old probe without tools falls back to this machine", () => {
-    expect(deliveryFor(published("linux-x64"), linux())).toEqual(Delivery.ClientFetch());
+    ["no curl or wget", { ...linux(), tools: { ...allTools, fetch: null } }],
+    ["no tar", { ...linux(), tools: { ...allTools, tar: false } }],
+    ["no sha256sum or shasum", { ...linux(), tools: { ...allTools, sha256: false } }],
+    ["an old probe without tools", linux()],
+  ] as const)("with %s, this machine downloads and uploads", (_, probe) => {
+    expect(deliveryFor(published("linux-x64"), probe)).toEqual(Delivery.ClientFetch());
   });
 
   test("upgrades take the same path", () => {

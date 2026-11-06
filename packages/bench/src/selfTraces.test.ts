@@ -34,6 +34,6 @@ test("--developer-mode on: the Daemon stores the bench's Self-Trace batch whole"
   expect(await ingestOnce("on")).toBe(SELF_SPANS_PER_BATCH);
 }, 60_000);
 
-test("off by default: the Daemon refuses Client Self-Traces", async () => {
+test("--developer-mode off: the Daemon refuses Client Self-Traces", async () => {
   expect(await ingestOnce("off")).toBe("developer-mode-off");
 }, 60_000);

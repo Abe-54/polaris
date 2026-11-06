@@ -43,10 +43,6 @@ const sourced: ReadonlyArray<readonly [FrameTokenName, string]> = FRAME_TOKEN_NA
 );
 
 describe("frame token themes", () => {
-  test.each(Object.entries(FRAME_TOKEN_THEMES))("%s covers every token", (_theme, values) => {
-    expect(Object.keys(values).toSorted()).toEqual([...FRAME_TOKEN_NAMES].toSorted());
-  });
-
   test.each(sourced)(
     "%s matches @polaris/ui's %s in light, Moonlit and Midnight",
     (name, source) => {

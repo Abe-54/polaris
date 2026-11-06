@@ -25,7 +25,6 @@ type Dependencies = {
   preview: boolean;
   /** Names of missing or invalid settings, recorded when the transport is unavailable. */
   configProblems?: () => readonly string[];
-  requested?: () => void;
 };
 
 /** The one public reply to every well-formed submission, whatever happens to it. */
@@ -237,7 +236,6 @@ export function createEmailHandler(deps: Dependencies) {
       return reply(400, "Enter a valid email address.");
     }
 
-    deps.requested?.();
     const headers = new Headers(request.headers);
     const { email } = submission;
     background(() => admitAndDeliver(deps, validator, headers, email, event));
