@@ -236,11 +236,29 @@ test("multiple Hosts keep their own Workspaces and a refused Host stays separate
 
     opened.push(polaris);
 
-    const views = await until(polaris.subscribeHosts(), (views) => views.length === 3);
+    const viewOf = (views: ReadonlyArray<HostView>, hostId: string) =>
+      views.find((view) => view.hostId === hostId);
+
+    // A Host's error view ends its feed, so it settles the wait: the assertions name the error.
+    const settled = (views: ReadonlyArray<HostView>, hostId: string, workspace: string) => {
+      const view = viewOf(views, hostId);
+
+      return view?.error != null || view?.workspaces.some((w) => w.id === workspace) === true;
+    };
+
+    const views = await until(
+      polaris.subscribeHosts(),
+      (views) =>
+        viewOf(views, "wrong-host") !== undefined &&
+        settled(views, daemon.hostId, localWorkspace) &&
+        settled(views, other.hostId, otherWorkspace)
+    );
 
     const workspacesOf = (hostId: string) =>
-      views.find((view) => view.hostId === hostId)?.workspaces.map((w) => String(w.id));
+      viewOf(views, hostId)?.workspaces.map((w) => String(w.id));
 
+    expect(viewOf(views, daemon.hostId)?.error?.message ?? null).toBeNull();
+    expect(viewOf(views, other.hostId)?.error?.message ?? null).toBeNull();
     expect(workspacesOf(daemon.hostId)).toContain(localWorkspace);
     expect(workspacesOf(daemon.hostId)).not.toContain(otherWorkspace);
     expect(workspacesOf(other.hostId)).toEqual([otherWorkspace]);
