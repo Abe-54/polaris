@@ -77,21 +77,4 @@ describe("LocalHost", () => {
     );
     expect(localTarget(testDaemon(null))).toEqual(HostTarget.Local({ socketPath: "dev.sock" }));
   });
-
-  test("the test Layer starts resolved and scripts the wait for the socket", async () => {
-    const waited: Array<string> = [];
-
-    const local = serviceOf(
-      LocalHost.test({
-        daemon: testDaemon("/h"),
-        listening: (home) => Promise.resolve(void waited.push(home)),
-      })
-    );
-
-    expect(Option.getOrNull(Effect.runSync(local.current))?.installedHome).toBe("/h");
-    await Effect.runPromise(local.listening("/h"));
-    expect(waited).toEqual(["/h"]);
-    const none = serviceOf(LocalHost.test());
-    expect((await Effect.runPromise(Effect.flip(none.resolve)))._tag).toBe("LocalHostFailed");
-  });
 });

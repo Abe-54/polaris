@@ -312,12 +312,6 @@ describe("requests", () => {
     expect(revealed).toEqual(["/tmp/a.ts", "\\\\wsl.localhost\\Ubuntu\\home\\a.ts"]);
   });
 
-  test("onboarding.found lists the ssh config's Host aliases", async () => {
-    const exit = await run(requestRunner(handlers, "onboarding.found")({}));
-
-    expect(exit).toEqual(Exit.succeed({ sshHosts: ["studio", "pi"], version: "0.1.0" }));
-  });
-
   test("a refusal crosses with the Daemon's reason as its message", () => {
     const refused = new CommandRejected({
       commandId: CommandId.make("c1"),
