@@ -66,12 +66,14 @@ native.each(["busy JS", "native block"])(
       const script = join(root, "target.cjs");
       const trigger = join(root, "block");
       const active = join(root, "active");
+      const watchdogGone = join(root, "watchdog-gone");
       await writeFile(
         script,
         `const fs = require('node:fs');
+process.on('worker', (w) => w.once('exit', () => fs.writeFileSync(${JSON.stringify(watchdogGone)}, '1')));
 setInterval(() => { if (fs.existsSync(${JSON.stringify(trigger)})) {
 fs.unlinkSync(${JSON.stringify(trigger)}); fs.writeFileSync(${JSON.stringify(active)}, '1');
-${mode === "busy JS" ? "const end=Date.now()+4000; while(Date.now()<end) Math.sqrt(Math.random());" : "require('node:child_process').execSync('sleep 4');"}
+${mode === "busy JS" ? "const end=Date.now()+1500; while(Date.now()<end) Math.sqrt(Math.random());" : "require('node:child_process').execSync('sleep 1.5');"}
 } }, 20);`
       );
       const child = await spawnNode(registry, script, "ignore");
@@ -97,7 +99,8 @@ ${mode === "busy JS" ? "const end=Date.now()+4000; while(Date.now()<end) Math.sq
 
         if (mode === "busy JS") expect(await capture.profile).toContain('"nodes"');
         await registry.close();
-        await Bun.sleep(1800);
+        // The watchdog thread is the only agent code in the target; once it exits nothing can listen.
+        await until(async () => ((await exists(watchdogGone)) ? true : null));
         await noListener();
         expect(child.exitCode).toBeNull();
       } finally {
@@ -113,16 +116,17 @@ native(
   () =>
     scratch(async (root, registry) => {
       const script = join(root, "server.cjs");
+      const retitled = join(root, "retitled");
       // next@16.3.8 start-server.js:180 does `process.title = \`next-server (v16.3.8)\`` at load.
       await writeFile(
         script,
-        "setTimeout(() => { process.title = 'next-server (v16.3.8)'; }, 200); setInterval(() => {}, 1000);"
+        `setTimeout(() => { process.title = 'next-server (v16.3.8)'; require('node:fs').writeFileSync(${JSON.stringify(retitled)}, '1'); }, 200); setInterval(() => {}, 1000);`
       );
       const child = await spawnNode(registry, script, "ignore");
 
       try {
         await until(() => registry.get(TEST_SESSION, child.pid));
-        await Bun.sleep(500);
+        await until(async () => ((await exists(retitled)) ? true : null));
 
         let refusal: string | null = null;
 

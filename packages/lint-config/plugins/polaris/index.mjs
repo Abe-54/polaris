@@ -1,6 +1,8 @@
 // oxlint JS plugin: Polaris's own rules, shared by every workspace.
 // See packages/lint-config/README.md.
 
+import { noFixedSleep } from "./fixedSleep.mjs";
+
 const MAX_PROSE_LINES = 2;
 
 // Pointer lines carry no prose, so they don't count toward the cap.
@@ -162,6 +164,7 @@ function returnsNonCleanup(callback) {
 export default {
   meta: { name: "polaris" },
   rules: {
+    "no-fixed-sleep": noFixedSleep,
     "no-long-comment": {
       meta: {
         type: "suggestion",

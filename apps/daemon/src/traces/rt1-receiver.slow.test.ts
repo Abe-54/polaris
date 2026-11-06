@@ -8,54 +8,33 @@ import { Effect, Schema } from "effect";
 import { sessionTraceEnvironment } from "./environment.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { TraceTokenVault } from "./tokens.ts";
-import { postTraces, TEST_SESSION, TEST_WORKSPACE, withTraceFixture } from "./testing.ts";
+import { postTraces, TEST_SESSION, TEST_WORKSPACE, until, withTraceFixture } from "./testing.ts";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** An unauthenticated local process: no token, a path that 404s, and a body dripped below idleTimeout. */
+/** An unauthenticated local process: no token, a path that 404s, and a body that never arrives. */
 const slowPost = (port: number): Promise<Socket> =>
   new Promise((resolve, reject) => {
     const socket = connect(port, "127.0.0.1", () => {
       socket.write(
-        `POST /not-otlp HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n`
+        `POST /not-otlp HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n`,
+        () => resolve(socket)
       );
-      resolve(socket);
     });
 
     socket.on("error", reject);
   });
 
-test(
-  "an unauthenticated local process holding two slow bodies cannot keep every exporter out",
-  () =>
-    withTraceFixture(async (f) => {
-      let running = true;
-      const sockets = new Set<Socket>();
+test("an unauthenticated local process holding two slow bodies cannot keep every exporter out", () =>
+  withTraceFixture(async (f) => {
+    const sockets = await Promise.all([slowPost(f.port), slowPost(f.port)]);
 
-      // Bun closes each slow request after ~10-12 s; the attacker simply reconnects.
-      const hold = async () => {
-        while (running) {
-          const socket = await slowPost(f.port);
-          sockets.add(socket);
-          await new Promise((resolve) => socket.once("close", resolve));
-          sockets.delete(socket);
-        }
-      };
-
-      void hold();
-      void hold();
-
-      try {
-        await sleep(15_000);
-        expect((await postTraces(f.endpoint!)).status).toBe(200);
-      } finally {
-        running = false;
-
-        for (const socket of sockets) socket.destroy();
-      }
-    }),
-  30_000
-);
+    try {
+      // Answered after the slow requests, so the receiver has seen both before the exporter posts.
+      expect((await fetch(f.endpoint!)).status).toBe(405);
+      expect((await postTraces(f.endpoint!)).status).toBe(200);
+    } finally {
+      for (const socket of sockets) socket.destroy();
+    }
+  }));
 
 test("closing a Harness scope (dormancy, graceful Daemon shutdown) keeps an active session's endpoint", () =>
   withTraceFixture(async (f) => {
@@ -113,9 +92,12 @@ test("the receiver binds once the port is freed after a conflict", async () => {
   await withTraceFixture(
     async (f) => {
       await holder.stop(true);
-      await sleep(3000);
-      const page = await Effect.runPromise(f.runtime.setup(TEST_SESSION));
-      seen = page.availability._tag;
+
+      await until(async () => {
+        seen = (await Effect.runPromise(f.runtime.setup(TEST_SESSION))).availability._tag;
+
+        return seen === "Listening";
+      });
     },
     { port, owner: async () => null }
   );

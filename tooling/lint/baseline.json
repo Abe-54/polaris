@@ -1,4 +1,213 @@
 {
   "$comment": "Existing lint violations, per file and rule. `bun run lint` fails when a count goes up; `bun run lint:baseline` lowers them. Never raise a count by hand: fix the code. See packages/lint-config/README.md.",
-  "violations": {}
+  "violations": {
+    "apps/daemon/src/engine/Engine.autoArchive.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/engine/Engine.shellCommand.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/engine/Engine.subagents.test.ts": {
+      "polaris/no-fixed-sleep": 4
+    },
+    "apps/daemon/src/files/FileSearch.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/files/search/watch.slow.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/files/write.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/git/watch.slow.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/harness/availability/AvailabilityRpcs.slow.test.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "apps/daemon/src/harness/claude/ClaudeDriver.e2e.test.ts": {
+      "polaris/no-fixed-sleep": 4
+    },
+    "apps/daemon/src/harness/claude/plan.e2e.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/harness/claude/readOnly.e2e.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/harness/claude/tracePermissions.e2e.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/harness/codex/windowsServer.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/hostStats/transport.test.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "apps/daemon/src/languages/go/goPhp.live.testing.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/languages/install/performance.testing.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/languages/runtime/bench.testing.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/languages/runtime/fake-server.testing.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "apps/daemon/src/languages/runtime/lifecycleDemand.slow.test.ts": {
+      "polaris/no-fixed-sleep": 4
+    },
+    "apps/daemon/src/linkedDevices/wake.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/mcp/tools/traceCapture.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/mcp/tools/traces.performance.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/presence/presence.test.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "apps/daemon/src/push/hold.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/push/push.e2e.slow.test.ts": {
+      "polaris/no-fixed-sleep": 9
+    },
+    "apps/daemon/src/resources/lostExit.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/secrets/sessionFiles.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/service/handoff-start.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/service/launchd.e2e.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/service/supervisor.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/service/upgrade.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/terminal/handoff.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/traces/admission.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/traces/attach/lifecycle.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/traces/forwarding.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/traces/forwardQueue.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/traces/profiles/regressions.slow.test.ts": {
+      "polaris/no-fixed-sleep": 4
+    },
+    "apps/daemon/src/transport/byteStreams.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/transport/byteStreamsReset.test.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "apps/daemon/src/transport/deadline.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/transport/transport.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/transport/windowsPipe/client.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/usage/UsageIndex.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/verification/findings.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/daemon/src/voice/voice.socket.slow.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/desktop/src/main/hostAddress/server.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/desktop/src/renderer/features/data/sql/useCatalog.test.tsx": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/editor/lsp/adapters.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/editor/lsp/completionResolve.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/editor/refactors/evidence.testing.tsx": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/commandCard.test.tsx": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/terminal/runtime.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/routes/navigation.test.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "apps/mobile/scripts/composer.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/mobile/scripts/relay.e2e.slow.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "apps/mobile/src/newSession/draftWriter.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "apps/relay/src/live.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "packages/bench/src/proc.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/bench/src/sampler.test.ts": {
+      "polaris/no-fixed-sleep": 2
+    },
+    "packages/client/src/client.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/client/src/defect.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/client/src/presence.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/client/src/rpc.test.ts": {
+      "polaris/no-fixed-sleep": 3
+    },
+    "packages/lint-config/plugins/polaris/fixedSleep.mjs": {
+      "anti-slop/no-runtime-typeof": 3,
+      "anti-slop/require-readable-spacing": 1
+    },
+    "packages/protocol/src/wire.test.ts": {
+      "polaris/no-fixed-sleep": 5
+    },
+    "packages/protocol/src/wireLimits.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/sdk/src/daemon.testing.ts": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/ui/src/components/polaris/state-icon.test.tsx": {
+      "polaris/no-fixed-sleep": 1
+    },
+    "packages/visualization/src/frame/document.test.ts": {
+      "polaris/no-fixed-sleep": 1
+    }
+  }
 }

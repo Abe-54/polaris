@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Schema } from "effect";
 import { bundledRegisterPath } from "./assets.ts";
 import { prepareAutoInstrumentation } from "./index.ts";
+import { until } from "../testing.ts";
 
 // Real Node children with the real bundled preload; the "Polaris" and "vendor" ends are counters.
 const daemonPackage = join(import.meta.dir, "../../../package.json");
@@ -212,7 +213,9 @@ for (const scenario of missed)
 
     const before = vendor.names.length;
     const run = await node(["app.cjs"], cwd, { ...source, ...result.environment });
-    await Bun.sleep(1200);
+    // The app has exited: an export sent twice is already in the socket and arrives within a tick.
+    await until(() => vendor.names.length > before);
+    await Bun.sleep(50);
 
     expect({ code: run.code, vendor: vendor.names.slice(before) }).toEqual({
       code: 0,
@@ -276,7 +279,9 @@ test("finding P3-3: an inherited preload from another Daemon build exports each 
 
   const before = polaris.names.length;
   const run = await node(["fetch.mjs"], checkout, { ...source, ...result.environment });
-  await Bun.sleep(1200);
+  // The app has exited: an export sent twice is already in the socket and arrives within a tick.
+  await until(() => polaris.names.length > before);
+  await Bun.sleep(50);
 
   expect({
     code: run.code,

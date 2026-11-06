@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { Schema } from "effect";
 
 const OXLINT = join(import.meta.dir, "../../../node_modules/.bin/oxlint");
@@ -85,6 +87,65 @@ describe("custom oxlint plugins", () => {
 
       expect(diagnostics.filter((d) => !d.filename.endsWith("long-comment.ts"))).toEqual([]);
       expect(diagnostics).toHaveLength(4);
+    },
+    SPAWN_TIMEOUT_MS
+  );
+
+  test(
+    "polaris/no-fixed-sleep reports fixed sleeps over 50 ms, outside races and TestClock",
+    () => {
+      const lines = lintFixtures("polaris")
+        .filter((d) => d.code === "polaris(no-fixed-sleep)")
+        .map((d) => `${d.filename}:${d.labels?.[0]?.span.line ?? 0}`)
+        .sort();
+
+      // A multi-line sleep reports on its first line; the silent function's lines never report.
+      const reported = [12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26, 27, 28];
+
+      expect(lines).toEqual(
+        [
+          "fixtures/fixed-sleep-testclock.testing.ts:10",
+          ...reported.map((line) => `fixtures/fixed-sleep.testing.ts:${line}`),
+        ].sort()
+      );
+    },
+    SPAWN_TIMEOUT_MS
+  );
+
+  test(
+    "polaris/no-fixed-sleep applies to test files and test helpers only",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "no-fixed-sleep-"));
+      const config = join(import.meta.dir, "polaris/test/fixtures.oxlintrc.json");
+
+      const files = [
+        "a.test.ts",
+        "b.slow.test.ts",
+        "c.test.tsx",
+        "d.testing.ts",
+        "testing.ts",
+        "testing/fake.ts",
+        "src/daemon.ts",
+        "src/fixture.tsx",
+        "src/contest.ts",
+      ];
+
+      for (const file of files) {
+        mkdirSync(dirname(join(root, file)), { recursive: true });
+        writeFileSync(join(root, file), "export const pause = () => Bun.sleep(1000);\n");
+      }
+
+      const run = Bun.spawnSync([OXLINT, "-c", config, "--format", "json", "."], { cwd: root });
+      const report = Schema.decodeUnknownSync(Schema.fromJsonString(Report))(run.stdout.toString());
+
+      expect(report.diagnostics.map((d) => relative(".", d.filename)).sort()).toEqual([
+        "a.test.ts",
+        "b.slow.test.ts",
+        "c.test.tsx",
+        "d.testing.ts",
+        "testing.ts",
+        "testing/fake.ts",
+      ]);
     },
     SPAWN_TIMEOUT_MS
   );

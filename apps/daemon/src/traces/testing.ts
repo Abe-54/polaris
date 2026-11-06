@@ -213,6 +213,16 @@ export const withTraceFixture = async (
   }
 };
 
+/** Polls until a condition holds; fails the test if it never does. */
+export const until = async (condition: () => boolean | Promise<boolean>, ms = 5000) => {
+  const deadline = Date.now() + ms;
+
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error("condition not reached");
+    await Bun.sleep(20);
+  }
+};
+
 export const postTraces = (endpoint: string, data: typeof ExportTraces.Type = traceFixture()) =>
   fetch(`${endpoint}/v1/traces`, {
     method: "POST",

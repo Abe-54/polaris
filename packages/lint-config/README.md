@@ -17,6 +17,7 @@ All at `error`. Type-aware rules run through `oxlint-tsgolint`, which uses the T
 - **`max-lines`**: 750 per file, blank lines skipped, comments counted.
 - **`sonarjs/cognitive-complexity`**: 15 per function.
 - **`polaris/no-long-comment`**: at most two lines of prose per comment.
+- **`polaris/no-fixed-sleep`** (`plugins/polaris/fixedSleep.mjs`): in test files and test helpers (`*.test.*`, `*.testing.*`, `testing.ts`, `testing/`), no fixed sleep over 50 ms. See below.
 - **`polaris/await-expect-promise`**: an `expect(…).rejects` / `.resolves` statement must be awaited. bun types the matcher as `void`, so write `await Promise.resolve(expect(p).rejects.toThrow(…))`; unawaited, the assertions after it run before the promise settles.
 - **`polaris/effect-cleanup-return`**: a `useEffect` / `useLayoutEffect` / `useInsertionEffect` callback is never `async` and has a block body, unless its expression body is a function, an identifier (a cleanup) or `void …`. React calls whatever an effect returns as its cleanup; Chromium's scroll methods return a Promise though the DOM types say `void`, so `() => el.scrollIntoView()` threw on unmount and blanked the window (ENG-756). Write `{ return subscribe(); }` when the call returns a cleanup.
 - **anti-slop**: every generic rule, the native companion `oxc/no-accumulating-spread`, and every Effect rule.
@@ -63,6 +64,20 @@ A "comment" is a block comment, or an unbroken run of `//` lines that each own t
 JSDoc (`/** … */`) documents an API surface and is exempt. Trailing comments (code before them on the line) are never grouped or reported. A hashbang is not a comment.
 
 Fixing a violation: if the comment explains **why**, write an ADR and leave a pointer; if it explains **what**, make the code say it (rename, extract); if it warns about a **trap at this call site**, keep it, in two lines. `MAX_PROSE_LINES` is the knob; raising it is a decision about the codebase, not a workaround.
+
+## `polaris/no-fixed-sleep` (`plugins/polaris/fixedSleep.mjs`)
+
+A fixed sleep in a test is slow when it's long enough and flaky when it isn't. Wait on a condition (poll, an event, a `Deferred`), or use `TestClock` for time the code under test measures.
+
+It reports a sleep whose duration is a literal or a `const` in the same file (`60 * 1000`, the longer branch of `a ? 500 : 10`, `"2 seconds"`, `Duration.seconds(2)`) above `MAX_SLEEP_MS` (50):
+
+- `Bun.sleep`, `Bun.sleepSync`, `Effect.sleep`;
+- `sleep(n)`, `delay(n)` and `setTimeout(n)` (`node:timers/promises`), and any local helper that passes its first parameter to a sleep, whatever its name;
+- `new Promise((r) => setTimeout(r, n))`, when the timer is all the executor does.
+
+These don't count: `Effect.sleep` in a file that imports `TestClock`, a sleep directly inside `Promise.race`/`any` or `Effect.race`/`raceAll`/`raceFirst` (it bounds a wait), and a timer that rejects or schedules work.
+
+It can't see an imported constant, a computed duration, an aliased helper or `Effect.delay`. Proving that something does not happen sometimes needs a real wait; keep those at 50 ms or under, or disable the line with the reason.
 
 ## `sonarjs/cognitive-complexity` (`plugins/sonarjs/index.mjs`)
 
