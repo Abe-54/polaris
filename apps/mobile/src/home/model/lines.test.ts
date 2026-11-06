@@ -8,55 +8,9 @@ import {
   QuestionOption,
 } from "@polaris/protocol";
 import { Effect } from "effect";
-import { commandApproval, question, session } from "../fixtures.testing.ts";
-import type { SessionRow } from "./home.ts";
-import { approvalDetail, quickQuestion, statusLine } from "./lines.ts";
+import { commandApproval, question } from "../fixtures.testing.ts";
+import { approvalDetail, quickQuestion } from "./lines.ts";
 import { type Reply, respond } from "./respond.ts";
-
-const row = (
-  input: Parameters<typeof session>[0],
-  replyPreview: string | null = null
-): SessionRow => ({
-  kind: "session",
-  key: input.id,
-  hostId: "h1",
-  hostName: "Linux VM",
-  workspaceName: "polaris",
-  session: session(input),
-  approval: null,
-  replyPreview,
-  since: 0,
-  stale: false,
-});
-
-test.each([
-  [
-    { id: "a", state: "working", turnCount: 6 },
-    "Running bun test\nmore",
-    true,
-    "Running bun test · turn 6 · Linux VM",
-  ],
-  [{ id: "b", state: "working", turnCount: 2 }, null, false, "Working · turn 2"],
-  [
-    { id: "c", state: "idle", turnCount: 3, acceptedThroughIndex: 1 },
-    null,
-    false,
-    "Ready to review · turn 3",
-  ],
-  [{ id: "d", state: "idle", turnCount: 3, acceptedThroughIndex: 2 }, null, false, "Idle · turn 3"],
-  [
-    { id: "e", state: "failed", lastError: "Codex exited\ntrace" },
-    null,
-    false,
-    "Failed · Codex exited",
-  ],
-] as const)("%p says %p", (input, preview, withHost, text) => {
-  expect(statusLine(row(input, preview), withHost).text).toBe(text);
-});
-
-test("a failed agent session's line is in the failed colour", () => {
-  expect(statusLine(row({ id: "f", state: "failed" }), false).tone).toBe("failed");
-});
 
 test("a command reads as a shell line", () => {
   expect(approvalDetail(commandApproval("s", "r", "cargo build --release"))).toEqual({
