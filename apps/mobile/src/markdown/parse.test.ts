@@ -173,27 +173,21 @@ describe("while streaming", () => {
     "| a | b |\n|---|--:|\n| 1 | 2 |\n\n---\n\nDone, see [ref].\n\n[ref]: https://x.dev\n",
   ].join("");
 
-  test("growing a message a few characters at a time ends where a single parse does", () => {
-    let parsed = parseAfter(null, "");
+  test.each([1, 3])(
+    "growing a message %i characters at a time matches a fresh parse at every step and the end",
+    (stride) => {
+      let parsed = parseAfter(null, "");
 
-    for (let end = 1; end <= DOCUMENT.length; end += 3)
-      parsed = parseAfter(parsed, DOCUMENT.slice(0, end));
+      for (let end = 1; end <= DOCUMENT.length; end += stride) {
+        const text = DOCUMENT.slice(0, end);
 
-    parsed = parseAfter(parsed, DOCUMENT);
+        parsed = parseAfter(parsed, text);
+        expect({ text, blocks: parsed.blocks }).toEqual({ text, blocks: blocks(text) });
+      }
 
-    expect(parsed.blocks).toEqual(parseAfter(null, DOCUMENT).blocks);
-  });
-
-  test("every intermediate step matches a fresh parse of the same text", () => {
-    let parsed = parseAfter(null, "");
-
-    for (let end = 1; end <= DOCUMENT.length; end += 1) {
-      const text = DOCUMENT.slice(0, end);
-
-      parsed = parseAfter(parsed, text);
-      expect({ text, blocks: parsed.blocks }).toEqual({ text, blocks: blocks(text) });
+      expect(parseAfter(parsed, DOCUMENT).blocks).toEqual(blocks(DOCUMENT));
     }
-  });
+  );
 
   test("settled blocks are kept as they were, so their views don't redraw", () => {
     const before = parseAfter(null, "# Plan\n\nFirst point.\n\nSecond");
