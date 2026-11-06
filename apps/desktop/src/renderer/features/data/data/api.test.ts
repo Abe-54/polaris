@@ -37,27 +37,32 @@ const users = new TableDetail({
   rowEstimate: 3,
 });
 
-test("a described table crosses IPC as a TableDetail, so the Table tab reads its rows", async () => {
+// IPC is a structured clone: the class's prototype doesn't survive it.
+test.each<
+  [
+    string,
+    TableDetail | SchemaTree,
+    Parameters<typeof liveDataApi.describe>[1],
+    typeof TableDetail | typeof SchemaTree,
+  ]
+>([
+  [
+    "a described table crosses IPC as a TableDetail, so the Table tab reads its rows",
+    users,
+    { source: "polaris.sqlite", table: "users" },
+    TableDetail,
+  ],
+  [
+    "a schema tree crosses IPC as a SchemaTree, so the SQL catalog loads",
+    new SchemaTree({ loadedAt: "2026-11-02T00:00:00Z", schemas: [], truncatedTables: 0 }),
+    { source: "web/app" },
+    SchemaTree,
+  ],
+])("%s", async (_case, answer, input, decoded) => {
   const bridge = installFakeBridge();
 
-  // IPC is a structured clone: the class's prototype doesn't survive it.
-  bridge.answerOk("data.describe", structuredClone(users));
-  const result = await liveDataApi.describe(at, { source: "polaris.sqlite", table: "users" });
+  bridge.answerOk("data.describe", structuredClone(answer));
+  const result = await liveDataApi.describe(at, input);
 
-  expect(result.ok && result.value instanceof TableDetail).toBe(true);
-});
-
-test("a schema tree crosses IPC as a SchemaTree, so the SQL catalog loads", async () => {
-  const bridge = installFakeBridge();
-
-  const tree = new SchemaTree({
-    loadedAt: "2026-11-02T00:00:00Z",
-    schemas: [],
-    truncatedTables: 0,
-  });
-
-  bridge.answerOk("data.describe", structuredClone(tree));
-  const result = await liveDataApi.describe(at, { source: "web/app" });
-
-  expect(result.ok && result.value instanceof SchemaTree).toBe(true);
+  expect(result.ok && result.value instanceof decoded).toBe(true);
 });

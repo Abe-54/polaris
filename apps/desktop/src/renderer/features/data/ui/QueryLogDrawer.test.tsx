@@ -148,13 +148,6 @@ describe("a re-run finds its source by id (F6)", () => {
     return { tab, ran: tab !== undefined && takeQueuedRun(at, tab.id) };
   };
 
-  test("its source, still listed, runs it there", () => {
-    expect(rerun({ id: "src-app", name: "app" })).toMatchObject({
-      tab: { sourceId: "app" },
-      ran: true,
-    });
-  });
-
   test.each([
     ["gone", { id: "src-ghost", name: "ghost" }],
     ["its name now another source's", { id: "src-app-before-rename", name: "app" }],

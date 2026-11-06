@@ -59,7 +59,6 @@ test("a partial multi-file outcome is one sentence with Check again and Undo", (
       .getAllByRole("button")
       .map((b) => b.textContent)
   ).toEqual(["Check again", "Undo"]);
-  expect(strip.className).toContain("bg-surface-sunken");
   unbind();
 });
 

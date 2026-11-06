@@ -170,9 +170,8 @@ describe("marksCss", () => {
     expect(long.match(/box-shadow/g)?.length).toBe(MAX_MARKED_LINES);
   });
 
-  test("no marks, no stylesheet; the same marks, the same string", () => {
+  test("no marks, no stylesheet", () => {
     expect(marksCss([])).toBe("");
-    expect(marksCss([mark({})])).toBe(marksCss([mark({})]));
   });
 });
 

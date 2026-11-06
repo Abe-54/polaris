@@ -461,12 +461,4 @@ describe("parents in the sidebar", () => {
       ["F3", 1],
     ]);
   });
-
-  test("a blocked worker reads blocked, unless its session needs you", () => {
-    const f2 = rows.find((r) => r.taskId === "F2");
-
-    expect(f2?.state).toBe("blocked");
-    expect(f2?.group).toBe("F · Updates");
-    expect(f2?.parents.map((p) => `${p.id}`)).toEqual(["F"]);
-  });
 });

@@ -75,25 +75,30 @@ describe("selectors", () => {
     expect(selectorFor("[data-testid=cancel]")).toBe('button[data-testid="cancel"]');
   });
 
-  test("a repeated element is numbered under its nearest ancestor with an id", () => {
-    document.body.innerHTML = `
-      <ul id="todos"><li class="item">a</li><li class="item">b</li><li class="item">c</li></ul>
-      <ul><li class="item">d</li><li class="item">e</li></ul>`;
+  test.each([
+    [
+      "a repeated element is numbered under its nearest ancestor with an id",
+      `<ul id="todos"><li class="item">a</li><li class="item">b</li><li class="item">c</li></ul>
+      <ul><li class="item">d</li><li class="item">e</li></ul>`,
+      "#todos li:nth-child(2)",
+      "#todos > li.item:nth-of-type(2)",
+    ],
+    [
+      "build-generated class names are left out, so the selector survives a rebuild",
+      `<section><p class="css-1x2y3z lead">one</p></section><section><p>two</p></section>`,
+      "p.lead",
+      "p.lead",
+    ],
+    [
+      "a duplicate id isn't trusted",
+      `<div><span id="dup">a</span></div><p><span id="dup">b</span></p>`,
+      "p > span",
+      "p > span",
+    ],
+  ])("%s", (_case, html, target, selector) => {
+    document.body.innerHTML = html;
 
-    expect(selectorFor("#todos li:nth-child(2)")).toBe("#todos > li.item:nth-of-type(2)");
-  });
-
-  test("build-generated class names are left out, so the selector survives a rebuild", () => {
-    document.body.innerHTML = `
-      <section><p class="css-1x2y3z lead">one</p></section><section><p>two</p></section>`;
-
-    expect(selectorFor("p.lead")).toBe("p.lead");
-  });
-
-  test("a duplicate id isn't trusted", () => {
-    document.body.innerHTML = `<div><span id="dup">a</span></div><p><span id="dup">b</span></p>`;
-
-    expect(selectorFor("p > span")).toBe("p > span");
+    expect(selectorFor(target)).toBe(selector);
   });
 });
 

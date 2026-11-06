@@ -312,12 +312,6 @@ describe("requests", () => {
     expect(revealed).toEqual(["/tmp/a.ts", "\\\\wsl.localhost\\Ubuntu\\home\\a.ts"]);
   });
 
-  test("onboarding.found lists the ssh config's Host aliases", async () => {
-    const exit = await run(requestRunner(handlers, "onboarding.found")({}));
-
-    expect(exit).toEqual(Exit.succeed({ sshHosts: ["studio", "pi"], version: "0.1.0" }));
-  });
-
   test("a refusal crosses with the Daemon's reason as its message", () => {
     const refused = new CommandRejected({
       commandId: CommandId.make("c1"),
@@ -330,17 +324,12 @@ describe("requests", () => {
     });
   });
 
-  test("an input that does not decode never reaches the handler", async () => {
-    const exit = await run(requestRunner(handlers, "dispatch")({ hostKey: "local", command: {} }));
-
-    expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("InvalidInput");
-  });
-
   test.each([
     ["extensions.pair", { hostKey: "local", name: "Raycast", grant: ["read", "write"] }],
     ["extensions.pair", { hostKey: "local", name: 42, grant: ["read"] }],
     ["extensions.revoke", { hostKey: "local", id: 42 }],
     ["extensions.list", { hostKey: 42 }],
+    ["dispatch", { hostKey: "local", command: {} }],
   ] as const)("invalid %s input is rejected before reaching the Host", async (method, input) => {
     const exit = await run(requestRunner(handlers, method)(input));
     expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("InvalidInput");

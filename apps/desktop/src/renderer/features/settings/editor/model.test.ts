@@ -43,9 +43,22 @@ describe("languageRows", () => {
     expect(row("gopls").state).toBe("Couldn't download gopls");
   });
 
-  test("a server on Polaris's own Node waits for its download, not for the Host's node", () => {
+  test.each([
+    [
+      "a server on Polaris's own Node waits for its download, not for the Host's node",
+      "vscode-langservers-extracted",
+      "html",
+      "Not downloaded yet · vscode-langservers-extracted arrives with your first .html file",
+    ],
+    [
+      "TypeScript 7 is a native binary, so a Host without Node still has it ready",
+      "typescript-language-server",
+      "typescript-go",
+      "Ready · uses each project's TypeScript once you trust it",
+    ],
+  ])("%s", (_case, toolId, rowId, state) => {
     const withoutNode = facts().map((fact) =>
-      fact.toolId === "vscode-langservers-extracted"
+      fact.toolId === toolId
         ? {
             ...fact,
             prerequisites: [
@@ -58,37 +71,12 @@ describe("languageRows", () => {
         : fact
     );
 
-    const html = languageRows(catalog, withoutNode, {
+    const row = languageRows(catalog, withoutNode, {
       host: "this Mac",
       downloadAutomatically: true,
-    }).find((r) => r.id === "html");
+    }).find((r) => r.id === rowId);
 
-    expect(html?.state).toBe(
-      "Not downloaded yet · vscode-langservers-extracted arrives with your first .html file"
-    );
-  });
-
-  test("TypeScript 7 is a native binary, so a Host without Node still has it ready", () => {
-    const withoutNode = facts().map((fact) =>
-      fact.toolId === "typescript-language-server"
-        ? {
-            ...fact,
-            prerequisites: [
-              {
-                ...missingCargo,
-                requirement: { ...missingCargo.requirement, id: "node", executable: "node" },
-              },
-            ],
-          }
-        : fact
-    );
-
-    const ts = languageRows(catalog, withoutNode, {
-      host: "this Mac",
-      downloadAutomatically: true,
-    }).find((r) => r.id === "typescript-go");
-
-    expect(ts?.state).toBe("Ready · uses each project's TypeScript once you trust it");
+    expect(row?.state).toBe(state);
   });
 
   test("an open row's parts come only from the host's facts", () => {

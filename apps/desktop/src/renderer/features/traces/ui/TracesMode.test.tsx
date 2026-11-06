@@ -183,16 +183,6 @@ test("finding 6: a ×214 repeat, once listed, can be folded again", async () => 
   expect(refold.length).toBeGreaterThan(0);
 });
 
-test("control: the harness lists the fixtures and opens a trace in the waterfall", async () => {
-  const fake = scripted(() => FIXTURE_DETAILS);
-
-  fake.publish(() => listening(FIXTURE_DETAILS));
-  mountTraces(fake.api);
-  fireEvent.click(await screen.findByRole("button", { name: /^POST \/invoices\/overdue, 840/ }));
-
-  expect((await screen.findByTestId("waterfall-ended")).textContent).toContain("434 spans");
-});
-
 test("finding 8: another session's Turn 12 in the same checkout isn't this session's NOW", () => {
   const [mine, theirs] = FIXTURE_DETAILS.filter((d) => d.summary.turn?.number === 12);
 

@@ -30,27 +30,25 @@ test("second preview joins the live context with only didClose/didOpen, becomes 
   expect(f.service.releases).toBe(1);
 });
 
-for (const reason of ["tsconfig change", "Trust change"]) {
-  test(`${reason} replacement invalidates discovery before the next file opens`, async () => {
-    const f = fixture();
+test("a replaced context invalidates discovery before the next file opens", async () => {
+  const f = fixture();
 
-    try {
-      const a = f.open("a.ts");
-      await f.settled(a);
-      f.replace(a);
-      await f.settled(a);
-      const start = f.requests.length;
-      const b = f.open("b.ts");
-      await f.settled(b);
-      expect(
-        f.requests.slice(start).filter((method) => method === "languages.discover")
-      ).toHaveLength(1);
-      expect(b.entry()?.features.options.providers()[0]?.context.generation).toBe(2);
-    } finally {
-      f.coordinator.dispose();
-    }
-  });
-}
+  try {
+    const a = f.open("a.ts");
+    await f.settled(a);
+    f.replace(a);
+    await f.settled(a);
+    const start = f.requests.length;
+    const b = f.open("b.ts");
+    await f.settled(b);
+    expect(
+      f.requests.slice(start).filter((method) => method === "languages.discover")
+    ).toHaveLength(1);
+    expect(b.entry()?.features.options.providers()[0]?.context.generation).toBe(2);
+  } finally {
+    f.coordinator.dispose();
+  }
+});
 
 test("provider override refreshes Settings and discovery, while nested directories discover independently", async () => {
   const f = fixture();

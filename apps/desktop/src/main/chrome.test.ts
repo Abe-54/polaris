@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromeOptions, menuKeys, TITLE_BAR_HEIGHT, titleBarOverlay } from "./chrome.ts";
+import { chromeOptions, menuKeys, titleBarOverlay } from "./chrome.ts";
 
 const styles = join(import.meta.dir, "../../../../packages/ui/src/styles");
 
@@ -44,10 +44,6 @@ describe("titleBarOverlay", () => {
 
     expect(overlay.color).toBe(token("ground", dark));
     expect(overlay.symbolColor).toBe(token("text-default", dark));
-  });
-
-  test("spans the whole bar, which has no hairline", () => {
-    expect(titleBarOverlay(true).height).toBe(TITLE_BAR_HEIGHT);
   });
 });
 

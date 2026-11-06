@@ -94,32 +94,36 @@ test("a tool's native Windows image path is absolute and labels its filename", a
 });
 
 test.each([
-  ["drive-letter path", "C:/Users/Developer/shots/strip.png"],
-  ["backslash path", "C:\\Users\\Developer\\shots\\strip.png"],
-  ["file URL", "file:///C:/Users/Developer/shots/strip.png"],
-])("a Windows %s displays the image from its absolute Host path", async (_, source) => {
-  const bridge = hostWith(png(8, 8));
-  const view = render(message(`![strip](${source})`, freshHost(), "D:\\work\\repo"));
-
-  await settle();
-
-  expect(bridge.sent("files.read").map((input) => input.path)).toEqual([
+  ["C:/Users/Developer/shots/strip.png", "D:\\work\\repo", "C:/Users/Developer/shots/strip.png"],
+  [
+    "C:\\Users\\Developer\\shots\\strip.png",
+    "D:\\work\\repo",
     "C:/Users/Developer/shots/strip.png",
-  ]);
-  expect(view.getByRole("img", { name: "strip" }).getAttribute("src")).toStartWith("blob:");
-});
-
-test.each([
-  ["<C:\\Users\\Example User\\shots\\strip.png>", "C:/Users/Example User/shots/strip.png"],
-  ["file:///C:/Users/Example%20User/shots/strip.png", "C:/Users/Example User/shots/strip.png"],
-  [".\\shots\\strip.png", "D:/work/repo/shots/strip.png"],
-])("Windows image path %s resolves spaces and separators", async (source, path) => {
+  ],
+  [
+    "file:///C:/Users/Developer/shots/strip.png",
+    "D:\\work\\repo",
+    "C:/Users/Developer/shots/strip.png",
+  ],
+  [
+    "<C:\\Users\\Example User\\shots\\strip.png>",
+    "D:\\work\\repo\\",
+    "C:/Users/Example User/shots/strip.png",
+  ],
+  [
+    "file:///C:/Users/Example%20User/shots/strip.png",
+    "D:\\work\\repo\\",
+    "C:/Users/Example User/shots/strip.png",
+  ],
+  [".\\shots\\strip.png", "D:\\work\\repo\\", "D:/work/repo/shots/strip.png"],
+])("a Windows image at %s under %s displays from %s on the Host", async (source, root, path) => {
   const bridge = hostWith(png(8, 8));
+  const view = render(message(`![strip](${source})`, freshHost(), root));
 
-  render(message(`![strip](${source})`, freshHost(), "D:\\work\\repo\\"));
   await settle();
 
   expect(bridge.sent("files.read").map((input) => input.path)).toEqual([path]);
+  expect(view.getByRole("img", { name: "strip" }).getAttribute("src")).toStartWith("blob:");
 });
 
 test.each(["file://server/share/strip.png", "javascript:alert(1)"])(

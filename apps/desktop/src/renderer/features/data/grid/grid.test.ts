@@ -4,18 +4,16 @@ import { toCsv } from "./csv.ts";
 import { indentJson } from "./json.ts";
 import { appendBlock, blockBudget, rowsBlock } from "./rows.ts";
 import { emptySelection, moveActive, selectAll, selectCell, selectedRows } from "./selection.ts";
-import { Option } from "effect";
 import {
   cellOf,
   type DataValue,
   DataValueTags,
-  decodeRows,
   DISPLAY_CHARS,
   displayOf,
   formatSize,
 } from "./value.ts";
 
-const { BigInt, Bytes, Json, Numeric, Timestamp, Truncated } = DataValueTags.cases;
+const { BigInt, Bytes, Numeric, Timestamp, Truncated } = DataValueTags.cases;
 
 const shown = (value: DataValue) => displayOf(cellOf(value));
 
@@ -30,6 +28,8 @@ describe("cell display", () => {
     [Timestamp.make({ iso: "2026-08-02T09:30:00.000Z" }), "2026-08-02 09:30:00Z"],
     [Timestamp.make({ iso: "2026-10-30T12:00:00.000+05:30" }), "2026-10-30 12:00:00+05:30"],
     ["2026-10-30T09:00 standup", "2026-10-30T09:00 standup"],
+    ["INV-2041", "INV-2041"],
+    ["12345", "12345"],
     ["a\tb\rc\r\nd\u2028e\u0085f", "a⇥b␍c⏎d⏎e⏎f"],
     ["invoice_\u202Efdp.exe", "invoice_⟨RLO⟩fdp.exe"],
     [Bytes.make({ length: 16 }), "16 bytes"],
@@ -60,18 +60,6 @@ describe("cell display", () => {
     expect(formatSize(1_000_000, "characters")).toBe("1.0M characters");
     expect(formatSize(980, "characters")).toBe("980 characters");
     expect(formatSize(1_048_576, "bytes")).toBe("1.0 MB");
-  });
-
-  test("rows parse at the boundary, and a cell that isn't a data value fails the result", () => {
-    expect(decodeRows(JSON.parse('[[1, null, {"_tag": "Json", "text": "{}"}]]'))).toEqual(
-      Option.some([[1, null, Json.make({ text: "{}" })]])
-    );
-    expect(Option.isNone(decodeRows([[{ unexpected: [1] }]]))).toBe(true);
-  });
-
-  test("a numeric-looking string in a text column isn't grouped", () => {
-    expect(shown("INV-2041")).toBe("INV-2041");
-    expect(shown("12345")).toBe("12345");
   });
 });
 

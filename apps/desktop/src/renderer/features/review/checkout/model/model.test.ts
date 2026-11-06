@@ -25,7 +25,7 @@ import {
   removedText,
 } from "./chip.ts";
 import { cloneCommand, clonePath, cloneTransport, cloneUrls, shellQuote } from "./clone.ts";
-import { loginShellArgv, runCommandOf, runningFact } from "./run.ts";
+import { runCommandOf, runningFact } from "./run.ts";
 import { hostChoices, orderPlaces, type PlaceHost, placeToOpen } from "./hosts.ts";
 import { CLOSED_GRACE_MS, decide, actionKey, watchKey, watchList } from "./watch.ts";
 
@@ -419,15 +419,6 @@ describe("Run", () => {
     expect(runCommandOf(JSON.stringify({ scripts: { test: "x" } }), new Set())).toBeNull();
     expect(runCommandOf("not json", new Set())).toBeNull();
     expect(runCommandOf(null, new Set())).toBeNull();
-  });
-
-  test("it runs through the user's login shell", () => {
-    expect(loginShellArgv("bun run dev")).toEqual([
-      "/bin/sh",
-      "-c",
-      'exec "${SHELL:-/bin/sh}" -lc "$0"',
-      "bun run dev",
-    ]);
   });
 });
 

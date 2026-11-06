@@ -398,29 +398,15 @@ describe("merging: the head branch afterwards", () => {
     expect(branch.back).toBe(null);
   });
 
-  test("kept: the default branch", async () => {
+  test.each<["default" | "protected" | "fork", (h: ReturnType<typeof open>) => void]>([
+    ["default", (h) => h.fake.setRepo(REPO, { defaultBranch: "deps/parser-4.2" })],
+    ["protected", (h) => h.fake.protectBranch(REPO, "deps/parser-4.2")],
+    ["fork", (h) => void (pullOf(h, 44).isCrossRepository = true)],
+  ])("kept: the %s branch", async (reason, arrange) => {
     const h = open();
 
-    h.fake.setRepo(REPO, { defaultBranch: "deps/parser-4.2" });
-    expect(await branchOf(h)).toEqual({ kind: "kept", name: "deps/parser-4.2", reason: "default" });
-  });
-
-  test("kept: a protected branch", async () => {
-    const h = open();
-
-    h.fake.protectBranch(REPO, "deps/parser-4.2");
-    expect(await branchOf(h)).toEqual({
-      kind: "kept",
-      name: "deps/parser-4.2",
-      reason: "protected",
-    });
-  });
-
-  test("kept: a fork the account can't write to", async () => {
-    const h = open();
-
-    pullOf(h, 44).isCrossRepository = true;
-    expect(await branchOf(h)).toEqual({ kind: "kept", name: "deps/parser-4.2", reason: "fork" });
+    arrange(h);
+    expect(await branchOf(h)).toEqual({ kind: "kept", name: "deps/parser-4.2", reason });
   });
 
   test("GitHub deletes it itself when the repository says so", async () => {

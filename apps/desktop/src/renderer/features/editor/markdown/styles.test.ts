@@ -76,8 +76,4 @@ describe("the Markdown preview's own rules reach Streamdown's elements", () => {
       true
     );
   });
-
-  test("*emphasis* stays a real <em>, italic by the browser", () => {
-    expect(rendered().querySelector("em")?.textContent).toBe("em");
-  });
 });

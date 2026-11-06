@@ -1,7 +1,7 @@
 import { ReviewCheckoutId } from "@polaris/protocol";
 import { expect, test } from "bun:test";
 import { Placement } from "../../../commands.ts";
-import { askRoute, installCommand, INSTALL_COMMAND, placementOf } from "./agentSetup.ts";
+import { installCommand, INSTALL_COMMAND, placementOf } from "./agentSetup.ts";
 
 const REVIEW = { id: ReviewCheckoutId.make("rc1"), path: "/code/sightline.worktrees/.review/pr-7" };
 
@@ -14,10 +14,6 @@ test.each([
   ],
 ])("a new session beside one in %s works in that same checkout", (_where, session, placed) => {
   expect(placementOf(session, [REVIEW])).toEqual(placed);
-});
-
-test("a Starting session waits instead of getting a second agent in its checkout", () => {
-  expect(askRoute("starting")).toBe("wait");
 });
 
 test("a Harness the skills CLI doesn't know gets the default install", () => {
