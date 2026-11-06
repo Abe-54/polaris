@@ -102,7 +102,7 @@ This section describes `.github/workflows/ci.yml` and `nightly.yml`. When it dis
 
 ### Required lane
 
-The checks that must pass to merge. The `CI` job sums them up: it passes only if every job it counts passed or was skipped by scope.
+The checks that must pass to merge. The `CI` job sums them up: it passes only if every job in this table passed or was skipped by scope. It doesn't wait for a macOS job.
 
 On a pull request, CI selects by what the change affects (`turbo query affected` over the merge commit, which includes dependents). A change to `bun.lock`, `package.json`, `turbo.json`, `tsconfig.base.json`, `patches/`, `tooling/` or `.github/` runs everything, and so does every push to main.
 
@@ -115,9 +115,9 @@ On a pull request, CI selects by what the change affects (`turbo query affected`
 | Quint spec and trace validation | Ubuntu | `packages/spec/`, `apps/daemon/src/engine/`, `store/` or `verification/`, or `packages/client/src/resume.ts` changed |
 | Bench (memory and start-up modules gate; latency and CPU only report) | Ubuntu | the daemon, client, protocol or SDK is affected |
 | Desktop budgets | Ubuntu | the desktop app or the daemon is affected |
-| Daemon build, smokes (Linux x64 and arm64, Windows with its pipe), Windows service end to end | macOS for the build, then each platform | the daemon or client is affected, or `scripts/build-daemon.ts` changed |
+| Daemon build (every target but darwin), smokes (Linux x64 and arm64, Windows with its pipe), Windows service end to end | Ubuntu for the build, then each platform | the daemon or client is affected, or `scripts/build-daemon.ts` changed |
 
-**macOS** runs its tests and platform checks on a pull request, where they only report; on a push to main and in the nightly they count. Two exceptions on a pull request: the daemon build runs on macOS and counts, because the smokes need it, and the `CI` job doesn't report until the macOS jobs finish, so a queue for macOS runners holds it back even though their results don't count.
+**macOS** runs its tests, platform checks and darwin daemon build on a pull request, where they only report, often after `CI` has. On a push to main the `CI (macOS)` job counts them, so a red one turns the run red and files a `ci-red` issue; the nightly counts its macOS tests too. `CI` itself never includes them, on main or on a pull request, so check the run, not only `CI`, when you read main's state.
 
 ### Report lane
 
@@ -171,7 +171,7 @@ The nightly's bypass job lists each merge to main from the last day with that li
 
 ### A red main or nightly
 
-A job that fails on a push to main or in the nightly files a rolling `ci-red` issue in Linear: one open issue per failing job, titled `CI red: <workflow> / <job>`. A repeat failure comments on the open issue, and so does a recovery. Nothing closes the issue for you; close it once the job is fixed. If the job failed on a flake, quarantine the test.
+A job that fails, times out or is cancelled on its own on a push to main or in the nightly files a rolling `ci-red` issue in Linear: one open issue per failing job, titled `CI red: <workflow> / <job>`. Cancelling a whole run files nothing, since `ci-red` is cancelled with it. A repeat failure comments on the open issue, and so does a recovery. Nothing closes the issue for you; close it once the job is fixed. If the job failed on a flake, quarantine the test.
 
 ## Borrowed code
 
