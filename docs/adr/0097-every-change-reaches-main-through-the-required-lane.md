@@ -50,9 +50,9 @@ this records why.
   `ci-red` and repeats the shared steps.
 - **A job no runner acquired has no result, so it is neither red nor green.** GitHub cancels such a
   job with no steps and the annotation `The job was not acquired by Runner`. From 2026-10-26 to
-  2026-11-06 that hit 8 CI runs on main (6 of the 70 that finished, 2 cancelled whole), 2 of 4
-  nightlies and 13 of 39 finished PR runs, 46 jobs in all, and a job took a median of 20 min and a p90
-  of 33 to be cancelled. Steps
+  2026-11-06 that hit 9 CI runs on main (7 of the 71 that finished, 2 cancelled whole), 2 of 4
+  nightlies and 15 of 41 finished PR runs, 49 jobs in all, and a job took a median of 20 min and a p90
+  of 38 to be cancelled. Steps
   count alone can't tell: a job timeout (run 40980865529) also has none, so the annotation decides
   and a job that ran steps can't claim it. `CI (macOS)` then skips rather than fails, since short of
   cancelling the run a job has no other conclusion to take, and on a push to main nothing else skips
@@ -60,10 +60,11 @@ this records why.
   counts as cancelled.
 - **Main re-runs those jobs once, and only when nothing else is red.** This isn't the retry the
   quarantine rules out: no step ran, so nothing can turn green that had failed. GitHub's re-run takes
-  every failed job, though, so any other red job blocks it. All 8 CI runs above had another red job,
-  so none would have re-run, while 1 of the 2 nightlies would; main was red for other reasons then,
-  and the next push runs every macOS job again. One re-run, not more, for two reasons: of the 204
-  macOS jobs queued in the 20 min after such a cancel, 187 got a runner, and a run restarted with
+  every failed job, though, so any other red job blocks it. 8 of the 9 CI runs above had another red job,
+  so they wouldn't re-run, and the next push runs every macOS job again. The ninth, 42259595632, is
+  the case this exists for: one job with no runner turned `CI (macOS)` red with no test failed. 1 of
+  the 2 nightlies would re-run too. One re-run, not more, for two reasons: of the 207
+  macOS jobs queued in the 20 min after such a cancel, 189 got a runner, and a run restarted with
   `GITHUB_TOKEN` may not fire `workflow_run` again, so only the first re-run can be counted on.
   `ci-rerun.yml` is its own workflow because a run can't re-run itself before it finishes.
 - **A PR's report-only macOS jobs run only when its own files need them.** GitHub has no queue

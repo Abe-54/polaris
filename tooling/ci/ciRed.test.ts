@@ -253,6 +253,17 @@ describe("real runs", () => {
     );
   });
 
+  test("42259595632: capacity alone turned main red; now it's no result and a re-run", async () => {
+    const checks = (await checksFrom(real("main-capacity-alone"))).filter(
+      (check) => check.name !== "CI (macOS)"
+    );
+
+    expect(named(checks, NO_RUNNER)).toEqual(["Test Daemon 2/3 (macos-15)"]);
+    expect(macosResultOf(checks)).toBe("no-result");
+    expect(decideRerun(checks, 1).kind).toBe("rerun");
+    expect(plan(run, checks, [])).toEqual([]);
+  });
+
   test("40980865529: a job timeout cancelled with no steps stays red", async () => {
     const checks = await checksFrom(real("main-job-timeout-no-steps"));
 

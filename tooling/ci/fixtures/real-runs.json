@@ -1759,5 +1759,414 @@
         }
       ]
     }
+  },
+  "main-capacity-alone": {
+    "run": 42259595632,
+    "attempt": 1,
+    "jobs": {
+      "total_count": 32,
+      "jobs": [
+        {
+          "id": 128035731754,
+          "name": "Platform checks (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128035731754",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128035732141,
+          "name": "Platform checks (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128035732141",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128035732226,
+          "name": "Scope",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128035732226",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128035732251,
+          "name": "Lint, typecheck, licences",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128035732251",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631082,
+          "name": "Spec (Quint)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631082",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631119,
+          "name": "Build the Daemon",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631119",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631171,
+          "name": "Spec trace validation, Apalache",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631171",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631178,
+          "name": "Build the Daemon (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631178",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631294,
+          "name": "Desktop budgets (memory, Workspace switch, frames)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631294",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631296,
+          "name": "Test Daemon 1/3 (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631296",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631330,
+          "name": "Test Daemon 2/3 (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631330",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631348,
+          "name": "Test other packages (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631348",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631356,
+          "name": "Test spec replays (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631356",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631375,
+          "name": "Daemon benchmarks run 1",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631375",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631384,
+          "name": "Test other packages (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631384",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631419,
+          "name": "Windows service end to end",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631419",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631426,
+          "name": "Daemon benchmarks run 3",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631426",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631429,
+          "name": "Test Daemon 3/3 (macos-15)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631429",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631454,
+          "name": "Test Daemon 2/3 (macos-15)",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631454",
+          "steps": []
+        },
+        {
+          "id": 128036631470,
+          "name": "Test Daemon 3/3 (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631470",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631504,
+          "name": "Test Daemon 1/3 (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631504",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631508,
+          "name": "Test Daemon 1/3 (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631508",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631543,
+          "name": "Daemon benchmarks run 2",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631543",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631616,
+          "name": "Test Daemon 3/3 (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631616",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128036631645,
+          "name": "Test Daemon 2/3 (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128036631645",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128038640583,
+          "name": "Smoke-test windows-x64",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128038640583",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128038640657,
+          "name": "Smoke-test linux-arm64",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128038640657",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128038640763,
+          "name": "Smoke-test linux-x64",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128038640763",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128040124899,
+          "name": "Daemon benchmarks (quick; memory gated)",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128040124899",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128041957292,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128041957292",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128088961769,
+          "name": "CI (macOS)",
+          "status": "completed",
+          "conclusion": "failure",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128088961769",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        },
+        {
+          "id": 128089006464,
+          "name": "ci-red",
+          "status": "completed",
+          "conclusion": "success",
+          "html_url": "https://github.com/luxdotdev/polaris/actions/runs/42259595632/job/128089006464",
+          "steps": [
+            {
+              "name": "Set up job"
+            }
+          ]
+        }
+      ]
+    },
+    "annotations": {
+      "128036631454": [
+        {
+          "annotation_level": "failure",
+          "message": "The job was not acquired by Runner of type hosted even after multiple attempts"
+        },
+        {
+          "annotation_level": "notice",
+          "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times."
+        },
+        {
+          "annotation_level": "notice",
+          "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times."
+        },
+        {
+          "annotation_level": "notice",
+          "message": "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times."
+        }
+      ]
+    }
   }
 }
