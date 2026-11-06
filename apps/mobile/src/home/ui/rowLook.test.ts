@@ -68,6 +68,11 @@ describe("metaLine (MX-I)", () => {
       { lead: { text: "Ready to review", tone: "default" }, rest: "turn 3" },
     ],
     [
+      "done with every turn accepted is idle, not ready to review",
+      row({ id: "s", state: "idle", turnCount: 3, acceptedThroughIndex: 2 }),
+      { lead: { text: "Idle", tone: "default" }, rest: "turn 3" },
+    ],
+    [
       "failed leads with Failed, then the error's first line",
       row({ id: "s", state: "failed", lastError: "exit 1 in bun test\nstack" }),
       { lead: { text: "Failed", tone: "failed" }, rest: "exit 1 in bun test" },

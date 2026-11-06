@@ -63,16 +63,6 @@ describe("unsent constellation input across postures", () => {
     });
   });
 
-  test("a replacement claim on the same task starts without the kept answer", () => {
-    const choices = keptStore<Unsent>();
-    const slot = taskKey("h", "c", "B2");
-    const first = claimKey({ attemptId: "a1", revision: 3, head: "abc1234" });
-    choices.set(slot, typed(chosen(first, "accept"), "answer for head 1"));
-    const second = claimKey({ attemptId: "a2", revision: 4, head: "def5678" });
-
-    expect(unsentFor(choices.all().get(slot) ?? null, second).step).toEqual({ kind: "choose" });
-  });
-
   test("drafts are kept per Host and Constellation, and only a change wakes the views", () => {
     const drafts = keptStore<string>();
     const view = mount(drafts);

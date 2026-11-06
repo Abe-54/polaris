@@ -1,70 +1,14 @@
 /**
- * What each Home row says under its title, and how an approval is asked: concrete lines
- * (product-design, rule/say-what-happened), glossary words lowercase.
+ * How a Home row asks for an approval: concrete lines (product-design, rule/say-what-happened),
+ * glossary words lowercase.
  */
 import type { ApprovalRequest } from "@polaris/protocol";
 import { Match } from "effect";
 import type { Session } from "../feed/fold.ts";
-import type { SessionRow } from "./home.ts";
-
-export type Tone = "subtle" | "failed" | "needs-you";
-
-export interface Line {
-  readonly text: string;
-  readonly tone: Tone;
-}
-
-const turnOf = (session: Session): number => session.currentUserTurn?.number ?? session.turnCount;
-
-const firstLine = (text: string | null): string | null => {
-  const line = text
-    ?.split("\n")
-    .find((part) => part.trim() !== "")
-    ?.trim();
-
-  return line === undefined || line === "" ? null : line;
-};
 
 /** A "Ready to review" session: a Turn after the last accepted one. */
 export const hasUnreviewedTurns = (session: Session) =>
   session.turnCount > 0 && (session.acceptedThroughIndex ?? -1) < session.turnCount - 1;
-
-const join = (...parts: ReadonlyArray<string | null>) =>
-  parts.filter((part): part is string => part !== null && part !== "").join(" · ");
-
-const idleWords = (session: Session) => (hasUnreviewedTurns(session) ? "Ready to review" : "Idle");
-
-/** The second line of a working or recent row. `withHost` adds the Host when there are several. */
-export const statusLine = (row: SessionRow, withHost: boolean): Line => {
-  const { session } = row;
-  const host = withHost ? row.hostName : null;
-  const turn = session.turnCount > 0 ? `turn ${turnOf(session)}` : null;
-
-  return Match.value(session.state).pipe(
-    Match.when("failed", () => ({
-      text: join("Failed", firstLine(session.lastError), host),
-      tone: "failed" as const,
-    })),
-    Match.when("limited", () => ({
-      text: join("At its usage limit", host),
-      tone: "subtle" as const,
-    })),
-    Match.when("needs-you", () => ({
-      text: join("Needs you", turn, host),
-      tone: "needs-you" as const,
-    })),
-    Match.whenOr("starting", "working", () => ({
-      text: join(firstLine(row.replyPreview) ?? "Working", turn, host),
-      tone: "subtle" as const,
-    })),
-    Match.when("in-terminal", () => ({
-      text: join("In the terminal", turn, host),
-      tone: "subtle" as const,
-    })),
-    Match.when("dormant", () => ({ text: join("Dormant", turn, host), tone: "subtle" as const })),
-    Match.orElse(() => ({ text: join(idleWords(session), turn, host), tone: "subtle" as const }))
-  );
-};
 
 /** The yellow line above an approval's detail: what the agent wants. */
 export const askLine = (approval: ApprovalRequest): string =>
