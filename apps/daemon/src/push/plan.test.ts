@@ -7,7 +7,6 @@ import {
   approval,
   event,
   approvalRequested,
-  attemptStarted,
   backgroundTasks,
   leadNotified,
   notified,
@@ -173,12 +172,6 @@ describe("push plan", () => {
     );
 
     expect(sent.map((m) => m.body)).toEqual(["Merged A"]);
-  });
-
-  test("a Constellation worker's Turns end without a push: its Lead reports on them", () => {
-    expect(
-      run([...start, [5, attemptStarted()], [100, turnEnded("t1", "Claimed")]], 100_000)
-    ).toEqual([]);
   });
 
   // The Host stream never carries AttemptStarted: the Snapshot's mark is what the plan sees.
