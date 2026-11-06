@@ -138,7 +138,9 @@ describe("custom oxlint plugins", () => {
       const run = Bun.spawnSync([OXLINT, "-c", config, "--format", "json", "."], { cwd: root });
       const report = Schema.decodeUnknownSync(Schema.fromJsonString(Report))(run.stdout.toString());
 
-      expect(report.diagnostics.map((d) => relative(".", d.filename)).sort()).toEqual([
+      const linted = report.diagnostics.map((d) => relative(".", d.filename).replaceAll("\\", "/"));
+
+      expect(linted.sort()).toEqual([
         "a.test.ts",
         "b.slow.test.ts",
         "c.test.tsx",
