@@ -2,6 +2,7 @@
 
 Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Desktop App, and later a React Native Mobile App. Read these before changing anything:
 
+- `CONTRIBUTING.md`, before changing code: its Checks section defines the required and report lanes, test tiers, quarantine, budgets and the PR flow.
 - `CONTEXT.md`: the glossary. Use its terms exactly (Host, Daemon, Workspace, Agent Session, Turn, Session State…) in code, comments and UI copy.
 - `PRODUCT.md` and `DESIGN.md`: product truth, voice and the UI spec.
 - Any user-facing work (Paper mockups, the Desktop App, copy, brand): load the `product-design` skill (`.agents/skills/product-design/`) first.
@@ -44,7 +45,7 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
 - Tests come in two tiers (ADR 0096). A file is slow-tier, named `*.slow.test.ts`, when it runs a real Daemon process, real network or SSH, heavy real git, model-based or property runs, or Quint, or takes over 2 s; every other file is fast-tier and keeps under 2 s. The watchdog takes `--tier=fast|slow|all` (default all): pre-push runs the fast tier, CI runs both, and a run lists the fast files over budget.
 - Never use node-pty; terminals use `Bun.Terminal`.
 - **Lifecycle changes go through the state machines**, never ad-hoc `if (state === …)` code: Session States through the Agent Session machine (`apps/daemon/src/engine/session.ts`, the engine's pure decider; see its README), Connection States through `packages/client/src/connection.ts`. They use XState v6 (`xstate@6.0.0-alpha.61`, an alpha, pinned exactly): read the bundled types in `node_modules/xstate/dist/declarations` rather than v5 docs or memory. The event log stays the source of truth: a machine snapshot is always derived from folded events, never kept only in an actor. Update the model-based tests (`*.testing.ts`, `*.graph.slow.test.ts`) and the Mermaid diagrams with the machine.
-- Run `bun run typecheck && bun run test && bun run lint` before committing.
+- Before committing, run the tests for what you changed (`bun test <path>`, or `bun run --cwd <package> test` for both tiers). The hooks below run format, lint, typecheck and the fast tier; the required lane runs the rest on your PR.
 
 ## Lint and maintainability
 
@@ -64,13 +65,17 @@ Repo-wide formatting commits are listed in `.git-blame-ignore-revs`, GitHub's bl
   - `no-manual-effect-error-tag`: handle tagged errors with `Effect.catchTag`/`catchTags`, not by inspecting `_tag` in a broad catch.
   - `no-service-constructor-imports`: runtime code yields a service from its Layer instead of importing its `make…` constructor.
 
+## Pull requests
+
+Every change reaches main through a PR, so the required lane runs on it; none is pushed to main directly. `CONTRIBUTING.md`, "The pull request flow", has the merge command and the bypass line.
+
 ## Git hooks
 
 `bun install` points git at `tooling/hooks` (`core.hooksPath`, a relative path, so each checkout and worktree runs its own copy against its own `node_modules`; a checkout without dependencies installed is refused with a message).
 
 - **pre-commit**: formats fully staged files with oxfmt and restages them, only checks partially staged ones, and lints staged files through the ratchet.
 - **commit-msg**: strips `Claude-Session:` trailers and claude.ai session URLs; this repo doesn't record them.
-- **pre-push**: re-checks format and lint on the files in the pushed commits, then typechecks the changed packages and their dependents (`turbo --filter=...[base...head]`) and tests only the changed packages (`--filter=[base...head]`); dependents' tests are CI's job.
+- **pre-push**: re-checks format and lint on the files in the pushed commits, then typechecks the changed packages and their dependents (`turbo --filter=...[base...head]`) and runs only the changed packages' fast tier (`--filter=[base...head]`, `--tier=fast`); dependents' tests and the slow tier are CI's job.
 - **By hand**: `bun run quality <files…>` (fix), `--check`, `--dirty`, or `--range <a>..<b>`.
 
 Never bypass a hook with `--no-verify`. If one is broken, fix it or say so.
