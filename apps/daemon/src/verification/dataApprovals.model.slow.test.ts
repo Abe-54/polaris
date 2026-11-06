@@ -20,7 +20,7 @@ import { decideSession } from "../engine/session.ts";
 import { started } from "../data/approvals.testing.ts";
 import { ApprovalStore, targetOf } from "../data/approvalStore.ts";
 import { workingTurn } from "../store/model.ts";
-import { pbtRuns, pbtSeed } from "./pbt.ts";
+import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
 
 const source = (index: number, local = false) =>
   new DataSource({
@@ -41,111 +41,117 @@ const source = (index: number, local = false) =>
 
 const at = started.session.createdAt;
 
-test("approval target, server, denial and revocation sequences agree with an independent model", () => {
-  fc.assert(
-    fc.property(
-      fc.array(
-        fc.record({
-          target: fc.integer({ min: 0, max: 3 }),
-          session: fc.integer({ min: 0, max: 1 }),
-          action: fc.constantFrom(
-            "allow",
-            "server",
-            "once",
-            "deny",
-            "revoke",
-            "restart",
-            "local",
-            "remote",
-            "writes",
-            "writes-ask",
-            "end"
-          ),
-        }),
-        { minLength: 1, maxLength: 50 }
-      ),
-      (steps) => {
-        const db = new Database(":memory:");
-        let repository = new ApprovalStore(db);
+const RUNS = pbtRuns(100);
 
-        const records = [
-          started,
-          {
-            ...started,
-            session: new AgentSession({
-              ...Schema.decodeUnknownSync(Schema.Struct(AgentSession.fields))(started.session),
-              id: SessionId.make("model-session-2"),
-            }),
-            turns: [
-              new Turn({
-                ...Schema.decodeUnknownSync(Schema.Struct(Turn.fields))(started.turns[0]!),
-                id: TurnId.make("model-turn-2"),
-                sessionId: SessionId.make("model-session-2"),
+test(
+  "approval target, server, denial and revocation sequences agree with an independent model",
+  () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            target: fc.integer({ min: 0, max: 3 }),
+            session: fc.integer({ min: 0, max: 1 }),
+            action: fc.constantFrom(
+              "allow",
+              "server",
+              "once",
+              "deny",
+              "revoke",
+              "restart",
+              "local",
+              "remote",
+              "writes",
+              "writes-ask",
+              "end"
+            ),
+          }),
+          { minLength: 1, maxLength: 50 }
+        ),
+        (steps) => {
+          const db = new Database(":memory:");
+          let repository = new ApprovalStore(db);
+
+          const records = [
+            started,
+            {
+              ...started,
+              session: new AgentSession({
+                ...Schema.decodeUnknownSync(Schema.Struct(AgentSession.fields))(started.session),
+                id: SessionId.make("model-session-2"),
               }),
-            ],
-          },
-        ];
+              turns: [
+                new Turn({
+                  ...Schema.decodeUnknownSync(Schema.Struct(Turn.fields))(started.turns[0]!),
+                  id: TurnId.make("model-turn-2"),
+                  sessionId: SessionId.make("model-session-2"),
+                }),
+              ],
+            },
+          ];
 
-        let sequence = 0;
-        const exact = new Map<number, "approved" | "denied">();
-        const local = new Set<number>();
-        const writes = new Map<number, { local: boolean; policy: "ask" | "off" }>();
-        const servers = new Set<string>();
+          let sequence = 0;
+          const exact = new Map<number, "approved" | "denied">();
+          const local = new Set<number>();
+          const writes = new Map<number, { local: boolean; policy: "ask" | "off" }>();
+          const servers = new Set<string>();
 
-        const apply = (events: ReadonlyArray<DomainEvent>) => {
-          const envelopes = events.map(
-            (event) =>
-              new EventEnvelope({
-                event,
-                sequence: Sequence.make(++sequence),
-                occurredAt: at,
-                commandId: null,
-              })
-          );
-
-          repository.apply(envelopes, sequence);
-        };
-
-        try {
-          for (const step of steps) {
-            const target = source(step.target, local.has(step.target));
-            const key = `${target.host}/${target.user}`;
-
-            const handled = applyPolicy(
-              step.action,
-              step.target,
-              target,
-              key,
-              repository,
-              exact,
-              servers,
-              local,
-              writes
+          const apply = (events: ReadonlyArray<DomainEvent>) => {
+            const envelopes = events.map(
+              (event) =>
+                new EventEnvelope({
+                  event,
+                  sequence: Sequence.make(++sequence),
+                  occurredAt: at,
+                  commandId: null,
+                })
             );
 
-            if (step.action === "restart") repository = new ApprovalStore(db);
-            else if (!handled) {
-              records[step.session] = decideApproval(
-                records[step.session]!,
-                sequence,
-                target,
-                step.action,
-                apply,
-                repository
-              );
-              updateModelDecision(step.action, step.target, key, exact, servers);
-            }
+            repository.apply(envelopes, sequence);
+          };
 
-            checkPolicy(repository, exact, servers, local, writes);
+          try {
+            for (const step of steps) {
+              const target = source(step.target, local.has(step.target));
+              const key = `${target.host}/${target.user}`;
+
+              const handled = applyPolicy(
+                step.action,
+                step.target,
+                target,
+                key,
+                repository,
+                exact,
+                servers,
+                local,
+                writes
+              );
+
+              if (step.action === "restart") repository = new ApprovalStore(db);
+              else if (!handled) {
+                records[step.session] = decideApproval(
+                  records[step.session]!,
+                  sequence,
+                  target,
+                  step.action,
+                  apply,
+                  repository
+                );
+                updateModelDecision(step.action, step.target, key, exact, servers);
+              }
+
+              checkPolicy(repository, exact, servers, local, writes);
+            }
+          } finally {
+            db.close();
           }
-        } finally {
-          db.close();
         }
-      }
-    ),
-    { numRuns: pbtRuns(100), ...pbtSeed() }
-  );
-});
+      ),
+      { numRuns: RUNS, ...pbtSeed() }
+    );
+  },
+  pbtTimeout(RUNS, 100)
+);
 
 function decideApproval(
   record: typeof started,

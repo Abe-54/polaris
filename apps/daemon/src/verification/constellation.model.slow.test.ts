@@ -44,7 +44,7 @@ import {
 } from "./constellation.reference.testing.ts";
 import { taskData } from "../constellation/data.ts";
 import { projectTasks } from "../constellation/projections.ts";
-import { pbtRuns, pbtSeed } from "./pbt.ts";
+import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
 
 interface Step {
   command: ConstellationCommand;
@@ -365,12 +365,21 @@ const run = (operations: ReadonlyArray<number>) => {
   }
 };
 
-test("model sequences compare the real decider and fold with independent command guards and reference fold", () => {
-  fc.assert(
-    fc.property(fc.array(fc.integer({ min: 0, max: 35 }), { minLength: 20, maxLength: 100 }), run),
-    { numRuns: pbtRuns(100), ...pbtSeed() }
-  );
-});
+const RUNS = pbtRuns(100);
+
+test(
+  "model sequences compare the real decider and fold with independent command guards and reference fold",
+  () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer({ min: 0, max: 35 }), { minLength: 20, maxLength: 100 }),
+        run
+      ),
+      { numRuns: RUNS, ...pbtSeed() }
+    );
+  },
+  pbtTimeout(RUNS, 100)
+);
 
 test("model parent dependency edits preserve active rollup and gate descendants until acceptance", () => {
   run([30, 30, 0, 6, 30, 9, 1, 2, 8, 11, 1, 7, 10]);
