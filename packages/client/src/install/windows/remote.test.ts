@@ -30,48 +30,35 @@ const probeWith = (answer: Parameters<typeof fakeSsh>[0]) =>
   Effect.runPromise(probeHost("pc").pipe(Effect.provide(fakeSsh(answer)), Effect.result));
 
 describe("probeHost on a Windows Host", () => {
-  test("asks PowerShell when there is no sh", async () => {
+  test.each([
+    ["PowerShell when there is no sh", "powershell", { code: 1, stdout: "", stderr: NO_SH }],
+    [
+      "PowerShell when sh is Git for Windows'",
+      "powershell",
+      { code: 0, stdout: "os=MINGW64_NT-10.0-26200\narch=x86_64\n", stderr: "" },
+    ],
+    [
+      "cmd's PowerShell when cmd has no sh",
+      "cmd",
+      {
+        code: 9009,
+        stdout: "",
+        stderr: "'sh' is not recognized as an internal or external command,\r\n",
+      },
+    ],
+    [
+      "PowerShell when Git's sh can't run the POSIX probe",
+      "powershell",
+      { code: 1, stdout: "", stderr: "printf: usage: printf [-v var] format [arguments]\n" },
+    ],
+  ] as const)("asks %s", async (_, shell, posixAnswer) => {
     const result = await probeWith((command) =>
       command === WINDOWS_PROBE_COMMAND
-        ? { code: 0, stdout: WINDOWS_ANSWER, stderr: "" }
-        : { code: 1, stdout: "", stderr: NO_SH }
+        ? { code: 0, stdout: WINDOWS_ANSWER.replace("powershell", shell), stderr: "" }
+        : posixAnswer
     );
 
-    expect(Result.getOrUndefined(result)?.windowsShell).toBe("powershell");
-  });
-
-  test("asks PowerShell when sh is Git for Windows'", async () => {
-    const result = await probeWith((command) =>
-      command === WINDOWS_PROBE_COMMAND
-        ? { code: 0, stdout: WINDOWS_ANSWER, stderr: "" }
-        : { code: 0, stdout: "os=MINGW64_NT-10.0-26200\narch=x86_64\n", stderr: "" }
-    );
-
-    expect(Result.getOrUndefined(result)?.os).toBe("windows");
-  });
-
-  test("asks cmd's PowerShell when cmd has no sh", async () => {
-    const result = await probeWith((command) =>
-      command === WINDOWS_PROBE_COMMAND
-        ? { code: 0, stdout: WINDOWS_ANSWER.replace("powershell", "cmd"), stderr: "" }
-        : {
-            code: 9009,
-            stdout: "",
-            stderr: "'sh' is not recognized as an internal or external command,\r\n",
-          }
-    );
-
-    expect(Result.getOrUndefined(result)?.windowsShell).toBe("cmd");
-  });
-
-  test("asks PowerShell when Git's sh can't run the POSIX probe", async () => {
-    const result = await probeWith((command) =>
-      command === WINDOWS_PROBE_COMMAND
-        ? { code: 0, stdout: WINDOWS_ANSWER, stderr: "" }
-        : { code: 1, stdout: "", stderr: "printf: usage: printf [-v var] format [arguments]\n" }
-    );
-
-    expect(Result.getOrUndefined(result)?.windowsShell).toBe("powershell");
+    expect(Result.getOrUndefined(result)).toMatchObject({ os: "windows", windowsShell: shell });
   });
 
   test("a Host that is neither keeps the POSIX probe's error", async () => {

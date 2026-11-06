@@ -632,20 +632,19 @@ describe("probe libc", () => {
     return parseProbe(Bun.spawnSync(["sh", "-c", probeScript(root)]).stdout.toString());
   };
 
-  test("a glibc Host with musl's loader installed is glibc", () => {
-    const probe = probeIn(["/lib64/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"]);
+  test.each([
+    ["an x64", "x86_64", "linux-x64", ["/lib64/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"]],
+    [
+      "a Debian arm64",
+      "aarch64",
+      "linux-arm64",
+      ["/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1", "/lib/ld-musl-aarch64.so.1"],
+    ],
+  ] as const)("%s glibc Host with musl's loader installed is glibc", (_, arch, platform, files) => {
+    const probe = probeIn(files);
 
     expect(probe?.libc).toBeUndefined();
-    expect(platformFromUname("Linux", "x86_64", probe?.libc)).toBe("linux-x64");
-  });
-
-  test("a Debian arm64 Host with musl installed is glibc", () => {
-    const probe = probeIn([
-      "/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
-      "/lib/ld-musl-aarch64.so.1",
-    ]);
-
-    expect(platformFromUname("Linux", "aarch64", probe?.libc)).toBe("linux-arm64");
+    expect(platformFromUname("Linux", arch, probe?.libc)).toBe(platform);
   });
 
   test("a Host with only musl's loader is musl", () => {

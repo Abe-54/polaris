@@ -23,33 +23,33 @@ const LIST = [
 ].join("\r\n");
 
 describe("parseDistroList", () => {
-  test("reads names, states, versions and the default", () => {
-    expect(parseDistroList(LIST)).toEqual([
-      new WslDistro({ name: "Ubuntu", version: 2, state: "running", isDefault: true }),
-      new WslDistro({ name: "Debian", version: 2, state: "stopped", isDefault: false }),
-      new WslDistro({ name: "Legacy", version: 1, state: "stopped", isDefault: false }),
-      new WslDistro({ name: "docker-desktop", version: 2, state: "running", isDefault: false }),
-    ]);
-  });
-
-  test("a localized header and state still yield the name and version", () => {
-    const text =
-      "  NAME       ZUSTAND         VERSION\r\n* Ubuntu     Wird ausgeführt  2\r\n  Alt   Angehalten   1\r\n";
-
-    expect(parseDistroList(text)).toEqual([
-      new WslDistro({ name: "Ubuntu", version: 2, state: "running", isDefault: true }),
-      new WslDistro({ name: "Alt", version: 1, state: "unknown", isDefault: false }),
-    ]);
-  });
-
-  test("a BOM, LF endings and a name with a space are fine", () => {
-    expect(parseDistroList("﻿  NAME  STATE  VERSION\n  My Distro  Stopped  2\n")).toEqual([
-      new WslDistro({ name: "My Distro", version: 2, state: "stopped", isDefault: false }),
-    ]);
-  });
-
-  test("lines that aren't rows are skipped", () => {
-    expect(parseDistroList("  NAME  STATE  VERSION\n  garbage\n")).toEqual([]);
+  test.each([
+    [
+      "reads names, states, versions and the default",
+      LIST,
+      [
+        new WslDistro({ name: "Ubuntu", version: 2, state: "running", isDefault: true }),
+        new WslDistro({ name: "Debian", version: 2, state: "stopped", isDefault: false }),
+        new WslDistro({ name: "Legacy", version: 1, state: "stopped", isDefault: false }),
+        new WslDistro({ name: "docker-desktop", version: 2, state: "running", isDefault: false }),
+      ],
+    ],
+    [
+      "a localized header and state still yield the name and version",
+      "  NAME       ZUSTAND         VERSION\r\n* Ubuntu     Wird ausgeführt  2\r\n  Alt   Angehalten   1\r\n",
+      [
+        new WslDistro({ name: "Ubuntu", version: 2, state: "running", isDefault: true }),
+        new WslDistro({ name: "Alt", version: 1, state: "unknown", isDefault: false }),
+      ],
+    ],
+    [
+      "a BOM, LF endings and a name with a space are fine",
+      "﻿  NAME  STATE  VERSION\n  My Distro  Stopped  2\n",
+      [new WslDistro({ name: "My Distro", version: 2, state: "stopped", isDefault: false })],
+    ],
+    ["lines that aren't rows are skipped", "  NAME  STATE  VERSION\n  garbage\n", []],
+  ])("%s", (_, text, distros) => {
+    expect(parseDistroList(text)).toEqual(distros);
   });
 });
 
@@ -64,14 +64,29 @@ describe("discoveryOf", () => {
     );
   });
 
-  test("the stub's message is NotInstalled", () => {
-    const stub = utf16(
-      "Windows Subsystem for Linux is not installed. You can install by running 'wsl.exe --install'.\r\n"
-    );
-
-    expect(discoveryOf({ code: 1, stdout: none, stderr: stub, spawnError: null })._tag).toBe(
-      "NotInstalled"
-    );
+  test.each([
+    [
+      "the stub's message is NotInstalled",
+      {
+        code: 1,
+        stdout: none,
+        stderr: utf16(
+          "Windows Subsystem for Linux is not installed. You can install by running 'wsl.exe --install'.\r\n"
+        ),
+      },
+    ],
+    [
+      "WSL's error code reads as NotInstalled in any language",
+      {
+        code: 255,
+        stdout: utf16(
+          "Diese Anwendung erfordert die Windows-Subsystem für Linux optionale Komponente.\r\nFehlercode: Wsl/WSL_E_WSL_OPTIONAL_COMPONENT_REQUIRED\r\n"
+        ),
+        stderr: none,
+      },
+    ],
+  ])("%s", (_, output) => {
+    expect(discoveryOf({ ...output, spawnError: null })._tag).toBe("NotInstalled");
   });
 
   test.each(["en", "de"] as const)(
@@ -96,16 +111,6 @@ describe("discoveryOf", () => {
 
     expect(discoveryOf({ ...verbose, spawnError: null }, quiet)).toEqual(
       WslDiscovery.Failed({ detail: "Zugriff verweigert" })
-    );
-  });
-
-  test("WSL's error code reads as NotInstalled in any language", () => {
-    const message = utf16(
-      "Diese Anwendung erfordert die Windows-Subsystem für Linux optionale Komponente.\r\nFehlercode: Wsl/WSL_E_WSL_OPTIONAL_COMPONENT_REQUIRED\r\n"
-    );
-
-    expect(discoveryOf({ code: 255, stdout: message, stderr: none, spawnError: null })._tag).toBe(
-      "NotInstalled"
     );
   });
 

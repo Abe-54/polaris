@@ -85,32 +85,44 @@ describe("syntax-aware rows", () => {
     expect(marked(before, after)).toEqual(["new:user: 'lucas',"]);
   });
 
-  test("a rename marks the old and the new name, nothing else", () => {
-    expect(
-      marked("export function dial(host: Host) {}\n", "export function connect(host: Host) {}\n")
-    ).toEqual(["old:dial", "new:connect"]);
-  });
-
-  test("an edit in a block comment marks the words that changed", () => {
-    const before = "/**\n * Keep retrying until the host answers.\n */\nexport const x = 1;\n";
-
-    const after =
-      "/**\n * Keep retrying quietly until the host answers.\n */\nexport const x = 1;\n";
-
-    expect(marked(before, after)).toEqual(["new:quietly"]);
-  });
-
-  test("a line comment is part of its line: editing it is a change of a few words", () => {
-    expect(marked("retry(); // once\n", "retry(); // once more\n")).toEqual(["new:more"]);
-  });
-
-  test("a URL added to a multi-line template literal marks just that URL", () => {
-    const before = "const csp = `\n  default-src 'self';\n  img-src 'self';\n`;\n";
-
-    const after =
-      "const csp = `\n  default-src 'self';\n  img-src 'self' https://cdn.example;\n`;\n";
-
-    expect(marked(before, after)).toEqual(["new:https://cdn.example"]);
+  test.each([
+    [
+      "a rename marks the old and the new name, nothing else",
+      "export function dial(host: Host) {}\n",
+      "export function connect(host: Host) {}\n",
+      "a.ts",
+      ["old:dial", "new:connect"],
+    ],
+    [
+      "an edit in a block comment marks the words that changed",
+      "/**\n * Keep retrying until the host answers.\n */\nexport const x = 1;\n",
+      "/**\n * Keep retrying quietly until the host answers.\n */\nexport const x = 1;\n",
+      "a.ts",
+      ["new:quietly"],
+    ],
+    [
+      "a line comment is part of its line: editing it is a change of a few words",
+      "retry(); // once\n",
+      "retry(); // once more\n",
+      "a.ts",
+      ["new:more"],
+    ],
+    [
+      "a URL added to a multi-line template literal marks just that URL",
+      "const csp = `\n  default-src 'self';\n  img-src 'self';\n`;\n",
+      "const csp = `\n  default-src 'self';\n  img-src 'self' https://cdn.example;\n`;\n",
+      "a.ts",
+      ["new:https://cdn.example"],
+    ],
+    [
+      "JSX text edits mark words",
+      "export const A = () => <p>Hello there</p>;\n",
+      "export const A = () => <p>Hello over there</p>;\n",
+      "a.tsx",
+      ["new:over"],
+    ],
+  ])("%s", (_, before, after, path, marks) => {
+    expect(marked(before, after, path)).toEqual(marks);
   });
 
   test("a reindented block is not a change; whole new and removed lines are", () => {
@@ -124,13 +136,6 @@ describe("syntax-aware rows", () => {
       "modified",
       "added",
     ]);
-  });
-
-  test("JSX text edits mark words", () => {
-    const before = "export const A = () => <p>Hello there</p>;\n";
-    const after = "export const A = () => <p>Hello over there</p>;\n";
-
-    expect(marked(before, after, "a.tsx")).toEqual(["new:over"]);
   });
 });
 
