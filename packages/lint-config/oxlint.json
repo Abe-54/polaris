@@ -65,6 +65,7 @@
     "typescript/restrict-plus-operands": "error",
 
     "polaris/no-long-comment": "error",
+    "polaris/no-fixed-sleep": "error",
     "polaris/await-expect-promise": "error",
     "polaris/effect-cleanup-return": "error",
     "security/git-spawn": "error",
