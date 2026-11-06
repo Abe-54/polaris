@@ -7,7 +7,8 @@ name: Nightly
 #   pbt          the Daemon's property and model-based tests at 500 runs, on a random seed it prints.
 #   apalache     the spec's bounded Apalache check, which only reports in CI.
 #   bypass       merges to main in the last day whose message has `ci-bypass:`, in the summary.
-#   ci-red       a Linear issue per red job (tooling/ci/ciRed.ts); a dry run off main.
+#   ci-red       a Linear issue per red job (tooling/ci/ciRed.ts); a dry run off main. A job no runner
+#                acquired has no result and gets a re-run (ci-rerun.yml), not an issue naming a test.
 
 on:
   schedule:
@@ -200,6 +201,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

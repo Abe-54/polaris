@@ -2,6 +2,7 @@
 /**
  * Rolling ci-red issues: after a workflow run, one Linear issue per failing job (created, or
  * commented on when already open), and a comment once it recovers. Issues are never closed here.
+ * Jobs no runner acquired aren't failures: they share one issue, once no re-run is coming.
  *
  *   bun tooling/ci/ciRed.ts --workflow <name> [--ignore <job>]… [--dry-run] [--fake <fixture.json>]
  *
@@ -13,7 +14,7 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { decodeFixture, fakeFetch } from "./fake.ts";
-import { checksOf, type Fetch, type GitHubRun } from "./github.ts";
+import { checksOf, type Fetch, gitHubRunOf } from "./github.ts";
 import {
   LABEL_NAME,
   type Linear,
@@ -21,7 +22,7 @@ import {
   linearClient,
   requestToken,
 } from "./linear.ts";
-import { type Action, type Check, plan, type Run } from "./plan.ts";
+import { type Action, type Check, NO_RUNNER, plan, type Run } from "./plan.ts";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -71,16 +72,9 @@ const runOf = (env: Env, workflow: string): Run => {
     url: `${server}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`,
     sha: env.GITHUB_SHA ?? "",
     ref: env.GITHUB_REF_NAME ?? "",
+    attempt: Number(env.GITHUB_RUN_ATTEMPT ?? "1"),
   };
 };
-
-const gitHubRunOf = (env: Env): GitHubRun => ({
-  api: env.GITHUB_API_URL ?? "https://api.github.com",
-  repository: env.GITHUB_REPOSITORY ?? "",
-  runId: env.GITHUB_RUN_ID ?? "",
-  attempt: env.GITHUB_RUN_ATTEMPT ?? "1",
-  token: env.GITHUB_TOKEN ?? "",
-});
 
 const report = (checks: ReadonlyArray<Check>) => {
   const red = checks.filter(
@@ -89,7 +83,12 @@ const report = (checks: ReadonlyArray<Check>) => {
 
   console.log(red.length === 0 ? "Every check passed or was skipped." : "Not passing:");
 
-  for (const check of red) console.log(`  ${check.name}: ${check.conclusion}`);
+  for (const check of red)
+    console.log(
+      check.conclusion === NO_RUNNER
+        ? `::warning::${check.name}: no runner acquired it, so it has no result`
+        : `  ${check.name}: ${check.conclusion}`
+    );
 };
 
 /** Files, comments or (dry run) prints what this run calls for; the exit code. */

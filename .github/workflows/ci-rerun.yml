@@ -1,0 +1,41 @@
+name: CI re-run
+
+# After CI or the Nightly finishes on main, re-runs the jobs no runner acquired, once, when nothing
+# else in that attempt is red (tooling/ci/rerun.ts, ADR 0097). A workflow_run runs main's own code, so
+# this write token never meets a PR's, and a PR's runs aren't re-run: their macOS jobs only report.
+on:
+  workflow_run:
+    workflows: [CI, Nightly]
+    types: [completed]
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.4
+
+jobs:
+  rerun:
+    name: Re-run jobs no runner acquired
+    if: >-
+      ${{ github.event.workflow_run.event != 'pull_request'
+      && github.event.workflow_run.head_branch == 'main'
+      && github.event.workflow_run.conclusion != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: Re-run if nothing else is red
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: bun tooling/ci/rerun.ts --run "$RUN" --attempt "$ATTEMPT" --ignore ci-red

@@ -48,6 +48,38 @@ this records why.
   more: a second job named `CI` for each event still waits on its `needs` before it skips, then
   reports a skipped `CI`, which GitHub treats as passing; a separate workflow needs its own
   `ci-red` and repeats the shared steps.
+- **A job no runner acquired has no result, so it is neither red nor green.** GitHub cancels such a
+  job with no steps and the annotation `The job was not acquired by Runner`. From 2026-10-26 to
+  2026-11-06 that hit 9 CI runs on main (7 of the 71 that finished, 2 cancelled whole), 2 of 4
+  nightlies and 15 of 41 finished PR runs, 49 jobs in all, and a job took a median of 20 min and a p90
+  of 38 to be cancelled. Steps
+  count alone can't tell: a job timeout (run 40980865529) also has none, so the annotation decides
+  and a job that ran steps can't claim it. `CI (macOS)` then skips rather than fails, since short of
+  cancelling the run a job has no other conclusion to take, and on a push to main nothing else skips
+  it. Passing would claim a result, and failing would blame a test. Unsure stays red: without the annotations, the job
+  counts as cancelled.
+- **Main re-runs those jobs once, and only when nothing else is red.** This isn't the retry the
+  quarantine rules out: no step ran, so nothing can turn green that had failed. GitHub's re-run takes
+  every failed job, though, so any other red job blocks it. 8 of the 9 CI runs above had another red job,
+  so they wouldn't re-run, and the next push runs every macOS job again. The ninth, 42259595632, is
+  the case this exists for: one job with no runner turned `CI (macOS)` red with no test failed. 1 of
+  the 2 nightlies would re-run too. One re-run, not more, for two reasons: of the 207
+  macOS jobs queued in the 20 min after such a cancel, 189 got a runner, and a run restarted with
+  `GITHUB_TOKEN` may not fire `workflow_run` again, so only the first re-run can be counted on.
+  `ci-rerun.yml` is its own workflow because a run can't re-run itself before it finishes.
+- **A PR's report-only macOS jobs run only when its own files need them.** GitHub has no queue
+  priority, and macOS capacity is the limit rather than the org's five slots: from 17:05 to 18:35 on
+  2026-11-06, 25 to 37 macOS jobs sat queued while about two ran. Since ENG-781 PRs took 203 of 266
+  macOS runner-minutes, and main's macOS jobs waited a median of 32.7 min, p90 50.8, max 66.9 (21
+  jobs that had started; 26 more were still queued, up to 81.9 min). A two-slot FIFO replay of those
+  arrivals reproduces that (median 35.3, p90 50.7). With the gate it gives a median of 3.4 and a p90
+  of 7.2, against 2.4 and 7.0 with no PR macOS jobs at all, since 10 of those 16 PR runs drop out. It
+  does nothing when PRs touch macOS code: on 2026-11-02 it kept 12 of 13, and the median stays 19.2.
+  Over the whole period it keeps 26 of 41. Fewer shards save no runner-minutes; skipping only parts
+  that aren't affected saves about 5 of those 203; cancelling a merged PR's jobs saves about 4, and
+  would need a write token on main's run. The cost is that a Mac-only break in a file the gate misses, such as a test
+  file, first shows on main, which is where such a break already landed: 6 of the 7 macOS-only job
+  failures since 2026-11-02 were on main.
 - **The daemon build the smokes need runs on Linux; only darwin-arm64 needs macOS.** From 14
   green PR runs of 2026-11-02 to 2026-11-06, the build waited for a macOS runner 5.8 min at the
   median, 17.8 at p90 and 25.6 at most, to run for 2.4. The jobs that count finished at a
@@ -80,10 +112,13 @@ this records why.
 - A darwin build break, like a Mac-only test failure, lands on main. CI's smokes also run binaries
   cross-compiled on Linux, while a release builds on macOS, so a fault only that build has first
   shows at release.
-- A macOS job cancelled on its own now files a `ci-red` issue, as main's run 41862561967 (six macOS
-  jobs cancelled, nothing filed) should have. Queued macOS jobs were cancelled after 20 to 32 min
-  without a runner on this change's PR, so a queue can file these too. Cancelling a whole run
-  still files nothing.
+- A macOS job cancelled after a runner took it files a `ci-red` issue. One no runner acquired doesn't:
+  main's run 41862561967 (six such jobs beside a real Windows failure) now files the Windows failure
+  and one `no runner` issue naming no test. Cancelling a whole run still files nothing.
+- GitHub marks a run with a job no runner acquired as failed, whatever `CI (macOS)` says, so a count
+  of main's runs reads `CI` and `CI (macOS)`, where skipped on a push means no result.
+- Runner capacity stays GitHub's: the gate shortens main's queue, but 2026-11-04 lost all 11 macOS
+  jobs of two runs with no queue at all, and a re-run into that gets no runner either.
 - PR macOS jobs keep their place in the queue after the PR merges, and report on a closed PR.
 - The budgets (pre-commit 10 s, pre-push 90 s, the required lane 8 min) are targets that nothing
   enforces; a miss needs someone to notice it and open an issue.
