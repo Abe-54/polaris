@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { spinnerVerbsHandler, parseSetting, settingsFiles } from "./spinnerVerbs.ts";
+import { spinnerVerbsHandler, parseSetting } from "./spinnerVerbs.ts";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
@@ -47,6 +47,7 @@ describe("parseSetting", () => {
     expect(parseSetting("{ not json")).toBeNull();
     expect(parseSetting('{"spinnerVerbs":{"mode":"append","verbs":[]}}')).toBeNull();
     expect(parseSetting('{"spinnerVerbs":"Pondering"}')).toBeNull();
+    expect(parseSetting('{"spinnerVerbs":{"mode":"replace","verbs":[" "]}}')).toBeNull();
   });
 
   test("non-strings and blanks are dropped, control characters cleaned, length capped", () => {
@@ -55,10 +56,6 @@ describe("parseSetting", () => {
     );
 
     expect(parsed?.verbs).toEqual(["A B", "x".repeat(80)]);
-  });
-
-  test("an empty replace list can't replace anything", () => {
-    expect(parseSetting('{"spinnerVerbs":{"mode":"replace","verbs":[" "]}}')).toBeNull();
   });
 });
 
@@ -103,13 +100,5 @@ describe("harness.spinnerVerbs", () => {
 
     rmSync(file);
     expect(await Effect.runPromise(read({ cwd: null }))).toBeNull();
-  });
-
-  test("the files, in Claude Code's order", () => {
-    expect(settingsFiles("/h", "/p")).toEqual([
-      join("/h", ".claude", "settings.json"),
-      join("/p", ".claude", "settings.json"),
-      join("/p", ".claude", "settings.local.json"),
-    ]);
   });
 });

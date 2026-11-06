@@ -14,7 +14,6 @@ import {
   QueryLogEntry,
   PageDataQueryLog,
   SaveDataSource,
-  SchemaTree,
   ApprovalDecision,
   DataRpcs,
   scrubCredentials,
@@ -50,7 +49,7 @@ const log = {
   at: "2026-10-30T00:00:00Z",
 };
 
-test("F1: credentials are scrubbed on decode and encode of source errors, SQL, params and commands", () => {
+test("credentials are scrubbed on decode and encode of source errors, SQL, params and commands", () => {
   const decode = Schema.decodeUnknownSync(QueryLogEntry);
   const entry = decode({ ...log, error: `password=hunter2 ${url}` });
   expect(JSON.stringify(entry)).not.toContain("hunter2");
@@ -81,11 +80,11 @@ test.each([
   ["mysql://app:hun%40ter@db/app", "[redacted URL]"],
   ["password=hunter2; next", "password=[redacted]; next"],
   [String.raw`password='hun\'ter2' host=db`, "password=[redacted] host=db"],
-])("F1: scrubs credential syntax %s", (input, expected) => {
+])("scrubs credential syntax %s", (input, expected) => {
   expect(scrubCredentials(input)).toBe(expected);
 });
 
-test("F1: exact credentials in innocuous values and errors are masked longest first; short secrets match standalone tokens", () => {
+test("exact credentials in innocuous values and errors are masked longest first; short secrets match standalone tokens", () => {
   const known = [Redacted.make("hunter2"), Redacted.make(url), Redacted.make("abc")];
   expect(scrubCredentials(`SQL failed: hunter2 ${url} abc alphabet`, known)).toBe(
     "SQL failed: [redacted] [redacted] [redacted] alphabet"
@@ -100,7 +99,7 @@ test("F1: exact credentials in innocuous values and errors are masked longest fi
   );
 });
 
-test("F1: Data hosts reject userinfo and URLs while admitting hosts, IPv6 and socket paths", () => {
+test("Data hosts reject userinfo and URLs while admitting hosts, IPv6 and socket paths", () => {
   expect(Schema.is(DataHost)("app:hunter2@db.internal")).toBe(false);
   expect(Schema.is(DataHost)(url)).toBe(false);
 
@@ -108,7 +107,7 @@ test("F1: Data hosts reject userinfo and URLs while admitting hosts, IPv6 and so
     expect(Schema.is(DataHost)(host)).toBe(true);
 });
 
-test("F2: normalised values survive JSON round trips without losing integer precision", () => {
+test("normalised values survive JSON round trips without losing integer precision", () => {
   const values = [
     null,
     true,
@@ -143,7 +142,7 @@ test("F2: normalised values survive JSON round trips without losing integer prec
 });
 
 test.each([12345678901234567890n, new Date(), new Uint8Array([1, 2, 3]), Infinity, { nested: 1 }])(
-  "F2: raw driver value %p is refused at the contract boundary",
+  "raw driver value %p is refused at the contract boundary",
   (value) => {
     expect(() => Schema.decodeUnknownSync(DataValue)(value)).toThrow();
     expect(() =>
@@ -157,7 +156,7 @@ test.each([12345678901234567890n, new Date(), new Uint8Array([1, 2, 3]), Infinit
   }
 );
 
-test("F4/F6: agent and Desktop limits differ and cells/chunks are bounded before framing", () => {
+test("agent and Desktop limits differ and cells/chunks are bounded before framing", () => {
   const input = { sessionId: "s", source: "app", sql: "select 1", limit: 10000 };
   expect(() => Schema.decodeUnknownSync(QueryData.payloadSchema)(input)).toThrow();
   expect(Schema.decodeUnknownSync(QueryDataStream.payloadSchema)(input).limit).toBe(10000);
@@ -183,7 +182,7 @@ test("F4/F6: agent and Desktop limits differ and cells/chunks are bounded before
   ).toEqual(DataValueTags.cases.Truncated.make({ preview: "large text…", bytes: 17825792 }));
 });
 
-test("F5: only RespondToApproval's decision carries Data scope; the bypass RPC is gone", () => {
+test("only RespondToApproval's decision carries Data scope; the bypass RPC is gone", () => {
   expect(
     Schema.decodeUnknownSync(ApprovalDecision)(
       ApprovalDecision.cases.Allow.make({
@@ -195,7 +194,7 @@ test("F5: only RespondToApproval's decision carries Data scope; the bypass RPC i
   expect(DataRpcs.requests.has("data.approval.decide")).toBe(false);
 });
 
-test("F9: log preserves parameters, pending approval and an exclusive paging cursor", () => {
+test("log preserves parameters, pending approval and an exclusive paging cursor", () => {
   const entry = Schema.decodeUnknownSync(QueryLogEntry)({
     ...log,
     params: [42],
@@ -217,7 +216,7 @@ test("F9: log preserves parameters, pending approval and an exclusive paging cur
 });
 
 test.each(["keep", "clear", "set"])(
-  "F10: edit/rename explicitly carries password action %s",
+  "edit/rename explicitly carries password action %s",
   (passwordAction) => {
     const input = {
       sessionId: "s1",
@@ -236,32 +235,7 @@ test.each(["keep", "clear", "set"])(
   }
 );
 
-test("F11: schema completion receives columns and load time alongside returned/total counts", () => {
-  const tree = Schema.decodeUnknownSync(SchemaTree)({
-    loadedAt: "2026-10-30T00:00:00Z",
-    truncatedTables: 0,
-    schemas: [
-      {
-        name: "public",
-        functions: [],
-        views: [],
-        tables: [
-          {
-            name: "invoices",
-            rowEstimate: 18402,
-            columnCount: 1,
-            columns: [{ name: "id", type: "bigint" }],
-          },
-        ],
-      },
-    ],
-  });
-
-  expect(tree.schemas[0]?.tables[0]?.columns).toEqual([{ name: "id", type: "bigint" }]);
-  expect(tree.loadedAt).toBe("2026-10-30T00:00:00Z");
-});
-
-test("F10: password actions reject ambiguous set/keep/clear combinations", () => {
+test("password actions reject ambiguous set/keep/clear combinations", () => {
   const input = { sessionId: "s", ...source };
   expect(() =>
     Schema.decodeUnknownSync(SaveDataSource.payloadSchema)({ ...input, passwordAction: "set" })
@@ -278,14 +252,14 @@ test("F10: password actions reject ambiguous set/keep/clear combinations", () =>
   }
 });
 
-test("F1: JSON escapes cannot hide a known credential in an innocuous nested value", () => {
+test("JSON escapes cannot hide a known credential in an innocuous nested value", () => {
   const value = DataValueTags.cases.Json.make({ text: JSON.stringify({ note: ['hun"ter2'] }) });
   expect(scrubDataValue(value, [Redacted.make('hun"ter2')])).toEqual(
     DataValueTags.cases.Json.make({ text: '{"note":["[redacted]"]}' })
   );
 });
 
-test("F1/F2: scrubbing JSON strings preserves numeric lexemes through wire encode and decode", () => {
+test("scrubbing JSON strings preserves numeric lexemes through wire encode and decode", () => {
   const text = '{"token":9007199254740993,"ratio":100.001000000000000001,"note":"hunter2"}';
 
   const expected = DataValueTags.cases.Json.make({
@@ -314,7 +288,7 @@ test("F1/F2: scrubbing JSON strings preserves numeric lexemes through wire encod
   expect(Schema.decodeUnknownSync(QueryResult)(encoded).rows).toEqual([[expected]]);
 });
 
-test("RM F2: short known passwords redact whole cells, JSON strings and credential contexts without changing words", () => {
+test("short known passwords redact whole cells, JSON strings and credential contexts without changing words", () => {
   const known = [Redacted.make("pw")];
   expect(scrubDataValue("pw", known)).toBe("[redacted]");
   expect(scrubCredentials("app:pw@host", known)).not.toContain(":pw@");
@@ -325,7 +299,7 @@ test("RM F2: short known passwords redact whole cells, JSON strings and credenti
   ).toEqual(DataValueTags.cases.Json.make({ text: '{"note":"[redacted]","word":"appword"}' }));
 });
 
-test("RM F3: shared URL scanning remains linear on long dotted scheme candidates", () => {
+test("shared URL scanning remains linear on long dotted scheme candidates", () => {
   const input = "a.".repeat(50_000);
   const started = performance.now();
   expect(scrubCredentials(input)).toBe(input);

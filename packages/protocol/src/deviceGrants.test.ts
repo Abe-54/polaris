@@ -150,6 +150,6 @@ test("a Linked Device may read a constellation's stats", () => {
   expect(outcome("constellation.stats", null)).toBe("allowed");
 });
 
-test("P9-6: linked user capture follows RespondToApproval's device access", () => {
+test("linked user capture follows RespondToApproval's device access", () => {
   expect(outcome("profiles.attach", null)).toBe(outcome("dispatch", "RespondToApproval"));
 });

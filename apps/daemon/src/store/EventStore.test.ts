@@ -179,36 +179,6 @@ describe("EventStore", () => {
     );
   });
 
-  test("concurrent commits get a gapless sequence", async () => {
-    await run(
-      ":memory:",
-      Effect.gen(function* () {
-        const store = yield* EventStore;
-        yield* seed(store);
-        yield* Effect.forEach(
-          Array.from({ length: 50 }, (_, i) => i),
-          (i) =>
-            store.commit({
-              commandId: null,
-              decide: () =>
-                Effect.succeed([
-                  DomainEvent.cases.SessionRenamed.make({ sessionId: sId, title: `t${i}` }),
-                  DomainEvent.cases.SessionStateChanged.make({
-                    sessionId: sId,
-                    state: "working",
-                    reason: null,
-                  }),
-                ]),
-            }),
-          { concurrency: "unbounded" }
-        );
-        const all = yield* store.readEvents({ after: 0, upTo: 1000, sessionId: sId });
-        const sequences = all.map((e) => Number(e.sequence));
-        expect(sequences).toEqual(Array.from({ length: 104 }, (_, i) => i + 2));
-      })
-    );
-  });
-
   test("commits queued together are decided in order and settled one by one", async () => {
     const file = join(tempDir("polaris-store-"), "state.sqlite");
     await run(

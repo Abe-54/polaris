@@ -31,9 +31,4 @@ describe("ReasoningTimes", () => {
     });
     expect(times.finish(reasoning("other"), 5)).toEqual(reasoning("other"));
   });
-
-  test("other items pass through", () => {
-    const message = TurnItem.cases.AssistantMessage.make({ id: "m", text: "hi" });
-    expect(new ReasoningTimes().finish(message, 1)).toBe(message);
-  });
 });

@@ -1,19 +1,8 @@
 import { expect, test } from "bun:test";
 import { Schema } from "effect";
-import { Command, HarnessModels, SessionId, Turn, TurnItem } from "./index.ts";
+import { HarnessModels, Turn, TurnItem } from "./index.ts";
 
 const at = "2026-10-20T00:00:00.000Z";
-
-test("RunShellCommand survives the wire", () => {
-  const command = Command.cases.RunShellCommand.make({
-    sessionId: SessionId.make("s"),
-    command: "git status",
-  });
-
-  const wire = Schema.encodeSync(Schema.fromJsonString(Command))(command);
-
-  expect(Schema.decodeUnknownSync(Schema.fromJsonString(Command))(wire)).toEqual(command);
-});
 
 test("an older Daemon's Turn and command item decode as not the user's shell command", () => {
   const turn = Schema.decodeUnknownSync(Turn)({

@@ -71,7 +71,7 @@ describe("Claude Code's commands", () => {
     expect(byName("docx")).toMatchObject({ source: "plugin", plugin: "anthropic-skills" });
   });
 
-  test("Skills first, then commands, each by name", () => {
+  test("Skills come before commands; each takes the / sigil and no template", () => {
     const listed = classify(SDK, dirs);
     const firstCommand = listed.findIndex((c) => c.kind === "command");
 

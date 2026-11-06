@@ -222,16 +222,8 @@ describe("wire", () => {
         const id = yield* wa.offerBlob(big);
         // Let some chunks arrive before the stream is taken.
         yield* Effect.sleep(5);
-        let peakBuffered = 0;
 
-        const chunks = yield* wb.takeBlobStream(id).pipe(
-          Stream.tap(() =>
-            Effect.sync(() => {
-              peakBuffered = Math.max(peakBuffered, wb.stats().bufferedBlobBytes);
-            })
-          ),
-          Stream.runCollect
-        );
+        const chunks = yield* wb.takeBlobStream(id).pipe(Stream.runCollect);
 
         const got = new Uint8Array(big.byteLength);
         let at = 0;

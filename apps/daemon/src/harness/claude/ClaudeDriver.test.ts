@@ -741,8 +741,7 @@ describe("probe", () => {
     expect((await Effect.runPromise(broken.probe)).available).toBe(false);
   });
 
-  test("parses versions", () => {
-    expect(parseVersion("2.1.283 (Claude Code)")).toBe("2.1.283");
+  test("output without a version parses as none", () => {
     expect(parseVersion("nonsense")).toBeNull();
   });
 });

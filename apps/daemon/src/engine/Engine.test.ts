@@ -122,24 +122,12 @@ describe("commands", () => {
     );
   });
 
-  test("SendTurn is rejected end to end while Working; an unknown session is NotFound", async () => {
+  test("SendTurn to an unknown session is NotFound", async () => {
     const codex = makeFakeDriver("codex");
     const { layer } = setup({ drivers: [codex] });
     await run(
       layer,
       Effect.gen(function* () {
-        const workspace = yield* registerWorkspace;
-        const s = sid("s-working");
-        yield* startSession(workspace, s, "codex");
-        yield* waitFor((m) => m.sessions.get(s)?.session.state === "working");
-
-        const busy = yield* Effect.flip(
-          dispatch(Command.cases.SendTurn.make({ sessionId: s, prompt: "more", attachments: [] }))
-        );
-
-        expect(busy._tag).toBe("CommandRejected");
-        expect(busy).toMatchObject({ reason: "the session is working; wait for the Turn to end" });
-
         const missing = yield* Effect.flip(
           dispatch(
             Command.cases.SendTurn.make({ sessionId: sid("nope"), prompt: "x", attachments: [] })

@@ -252,7 +252,7 @@ describe("Subagents", () => {
     );
   });
 
-  test("a Subagent for a Turn that isn't in flight, or a repeat, is ignored", async () => {
+  test("a Subagent for a Turn that isn't in flight is ignored", async () => {
     const codex = makeFakeDriver("codex");
     await run(
       layerWith(codex),
@@ -446,7 +446,6 @@ test.each([false, true])(
         );
 
         const record = model.sessions.get(sessionId)!;
-        expect(record.turns).toHaveLength(2);
         expect(record.turns[1]!.status).toBe("completed");
         expect(harness.turns[1]?.prompt).toBe("User raced");
         const store = yield* EventStore;

@@ -25,7 +25,7 @@ describe("CodexSteers", () => {
     expect(steers.take("t1")).toEqual([]);
   });
 
-  test("a steer reported by both the response and an item is recorded once", () => {
+  test("a response pairs with its item; a second response is a new steer", () => {
     const steers = new CodexSteers();
     steers.fromItem("t1", "u1", "fix it");
     steers.fromItem("t1", "u2", "again");

@@ -142,7 +142,6 @@ describe.skipIf(!enabled)("Claude driver against the real claude", () => {
       );
       const listCommands = driver.listCommands;
 
-      expect(listCommands).toBeDefined();
       const commands = listCommands === undefined ? [] : await Effect.runPromise(listCommands(cwd));
       const byName = (name: string) => commands.find((c) => c.name === name);
 

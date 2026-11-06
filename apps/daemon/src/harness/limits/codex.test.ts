@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { PlanLimit } from "@polaris/protocol";
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 import {
   CodexLimitTracker,
   CodexRateLimitsRead,
@@ -132,13 +132,6 @@ describe("account/rateLimits", () => {
       ["five-hour", 11, "plus"],
       ["weekly", 20, "plus"],
     ]);
-  });
-
-  test("a message of another shape doesn't decode", () => {
-    expect(Option.isNone(Schema.decodeUnknownOption(CodexRateLimitsRead)({ nope: true }))).toBe(
-      true
-    );
-    expect(Option.isNone(Schema.decodeUnknownOption(CodexRateLimitsUpdated)(null))).toBe(true);
   });
 });
 

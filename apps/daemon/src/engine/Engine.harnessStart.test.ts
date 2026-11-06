@@ -73,35 +73,28 @@ const startAndFail = (
   );
 };
 
-test("a Harness that never finishes opening fails the start with a line naming it and the Host", async () => {
-  const record = await startAndFail(
-    withOpen(makeFakeDriver("codex"), () => Effect.never),
-    SessionId.make("s-never-opens")
-  );
+test.each<[string, () => FakeDriver, Layer.Layer<Checkpoints> | undefined, string]>([
+  [
+    "a Harness that never finishes opening names itself and the Host",
+    () => withOpen(makeFakeDriver("codex"), () => Effect.never),
+    undefined,
+    `Codex didn't start on ${shortHostName()} after 0 seconds. Check that \`codex --version\` runs there, then retry.`,
+  ],
+  [
+    "a Harness that crashes while opening doesn't hang",
+    () => withOpen(makeFakeDriver("codex"), () => Effect.die(new Error("spawn codex ENOENT"))),
+    undefined,
+    `Codex couldn't start on ${shortHostName()}: spawn codex ENOENT`,
+  ],
+  [
+    "a crash before the Harness opens doesn't leave it Starting",
+    () => makeFakeDriver("codex"),
+    Layer.succeed(Checkpoints)({ capture: () => Effect.die(new Error("git: index.lock exists")) }),
+    "The session couldn't start: git: index.lock exists",
+  ],
+])("%s: the start fails with its line", async (_, driver, checkpoints, lastError) => {
+  const record = await startAndFail(driver(), SessionId.make("s-start-fails"), checkpoints);
 
-  expect(record.session.lastError).toBe(
-    `Codex didn't start on ${shortHostName()} after 0 seconds. Check that \`codex --version\` runs there, then retry.`
-  );
+  expect(record.session.lastError).toBe(lastError);
   expect(record.turns[0]!.status).toBe("failed");
-});
-
-test("a Harness that crashes while opening fails the start instead of hanging", async () => {
-  const record = await startAndFail(
-    withOpen(makeFakeDriver("codex"), () => Effect.die(new Error("spawn codex ENOENT"))),
-    SessionId.make("s-open-dies")
-  );
-
-  expect(record.session.lastError).toBe(
-    `Codex couldn't start on ${shortHostName()}: spawn codex ENOENT`
-  );
-});
-
-test("a crash before the Harness opens fails the start instead of leaving it Starting", async () => {
-  const record = await startAndFail(
-    makeFakeDriver("codex"),
-    SessionId.make("s-checkpoint-dies"),
-    Layer.succeed(Checkpoints)({ capture: () => Effect.die(new Error("git: index.lock exists")) })
-  );
-
-  expect(record.session.lastError).toBe("The session couldn't start: git: index.lock exists");
 });

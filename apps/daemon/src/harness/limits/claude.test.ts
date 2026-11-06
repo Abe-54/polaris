@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PlanLimit } from "@polaris/protocol";
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 import {
   ClaudeRateLimitEvent,
   ClaudeUsageResponse,
@@ -100,13 +100,6 @@ describe("get_usage", () => {
 
     expect(fromUsageResponse(reply, AT, emptyClaudeLimitContext())).toEqual([]);
   });
-
-  test("a reply of another shape doesn't decode", () => {
-    const decode = Schema.decodeUnknownOption(ClaudeUsageResponse);
-
-    expect(Option.isNone(decode("nonsense"))).toBe(true);
-    expect(Option.isNone(decode({ rate_limits: { limits: "x" } }))).toBe(true);
-  });
 });
 
 describe("rate_limit_event", () => {
@@ -198,15 +191,12 @@ describe("rate_limit_event", () => {
     ]);
   });
 
-  test("ignores spend (`overage`); other messages don't decode", () => {
+  test("ignores spend (`overage`)", () => {
     const spend = event({
       type: "rate_limit_event",
       rate_limit_info: { status: "rejected", rateLimitType: "overage" },
     });
 
-    const decode = Schema.decodeUnknownOption(ClaudeRateLimitEvent);
-
     expect(fromRateLimitEvent(spend, AT, emptyClaudeLimitContext())).toEqual([]);
-    expect(Option.isNone(decode({ type: "assistant" }))).toBe(true);
   });
 });

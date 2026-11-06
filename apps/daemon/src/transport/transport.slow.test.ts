@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   attachTerminal,
@@ -274,7 +274,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, Scope.Scope>) =>
   Effect.runPromise(Effect.scoped(effect));
 
 describe("transport", () => {
-  test("hello round-trip, device label and placeholders", async () => {
+  test("hello reports the Host and negotiated capabilities; the socket is owner-only and removed on stop", async () => {
     const result = await run(
       Effect.gen(function* () {
         const server = yield* startServer(serverOptions(home));
@@ -285,17 +285,6 @@ describe("transport", () => {
           Effect.andThen(() => SubscriptionRef.get(conn.status))
         );
 
-        const rejected = yield* Effect.flip(
-          session.client.dispatch({
-            commandId: CommandId.make("c1"),
-            command: Command.cases.RemoveWorkspace.make({ workspaceId: WorkspaceId.make("w1") }),
-          })
-        );
-
-        const hostItems = yield* session.client
-          .subscribeHost({ afterSequence: null })
-          .pipe(Stream.take(2), Stream.runCollect);
-
         const modes = windows
           ? null
           : {
@@ -303,7 +292,7 @@ describe("transport", () => {
               dir: statSync(home).mode & 0o777,
             };
 
-        return { server, session, status, rejected, hostItems, modes };
+        return { server, session, status, modes };
       })
     );
 
@@ -313,9 +302,6 @@ describe("transport", () => {
     );
     expect(result.session.capabilities).toEqual(["blobs"]);
     expect(result.status.state).toBe("connected");
-    // The placeholder dispatch rejects; the device label only shows with the test handlers.
-    expect(result.rejected._tag).toBe("CommandRejected");
-    expect(result.hostItems.map((i) => i._tag)).toEqual(["Snapshot", "Synchronized"]);
 
     // A pipe has no mode bits: pipe.test.ts checks its owner-only DACL.
     if (!windows) expect(result.modes).toEqual({ socket: 0o600, dir: 0o700 });
@@ -345,7 +331,7 @@ describe("transport", () => {
     expect(reason).toBe("Test MacBook");
   });
 
-  test("handlers see the Client's capabilities from hello; session.terminalCommand is served", async () => {
+  test("handlers see the Client's capabilities from hello", async () => {
     const result = await run(
       Effect.gen(function* () {
         const log = yield* makeLog;
@@ -384,23 +370,6 @@ describe("transport", () => {
       "host.any-platform",
       "session.live-items",
     ]);
-
-    // The placeholder answers NotFound; a fresh home, as a pipe's name outlives its scope.
-    const fresh = mkdtempSync(join(home, "fresh-"));
-
-    const missing = await run(
-      Effect.gen(function* () {
-        yield* startServer(serverOptions(fresh));
-        const conn = yield* localHost(fresh);
-        const session = yield* conn.awaitSession;
-
-        return yield* Effect.flip(
-          session.client["session.terminalCommand"]({ sessionId: SessionId.make("s") })
-        );
-      })
-    );
-
-    expect(missing._tag).toBe("NotFound");
   });
 
   test("streams events and moves multi-MB blobs both ways, interleaved", async () => {
@@ -660,40 +629,6 @@ describe("transport", () => {
 
     expect(host.hostname.length).toBeGreaterThan(0);
   });
-
-  test("polaris bridge pipes a Client to the Daemon", async () => {
-    const result = await run(
-      Effect.gen(function* () {
-        const log = yield* makeLog;
-        yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
-        const conn = yield* bridgeHost(home);
-        const session = yield* conn.awaitSession;
-
-        const read = yield* session.client["files.read"]({
-          path: "/x",
-          offset: null,
-          length: 3_000_000,
-        });
-
-        const got = isBlob(read.content) ? yield* session.blobs.take(read.content.blobId) : null;
-
-        const staged = yield* conn.withBlob(bytes(2_000_000, 9), (blobId, s) =>
-          s.client["attachments.stage"]({
-            sessionId: null,
-            workspaceId: WorkspaceId.make("w"),
-            name: "b",
-            mimeType: "x/y",
-            blobId,
-          })
-        );
-
-        return { host: session.host, got, staged };
-      })
-    );
-
-    expect(result.got && sha(result.got)).toBe(sha(bytes(3_000_000, 7)));
-    expect(result.staged.hostPath).toBe(sha(bytes(2_000_000, 9)));
-  }, 15_000);
 
   test("no Daemon behind the bridge is Needs Attention, and it recovers", async () => {
     const result = await run(

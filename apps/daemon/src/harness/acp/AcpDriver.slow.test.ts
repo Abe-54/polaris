@@ -361,7 +361,7 @@ describe("ACP driver", () => {
     expect(declined.find((item) => item.id === "call-1")).toMatchObject({ status: "declined" });
   });
 
-  test("the permission mode lets reads (supervised) or everything (full access) through", async () => {
+  test("full access lets every permission request through", async () => {
     const read = { toolCallId: "r", title: "Read a file", kind: "read" };
 
     const agent = await start({
@@ -391,7 +391,7 @@ describe("ACP driver", () => {
     ]);
   });
 
-  test("interrupt cancels the Turn and withdraws its open approvals", async () => {
+  test("interrupt cancels the Turn", async () => {
     const agent = await start({
       prompts: [
         {

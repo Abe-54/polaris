@@ -130,7 +130,7 @@ describe("Secret Requests", () => {
     expect(loggedPayloads(filename)).not.toContain(VALUE);
   });
 
-  test("a decline saves nothing and tells the agent", async () => {
+  test("a decline tells the agent", async () => {
     const { layer } = setup();
     const S = SessionId.make("secret-declined");
 

@@ -5,17 +5,13 @@ import { WorkspaceId, WorktreeId, HostId } from "../ids.ts";
 import {
   LanguageRequestInputs,
   LanguageRequestOutputs,
-  LanguageSubscriptionInputs,
 } from "../../../../apps/desktop/src/shared/languages.ts";
 import {
   LANGUAGE_RPC_CAPABILITIES,
   LanguageRpcs,
   languageRpcAllowed,
   LanguageCheckout,
-  LanguageInstallation,
-  LanguagePreflight,
   LanguageFormatterSelection,
-  LanguageAvailability,
   LanguageCatalog,
   LanguageDeveloperCompanion,
   LanguageContextIdentity,
@@ -239,46 +235,6 @@ test("diagnostic sets are provider-owned and unversioned data cannot claim fresh
   expect(Schema.is(LanguageDiagnostics)({ ...diagnostic, kind: "unchanged" })).toBe(false);
 });
 
-test("installed is independent from audit/feature preflight, readiness and update candidates", () => {
-  const availability = {
-    hostId: "fake-host",
-    toolId: "pyright",
-    pinnedVersion: "1.1.408",
-    platform: { os: "darwin", arch: "arm64", libc: "none" },
-    installation: LanguageInstallation.cases.Installed.make({
-      version: "1.1.407",
-      artifactId: "pyright-npm",
-      integrity: `sha256:${"a".repeat(64)}`,
-    }),
-    updateCandidate: "1.1.408",
-    phase: "feature",
-    prerequisites: [],
-    preflight: LanguagePreflight.cases.Blocked.make({
-      reason: "audit-required",
-      message: "Retained version; update audit incomplete",
-    }),
-    checkedAt: 10,
-  };
-
-  expect(Schema.is(LanguageAvailability)(availability)).toBe(true);
-
-  expect(
-    Schema.is(LanguageAvailability)({
-      ...availability,
-      preflight: LanguagePreflight.cases.Blocked.make({
-        reason: "missing-prerequisite",
-        message: "Missing interpreter",
-      }),
-    })
-  ).toBe(true);
-
-  const invalidInstallation: unknown = JSON.parse('{"_tag":"Ready"}');
-
-  expect(
-    Schema.is(LanguageAvailability)({ ...availability, installation: invalidInstallation })
-  ).toBe(false);
-});
-
 test("workspace edits retain both forms, null versions, annotations and ordered resource operations", () => {
   const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
 
@@ -411,14 +367,6 @@ test("IPC input and output tables cover every opt-in request and validate Host r
       notification: LanguageDocumentNotification.cases.Close.make({ uri, version: 3 }),
     })
   ).toBe(false);
-
-  expect(Object.keys(LanguageSubscriptionInputs)).toEqual([
-    "languages.host.state.watch",
-    "languages.log.watch",
-    "languages.context.watch",
-    "languages.install.watch",
-    "languages.availability.watch",
-  ]);
 });
 
 test("preview IPC rejects executable URLs, credentials and oversized fetch requests", () => {

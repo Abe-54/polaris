@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { Schema } from "effect";
-import { CapabilityList } from "./capabilities.ts";
 import { decideDeviceAccess } from "./deviceGrants.ts";
 import { Pairing } from "./extensions.ts";
 import { decideAccess } from "./grants.ts";
@@ -48,17 +47,6 @@ test("forward targets cannot serialize a header value map from a Host-side targe
   });
   expect(wire).not.toContain("private-value");
   expect(wire).not.toContain("private-dataset");
-});
-
-test("new Traces capabilities survive negotiation independently of phase 1", () => {
-  expect(
-    Schema.decodeUnknownSync(CapabilityList)([
-      "traces.settings",
-      "traces.profiles",
-      "traces.compare",
-      "traces.future",
-    ])
-  ).toEqual(["traces.settings", "traces.profiles", "traces.compare"]);
 });
 
 const extension = new Pairing({

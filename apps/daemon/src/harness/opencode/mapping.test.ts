@@ -192,39 +192,22 @@ describe("tool parts", () => {
     });
   });
 
-  test("other tools are tool calls with their input, output and kind", () => {
-    const grep = part("grep", {
-      status: "completed",
-      input: { pattern: "x" },
-      output: "found",
-      metadata: {},
-    });
+  // An MCP server's tool isn't one OpenCode builds in, so its kind is other.
+  test.each([
+    ["grep", "search"],
+    ["paper_write_html", "other"],
+  ] as const)("%s is a tool call with its input, output and kind", (name, kind) => {
+    const input = { pattern: "x" };
 
-    expect(toolItem(grep, "/repo")).toEqual(
+    expect(
+      toolItem(part(name, { status: "completed", input, output: "found", metadata: {} }), "/repo")
+    ).toEqual(
       TurnItem.cases.ToolCall.make({
         id: "prt_1",
-        name: "grep",
-        kind: "search",
-        input: { pattern: "x" },
+        name,
+        kind,
+        input,
         output: "found",
-        status: "completed",
-      })
-    );
-  });
-
-  test("a tool OpenCode doesn't build in, such as an MCP server's, is other", () => {
-    const item = toolItem(
-      part("paper_write_html", { status: "completed", input: {}, output: "ok", metadata: {} }),
-      "/repo"
-    );
-
-    expect(item).toEqual(
-      TurnItem.cases.ToolCall.make({
-        id: "prt_1",
-        name: "paper_write_html",
-        kind: "other",
-        input: {},
-        output: "ok",
         status: "completed",
       })
     );

@@ -101,20 +101,21 @@ test("a steer's attachments reach the Harness with the text, resolved from stagi
   );
 });
 
-test("a steer with attachments is refused where the Harness can't take them mid-Turn", async () => {
-  const driver = makeFakeDriver("codex", { steer: true, steerAttachments: false });
+test.each<[string, () => FakeDriver, AttachmentId, string]>([
+  [
+    "attachments, where the Harness can't take them mid-Turn",
+    () => makeFakeDriver("codex", { steer: true, steerAttachments: false }),
+    screenshot.id,
+    "codex can't take attachments in a steer",
+  ],
+  [
+    "an attachment that isn't staged",
+    () => makeFakeDriver("claude", { steer: true }),
+    AttachmentId.make("att-gone"),
+    "unknown attachments: att-gone",
+  ],
+])("a steer with %s is refused", async (_, driver, attachment, expected) => {
+  const reason = await run(driver(), (sessionId) => refusal(sessionId, [attachment]));
 
-  const reason = await run(driver, (sessionId) => refusal(sessionId, [screenshot.id]));
-
-  expect(reason).toBe("codex can't take attachments in a steer");
-});
-
-test("a steer naming an attachment that isn't staged is refused", async () => {
-  const driver = makeFakeDriver("claude", { steer: true });
-
-  const reason = await run(driver, (sessionId) =>
-    refusal(sessionId, [AttachmentId.make("att-gone")])
-  );
-
-  expect(reason).toBe("unknown attachments: att-gone");
+  expect(reason).toBe(expected);
 });
