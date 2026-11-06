@@ -8,6 +8,8 @@ import { forwardReceived } from "./forwarding.ts";
 import { TraceStore } from "./storeService.ts";
 import { TRACE_TOKEN_PATTERN } from "./tokens.ts";
 
+const BODY_LINGER_MS = 500;
+
 /** A total deadline bounds even bodies that keep the idle timeout alive. */
 const body = async (request: Request): Promise<Uint8Array> => {
   const length = request.headers.get("content-length");
@@ -28,7 +30,6 @@ const body = async (request: Request): Promise<Uint8Array> => {
   const expired = new Promise<never>((_resolve, reject) => {
     deadline = setTimeout(() => {
       reject(new IngestError(408, "OTLP body deadline exceeded"));
-      void reader.cancel().catch(() => {});
     }, 5000);
   });
 
@@ -67,6 +68,45 @@ const refuse = (request: Request, status: number): Response => {
   void request.body?.cancel().catch(() => {});
 
   return new Response(null, { status, headers: { connection: "close" } });
+};
+
+/**
+ * Answers a body past its deadline, reading on for a bounded time first: a close with bytes
+ * unread resets the connection, and Windows then drops an answer the client hasn't read.
+ */
+const refuseExpiredBody = (request: Request, message: string): Response => {
+  const reader = request.body?.getReader();
+
+  const drain = async () => {
+    while (reader !== undefined && !(await reader.read()).done);
+  };
+
+  void drain().catch(() => {});
+  let linger: ReturnType<typeof setTimeout> | undefined;
+
+  const answer = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(message));
+      linger = setTimeout(() => {
+        controller.close();
+        void reader?.cancel().catch(() => {});
+      }, BODY_LINGER_MS);
+    },
+    cancel() {
+      clearTimeout(linger);
+      void reader?.cancel().catch(() => {});
+    },
+  });
+
+  return new Response(answer, { status: 408, headers: { connection: "close" } });
+};
+
+const refuseFailure = (request: Request, cause: unknown): Response => {
+  if (!(cause instanceof IngestError)) return refuse(request, 503);
+
+  return cause.status === 408
+    ? refuseExpiredBody(request, cause.message)
+    : refuse(request, cause.status);
 };
 
 const acknowledge = (type: string) =>
@@ -159,7 +199,7 @@ export const traceRequestHandler = (options: ReceiverOptions = {}) =>
 
         return acknowledge(type);
       } catch (cause) {
-        return refuse(request, cause instanceof IngestError ? cause.status : 503);
+        return refuseFailure(request, cause);
       } finally {
         if (admitted !== undefined) {
           tokens.delete(admitted);
