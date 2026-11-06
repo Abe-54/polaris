@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { Schema, Struct } from "effect";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -178,6 +178,12 @@ const verdict = (main: string, exitCode: number | null, stdout: string, stderr: 
   throw new Error(`quint test ${main} did not replay (exit ${exitCode}):\n${stderr}\n${stdout}`);
 };
 
+// A concurrent test's timer runs while its checks queue for the pool, so it bounds the whole file.
+setDefaultTimeout(600_000);
+
+// The child's limit starts once a pool slot is held, so it is what catches a stuck check.
+const CHECK_LIMIT_MS = 120_000;
+
 // Each `quint test` is a CPU-bound Node process, so concurrent checks share a bounded pool.
 let free = Math.max(2, Math.floor(navigator.hardwareConcurrency / 2));
 
@@ -207,7 +213,7 @@ const replay = (path: string, main: string) =>
         `--main=${main}`,
         "--backend=typescript",
       ],
-      { stdout: "pipe", stderr: "pipe" }
+      { stdout: "pipe", stderr: "pipe", timeout: CHECK_LIMIT_MS }
     );
 
     const [stdout, stderr, exitCode] = await Promise.all([

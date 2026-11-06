@@ -16,7 +16,7 @@ import { decideSession } from "../engine/session.ts";
 import { started } from "../data/approvals.testing.ts";
 import { ApprovalStore } from "../data/approvalStore.ts";
 import { workingTurn } from "../store/model.ts";
-import { pbtRuns, pbtSeed } from "./pbt.ts";
+import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
 
 const request = new ApprovalRequest({
   id: RequestId.make("write"),
@@ -188,43 +188,49 @@ class Actual {
   }
 }
 
-test("write decisions, retries and withdrawal agree with an independent one-shot model", () => {
-  fc.assert(
-    fc.property(
-      fc.array(
-        fc.constantFrom<Step>(
-          "request",
-          "allow",
-          "deny",
-          "claim",
-          "end",
-          "restart",
-          "wait",
-          "complete",
-          "unknown",
-          "fail"
-        ),
-        { minLength: 1, maxLength: 60 }
-      ),
-      (steps) => {
-        const actual = new Actual();
-        let expected: Reference = { phase: "new", active: true, claims: 0 };
+const RUNS = pbtRuns(200);
 
-        try {
-          for (const step of steps) {
-            const next = reference(expected, step);
-            const claimed = actual.step(step);
-            expect(claimed).toBe(next.claims > expected.claims);
-            expected = next;
-            expect(actual.repo.writes.find("write")?.status ?? "new").toBe(expected.phase);
-            expect(actual.record.pending.size).toBe(expected.phase === "pending" ? 1 : 0);
-            expect(expected.claims).toBeLessThanOrEqual(1);
+test(
+  "write decisions, retries and withdrawal agree with an independent one-shot model",
+  () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.constantFrom<Step>(
+            "request",
+            "allow",
+            "deny",
+            "claim",
+            "end",
+            "restart",
+            "wait",
+            "complete",
+            "unknown",
+            "fail"
+          ),
+          { minLength: 1, maxLength: 60 }
+        ),
+        (steps) => {
+          const actual = new Actual();
+          let expected: Reference = { phase: "new", active: true, claims: 0 };
+
+          try {
+            for (const step of steps) {
+              const next = reference(expected, step);
+              const claimed = actual.step(step);
+              expect(claimed).toBe(next.claims > expected.claims);
+              expected = next;
+              expect(actual.repo.writes.find("write")?.status ?? "new").toBe(expected.phase);
+              expect(actual.record.pending.size).toBe(expected.phase === "pending" ? 1 : 0);
+              expect(expected.claims).toBeLessThanOrEqual(1);
+            }
+          } finally {
+            actual.db.close();
           }
-        } finally {
-          actual.db.close();
         }
-      }
-    ),
-    { numRuns: pbtRuns(200), ...pbtSeed() }
-  );
-});
+      ),
+      { numRuns: RUNS, ...pbtSeed() }
+    );
+  },
+  pbtTimeout(RUNS, 100)
+);

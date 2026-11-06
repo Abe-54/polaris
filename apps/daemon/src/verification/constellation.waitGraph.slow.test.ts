@@ -32,7 +32,7 @@ import {
   referenceDone,
   type Reference,
 } from "./constellation.reference.testing.ts";
-import { pbtRuns, pbtSeed } from "./pbt.ts";
+import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
 
 const X = TaskId.make("X");
 
@@ -178,16 +178,22 @@ const scenario = (accepted: boolean, edits: Array<[TaskId, TaskId[]]>) => {
   }
 };
 
-test("model permits legacy-cycle repairs and ignores accepted waits while rejecting newly cyclic edges", () => {
-  fc.assert(
-    fc.property(
-      fc.boolean(),
-      fc.array(fc.tuple(fc.constantFrom(A, B, X), fc.subarray([A, B, X])), {
-        minLength: 1,
-        maxLength: 30,
-      }),
-      scenario
-    ),
-    { numRuns: pbtRuns(100), ...pbtSeed() }
-  );
-});
+const RUNS = pbtRuns(100);
+
+test(
+  "model permits legacy-cycle repairs and ignores accepted waits while rejecting newly cyclic edges",
+  () => {
+    fc.assert(
+      fc.property(
+        fc.boolean(),
+        fc.array(fc.tuple(fc.constantFrom(A, B, X), fc.subarray([A, B, X])), {
+          minLength: 1,
+          maxLength: 30,
+        }),
+        scenario
+      ),
+      { numRuns: RUNS, ...pbtSeed() }
+    );
+  },
+  pbtTimeout(RUNS, 100)
+);

@@ -49,7 +49,12 @@ test("the gate turns on from the Desktop's watched per-Host Developer Mode (ENG-
       const modes = makeHostDeveloperModes();
       const source = developerModeSource("local", modes);
       const heard: Array<unknown> = [];
-      source.subscribe((gate) => heard.push(gate));
+      const turnedOn = Promise.withResolvers<void>();
+      source.subscribe((gate) => {
+        heard.push(gate);
+
+        if (gate.enabled) turnedOn.resolve();
+      });
 
       const sessions = yield* Queue.unbounded<WatchSession | null>();
       const fiber = yield* Effect.forkChild(modes.watch("local", Stream.fromQueue(sessions)));
@@ -63,7 +68,7 @@ test("the gate turns on from the Desktop's watched per-Host Developer Mode (ENG-
             Stream.concat(Stream.succeed(mode(true, null)), Stream.never),
         },
       });
-      yield* Effect.sleep("20 millis");
+      yield* Effect.promise(() => turnedOn.promise);
 
       expect(source.current()).toEqual({ hostKey: "local", enabled: true });
       expect(heard.at(-1)).toEqual({ hostKey: "local", enabled: true });

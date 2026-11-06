@@ -21,7 +21,7 @@ import { DeviceConnections, RelayRoute } from "../linkedDevices/route.ts";
 import { LinkedDevices } from "../linkedDevices/store.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { LiveHostEvents, LiveNotifier } from "./liveNotifier.ts";
-import { approvalRequested, session, snapshot, synchronized } from "./push.testing.ts";
+import { approvalRequested, session, snapshot, synchronized, waitUntil } from "./push.testing.ts";
 import { pushSuite } from "./seal.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
@@ -82,18 +82,6 @@ const openSlice = async (sealed: string) => {
     new TextDecoder().decode(await recipient.open(new Uint8Array(bytes.subarray(PUSH_ENC_BYTES))))
   );
 };
-
-const waitUntil = <A>(probe: () => A | undefined, what: string) =>
-  Effect.gen(function* () {
-    for (let i = 0; i < 400; i++) {
-      const found = probe();
-
-      if (found !== undefined) return found;
-      yield* Effect.sleep("25 millis");
-    }
-
-    return yield* Effect.die(new Error(`timed out waiting for ${what}`));
-  });
 
 const TOKEN = "d4".repeat(40);
 
