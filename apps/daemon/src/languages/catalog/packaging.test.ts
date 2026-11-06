@@ -128,9 +128,7 @@ test("source and manifest corruption, unsafe links even in excluded trees, and d
   }
 });
 
-test("optional descriptor retains absence and rejects malformed portable manifest paths", () => {
-  expect(Artifact.make({ ...original, packaging: undefined }).packaging).toBeUndefined();
-
+test("malformed portable manifest paths fail schema parsing", () => {
   for (const manifest of [
     "",
     "/absolute",

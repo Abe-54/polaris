@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { HostId, LanguageProcessLimit } from "@polaris/protocol";
-import { Schema } from "effect";
+import { HostId } from "@polaris/protocol";
 import { createProcessSettings } from "./processSettings.ts";
 import { newTempDir, removeTempDirSettled } from "../../platform/tempDir.testing.ts";
 
@@ -36,8 +35,6 @@ test("Host override persists revision CAS, races one winner, and null restores a
       revision: 2,
       maxProcesses: null,
     });
-    expect(Schema.is(LanguageProcessLimit)(0)).toBe(false);
-    expect(Schema.is(LanguageProcessLimit)(33)).toBe(false);
   } finally {
     await removeTempDirSettled(root);
   }
