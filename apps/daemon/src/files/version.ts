@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { EDITOR_FILE_MAX_BYTES, FileVersion } from "@polaris/protocol";
+import { noteFileRead } from "../memory/fileReads.ts";
 import { FsFailure, resolveHostPath, toFsFailure } from "./fs.ts";
 
 export const sameVersion = (a: FileVersion | null, b: FileVersion | null): boolean =>
@@ -41,6 +42,8 @@ export const readVersioned = async (input: string) => {
           before.size === after.size &&
           offset === after.size
         ) {
+          noteFileRead(bytes.length);
+
           return {
             bytes,
             mode: after.mode,
