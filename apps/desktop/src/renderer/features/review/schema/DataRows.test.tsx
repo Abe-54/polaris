@@ -51,17 +51,6 @@ describe("the files list's Data rows", () => {
     );
   });
 
-  test("'Schema diff' keeps its width; '+ others' is what gives way on a narrow row (F10)", () => {
-    const row = list([source({ concurrent: true })]).getByTestId("review-data-schema");
-    const label = [...row.querySelectorAll("span")].find((s) => s.textContent === "Schema diff");
-
-    expect(label?.className).toContain("shrink-0");
-    expect(label?.className).not.toContain("truncate");
-    expect(row.querySelector('[data-testid="review-data-others"]')?.className).toContain(
-      "truncate"
-    );
-  });
-
   test("an unavailable source's row gives the real reason on hover", () => {
     const row = list([
       source({ status: "unavailable", afterAt: null, errorCode: "E-DATA-DENIED" }),

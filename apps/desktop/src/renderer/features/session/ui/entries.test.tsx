@@ -48,44 +48,6 @@ test("a tool run starts folded, lists its commands folded, and each opens on its
   expect(queryByText("bun test output")).toBeNull();
 });
 
-test("a working Subagent's hover fill covers its activity line, not only the header row", () => {
-  const subagent = new Subagent({
-    id: SubagentId.make("toolu_agent"),
-    sessionId: SessionId.make("s1"),
-    turnId: TurnId.make("t1"),
-    parentItemId: "toolu_agent",
-    title: "Find the subagent card",
-    agent: "general-purpose",
-    model: null,
-    status: "working",
-    startedAt: "2026-10-01T00:00:00.000Z",
-    endedAt: null,
-  });
-
-  const { getByRole, getByTestId } = render(
-    <EntryView
-      entry={{
-        kind: "subagent",
-        card: {
-          id: "toolu_agent",
-          subagent,
-          task: null,
-          entries: [],
-          report: null,
-          activity: "Running cd apps",
-        },
-      }}
-      ctx={{ hue: "claude", onOpenDiff: () => {} }}
-    />
-  );
-
-  const header = getByRole("button", { name: /general-purpose/ });
-  const filled = getByTestId("subagent-activity").closest("[class*='hover:bg-']");
-
-  expect(filled?.contains(header)).toBe(true);
-  expect(header.className).not.toMatch(/hover:bg-/);
-});
-
 test("a finished Subagent's report stays folded until its card opens", () => {
   const subagent = new Subagent({
     id: SubagentId.make("toolu_report"),

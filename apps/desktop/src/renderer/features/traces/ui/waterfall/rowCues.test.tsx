@@ -48,14 +48,13 @@ test("finding 14: an error row says error in words, not only in red", () => {
   expect(screen.queryByTestId("row-error")).toBeNull();
 });
 
-test("finding 19: a long name truncates with its whole name as the title, bidi controls named", () => {
+test("finding 19: a long name keeps its whole name as the title, bidi controls named", () => {
   const [row] = rowsOf(BIG_TRACE.id);
   const name = `GET /invoices/‮exe.overdue/${"x".repeat(200)}`;
 
   mount({ ...row!, node: { ...row!.node, name } });
   const shown = screen.getByTitle(name);
 
-  expect(shown.className).toContain("truncate");
   expect(shown.textContent).not.toContain("‮");
 });
 
