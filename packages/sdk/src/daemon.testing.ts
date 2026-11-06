@@ -3,7 +3,7 @@
  * throwaway POLARIS_HOME and the scripted bench Harness, plus a token-less
  * Client (as the Desktop App) that pairs Extensions and registers Workspaces.
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { Command, CommandId, type GrantKind, type HostId, PairingId } from "@polaris/protocol";
@@ -100,8 +100,20 @@ export const launchDaemon = async (options: LaunchOptions = {}): Promise<TestDae
     }
   };
 
+  // The Daemon opens its socket first and writes this record once its gateway is bound.
+  const gatewayListening = async () => {
+    const deadline = Date.now() + 30_000;
+
+    while (!existsSync(join(home, "gateway.json"))) {
+      if (Date.now() > deadline) throw new Error(`the Daemon at ${home} never bound ${gatewayUrl}`);
+      await Bun.sleep(20);
+    }
+  };
+
   let admin = await connectWithRetry(scope);
   let adminScope = scope;
+
+  await gatewayListening();
 
   const run = <A, E>(effect: (client: typeof admin.client) => Effect.Effect<A, E>) =>
     Effect.runPromise(effect(admin.client));
@@ -176,6 +188,7 @@ export const launchDaemon = async (options: LaunchOptions = {}): Promise<TestDae
       child = spawnDaemon(home, gatewayPort, main);
       adminScope = Effect.runSync(Scope.make());
       admin = await connectWithRetry(adminScope);
+      await gatewayListening();
     },
     stop: async () => {
       await Effect.runPromise(Scope.close(adminScope, Exit.void));
