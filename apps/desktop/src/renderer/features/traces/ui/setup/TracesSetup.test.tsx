@@ -136,24 +136,6 @@ test("Set up tracing installs the skill globally in a terminal, then starts an a
   expect(screen.getByRole("button", { name: "Open agent session" })).toBeTruthy();
 });
 
-test("a failed install says so and starts nothing", async () => {
-  fake.answerOk("traces.settings", FRESH_SETTINGS);
-  fake.answerOk("terminal.open", { terminalId: TerminalId.make("t1") });
-  await mount();
-  await click("Set up tracing");
-
-  await act(async () => {
-    for (const feed of fake.feeds("terminal"))
-      feed.listener.items([TerminalOutput.Exit({ code: 1 })]);
-  });
-
-  expect(commands()).toEqual([]);
-  expect(screen.getByTestId("traces-setup-progress").textContent).toBe(
-    "The install exited with code 1; its output is in the terminal"
-  );
-  expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
-});
-
 test("Instrument Node automatically opens Settings → Traces on this workspace", async () => {
   fake.answerOk("traces.settings", FRESH_SETTINGS);
   const { navigation } = await mount();

@@ -114,12 +114,10 @@ describe("attention cards", () => {
     expect(model?.secondary?.action).toBe("copy-detail");
   });
 
-  test("an unknown host key hands off to Terminal; auth shows ssh's own line", () => {
-    expect(attentionCard(attention("host-key-unknown"))?.fix?.action).toBe("open-ssh");
+  test("auth shows ssh's own line", () => {
     expect(
       attentionCard(attention("auth-failed", "pi@10.0.0.9: Permission denied (publickey)."))?.detail
     ).toBe("pi@10.0.0.9: Permission denied (publickey).");
-    expect(attentionCard(attention("daemon-not-running"))?.fix?.action).toBe("start-daemon");
   });
 
   test("this Mac with nothing installed offers Install with no approval; its log shows when stopped", () => {

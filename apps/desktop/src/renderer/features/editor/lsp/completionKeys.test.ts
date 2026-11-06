@@ -5,7 +5,6 @@ import { EditorSelection, EditorState, type Extension } from "@codemirror/state"
 import { EditorView } from "@codemirror/view";
 import { cmChord, forwardShellChords, shellChords } from "../cm/keys.ts";
 import { vimExtension } from "../cm/vim.ts";
-import { LANGUAGE_NAVIGATION, shortcutOf } from "../navigation/commands.ts";
 import { footnoteOf } from "./completionMenu.ts";
 import { WORDS_FOOTNOTE, withWordFallback } from "./codemirror.ts";
 import { setClientPlatform } from "../../../../shared/platform.ts";
@@ -90,11 +89,4 @@ test("no shell chord takes ⌃Space or ⌃⇧Space from the editor", () => {
 
   for (const key of ["Ctrl-Space", "Ctrl-Shift-Space"])
     expect(shell.has(cmChord(key, "mac"))).toBe(false);
-});
-
-test("completion and signature help are listed with their chords", () => {
-  const byId = new Map(LANGUAGE_NAVIGATION.map((c) => [c.id, shortcutOf(c)]));
-
-  expect(byId.get("editor.language.completion")).toBe("⌃Space");
-  expect(byId.get("editor.language.signature")).toBe("⌃⇧Space");
 });

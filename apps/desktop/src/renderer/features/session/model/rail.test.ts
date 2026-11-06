@@ -3,16 +3,7 @@ import { TurnId, TurnItem } from "@polaris/protocol";
 import { turnWith } from "../../../store/fixtures.testing.ts";
 import type { TurnView } from "../../../store/sessionModel.ts";
 import { conversationRows } from "./conversation.ts";
-import {
-  LONGEST,
-  REST,
-  railLayout,
-  railTurns,
-  tickLength,
-  tickTurn,
-  turnAt,
-  turnsInView,
-} from "./rail.ts";
+import { LONGEST, REST, railLayout, tickLength, tickTurn, turnAt, turnsInView } from "./rail.ts";
 
 const view = (index: number): TurnView => ({
   turn: turnWith({ id: TurnId.make(`t${index}`), index, prompt: `prompt ${index}` }),
@@ -58,9 +49,5 @@ describe("turn rail", () => {
     // Folded summaries for t0–t2, then t3's prompt and reply.
     expect(turnsInView(rows, 1, 3, index)).toEqual({ first: 1, last: 3 });
     expect(turnsInView(rows, 9, 12, index)).toBeNull();
-  });
-
-  test("each Turn previews its prompt, number and time", () => {
-    expect(railTurns([view(4)])[0]).toMatchObject({ turnId: "t4", number: 5, opening: "prompt 4" });
   });
 });

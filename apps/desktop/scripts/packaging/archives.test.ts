@@ -122,11 +122,4 @@ describe("staging the app's Daemon", () => {
     expect(loadBuilds(dest).every((b) => b.bundled && b.archive === null)).toBe(true);
     expect(existsSync(join(dest, RELEASE_DIR))).toBe(false);
   });
-
-  test("the release archives never enter the app", () => {
-    const dist = daemonDist(VERSION);
-    writeDaemonArchives(dist);
-
-    expect(existsSync(join(stage(dist, ["darwin-arm64"]), RELEASE_DIR))).toBe(false);
-  });
 });

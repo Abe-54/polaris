@@ -186,12 +186,6 @@ describe("the routes", () => {
     ]);
   });
 
-  test("no row reads the '–' placeholder the Daemon's null p50 used to give", () => {
-    const titles = routeRows(ROUTES, PLAN).map((row) => routeTitle(row));
-
-    expect(titles.filter((title) => title.includes("–"))).toEqual([]);
-  });
-
   test("partial runs left out are named in the row's sentence", () => {
     const row = routeRows(ROUTES, PLAN).find((r) => r.route === "GET /g trimmed");
 

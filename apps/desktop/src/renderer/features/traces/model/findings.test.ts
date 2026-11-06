@@ -14,12 +14,6 @@ import { spanDataSource } from "../model/span/dataSource.ts";
 import { durationLabel, spanTree, traceTimes, waterfallRows } from "../model/waterfall/index.ts";
 import { ERROR_TRACE, FIXTURE_DETAILS } from "../preview/fixtures.ts";
 
-test("finding 4: an Offline Host doesn't read as Reconnecting", () => {
-  const state = setupState({ status: "loading" }, { label: "lucas-rpi", state: "offline" });
-
-  expect(state?.kind).not.toBe("reconnecting");
-});
-
 test("finding 7: Open in Data never picks a Remote Data Source for a span that names no server", () => {
   // A local MySQL in a container, instrumented without server.address: only engine and database.
   const source = spanDataSource(

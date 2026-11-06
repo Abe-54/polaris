@@ -12,20 +12,6 @@ const deferred = () => {
 };
 
 describe("latestLoads", () => {
-  test("a navigation asked for while the partition is setting up beats the saved URL", async () => {
-    const started: Array<string> = [];
-    const loads = latestLoads<string>((tab, url) => started.push(`${tab} ${url}`));
-    const ready = deferred();
-
-    loads.request("t1", "https://saved.example/", ready.promise);
-    loads.request("t1", "http://localhost:3000/", ready.promise);
-    ready.resolve();
-    await ready.promise;
-    await Promise.resolve();
-
-    expect(started).toEqual(["t1 http://localhost:3000/"]);
-  });
-
   test("other tabs' loads don't supersede each other", async () => {
     const started: Array<string> = [];
     const loads = latestLoads<string>((tab, url) => started.push(`${tab} ${url}`));

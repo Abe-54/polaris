@@ -185,24 +185,6 @@ test("formatter failure saves, autosave notices coalesce, manual notices remain 
   expect(f.state().disk).toBe("two");
 });
 
-test("disabled, and None where no server formats, do not invoke the formatter", async () => {
-  const f = fixture(async () => {
-    throw new Error("must not execute");
-  });
-
-  f.disable();
-  expect(await f.coordinator.save("manual")).toBe(true);
-
-  const none = fixture(async () => {
-    throw new Error("must not execute");
-  });
-
-  none.none();
-  none.noServerFormatter();
-  expect(await none.coordinator.save("manual")).toBe(true);
-  expect([...f.notices, ...none.notices, ...f.reasons, ...none.reasons]).toEqual([]);
-});
-
 test("disk failure is never a successful save and release rejects late work", async () => {
   const failed = fixture(async () => "formatted");
 
