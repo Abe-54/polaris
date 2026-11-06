@@ -167,7 +167,7 @@ test(
 );
 
 test(
-  "profile ids and artifact paths never authorize another checkout or arbitrary file read",
+  "a path-traversal profile id is refused as not found",
   () =>
     withProfiles(async ({ runtime }) => {
       const profiles = await runtime.runPromise(Profiles);

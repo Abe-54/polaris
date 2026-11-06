@@ -133,7 +133,6 @@ test("acceptance waits for the worker's Turn boundary, skips nudging and commits
       });
 
       const started = turns.find((e) => Predicate.isTagged(e.event, "TurnStarted"))!;
-      expect(started).toBeDefined();
       expect(started.occurredAt).toBe(events[marker]!.occurredAt);
       yield* delivery.flush();
       expect(w.turns).toHaveLength(1);

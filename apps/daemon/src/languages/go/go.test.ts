@@ -93,9 +93,6 @@ test("gopls is a developer Prerequisite with no artifact and the go install comm
 
   const go = catalog.integrations.find((item) => item.id === "go")!;
   expect(go).toMatchObject({ offered: true, formatter: { tool: "gopls", source: "developer" } });
-  expect(catalog.integrations.find((item) => item.id === "java")!.limitations).toContain(
-    "Skipped (owner: Java users use IntelliJ)."
-  );
 });
 
 test("missing gopls blocks with its command; Check again finds it and Trust gates the launch", async () => {

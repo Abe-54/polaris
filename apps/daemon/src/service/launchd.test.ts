@@ -159,33 +159,31 @@ describe("planLaunchd", () => {
       ...state,
     });
 
-  test("loads into gui when it exists, else user", () => {
-    expect(plan({})).toEqual({ action: "load", domain: "gui" });
-    expect(plan({ guiDomain: false })).toEqual({ action: "load", domain: "user" });
-  });
-
-  test("reloads a changed definition in the domain it is loaded in", () => {
-    expect(plan({ loadedIn: "gui", changed: newPlist })).toEqual({
-      action: "reload",
-      domain: "gui",
-    });
-    expect(plan({ loadedIn: "user", guiDomain: true, changed: newPlist })).toEqual({
-      action: "reload",
-      domain: "user",
-    });
-  });
-
-  test("kickstarts an unchanged definition, restarting only for a new binary", () => {
-    expect(plan({ loadedIn: "gui" })).toEqual({
-      action: "kickstart",
-      domain: "gui",
-      restart: false,
-    });
-    expect(plan({ loadedIn: "user", changed: { binary: true, serviceFile: false } })).toEqual({
-      action: "kickstart",
-      domain: "user",
-      restart: true,
-    });
+  test.each<[string, Parameters<typeof plan>[0], ReturnType<typeof plan>]>([
+    ["loads into gui when it exists", {}, { action: "load", domain: "gui" }],
+    ["loads into user without gui", { guiDomain: false }, { action: "load", domain: "user" }],
+    [
+      "reloads a changed definition in the gui domain it is loaded in",
+      { loadedIn: "gui", changed: newPlist },
+      { action: "reload", domain: "gui" },
+    ],
+    [
+      "reloads a changed definition in the user domain it is loaded in, though gui exists",
+      { loadedIn: "user", guiDomain: true, changed: newPlist },
+      { action: "reload", domain: "user" },
+    ],
+    [
+      "kickstarts an unchanged definition without a restart",
+      { loadedIn: "gui" },
+      { action: "kickstart", domain: "gui", restart: false },
+    ],
+    [
+      "kickstarts with a restart for a new binary",
+      { loadedIn: "user", changed: { binary: true, serviceFile: false } },
+      { action: "kickstart", domain: "user", restart: true },
+    ],
+  ])("%s", (_name, state, expected) => {
+    expect(plan(state)).toEqual(expected);
   });
 });
 

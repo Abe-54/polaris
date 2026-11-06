@@ -17,6 +17,18 @@ for (const command of [
   'cd /repo && /opt/homebrew/bin/psql "$DATABASE_URL"',
   `bun -e 'const db = new Bun.SQL(process.env.DATABASE_URL); await db\`select 1\`'`,
   `node --eval 'connect(process.env["DATABASE_URL"])'`,
+  `bash -lc 'psql "$DATABASE_URL"'`,
+  `/bin/zsh -lc 'psql "$DATABASE_URL"'`,
+  `sh -c 'pg_dump "$DATABASE_URL"'`,
+  "docker exec -it pg psql -U owner ledger",
+  "docker compose exec db psql -U owner ledger",
+  "sudo -u postgres psql -U owner ledger",
+  "env PGPASSWORD=private psql -h 127.0.0.1 -U owner ledger",
+  "PGHOST=127.0.0.1 PGUSER=owner PGDATABASE=ledger psql",
+  "psql -h localhost -d ledger",
+  `npx prisma db execute --url "$DATABASE_URL"`,
+  "pgcli $DATABASE_URL",
+  `bun -e 'await Bun.sql\`select 1\`'`,
 ])
   test(`matches checkout source: ${command.replace(/\/\/[^@]+@/, "//[redacted]@")}`, () => {
     expect(outsideMatches(command, source, url)).toBe(true);
@@ -35,6 +47,7 @@ for (const command of [
   `DATABASE_URL=postgres://owner:pw@localhost:5432/other node -e 'connect(process.env.DATABASE_URL)'`,
   `node script.js DATABASE_URL`,
   `bun -e 'console.log("DATABASE_URL")'`,
+  `node -e 'console.log(process.env.DATABASE_URL)'`,
 ])
   test(`ignores unrelated target or executable: ${command.replace(/\/\/[^@]+@/, "//[redacted]@")}`, () => {
     expect(outsideMatches(command, source, url)).toBe(false);
@@ -157,30 +170,6 @@ test("declined commands never discover or record a database call", async () => {
         },
       }
     )
-  );
-});
-
-for (const command of [
-  `bash -lc 'psql "$DATABASE_URL"'`,
-  `/bin/zsh -lc 'psql "$DATABASE_URL"'`,
-  `sh -c 'pg_dump "$DATABASE_URL"'`,
-  "docker exec -it pg psql -U owner ledger",
-  "docker compose exec db psql -U owner ledger",
-  "sudo -u postgres psql -U owner ledger",
-  "env PGPASSWORD=private psql -h 127.0.0.1 -U owner ledger",
-  "PGHOST=127.0.0.1 PGUSER=owner PGDATABASE=ledger psql",
-  "psql -h localhost -d ledger",
-  `npx prisma db execute --url "$DATABASE_URL"`,
-  "pgcli $DATABASE_URL",
-  `bun -e 'await Bun.sql\`select 1\`'`,
-])
-  test(`RM F5: unwraps and attributes ${command}`, () => {
-    expect(outsideMatches(command, source, url)).toBe(true);
-  });
-
-test("RM F5: reading DATABASE_URL in a log is not a database query", () => {
-  expect(outsideMatches(`node -e 'console.log(process.env.DATABASE_URL)'`, source, url)).toBe(
-    false
   );
 });
 

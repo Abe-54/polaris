@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { CONSTELLATION_SKILL_VERSION, constellationInstructions } from "./index.ts";
-import { m2Examples } from "./examples.ts";
 import { leadBinding, workerBinding } from "../../mcp/testing.ts";
 
 test("Lead and worker instructions share one version and use the report-derived M2 loop", () => {
@@ -22,6 +21,4 @@ test("Lead and worker instructions share one version and use the report-derived 
   expect(worker).toContain("notDone, followups, questions, outsideArea, decisions and summary");
   expect(worker).toContain("polaris lease");
   expect(worker).toContain("identical still-open questions");
-  expect(m2Examples.sources).toContain(".dagr/reports/m2/Q-check.md");
-  expect(m2Examples.sources).toContain(".dagr/reports/m2/FX-accept.md");
 });

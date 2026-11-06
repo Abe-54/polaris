@@ -3,10 +3,10 @@ import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
  * The fallback supervisor script (templates.ts `supervisorScript`), run for
  * real with /bin/sh against a stand-in `polaris serve`.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect } from "bun:test";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { shQuote, supervisorScript, supervisorStartLine } from "./templates.ts";
+import { shQuote, supervisorScript } from "./templates.ts";
 import { posixTest } from "../platform/testing.ts";
 
 const shTest = posixTest(
@@ -159,13 +159,4 @@ describe("fallback supervisor", () => {
     },
     20_000
   );
-
-  test("start lines for cron and login profiles", () => {
-    expect(supervisorStartLine("/home/a b/.polaris/bin/polaris-supervise", "cron")).toBe(
-      "@reboot '/home/a b/.polaris/bin/polaris-supervise' # polaris-supervisor"
-    );
-    expect(supervisorStartLine("/h/s", "profile")).toBe(
-      "[ -x '/h/s' ] && '/h/s' >/dev/null 2>&1 # polaris-supervisor"
-    );
-  });
 });

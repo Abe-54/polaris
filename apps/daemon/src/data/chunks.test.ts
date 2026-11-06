@@ -3,7 +3,7 @@ import { DataValueTags, QueryDataStreamItem, dataJsonBytes } from "@polaris/prot
 import { Schema } from "effect";
 import { resultChunks } from "./chunks.ts";
 
-test("wide tagged-value rows and 10k results all fit the RPC chunk boundary", () => {
+test("a wide row whose cells each fit is clipped to the RPC chunk limit and End reports truncation", () => {
   const rows = Array.from({ length: 2 }, () =>
     Array.from({ length: 256 }, () =>
       DataValueTags.cases.Json.make({ text: JSON.stringify({ payload: "x".repeat(50000) }) })

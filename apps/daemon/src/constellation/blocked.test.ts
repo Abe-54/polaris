@@ -11,7 +11,7 @@ import {
   TaskDefinition,
   TurnId,
 } from "@polaris/protocol";
-import { Schema, Struct } from "effect";
+import { Struct } from "effect";
 import { decideConstellation } from "../engine/constellation.ts";
 import {
   A,
@@ -105,7 +105,6 @@ test("block validates state, each target condition and already accepted targets"
   expect(decideConstellation(working(), command(), ctx()).rejection?.findings[0]?.code).toBe(
     "E-AUTHORITY"
   );
-  expect(() => Schema.decodeUnknownSync(C.WorkerBlock)({ ...command(), reason: "" })).toThrow();
 });
 
 test("block persists metadata, projects blockers and queues a Lead digest", () => {

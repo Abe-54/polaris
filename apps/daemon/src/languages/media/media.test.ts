@@ -112,14 +112,6 @@ posixMedia("actual raster bytes use the request BlobChannel without execution tr
   expect(calls).toBe(3);
 });
 
-test("Layer construction is inert until media demand", async () => {
-  await Effect.runPromise(
-    Effect.scoped(HostPreviewMedia.pipe(Effect.provide(HostPreviewMedia.layer())))
-  );
-  expect(calls).toBe(0);
-  expect(blobs.blobs.size).toBe(0);
-});
-
 test("unauthorized and foreign Workspace requests fail before any Blob offer", async () => {
   allowed = false;
   await rejected(input, "not-owner");

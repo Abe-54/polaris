@@ -115,11 +115,19 @@ test("Axiom dependency and environment prefill only credential-free metadata", (
     expect(JSON.stringify(result.detectedExporters)).not.toContain("private-");
   }));
 
-for (const [file, source] of [
-  ["AXIOM_URL=https://file.test\nAXIOM_TOKEN=file-token", { AXIOM_DATASET: "launch-dataset" }],
-  ["AXIOM_DATASET=file-dataset", { AXIOM_URL: "https://launch.test", AXIOM_TOKEN: "launch-token" }],
+for (const [holder, file, source] of [
+  [
+    "the file holds the token, the launch the dataset",
+    "AXIOM_URL=https://file.test\nAXIOM_TOKEN=file-token",
+    { AXIOM_DATASET: "launch-dataset" },
+  ],
+  [
+    "the launch holds the token, the file the dataset",
+    "AXIOM_DATASET=file-dataset",
+    { AXIOM_URL: "https://launch.test", AXIOM_TOKEN: "launch-token" },
+  ],
 ] as const)
-  test("partial vendor configuration never borrows credentials from the other source", () =>
+  test(`partial vendor configuration never borrows credentials: ${holder}`, () =>
     fixture(async (root) => {
       await writeFile(join(root, ".env"), file);
       const detected = await detectExporters(root, source);

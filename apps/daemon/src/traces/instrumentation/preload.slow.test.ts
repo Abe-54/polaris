@@ -257,7 +257,6 @@ test("finding P3-3: an inherited preload from another Daemon build exports each 
   await prepareAutoInstrumentation({ checkout, cwd: checkout, settings, source: endpoint, home });
   const register = pathToFileURL(await bundledRegisterPath(home)).href;
 
-  expect(register).toBeString();
   // The same assets under an older build's digest, as a terminal opened before an upgrade inherits.
   const older = join(home, "node-instrumentation", "older-build");
   await cp(dirname(fileURLToPath(register)), older, { recursive: true });

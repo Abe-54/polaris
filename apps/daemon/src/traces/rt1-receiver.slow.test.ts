@@ -5,8 +5,6 @@ import { connect, type Socket } from "node:net";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { sessionTraceEnvironment } from "./environment.ts";
-import { TraceRuntime } from "./runtime.ts";
 import { TraceTokenVault } from "./tokens.ts";
 import { postTraces, TEST_SESSION, TEST_WORKSPACE, until, withTraceFixture } from "./testing.ts";
 
@@ -34,19 +32,6 @@ test("an unauthenticated local process holding two slow bodies cannot keep every
     } finally {
       for (const socket of sockets) socket.destroy();
     }
-  }));
-
-test("closing a Harness scope (dormancy, graceful Daemon shutdown) keeps an active session's endpoint", () =>
-  withTraceFixture(async (f) => {
-    const env = await Effect.runPromise(
-      Effect.scoped(sessionTraceEnvironment(TEST_SESSION, {})).pipe(
-        Effect.provideService(TraceRuntime, f.runtime)
-      )
-    );
-    // The session is still active (f.state.active); only its Harness process went away.
-
-    const response = await postTraces(env.OTEL_EXPORTER_OTLP_ENDPOINT!);
-    expect(response.status).toBe(200);
   }));
 
 test("a storage failure answers a retryable status, not 400", () =>

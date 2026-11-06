@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { Schema } from "effect";
-import { LanguageAvailability } from "@polaris/protocol";
 import { availability } from "./index.ts";
 import { artifactFixture, fixture, hostId, platform } from "../install/fixture.testing.ts";
 import { posixTest } from "../../platform/testing.ts";
@@ -72,7 +70,6 @@ test("availability defaults deny and reports offline/unsupported/missing/incompa
   });
 
   expect(unknown.prerequisites[0]?.outcome).toBe("unknown");
-  expect(Schema.is(LanguageAvailability)(unknown)).toBe(true);
 });
 
 privateStorage(

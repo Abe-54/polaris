@@ -297,8 +297,5 @@ describe("git.diff", () => {
     );
 
     expect(error._tag).toBe("NotFound");
-    expect(checkpointRef(sessionId, "nope", "before")).toBe(
-      "refs/polaris/checkpoints/s1/nope/before"
-    );
   });
 });

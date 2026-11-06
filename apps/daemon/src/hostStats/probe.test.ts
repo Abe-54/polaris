@@ -32,7 +32,7 @@ describe("probe parsers", () => {
     expect(parseMeminfo("MemTotal: 1024 kB\nMemFree: 512 kB\n")).toBeNull();
   });
 
-  test("CPU share stays within 0 to 100, and a stalled counter reads idle", () => {
+  test("CPU share is the busy fraction of the interval, and a stalled counter reads idle", () => {
     expect(cpuPercent({ busy: 0, total: 0 }, { busy: 50, total: 200 })).toBe(25);
     expect(cpuPercent({ busy: 10, total: 100 }, { busy: 10, total: 100 })).toBe(0);
   });

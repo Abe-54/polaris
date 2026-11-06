@@ -17,7 +17,6 @@ import {
   WorkspaceId,
 } from "@polaris/protocol";
 import { Effect } from "effect";
-import { draft } from "../engine/constellation.testing.ts";
 import { patchSession } from "../store/model.ts";
 
 const at = "2026-10-27T12:00:00.000Z";
@@ -169,16 +168,6 @@ export const leadNotified = (turnId: string) =>
       turnId: TurnId.make(turnId),
       steered: false,
       audit: null,
-    })
-  );
-
-/** This session became a Constellation worker. */
-export const attemptStarted = () =>
-  event(
-    DomainEvent.cases.AttemptStarted.make({
-      constellationId: ConstellationId.make("c1"),
-      revision: 1,
-      attempt: draft(undefined, "a1", SESSION_ID),
     })
   );
 

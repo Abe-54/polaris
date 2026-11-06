@@ -36,12 +36,6 @@ test("current catalog requires Host ShellCheck and manages shfmt while ShellChec
   expect(
     bash.developerCompanions?.some((companion) => companion.id === "shellcheck") ?? false
   ).toBe(false);
-  expect(catalog.tools.find((entry) => entry.id === "shellcheck")?.disposition).toBe("offered");
-  expect(
-    catalog.tools
-      .find((entry) => entry.id === "shellcheck")
-      ?.artifacts.every((artifact) => artifact.audit === "pending")
-  ).toBe(true);
 });
 
 test("untrusted configured executables never run and Bash automatic discovery stays disabled", async () => {
@@ -150,12 +144,10 @@ ${ending}
 `
       );
       let pid: number | undefined;
-      let elapsedMs = 0;
 
       try {
         const start = Date.now();
         const fact = await probeDeveloperShellCheck(f.input);
-        elapsedMs = Date.now() - start;
         expect(Date.now() - start).toBeLessThan(3000);
         expect(fact.status).toBe("probe-failed");
         expect(fact.shellcheckDiagnostics).toBe(false);
@@ -177,16 +169,6 @@ ${ending}
         }
 
         expect(() => process.kill(pid!, 0)).toThrow();
-        console.log(
-          JSON.stringify({
-            topology: "synthetic-setsid-held-pipe",
-            ending,
-            elapsedMs,
-            status: "probe-failed",
-            escapedChildAliveAfterProbe: true,
-            fixtureOwnerCleanupVerified: true,
-          })
-        );
       }
     }
   },

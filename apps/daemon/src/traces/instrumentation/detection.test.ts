@@ -66,32 +66,34 @@ test("bounded discovery respects gitignore, regular files and checkout containme
     }
   }));
 
-test("source detection excludes comments, examples, unrelated URLs and environment fallbacks", () => {
-  expect(
-    fixedExporterLines(
-      `// ${fixed}\n/* ${fixed} */\nconst example = ${JSON.stringify(fixed)};\nnew Client({url:'https://other.example'});`
-    )
-  ).toEqual([]);
-  expect(
-    fixedExporterLines(
-      "new OTLPTraceExporter({url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? 'https://vendor.example'})"
-    )
-  ).toEqual([]);
-  expect(fixedExporterLines("new OTLPTraceExporter({url: `https://${host}/v1/traces`})")).toEqual(
-    []
-  );
-  expect(fixedExporterLines(`\n\n${fixed}`)).toEqual([4]);
+test.each<[string, string, ReadonlyArray<number>]>([
+  [
+    "excludes comments, examples and unrelated URLs",
+    `// ${fixed}\n/* ${fixed} */\nconst example = ${JSON.stringify(fixed)};\nnew Client({url:'https://other.example'});`,
+    [],
+  ],
+  [
+    "excludes environment fallbacks",
+    "new OTLPTraceExporter({url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? 'https://vendor.example'})",
+    [],
+  ],
+  ["excludes template URLs", "new OTLPTraceExporter({url: `https://${host}/v1/traces`})", []],
+  ["counts lines from the file's start", `\n\n${fixed}`, [4]],
+  [
+    "finds a literal endpoint after nested exporter headers",
+    "new OTLPTraceExporter({\n headers: {Authorization: token},\n url: 'https://vendor.example/v1/traces',\n})",
+    [3],
+  ],
+  [
+    "finds a quoted exporter url property",
+    "new OTLPTraceExporter({ 'url': 'https://vendor.example/v1/traces' })",
+    [1],
+  ],
+])("source detection %s", (_name, source, lines) => {
+  expect(fixedExporterLines(source)).toEqual([...lines]);
 });
 
-test("source detection finds a literal endpoint after nested exporter headers", () => {
-  expect(
-    fixedExporterLines(
-      "new OTLPTraceExporter({\n headers: {Authorization: token},\n url: 'https://vendor.example/v1/traces',\n})"
-    )
-  ).toEqual([3]);
-});
-
-test("discovery caps exporter evidence without recording URL content", () =>
+test("discovery keeps the first 32 exporter locations", () =>
   fixture(async (root) => {
     await writeFile(join(root, "many.ts"), `${fixed}\n`.repeat(80));
 
@@ -104,9 +106,3 @@ test("discovery caps exporter evidence without recording URL content", () =>
     expect(result).toHaveLength(32);
     expect(result[31]?.line).toBe(95);
   }));
-
-test("a quoted exporter url property is detected", () => {
-  expect(
-    fixedExporterLines("new OTLPTraceExporter({ 'url': 'https://vendor.example/v1/traces' })")
-  ).toEqual([1]);
-});

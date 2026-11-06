@@ -272,8 +272,6 @@ const applyEvent = (state: PlanState, event: DomainEvent, context: PlanContext):
       },
       LeadNotified: ({ turnId, steered }) =>
         same(steered ? state : { ...state, digestTurns: new Set(state.digestTurns).add(turnId) }),
-      AttemptStarted: ({ attempt }) =>
-        same(update(state, attempt.sessionId, (s) => ({ ...s, worker: true }), now)),
     }),
     Match.orElse(() => same(state))
   );

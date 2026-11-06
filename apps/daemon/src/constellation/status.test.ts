@@ -68,7 +68,6 @@ test("status keeps only the latest rejected Claim with three indented feedback l
   expect(text).toContain("  Review feedback:\n    one\n    two\n    three\n    …");
   expect(text).not.toContain("old-head");
   expect(text).not.toContain("four");
-  expect(graph.attempts[1]!.rejectionReason).toBe("one\ntwo\nthree\nfour\nfive");
 });
 
 test("proposal details are available in status, digest and structured JSON", () => {

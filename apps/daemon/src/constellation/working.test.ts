@@ -80,7 +80,6 @@ test("committed hooks replay archives at startup and recover a dropped bounded o
           decide: () => Effect.succeed(Array.from({ length: 20 }, () => archived)),
         });
         yield* waitFor(() => observed === 21);
-        expect(observed).toBe(21);
       })
     ).pipe(
       Effect.provide(EventStore.layerSqlite(":memory:")),

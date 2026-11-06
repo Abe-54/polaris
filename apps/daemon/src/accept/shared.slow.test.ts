@@ -140,7 +140,7 @@ describe("conflictReason", () => {
   });
 });
 
-test("contains", () => {
+test("a directory contains itself and its children, not a sibling sharing its prefix or its parent", () => {
   expect(contains("/a/b", "/a/b")).toBe(true);
   expect(contains("/a/b", "/a/b/c")).toBe(true);
   expect(contains("/a/b", "/a/bc")).toBe(false);

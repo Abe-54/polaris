@@ -64,9 +64,6 @@
     "apps/daemon/src/mcp/tools/traceCapture.test.ts": {
       "polaris/no-fixed-sleep": 2
     },
-    "apps/daemon/src/mcp/tools/traces.performance.test.ts": {
-      "polaris/no-fixed-sleep": 1
-    },
     "apps/daemon/src/presence/presence.test.ts": {
       "polaris/no-fixed-sleep": 3
     },

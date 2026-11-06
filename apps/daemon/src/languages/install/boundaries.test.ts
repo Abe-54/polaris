@@ -327,7 +327,7 @@ test("stored file links and modified receipt descriptors are rejected, never lau
   }
 });
 
-test("Effect Layer defaults deny and releases its scope with typed failure", async () => {
+test("ManagedInstaller.layer without an approve adapter fails the install", async () => {
   const f = await fixture();
 
   try {

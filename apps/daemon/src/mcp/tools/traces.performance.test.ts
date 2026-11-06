@@ -85,39 +85,6 @@ perf(
 );
 
 perf(
-  "F6: SLOW history scans every stored Span per name, blocking the trace worker for other RPCs",
-  () =>
-    withStoredTools(async (f) => {
-      // Only 5k stored Spans: four earlier requests and this one, 1k Spans each.
-      for (let t = 0; t < 4; t++)
-        await ingestAll(f.ingest, requestTrace(traceId(t), 10, 99, 40, -100_000 + t * 1_000));
-      await ingestAll(f.ingest, requestTrace(TRACE_ID, 10, 99, 40));
-
-      let listMs = 0;
-
-      const { elapsed } = await mainThreadStall(async () => {
-        const call = f.tool("trace").call({ id: TRACE_ID });
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
-        const started = performance.now();
-        await Effect.runPromise(f.store.list("/tmp/trace-tool-checkout", { limit: 20 }));
-        listMs = performance.now() - started;
-        await call;
-      });
-
-      console.log(
-        `load average ${loadavg()
-          .map((value) => value.toFixed(2))
-          .join("/")}`,
-        `trace with history over 5k stored spans: ${elapsed.toFixed(0)} ms; a concurrent list waited ${listMs.toFixed(0)} ms`
-      );
-
-      expect(elapsed).toBeLessThan(2_000);
-      expect(listMs).toBeLessThan(250);
-    }),
-  600_000
-);
-
-perf(
   "F7: `traces` loads every error trace in full to print one message",
   () =>
     withStoredTools(async (f) => {

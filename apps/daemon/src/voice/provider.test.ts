@@ -35,7 +35,7 @@ test("finals accumulate, a guess is replaced, and one still pending at the end i
   );
 });
 
-test("a provider failure fails the stream without a finished snapshot", async () => {
+test("a provider failure fails the stream", async () => {
   const exit = await fold(
     Stream.concat(Stream.make({ text: "hey", isFinal: false }), Stream.fail(providerFailed("gone")))
   );
