@@ -13,13 +13,16 @@ name: CI
 #                     the job summary.
 #   spec, spec-traces the Quint spec and Engine trace replays: spec, engine, store, verification, resume.ts.
 #   build-daemon, smoke-*, service-windows: the binaries build, start and serve; Daemon or Client affected.
+#                     build-daemon cross-compiles on Linux what the smokes need; build-daemon-macos builds
+#                     and signs darwin-arm64.
 #   bench             Daemon memory gates (bench-shards runs it 3 times in parallel): Daemon, Client,
 #                     protocol or SDK affected.
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
 #   ci-red            on a push to main, a Linear issue per red job (tooling/ci/ciRed.ts); not counted.
-#   ci                one result for branch protection: passes only if every job passed or was skipped.
-#                     On a PR the macOS jobs (*-macos) run and report but don't count; Ubuntu and Windows
-#                     do, and so does build-daemon (macOS), which the smokes need. On main every job counts.
+#   ci                one result for branch protection: every job off macOS passed or was skipped. It
+#                     doesn't wait for macOS, whose runners can queue for half an hour (ADR 0097).
+#   ci-macos          the macOS jobs (*-macos) run and report on a PR, where nothing counts them; on a
+#                     push to main this job does, and a red one turns the run red and files a ci-red issue.
 # Jobs off on a PR are skipped (a skip reports as passing); matrix jobs instead skip their steps,
 # so their expanded names always report.
 
@@ -169,7 +172,7 @@ jobs:
 
   platform-checks-macos:
     name: Platform checks (${{ matrix.os }})
-    # platform-checks' steps; reports on a PR without blocking it (see `ci`).
+    # platform-checks' steps; reports on a PR without blocking it (see `ci-macos`).
     strategy:
       fail-fast: false
       matrix:
@@ -279,7 +282,7 @@ jobs:
 
   test-macos:
     name: Test ${{ matrix.part.name }} (${{ matrix.os }})
-    # test's parts and steps on macOS; reports on a PR without blocking it (see `ci`).
+    # test's parts and steps on macOS; reports on a PR without blocking it (see `ci-macos`).
     needs: scope
     strategy:
       fail-fast: false
@@ -347,7 +350,28 @@ jobs:
 
   build-daemon:
     name: Build the Daemon
-    # darwin builds must be re-signed with macOS codesign; the Linux targets cross-compile.
+    # Every target but darwin, which build-daemon-macos signs: on Linux, so the smokes never queue for macOS.
+    needs: scope
+    if: needs.scope.outputs.binaries == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      # Also installs the other platforms' optional packages (fff-bin-*) so their
+      # native libraries can be embedded, and runs `polaris selftest` on linux-x64.
+      - run: bunx turbo run build --filter=@polaris/daemon -- linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl windows-x64
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: polaris-daemon
+          path: apps/daemon/dist/
+          if-no-files-found: error
+
+  build-daemon-macos:
+    name: Build the Daemon (macos-15)
+    # darwin builds must be re-signed with macOS codesign, and run `polaris selftest` here.
     needs: scope
     if: needs.scope.outputs.binaries == 'true'
     runs-on: macos-15
@@ -356,15 +380,9 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install --frozen-lockfile
-      # Also installs the other platforms' optional packages (fff-bin-*) so their
-      # native libraries can be embedded, and runs `polaris selftest` on darwin.
-      - run: bunx turbo run build --filter=@polaris/daemon
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: polaris-daemon
-          path: apps/daemon/dist/
-          if-no-files-found: error
+      # The bundler resolves every platform's ast-grep addon, whichever one it builds.
+      - run: bun install --frozen-lockfile --os=* --cpu=*
+      - run: bunx turbo run build --filter=@polaris/daemon -- darwin-arm64
 
   smoke-linux:
     name: Smoke-test ${{ matrix.platform }}
@@ -559,14 +577,13 @@ jobs:
 
   ci:
     name: CI
+    # The check branch protection requires. No macOS job in `needs`: they are in ci-macos.
     needs:
       [
         scope,
         check,
         platform-checks,
-        platform-checks-macos,
         test,
-        test-macos,
         spec,
         spec-traces,
         build-daemon,
@@ -578,27 +595,31 @@ jobs:
       ]
     if: always()
     runs-on: ubuntu-latest
-    steps:
+    steps: &aggregate-steps
       - name: Every counted job passed or was skipped by scope
         env:
           NEEDS: ${{ toJSON(needs) }}
-          EVENT: ${{ github.event_name }}
-        # Failed, cancelled and abandoned (never given a runner) all fail; macOS doesn't count on a PR.
+        # Failed, cancelled and abandoned (never given a runner) all fail.
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
-          failing=$(jq -r --arg event "$EVENT" '
-            ["platform-checks-macos", "test-macos"] as $macos
-            | to_entries[]
-            | select($event != "pull_request" or (.key | IN($macos[]) | not))
+          failing=$(jq -r 'to_entries[]
             | select(.value.result != "success" and .value.result != "skipped")
             | .key' <<<"$NEEDS")
           if [ -n "$failing" ]; then echo "Not passing: $failing"; exit 1; fi
+
+  ci-macos:
+    name: CI (macOS)
+    # On a push to main, what `ci` is to the jobs off macOS. Nothing requires this check.
+    needs: [platform-checks-macos, test-macos, build-daemon-macos]
+    if: ${{ always() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps: *aggregate-steps
 
   ci-red:
     name: ci-red
     # Files or comments on a Linear issue per red job and says when one recovers; warns and
     # passes without LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET.
-    needs: ci
+    needs: [ci, ci-macos]
     if: ${{ !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -616,4 +637,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           LINEAR_CLIENT_ID: ${{ secrets.LINEAR_CLIENT_ID }}
           LINEAR_CLIENT_SECRET: ${{ secrets.LINEAR_CLIENT_SECRET }}
-        run: bun tooling/ci/ciRed.ts --workflow CI --ignore CI --ignore ci-red
+        run: bun tooling/ci/ciRed.ts --workflow CI --ignore CI --ignore "CI (macOS)" --ignore ci-red

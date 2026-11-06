@@ -60,7 +60,13 @@ describe("plan", () => {
     expect(again).toEqual([]);
   });
 
-  test.each(["skipped", "cancelled", "success"])(
+  test("files an issue for a job cancelled inside a run that wasn't", () => {
+    const [action] = plan(run, [check("Test Daemon 1/3 (macos-15)", "cancelled")], []);
+
+    expect(action?.kind === "create" && action.body).toContain("cancelled on");
+  });
+
+  test.each(["skipped", "success"])(
     "leaves a %s check without an open issue alone",
     (conclusion) => {
       expect(plan(run, [check("Lint", conclusion)], [issue("Other")])).toEqual([]);

@@ -41,7 +41,8 @@ export const TITLE_PREFIX = "CI red: ";
 
 const RECOVERED = "Recovered:";
 
-const RED = new Set(["failure", "timed_out"]);
+/** A job cancelled inside a run that wasn't: a job timeout, a lost or never-found runner. */
+const RED = new Set(["failure", "timed_out", "cancelled"]);
 
 /** Failing test lines kept per check; the job log has the rest. */
 export const MAX_TESTS = 30;

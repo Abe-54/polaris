@@ -43,7 +43,17 @@ this records why.
 - **macOS reports on PRs and counts on main and in the nightly**, because GitHub's macOS queue
   made PR runs take over 30 min. The break a Mac-only test finds lands on main and files a `ci-red`
   issue. Lint and typecheck moved to one Linux run, since macOS typecheck had become
-  the critical path.
+  the critical path. `CI`, the required check, doesn't wait for macOS at all, and `CI (macOS)`
+  counts those jobs on a push to main. `needs` can't be conditional, and the alternatives cost
+  more: a second job named `CI` for each event still waits on its `needs` before it skips, then
+  reports a skipped `CI`, which GitHub treats as passing; a separate workflow needs its own
+  `ci-red` and repeats the shared steps.
+- **The daemon build the smokes need runs on Linux; only darwin-arm64 needs macOS.** From 14
+  green PR runs of 2026-11-02 to 2026-11-06, the build waited for a macOS runner 5.8 min at the
+  median, 17.8 at p90 and 25.6 at most, to run for 2.4. The jobs that count finished at a
+  median of 12.2 min and a p90 of 23.6 with it, against 10.4 and 16.4 without it and the
+  smokes. Keeping it would have left the queue in the lane. darwin needs `codesign`, so it reports
+  on the PR with the other macOS jobs.
 - **The slow tier runs only in CI** (ADR 0096). pre-push stays under 90 s by running the fast tier
   of the changed packages, so a behaviour only a slow file covers is first checked on the PR.
 - **Merge commits, not squash.** Linear's release scan reads the subject of every commit pushed to
@@ -63,10 +73,18 @@ this records why.
 
 - A quarantine entry going past 30 days fails `bun run lint`, and so the required lane of every
   open PR, whatever it changed. That is deliberate: the expiry has to cost something.
-- The `CI` job waits for the macOS jobs on a PR even though their results don't count. On
-  2026-11-02 run 41541182597's counted jobs finished in 9 min and `CI` reported at 24 min, after
-  macOS runners came free. Run 41552593596, with no queue, took 5 min. The daemon build also runs
-  on macOS and counts, so it can hold the lane by itself.
+- On the PR that made this change, `CI` reported at 8.2, 8.3 and 6.8 min with macOS jobs still queued,
+  and failed on a failed counted job. The Linux build took 1.5 min.
+- `CI` on main doesn't include macOS: a green `CI` beside a red `CI (macOS)` means main is red,
+  and the run says so. Nothing reads `CI` on main; branch protection reads it on the PR.
+- A darwin build break, like a Mac-only test failure, lands on main. CI's smokes also run binaries
+  cross-compiled on Linux, while a release builds on macOS, so a fault only that build has first
+  shows at release.
+- A macOS job cancelled on its own now files a `ci-red` issue, as main's run 41862561967 (six macOS
+  jobs cancelled, nothing filed) should have. Queued macOS jobs were cancelled after 20 to 32 min
+  without a runner on this change's PR, so a queue can file these too. Cancelling a whole run
+  still files nothing.
+- PR macOS jobs keep their place in the queue after the PR merges, and report on a closed PR.
 - The budgets (pre-commit 10 s, pre-push 90 s, the required lane 8 min) are targets that nothing
   enforces; a miss needs someone to notice it and open an issue.
 - `CONTRIBUTING.md` describes branch protection and auto-merge as not yet on until ENG-738 turns
