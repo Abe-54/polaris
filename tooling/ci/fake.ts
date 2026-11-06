@@ -4,12 +4,14 @@
  */
 import { Schema } from "effect";
 import { ContextData } from "./linear.ts";
-import { JobsPage } from "./github.ts";
+import { Annotations, JobsPage } from "./github.ts";
 
 export const Fixture = Schema.Struct({
   jobs: JobsPage,
   /** Each failed job's log, by job id. */
   logs: Schema.Record(Schema.String, Schema.String),
+  /** Each cancelled job's annotations, by job id. */
+  annotations: Schema.optional(Schema.Record(Schema.String, Annotations)),
   linear: ContextData,
 });
 
@@ -25,6 +27,8 @@ export interface Recorded {
 
 const LOG = /\/actions\/jobs\/(\d+)\/logs$/;
 
+const ANNOTATIONS = /\/check-runs\/(\d+)\/annotations/;
+
 const answer = (fixture: Fixture, url: string, body: string): Response => {
   if (url.includes("/oauth/token")) return Response.json({ access_token: "fake-token" });
 
@@ -35,6 +39,12 @@ const answer = (fixture: Fixture, url: string, body: string): Response => {
   const job = LOG.exec(url)?.[1];
 
   if (job) return new Response(fixture.logs[job] ?? "", { status: 200 });
+
+  const annotated = ANNOTATIONS.exec(url)?.[1];
+
+  if (annotated) return Response.json(fixture.annotations?.[annotated] ?? []);
+
+  if (url.includes("/rerun-failed-jobs")) return new Response(null, { status: 201 });
 
   if (url.includes("/jobs?")) return Response.json(fixture.jobs);
 

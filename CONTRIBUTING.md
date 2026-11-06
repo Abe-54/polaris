@@ -117,7 +117,15 @@ On a pull request, CI selects by what the change affects (`turbo query affected`
 | Desktop budgets | Ubuntu | the desktop app or the daemon is affected |
 | Daemon build (every target but darwin), smokes (Linux x64 and arm64, Windows with its pipe), Windows service end to end | Ubuntu for the build, then each platform | the daemon or client is affected, or `scripts/build-daemon.ts` changed |
 
-**macOS** runs its tests, platform checks and darwin daemon build on a pull request, where they only report, often after `CI` has. On a push to main the `CI (macOS)` job counts them, so a red one turns the run red and files a `ci-red` issue; the nightly counts its macOS tests too. `CI` itself never includes them, on main or on a pull request, so check the run, not only `CI`, when you read main's state.
+**macOS** runs its tests, platform checks and darwin daemon build on a pull request only when the change could behave differently there (`tooling/ci/macosScope.ts`): a non-test source file that mentions `darwin`, `launchd`, `codesign`, `macOS` or `process.platform`, or `ci.yml`, `.github/actions/`, `bun.lock`, `package.json`, `patches/`, `scripts/build-daemon*`, `tooling/test/` or `apps/daemon/scripts/`. There they only report, often after `CI` has. On a push to main they always run and the `CI (macOS)` job counts them; the nightly counts its macOS tests too. `CI` itself never includes them, on main or on a pull request, so read `CI` and `CI (macOS)` together for main's state:
+
+| `CI (macOS)` on a push to main | Means |
+|---|---|
+| passed | every macOS job passed |
+| failed | a macOS job failed, timed out, or was cancelled after a runner took it; it files a `ci-red` issue |
+| skipped | no result: no runner acquired a macOS job and none failed. This is not a pass; the `macOS result` job's summary names the jobs |
+
+GitHub itself marks a run with a job no runner acquired as failed, so read these two checks, not the run's own status.
 
 ### Report lane
 
@@ -172,6 +180,8 @@ The nightly's bypass job lists each merge to main from the last day with that li
 ### A red main or nightly
 
 A job that fails, times out or is cancelled on its own on a push to main or in the nightly files a rolling `ci-red` issue in Linear: one open issue per failing job, titled `CI red: <workflow> / <job>`. Cancelling a whole run files nothing, since `ci-red` is cancelled with it. A repeat failure comments on the open issue, and so does a recovery. Nothing closes the issue for you; close it once the job is fixed. If the job failed on a flake, quarantine the test.
+
+A job no runner acquired has no result, so it is neither of those: GitHub cancelled it before any step ran, and its annotation says `The job was not acquired by Runner`. `ci-rerun.yml` re-runs such jobs once when the run finishes on main, unless something else in the run is red, because GitHub's re-run would retry that too. If they still have no result and no re-run is coming, one rolling issue, `CI red: <workflow> / no runner`, lists them and blames no test, and it says so when a later run gets a runner for every job. A job with no steps cancelled for any other reason, such as a job timeout, stays red.
 
 ## Borrowed code
 
