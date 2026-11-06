@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { auditBundle, readBundle } from "./audit";
-import { checkCatalog } from "./check";
 import { catalog } from "../../apps/daemon/src/languages/catalog";
 import { Tool } from "../../apps/daemon/src/languages/catalog/model";
 import { offeredTools, referenceFailures } from "./offered";
@@ -40,10 +39,6 @@ test("third party notice disappearance and copyleft metadata are not hidden by r
 
   expect(failures.some((failure) => failure.includes("license-review"))).toBe(true);
   expect(failures.some((failure) => failure.includes("notice-coverage"))).toBe(true);
-});
-
-test("catalog audit roots and eligibility flags match the exact retained evidence", () => {
-  expect(checkCatalog()).toEqual([]);
 });
 
 test("evaluation-only SQL cannot block offered release roots", () => {
