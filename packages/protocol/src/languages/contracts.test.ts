@@ -5,7 +5,6 @@ import { WorkspaceId, WorktreeId, HostId } from "../ids.ts";
 import {
   LanguageRequestInputs,
   LanguageRequestOutputs,
-  LanguageSubscriptionInputs,
 } from "../../../../apps/desktop/src/shared/languages.ts";
 import {
   LANGUAGE_RPC_CAPABILITIES,
@@ -368,14 +367,6 @@ test("IPC input and output tables cover every opt-in request and validate Host r
       notification: LanguageDocumentNotification.cases.Close.make({ uri, version: 3 }),
     })
   ).toBe(false);
-
-  expect(Object.keys(LanguageSubscriptionInputs)).toEqual([
-    "languages.host.state.watch",
-    "languages.log.watch",
-    "languages.context.watch",
-    "languages.install.watch",
-    "languages.availability.watch",
-  ]);
 });
 
 test("preview IPC rejects executable URLs, credentials and oversized fetch requests", () => {

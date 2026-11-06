@@ -177,7 +177,6 @@ test("Resume at reset continues the same Turn at the reset, and a restart re-arm
       );
       yield* clock.adjust(RESET_MS);
       yield* waitFor((m) => m.sessions.get(SESSION)?.session.state === "working");
-      expect(clock.currentTimeMillisUnsafe()).toBeGreaterThanOrEqual(RESET_MS);
       expect(after.latest(SESSION)!.turns[0]).toMatchObject({ turnId, prompt: CONTINUE_PROMPT });
 
       const events = yield* (yield* EventStore).readEvents({

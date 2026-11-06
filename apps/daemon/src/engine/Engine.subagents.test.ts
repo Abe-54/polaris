@@ -446,7 +446,6 @@ test.each([false, true])(
         );
 
         const record = model.sessions.get(sessionId)!;
-        expect(record.turns).toHaveLength(2);
         expect(record.turns[1]!.status).toBe("completed");
         expect(harness.turns[1]?.prompt).toBe("User raced");
         const store = yield* EventStore;

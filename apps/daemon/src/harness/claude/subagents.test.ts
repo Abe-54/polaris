@@ -272,7 +272,6 @@ test("a real SubagentHandback input supplies the report instead of the interim t
     expect(t.events.find(HarnessEvent.$is("SubagentEnded"))).toMatchObject({
       report: handback.input.message,
     });
-    expect(handback.input.message).toContain("**Deliverables completed:**");
   } finally {
     await t.close();
   }

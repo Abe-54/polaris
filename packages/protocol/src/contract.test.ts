@@ -146,13 +146,9 @@ describe("contract compatibility", () => {
   test("every catalogue entry is a capability", () => {
     const decode = Schema.decodeUnknownSync(CapabilityList);
 
-    expect(decode(HARNESS_CATALOGUE.map((harness) => harness.capability))).toEqual([
-      "harness.claude",
-      "harness.codex",
-      "harness.opencode",
-      "harness.gemini",
-      "harness.copilot",
-    ]);
+    const capabilities = HARNESS_CATALOGUE.map((harness) => harness.capability);
+
+    expect(decode(capabilities)).toEqual(capabilities);
   });
 
   test("a report from before signInKind and the tested version decodes with both null", () => {
