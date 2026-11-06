@@ -43,7 +43,8 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     args = parser.parse_args()
     values = metadata(os.environ["RELEASE_TAG"], args.root)
-    with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+    # Plain \n lines everywhere: on Windows text mode would write \r\n.
+    with open(os.environ["GITHUB_OUTPUT"], "a", newline="\n") as output:
         output.write("".join(f"{key}={value}\n" for key, value in values.items()))
 
 
