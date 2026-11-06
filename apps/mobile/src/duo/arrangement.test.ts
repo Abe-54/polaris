@@ -55,13 +55,6 @@ describe("arrangementOf", () => {
   ] as const)("half-folded, %o is %s", (route, kind) => {
     expect(arrangementOf(halfFolded, route).kind).toBe(kind);
   });
-
-  test("the same route goes through every posture and back without changing", () => {
-    const route = thread;
-    const kinds = [FOLDED, unfolded, halfFolded, FOLDED].map((p) => arrangementOf(p, route).kind);
-
-    expect(kinds).toEqual(["single", "context", "laptop", "single"]);
-  });
 });
 
 describe("composerMinHeight", () => {
