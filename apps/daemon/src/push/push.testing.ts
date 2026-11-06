@@ -16,10 +16,24 @@ import {
   TurnId,
   WorkspaceId,
 } from "@polaris/protocol";
+import { Effect } from "effect";
 import { draft } from "../engine/constellation.testing.ts";
 import { patchSession } from "../store/model.ts";
 
 const at = "2026-10-27T12:00:00.000Z";
+
+/** Polls until `probe` finds something; a stuck wait dies naming `what`. */
+export const waitUntil = <A>(probe: () => A | undefined, what: string) =>
+  Effect.gen(function* () {
+    for (let i = 0; i < 400; i++) {
+      const found = probe();
+
+      if (found !== undefined) return found;
+      yield* Effect.sleep("25 millis");
+    }
+
+    return yield* Effect.die(new Error(`timed out waiting for ${what}`));
+  });
 
 export const SESSION_ID = SessionId.make("s1");
 

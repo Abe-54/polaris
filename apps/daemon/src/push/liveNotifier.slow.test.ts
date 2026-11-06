@@ -5,11 +5,21 @@ import { Effect, Layer, PubSub, Stream } from "effect";
 import { type LiveSlice, RelayRoute } from "../linkedDevices/route.ts";
 import type { LiveTarget } from "../linkedDevices/store.ts";
 import { LIVE_DEBOUNCE_MS, LiveHostEvents, LiveNotifier } from "./liveNotifier.ts";
-import { approvalRequested, event, SESSION_ID, snapshot, synchronized } from "./push.testing.ts";
+import {
+  approvalRequested,
+  event,
+  SESSION_ID,
+  snapshot,
+  synchronized,
+  waitUntil,
+} from "./push.testing.ts";
 import { pushSuite } from "./seal.ts";
 import { toBase64Url } from "@polaris/protocol/relay";
 
 const unused = Effect.die("not used by the notifier");
+
+// Sealing is asynchronous, so a slice reaches `sent` some time after its flush.
+const SLOW_TEST_MS = 30_000;
 
 const keys = await pushSuite.kem.generateKeyPair();
 
@@ -96,7 +106,10 @@ const withNotifier = (
             )
           )
         );
-        yield* Effect.sleep("50 millis");
+        yield* waitUntil(
+          () => (targets.length === 0 || sent.length > 0 ? true : undefined),
+          "the first slice"
+        );
         yield* body({
           feed: (item) => Effect.runSync(PubSub.publish(events, item)),
           sent,
@@ -110,41 +123,58 @@ const withNotifier = (
 const flags = (sent: ReadonlyArray<LiveSlice>) =>
   sent.map(({ active, alert }) => ({ active, alert }));
 
-test("a burst of steps goes as one slice after the debounce; a new Needs You goes at once", () =>
-  withNotifier([target], ({ feed, sent }) =>
-    Effect.gen(function* () {
-      // The first slice follows Synchronized.
-      expect(flags(sent)).toEqual([{ active: true, alert: false }]);
+const reached = (sent: ReadonlyArray<LiveSlice>, count: number) =>
+  waitUntil(() => (sent.length >= count ? true : undefined), `slice ${count}`);
 
-      feed(step("Read a.ts"));
-      feed(step("Read b.ts"));
-      feed(step("Read c.ts"));
-      yield* Effect.sleep("50 millis");
-      expect(sent).toHaveLength(1);
+test(
+  "a burst of steps goes as one slice after the debounce; a new Needs You goes at once",
+  () =>
+    withNotifier([target], ({ feed, sent }) =>
+      Effect.gen(function* () {
+        // The first slice follows Synchronized.
+        expect(flags(sent)).toEqual([{ active: true, alert: false }]);
 
-      yield* Effect.sleep(`${LIVE_DEBOUNCE_MS} millis`);
-      expect(sent).toHaveLength(2);
+        const burst = Date.now();
+        feed(step("Read a.ts"));
+        feed(step("Read b.ts"));
+        feed(step("Read c.ts"));
+        yield* reached(sent, 2);
+        // Timers may fire a tick early; load only makes this later.
+        expect(Date.now() - burst).toBeGreaterThanOrEqual(LIVE_DEBOUNCE_MS - 20);
 
-      feed(approvalRequested("r1"));
-      yield* Effect.sleep("50 millis");
-      expect(flags(sent).at(-1)).toEqual({ active: true, alert: true });
-      expect(sent).toHaveLength(3);
-    })
-  ));
+        // A step's debounce is already running, so a delayed alert would come after its slice.
+        feed(step("Read d.ts"));
+        feed(approvalRequested("r1"));
+        yield* reached(sent, 3);
+        yield* Effect.sleep(`${LIVE_DEBOUNCE_MS + 100} millis`);
+        expect(flags(sent)).toEqual([
+          { active: true, alert: false },
+          { active: true, alert: false },
+          { active: true, alert: true },
+        ]);
+      })
+    ),
+  SLOW_TEST_MS
+);
 
-test("an item that changes nothing shown sends nothing; a relay reconnect sends the slice again", () =>
-  withNotifier([target], ({ feed, sent, reconnect }) =>
-    Effect.gen(function* () {
-      feed(event(DomainEvent.cases.SessionPinned.make({ sessionId: SESSION_ID, pinnedAt: null })));
-      yield* Effect.sleep(`${LIVE_DEBOUNCE_MS + 100} millis`);
-      expect(sent).toHaveLength(1);
+test(
+  "an item that changes nothing shown sends nothing; a relay reconnect sends the slice again",
+  () =>
+    withNotifier([target], ({ feed, sent, reconnect }) =>
+      Effect.gen(function* () {
+        feed(
+          event(DomainEvent.cases.SessionPinned.make({ sessionId: SESSION_ID, pinnedAt: null }))
+        );
+        yield* Effect.sleep(`${LIVE_DEBOUNCE_MS + 100} millis`);
+        expect(sent).toHaveLength(1);
 
-      reconnect();
-      yield* Effect.sleep("50 millis");
-      expect(sent).toHaveLength(2);
-      expect(sent[1]?.sealed).not.toBe(sent[0]?.sealed);
-    })
-  ));
+        reconnect();
+        yield* reached(sent, 2);
+        expect(sent[1]?.sealed).not.toBe(sent[0]?.sealed);
+      })
+    ),
+  SLOW_TEST_MS
+);
 
 test("with no activity registered, the Host stream isn't followed and nothing is sent", () =>
   withNotifier([], ({ feed, sent, subscriptions }) =>
