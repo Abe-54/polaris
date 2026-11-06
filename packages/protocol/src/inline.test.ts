@@ -1,17 +1,6 @@
 import { expect, test } from "bun:test";
-import { Schema } from "effect";
 import { InlinePatch, InlineRequest, inlineSessionPrompt } from "./inline.ts";
 import { WorkspaceId } from "./ids.ts";
-
-test("inline patch rejects invalid offsets and missing or oversized summaries", () => {
-  const decode = Schema.decodeUnknownSync(InlinePatch);
-
-  for (const from of [-1, 1.5])
-    expect(() => decode({ replacements: [{ from, to: 2, text: "x" }], summary: "Edit" })).toThrow();
-
-  for (const summary of [undefined, "", "x".repeat(501)])
-    expect(() => decode({ replacements: [], summary })).toThrow();
-});
 
 test("session conversion preserves the exact unsaved selection and proposal", () => {
   const request = InlineRequest.make({

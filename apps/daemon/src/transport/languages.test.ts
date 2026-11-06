@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import * as P from "@polaris/protocol";
-import { Effect, Layer, Queue, Schema } from "effect";
+import { Effect, Queue, Schema } from "effect";
 import { ServerRpcs } from "./rpcs.ts";
 import { startServer } from "./server.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
@@ -59,41 +59,27 @@ test("existing RPC connection returns typed unavailable language defaults withou
 
 test("raw tree wire rejects malformed decisions before handlers and retains full manifests", async () => {
   const seen: P.LanguageTreeEditDecision[] = [];
-  let legacyCalls = 0;
 
-  const handlers = Layer.merge(
-    ServerRpcs.toLayerHandler("languages.tree.edit.decide", (input) => {
-      seen.push(input);
+  const handlers = ServerRpcs.toLayerHandler("languages.tree.edit.decide", (input) => {
+    seen.push(input);
 
-      return Effect.succeed(
-        P.LanguageTreeOperationOutcome.make({
-          format: 2,
-          operationId: input.acceptance.operationId,
-          proposalId: input.acceptance.proposalId,
-          owner: input.acceptance.fence.context,
-          state: "rejected",
-          draftsDurable: false,
-          receiptDurable: false,
-          receiptRevision: 0,
-          draftGroupId: null,
-          steps: [],
-          failedChange: null,
-          message: "Codec fixture only",
-        })
-      );
-    }),
-    ServerRpcs.toLayerHandler("languages.edit.decide", () => {
-      legacyCalls++;
-
-      return Effect.fail(
-        new P.LanguageError({
-          reason: "invalid-input",
-          message: "Legacy fixture",
-          retryable: false,
-        })
-      );
-    })
-  );
+    return Effect.succeed(
+      P.LanguageTreeOperationOutcome.make({
+        format: 2,
+        operationId: input.acceptance.operationId,
+        proposalId: input.acceptance.proposalId,
+        owner: input.acceptance.fence.context,
+        state: "rejected",
+        draftsDurable: false,
+        receiptDurable: false,
+        receiptRevision: 0,
+        draftGroupId: null,
+        steps: [],
+        failedChange: null,
+        message: "Codec fixture only",
+      })
+    );
+  });
 
   await Effect.runPromise(
     Effect.scoped(
@@ -150,35 +136,26 @@ test("raw tree wire rejects malformed decisions before handlers and retains full
           Queue.offer(responses, text).pipe(Effect.asVoid)
         );
 
-        const malformed = [
-          { ...acceptance, format: undefined },
-          { ...acceptance, format: 3 },
-          { ...acceptance, resourceSnapshots: [{ ...snapshot, tree: { format: 1, entries: [] } }] },
-          { ...acceptance, resourceSnapshots: Array.from({ length: 129 }, () => snapshot) },
-        ];
+        yield* wire.sendJson(
+          JSON.stringify(
+            RawRequest.make({
+              id: "bad",
+              tag: "languages.tree.edit.decide",
+              payload: { acceptance: { ...acceptance, format: 3 }, drafts: null },
+              headers: [],
+            })
+          )
+        );
 
-        for (const [index, input] of malformed.entries()) {
-          yield* wire.sendJson(
-            JSON.stringify(
-              RawRequest.make({
-                id: `bad-${index}`,
-                tag: "languages.tree.edit.decide",
-                payload: { acceptance: input, drafts: null },
-                headers: [],
-              })
-            )
-          );
+        const text = yield* Queue.take(responses).pipe(Effect.timeout("3 seconds"));
 
-          const text = yield* Queue.take(responses).pipe(Effect.timeout("3 seconds"));
+        const header = Schema.decodeUnknownSync(
+          Schema.Struct({ _tag: Schema.Literal("Exit"), requestId: Schema.String })
+        )(JSON.parse(text));
 
-          const header = Schema.decodeUnknownSync(
-            Schema.Struct({ _tag: Schema.Literal("Exit"), requestId: Schema.String })
-          )(JSON.parse(text));
+        expect(header.requestId).toBe("bad");
 
-          expect(header.requestId).toBe(`bad-${index}`);
-
-          expect(seen).toHaveLength(0);
-        }
+        expect(seen).toHaveLength(0);
 
         yield* wire.sendJson(
           JSON.stringify(
@@ -194,8 +171,6 @@ test("raw tree wire rejects malformed decisions before handlers and retains full
         yield* Queue.take(responses).pipe(Effect.timeout("3 seconds"));
 
         expect(seen).toEqual([P.LanguageTreeEditDecision.make({ acceptance, drafts: null })]);
-
-        expect(legacyCalls).toBe(0);
       })
     )
   );

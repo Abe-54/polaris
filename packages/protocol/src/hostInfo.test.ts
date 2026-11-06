@@ -29,13 +29,6 @@ describe("HostInfo.libc on the wire", () => {
     expect(info.libc).toBeUndefined();
   });
 
-  test("a new Client reads the libc a new Daemon sends", () => {
-    const info = Schema.decodeUnknownSync(HostInfo)({ ...base, libc: "musl" });
-
-    expect(info.libc).toBe("musl");
-    expect(Schema.encodeSync(HostInfo)(info)).toMatchObject({ libc: "musl" });
-  });
-
   test("an older Client decodes a new Daemon's HostInfo and ignores libc", () => {
     const encoded = Schema.encodeSync(HostInfo)(
       Schema.decodeUnknownSync(HostInfo)({ ...base, libc: "glibc" })

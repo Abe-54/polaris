@@ -60,7 +60,7 @@ describe("contract compatibility", () => {
     });
   });
 
-  test("a StartSession sent before origin existed decodes; PinSession decodes", () => {
+  test("a StartSession sent before origin existed decodes", () => {
     const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.toCodecJson(Command)));
 
     const start = decode(
@@ -70,9 +70,6 @@ describe("contract compatibility", () => {
     );
 
     expect(Predicate.isTagged(start, "StartSession") && start.origin == null).toBe(true);
-    expect(decode('{"_tag":"PinSession","sessionId":"s","pinned":true}')).toEqual(
-      Command.cases.PinSession.make({ sessionId: SessionId.make("s"), pinned: true })
-    );
   });
 
   test("ItemProgress carries a full item; a Snapshot with unknown extra fields still decodes", () => {

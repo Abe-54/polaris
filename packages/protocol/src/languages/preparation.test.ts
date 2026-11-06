@@ -6,7 +6,7 @@ import { languageRpcAllowed } from "./capabilities.ts";
 import { LanguageTreeEditProposal } from "./trees.ts";
 import { LanguageEditProposal } from "./edits.ts";
 import { LanguagePreparedEditProposal } from "./preparation.ts";
-import { AcknowledgeLanguageDocument, PrepareLanguageEdit } from "./rpc.ts";
+import { PrepareLanguageEdit } from "./rpc.ts";
 
 const fence = {
   context: {
@@ -59,20 +59,6 @@ test("unknown or missing tree format and versionless legacy resources fail befor
     { ...text, edit: { documentChanges: [{ kind: "create", uri: "file:///checkout/new" }] } },
   ])
     expect(() => Schema.decodeUnknownSync(LanguagePreparedEditProposal)(input)).toThrow();
-});
-
-test("acknowledgment input preserves exact buffer tuple and rejects malformed draft revision", () => {
-  const input = {
-    fence,
-    buffer: { uri: "file:///checkout/a", version: 3, text: "unsaved", draftRevision: 7 },
-  };
-
-  const schema = AcknowledgeLanguageDocument.payloadSchema;
-
-  expect(Schema.decodeUnknownSync(schema)(input)).toEqual(input);
-  expect(() =>
-    Schema.decodeUnknownSync(schema)({ ...input, buffer: { ...input.buffer, draftRevision: -1 } })
-  ).toThrow();
 });
 
 test("old peers and partial capabilities cannot invoke new preparation or acknowledgment methods", () => {

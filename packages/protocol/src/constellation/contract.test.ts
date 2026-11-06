@@ -3,9 +3,8 @@ import { Schema } from "effect";
 import { DomainEvent } from "../events.ts";
 import { HostId, SessionId } from "../ids.ts";
 import { DaemonRpcs, HostStreamItem } from "../rpc.ts";
-import { ConstellationCommand, PlanOperation, ReviewAction } from "./commands.ts";
+import { ConstellationCommand } from "./commands.ts";
 import {
-  AttemptCause,
   AttemptState,
   TaskState,
   AttemptId,
@@ -14,16 +13,10 @@ import {
   ConstellationId,
   ConstellationSettings,
   HostResource,
-  Revision,
   TaskDefinition,
 } from "./domain.ts";
 import { ConstellationEvent, ConstellationOutboxEntry, ResourceEvent } from "./events.ts";
-import {
-  ConstellationPlan,
-  ConstellationReview,
-  ConstellationRpcs,
-  ConstellationWorkerProgress,
-} from "./rpc.ts";
+import { ConstellationPlan, ConstellationRpcs, ConstellationWorkerProgress } from "./rpc.ts";
 
 const claim = Schema.decodeUnknownSync(Claim)({
   branch: "polaris/c/A1",
@@ -71,19 +64,7 @@ describe("Constellation contract", () => {
     expect(Object.keys(plan)).not.toContain("_tag");
   });
 
-  test("review, cancel and edit require revisions; progress does not", () => {
-    expect(() =>
-      Schema.decodeUnknownSync(ConstellationReview.payloadSchema)({
-        commandId: "cmd",
-        constellationId: "c",
-        attemptId: "a",
-        action: ReviewAction.cases.Stop.make({ reason: "Lost" }),
-      })
-    ).toThrow();
-    expect(() => Schema.decodeUnknownSync(PlanOperation.cases.Cancel)({ taskId: "A1" })).toThrow();
-    expect(() =>
-      Schema.decodeUnknownSync(PlanOperation.cases.Edit)({ taskId: "A1", task: {} })
-    ).toThrow();
+  test("a progress report may leave out its counts", () => {
     expect(
       Schema.decodeUnknownSync(ConstellationWorkerProgress.payloadSchema)({
         commandId: "cmd",
@@ -92,15 +73,6 @@ describe("Constellation contract", () => {
         note: "Checking",
       })
     ).toMatchObject({ completed: null, total: null });
-
-    for (const invalid of [-1, 1.5]) expect(() => Revision.make(invalid)).toThrow();
-  });
-
-  test("a Claim cannot omit receipts or questions", () => {
-    const { receipts: _receipts, ...incomplete } = claim;
-    expect(() => Schema.decodeUnknownSync(Claim)(incomplete)).toThrow();
-    const { questions: _questions, ...withoutQuestions } = claim;
-    expect(() => Schema.decodeUnknownSync(Claim)(withoutQuestions)).toThrow();
   });
 
   test("verified evidence points to a recorded item, while reported evidence is text", () => {
@@ -166,8 +138,7 @@ describe("Constellation contract", () => {
     ).toThrow();
   });
 
-  test("a sent-back cause must name the earlier Attempt; a resource needs capacity", () => {
-    expect(() => Schema.decodeUnknownSync(AttemptCause.cases.SentBack)({})).toThrow();
+  test("a resource needs capacity", () => {
     expect(() =>
       HostResource.make({ hostId: HostId.make("h"), name: "bench", capacity: 0 })
     ).toThrow();

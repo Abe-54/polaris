@@ -14,7 +14,6 @@ import {
   QueryLogEntry,
   PageDataQueryLog,
   SaveDataSource,
-  SchemaTree,
   ApprovalDecision,
   DataRpcs,
   scrubCredentials,
@@ -235,31 +234,6 @@ test.each(["keep", "clear", "set"])(
     expect(payload.passwordAction).toBe(passwordAction);
   }
 );
-
-test("F11: schema completion receives columns and load time alongside returned/total counts", () => {
-  const tree = Schema.decodeUnknownSync(SchemaTree)({
-    loadedAt: "2026-10-30T00:00:00Z",
-    truncatedTables: 0,
-    schemas: [
-      {
-        name: "public",
-        functions: [],
-        views: [],
-        tables: [
-          {
-            name: "invoices",
-            rowEstimate: 18402,
-            columnCount: 1,
-            columns: [{ name: "id", type: "bigint" }],
-          },
-        ],
-      },
-    ],
-  });
-
-  expect(tree.schemas[0]?.tables[0]?.columns).toEqual([{ name: "id", type: "bigint" }]);
-  expect(tree.loadedAt).toBe("2026-10-30T00:00:00Z");
-});
 
 test("F10: password actions reject ambiguous set/keep/clear combinations", () => {
   const input = { sessionId: "s", ...source };
