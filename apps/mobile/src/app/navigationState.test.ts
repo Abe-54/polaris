@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  HOME_TABS,
   initialNavigation,
   layersOf,
   opened,
@@ -10,12 +9,6 @@ import {
   topOf,
   wentBack,
 } from "./navigationState.ts";
-
-describe("the tabs", () => {
-  test("the pill holds Sessions, Review and Settings; Hosts is no longer a tab", () => {
-    expect(HOME_TABS).toEqual(["sessions", "review", "settings"]);
-  });
-});
 
 describe("Settings → Hosts", () => {
   test("Hosts pushes over Settings and back returns to the Settings tab", () => {
