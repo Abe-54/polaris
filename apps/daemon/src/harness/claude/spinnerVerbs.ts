@@ -64,7 +64,7 @@ export const parseSetting = (text: string): Setting | null => {
 };
 
 /** The files that can set it, lowest precedence first. */
-export const settingsFiles = (home: string, cwd: string | null): ReadonlyArray<string> => [
+const settingsFiles = (home: string, cwd: string | null): ReadonlyArray<string> => [
   join(home, ".claude", "settings.json"),
   ...(cwd === null
     ? []

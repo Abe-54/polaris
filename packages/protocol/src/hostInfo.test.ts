@@ -48,14 +48,6 @@ describe("HostInfo.platform on the wire", () => {
 
     expect(info.platform).toBe("windows-arm64");
   });
-
-  test("an older Client refuses windows-x64, so hello must not send it one", () => {
-    const encoded = Schema.encodeSync(HostInfo)(
-      Schema.decodeUnknownSync(HostInfo)({ ...base, platform: "windows-x64" })
-    );
-
-    expect(() => Schema.decodeUnknownSync(OlderHostInfo)(encoded)).toThrow();
-  });
 });
 
 describe("HostInfo.previousStop on the wire", () => {

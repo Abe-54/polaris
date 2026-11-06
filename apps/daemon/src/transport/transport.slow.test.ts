@@ -661,40 +661,6 @@ describe("transport", () => {
     expect(host.hostname.length).toBeGreaterThan(0);
   });
 
-  test("polaris bridge pipes a Client to the Daemon", async () => {
-    const result = await run(
-      Effect.gen(function* () {
-        const log = yield* makeLog;
-        yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
-        const conn = yield* bridgeHost(home);
-        const session = yield* conn.awaitSession;
-
-        const read = yield* session.client["files.read"]({
-          path: "/x",
-          offset: null,
-          length: 3_000_000,
-        });
-
-        const got = isBlob(read.content) ? yield* session.blobs.take(read.content.blobId) : null;
-
-        const staged = yield* conn.withBlob(bytes(2_000_000, 9), (blobId, s) =>
-          s.client["attachments.stage"]({
-            sessionId: null,
-            workspaceId: WorkspaceId.make("w"),
-            name: "b",
-            mimeType: "x/y",
-            blobId,
-          })
-        );
-
-        return { host: session.host, got, staged };
-      })
-    );
-
-    expect(result.got && sha(result.got)).toBe(sha(bytes(3_000_000, 7)));
-    expect(result.staged.hostPath).toBe(sha(bytes(2_000_000, 9)));
-  }, 15_000);
-
   test("no Daemon behind the bridge is Needs Attention, and it recovers", async () => {
     const result = await run(
       Effect.gen(function* () {

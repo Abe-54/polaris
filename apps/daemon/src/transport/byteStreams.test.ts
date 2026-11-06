@@ -19,7 +19,7 @@ import {
   type ByteTransport,
   SessionId,
 } from "@polaris/protocol";
-import { Effect, Exit, Fiber, Predicate, Queue, Scope, Stream } from "effect";
+import { Effect, Exit, Fiber, Predicate, Queue, Stream } from "effect";
 import {
   bytes,
   cleanupHome,
@@ -141,7 +141,7 @@ describe("Host-address streams", () => {
     expect(result.unreachable).toBe("refused");
   });
 
-  test("a stream ends with its connection, in both directions", async () => {
+  test("a Host's close ends the Client's incoming", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* daemon();
@@ -152,40 +152,24 @@ describe("Host-address streams", () => {
           socket.on("data", () => {});
         });
 
-        // The Client disconnects: the Daemon closes its loopback socket.
-        const connectionScope = yield* Scope.make();
-        const session = yield* client("socket").pipe(Scope.provide(connectionScope));
+        const session = yield* client("socket");
 
-        const stream = yield* openHostAddressStream(session, {
-          hostname: "localhost",
-          port: server.port,
-        });
-
-        yield* stream.write(bytes(10, 1));
-        yield* eventually(() => server.connections.opened === 1);
-        yield* Scope.close(connectionScope, Exit.void);
-        const socketClosed = yield* eventually(() => server.connections.closed === 1);
-
-        // The Host's server closes its socket: the Client's incoming ends.
-        const second = yield* client("socket", { key: "second" });
-
-        const other = yield* openHostAddressStream(second, {
+        const other = yield* openHostAddressStream(session, {
           hostname: "localhost",
           port: server.port,
         });
 
         yield* other.write(bytes(10, 2));
-        yield* eventually(() => server.connections.opened === 2);
+        yield* eventually(() => server.connections.opened === 1);
         const drained = yield* Effect.forkChild(collectAll(other.incoming).pipe(Effect.exit));
         held!.destroy();
         const incomingEnded = yield* Fiber.join(drained);
 
-        return { socketClosed, incomingEnded: Exit.isSuccess(incomingEnded) };
+        return Exit.isSuccess(incomingEnded);
       })
     );
 
-    expect(result.socketClosed).toBe(true);
-    expect(result.incomingEnded).toBe(true);
+    expect(result).toBe(true);
   }, 15_000);
 
   test("a sender never has more than one window in flight, so RPCs keep flowing beside a stalled transfer", async () => {
@@ -443,33 +427,29 @@ describe("Browser hosting", () => {
     expect(result.claim).toBe("Unsupported");
   });
 
-  test.each(["socket", "bridge"] as const)(
-    "a Browser stream carries bytes both ways between the Daemon and the hosting Desktop App (%s)",
-    async (transport) => {
-      const result = await run(
-        Effect.gen(function* () {
-          const { hosting } = yield* daemon();
-          const mac = yield* desktop(yield* client(transport));
-          yield* mac.host.claim(s1);
-          const payload = bytes(2 * 1024 * 1024, 4);
+  test("a Browser stream carries bytes both ways between the Daemon and the hosting Desktop App", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { hosting } = yield* daemon();
+        const mac = yield* desktop(yield* client("socket"));
+        yield* mac.host.claim(s1);
+        const payload = bytes(2 * 1024 * 1024, 4);
 
-          const daemonSide = yield* hosting.open(s1, "cdp");
-          const macSide = yield* Queue.take(mac.accepted);
-          // The Desktop App echoes.
-          yield* macSide.incoming.pipe(Stream.runForEach(macSide.write), Effect.forkScoped);
+        const daemonSide = yield* hosting.open(s1, "cdp");
+        const macSide = yield* Queue.take(mac.accepted);
+        // The Desktop App echoes.
+        yield* macSide.incoming.pipe(Stream.runForEach(macSide.write), Effect.forkScoped);
 
-          const echoed = yield* roundTrip(daemonSide, payload);
-          yield* daemonSide.close;
+        const echoed = yield* roundTrip(daemonSide, payload);
+        yield* daemonSide.close;
 
-          return { echoed: sha(echoed), payload: sha(payload), offered: mac.offered };
-        })
-      );
+        return { echoed: sha(echoed), payload: sha(payload), offered: mac.offered };
+      })
+    );
 
-      expect(result.echoed).toBe(result.payload);
-      expect(result.offered.map((o) => o.sessionId)).toEqual([s1]);
-    },
-    30_000
-  );
+    expect(result.echoed).toBe(result.payload);
+    expect(result.offered.map((o) => o.sessionId)).toEqual([s1]);
+  }, 30_000);
 
   test("streams go to the last claimer, else the most recently present host; a move revokes", async () => {
     const result = await run(

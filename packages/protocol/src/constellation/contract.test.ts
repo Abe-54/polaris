@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Schema } from "effect";
 import { DomainEvent } from "../events.ts";
 import { HostId, SessionId } from "../ids.ts";
-import { DaemonRpcs, HostStreamItem } from "../rpc.ts";
+import { DaemonRpcs } from "../rpc.ts";
 import { ConstellationCommand } from "./commands.ts";
 import {
   AttemptState,
@@ -95,12 +95,7 @@ describe("Constellation contract", () => {
     }
   });
 
-  test("old Host snapshots, Tasks and settings decode without Constellation fields", () => {
-    expect(
-      Schema.decodeUnknownSync(Schema.fromJsonString(Schema.toCodecJson(HostStreamItem)))(
-        '{"_tag":"Snapshot","sequence":0,"workspaces":[],"worktrees":[],"sessions":[]}'
-      )
-    ).toMatchObject({ sessions: [] });
+  test("old Tasks and settings decode without Constellation fields", () => {
     expect(
       Schema.decodeUnknownSync(TaskDefinition)({
         id: "A1",

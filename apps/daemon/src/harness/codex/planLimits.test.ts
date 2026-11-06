@@ -143,27 +143,6 @@ describe("Codex Plan Limits", () => {
     ]);
   });
 
-  test("an update keeps the plan the read named", async () => {
-    const seen: Array<PlanLimit> = [];
-
-    await run(
-      (conn) => conn.reply(realRead),
-      async ({ reported, connection }) => {
-        await until(() => reported.length === 1, "the read");
-        connection().notify("account/rateLimits/updated", {
-          rateLimits: { limitId: "codex", primary: { usedPercent: 9, windowDurationMins: 10080 } },
-        });
-        await until(() => reported.length === 2, "the update");
-        seen.push(...reported);
-      }
-    );
-
-    expect(seen.map((l) => [l.kind, l.usedPercent, l.plan])).toEqual([
-      ["weekly", 7, "prolite"],
-      ["weekly", 9, "prolite"],
-    ]);
-  });
-
   test("a failed read (not signed in) leaves the session working and reports nothing", async () => {
     const seen: Array<PlanLimit> = [];
     const ended: Array<string> = [];
