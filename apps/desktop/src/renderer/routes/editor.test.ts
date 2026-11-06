@@ -47,16 +47,17 @@ const model = withWorktree(
 const app = { hostModels: { local: model } };
 
 describe("resolvePath", () => {
-  test("joins a relative path to its root and folds dots", () => {
-    expect(resolvePath("src/./a/../b.ts", "/code/polaris/")).toBe("/code/polaris/src/b.ts");
-  });
-
-  test("keeps an absolute path", () => {
-    expect(resolvePath("/etc/hosts", "/code")).toBe("/etc/hosts");
-  });
-
-  test("stays relative with no root", () => {
-    expect(resolvePath("src/a.ts", null)).toBe("src/a.ts");
+  test.each<[string, string, string | null, string]>([
+    [
+      "joins a relative path to its root and folds dots",
+      "src/./a/../b.ts",
+      "/code/polaris/",
+      "/code/polaris/src/b.ts",
+    ],
+    ["keeps an absolute path", "/etc/hosts", "/code", "/etc/hosts"],
+    ["stays relative with no root", "src/a.ts", null, "src/a.ts"],
+  ])("%s", (_case, path, root, resolved) => {
+    expect(resolvePath(path, root)).toBe(resolved);
   });
 });
 

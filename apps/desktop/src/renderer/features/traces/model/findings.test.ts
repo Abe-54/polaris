@@ -53,19 +53,17 @@ const shown = (detail: ReturnType<typeof withParents>) =>
     r.node.spans.map((s) => s.span.id)
   );
 
-test("finding 13: a span naming itself as parent still shows in the waterfall", () => {
-  const detail = withParents(new Map([["63a8cae2f4b6d803", "63a8cae2f4b6d803"]]));
-
-  expect(shown(detail).toSorted()).toEqual(detail.spans.map((s) => s.id).toSorted());
-});
-
-test("finding 13: two spans naming each other as parent still show in the waterfall", () => {
-  const detail = withParents(
+test.each([
+  ["a span naming itself as parent", new Map([["63a8cae2f4b6d803", "63a8cae2f4b6d803"]])],
+  [
+    "two spans naming each other as parent",
     new Map([
       ["63a8cae2f4b6d803", "74b9dbf3a5c7e914"],
       ["74b9dbf3a5c7e914", "63a8cae2f4b6d803"],
-    ])
-  );
+    ]),
+  ],
+])("finding 13: %s still shows in the waterfall", (_case, parents) => {
+  const detail = withParents(parents);
 
   expect(shown(detail).toSorted()).toEqual(detail.spans.map((s) => s.id).toSorted());
 });

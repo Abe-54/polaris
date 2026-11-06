@@ -45,41 +45,45 @@ describe("parseConnectionString", () => {
     });
   });
 
-  test("Postgres query parameters override the authority", () => {
-    expect(
-      parseConnectionString(
-        "postgres://ignored:old@ignored:1/ignored?host=/var/run/postgresql&port=5544&user=ops&dbname=metrics&password=n%26w"
-      )
-    ).toEqual({
-      engine: "postgres",
-      host: "/var/run/postgresql",
-      port: 5544,
-      database: "metrics",
-      user: "ops",
-      password: "n&w",
-    });
-  });
-
-  test("MySQL ignores Postgres-only parameters and defaults to 3306", () => {
-    expect(parseConnectionString("mysql://root:pw@mysql.local/shop?host=elsewhere")).toEqual({
-      engine: "mysql",
-      host: "mysql.local",
-      port: 3306,
-      database: "shop",
-      user: "root",
-      password: "pw",
-    });
-  });
-
-  test("a bare Postgres URL takes libpq's defaults", () => {
-    expect(parseConnectionString("postgres://")).toEqual({
-      engine: "postgres",
-      host: "localhost",
-      port: 5432,
-      database: "postgres",
-      user: "postgres",
-      password: "",
-    });
+  test.each<[string, string, ReturnType<typeof parseConnectionString>]>([
+    [
+      "Postgres query parameters override the authority",
+      "postgres://ignored:old@ignored:1/ignored?host=/var/run/postgresql&port=5544&user=ops&dbname=metrics&password=n%26w",
+      {
+        engine: "postgres",
+        host: "/var/run/postgresql",
+        port: 5544,
+        database: "metrics",
+        user: "ops",
+        password: "n&w",
+      },
+    ],
+    [
+      "MySQL ignores Postgres-only parameters and defaults to 3306",
+      "mysql://root:pw@mysql.local/shop?host=elsewhere",
+      {
+        engine: "mysql",
+        host: "mysql.local",
+        port: 3306,
+        database: "shop",
+        user: "root",
+        password: "pw",
+      },
+    ],
+    [
+      "a bare Postgres URL takes libpq's defaults",
+      "postgres://",
+      {
+        engine: "postgres",
+        host: "localhost",
+        port: 5432,
+        database: "postgres",
+        user: "postgres",
+        password: "",
+      },
+    ],
+  ])("%s", (_case, pasted, parsed) => {
+    expect(parseConnectionString(pasted)).toEqual(parsed);
   });
 
   test.each([

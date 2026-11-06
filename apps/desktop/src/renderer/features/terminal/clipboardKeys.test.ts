@@ -11,19 +11,15 @@ const press = (key: string, mods: Partial<Omit<KeyLike, "key">> = {}): KeyLike =
 });
 
 describe("clipboardKey", () => {
-  test("Windows copies with Ctrl+Shift+C and Ctrl+Insert", () => {
-    expect(clipboardKey(press("C", { ctrlKey: true, shiftKey: true }), "win32")).toBe("copy");
-    expect(clipboardKey(press("Insert", { ctrlKey: true }), "win32")).toBe("copy");
-  });
-
-  test("Windows pastes with Ctrl+Shift+V and Shift+Insert", () => {
-    expect(clipboardKey(press("V", { ctrlKey: true, shiftKey: true }), "win32")).toBe("paste");
-    expect(clipboardKey(press("Insert", { shiftKey: true }), "win32")).toBe("paste");
-  });
-
-  test("Ctrl+C and Ctrl+V still reach the shell", () => {
-    expect(clipboardKey(press("c", { ctrlKey: true }), "win32")).toBeNull();
-    expect(clipboardKey(press("v", { ctrlKey: true }), "win32")).toBeNull();
+  test.each<[string, KeyLike, "copy" | "paste" | null]>([
+    ["Windows copies with Ctrl+Shift+C", press("C", { ctrlKey: true, shiftKey: true }), "copy"],
+    ["Windows copies with Ctrl+Insert", press("Insert", { ctrlKey: true }), "copy"],
+    ["Windows pastes with Ctrl+Shift+V", press("V", { ctrlKey: true, shiftKey: true }), "paste"],
+    ["Windows pastes with Shift+Insert", press("Insert", { shiftKey: true }), "paste"],
+    ["Ctrl+C still reaches the shell", press("c", { ctrlKey: true }), null],
+    ["Ctrl+V still reaches the shell", press("v", { ctrlKey: true }), null],
+  ])("%s", (_case, key, action) => {
+    expect(clipboardKey(key, "win32")).toBe(action);
   });
 
   test("macOS and Linux are untouched", () => {

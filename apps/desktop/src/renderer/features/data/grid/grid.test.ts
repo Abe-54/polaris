@@ -28,6 +28,8 @@ describe("cell display", () => {
     [Timestamp.make({ iso: "2026-08-02T09:30:00.000Z" }), "2026-08-02 09:30:00Z"],
     [Timestamp.make({ iso: "2026-10-30T12:00:00.000+05:30" }), "2026-10-30 12:00:00+05:30"],
     ["2026-10-30T09:00 standup", "2026-10-30T09:00 standup"],
+    ["INV-2041", "INV-2041"],
+    ["12345", "12345"],
     ["a\tb\rc\r\nd\u2028e\u0085f", "a⇥b␍c⏎d⏎e⏎f"],
     ["invoice_\u202Efdp.exe", "invoice_⟨RLO⟩fdp.exe"],
     [Bytes.make({ length: 16 }), "16 bytes"],
@@ -58,11 +60,6 @@ describe("cell display", () => {
     expect(formatSize(1_000_000, "characters")).toBe("1.0M characters");
     expect(formatSize(980, "characters")).toBe("980 characters");
     expect(formatSize(1_048_576, "bytes")).toBe("1.0 MB");
-  });
-
-  test("a numeric-looking string in a text column isn't grouped", () => {
-    expect(shown("INV-2041")).toBe("INV-2041");
-    expect(shown("12345")).toBe("12345");
   });
 });
 

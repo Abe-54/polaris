@@ -127,12 +127,11 @@ describe("launch", () => {
     expect(endedLine({ kind: "exited", code: null }, stop)).toMatch(/or the process was stopped/);
   });
 
-  test("a Windows Host's folder titles its tab", () => {
-    expect(baseName("C:\\Users\\lucas\\code\\polaris")).toBe("polaris");
-  });
-
-  test("tab titles take the last path segment", () => {
-    expect(baseName("/home/me/code/polaris/")).toBe("polaris");
-    expect(baseName("/")).toBe("/");
+  test.each([
+    ["C:\\Users\\lucas\\code\\polaris", "polaris"],
+    ["/home/me/code/polaris/", "polaris"],
+    ["/", "/"],
+  ])("the tab for %s is titled %s", (path, title) => {
+    expect(baseName(path)).toBe(title);
   });
 });
