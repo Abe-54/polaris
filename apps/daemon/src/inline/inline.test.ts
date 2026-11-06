@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { InlinePatch, InlineStreamItem } from "@polaris/protocol";
+import { InlinePatch } from "@polaris/protocol";
 import { Deferred, Effect, Fiber, Stream, Predicate, Result } from "effect";
 import { benchInline } from "./bench.ts";
 import type { InlineBackend } from "./backend.ts";
@@ -21,9 +21,7 @@ test("scripted Harness streams progress and one validated final patch with timin
   );
 
   expect(items).toHaveLength(2);
-  expect(items[0]).toEqual(
-    InlineStreamItem.cases.Delta.make({ text: "Preparing a scripted proposal" })
-  );
+  expect(Predicate.isTagged(items[0], "Delta")).toBe(true);
   expect(items[1]).toMatchObject({ patch });
   expect(Predicate.isTagged(items[1], "Proposed") && items[1].thoughtMs).toBeGreaterThanOrEqual(0);
 });

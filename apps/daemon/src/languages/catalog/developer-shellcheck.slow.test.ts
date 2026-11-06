@@ -150,12 +150,10 @@ ${ending}
 `
       );
       let pid: number | undefined;
-      let elapsedMs = 0;
 
       try {
         const start = Date.now();
         const fact = await probeDeveloperShellCheck(f.input);
-        elapsedMs = Date.now() - start;
         expect(Date.now() - start).toBeLessThan(3000);
         expect(fact.status).toBe("probe-failed");
         expect(fact.shellcheckDiagnostics).toBe(false);
@@ -177,16 +175,6 @@ ${ending}
         }
 
         expect(() => process.kill(pid!, 0)).toThrow();
-        console.log(
-          JSON.stringify({
-            topology: "synthetic-setsid-held-pipe",
-            ending,
-            elapsedMs,
-            status: "probe-failed",
-            escapedChildAliveAfterProbe: true,
-            fixtureOwnerCleanupVerified: true,
-          })
-        );
       }
     }
   },
