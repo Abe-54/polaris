@@ -25,7 +25,7 @@ interface DirectoryWatch {
 const directories = new Map<string, DirectoryWatch>();
 
 /** Quiet time after a directory's last event before all its listeners recheck (ADR 0046). */
-const SETTLE_MS = 20;
+export const SETTLE_MS = 20;
 
 interface Settle {
   readonly arm: () => void;

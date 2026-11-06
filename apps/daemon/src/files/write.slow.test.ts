@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmod,
   lstat,
+  mkdir,
   readFile,
   readdir,
   rm,
@@ -23,7 +24,7 @@ import { currentVersion, readVersioned } from "./version.ts";
 import { createPath, deletePath, renamePath, writeVersioned } from "./write.ts";
 import { linuxTrash } from "./trash.ts";
 import { inotifyOpen } from "./inotify.ts";
-import { openFileWatchCount, watchFile } from "./watch.ts";
+import { openFileWatchCount, SETTLE_MS, watchFile } from "./watch.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
 
 let root: string;
@@ -44,6 +45,13 @@ const until = async (done: () => boolean, deadlineMs = 5000) => {
 
   while (!done() && performance.now() - start < deadlineMs) await Bun.sleep(5);
 };
+
+/** A watch may report states between two changes, so wait for the content, not a count. */
+const latestReaches = (versions: ReadonlyArray<string | null>, hash: string | null) =>
+  Effect.promise(async () => {
+    await until(() => versions.at(-1) === hash);
+    expect(versions.at(-1)).toBe(hash);
+  });
 
 describe("versioned writes", () => {
   test("concurrent writers and symlink aliases accept exactly one expected version", async () => {
@@ -313,11 +321,7 @@ test.each([".env", "~draft"])(
     await writeFile(path, "before");
     const versions: Array<string | null> = [];
 
-    const reaches = (hash: string | null) =>
-      Effect.promise(async () => {
-        await until(() => versions.at(-1) === hash);
-        expect(versions.at(-1)).toBe(hash);
-      });
+    const reaches = (hash: string | null) => latestReaches(versions, hash);
 
     /** Writes in place, as a shell redirect or an editor without atomic saves does. */
     const edit = (text: string) =>
@@ -393,9 +397,11 @@ test("20 open tabs share one parent watcher and cancel all native watches", asyn
 posixTest("windows-latest never reports a retargeted symlink, though Windows 11 does (ENG-318)")(
   "symlink watches follow target changes and retargeting",
   async () => {
-    const first = join(root, "first");
-    const second = join(root, "second");
-    const link = join(root, "link");
+    // A directory each: an event beside the link would recheck it and hide a missing target watch.
+    await Promise.all(["a", "b", "links"].map((name) => mkdir(join(root, name))));
+    const first = join(root, "a", "first");
+    const second = join(root, "b", "second");
+    const link = join(root, "links", "link");
     await writeFile(first, "first");
     await writeFile(second, "second");
     await symlink(first, link);
@@ -413,28 +419,32 @@ posixTest("windows-latest never reports a retargeted symlink, though Windows 11 
             Effect.forkScoped
           );
 
-          const wait = (count: number) =>
-            Effect.promise(async () => {
-              for (let i = 0; i < 100 && hashes.length < count; i++) await Bun.sleep(10);
-              expect(hashes.length).toBeGreaterThanOrEqual(count);
-            });
+          const reaches = (path: string) =>
+            Effect.promise(() => readVersioned(path)).pipe(
+              Effect.flatMap(({ version }) => latestReaches(hashes, version.hash))
+            );
 
-          yield* wait(1);
+          // Not a wait for an outcome: a change inside the last burst's recheck would hide a lost watch.
+          const pastSettle = Effect.promise(() => Bun.sleep(SETTLE_MS * 5));
+
+          yield* reaches(first);
           yield* Effect.promise(() => writeFile(first, "changed"));
-          yield* wait(2);
+          yield* reaches(first);
+          yield* pastSettle;
           yield* Effect.promise(async () => {
             await rm(link);
             await symlink(second, link);
           });
-          yield* wait(3);
+          yield* reaches(second);
+          yield* pastSettle;
           yield* Effect.promise(() => writeFile(second, "again"));
-          yield* wait(4);
+          yield* reaches(second);
         })
       )
     );
-    expect(hashes.at(-1)).toBe((await readVersioned(second)).version.hash);
     expect(openFileWatchCount()).toBe(0);
-  }
+  },
+  15_000
 );
 
 posixTest("no mkfifo on Windows, whose named pipes aren't in the file system")(
