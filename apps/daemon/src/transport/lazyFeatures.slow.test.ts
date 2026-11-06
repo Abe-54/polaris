@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import {
@@ -21,7 +20,7 @@ import {
   SessionStreamItem,
   WorkspaceId,
 } from "@polaris/protocol";
-import { Effect, Option, Schedule, Schema, Stream } from "effect";
+import { Effect, Option, Schedule, Stream } from "effect";
 import { RESTART_NOTE } from "../reviewer/recovery.ts";
 import { RULES_AFTER_TURN } from "../reviewer/run.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -31,35 +30,6 @@ const dirs: Array<string> = [];
 
 afterAll(() => {
   for (const dir of dirs) removeTempDir(dir);
-});
-
-test("Daemon startup does not import the Reviewer, the Usage index or the accept handlers", async () => {
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      "-e",
-      `await import(${JSON.stringify(fileURLToPath(new URL("./serve.ts", import.meta.url)))});
-     console.log(JSON.stringify(Object.keys(require.cache).map(path => path.replaceAll("\\\\", "/")).filter(path => /\\/apps\\/daemon\\/src\\/(reviewer|usage|accept)\\//.test(path))));`,
-    ],
-    { stdout: "pipe", stderr: "pipe" }
-  );
-
-  const output = await new Response(child.stdout).text();
-  expect(await child.exited).toBe(0);
-  const imported = Schema.decodeUnknownSync(Schema.Array(Schema.String))(JSON.parse(output));
-  const names = imported.map((path) => path.split("/apps/daemon/src/")[1]);
-
-  for (const heavy of [
-    "reviewer/index.ts",
-    "reviewer/run.ts",
-    "reviewer/walkthrough.ts",
-    "usage/UsageIndex.ts",
-    "usage/db.ts",
-    "usage/indexer.ts",
-    "accept/AcceptRpcs.ts",
-    "accept/draft.ts",
-  ])
-    expect(names).not.toContain(heavy);
 });
 
 /** The production Daemon on the scripted Harness, listening on a socket in a fresh home. */

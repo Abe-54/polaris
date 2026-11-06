@@ -294,6 +294,7 @@ const resourceEvents: ReadonlyArray<DomainEvent> = [
 ];
 
 const reviewCommands: ReadonlyArray<Command> = [
+  Command.cases.RunShellCommand.make({ sessionId: s, command: "git status" }),
   Command.cases.SendFeedback.make({ sessionId: s, feedback, attachments: [] }),
   Command.cases.AcceptTurns.make({ sessionId: s, throughTurnId: t, revertLaterTurns: false }),
   Command.cases.LinkPullRequest.make({ sessionId: s, pullRequest }),

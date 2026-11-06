@@ -48,6 +48,16 @@ const implementationModules = () =>
         path.includes("/node_modules/protobufjs/")
     );
 
+/** The Reviewer, the Usage index and the accept handlers wait for their first request. */
+const featureModules = () =>
+  Object.keys(require.cache)
+    .map((path) => path.replaceAll("\\", "/"))
+    .filter((path) =>
+      /\/apps\/daemon\/src\/(?:reviewer\/(?:index|run|walkthrough)|usage\/(?:UsageIndex|db|indexer)|accept\/(?:AcceptRpcs|draft))\.ts$/.test(
+        path
+      )
+    );
+
 const seed = Effect.gen(function* () {
   const { initialSnapshot, stepModel } = yield* Effect.promise(
     () => import("../engine/session.testing.ts")
@@ -92,6 +102,7 @@ const seed = Effect.gen(function* () {
 const empty = async () => {
   const { engineServices, daemonCapabilities } = await import("./serve.ts");
   assert.deepEqual(implementationModules(), []);
+  assert.deepEqual(featureModules(), []);
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

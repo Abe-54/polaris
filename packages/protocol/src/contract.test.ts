@@ -60,18 +60,6 @@ describe("contract compatibility", () => {
     });
   });
 
-  test("a StartSession sent before origin existed decodes", () => {
-    const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.toCodecJson(Command)));
-
-    const start = decode(
-      '{"_tag":"StartSession","sessionId":"s","workspaceId":"w","harness":"claude",' +
-        '"placement":{"_tag":"InPlace"},"permissionMode":"supervised","model":null,' +
-        '"prompt":"go","attachments":[]}'
-    );
-
-    expect(Predicate.isTagged(start, "StartSession") && start.origin == null).toBe(true);
-  });
-
   test("ItemProgress carries a full item; a Snapshot with unknown extra fields still decodes", () => {
     expect(
       decodeItemJson(
@@ -135,7 +123,7 @@ describe("contract compatibility", () => {
     ).toThrow();
   });
 
-  test("commands from Clients that predate effort still decode", () => {
+  test("commands from Clients that predate effort and origin still decode", () => {
     const decodeCommand = Schema.decodeUnknownSync(
       Schema.fromJsonString(Schema.toCodecJson(Command))
     );
@@ -151,6 +139,7 @@ describe("contract compatibility", () => {
     );
 
     expect(start).toMatchObject({ effort: null });
+    expect(Predicate.isTagged(start, "StartSession") && start.origin == null).toBe(true);
     expect(fork).toMatchObject({ model: null, effort: null });
   });
 
@@ -166,20 +155,17 @@ describe("contract compatibility", () => {
     ]);
   });
 
-  test("a report from before signInKind decodes with it null", () => {
-    const old = {
+  test("a report from before signInKind and the tested version decodes with both null", () => {
+    const legacy = Schema.decodeUnknownSync(HarnessAvailability)({
       harness: "claude",
       status: "ready",
       version: "2.1.283",
       minVersion: "2.1.283",
       detail: null,
-      signInArgv: null,
-    };
+      signInArgv: ["/usr/local/bin/claude", "auth", "login"],
+    });
 
-    expect(Schema.decodeUnknownSync(HarnessAvailability)(old).signInKind).toBeNull();
-    expect(
-      Schema.decodeUnknownSync(HarnessAvailability)({ ...old, signInKind: "Claude Max" }).signInKind
-    ).toBe("Claude Max");
+    expect(legacy).toMatchObject({ signInKind: null, olderThanTested: null });
   });
 
   test("Harness availability round-trips; a status from a newer Daemon decodes as unknown", () => {
@@ -219,19 +205,6 @@ describe("contract compatibility", () => {
       expect(Bun.semver.satisfies(harness.minVersion, "*")).toBe(true);
       expect(Bun.semver.order(harness.minVersion, harness.testedVersion)).toBeLessThanOrEqual(0);
     }
-  });
-
-  test("availability from a Daemon before the tested version decodes with no note", () => {
-    const legacy = Schema.decodeUnknownSync(HarnessAvailability)({
-      harness: "claude",
-      status: "ready",
-      version: "2.1.283",
-      minVersion: "2.1.283",
-      detail: null,
-      signInArgv: ["/usr/local/bin/claude", "auth", "login"],
-    });
-
-    expect(legacy.olderThanTested).toBeNull();
   });
 
   test("items and Turn details from before Subagents decode as the Turn's own", () => {

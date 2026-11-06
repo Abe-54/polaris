@@ -217,19 +217,26 @@ describe("probeHarness", () => {
     });
   });
 
-  test("below the declared minimum is outdated, and sign-in isn't checked", async () => {
-    const host = fakeHost();
-    mkdirSync(join(host.home, ".codex"));
-    fakeBinary(host, "codex", { version: "echo 'codex-cli 0.100.0'; exit 0", status: "exit 0" });
+  test.each([
+    ["codex", "echo 'codex-cli 0.100.0'; exit 0", "exit 0", "0.100.0"],
+    ["opencode", "echo 1.15.5; exit 0", "exit 0", "1.15.5"],
+    ["gemini", "echo 0.32.0; exit 0", "", "0.32.0"],
+  ] as const)(
+    "%s below its minimum is outdated, and sign-in isn't checked",
+    async (kind, version, status, parsed) => {
+      const host = fakeHost();
+      mkdirSync(join(host.home, `.${kind}`));
+      fakeBinary(host, kind, { version, status });
 
-    expect(await probe("codex", host.env)).toMatchObject({
-      status: "outdated",
-      version: "0.100.0",
-      minVersion: entry("codex").minVersion,
-      olderThanTested: null,
-    });
-    expect(host.calls()).toEqual(["--version"]);
-  });
+      expect(await probe(kind, host.env)).toMatchObject({
+        status: "outdated",
+        version: parsed,
+        minVersion: entry(kind).minVersion,
+        olderThanTested: null,
+      });
+      expect(host.calls()).toEqual(["--version"]);
+    }
+  );
 
   test("Codex: exit 0 is ready, 'Not logged in' needs sign-in, anything else is unknown", async () => {
     const cases = [
@@ -295,16 +302,6 @@ describe("probeHarness", () => {
     expect(readdirSync(host.home)).toEqual([]);
   });
 
-  test("an OpenCode older than the driver's minimum is outdated", async () => {
-    const host = fakeHost();
-    fakeBinary(host, "opencode", { version: "echo 1.15.5; exit 0", status: "exit 0" });
-
-    expect(await probe("opencode", host.env)).toMatchObject({
-      status: "outdated",
-      version: "1.15.5",
-    });
-  });
-
   test("an ACP Harness never run on the Host needs sign-in; otherwise it can't say", async () => {
     const host = fakeHost();
     fakeBinary(host, "copilot", {
@@ -344,16 +341,6 @@ describe("probeHarness", () => {
     const [, scratch] = host.calls();
     expect(scratch).toContain("polaris-probe-");
     expect(() => readdirSync(scratch ?? "")).toThrow();
-  });
-
-  test("Gemini CLI below --acp is outdated", async () => {
-    const host = fakeHost();
-    fakeBinary(host, "gemini", { version: "echo 0.32.0; exit 0", status: "" });
-
-    expect(await probe("gemini", host.env)).toMatchObject({
-      status: "outdated",
-      version: "0.32.0",
-    });
   });
 
   test("a failing --version is unknown", async () => {

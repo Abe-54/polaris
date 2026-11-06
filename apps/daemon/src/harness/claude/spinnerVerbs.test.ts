@@ -47,6 +47,7 @@ describe("parseSetting", () => {
     expect(parseSetting("{ not json")).toBeNull();
     expect(parseSetting('{"spinnerVerbs":{"mode":"append","verbs":[]}}')).toBeNull();
     expect(parseSetting('{"spinnerVerbs":"Pondering"}')).toBeNull();
+    expect(parseSetting('{"spinnerVerbs":{"mode":"replace","verbs":[" "]}}')).toBeNull();
   });
 
   test("non-strings and blanks are dropped, control characters cleaned, length capped", () => {
@@ -55,10 +56,6 @@ describe("parseSetting", () => {
     );
 
     expect(parsed?.verbs).toEqual(["A B", "x".repeat(80)]);
-  });
-
-  test("an empty replace list can't replace anything", () => {
-    expect(parseSetting('{"spinnerVerbs":{"mode":"replace","verbs":[" "]}}')).toBeNull();
   });
 });
 

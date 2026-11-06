@@ -235,10 +235,7 @@ describe("session machine", () => {
       );
     });
 
-    test("a live Turn must be interrupted before archiving", () => {
-      expect(refusal(run(["start"]), "archive")).toBe(
-        "interrupt the Turn in flight before archiving"
-      );
+    test("an Archived session can't be archived again", () => {
       expect(refusal(run(["start", "complete", "archive"]), "archive")).toBe(
         "the session is already Archived"
       );
@@ -246,6 +243,10 @@ describe("session machine", () => {
 
     // Finding 2 (ENG-209): Archive used to be refused only in the live states.
     test("a Turn in flight must be interrupted before archiving, in every state", () => {
+      expect(refusal(run(["start"]), "archive")).toBe(
+        "interrupt the Turn in flight before archiving"
+      );
+
       for (const options of [claude, codex]) {
         const inTerminal = run(["start", "complete", "openTerminal", "terminalTurn"], options);
         expect(stateOf(inTerminal.machine)).toBe("in-terminal");

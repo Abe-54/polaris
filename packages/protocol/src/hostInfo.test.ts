@@ -29,14 +29,6 @@ describe("HostInfo.libc on the wire", () => {
     expect(info.libc).toBeUndefined();
   });
 
-  test("an older Client decodes a new Daemon's HostInfo and ignores libc", () => {
-    const encoded = Schema.encodeSync(HostInfo)(
-      Schema.decodeUnknownSync(HostInfo)({ ...base, libc: "glibc" })
-    );
-
-    expect(Schema.decodeUnknownSync(OlderHostInfo)(encoded).platform).toBe("linux-arm64");
-  });
-
   test("an unknown libc is refused", () => {
     expect(() => Schema.decodeUnknownSync(HostInfo)({ ...base, libc: "bionic" })).toThrow();
   });
@@ -50,15 +42,21 @@ describe("HostInfo.platform on the wire", () => {
   });
 });
 
-describe("HostInfo.previousStop on the wire", () => {
+describe("HostInfo fields an older Client doesn't know", () => {
   const stop = { reason: "upgrade", fromVersion: "0.2.0-dev.1", at: "2026-10-16T00:00:00Z" };
 
-  test("an older Client decodes a HostInfo that says the last Daemon stopped for an upgrade", () => {
+  test.each([
+    ["libc", { libc: "glibc" }],
+    ["previousStop", { previousStop: stop }],
+  ])("an older Client decodes a new Daemon's HostInfo and ignores %s", (_, added) => {
     const encoded = Schema.encodeSync(HostInfo)(
-      Schema.decodeUnknownSync(HostInfo)({ ...base, previousStop: stop })
+      Schema.decodeUnknownSync(HostInfo)({ ...base, ...added })
     );
 
-    expect(Schema.decodeUnknownSync(OlderHostInfo)(encoded).daemonVersion).toBe("0.1.0");
+    expect(Schema.decodeUnknownSync(OlderHostInfo)(encoded)).toMatchObject({
+      platform: "linux-arm64",
+      daemonVersion: "0.1.0",
+    });
   });
 
   test("this Client decodes a stop reason newer than itself", () => {

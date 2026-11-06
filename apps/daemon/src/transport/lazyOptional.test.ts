@@ -28,7 +28,7 @@ const isolated = async (mode: string) => {
 };
 
 test(
-  "empty Daemon startup keeps Data, Traces, profiles, push encryption and decoders out of the implementation graph",
+  "empty Daemon startup keeps Data, Traces, profiles, push encryption, decoders, the Reviewer, the Usage index and the accept handlers out of the implementation graph",
   () => isolated("empty"),
   30000
 );

@@ -24,11 +24,13 @@ const expected = (kind: "search" | "other", title: string) =>
   });
 
 describe("toolCallItem", () => {
-  test("keeps ACP's kind and title for the calls a Tool Run counts", () => {
-    expect(call("search", "Find usages of foo")).toEqual(expected("search", "Find usages of foo"));
-  });
-
-  test("kinds a Tool Run doesn't count are other", () => {
-    expect(call("think", "Ponder")).toEqual(expected("other", "Ponder"));
-  });
+  test.each<[ToolKind, string, "search" | "other"]>([
+    ["search", "Find usages of foo", "search"],
+    ["think", "Ponder", "other"],
+  ])(
+    "ACP's %s keeps its title; a Tool Run counts only the kinds it knows",
+    (kind, title, mapped) => {
+      expect(call(kind, title)).toEqual(expected(mapped, title));
+    }
+  );
 });
