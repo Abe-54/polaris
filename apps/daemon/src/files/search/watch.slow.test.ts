@@ -187,22 +187,15 @@ test.skipIf(process.platform !== "darwin")(
   60_000
 );
 
-test("macOS keeps its single native recursive FSEvents watch", async () => {
-  const root = tempDir("polaris-mac-watch-");
-  roots.push(root);
-  const { opened, open } = recorder();
-  stops.push(await watchRoot(root, () => undefined, { platform: "darwin", open }));
-  expect(opened).toEqual([{ path: root, recursive: true }]);
-});
-
-test("macOS keeps one watch even when non-git roots are asked for", async () => {
+test.each([
+  ["by default", false],
+  ["even when non-git roots are asked for", true],
+])("macOS keeps one native recursive FSEvents watch %s", async (_name, includeNonGit) => {
   const root = tempDir("polaris-mac-watch-");
   roots.push(root);
   write(root, "nested/deeper/a.ts", "");
   const { opened, open } = recorder();
-  stops.push(
-    await watchRoot(root, () => undefined, { platform: "darwin", open, includeNonGit: true })
-  );
+  stops.push(await watchRoot(root, () => undefined, { platform: "darwin", open, includeNonGit }));
   expect(opened).toEqual([{ path: root, recursive: true }]);
 });
 

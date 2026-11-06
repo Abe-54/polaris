@@ -8,56 +8,56 @@ const repos: Array<string> = [];
 afterAll(() => repos.forEach(removeTempDir));
 
 describe("parseAddedLines", () => {
-  test("keeps the new side's ranges and drops pure deletions", () => {
-    const diff = [
-      "diff --git a.ts a.ts",
-      "--- a.ts",
-      "+++ a.ts",
-      "@@ -1,0 +2,3 @@",
-      "+one",
-      "+two",
-      "+three",
-      "@@ -9 +11,0 @@",
-      "-gone",
-      "@@ -20 +22 @@",
-      "-old",
-      "+new",
-    ].join("\n");
-
-    expect([...parseAddedLines(diff)]).toEqual([
+  test.each<[string, ReadonlyArray<string>, ReadonlyArray<[string, Array<[number, number]>]>]>([
+    [
+      "keeps the new side's ranges and drops pure deletions",
       [
-        "a.ts",
+        "diff --git a.ts a.ts",
+        "--- a.ts",
+        "+++ a.ts",
+        "@@ -1,0 +2,3 @@",
+        "+one",
+        "+two",
+        "+three",
+        "@@ -9 +11,0 @@",
+        "-gone",
+        "@@ -20 +22 @@",
+        "-old",
+        "+new",
+      ],
+      [
         [
-          [2, 4],
-          [22, 22],
+          "a.ts",
+          [
+            [2, 4],
+            [22, 22],
+          ],
         ],
       ],
-    ]);
-  });
-
-  test("an added line reading `++ x` is content, not a file header", () => {
-    const diff = ["--- a.md", "+++ a.md", "@@ -1,0 +1,2 @@", "+++ not a header", "+tail"].join(
-      "\n"
-    );
-
-    expect([...parseAddedLines(diff)]).toEqual([["a.md", [[1, 2]]]]);
-  });
-
-  test("deleted files are absent; quoted paths are unquoted", () => {
-    const diff = [
-      "--- gone.ts",
-      "+++ /dev/null",
-      "@@ -1,2 +0,0 @@",
-      "-a",
-      "-b",
-      '--- "caf\\303\\251 \\"x\\".ts"',
-      '+++ "caf\\303\\251 \\"x\\".ts"',
-      "@@ -0,0 +1 @@",
-      "+a",
-      "\\ No newline at end of file",
-    ].join("\n");
-
-    expect([...parseAddedLines(diff)]).toEqual([['café "x".ts', [[1, 1]]]]);
+    ],
+    [
+      "an added line reading `++ x` is content, not a file header",
+      ["--- a.md", "+++ a.md", "@@ -1,0 +1,2 @@", "+++ not a header", "+tail"],
+      [["a.md", [[1, 2]]]],
+    ],
+    [
+      "deleted files are absent; quoted paths are unquoted",
+      [
+        "--- gone.ts",
+        "+++ /dev/null",
+        "@@ -1,2 +0,0 @@",
+        "-a",
+        "-b",
+        '--- "caf\\303\\251 \\"x\\".ts"',
+        '+++ "caf\\303\\251 \\"x\\".ts"',
+        "@@ -0,0 +1 @@",
+        "+a",
+        "\\ No newline at end of file",
+      ],
+      [['café "x".ts', [[1, 1]]]],
+    ],
+  ])("%s", (_name, diff, expected) => {
+    expect([...parseAddedLines(diff.join("\n"))]).toEqual([...expected]);
   });
 
   test("overlap, not start line, decides", () => {

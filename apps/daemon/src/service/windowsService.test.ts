@@ -25,50 +25,44 @@ const facts = (overrides: Partial<WindowsTaskFacts>): WindowsTaskFacts => ({
 });
 
 describe("planWindowsTask", () => {
-  test("a second install of what already runs touches nothing", () => {
-    expect(planWindowsTask(facts({}))).toEqual({ register: false, stop: null, start: false });
-  });
-
-  test("a new binary stops the running Daemon as an upgrade, then starts the task", () => {
-    expect(
-      planWindowsTask(facts({ changed: { binary: true, serviceFile: false }, version: "0.2.1" }))
-    ).toEqual({ register: false, stop: "upgrade", start: true });
-  });
-
-  test("a Daemon of another version is replaced even when the files were already in place", () => {
-    expect(planWindowsTask(facts({ version: "0.2.1" }))).toMatchObject({ stop: "upgrade" });
-  });
-
-  test("a changed task definition re-registers and restarts, since the running loop is the old one", () => {
-    expect(planWindowsTask(facts({ changed: { binary: false, serviceFile: true } }))).toEqual({
-      register: true,
-      stop: "restart",
-      start: true,
-    });
-  });
-
-  test("install --restart stops and starts the Daemon though nothing changed (Restart daemon)", () => {
-    expect(planWindowsTask(facts({ restart: true }))).toEqual({
-      register: false,
-      stop: "restart",
-      start: true,
-    });
-  });
-
-  test("a task removed by hand is registered again", () => {
-    expect(planWindowsTask(facts({ registered: false, running: null }))).toEqual({
-      register: true,
-      stop: null,
-      start: true,
-    });
-  });
-
-  test("with no Daemon answering, the task is started without stopping anything", () => {
-    expect(planWindowsTask(facts({ running: null }))).toEqual({
-      register: false,
-      stop: null,
-      start: true,
-    });
+  test.each<[string, Partial<WindowsTaskFacts>, ReturnType<typeof planWindowsTask>]>([
+    [
+      "a second install of what already runs touches nothing",
+      {},
+      { register: false, stop: null, start: false },
+    ],
+    [
+      "a new binary stops the running Daemon as an upgrade, then starts the task",
+      { changed: { binary: true, serviceFile: false }, version: "0.2.1" },
+      { register: false, stop: "upgrade", start: true },
+    ],
+    [
+      "a Daemon of another version is replaced even when the files were already in place",
+      { version: "0.2.1" },
+      { register: false, stop: "upgrade", start: true },
+    ],
+    [
+      "a changed task definition re-registers and restarts, since the running loop is the old one",
+      { changed: { binary: false, serviceFile: true } },
+      { register: true, stop: "restart", start: true },
+    ],
+    [
+      "install --restart stops and starts the Daemon though nothing changed (Restart daemon)",
+      { restart: true },
+      { register: false, stop: "restart", start: true },
+    ],
+    [
+      "a task removed by hand is registered again",
+      { registered: false, running: null },
+      { register: true, stop: null, start: true },
+    ],
+    [
+      "with no Daemon answering, the task is started without stopping anything",
+      { running: null },
+      { register: false, stop: null, start: true },
+    ],
+  ])("%s", (_name, overrides, expected) => {
+    expect(planWindowsTask(facts(overrides))).toEqual(expected);
   });
 });
 

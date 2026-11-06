@@ -93,33 +93,39 @@ describe("claimTask", () => {
   const home = "C:\\Users\\lucas\\.polaris";
   const dev = "C:\\Users\\lucas\\dev\\.polaris";
 
-  test("a task that runs this home is ours, also as a 0.2.0-dev install spelled it", () => {
-    expect(
-      claimTask(
-        { action: "current", home: "c:\\users\\Lucas\\.polaris\\", homeInstalled: true },
-        home,
-        false
-      )
-    ).toBe("ours");
-  });
-
-  test("a task that runs another installed home is refused unless --replace-task", () => {
-    const existing = { action: "current" as const, home: dev, homeInstalled: true };
-
-    expect(claimTask(existing, home, false)).toBe("conflict");
-    expect(claimTask(existing, home, true)).toBe("taken-over");
-  });
-
-  test("a task left by a home with nothing installed may be replaced", () => {
-    expect(claimTask({ action: "current", home: dev, homeInstalled: false }, home, false)).toBe(
-      "abandoned"
-    );
-  });
-
-  test("a task under the name that isn't Polaris' is refused unless --replace-task", () => {
-    expect(claimTask({ action: "other", home: null, homeInstalled: false }, home, false)).toBe(
-      "conflict"
-    );
+  test.each<[string, Parameters<typeof claimTask>[0], boolean, ReturnType<typeof claimTask>]>([
+    [
+      "a task that runs this home is ours, also as a 0.2.0-dev install spelled it",
+      { action: "current", home: "c:\\users\\Lucas\\.polaris\\", homeInstalled: true },
+      false,
+      "ours",
+    ],
+    [
+      "a task that runs another installed home is refused",
+      { action: "current", home: dev, homeInstalled: true },
+      false,
+      "conflict",
+    ],
+    [
+      "a task that runs another installed home is taken over with --replace-task",
+      { action: "current", home: dev, homeInstalled: true },
+      true,
+      "taken-over",
+    ],
+    [
+      "a task left by a home with nothing installed may be replaced",
+      { action: "current", home: dev, homeInstalled: false },
+      false,
+      "abandoned",
+    ],
+    [
+      "a task under the name that isn't Polaris' is refused unless --replace-task",
+      { action: "other", home: null, homeInstalled: false },
+      false,
+      "conflict",
+    ],
+  ])("%s", (_name, existing, replace, expected) => {
+    expect(claimTask(existing, home, replace)).toBe(expected);
   });
 });
 
@@ -203,19 +209,25 @@ describe("whose a registered task is", () => {
 describe("stopsOtherHome", () => {
   const dev = "C:\\Users\\lucas\\dev\\.polaris";
 
-  test("a take-over stops the other home's Daemon only while the task runs it", () => {
-    expect(stopsOtherHome("taken-over", dev, true)).toBe(true);
-    expect(stopsOtherHome("taken-over", dev, false)).toBe(false);
-  });
-
-  test("when Task Scheduler can't say, it stops it, as before ENG-325", () => {
-    expect(stopsOtherHome("taken-over", dev, null)).toBe(true);
-  });
-
-  test("nothing else stops another home's Daemon", () => {
-    for (const claim of ["absent", "ours", "abandoned", "conflict"] as const)
-      expect(stopsOtherHome(claim, dev, true)).toBe(false);
-    expect(stopsOtherHome("taken-over", null, true)).toBe(false);
+  test.each<[string, Parameters<typeof stopsOtherHome>, boolean]>([
+    [
+      "a take-over stops the other home's Daemon while the task runs it",
+      ["taken-over", dev, true],
+      true,
+    ],
+    ["a take-over leaves it when the task doesn't run it", ["taken-over", dev, false], false],
+    [
+      "when Task Scheduler can't say, it stops it, as before ENG-325",
+      ["taken-over", dev, null],
+      true,
+    ],
+    ["an absent task doesn't stop it", ["absent", dev, true], false],
+    ["our own task doesn't stop it", ["ours", dev, true], false],
+    ["an abandoned task doesn't stop it", ["abandoned", dev, true], false],
+    ["a conflict doesn't stop it", ["conflict", dev, true], false],
+    ["a take-over with no other home stops nothing", ["taken-over", null, true], false],
+  ])("%s", (_name, args, expected) => {
+    expect(stopsOtherHome(...args)).toBe(expected);
   });
 });
 

@@ -89,43 +89,42 @@ const record = (outcome: Effect.Effect<RulesOutcome, ServiceError>) => {
 };
 
 describe("recordRulesLayer", () => {
-  test("records the Findings and completes the layer, with the run's notes", async () => {
-    const summary = await record(
-      Effect.succeed({ findings: [finding], notes: ["2 files were too large"], ok: true })
-    );
-
-    expect(summary?.findings.map((f) => f.id)).toEqual([finding.id]);
-    expect(summary?.layers.rules).toEqual(
-      LayerRun.make({ status: "completed", note: "2 files were too large" })
-    );
-  });
-
-  test("a clean run completes with no Findings and no note", async () => {
-    const summary = await record(Effect.succeed({ findings: [], notes: [], ok: true }));
-
-    expect(summary?.findings).toEqual([]);
-    expect(summary?.layers.rules).toEqual(LayerRun.make({ status: "completed", note: null }));
-  });
-
-  test("a run that could not start fails the layer with why", async () => {
-    const summary = await record(
-      Effect.fail(new ServiceError({ service: "Rules", message: "not a git repository" }))
-    );
-
-    expect(summary?.layers.rules).toEqual(
-      LayerRun.make({ status: "failed", note: "The rules could not run: not a git repository" })
-    );
-  });
-
-  test("both scanners failing fails the layer", async () => {
-    const summary = await record(
+  test.each<[string, Parameters<typeof record>[0], ReadonlyArray<typeof finding.id>, LayerRun]>([
+    [
+      "records the Findings and completes the layer, with the run's notes",
+      Effect.succeed({ findings: [finding], notes: ["2 files were too large"], ok: true }),
+      [finding.id],
+      LayerRun.make({ status: "completed", note: "2 files were too large" }),
+    ],
+    [
+      "a clean run completes with no Findings and no note",
+      Effect.succeed({ findings: [], notes: [], ok: true }),
+      [],
+      LayerRun.make({ status: "completed", note: null }),
+    ],
+    [
+      "a run that could not start fails the layer with why",
+      Effect.fail(new ServiceError({ service: "Rules", message: "not a git repository" })),
+      [],
+      LayerRun.make({ status: "failed", note: "The rules could not run: not a git repository" }),
+    ],
+    [
+      "both scanners failing fails the layer",
       Effect.succeed({
         findings: [],
         notes: ["Secrets were not checked", "Code patterns were not checked"],
         ok: false,
-      })
-    );
+      }),
+      [],
+      LayerRun.make({
+        status: "failed",
+        note: "Secrets were not checked. Code patterns were not checked",
+      }),
+    ],
+  ])("%s", async (_name, outcome, findings, layer) => {
+    const summary = await record(outcome);
 
-    expect(summary?.layers.rules.status).toBe("failed");
+    expect(summary?.findings.map((f) => f.id)).toEqual([...findings]);
+    expect(summary?.layers.rules).toEqual(layer);
   });
 });

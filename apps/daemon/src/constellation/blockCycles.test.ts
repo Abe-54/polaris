@@ -75,32 +75,37 @@ const waiting = (tasks = [task(A), task(B), task(X)]) => {
   );
 };
 
-test("second mutual block is rejected atomically", () => {
-  const decision = block(waiting(), B, A);
+const childOfParent = new TaskDefinition(Struct.assign(task(B), { parent: P }));
+
+test.each([
+  ["second mutual block is rejected atomically", undefined, A],
+  [
+    "mixed dependency and block paths reject transitive blocks",
+    [task(A), task(B), task(X, [A])],
+    X,
+  ],
+])("%s", (_name, tasks, target) => {
+  const decision = block(waiting(tasks), B, target);
   expect(decision.rejection?.findings[0]?.code).toBe("E-BLOCK-CYCLE");
   expect(decision.events).toEqual([]);
 });
 
-test("mixed dependency and block paths reject transitive blocks", () => {
-  const decision = block(waiting([task(A), task(B), task(X, [A])]), B, X);
-  expect(decision.rejection?.findings[0]?.code).toBe("E-BLOCK-CYCLE");
-  expect(decision.events).toEqual([]);
-});
-
-test("plan edits reject live block cycles and name their block edge", () => {
-  for (const deps of [[A], [X]]) {
-    const decision = edit(waiting([task(A), task(B), task(X, [A])]), B, deps);
-    expect(decision.rejection?.findings.find((f) => f.code === "E-DEP-CYCLE")?.message).toContain(
-      "block A → B"
-    );
-    expect(decision.events).toEqual([]);
-  }
-});
-
-test("block-closing parent edits include inherited dependencies and completion edges", () => {
-  const child = new TaskDefinition(Struct.assign(task(B), { parent: P }));
-  const record = waiting([task(A), task(P), child]);
-  const decision = edit(record, P, [A]);
+test.each([
+  ["plan edits name the block edge of a direct cycle", [task(A), task(B), task(X, [A])], B, [A]],
+  [
+    "plan edits name the block edge of a transitive cycle",
+    [task(A), task(B), task(X, [A])],
+    B,
+    [X],
+  ],
+  [
+    "block-closing parent edits include inherited dependencies and completion edges",
+    [task(A), task(P), childOfParent],
+    P,
+    [A],
+  ],
+])("%s", (_name, tasks, id, deps) => {
+  const decision = edit(waiting(tasks), id, deps);
   expect(decision.rejection?.findings.find((f) => f.code === "E-DEP-CYCLE")?.message).toContain(
     "block A → B"
   );

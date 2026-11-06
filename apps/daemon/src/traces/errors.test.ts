@@ -21,18 +21,15 @@ test.each([
   ["trace 4bf92f3577b34da6a3ce929d0e0e4736 expired", "trace <id> expired"],
   ["fetch https://api.example.com/v1/items?id=42 failed: 503", "fetch <url> failed: <n>"],
   ["  Timeout   after  1.5 s\nstack", "Timeout after <n> s"],
+  ["branch 7mmvvc5m9g0t does not exist", "branch <id> does not exist"],
+  ["branch q2w8e4r1t6y9 does not exist", "branch <id> does not exist"],
+  ["is a directory: /a/b/.git", "is a directory: <path>"],
+  ["is a directory: /c/d/e/.git", "is a directory: <path>"],
+  // An eight-letter word stays a word; it isn't mistaken for a random id.
+  ["table users does not exist", "table users does not exist"],
+  ["table invoices does not exist", "table invoices does not exist"],
 ])("fingerprint(%p) is %p", (message, expected) => {
   expect(fingerprint(message)).toBe(expected);
-});
-
-test("messages that differ only in ids, paths and numbers share a fingerprint; words don't", () => {
-  expect(fingerprint("branch 7mmvvc5m9g0t does not exist")).toBe(
-    fingerprint("branch q2w8e4r1t6y9 does not exist")
-  );
-  expect(fingerprint("is a directory: /a/b/.git")).toBe(fingerprint("is a directory: /c/d/e/.git"));
-  expect(fingerprint("table users does not exist")).not.toBe(
-    fingerprint("table invoices does not exist")
-  );
 });
 
 test("a 100 KB single-line message fingerprints quickly to a bounded key", () => {

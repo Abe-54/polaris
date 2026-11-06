@@ -60,6 +60,8 @@ for (const dependency of [
   "@opentelemetry/sdk-trace-base",
   "@opentelemetry/sdk-trace-node",
   "@opentelemetry/sdk-trace",
+  // A wrapper too: instrumenting beside it would lose Vercel's second exporter.
+  "@vercel/otel",
 ]) {
   test(`skip ${dependency} in a parent manifest unless explicitly overridden`, () =>
     temp(async (root) => {
@@ -283,20 +285,4 @@ test("unreadable manifest bounds fail closed instead of assuming no SDK", () =>
 
     expect(result.environment).toEqual({});
     expect(result.skipReason).toContain("could not be checked");
-  }));
-
-test("a known SDK wrapper is skipped to preserve Vercel's second exporter", () =>
-  temp(async (root) => {
-    await writeFile(join(root, "package.json"), '{"dependencies":{"@vercel/otel":"2.1.1"}}');
-    expect(
-      (
-        await prepareAutoInstrumentation({
-          checkout: root,
-          cwd: root,
-          source,
-          settings,
-          registerPath: "/unused/register.mjs",
-        })
-      ).skipReason
-    ).toContain("@vercel/otel");
   }));

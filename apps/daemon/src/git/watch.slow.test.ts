@@ -54,6 +54,8 @@ describe("watchGitState", () => {
     ["git commit", ["commit", "-qam", "two"]],
     ["git reset", ["reset", "-q", "a.txt"]],
     ["git checkout -b", ["checkout", "-qb", "other"]],
+    // Moves the index and HEAD's reflog.
+    ["git stash", ["stash", "-q"]],
   ])("an external %s is seen", async (_name, args) => {
     const root = await repo();
     write(root, "a.txt", "two\n");
@@ -95,17 +97,6 @@ describe("watchGitState", () => {
 
     expect(await watch.next()).toBe(true);
     expect((await gitStatus(root)).behind).toBe(1);
-  });
-
-  test("git stash, which moves the index and HEAD's reflog, is seen", async () => {
-    const root = await repo();
-    write(root, "a.txt", "two\n");
-    await gitText(root, ["add", "a.txt"]);
-    const watch = await watching(root);
-
-    await gitText(root, ["stash", "-q"]);
-
-    expect(await watch.next()).toBe(true);
   });
 
   test("the Daemon's own git.status doesn't count, or each refetch would set off the next", async () => {
