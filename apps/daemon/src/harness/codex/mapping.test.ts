@@ -84,7 +84,7 @@ describe("turn input", () => {
 });
 
 describe("thread items", () => {
-  test("agent messages, reasoning and plans", () => {
+  test("agent messages and reasoning", () => {
     expect(item({ type: "agentMessage", id: "a", text: "ok", phase: null })).toEqual(
       TurnItem.cases.AssistantMessage.make({ id: "a", text: "ok" })
     );

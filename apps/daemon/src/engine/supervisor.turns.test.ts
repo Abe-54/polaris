@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { TurnToRun } from "./supervisor.ts";
 import { takeDeferredTurn } from "./supervisor.turns.ts";
 
-test("enqueue at the retired lane boundary starts a new lane rather than a dead array", async () => {
+test("a finished lane's last take can't retire its replacement lane", async () => {
   const sessionId = SessionId.make("lane");
 
   const input: TurnToRun = {

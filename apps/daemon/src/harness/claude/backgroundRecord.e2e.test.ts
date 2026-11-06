@@ -21,7 +21,7 @@ const PROMPT = command
     "arrives, respond with the report and the words continuation pong. Do no other work.";
 
 test.skipIf(out === undefined)(
-  "records a background Agent and the Harness's continuation",
+  "records a background task and the Harness's continuation",
   async () => {
     const frames: SDKMessage[] = [];
 

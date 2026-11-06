@@ -60,7 +60,7 @@ describe("contract compatibility", () => {
     });
   });
 
-  test("ItemProgress carries a full item; a Snapshot with unknown extra fields still decodes", () => {
+  test("ItemProgress carries a full item; Synchronized with unknown extra fields still decodes", () => {
     expect(
       decodeItemJson(
         '{"_tag":"ItemProgress","turnId":"t",' +

@@ -252,7 +252,7 @@ describe("Subagents", () => {
     );
   });
 
-  test("a Subagent for a Turn that isn't in flight, or a repeat, is ignored", async () => {
+  test("a Subagent for a Turn that isn't in flight is ignored", async () => {
     const codex = makeFakeDriver("codex");
     await run(
       layerWith(codex),

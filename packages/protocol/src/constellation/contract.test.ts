@@ -107,7 +107,7 @@ describe("Constellation contract", () => {
     expect(Schema.decodeUnknownSync(ConstellationSettings)({})).toMatchObject({ defaults: null });
   });
 
-  test("remote outboxes carry only worker commands and preserve stable ids", () => {
+  test("remote outboxes carry only worker commands", () => {
     const entry = new ConstellationOutboxEntry({
       id: "outbox:1",
       constellationId: ConstellationId.make("c"),

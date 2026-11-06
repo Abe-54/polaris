@@ -49,7 +49,7 @@ test.each([
   }
 );
 
-test("an ordinary checkout path is read back as the work tree, beside only the allowlisted keys", async () => {
+test("an ordinary checkout path leaves only the allowlisted keys", async () => {
   const keys = await readByGit(sanitizedConfig("core.repositoryformatversion\n0\0", "/tmp/pr 7"));
 
   expect(keys).toEqual(ALLOWED);

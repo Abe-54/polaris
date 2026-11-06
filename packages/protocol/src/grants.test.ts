@@ -102,7 +102,7 @@ describe("decideAccess", () => {
   });
 });
 
-test("P9-6: user profiling requires exactly RespondToApproval's approve Grant", () => {
+test("user profiling requires exactly RespondToApproval's approve Grant", () => {
   for (const grant of [[], ["read"], ["turn"], ["approve"], ["read", "approve"]] as const) {
     const caller = pairing([...grant]);
     const attach = decideAccess(caller, "profiles.attach", null);

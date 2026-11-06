@@ -199,7 +199,7 @@ const replay = (steps: ReadonlyArray<Step>) =>
 describe("Review Checkout machine, model-based against the Engine", () => {
   const { states, transitions } = checkoutPaths();
 
-  test("the model reaches every checkout state", () => {
+  test("the checkout model has more than ten states and more transitions than states", () => {
     expect(states.length).toBeGreaterThan(10);
     expect(transitions.length).toBeGreaterThan(states.length);
   });
