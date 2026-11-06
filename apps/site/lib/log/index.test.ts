@@ -195,7 +195,7 @@ describe("emit", () => {
     async () =>
       respond();
 
-  test("ships to Axiom, then writes one line with the ingest result", async () => {
+  test("ships to the dataset's Axiom edge domain (api.axiom.co answers 404), then writes one line with the ingest result", async () => {
     let url = "";
 
     const lines = await emitted(async (input) => {
