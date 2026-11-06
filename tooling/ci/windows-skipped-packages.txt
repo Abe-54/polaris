@@ -4,4 +4,4 @@
 @polaris/desktop   # Mac packaging and signing, POSIX shell fixtures
 @polaris/bench     # samples processes through /proc and ps
 @polaris/relay     # a Linux server, stopped with SIGTERM
-@polaris/tooling   # the release signer in Python, notice delivery under /tmp
+@polaris/tooling   # language-catalog notice delivery writes only under /tmp
