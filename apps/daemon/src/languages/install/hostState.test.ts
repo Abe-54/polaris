@@ -77,7 +77,6 @@ privateStorage(
       const installed = Schema.decodeUnknownSync(LanguageHostState)((await watched.next()).value);
 
       expect(Predicate.isTagged(installed.tools[0]!.state, "Installed")).toBe(true);
-      expect(Schema.is(LanguageHostState)(installed)).toBe(true);
       expect(f.counts().decodes).toBe(1);
       await watched.return?.();
       expect(states.stats().subscribers).toBe(0);

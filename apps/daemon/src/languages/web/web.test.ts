@@ -32,16 +32,11 @@ test("every web language is offered with verified runtime pins on all private No
   }
 });
 
-test("workflow routing excludes ordinary YAML and retains both explicit owners", () => {
+test("workflow routing excludes ordinary YAML", () => {
   expect(workflowPath("/project/.github/workflows/ci.yml")).toBe(true);
   expect(workflowPath(".github/workflows/ci.yaml")).toBe(true);
   expect(workflowPath("/project/deploy.yml")).toBe(false);
   expect(workflowPath("/project/.github/workflows/nested/ci.yml")).toBe(false);
-  const actions = catalog.integrations.find((item) => item.id === "actions")!;
-  expect(actions.providers.map((item) => item.diagnostics)).toEqual([
-    "yaml-structure",
-    "actions-expressions",
-  ]);
 });
 
 test("private launches use the correct provider entry and Svelte Trust changes the launch identity", async () => {

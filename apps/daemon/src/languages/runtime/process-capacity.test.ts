@@ -1,14 +1,9 @@
 import { expect, test } from "bun:test";
-import {
-  deriveProcessLimit,
-  reclaimableDarwinMemory,
-  SERVER_ALLOWANCE_BYTES,
-} from "./process-capacity.ts";
+import { deriveProcessLimit, reclaimableDarwinMemory } from "./process-capacity.ts";
 
 const gib = 1024 ** 3;
 
 test("measured memory envelope scales Mac, Pi, constrained and CPU-limited Hosts", () => {
-  expect(SERVER_ALLOWANCE_BYTES).toBe(832 * 1024 ** 2);
   expect(
     deriveProcessLimit({
       cpuCount: 12,

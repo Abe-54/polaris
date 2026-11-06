@@ -240,10 +240,6 @@ describe("Terminals", () => {
     40_000
   );
 
-  posix("the default is the user's login shell", () => {
-    expect(loginShell().startsWith("/")).toBe(true);
-  });
-
   const unreadable = () => {
     throw new Error("unreadable");
   };

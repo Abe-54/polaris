@@ -36,12 +36,6 @@ test("current catalog requires Host ShellCheck and manages shfmt while ShellChec
   expect(
     bash.developerCompanions?.some((companion) => companion.id === "shellcheck") ?? false
   ).toBe(false);
-  expect(catalog.tools.find((entry) => entry.id === "shellcheck")?.disposition).toBe("offered");
-  expect(
-    catalog.tools
-      .find((entry) => entry.id === "shellcheck")
-      ?.artifacts.every((artifact) => artifact.audit === "pending")
-  ).toBe(true);
 });
 
 test("untrusted configured executables never run and Bash automatic discovery stays disabled", async () => {

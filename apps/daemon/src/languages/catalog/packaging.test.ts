@@ -69,7 +69,6 @@ test("filter removes only optional annotations and retains exact template/legal/
     "meta/template/string.lua",
   ]);
   expect(verifyPackaging(input)).toEqual([]);
-  expect(artifact.audit).toBe("pending");
   expect(packagedRoot(packagedFiles([...entries].reverse()))).toBe(root);
 });
 

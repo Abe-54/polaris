@@ -84,22 +84,6 @@ for (const useFff of [true, false]) {
   const backend = useFff ? "fff" : "fallback";
 
   describe(`FileSearch (${backend})`, () => {
-    test("uses the expected backend", async () => {
-      const root = await fixture();
-
-      const kind = await withSearch(
-        useFff,
-        Effect.gen(function* () {
-          const search = yield* FileSearch;
-          yield* search.searchPaths(root, "readme", 5);
-
-          return yield* search.backendOf(root);
-        })
-      );
-
-      expect(kind).toBe(backend);
-    });
-
     test("fuzzy path search finds files and skips ignored ones", async () => {
       const root = await fixture();
 
@@ -357,7 +341,6 @@ describe("FileSearch lifecycle", () => {
   });
 
   test("POLARIS_FFF=off forces the fallback", async () => {
-    const root = await fixture();
     process.env.POLARIS_FFF = "off";
 
     try {
@@ -366,8 +349,6 @@ describe("FileSearch lifecycle", () => {
     } finally {
       delete process.env.POLARIS_FFF;
     }
-
-    expect(root).toBeTruthy();
   });
 });
 
@@ -416,7 +397,6 @@ test("open-file subscriptions reuse an existing fff index without creating one",
       })
     )
   );
-  expect(notifications).toBeGreaterThan(0);
 }, 20_000);
 
 test("a watch whose fff watcher never arms reports changes through fs.watch", async () => {

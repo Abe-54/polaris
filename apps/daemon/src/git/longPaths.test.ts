@@ -36,7 +36,6 @@ const longWorkspace = async () => {
 
 test("a Workspace whose git files pass MAX_PATH stages, commits and checkpoints", async () => {
   const root = await longWorkspace();
-  expect(root.length).toBe(WORKSPACE_LENGTH);
   write(root, "a.txt", "a\n");
 
   await Effect.runPromise(handleGitStage({ cwd: root, paths: ["a.txt"] }));

@@ -235,5 +235,4 @@ test("explicit language demand watches non-git Linux checkout configs without re
 
     return seen.includes(join(root, "nested/tsconfig.json"));
   });
-  expect(seen).toContain(join(root, "nested/tsconfig.json"));
 });

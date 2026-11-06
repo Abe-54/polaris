@@ -120,7 +120,6 @@ test("watch coalesces a continuous ingest stream to at most four snapshots per s
 
       await until(() => events.at(-1)?.total === 30);
       expect(events[0]?.total).toBe(0);
-      expect(events.at(-1)?.total).toBe(30);
       expect(events.length).toBeLessThan(8);
 
       for (let i = 1; i < events.length; i++)
