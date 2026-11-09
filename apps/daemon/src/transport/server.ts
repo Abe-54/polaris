@@ -45,7 +45,7 @@ import { GATEWAY_WIRE_LIMITS } from "../gateway/limits.ts";
 import { connectionRejected, rejectConnection } from "../extensions/admission.ts";
 import { Pairings } from "../extensions/pairings.ts";
 import { RemoteAccessLive } from "../extensions/remoteAccess.ts";
-import { RemoteAccessControl } from "../remoteAccess/index.ts";
+import { RemoteAccessControl } from "../remoteAccess/service.ts";
 import { ConnectionDevice, deviceOf } from "../linkedDevices/connection.ts";
 import { DeviceConnections, type LinkTiming, RelayRoute } from "../linkedDevices/route.ts";
 import { HostPresence, type PresenceOptions } from "../presence/index.ts";

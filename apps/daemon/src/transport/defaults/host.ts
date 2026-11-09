@@ -29,7 +29,7 @@ import { RemoteAccess } from "../../extensions/remoteAccess.ts";
 import { deviceOf } from "../../linkedDevices/connection.ts";
 import { RelayRoute } from "../../linkedDevices/route.ts";
 import { HostPresence } from "../../presence/index.ts";
-import { RemoteAccessControl } from "../../remoteAccess/index.ts";
+import { RemoteAccessControl } from "../../remoteAccess/service.ts";
 import { type DefaultOptions, notYet, unsupportedFeed } from "./shared.ts";
 
 const notADevice = () =>
