@@ -38,7 +38,17 @@ export class HarnessError extends Schema.TaggedError<HarnessError>()("HarnessErr
   harness: Schema.String,
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
+  /** The driver already recorded the refused input and why in its Turn, so the Engine doesn't. */
+  recorded: Schema.optional(Schema.Boolean),
 }) {}
+
+/** `error`, marked as already recorded in its Turn by the driver. */
+export const recordedError = (error: HarnessError) =>
+  new HarnessError(
+    error.cause === undefined
+      ? { harness: error.harness, message: error.message, recorded: true }
+      : { harness: error.harness, message: error.message, cause: error.cause, recorded: true }
+  );
 
 /** What fills the context window, as the Harness last counted it (see `ContextUsage`). */
 export interface ContextBreakdown {

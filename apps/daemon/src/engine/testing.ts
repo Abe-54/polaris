@@ -19,6 +19,7 @@ import { type Cause, Duration, Effect, Layer, Queue, Stream } from "effect";
 import type { CheckpointPolicy } from "../git/prune.ts";
 import {
   type HarnessDriver,
+  type HarnessError,
   HarnessEvent,
   type OpenOptions,
   type TurnInput,
@@ -90,6 +91,8 @@ export const makeFakeDriver = (
     readonly onInterrupt?: (session: FakeHarnessSession) => ReadonlyArray<HarnessEvent>;
     /** Offer `terminalFollow`, like Claude's hooks. */
     readonly follow?: boolean;
+    /** The Harness refuses each steer with this error, after recording it if `recorded`. */
+    readonly refuseSteer?: HarnessError;
   } = {}
 ): FakeDriver => {
   const sessions: Array<FakeHarnessSession> = [];
@@ -182,10 +185,12 @@ export const makeFakeDriver = (
               return true;
             }),
           steer: (text, attachments = []) =>
-            Effect.sync(() => {
-              session.steers.push(text);
-              session.steerAttachments.push(attachments);
-            }),
+            options.refuseSteer === undefined
+              ? Effect.sync(() => {
+                  session.steers.push(text);
+                  session.steerAttachments.push(attachments);
+                })
+              : Effect.fail(options.refuseSteer),
           interrupt: Effect.sync(() => {
             session.interrupts++;
             session.emit(...(options.onInterrupt?.(session) ?? []));
