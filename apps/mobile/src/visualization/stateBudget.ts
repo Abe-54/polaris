@@ -20,7 +20,7 @@ export interface SavedFile {
 export const evictions = (files: ReadonlyArray<SavedFile>, kept: string): Array<string> => {
   const oldestFirst = files
     .filter(({ name }) => name !== kept)
-    .toSorted((a, b) => a.modified - b.modified);
+    .sort((a, b) => a.modified - b.modified);
 
   let bytes = files.reduce((sum, { size }) => sum + size, 0);
   let count = files.length;
