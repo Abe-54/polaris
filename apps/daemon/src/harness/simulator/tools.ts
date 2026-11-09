@@ -3,10 +3,11 @@
  * of the Agent Session's `SimulatorSession`.
  */
 import { Option, Schema } from "effect";
+import { Platform } from "./platforms.ts";
 import { failure, type SimulatorSession, type ToolResult } from "./session.ts";
 
 const WATCH =
-  "Prefer the simulator_* tools over xcrun simctl, adb or agent-device for UI work on a Simulator, so the user can watch it in the session's Simulator tab; builds and installs may still use the CLIs.";
+  "Prefer the simulator_* tools over xcrun simctl, adb or agent-device for UI work on an iOS Simulator or Android Emulator, so the user can watch it in the session's Simulator tab; builds and installs may still use the CLIs.";
 
 const Point = Schema.Tuple([Schema.Number, Schema.Number]);
 
@@ -61,25 +62,30 @@ const KEYS = ["home", "back", "return", "dismiss_keyboard"] as const;
 export const simulatorTools: ReadonlyArray<SimulatorTool> = [
   define(
     "simulator_list",
-    `Lists the iOS Simulators on this Host: their ids, names, OS versions and whether they are booted. ${WATCH}`,
+    `Lists this Host's iOS Simulators and Android Emulators: their ids, names, OS versions and whether they are running, or what the Host needs before a platform can run them. ${WATCH}`,
     Empty,
     (session) => session.list(),
     true
   ),
   define(
     "simulator_open",
-    `Opens a Simulator for this session, booting it if needed, and shows it to the user in the session's Simulator tab; optionally opens an app (bundle id or name) in it. Other simulator_* tools then act on it. The first open on a Host builds a test runner and takes about a minute. ${WATCH}`,
+    `Opens an iOS Simulator or Android Emulator for this session, booting it if needed, and shows it to the user in the session's Simulator tab; optionally opens an app (bundle id, package name or app name) in it. Other simulator_* tools then act on it. The first iOS open on a Host builds a test runner, and booting an emulator takes a minute or two. ${WATCH}`,
     Schema.Struct({
-      id: Schema.String.annotate({ description: "The Simulator's id (UDID) from simulator_list" }),
+      id: Schema.String.annotate({
+        description: "The id from simulator_list: a Simulator's UDID, or an emulator's serial",
+      }),
+      platform: Schema.optionalKey(
+        Platform.annotate({ description: "ios or android; inferred from the id when omitted" })
+      ),
       app: Schema.optionalKey(
-        Schema.String.annotate({ description: "A bundle id or app name to open in it" })
+        Schema.String.annotate({ description: "A bundle id, package name or app name to open" })
       ),
     }),
-    (session, { id, app }) => session.open(id, app)
+    (session, { id, platform, app }) => session.open(id, app, platform)
   ),
   define(
     "simulator_snapshot",
-    `The accessibility tree of the open Simulator's screen, with refs (@e12) for simulator_tap and simulator_type. Snapshot before acting, and again after the screen changes: refs go stale. ${WATCH}`,
+    `The accessibility tree of the open device's screen, with refs (@e12) for simulator_tap and simulator_type. Snapshot before acting, and again after the screen changes: refs go stale. ${WATCH}`,
     Empty,
     (session) => session.snapshot(),
     true
@@ -104,7 +110,7 @@ export const simulatorTools: ReadonlyArray<SimulatorTool> = [
   ),
   define(
     "simulator_press",
-    `Presses a device key on the open Simulator: home, back, the keyboard's return key, or dismiss_keyboard. ${WATCH}`,
+    `Presses a device key on the open device: home, back, the keyboard's return key, or dismiss_keyboard. ${WATCH}`,
     Schema.Struct({ key: Schema.Literals(KEYS) }),
     (session, { key }) => session.press(key)
   ),
@@ -136,26 +142,26 @@ export const simulatorTools: ReadonlyArray<SimulatorTool> = [
   ),
   define(
     "simulator_screenshot",
-    `A screenshot of the open Simulator, as an image. A snapshot is cheaper for finding what to tap. ${WATCH}`,
+    `A screenshot of the open device, as an image. A snapshot is cheaper for finding what to tap. ${WATCH}`,
     Empty,
     (session) => session.screenshot(),
     true
   ),
   define(
     "simulator_launch",
-    `Launches an installed app (bundle id or name) on the open Simulator and brings it to the front. ${WATCH}`,
+    `Launches an installed app (bundle id or name) on the open device and brings it to the front. ${WATCH}`,
     Schema.Struct({ app: Schema.String }),
     (session, { app }) => session.launch(app)
   ),
   define(
     "simulator_openurl",
-    `Opens a URL or deep link on the open Simulator. ${WATCH}`,
+    `Opens a URL or deep link on the open device. ${WATCH}`,
     Schema.Struct({ url: Schema.String }),
     (session, { url }) => session.openUrl(url)
   ),
   define(
     "simulator_close",
-    `Ends this session's control of the Simulator and closes its app; the Simulator keeps running. ${WATCH}`,
+    `Ends this session's control of the device and closes its app; the device keeps running. ${WATCH}`,
     Empty,
     (session) => session.close()
   ),

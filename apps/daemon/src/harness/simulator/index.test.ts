@@ -1,125 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { type HostSimulatorSupport, SessionId, SimulatorSupport } from "@polaris/protocol";
+import { SessionId, SimulatorSupport } from "@polaris/protocol";
 import { writeFileSync } from "node:fs";
-import { Effect, Exit, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect";
-import { SimulatorTools } from "../../install/simulator/index.ts";
-import { HostPlatform, type PlatformFacts } from "../../platform/index.ts";
-import { SimulatorDetection } from "../../simulator/index.ts";
-import type { SimulatorActivity } from "./activity.ts";
-import type { AgentDeviceRun, RunResult } from "./agentDevice.ts";
-import { SimulatorMcp } from "./index.ts";
+import type { RunResult } from "./agentDevice.ts";
 import { callTool, statusOf, textOf, toolNames } from "./mcp.testing.ts";
+import { defaultAnswer, disposeAll, ok, READY, setup, UDID } from "./server.testing.ts";
 
-const S1 = SessionId.make("s1");
-
-const UDID = "11111111-2222-3333-4444-555555555555";
-
-const READY: HostSimulatorSupport = {
-  ios: SimulatorSupport.cases.Ready.make({}),
-  android: SimulatorSupport.cases.Unsupported.make({}),
-};
-
-const ok = (data: typeof Schema.Json.Type): RunResult => ({
-  exitCode: 0,
-  stdout: JSON.stringify({ success: true, data }),
-  stderr: "",
-});
-
-type Answer = (args: ReadonlyArray<string>) => RunResult | Promise<RunResult>;
-
-const defaultAnswer: Answer = (args) =>
-  args[0] === "open"
-    ? ok({ device: "iPhone 17", selection: { bootOccurred: true } })
-    : { exitCode: 0, stdout: `ran ${args[0]}`, stderr: "" };
-
-const runtimes: Array<ManagedRuntime.ManagedRuntime<SimulatorMcp, never>> = [];
-
-afterEach(async () => {
-  for (const runtime of runtimes.splice(0)) await runtime.dispose();
-});
-
-const setup = (
-  options: {
-    readonly support?: HostSimulatorSupport;
-    readonly iosBlocked?: string | null;
-    readonly os?: PlatformFacts["os"];
-    readonly answer?: Answer;
-    readonly softWaitMs?: number;
-  } = {}
-) => {
-  const calls: Array<ReadonlyArray<string>> = [];
-  const marks: string[] = [];
-  const answer = options.answer ?? defaultAnswer;
-
-  const run: AgentDeviceRun = async (args) => {
-    calls.push(args);
-    marks.push(`run ${args[0]}`);
-
-    return answer(args);
-  };
-
-  const activity: SimulatorActivity = {
-    agentOpened: (sessionId, id) => Effect.sync(() => void marks.push(`opened ${sessionId} ${id}`)),
-    agentDriving: (sessionId) =>
-      Effect.acquireRelease(
-        Effect.sync(() => void marks.push(`driving ${sessionId}`)),
-        () => Effect.sync(() => void marks.push(`idle ${sessionId}`))
-      ),
-    shown: () => Effect.succeed(null),
-    agentBooted: (id) => Effect.sync(() => void marks.push(`booted ${id}`)),
-  };
-
-  const report = {
-    support: options.support ?? READY,
-    iosBlocked: options.iosBlocked ?? null,
-    androidSdk: null,
-  };
-
-  const layer = SimulatorMcp.layerWith(Effect.succeed(activity), {
-    agentDevice: () => run,
-    softWaitMs: options.softWaitMs,
-  }).pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        HostPlatform.test({ os: options.os ?? "darwin", arch: "arm64", libc: "none" }),
-        Layer.succeed(SimulatorDetection)(
-          SimulatorDetection.of({
-            current: Effect.succeed(report),
-            refresh: Effect.succeed(report),
-            changes: Stream.empty,
-          })
-        ),
-        Layer.succeed(SimulatorTools)(
-          SimulatorTools.of({
-            current: Effect.die("unused"),
-            ensure: Effect.succeed({ dir: "/t", hub: "/t/hub", agentDevice: "/t/ad.mjs" }),
-          })
-        )
-      )
-    )
-  );
-
-  const runtime = ManagedRuntime.make(layer);
-  runtimes.push(runtime);
-
-  const open = async (sessionId = S1) => {
-    const scope = Effect.runSync(Scope.make());
-
-    const server = await runtime.runPromise(
-      Effect.gen(function* () {
-        return yield* (yield* SimulatorMcp).forSession(sessionId);
-      }).pipe(Scope.provide(scope))
-    );
-
-    return { server, close: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
-  };
-
-  return { open, calls, marks };
-};
+afterEach(disposeAll);
 
 describe("the Simulator's MCP server", () => {
-  test("a Host that can't run iOS Simulators gives sessions no server", async () => {
-    const { open } = setup({ os: "linux" });
+  test("a Host that can run neither platform (a Linux arm64 Pi) gives sessions no server", async () => {
+    const { open } = setup({ facts: { os: "linux", arch: "arm64", libc: "glibc" } });
 
     expect((await open()).server).toBeNull();
   });

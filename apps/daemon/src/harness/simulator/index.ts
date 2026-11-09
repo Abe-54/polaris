@@ -22,10 +22,11 @@ import { SimulatorTools } from "../../install/simulator/index.ts";
 import { HostPlatform } from "../../platform/index.ts";
 import { SimulatorDetection, simulatorCapable } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
-import { type AgentDeviceRun, liveAgentDevice } from "./agentDevice.ts";
+import { type AgentDeviceRun, androidEnv, liveAgentDevice } from "./agentDevice.ts";
 import { sessionPath, simulatorMcpHttp } from "./http.ts";
 import { failure, type SimulatorSession, simulatorSession, type ToolResult } from "./session.ts";
-import { setupBlocker } from "./setup.ts";
+import type { Platform } from "./platforms.ts";
+import { possiblePlatforms, setupBlocker } from "./setup.ts";
 import { type SimulatorTool, simulatorTools } from "./tools.ts";
 
 const CLOSED = "This session's Simulator tools have closed.";
@@ -52,7 +53,11 @@ export interface SimulatorMcpServer {
 export interface SimulatorMcpOptions {
   readonly setupTimeout?: Duration.Input;
   /** How agent-device runs, given its installed script; tests pass a fake. */
-  readonly agentDevice?: (script: string, cwd: string) => AgentDeviceRun;
+  readonly agentDevice?: (
+    script: string,
+    cwd: string,
+    env: Readonly<Record<string, string>>
+  ) => AgentDeviceRun;
   readonly softWaitMs?: number | undefined;
 }
 
@@ -83,7 +88,7 @@ export class SimulatorMcp extends Context.Service<
       Effect.gen(function* () {
         const facts = yield* HostPlatform;
 
-        if (!simulatorCapable(facts) || facts.os !== "darwin")
+        if (!simulatorCapable(facts))
           return SimulatorMcp.of({ forSession: () => Effect.succeed(null) });
         const detection = yield* SimulatorDetection;
         const installs = yield* SimulatorTools;
@@ -93,15 +98,19 @@ export class SimulatorMcp extends Context.Service<
         const runAgentDevice = options.agentDevice ?? liveAgentDevice;
         let scratch: string | null = null;
 
-        const blocker = async () => {
+        /** The last detection, checked again while `platform` isn't Ready. */
+        const reportFor = async (platform: Platform) => {
           const last = await Effect.runPromise(detection.current);
 
-          const report = Predicate.isTagged(last.support.ios, "Ready")
+          return Predicate.isTagged(last.support[platform], "Ready")
             ? last
-            : await Effect.runPromise(detection.refresh);
-
-          return setupBlocker(report);
+            : Effect.runPromise(detection.refresh);
         };
+
+        const blocker = async (platform: Platform) =>
+          setupBlocker(await reportFor(platform), platform);
+
+        const platforms = async () => possiblePlatforms(await Effect.runPromise(detection.current));
 
         const agentDevice = async () => {
           const installed = await Effect.runPromise(
@@ -112,7 +121,13 @@ export class SimulatorMcp extends Context.Service<
             )
           );
 
-          return runAgentDevice(installed.agentDevice, scratch ?? tmpdir());
+          const { androidSdk } = await Effect.runPromise(detection.current);
+
+          return runAgentDevice(
+            installed.agentDevice,
+            scratch ?? tmpdir(),
+            androidEnv(androidSdk, process.env.PATH)
+          );
         };
 
         /** agent-device's daemon serves every session: stopped once none has used it. */
@@ -157,6 +172,7 @@ export class SimulatorMcp extends Context.Service<
             const session = simulatorSession({
               sessionId,
               blocker,
+              platforms,
               agentDevice,
               activity,
               scratch: scratch ?? tmpdir(),

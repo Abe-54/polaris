@@ -2,6 +2,7 @@
  * Runs Callstack's agent-device CLI (ADR 0099) as `BUN_BE_BUN=1 <polaris> <script>`: its daemon
  * inherits the same runtime, so no Node is needed. It never checks for updates.
  */
+import { delimiter, join } from "node:path";
 import { Option, Schema } from "effect";
 import { bunRuntime } from "../../install/simulator/index.ts";
 import { childEnv } from "../../service/childEnv.ts";
@@ -21,14 +22,33 @@ export type AgentDeviceRun = (
 /** Its daemon exits on its own after 10 idle minutes; `daemon stop` ends it sooner. */
 const DAEMON_IDLE_TIMEOUT_MS = "600000";
 
+/**
+ * agent-device finds adb on the PATH and the SDK by `ANDROID_HOME`: both point at the SDK
+ * detection found, so a Daemon started without the user's shell profile still reaches it.
+ */
+export const androidEnv = (
+  sdk: string | null,
+  path: string | undefined
+): Readonly<Record<string, string>> =>
+  sdk === null
+    ? {}
+    : {
+        ANDROID_HOME: sdk,
+        ANDROID_SDK_ROOT: sdk,
+        PATH: [join(sdk, "platform-tools"), join(sdk, "emulator"), path ?? ""]
+          .filter((part) => part !== "")
+          .join(delimiter),
+      };
+
 export const liveAgentDevice =
-  (script: string, cwd: string): AgentDeviceRun =>
+  (script: string, cwd: string, env: Readonly<Record<string, string>>): AgentDeviceRun =>
   async (args, { timeoutMs }) => {
     // The Daemon's own executable, run as Bun (`bunRuntime`).
     const proc = Bun.spawn([process.execPath, script, ...args], {
       cwd,
       env: {
         ...childEnv(),
+        ...env,
         ...bunRuntime().env,
         AGENT_DEVICE_NO_UPDATE_NOTIFIER: "1",
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: DAEMON_IDLE_TIMEOUT_MS,
