@@ -67,18 +67,16 @@ import { polarisInstructions } from "../../constellation/skills/preamble.ts";
 import type { ConstellationAttachment } from "../constellation/attachment.ts";
 import { type HarnessCall, harnessCallOf } from "./slash.ts";
 import { logStart } from "../startLog.ts";
-import type { BrowserMcp } from "../browser/index.ts";
 import { sessionTraceEnvironment, traceEndpointEnvironment } from "../../traces/environment.ts";
-import { codexBrowserConfig } from "./browser.ts";
+import type { ToolServers } from "../toolServers.ts";
+import { codexToolServers } from "./simulator.ts";
 
-export interface SessionConfig {
+export interface SessionConfig extends ToolServers {
   readonly appServer: AppServer;
   readonly codexPath: string;
   readonly clientVersion: string;
   /** Where the account's Plan Limits go; null, they aren't read. */
   readonly planLimits: CodexPlanLimits | null;
-  /** The Browser's MCP server for each thread that isn't read-only. */
-  readonly browser?: BrowserMcp["Service"] | undefined;
 }
 
 type PendingRequest = Data.TaggedEnum<{
@@ -233,7 +231,7 @@ export const openSession = (
       );
     }
 
-    const browser = yield* codexBrowserConfig(config.browser, options);
+    const servers = yield* codexToolServers(config, options);
 
     common.developerInstructions = polarisInstructions(options);
 
@@ -246,7 +244,7 @@ export const openSession = (
         "shell_environment_policy.set": { ...options.environment, ...traceEnv },
       };
 
-    const extra = { ...browser, ...sandboxing.config };
+    const extra = { ...servers, ...sandboxing.config };
 
     if (Object.keys(extra).length > 0) common.config = { ...common.config, ...extra };
 

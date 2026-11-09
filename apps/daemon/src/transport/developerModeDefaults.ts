@@ -39,7 +39,7 @@ export const developerModeDefaults = Layer.mergeAll(
     "traces.ingestSelf": request("traces.self"),
   }),
   DaemonRpcs.toLayerHandler("data.source.saveFile", request("data.sqlite")),
-  /** Stubs until ENG-829's Daemon task serves the Simulator. */
+  /** For Daemons without `SimulatorRpcHandlers` (serve.ts mounts them over these). */
   SimulatorRpcs.toLayer({
     "simulator.watch": feed("simulator"),
     "simulator.boot": request("simulator"),
