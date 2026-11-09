@@ -1,13 +1,8 @@
 import { readFile, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { DataConnection } from "./connection.ts";
+import type { ListenerAddress, Owner } from "./listener.ts";
 
-interface Owner {
-  readonly pid: number;
-  readonly executable: string;
-}
-
-const socketPath = (connection: DataConnection) =>
+const socketPath = (connection: ListenerAddress) =>
   connection.path ||
   (connection.hostname.startsWith("/")
     ? join(connection.hostname, `.s.PGSQL.${connection.port}`)
@@ -31,7 +26,7 @@ export const tcpInodes = (text: string, port: number) =>
       : [];
   });
 
-export const linuxOwners = async (connection: DataConnection): Promise<Owner[]> => {
+export const linuxOwners = async (connection: ListenerAddress): Promise<Owner[]> => {
   const inodes = await socketInodes(connection);
 
   if (!inodes.size) return [];
@@ -52,7 +47,7 @@ export const linuxOwners = async (connection: DataConnection): Promise<Owner[]> 
   return remaining.size ? [] : owners;
 };
 
-const socketInodes = async (connection: DataConnection) => {
+const socketInodes = async (connection: ListenerAddress) => {
   const socket = socketPath(connection);
   const inodes = new Set<string>();
 

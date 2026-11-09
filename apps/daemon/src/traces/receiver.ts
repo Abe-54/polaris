@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
+import { Effect, Layer, Option, Schema, type Scope } from "effect";
 import { TraceAvailability } from "@polaris/protocol";
 import { MAX_BODY_BYTES } from "./ingest.ts";
 import { TraceRuntime, TRACE_PORT } from "./runtimeService.ts";
@@ -13,14 +13,7 @@ const listenerOwner = async (port: number): Promise<string | null> => {
   try {
     const { listenerOwners } = await import("../data/listener.ts");
 
-    const owners = await listenerOwners({
-      hostname: "127.0.0.1",
-      port,
-      database: "",
-      username: "",
-      password: Redacted.make(""),
-      tls: false,
-    });
+    const owners = await listenerOwners({ hostname: "127.0.0.1", port });
 
     return owners.length === 0
       ? null
