@@ -5,6 +5,7 @@ import {
   backgroundUpgradeDue,
   buildPlatformOf,
   isDevVersion,
+  isPlatform,
   platformFromUname,
   upgradeDue,
 } from "./builds.ts";
@@ -64,6 +65,10 @@ describe("buildPlatformOf", () => {
     expect(buildPlatformOf({ platform: "darwin-arm64" })).toBe("darwin-arm64");
     // An older Daemon sends no libc.
     expect(buildPlatformOf({ platform: "linux-x64" })).toBe("linux-x64");
+  });
+
+  test("a libc this Client doesn't know picks no build, not the glibc one", () => {
+    expect(isPlatform(buildPlatformOf({ platform: "linux-arm64", libc: "bionic" }))).toBe(false);
   });
 });
 

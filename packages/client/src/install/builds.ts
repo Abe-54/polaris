@@ -66,11 +66,15 @@ export const platformFromUname = (
 /**
  * The build id for a Host from its `hello`: `HostInfo.platform` plus `-musl` when it says
  * libc is musl. An older Daemon sends no libc, so a musl Host reads as glibc until it upgrades.
+ * A libc this Client doesn't know keeps its name as the suffix, so it matches no build.
  */
 export const buildPlatformOf = (host: {
   readonly platform: string;
-  readonly libc?: "glibc" | "musl";
-}): string => (host.libc === "musl" ? `${host.platform}-musl` : host.platform);
+  readonly libc?: string;
+}): string =>
+  host.libc === undefined || host.libc === "glibc"
+    ? host.platform
+    : `${host.platform}-${host.libc}`;
 
 /**
  * Shared libraries Bun's musl runtime links dynamically. Alpine's minimal
