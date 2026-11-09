@@ -24,6 +24,7 @@ import { SpanPanel } from "./SpanPanel.tsx";
 import { TracesStatusBar } from "./StatusBar.tsx";
 import { TraceBar } from "./TraceBar.tsx";
 import { TraceMain } from "./TraceMain.tsx";
+import { WorkingStrip } from "./WorkingStrip.tsx";
 import { TracesSetup } from "./setup/TracesSetup.tsx";
 import { useSetupPlace } from "./setup/useSetupPlace.ts";
 
@@ -106,6 +107,7 @@ const Workbench = ({ slot: given }: { slot: Omit<TracesSlotProps, "traceId" | "s
         {setup === null ? (
           <>
             <TraceBar {...props} />
+            <WorkingStrip {...props} />
             <div className="flex min-h-0 flex-1">
               <div className="flex min-w-0 flex-1 flex-col">
                 <TraceMain {...props} />
