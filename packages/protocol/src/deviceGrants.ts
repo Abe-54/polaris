@@ -135,6 +135,7 @@ export const DEVICE_RPCS = {
   "host.stats.watch": "local",
   "byteStream.credit": "local",
   "hostAddress.open": "local",
+  "hostAddress.names": "local",
   "browser.host": "local",
   "browser.claim": "local",
   "browser.release": "local",

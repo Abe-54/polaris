@@ -323,6 +323,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host.resources",
   "host.stats",
   "host-address",
+  "host-address.names",
   "browser.host",
 ];
 

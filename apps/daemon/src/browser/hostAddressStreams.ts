@@ -5,6 +5,7 @@
 import { type ByteTransport, HostAddressError, loopbackAddressesOf } from "@polaris/protocol";
 import { Context, Effect, Layer, Result, type Scope } from "effect";
 import { connectTcp, type LoopbackConnectError } from "../transport/bunSocket.ts";
+import { HOSTS_FILE, parseHostsFile } from "./etcHosts.ts";
 
 /** Where a Host-address stream goes: `hostname` as the Client sent it, unresolved. */
 export interface HostAddressTarget {
@@ -17,6 +18,15 @@ export type LoopbackConnector = (
   address: string,
   port: number
 ) => Effect.Effect<ByteTransport, LoopbackConnectError, Scope.Scope>;
+
+/** The hosts file's text, read on each request; empty when it can't be read. */
+export type HostsFileReader = Effect.Effect<string>;
+
+const readHostsFile: HostsFileReader = Effect.promise(() =>
+  Bun.file(HOSTS_FILE)
+    .text()
+    .catch(() => "")
+);
 
 const hostAddressError = (
   target: HostAddressTarget,
@@ -34,6 +44,8 @@ export class HostAddressStreams extends Context.Service<
     readonly connect: (
       target: HostAddressTarget
     ) => Effect.Effect<ByteTransport, HostAddressError, Scope.Scope>;
+    /** The names the Host's hosts file maps to loopback right now (ENG-621). */
+    readonly names: Effect.Effect<ReadonlyArray<string>>;
   }
 >()("polaris/daemon/browser/HostAddressStreams") {
   /**
@@ -41,16 +53,28 @@ export class HostAddressStreams extends Context.Service<
    * those literals and nowhere else, so no name is ever resolved. A name tries IPv4 first and
    * falls through to IPv6 when nothing listens there; a literal tries itself alone.
    */
-  static make(connector: LoopbackConnector = connectTcp): HostAddressStreams["Service"] {
+  static make(
+    connector: LoopbackConnector = connectTcp,
+    hostsFile: HostsFileReader = readHostsFile
+  ): HostAddressStreams["Service"] {
+    const fromHostsFile = (hostname: string) =>
+      hostsFile.pipe(
+        Effect.map(
+          (text) => parseHostsFile(text).get(hostname.toLowerCase().replace(/\.$/, "")) ?? null
+        )
+      );
+
     return HostAddressStreams.of({
+      names: hostsFile.pipe(Effect.map((text) => [...parseHostsFile(text).keys()])),
       connect: Effect.fn("HostAddressStreams.connect")(function* (target: HostAddressTarget) {
-        const addresses = loopbackAddressesOf(target.hostname);
+        const addresses =
+          loopbackAddressesOf(target.hostname) ?? (yield* fromHostsFile(target.hostname));
 
         if (addresses === null)
           return yield* hostAddressError(
             target,
             "not-host-address",
-            `${target.hostname} is not a Host address: only localhost, *.localhost and loopback IPs are`
+            `${target.hostname} is not a Host address: only localhost, *.localhost, loopback IPs and names the hosts file maps to loopback are`
           );
 
         let failure: HostAddressError | null = null;
@@ -83,6 +107,7 @@ export class HostAddressStreams extends Context.Service<
   /** Placeholder for Daemons that mount no byte-stream handlers: every connect dies. */
   static readonly layerStub = Layer.succeed(HostAddressStreams)(
     HostAddressStreams.of({
+      names: Effect.succeed([]),
       connect: Effect.fn("HostAddressStreams.connect")(function* (target: HostAddressTarget) {
         return yield* Effect.die(
           new Error(`hostAddress.open to ${target.hostname}:${target.port} is not implemented`)

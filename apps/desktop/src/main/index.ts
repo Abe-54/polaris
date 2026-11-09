@@ -91,7 +91,12 @@ import {
 import { internetFetch } from "./net.ts";
 import { distrustInSession } from "./tls/distrust.ts";
 import { createHostAddresses, type HostAddresses } from "./hostAddress/index.ts";
-import { isLocalHost, openThroughHost, whenHostRemoved } from "./hostAddress/open.ts";
+import {
+  isLocalHost,
+  namesThroughHost,
+  openThroughHost,
+  whenHostRemoved,
+} from "./hostAddress/open.ts";
 import { openPrices } from "./prices.ts";
 import { openSnapshotCache } from "./snapshotCache.ts";
 import type { SessionPrefsPatch } from "../shared/contract.ts";
@@ -489,6 +494,7 @@ const start = async () => {
   hostAddresses = createHostAddresses({
     isLocal: (hostKey) => clientRuntime.runSync(isLocalHost(hostKey)),
     open: openThroughHost,
+    names: (hostKey) => clientRuntime.runPromise(namesThroughHost(hostKey)),
     run: (effect) => clientRuntime.runFork(effect),
   });
   const removedHosts = hostAddresses;

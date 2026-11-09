@@ -203,6 +203,8 @@ export const Capability = Schema.Literals([
   "blobs",
   /** `hostAddress.open` and `byteStream.credit`: Host-address streams to the Host's loopback (ADR 0093). */
   "host-address",
+  /** `hostAddress.names`: the names the Host's hosts file maps to loopback (ENG-621). */
+  "host-address.names",
   /**
    * `browser.*` and `byteStream.credit`: Browser hosting and Browser streams (ADR 0092). A Client
    * announces it when it can host Browsers; the Daemon refuses `browser.host` from one that didn't.
