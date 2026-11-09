@@ -4,6 +4,8 @@ import { Effect, Stream } from "effect";
 export type DefaultOptions = {
   readonly hostInfo: HostInfo;
   readonly capabilities: ReadonlyArray<Capability>;
+  /** Where this Host's enrolled user keys live (`userAccess.ts`). */
+  readonly userAccessFile?: string;
 };
 
 export const notYet = (what: string) => `${what} is not available on this Daemon yet`;

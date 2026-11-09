@@ -46,6 +46,7 @@ import {
 } from "./push.testing.ts";
 import { openPush, pushSuite } from "./seal.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const decodeApnsBody = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ aps: Schema.Unknown, p: Schema.String }))
@@ -207,7 +208,7 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
           yield* socketTransport(server.socketPath)
         )).client;
 
-        yield* desktop.hello(hello);
+        yield* desktop.hello({ ...hello, ...TEST_USER_KEY });
         yield* desktop["relayRoute.enable"]({ url: relay.url });
         let status: RelayRouteStatus = yield* desktop["relayRoute.status"]();
 

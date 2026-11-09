@@ -27,10 +27,12 @@ import {
   ManagedRuntime,
   Option,
   Predicate,
+  type Redacted,
   Schema,
   Stream,
   SubscriptionRef,
 } from "effect";
+import { userKeyForHost } from "./userKey.ts";
 import type { ConnectionStatusView, HostKind, HostView, IpcError } from "../shared/api.ts";
 import type { GitHub } from "./github/index.ts";
 import type { LocalDaemon } from "./local/index.ts";
@@ -248,6 +250,8 @@ export interface HostDirectoryInput {
   readonly identity: ClientIdentity;
   /** Supplied by Main's explicit private credential store, never renderer Settings. */
   readonly clientIdentity?: HostConnectionOptions["clientIdentity"];
+  /** The master user key; each Host gets its own key derived from it (ADR 0100). */
+  readonly userKey?: Redacted.Redacted<string>;
   /** Same Main allocator used by identity IPC; public epochs are freshness, never credentials. */
   readonly languageEpoch?: (hostKey: string, session: LiveSession) => number | null;
   readonly invalidateLanguage?: (hostKey: string) => void;
@@ -282,6 +286,7 @@ export class HostDirectory extends Context.Service<
     identity,
     ssh,
     clientIdentity,
+    userKey,
     languageEpoch,
     invalidateLanguage,
     presence,
@@ -347,7 +352,10 @@ export class HostDirectory extends Context.Service<
               key: entry.key,
               name: entry.label,
               target: entry.target,
-              identity,
+              identity:
+                userKey === undefined
+                  ? identity
+                  : { ...identity, userKey: userKeyForHost(userKey, entry.key) },
               ssh:
                 entry.remoteCommand === null
                   ? { ...ssh }

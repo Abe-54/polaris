@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
 import { Command, CommandId, type GrantKind, type HostId, PairingId } from "@polaris/protocol";
-import { Effect, Exit, Match, Option, Scope, Stream } from "effect";
+import { Effect, Exit, Match, Option, Redacted, Scope, Stream } from "effect";
 import { encodePairing } from "./pairing.ts";
 
 const DAEMON_MAIN = resolve(import.meta.dir, "..", "..", "..", "apps", "daemon", "src", "main.ts");
@@ -37,6 +37,8 @@ const identity = {
   clientVersion: "0.0.0",
   deviceLabel: "SDK tests",
   capabilities: [],
+  /** Acts as the Desktop App, which pairs: the fresh home enrols it (ADR 0100). */
+  userKey: Redacted.make("5".repeat(64)),
 };
 
 /** A port nothing listens on now, so a restarted Daemon's gateway keeps its URL. */

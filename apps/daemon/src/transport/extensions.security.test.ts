@@ -5,6 +5,7 @@ import { ExtensionDaemonRpcs, ExtensionTokenRejected } from "@polaris/protocol";
 import { Deferred, Effect, Exit, Fiber, Match, Redacted, Stream } from "effect";
 import { startServer } from "./server.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "./userAccess.testing.ts";
 
 const identity = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
@@ -26,7 +27,7 @@ const setup = Effect.gen(function* () {
     );
 
   const desktop = yield* connect();
-  yield* desktop.client.hello(hello());
+  yield* desktop.client.hello({ ...hello(), ...TEST_USER_KEY });
   const paired = yield* desktop.client["extensions.pair"]({ name: "Raycast", grant: ["read"] });
 
   return { connect, desktop, paired };

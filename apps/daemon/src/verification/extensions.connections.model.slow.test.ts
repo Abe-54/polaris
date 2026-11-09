@@ -19,6 +19,7 @@ import {
 import { startServer } from "../transport/server.ts";
 import { pbtRuns, pbtSeed, pbtTimeout } from "./pbt.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const runs = pbtRuns(20);
 
@@ -69,7 +70,7 @@ const exercise = (
       });
 
     const desktop = yield* connect();
-    yield* desktop.client.hello(identity);
+    yield* desktop.client.hello({ ...identity, ...TEST_USER_KEY });
 
     const issued = yield* Effect.forEach(grants, (grant, index) =>
       desktop.client["extensions.pair"]({ name: `Extension ${index}`, grant })
@@ -140,11 +141,8 @@ const exercise = (
           Effect.asVoid(
             client.client.dispatch({
               commandId: CommandId.make(`pbt-${index}`),
-              command: Command.cases.SendTurn.make({
-                sessionId: SessionId.make("s"),
-                prompt: "hi",
-                attachments: [],
-              }),
+              // Interrupt needs the turn Grant but not user access (ADR 0100), so this probes the Grant gate alone.
+              command: Command.cases.Interrupt.make({ sessionId: SessionId.make("s") }),
             })
           )
         ),

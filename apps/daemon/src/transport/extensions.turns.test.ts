@@ -21,6 +21,7 @@ import {
 } from "../engine/testing.ts";
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
 import { startServer } from "./server.ts";
+import { TEST_USER_KEY } from "./userAccess.testing.ts";
 
 test("the socket carries the Pairing's Grant into the Engine and returns its typed refusal", async () => {
   const root = tempDir();
@@ -48,6 +49,13 @@ test("the socket carries the Pairing's Grant into the Engine and returns its typ
           );
 
         const desktop = yield* connect();
+        yield* desktop.client.hello({
+          clientName: "desktop",
+          clientVersion: "0",
+          deviceLabel: "test",
+          capabilities: [],
+          ...TEST_USER_KEY,
+        });
 
         const paired = yield* desktop.client["extensions.pair"]({
           name: "Turn sender",

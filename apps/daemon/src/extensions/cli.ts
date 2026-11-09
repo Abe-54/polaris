@@ -3,8 +3,15 @@
  * a terminal, through the local Daemon's `extensions.*` RPCs, so a revoke
  * closes live connections exactly as from Settings.
  */
-import { connectRpc } from "@polaris/client";
-import { GRANT_KINDS, type GrantKind, type Pairing, PairingId } from "@polaris/protocol";
+import { connectRpcWith } from "@polaris/client";
+import {
+  DaemonRpcs,
+  GRANT_KINDS,
+  type GrantKind,
+  type Pairing,
+  PairingId,
+  UserAccessGate,
+} from "@polaris/protocol";
 import { Effect, Match, Predicate } from "effect";
 import { renderUnicodeCompact } from "uqr";
 import { paths } from "../paths.ts";
@@ -14,6 +21,7 @@ export const EXTENSION_USAGE = [
   "usage: polaris extension pair --name <name> --allow <grant,...>",
   "       polaris extension list",
   "       polaris extension revoke <id>",
+  "pair and revoke need the Desktop App (Settings › Extensions); a terminal can only list.",
   `grants: ${GRANT_KINDS.join(", ")} (driving a session that approves on its own needs approve as well as turn)`,
 ].join("\n");
 
@@ -111,8 +119,18 @@ export const formatPairings = (pairings: ReadonlyArray<Pairing>): string =>
         .map((p) => [p.id, p.name, grantLine(p), usedLine(p)].map(terminalText).join("  ·  "))
         .join("\n");
 
+/** `DaemonRpcs` with the user gate's refusal, which a terminal gets for pair and revoke (ADR 0100). */
+const CliRpcs = DaemonRpcs.middleware(UserAccessGate);
+
+const connectCli = (transport: Parameters<typeof connectRpcWith>[1]) =>
+  connectRpcWith(CliRpcs, transport);
+
+/** A terminal holds no user key, so an agent there can't pair itself an Extension. */
+const NEEDS_DESKTOP =
+  "pairing and revoking Extensions needs the Desktop App: use Settings › Extensions";
+
 const withDaemon = <A, E>(
-  use: (client: Effect.Success<ReturnType<typeof connectRpc>>["client"]) => Effect.Effect<A, E>
+  use: (client: Effect.Success<ReturnType<typeof connectCli>>["client"]) => Effect.Effect<A, E>
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -120,7 +138,7 @@ const withDaemon = <A, E>(
         process.env.POLARIS_HOST_SOCKET ?? paths().socket
       );
 
-      const { client } = yield* connectRpc(transport);
+      const { client } = yield* connectCli(transport);
 
       return yield* use(client);
     })
@@ -131,7 +149,8 @@ const run = (command: ExtensionCommand) =>
     Match.discriminatorsExhaustive("kind")({
       pair: ({ name, grant }) =>
         withDaemon((client) => client["extensions.pair"]({ name, grant })).pipe(
-          Effect.map((paired) => formatPaired(paired))
+          Effect.map((paired) => formatPaired(paired)),
+          Effect.catchTag("UserAccessRequired", () => Effect.fail(NEEDS_DESKTOP))
         ),
       list: () =>
         withDaemon((client) => client["extensions.list"]()).pipe(Effect.map(formatPairings)),
@@ -140,7 +159,8 @@ const run = (command: ExtensionCommand) =>
           Effect.map(
             (pairing) => `Revoked ${terminalText(pairing.name)} (${terminalText(pairing.id)}).`
           ),
-          Effect.catchTag("NotFound", () => Effect.fail(`no pairing ${id} on this host`))
+          Effect.catchTag("NotFound", () => Effect.fail(`no pairing ${id} on this host`)),
+          Effect.catchTag("UserAccessRequired", () => Effect.fail(NEEDS_DESKTOP))
         ),
     })
   );

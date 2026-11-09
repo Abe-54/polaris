@@ -14,7 +14,7 @@
  *
  * and `serve` composes them in one place (see `server.ts`).
  */
-import { ExtensionDaemonRpcs } from "@polaris/protocol";
+import { ExtensionDaemonRpcs, UserAccessGate } from "@polaris/protocol";
 import { RpcMiddleware } from "effect/rpc";
 import type { BlobChannel } from "../services.ts";
 import type { CurrentLanguageConnection } from "./currentLanguageConnection.ts";
@@ -25,7 +25,8 @@ export class ConnectionBlobs extends RpcMiddleware.Service<
   { provides: BlobChannel | CurrentLanguageConnection | LanguageConnectionLifetime }
 >()("polaris/daemon/transport/ConnectionBlobs") {}
 
-/** Every RPC also passes the Grant gate (`extensions/connection.ts`) before its handler. */
-export const ServerRpcs = ExtensionDaemonRpcs.middleware(ConnectionBlobs);
+/** Every RPC also passes the Grant gate (`extensions/connection.ts`) and the user gate (`userAccess.ts`). */
+export const ServerRpcs =
+  ExtensionDaemonRpcs.middleware(UserAccessGate).middleware(ConnectionBlobs);
 
 export type ServerRpcs = typeof ServerRpcs;

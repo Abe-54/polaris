@@ -25,6 +25,7 @@ import { RESTART_NOTE } from "../reviewer/recovery.ts";
 import { RULES_AFTER_TURN } from "../reviewer/run.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { makeRepo, removeTempDir, tempDir } from "../git/testing.ts";
+import { TEST_USER_KEY } from "./userAccess.testing.ts";
 
 const dirs: Array<string> = [];
 
@@ -85,6 +86,7 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
+            ...TEST_USER_KEY,
             capabilities: ["usage", "review.reviewer-settings", "session.accept"],
           });
 
@@ -139,6 +141,7 @@ test("a Turn that changes files starts its Rules-only Risk Summary, loading the 
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
+            ...TEST_USER_KEY,
             capabilities: ["review.risk-summary", "review.latest-summary"],
           });
 
@@ -255,6 +258,7 @@ test("a restart that left a Risk Summary running fails it on start, before any R
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
+            ...TEST_USER_KEY,
             capabilities: ["review.risk-summary"],
           });
 

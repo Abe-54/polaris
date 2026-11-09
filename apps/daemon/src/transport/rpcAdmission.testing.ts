@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { webSocketTransport } from "../gateway/client.testing.ts";
 import { startServer } from "./server.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "./userAccess.testing.ts";
 
 const Reply = Schema.Struct({
   _tag: Schema.String,
@@ -47,6 +48,7 @@ export const admissionSetup = <R, E>(handlers: Layer.Layer<R, E>) =>
       clientVersion: "0",
       deviceLabel: "test",
       capabilities: [],
+      ...TEST_USER_KEY,
     });
 
     const pairing = yield* desktop.client["extensions.pair"]({

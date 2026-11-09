@@ -1,16 +1,12 @@
 import { expect, test } from "bun:test";
 import { join, resolve } from "node:path";
-import {
-  decodePairingString,
-  encodePairingString,
-  HostId,
-  Pairing,
-  PairingId,
-} from "@polaris/protocol";
+import { encodePairingString, HostId, Pairing, PairingId } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
-import { Option } from "effect";
+import { connectRpc, socketTransport } from "@polaris/client";
+import { Effect } from "effect";
 import { type ExtensionCommand, formatPaired, formatPairings, parseExtensionArgs } from "./cli.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 test("a terminal still prints the pairing string when it exceeds QR capacity", () => {
   const name = "Phone shortcuts ".repeat(400);
@@ -87,7 +83,7 @@ const cli = async (main: string, env: Record<string, string | undefined>, args: 
   };
 };
 
-test("the real CLI pairs, lists and revokes through an isolated Daemon", async () => {
+test("the real CLI lists Pairings but leaves pairing and revoking to the Desktop App", async () => {
   const home = newTempDir("polaris-ext-cli-", { short: true });
   const main = resolve(import.meta.dir, "../main.ts");
 
@@ -120,39 +116,48 @@ test("the real CLI pairs, lists and revokes through an isolated Daemon", async (
 
     reader.releaseLock();
 
-    const paired = await cli(main, env, ["pair", "--name", "Raycast", "--allow", "read,approve"]);
-    expect(paired.code).toBe(0);
-    const pairingString = paired.out.trim().split("\n").at(-1) ?? "";
-    const payload = Option.getOrThrow(decodePairingString(pairingString));
-    expect(payload).toMatchObject({ name: "Raycast", url: null });
-    expect(payload.token).toMatch(/^pol_ext_/);
+    // The Desktop App pairs; a terminal holds no user key (ADR 0100).
+    const desktopPair = (name: string) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const transport = yield* socketTransport(localEndpoint(home));
+            const { client } = yield* connectRpc(transport);
+            yield* client.hello({
+              clientName: "test",
+              clientVersion: "0",
+              deviceLabel: "test",
+              capabilities: [],
+              ...TEST_USER_KEY,
+            });
 
-    const id = /\((pair_[^)]+)\)/.exec(paired.out)?.[1] ?? "";
-    const listed = await cli(main, env, ["list"]);
-    expect(listed.out).toContain(`${id}  ·  Raycast  ·  read, approve  ·  not used yet`);
-    expect(listed.out + listed.err + paired.err).not.toContain(payload.token);
+            return yield* client["extensions.pair"]({ name, grant: ["read", "approve"] });
+          })
+        )
+      );
 
-    expect((await cli(main, env, ["revoke", id])).out).toContain(`Revoked Raycast (${id}).`);
-    expect((await cli(main, env, ["list"])).out).toMatch(new RegExp(`${id}.*revoked `));
+    const refusedPair = await cli(main, env, ["pair", "--name", "Agent", "--allow", "approve"]);
+    expect(refusedPair.code).toBe(1);
+    expect(refusedPair.err).toContain("needs the Desktop App: use Settings › Extensions");
 
-    const missing = await cli(main, env, ["revoke", "pair_nope"]);
-    expect(missing.code).toBe(1);
-    expect(missing.err).toContain("no pairing pair_nope on this host");
-
+    const raycast = await desktopPair("Raycast");
     const unsafeName = "Phone\u001b]52;c;clipboard\u0007\n\u202ename";
-    const unsafe = await cli(main, env, ["pair", "--name", unsafeName, "--allow", "read"]);
-    expect(unsafe.code).toBe(0);
-    expect(unsafe.out).toContain("Paired Phone\\u001b]52;c;clipboard\\u0007\\u000a\\u202ename");
-    const unsafeId = /\((pair_[^)]+)\)/.exec(unsafe.out)?.[1] ?? "";
-    const revoked = await cli(main, env, ["revoke", unsafeId]);
-    expect(revoked.out).toContain("Revoked Phone\\u001b]52;c;clipboard\\u0007\\u000a\\u202ename");
+    const unsafe = await desktopPair(unsafeName);
 
-    const unsafePayload = Option.getOrThrow(
-      decodePairingString(unsafe.out.trim().split("\n").at(-1) ?? "")
+    const listed = await cli(main, env, ["list"]);
+    expect(listed.code).toBe(0);
+    expect(listed.out).toContain(
+      `${raycast.pairing.id}  ·  Raycast  ·  read, approve  ·  not used yet`
     );
+    expect(listed.out).toContain("Phone\\u001b]52;c;clipboard\\u0007\\u000a\\u202ename");
+    expect(listed.out + listed.err).not.toContain(raycast.token);
+    expect(listed.out).not.toContain(unsafe.token);
 
-    expect(unsafePayload.name).toBe(unsafeName);
-    expect(revoked.out + revoked.err).not.toContain(unsafePayload.token);
+    const refusedRevoke = await cli(main, env, ["revoke", raycast.pairing.id]);
+    expect(refusedRevoke.code).toBe(1);
+    expect(refusedRevoke.err).toContain("needs the Desktop App");
+    expect((await cli(main, env, ["list"])).out).not.toMatch(/revoked /);
+
     const invalid = await cli(main, env, ["bad\u001b[2J\ncommand"]);
     expect(invalid.code).toBe(2);
     expect(invalid.err).toContain('unknown command "bad\\u001b[2J\\u000acommand"');
