@@ -16,23 +16,27 @@ const FAKE_HUB = join(import.meta.dir, "fakeHub.testing.ts");
 
 const ready = SimulatorSupport.cases.Ready.make({});
 
+export const EMULATOR = "emulator-5554";
+
+const detectionWith = (android: boolean) => {
+  const report = {
+    support: { ios: ready, android: android ? ready : SimulatorSupport.cases.Unsupported.make({}) },
+    iosBlocked: null,
+    androidSdk: android ? "/fake/android-sdk" : null,
+  };
+
+  return Layer.succeed(
+    SimulatorDetection,
+    SimulatorDetection.of({
+      current: Effect.succeed(report),
+      refresh: Effect.succeed(report),
+      changes: Stream.never,
+    })
+  );
+};
+
 /** Detection that reports iOS ready and Android unsupported. */
-export const iosReadyDetection = Layer.succeed(
-  SimulatorDetection,
-  SimulatorDetection.of({
-    current: Effect.succeed({
-      support: { ios: ready, android: SimulatorSupport.cases.Unsupported.make({}) },
-      iosBlocked: null,
-      androidSdk: null,
-    }),
-    refresh: Effect.succeed({
-      support: { ios: ready, android: SimulatorSupport.cases.Unsupported.make({}) },
-      iosBlocked: null,
-      androidSdk: null,
-    }),
-    changes: Stream.never,
-  })
-);
+export const iosReadyDetection = detectionWith(false);
 
 export interface FakeHost {
   readonly dir: string;
@@ -44,8 +48,11 @@ export interface FakeHost {
   readonly layer: (sessions?: SessionLookup) => Layer.Layer<SimulatorHub>;
 }
 
-/** One booted Simulator the user started, one shut down that Polaris may boot. */
-export const fakeHost = (idleMs = 300): FakeHost => {
+/**
+ * One booted Simulator the user started, one shut down that Polaris may boot; with `android`,
+ * Android is ready too and the hub lists one shut-down emulator.
+ */
+export const fakeHost = (idleMs = 300, { android = false } = {}): FakeHost => {
   const dir = mkdtempSync("/tmp/simhub-");
   const devices = join(dir, "devices.json");
   const logPath = join(dir, "hub-events.log");
@@ -58,6 +65,9 @@ export const fakeHost = (idleMs = 300): FakeHost => {
         { id: OURS, name: "polaris-test-ours", version: "iOS 27.0", booted: false },
         { id: USERS, name: "The user's iPhone", version: "iOS 27.0", booted: true },
       ],
+      emulators: android
+        ? [{ id: EMULATOR, name: "Pixel_9_API_36", version: "36", booted: false }]
+        : [],
     })
   );
 
@@ -67,13 +77,18 @@ export const fakeHost = (idleMs = 300): FakeHost => {
     // SAFETY: only this file and the fake hub write `devices.json`, in this shape.
     JSON.parse(readFileSync(devices, "utf8")) as {
       simulators: Array<{ id: string; name: string; version: string; booted: boolean }>;
+      emulators: Array<{ id: string; name: string; version: string; booted: boolean }>;
     };
 
   return {
     dir,
     log: () => readFileSync(logPath, "utf8").split("\n").filter(Boolean),
     wedge: (on) => (on ? writeFileSync(wedgePath, "") : rmSync(wedgePath, { force: true })),
-    booted: (id) => read().simulators.find((device) => device.id === id)?.booted === true,
+    booted: (id) => {
+      const { simulators, emulators } = read();
+
+      return [...simulators, ...emulators].find((device) => device.id === id)?.booted === true;
+    },
     stale: (on) => {
       frozen = on ? read() : null;
     },
@@ -99,7 +114,7 @@ export const fakeHost = (idleMs = 300): FakeHost => {
         Layer.provide(
           Layer.merge(
             HostPlatform.test({ os: "darwin", arch: "arm64", libc: "none" }),
-            iosReadyDetection
+            detectionWith(android)
           )
         )
       ),
