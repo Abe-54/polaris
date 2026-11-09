@@ -43,6 +43,8 @@ export interface FakeHost {
   readonly log: () => ReadonlyArray<string>;
   readonly wedge: (on: boolean) => void;
   readonly booted: (id: string) => boolean;
+  /** Boots `id` behind the hub's back, as agent-device does. */
+  readonly bootOutside: (id: string) => void;
   /** While on, `simctl` lists what it listed when turned on, as one lagging behind a boot does. */
   readonly stale: (on: boolean) => void;
   readonly layer: (sessions?: SessionLookup) => Layer.Layer<SimulatorHub>;
@@ -88,6 +90,17 @@ export const fakeHost = (idleMs = 300, { android = false } = {}): FakeHost => {
       const { simulators, emulators } = read();
 
       return [...simulators, ...emulators].find((device) => device.id === id)?.booted === true;
+    },
+    bootOutside: (id) => {
+      const current = read();
+
+      writeFileSync(
+        devices,
+        JSON.stringify({
+          ...current,
+          simulators: current.simulators.map((d) => (d.id === id ? { ...d, booted: true } : d)),
+        })
+      );
     },
     stale: (on) => {
       frozen = on ? read() : null;

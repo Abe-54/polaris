@@ -178,7 +178,10 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
     );
 
   const supervisor: HubSupervisor = new HubSupervisor({
-    spawn: () => {
+    spawn: async () => {
+      // An idle stop with no hub yet may be the first start: install the tools as an attach would.
+      if (command === null) await Effect.runPromise(prepare);
+
       if (command === null) throw new Error("the Simulator's tools aren't installed");
 
       return spawnHub(
@@ -193,6 +196,7 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
         [...attached.keys()].filter((id) => inventory.find(id)?.platform === "ios")
       ),
     beforeIdleStop: (endpoint) => shutDownOurs(endpoint),
+    ownsBooted: () => booted.all.size > 0,
     log,
     timing,
   });

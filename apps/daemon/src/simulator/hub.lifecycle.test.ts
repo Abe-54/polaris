@@ -59,6 +59,24 @@ describe("SimulatorHub lifecycle", () => {
     );
   });
 
+  test("a Simulator an agent booted with no hub running is shut down at idle", async () => {
+    const host = fakeHost(300);
+
+    host.bootOutside(OURS);
+    await Effect.runPromise(
+      Effect.flatMap(SimulatorHub, (hub) =>
+        Effect.gen(function* () {
+          yield* hub.agentBooted(OURS);
+          yield* Effect.promise(() => until(() => host.log().some((l) => l.startsWith("term "))));
+        })
+      ).pipe(Effect.provide(host.layer()))
+    );
+
+    expect(host.log()).toContain(`shutdown ${OURS}`);
+    expect(host.log()).not.toContain(`shutdown ${USERS}`);
+    expect(host.booted(OURS)).toBe(false);
+  });
+
   test("the idle stop shuts down a Simulator Polaris booted while simctl lagged behind", async () => {
     const host = fakeHost(300);
 

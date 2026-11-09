@@ -53,6 +53,8 @@ export interface SupervisorDeps {
   readonly probe: (endpoint: HubEndpoint) => Promise<boolean>;
   /** Runs before an idle stop, while the hub still answers. */
   readonly beforeIdleStop: (endpoint: HubEndpoint) => Promise<void>;
+  /** Simulators Polaris booted may still run: an idle with no hub starts one to stop them. */
+  readonly ownsBooted: () => boolean;
   readonly log: (message: string) => void;
   readonly timing: HubTiming;
 }
@@ -122,7 +124,8 @@ export class HubSupervisor {
   touch(): void {
     this.lastActivity = Date.now();
 
-    if (this.hub !== null && this.holds === 0) this.armIdle();
+    // With no hub too: an agent may have booted a Simulator nothing else will shut down.
+    if (this.holds === 0) this.armIdle();
   }
 
   /** Called with the new endpoint after every start or restart. */
@@ -239,7 +242,7 @@ export class HubSupervisor {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
 
-      if (this.holds > 0 || this.hub === null) return;
+      if (this.holds > 0) return;
 
       if (Date.now() - this.lastActivity < this.deps.timing.idleMs) {
         this.armIdle();
@@ -253,9 +256,19 @@ export class HubSupervisor {
 
   private idleStop(): Promise<void> {
     return this.serial(async () => {
-      const hub = this.hub;
+      if (this.holds > 0 || this.closed) return;
 
-      if (hub === null || this.holds > 0) return;
+      if (this.hub === null && !this.deps.ownsBooted()) return;
+
+      const hub =
+        this.hub ??
+        (await this.startNow().catch((error) => {
+          this.deps.log(`starting the Simulator hub to stop Polaris's Simulators failed: ${error}`);
+
+          return null;
+        }));
+
+      if (hub === null) return;
       await this.deps.beforeIdleStop(hub.endpoint).catch((error) => {
         this.deps.log(`shutting down Polaris's Simulators failed: ${String(error)}`);
       });
