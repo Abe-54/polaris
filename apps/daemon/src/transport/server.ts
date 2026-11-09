@@ -33,9 +33,9 @@ import {
   Scope,
   Stream,
 } from "effect";
-import { RpcSerialization, RpcServer, type Rpc } from "effect/rpc";
+import { RpcSchema, RpcSerialization, RpcServer, type Rpc } from "effect/rpc";
 import { type FromClientEncoded, ResponseDefectEncoded } from "effect/rpc/RpcMessage";
-import { withRequestTraceContext } from "./traceContext.ts";
+import { linkedTo, withRequestTraceContext } from "./traceContext.ts";
 import { join } from "node:path";
 import { ExtensionConnections, grantGateFor } from "../extensions/connection.ts";
 import { type RunningGateway, startGateway } from "../gateway/index.ts";
@@ -129,6 +129,15 @@ const blobError = (error: BlobError) =>
 const tokenHello = Schema.is(Schema.Struct({ extensionToken: Schema.String }));
 
 const requestId = Schema.is(Schema.Union([Schema.String, Schema.Number]));
+
+/** The tags of `ServerRpcs` that stream: their handler Spans link to the Client's (ENG-732). */
+const STREAM_TAGS: ReadonlySet<string> = new Set(
+  [...ServerRpcs.requests.values()].flatMap((rpc) =>
+    RpcSchema.isStreamSchema(rpc.successSchema) ? [rpc._tag] : []
+  )
+);
+
+const isStreamRpc = (tag: string) => STREAM_TAGS.has(tag);
 
 const blobChannelFor = (wire: Wire): BlobChannel["Service"] =>
   BlobChannel.of({
@@ -484,7 +493,9 @@ export const startServer = <ROut = never, E = never, RIn = never>(
                         }
                       }
 
-                      return writeRequest(clientId, withRequestTraceContext(message));
+                      const traced = withRequestTraceContext(message, isStreamRpc);
+
+                      return writeRequest(clientId, traced.message).pipe(linkedTo(traced.link));
                     }),
                   {
                     discard: true,

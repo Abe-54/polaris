@@ -50,6 +50,7 @@ const quint = join(dir, "node_modules", ".bin", "quint");
 
 const WITNESSES = [
   "witnessDropped",
+  "witnessFeedFailed",
   "witnessResumedAfterDrop",
   "witnessDuplicateAnswered",
   "witnessRetryAfterCrash",
@@ -84,6 +85,11 @@ const FINDINGS = [
     main: "finding4",
     invariant: "acceptedNeverInFlight",
     what: "Continue reopens an accepted Turn",
+  },
+  {
+    main: "finding5",
+    invariant: "feedsFailVisibly",
+    what: "an upstream defect leaves the feed silent",
   },
 ];
 
@@ -446,7 +452,7 @@ run("Constellation property probes", [
 
 run("scenario tests", ["test", "polaris_test.qnt", "--main=polaris_test"]);
 
-for (const n of [1, 2, 3, 4]) {
+for (const n of [1, 2, 3, 4, 5]) {
   run(`scenario tests (finding ${n}, before its fix)`, [
     "test",
     "polaris_test.qnt",

@@ -11,7 +11,8 @@
  * withdrawals, Turn ends, and late approval requests for a Turn that ended),
  * in an order and batching `fc.scheduler` picks; pauses of Client feeds (a
  * stalled Client, which the Daemon drops at `subscriberCapacity`); connection
- * drops; and Daemon crashes (the layer torn down, possibly mid-burst, the same
+ * drops; a feed whose chunks start failing to decode (it must fail visibly, never
+ * hang or resubscribe); and Daemon crashes (the layer torn down, possibly mid-burst, the same
  * SQLite file reopened, and recovery run). After every step:
  *
  *   - the log is gapless, and each command id's events are one decision that a
@@ -335,6 +336,19 @@ class Stall extends Step {
   }
 }
 
+/** A feed's upstream starts dying on its chunks: the feed must fail visibly, never hang (ENG-492). */
+class Defect extends Step {
+  constructor(readonly index: number) {
+    super();
+  }
+  override async step(world: World) {
+    world.corruptFeed(this.index);
+  }
+  override toString() {
+    return `Defect(feed ${this.index})`;
+  }
+}
+
 // ── Arbitraries ─────────────────────────────────────────────────────────────
 
 const sessionArb = fc.constantFrom<SessionName>(...SESSIONS);
@@ -419,6 +433,7 @@ const commandArbs: Array<fc.Arbitrary<Cmd>> = [
   fc.constant(new Crash()),
   fc.constantFrom<ClientName>(...CLIENTS).map((d) => new Disconnect(d)),
   fc.tuple(fc.nat(5), fc.boolean()).map(([i, stalled]) => new Stall(i, stalled)),
+  fc.nat(5).map((i) => new Defect(i)),
 ];
 
 // ── Stats and traces ────────────────────────────────────────────────────────
@@ -543,8 +558,9 @@ const setUp = async (world: World) => {
 const feedsBehind = async (world: World) => {
   const log = await world.readLog();
 
+  // A feed that failed visibly is done: it never resubscribes, so it never catches up.
   return world.feeds
-    .filter((fs) => !isPrefix(streamSeqs(log, fs.stream), viewOfFeed(fs, log)))
+    .filter((fs) => !fs.failed && !isPrefix(streamSeqs(log, fs.stream), viewOfFeed(fs, log)))
     .map(
       (fs) =>
         `${fs.client}/${fs.stream} at ${viewOfFeed(fs, log).at(-1)} of ` +

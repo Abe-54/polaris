@@ -44,6 +44,11 @@ module polaris {
    * Removal purges the sessions from the read model; the log keeps their events (ADR 0086).
    */
   const WORKSPACE_REMOVAL: bool
+  /**
+   * A stream's upstream dies (a chunk fails to decode, ENG-492): "none" never; "fails" ends the
+   * feed visibly (resume.ts); "freezes" is finding 5, the pump ending with the feed left open.
+   */
+  const FEED_DEFECT: str
   /** Client devices, each with a feed per stream. */
   const CLIENTS: Set[str]
   /** Agent Sessions; recovery visits them in this order (any order gives the same result). */
@@ -131,7 +136,7 @@ module polaris {
 
   /** The Daemon side of one open stream: the hub subscriber and what is still in flight. */
   type Sub = {
-    phase: str, // "closed" | "registered" | "open"
+    phase: str, // "closed" | "registered" | "open" | "frozen" (finding 5)
     after: int, // afterSequence it was opened with (NONE: null)
     cut: int,
     pre: List[Item], // snapshot or replay, then Synchronized
@@ -139,8 +144,11 @@ module polaris {
     dropped: bool, // fell CAPACITY behind: removed from the hub, ends once drained
   }
 
-  /** The Client side (`makeFeed`): survives reconnects and Daemon restarts. */
-  type Feed = { last: int, seen: List[int] }
+  /**
+   * The Client side (`makeFeed`): survives reconnects and Daemon restarts.
+   * `failed`: a defect ended it; its subscribers saw the failure and it never resubscribes.
+   */
+  type Feed = { last: int, seen: List[int], failed: bool }
 
   /**
    * `requested` lists requests in the order they were opened (the order the
@@ -459,12 +467,12 @@ module polaris {
   pure def handle(f: Feed, it: Item, st: str, events: List[Event]): Handled =
     match it {
       | Snap(cut) =>
-        { feed: { last: cut, seen: streamSeqs(events, st).select(x => x <= cut) }, reopen: false }
+        { feed: { ...f, last: cut, seen: streamSeqs(events, st).select(x => x <= cut) }, reopen: false }
       | Sync(_) => { feed: f, reopen: false }
       | Ev(seq) =>
         if (f.last != NONE and seq <= f.last) { feed: f, reopen: false }
         else if (gapless(st) and f.last != NONE and seq != f.last + 1) { feed: f, reopen: true }
-        else { feed: { last: seq, seen: f.seen.append(seq) }, reopen: false }
+        else { feed: { ...f, last: seq, seen: f.seen.append(seq) }, reopen: false }
     }
 
   // ── Initial state ─────────────────────────────────────────────────────────
@@ -484,7 +492,7 @@ module polaris {
     reactor' = Set(),
     harness' = Set(),
     subs' = FEED_KEYS.mapBy(_ => closedSub),
-    feeds' = FEED_KEYS.mapBy(_ => { last: NONE, seen: [] }),
+    feeds' = FEED_KEYS.mapBy(_ => { last: NONE, seen: [], failed: false }),
     sentBy' = CMD_IDS.mapBy(_ => ""),
     sentCmd' = CMD_IDS.mapBy(_ => SendTurn(SESSION_LIST[0])),
     answers' = CMD_IDS.mapBy(_ => []),
@@ -636,10 +644,13 @@ module polaris {
     unchangedGhosts,
   }
 
+  /** A feed may (re)open its stream: it is closed and has not failed. */
+  def canSubscribe(c: str, st: str): bool =
+    up and subs.get((c, st)).phase == "closed" and not(feeds.get((c, st)).failed)
+
   /** A feed opens its stream: `store.subscribe` first (the hub subscriber)… */
   action subscribe(c: str, st: str): bool = all {
-    up,
-    subs.get((c, st)).phase == "closed",
+    canSubscribe(c, st),
     subs' = subs.set((c, st), { ...closedSub, phase: "registered", after: feeds.get((c, st)).last }),
     unchangedClients,
     log' = log, receipts' = receipts, up' = up, queue' = queue, toPublish' = toPublish,
@@ -707,6 +718,32 @@ module polaris {
     all { sub.phase == "open", sub.dropped, sub.pre.length() == 0, sub.buf.length() == 0 },
     subs' = subs.set((c, st), closedSub),
     unchangedClients,
+    log' = log, receipts' = receipts, up' = up, queue' = queue, toPublish' = toPublish,
+    toSettle' = toSettle, toReact' = toReact, reactor' = reactor, harness' = harness,
+    unchangedGhosts,
+  }
+
+  /**
+   * An open stream's upstream dies (a defect, not a disconnect): the feed fails for its
+   * subscribers and stays closed. In finding 5 the pump ends and the feed is left open, silent.
+   */
+  action upstreamDefect(c: str, st: str): bool = all {
+    up,
+    FEED_DEFECT != "none",
+    val k = (c, st)
+    all {
+      subs.get(k).phase == "open",
+      // At most one feed per trace, so the others keep exercising drops and resumes.
+      FEED_KEYS.forall(o => not(feeds.get(o).failed) and subs.get(o).phase != "frozen"),
+      if (FEED_DEFECT == "freezes") all {
+        subs' = subs.set(k, { ...subs.get(k), phase: "frozen" }),
+        feeds' = feeds,
+      } else all {
+        subs' = subs.set(k, closedSub),
+        feeds' = feeds.set(k, { ...feeds.get(k), failed: true }),
+      },
+    },
+    sentBy' = sentBy, sentCmd' = sentCmd, answers' = answers,
     log' = log, receipts' = receipts, up' = up, queue' = queue, toPublish' = toPublish,
     toSettle' = toSettle, toReact' = toReact, reactor' = reactor, harness' = harness,
     unchangedGhosts,
@@ -787,7 +824,9 @@ module polaris {
     reactorRuns(s),
     nondet c = CLIENTS.oneOf()
     nondet st = STREAMS.oneOf()
-    any { subscribe(c, st), readCut(c, st), deliver(c, st), streamEnds(c, st) },
+    // Only where defects are on: one more choice moves the other instances' walks (see USAGE_LIMITS).
+    if (FEED_DEFECT == "none") any { subscribe(c, st), readCut(c, st), deliver(c, st), streamEnds(c, st) }
+    else any { subscribe(c, st), readCut(c, st), deliver(c, st), streamEnds(c, st), upstreamDefect(c, st) },
     crash,
     restart,
   }
@@ -959,6 +998,14 @@ module polaris {
       later.length() == 0 or not(handle(f, Ev(later[0]), HOST, log).reopen)
     })
 
+  /**
+   * A feed never hangs: its stream is open or about to (re)open, or the feed failed and said so.
+   * A failed feed stays closed: it never resubscribes on its own.
+   */
+  val feedsFailVisibly: bool =
+    FEED_KEYS.forall(k => subs.get(k).phase != "frozen"
+      and (feeds.get(k).failed implies subs.get(k).phase == "closed"))
+
   val safety: bool = all {
     gaplessLog,
     feedsAreCommittedPrefixes,
@@ -974,6 +1021,7 @@ module polaris {
     workingHasATurn,
     archivedIsClosed,
     hostFeedCanProgress,
+    feedsFailVisibly,
     acceptedNeverInFlight,
     acceptedOnlyForward,
     removalNeedsArchived,
@@ -983,6 +1031,7 @@ module polaris {
   // ── Witnesses: states the checks must actually reach (`quint run --witnesses`) ──
 
   val witnessDropped: bool = FEED_KEYS.exists(k => subs.get(k).dropped)
+  val witnessFeedFailed: bool = FEED_KEYS.exists(k => feeds.get(k).failed)
   val witnessResumedAfterDrop: bool =
     FEED_KEYS.exists(k => subs.get(k).phase == "open" and subs.get(k).after != NONE
       and subs.get(k).pre.length() > 1)
@@ -1051,9 +1100,9 @@ module polaris {
     feeds, sentBy, sentCmd, answers, lastRestart, crashes,
   )
 
-  /** Every feed has seen its stream up to the last committed event. */
+  /** Every feed has seen its stream up to the last committed event, or failed visibly. */
   val caughtUp: bool =
-    FEED_KEYS.forall(k => feeds.get(k).seen == streamSeqs(log, k._2))
+    FEED_KEYS.forall(k => feeds.get(k).failed or feeds.get(k).seen == streamSeqs(log, k._2))
 
   /**
    * Fairness: the Daemon keeps running once it is down (restart), commits and
@@ -1084,6 +1133,7 @@ module current {
     REVIEW_COMMANDS = false,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "fails",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -1105,6 +1155,7 @@ module finding1 {
     REVIEW_COMMANDS = false,
     USAGE_LIMITS = false,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -1126,6 +1177,7 @@ module finding2 {
     REVIEW_COMMANDS = false,
     USAGE_LIMITS = false,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -1147,6 +1199,29 @@ module finding3 {
     REVIEW_COMMANDS = false,
     USAGE_LIMITS = false,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
+    CLIENTS = Set("mac", "phone"),
+    SESSION_LIST = ["s1", "s2"],
+    CMD_IDS = Set("k1", "k2", "k3", "k4"),
+    REQUESTS = Set("r1", "r2"),
+    REQUEST_SESSION = Map("r1" -> "s1", "r2" -> "s1"),
+    CAPACITY = 2,
+    MAX_LOG = 10,
+    MAX_CRASHES = 2,
+  ).*
+}
+
+/** Finding 5 (ENG-492): an upstream defect leaves the feed open and silent. Violates `feedsFailVisibly`. */
+module finding5 {
+  import polaris(
+    HOST_FEED_GAPLESS = false,
+    ARCHIVE_IGNORES_TURN = false,
+    RECORDS_LATE_REQUESTS = false,
+    CONTINUES_ACCEPTED = false,
+    REVIEW_COMMANDS = false,
+    USAGE_LIMITS = false,
+    WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "freezes",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -1171,6 +1246,7 @@ module finding4 {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = false,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -1195,6 +1271,7 @@ module review {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = false,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1"],
     CMD_IDS = Set("k1", "k2", "k3", "k4", "k5", "k6"),
@@ -1216,6 +1293,7 @@ module small {
     REVIEW_COMMANDS = false,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1"],
     CMD_IDS = Set("k1", "k2"),
@@ -1240,6 +1318,7 @@ module removal {
     REVIEW_COMMANDS = false,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = true,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4", "k5", "k6"),
