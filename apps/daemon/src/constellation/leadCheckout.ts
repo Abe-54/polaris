@@ -3,6 +3,7 @@
  * Never the Workspace root's current branch unless that is the lead branch (docs/adr/0099).
  */
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { type Constellation, ConstellationTransferError } from "@polaris/protocol";
 import { gitText, HOOKS_OFF, resolveCommit } from "../git/git.ts";
 import { gitStatus } from "../git/status.ts";
@@ -13,7 +14,7 @@ export const leadWorktreePath = (leadPath: string, constellationId: string) => {
   if (!/^[a-zA-Z0-9_-]+$/.test(constellationId))
     throw new Error("Constellation IDs must be single path components");
 
-  return `${leadPath}.worktrees/${constellationId}/@lead`;
+  return join(`${leadPath}.worktrees`, constellationId, "@lead");
 };
 
 /** The ref new work branches from and merges are checked against: the lead branch, else HEAD. */
@@ -42,8 +43,10 @@ export const leadCheckout = async (
   const holder = worktrees.find((w) => w.branch === branch);
   const path = leadWorktreePath(leadPath, graph.id);
 
-  if (holder !== undefined && (samePath(holder.path, leadPath) || samePath(holder.path, path)))
-    return holder.path;
+  // Our own spelling, not git's, so each call returns the same string.
+  if (holder !== undefined && samePath(holder.path, leadPath)) return leadPath;
+
+  if (holder !== undefined && samePath(holder.path, path)) return path;
 
   // Another session's checkout: merging there would move work under it.
   if (holder !== undefined)
