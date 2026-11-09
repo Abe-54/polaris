@@ -187,6 +187,12 @@ export const PEAK_TOLERANCE = { relative: 0.25, absolute: 10 } as const;
 export const peakMemory = (bytes: number, extra: Partial<Metric> = {}): Metric =>
   memory(bytes, { tolerance: PEAK_TOLERANCE, ...extra });
 
+/**
+ * RSS is reported, never gated: it counts shared pages and pages the allocator keeps that the
+ * system can reclaim, so it swings with Host state. Memory gates on physical footprint (ENG-682).
+ */
+export const rss = (metric: Metric): Metric => ({ ...metric, info: true });
+
 export const cpu = (pct: number, extra: Partial<Metric> = {}): Metric => ({
   value: pct,
   unit: "%",

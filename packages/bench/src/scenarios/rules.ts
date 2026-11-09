@@ -13,7 +13,7 @@ import { Effect, Schema } from "effect";
 import { cleanup, createTempDir } from "../daemon.ts";
 import { copyTree, git, sourceTree } from "../fixtures.ts";
 import { startSampler } from "../sampler.ts";
-import { count, cpu, type Metric, peakMemory, type Scenario, time } from "../types.ts";
+import { count, cpu, type Metric, peakMemory, rss, type Scenario, time } from "../types.ts";
 
 const root = join(import.meta.dir, "..", "..", "..", "..");
 
@@ -102,10 +102,13 @@ export const rules: Scenario = {
         const { report, tree } = yield* runOnce(repo, base, head, mode);
         Object.assign(metrics, {
           [`${mode}_ms`]: time(report.ms),
-          [`${mode}_peak_rss_mib`]: peakMemory(tree.rssBytes.max),
+          [`${mode}_peak_rss_mib`]: rss(peakMemory(tree.rssBytes.max)),
           [`${mode}_cpu_avg_pct`]: cpu(tree.cpuAvgPct),
           [`${mode}_findings`]: count(report.findings, "findings", { better: "higher" }),
         });
+
+        if (tree.footprintBytes)
+          metrics[`${mode}_peak_footprint_mib`] = peakMemory(tree.footprintBytes.max);
 
         for (const note of report.notes) notes.push(`${mode}: ${note}`);
         const top = [...tree.processes].sort((a, b) => b.maxRssBytes - a.maxRssBytes).slice(0, 3);

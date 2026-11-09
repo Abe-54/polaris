@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
 import { createTempDir, REPO_ROOT } from "../daemon.ts";
-import { count, latency, type Metric, memory, type Scenario, time } from "../types.ts";
+import { count, latency, type Metric, memory, rss, type Scenario, time } from "../types.ts";
 
 const APP_DIR = join(REPO_ROOT, "apps", "desktop");
 
@@ -49,9 +49,9 @@ const sceneMetrics = (name: string, scene: typeof SceneResult.Type) =>
     [`${name}_dropped_pct`]: count(scene.droppedShare * 100, "%", { info: true }),
     [`${name}_app_mib`]: memory(scene.appMiB * MiB, { tolerance: MEMORY_TOLERANCE }),
     [`${name}_app_scrolled_mib`]: memory(scene.appScrolledMiB * MiB, { info: true }),
-    [`${name}_daemon_peak_rss_mib`]: memory(scene.daemonPeakRssMiB * MiB, {
-      tolerance: MEMORY_TOLERANCE,
-    }),
+    [`${name}_daemon_peak_rss_mib`]: rss(
+      memory(scene.daemonPeakRssMiB * MiB, { tolerance: MEMORY_TOLERANCE })
+    ),
   }) satisfies Record<string, Metric>;
 
 export const review: Scenario = {
