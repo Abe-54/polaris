@@ -321,6 +321,10 @@ _Avoid_: SQL client, database view, DB tab
 The view for inspecting the Traces that code run in the selected Agent Session's checkout sent to Polaris, by its agents or by the user, and the Turns that produced them.
 _Avoid_: Runtime view (Runtime is avoided for Harness), APM, observability tab
 
+**Requests**:
+The view for writing the Requests in the selected Agent Session's checkout, sending them from its Host, and inspecting the Sends that the user and its agents made.
+_Avoid_: API client, Postman, HTTP tab
+
 **Browser**:
 An Agent Session's web browser in its Output, holding that session's own tabs, which the user and the session's agents (Subagents included) both use; its logins and cookies are shared across the Workspace.
 _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
@@ -368,7 +372,7 @@ _Avoid_: Internal database, state DB
 
 **Trace**:
 The record of one operation through running code, such as an HTTP request or a test, made of Spans, sent to Polaris by code that runs with Polaris's endpoint.
-_Avoid_: Request (an HTTP request is one kind of Span), log
+_Avoid_: Request (that is a saved definition; an HTTP request in a Trace is a Span, and one made from Requests is a Send), log
 
 **Span**:
 One timed step of a Trace, with its attributes and the log records written during it; a Span whose operation failed is an error Span.
@@ -381,6 +385,30 @@ _Avoid_: Flame graph (that is how a Profile is drawn), trace
 **Self-Trace**:
 A Trace that Polaris itself produced in the Daemon, the Desktop App or the Mobile App, sent while Developer Mode is on; it appears with the Traces of the Workspace that holds Polaris's own code, or under its own toggle when no such Workspace exists.
 _Avoid_: Internal trace, Polaris telemetry
+
+### Requests
+
+**Request**:
+A saved HTTP request (its method, URL, headers and body, with variables) kept in a `.http` file in the checkout; it describes what to send and has never happened.
+_Avoid_: Call, endpoint, collection item
+
+**Send**:
+One execution of a Request from the checkout's Host, by the user or by an agent, with its response, its timing, who sent it and in which Turn, and the Trace it started.
+_Avoid_: Request (that is the definition), call, run, execution
+
+**Send Log**:
+The record of every Send in a checkout, attributed to its Agent Session and Turn, which the user can inspect and send again.
+_Avoid_: Request history, history
+
+**Local Origin**:
+An origin (scheme, host and port) on the Host itself: a loopback address or `*.localhost` name whose listener is not a known tunnel. Agents may send to it without asking.
+
+**Remote Origin**:
+Any origin that is not Local, including loopback listeners owned by a tunnel such as `ssh -L` or `kubectl port-forward`; no agent sends to it until it has an Origin Approval.
+
+**Origin Approval**:
+The user's remembered, per-Host choice that lets agents send to one Remote Origin, with writes (methods other than GET, HEAD and OPTIONS) allowed separately; Sends the user makes never need one.
+_Avoid_: Allowlist, network approval, Trust
 
 ### Language tooling
 
