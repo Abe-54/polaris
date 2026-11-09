@@ -8,11 +8,14 @@ import { Schema } from "effect";
 
 const HostKey = Schema.String.check(Schema.isMinLength(1));
 
+/** RFC 6750's b64token: it goes into a header line, so no CR, LF or spaces reach it. */
+export const HubToken = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9._~+/-]+=*$/));
+
 /** What `simulator.attach` gave: the hub's port on the Host's loopback and its token. */
 const Hub = {
   hostKey: HostKey,
   port: HostAddressPort,
-  token: Schema.String.check(Schema.isMinLength(1)),
+  token: HubToken,
   id: SimulatorId,
 };
 
