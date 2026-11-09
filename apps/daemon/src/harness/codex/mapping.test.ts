@@ -78,6 +78,24 @@ describe("turn input", () => {
     ]);
   });
 
+  test("a read note goes inline and the files left are listed by path", () => {
+    const note = attachment("pick.md", "text/markdown");
+
+    const input = turnInput(
+      "",
+      [note, attachment("big.txt", "text/plain")],
+      new Map([[note.id, "Selector: #a"]])
+    );
+
+    expect(input).toEqual([
+      {
+        type: "text",
+        text: '<attached-file name="pick.md" type="text/markdown" path="/home/user/.polaris/staging/s1/pick.md">\nSelector: #a\n</attached-file>\n\nAttached files:\n- /home/user/.polaris/staging/s1/big.txt',
+        text_elements: [],
+      },
+    ]);
+  });
+
   test("a plain prompt is one text input", () => {
     expect(turnInput("hi", [])).toEqual([{ type: "text", text: "hi", text_elements: [] }]);
   });

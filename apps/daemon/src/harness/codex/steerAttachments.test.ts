@@ -1,5 +1,8 @@
-/** A steer with attachments on Codex (ENG-662): `turn/steer` carries the images as `localImage`. */
+/** A steer with attachments on Codex (ENG-662, ENG-637): images as `localImage`, small notes inline. */
 import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Attachment, AttachmentId, TurnItem } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import { makeCodexDriver } from "./CodexDriver.ts";
@@ -115,4 +118,38 @@ test("an image-only steer sends Codex no empty text input", async () => {
   expect(server.requests("turn/steer")[0]?.params).toMatchObject({
     input: [{ type: "localImage", path: "/stage/shot.png" }],
   });
+});
+
+test("a steer's small note goes inline in its text, and it still lands as the user sent it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "polaris-note-"));
+  cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  const notePath = join(dir, "pick.md");
+  writeFileSync(notePath, "Selector: `#save`\n");
+
+  const note = new Attachment({
+    id: AttachmentId.make("a3"),
+    name: "pick.md",
+    mimeType: "text/markdown",
+    size: 18,
+    hostPath: notePath,
+    width: null,
+    height: null,
+  });
+
+  const { events, server } = await steering((session) => session.steer("this one", [note]));
+
+  expect(server.requests("turn/steer")[0]?.params).toMatchObject({
+    input: [
+      {
+        type: "text",
+        text: `this one\n\n<attached-file name="pick.md" type="text/markdown" path="${notePath}">\nSelector: \`#save\`\n</attached-file>`,
+      },
+    ],
+  });
+
+  const steers = ofTag(events, "ItemCompleted").flatMap((e) =>
+    TurnItem.guards.UserMessage(e.item) ? [e.item] : []
+  );
+
+  expect(steers).toMatchObject([{ text: "this one", attachments: [note] }]);
 });

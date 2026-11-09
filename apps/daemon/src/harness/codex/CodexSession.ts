@@ -34,6 +34,7 @@ import {
   type OpenOptions,
   type TurnInput,
 } from "../HarnessDriver.ts";
+import { readInlineTexts } from "../inlineText.ts";
 import { ItemClock } from "../itemClock.ts";
 import { type AppServer, remoteTuiArgv } from "./AppServer.ts";
 import {
@@ -785,7 +786,7 @@ export const openSession = (
         activeCodexTurn = started.turn.id;
       });
 
-    const startTurn = (turnId: TurnId, prompt: string, input: ReturnType<typeof turnInput>) =>
+    const startTurn = (turnId: TurnId, prompt: string, files: ReadonlyArray<Attachment> = []) =>
       Effect.gen(function* () {
         if (activeCodexTurn !== null || pendingLocalTurn !== null)
           return yield* codexError("A Turn is already in progress; steer or interrupt it");
@@ -795,6 +796,8 @@ export const openSession = (
         const call = harnessCallOf(prompt, threadId);
 
         if (call !== null) return yield* startHarnessCall(turnId, prompt, call);
+
+        const input = turnInput(prompt, files, yield* readInlineTexts(files));
 
         const params: P.ClientParams["turn/start"] = {
           threadId,
@@ -830,7 +833,7 @@ export const openSession = (
         const codexTurnId = activeCodexTurn;
 
         if (codexTurnId === null) return yield* codexError("No Turn is in progress to steer");
-        const input = turnInput(text, attachments);
+        const input = turnInput(text, attachments, yield* readInlineTexts(attachments));
         yield* conn.request("turn/steer", {
           threadId,
           input,
@@ -855,7 +858,7 @@ export const openSession = (
             serviceTier: input.serviceTier ?? null,
           };
 
-          return startTurn(input.turnId, input.prompt, turnInput(input.prompt, input.attachments));
+          return startTurn(input.turnId, input.prompt, input.attachments);
         }),
       steer: steerText,
       stopBackground: (taskIds) =>
@@ -895,7 +898,7 @@ export const openSession = (
           if (!ApprovalDecision.guards.Answer(decision)) return;
 
           if (activeCodexTurn !== null) yield* steerText(decision.text);
-          else yield* startTurn(newTurnId(), decision.text, turnInput(decision.text, []));
+          else yield* startTurn(newTurnId(), decision.text);
         }),
       setPermissionMode: (mode) =>
         Effect.sync(() => {
