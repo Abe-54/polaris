@@ -7,6 +7,7 @@ import type { AppEvent } from "../../../shared/api.ts";
 import type { NeedsYouSummary } from "../../../shared/needsYou.ts";
 import type { ShellActions } from "../../routes/navigation.ts";
 import { polaris } from "../bridge.ts";
+import { showLeadTab } from "../constellation/leadTab.ts";
 import { answer, approve, deny } from "./respond.ts";
 
 let last = "";
@@ -39,6 +40,13 @@ export const onNeedsYouEvent = (
 
   if (event.action === "open") {
     actions.selectSession(target);
+
+    return;
+  }
+
+  if (event.action === "open-constellation") {
+    actions.selectSession(target);
+    showLeadTab(event.hostKey, sessionId, "constellation");
 
     return;
   }
