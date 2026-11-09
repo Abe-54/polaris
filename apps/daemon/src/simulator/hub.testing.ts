@@ -39,6 +39,8 @@ export interface FakeHost {
   readonly log: () => ReadonlyArray<string>;
   readonly wedge: (on: boolean) => void;
   readonly booted: (id: string) => boolean;
+  /** While on, `simctl` lists what it listed when turned on, as one lagging behind a boot does. */
+  readonly stale: (on: boolean) => void;
   readonly layer: (sessions?: SessionLookup) => Layer.Layer<SimulatorHub>;
 }
 
@@ -59,6 +61,8 @@ export const fakeHost = (idleMs = 300): FakeHost => {
     })
   );
 
+  let frozen: ReturnType<typeof read> | null = null;
+
   const read = () =>
     // SAFETY: only this file and the fake hub write `devices.json`, in this shape.
     JSON.parse(readFileSync(devices, "utf8")) as {
@@ -70,6 +74,9 @@ export const fakeHost = (idleMs = 300): FakeHost => {
     log: () => readFileSync(logPath, "utf8").split("\n").filter(Boolean),
     wedge: (on) => (on ? writeFileSync(wedgePath, "") : rmSync(wedgePath, { force: true })),
     booted: (id) => read().simulators.find((device) => device.id === id)?.booted === true,
+    stale: (on) => {
+      frozen = on ? read() : null;
+    },
     layer: (sessions = everySessionLive) =>
       SimulatorHub.layerWith({
         dir: join(dir, "home"),
@@ -77,7 +84,7 @@ export const fakeHost = (idleMs = 300): FakeHost => {
           argv: [process.execPath, FAKE_HUB],
           env: { FAKE_HUB_DEVICES: devices, FAKE_HUB_LOG: logPath, FAKE_HUB_WEDGE: wedgePath },
         }),
-        listIos: async () => ({ ...read(), emulators: [] }),
+        listIos: async () => ({ ...(frozen ?? read()), emulators: [] }),
         sessions,
         timing: {
           idleMs,

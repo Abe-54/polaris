@@ -59,6 +59,25 @@ describe("SimulatorHub lifecycle", () => {
     );
   });
 
+  test("the idle stop shuts down a Simulator Polaris booted while simctl lagged behind", async () => {
+    const host = fakeHost(300);
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const hub = yield* SimulatorHub;
+          host.stale(true);
+          yield* hub.boot(OURS);
+          host.stale(false);
+          const pid = pidOf(hub);
+
+          yield* Effect.promise(() => until(() => host.log().includes(`term ${pid}`)));
+          expect(host.log()).toContain(`shutdown ${OURS}`);
+        })
+      ).pipe(Effect.provide(host.layer()))
+    );
+  });
+
   test("a crashed hub restarts and every attach gets the new endpoint", async () => {
     const host = fakeHost(60_000);
 
