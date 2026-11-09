@@ -201,7 +201,6 @@ describe("the Simulator's MCP server", () => {
     expect(textOf(tapped)).toBe("ran press");
     expect(calls.at(-1)).toEqual([
       "press",
-      "@e3",
       "--settle",
       "--platform",
       "ios",
@@ -209,6 +208,8 @@ describe("the Simulator's MCP server", () => {
       UDID,
       "--session",
       "polaris-s1",
+      "--",
+      "@e3",
     ]);
     await close();
 
@@ -258,9 +259,9 @@ describe("the Simulator's MCP server", () => {
     const { open } = setup({
       answer: (args) => {
         if (args[0] !== "screenshot") return defaultAnswer(args);
-        writeFileSync(args[1]!, png);
+        writeFileSync(args.at(-1)!, png);
 
-        return ok({ path: args[1] ?? null });
+        return ok({ path: args.at(-1) ?? null });
       },
     });
 

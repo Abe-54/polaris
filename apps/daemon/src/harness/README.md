@@ -28,3 +28,14 @@ Answers are cached per Harness and directory. **Nothing runs at idle**: no timer
 - **Not pre-allowed.** It's absent from Claude's `allowedTools` and has no Codex `approval_mode`, so each call follows the session's permission mode. Codex itself lets tools annotated read-only through (snapshot, get title).
 - **`core` profile**, pinned: navigation, snapshots, clicks and typing, waits, reads, screenshots, eval and tabs, 29 tools. `state` and `network` reach cookies, credentials and the auth vault; `debug` can install Chrome.
 - Each session's agent-browser daemon is `AGENT_BROWSER_SESSION=polaris-<sessionId>`, with a 10-minute idle timeout (an attached browser otherwise never times out). Since its config is Polaris's, the user's `~/.agent-browser/config.json` can't change the attach.
+
+## The Simulator's MCP server
+
+`simulator/` gives each Claude Code and Codex session that isn't read-only, on a Mac, the `polaris_simulator` tools (ENG-829): `simulator_list`, `_open`, `_snapshot`, `_tap`, `_press`, `_type`, `_swipe`, `_scroll`, `_screenshot`, `_launch`, `_openurl` and `_close`. They wrap agent-device (ADR 0099), run as `BUN_BE_BUN=1 <polaris>` from `install/simulator`, and run in the Daemon, so they work with no Desktop App open.
+
+- **In the Daemon, not a child.** An open marks the session's shown Simulator on `SimulatorHub` (`agentOpened`, which publishes `AgentOpened`; `agentBooted` when it booted one); every call holds `agentDriving` while it runs. All of it reaches `simulator.sessionFeed`.
+- **Codex** gets a loopback HTTP URL whose path is the session's random token (`http.ts`), with a 120 s tool timeout. **Claude** gets the same tools in-process (`createSdkMcpServer`), since the SDK puts `mcpServers` on `claude`'s argv, where `ps` would show a URL.
+- **Bound to the session.** Each call passes `--platform ios --udid <id> --session polaris-<sessionId>`, then `--`, then the agent's values, so a value can't read as a flag. Calls run one at a time.
+- **Slow calls answer.** A call still running after 45 s (the first open builds agent-device's runner, about a minute) says so and carries on; the same tool called again waits for it.
+- **Setup in plain words.** Each call checks the Host's detected support first and returns "needs Xcode" or "Xcode is finishing an update" as a tool error, without running agent-device.
+- When a session's last open ends, its agent-device session is closed; when no session has used agent-device, `agent-device daemon stop` ends its daemon (never a kill).

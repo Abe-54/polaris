@@ -8,16 +8,27 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Cause, Context, type Duration, Effect, Layer, Predicate, Scope } from "effect";
+import {
+  Cause,
+  Context,
+  type Duration,
+  Effect,
+  Layer,
+  Predicate,
+  type Schema,
+  Scope,
+} from "effect";
 import { SimulatorTools } from "../../install/simulator/index.ts";
 import { HostPlatform } from "../../platform/index.ts";
 import { SimulatorDetection, simulatorCapable } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
 import { type AgentDeviceRun, liveAgentDevice } from "./agentDevice.ts";
 import { sessionPath, simulatorMcpHttp } from "./http.ts";
-import { type SimulatorSession, simulatorSession } from "./session.ts";
+import { failure, type SimulatorSession, simulatorSession, type ToolResult } from "./session.ts";
 import { setupBlocker } from "./setup.ts";
-import { simulatorTools } from "./tools.ts";
+import { type SimulatorTool, simulatorTools } from "./tools.ts";
+
+const CLOSED = "This session's Simulator tools have closed.";
 
 /** Not `simulator`: a user's own server of that name would shadow or be shadowed by it. */
 export const SIMULATOR_MCP_NAME = "polaris_simulator";
@@ -28,9 +39,14 @@ const SETUP_TIMEOUT: Duration.Input = "10 seconds";
 /** Codex's per-call limit: past the 45 s a call waits before saying it carries on. */
 export const SIMULATOR_TOOL_TIMEOUT_SECONDS = 120;
 
-/** The URL holds the session's token; nothing else is needed to reach the tools. */
+/**
+ * The session's tools two ways: `url` (its token in the path) for a Harness that takes the
+ * config off argv, and `call` in-process for one whose config `ps` would show.
+ */
 export interface SimulatorMcpServer {
   readonly url: string;
+  readonly tools: ReadonlyArray<SimulatorTool>;
+  readonly call: (name: string, input: typeof Schema.Json.Type) => Promise<ToolResult>;
 }
 
 export interface SimulatorMcpOptions {
@@ -171,7 +187,18 @@ export class SimulatorMcp extends Context.Service<
               const { origin } = yield* listener;
               const token = yield* Effect.acquireRelease(acquire(sessionId), release);
 
-              return { url: `${origin}${sessionPath(token)}` };
+              const call = (name: string, input: typeof Schema.Json.Type) => {
+                const session = byToken.get(token)?.session;
+                const tool = simulatorTools.find((item) => item.name === name);
+
+                if (session === undefined) return Promise.resolve(failure(CLOSED));
+
+                return tool === undefined
+                  ? Promise.resolve(failure(`No tool named ${name}`))
+                  : tool.call(session, input);
+              };
+
+              return { url: `${origin}${sessionPath(token)}`, tools: simulatorTools, call };
             }).pipe(
               Effect.timeoutOrElse({
                 duration: options.setupTimeout ?? SETUP_TIMEOUT,

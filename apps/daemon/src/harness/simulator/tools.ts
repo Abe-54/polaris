@@ -13,7 +13,7 @@ const Point = Schema.Tuple([Schema.Number, Schema.Number]);
 export interface SimulatorTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: object;
+  readonly inputSchema: ReturnType<typeof Schema.toJsonSchemaDocument>["schema"];
   readonly readOnly: boolean;
   readonly call: (
     session: SimulatorSession,
@@ -21,10 +21,13 @@ export interface SimulatorTool {
   ) => Promise<ToolResult>;
 }
 
+/** An input without fields is `{}`: Effect writes such a struct as "not null", which Zod refuses. */
 const jsonSchema = (schema: Schema.Top) => {
   const document = Schema.toJsonSchemaDocument(schema);
 
-  return { ...document.schema, $defs: document.definitions };
+  return document.schema.type === undefined
+    ? { type: "object" as const, properties: {} }
+    : { ...document.schema, $defs: document.definitions };
 };
 
 const define = <S extends Schema.Decoder<unknown>>(

@@ -1,12 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import type { SimulatorMcp } from "../simulator/index.ts";
+import { failure } from "../simulator/session.ts";
+import { simulatorTools } from "../simulator/tools.ts";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import { cleanup, scripted, sessionWith } from "./testing/session.ts";
 
 const simulator: SimulatorMcp["Service"] = {
   forSession: (sessionId) =>
-    Effect.succeed({ url: `http://127.0.0.1:9/simulator-mcp/${sessionId}` }),
+    Effect.succeed({
+      url: `http://127.0.0.1:9/simulator-mcp/${sessionId}`,
+      tools: simulatorTools,
+      call: () => Promise.resolve(failure("unused")),
+    }),
 };
 
 const withSession = sessionWith((options) => makeCodexDriver({ ...options, simulator }));

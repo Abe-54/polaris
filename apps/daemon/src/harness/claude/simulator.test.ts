@@ -1,19 +1,35 @@
 import { describe, expect, test } from "bun:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Exit, Scope } from "effect";
 import type { OpenOptions } from "../HarnessDriver.ts";
 import type { SimulatorMcp } from "../simulator/index.ts";
+import { text } from "../simulator/session.ts";
+import { simulatorTools } from "../simulator/tools.ts";
 import { makeClaudeDriver } from "./ClaudeDriver.ts";
 import { FakeClaude } from "./fakeClaude.ts";
 
+const TOKEN_URL = "http://127.0.0.1:9/simulator-mcp/secret-token";
+
 const asked: string[] = [];
+
+const calls: Array<{ name: string; input: unknown }> = [];
 
 const simulator: SimulatorMcp["Service"] = {
   forSession: (sessionId) =>
     Effect.sync(() => {
       asked.push(sessionId);
 
-      return { url: `http://127.0.0.1:9/simulator-mcp/${sessionId}` };
+      return {
+        url: TOKEN_URL,
+        tools: simulatorTools,
+        call: async (name, input) => {
+          calls.push({ name, input });
+
+          return text(`called ${name}`);
+        },
+      };
     }),
 };
 
@@ -51,14 +67,34 @@ const optionsOf = async (
 };
 
 describe("the Simulator's MCP server in Claude Code", () => {
-  test("a session gets its own URL as an HTTP server, not pre-allowed", async () => {
+  test("a session gets the tools in-process, with no token URL in its options", async () => {
     const o = await optionsOf({});
+    const server = o.mcpServers?.["polaris_simulator"];
 
-    expect(o.mcpServers?.["polaris_simulator"]).toEqual({
-      type: "http",
-      url: "http://127.0.0.1:9/simulator-mcp/session-1",
-    });
+    if (server === undefined || server.type !== "sdk") throw new Error("no SDK server");
+
+    const { instance: _instance, ...entry } = server;
+
+    expect(JSON.stringify({ ...o, mcpServers: { polaris_simulator: entry } })).not.toContain(
+      "secret-token"
+    );
     expect(JSON.stringify(o.allowedTools ?? [])).not.toContain("polaris_simulator");
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "simulator-test", version: "1" });
+
+    try {
+      await server.instance.connect(serverTransport);
+      await client.connect(clientTransport);
+      const { tools } = await client.listTools();
+
+      expect(tools.map((tool) => tool.name)).toContain("simulator_open");
+      await client.callTool({ name: "simulator_tap", arguments: { target: "@e3" } });
+
+      expect(calls).toEqual([{ name: "simulator_tap", input: { target: "@e3" } }]);
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
   });
 
   test("a read-only session gets no Simulator and asks for none", async () => {

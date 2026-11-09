@@ -140,7 +140,14 @@ export interface Step {
   readonly target: "chosen" | "current" | "none";
   readonly work: (
     run: AgentDeviceRun,
-    target: { readonly id: string; readonly flags: ReadonlyArray<string> }
+    target: {
+      readonly id: string;
+      /** `command`, the session's binding, then `values` after `--`, so none reads as a flag. */
+      readonly argv: (
+        command: ReadonlyArray<string>,
+        values: ReadonlyArray<string>
+      ) => ReadonlyArray<string>;
+    }
   ) => Promise<ToolResult>;
 }
 
@@ -152,7 +159,18 @@ export const simulatorSession = (deps: SessionDeps) => {
   let pending: Pending | null = null;
   let used = false;
 
-  const flagsOf = (id: string) => ["--platform", "ios", "--udid", id, "--session", name];
+  const argvOf =
+    (id: string) => (command: ReadonlyArray<string>, values: ReadonlyArray<string>) => [
+      ...command,
+      "--platform",
+      "ios",
+      "--udid",
+      id,
+      "--session",
+      name,
+      "--",
+      ...values,
+    ];
 
   const holdDriving = async () => {
     const scope = await Effect.runPromise(Scope.make());
@@ -185,7 +203,7 @@ export const simulatorSession = (deps: SessionDeps) => {
     const release = step.target === "none" ? async () => {} : await holdDriving();
 
     try {
-      return await step.work(run, { id, flags: flagsOf(id) });
+      return await step.work(run, { id, argv: argvOf(id) });
     } catch (error) {
       return failure(`agent-device didn't run: ${String(error)}`);
     } finally {
@@ -240,14 +258,16 @@ export const simulatorSession = (deps: SessionDeps) => {
         target: "chosen",
         work: async (run, target) => {
           const result = await run(
-            [
-              "open",
-              ...(app === undefined ? [] : [app, "--foreground"]),
-              "--json",
-              "--timeout",
-              String(OPEN_TIMEOUT_MS),
-              ...target.flags,
-            ],
+            target.argv(
+              [
+                "open",
+                ...(app === undefined ? [] : ["--foreground"]),
+                "--json",
+                "--timeout",
+                String(OPEN_TIMEOUT_MS),
+              ],
+              app === undefined ? [] : [app]
+            ),
             { timeoutMs: OPEN_TIMEOUT_MS + KILL_MARGIN_MS }
           );
 
@@ -268,7 +288,8 @@ export const simulatorSession = (deps: SessionDeps) => {
   const plain = (
     tool: string,
     label: string,
-    args: ReadonlyArray<string>,
+    command: ReadonlyArray<string>,
+    values: ReadonlyArray<string> = [],
     timeoutMs = 90_000,
     after?: () => void
   ) =>
@@ -277,7 +298,7 @@ export const simulatorSession = (deps: SessionDeps) => {
       label,
       target: "current",
       work: async (run, target) => {
-        const outcome = textOutcome(await run([...args, ...target.flags], { timeoutMs }));
+        const outcome = textOutcome(await run(target.argv(command, values), { timeoutMs }));
         after?.();
 
         return unwrap(outcome, (out) => text(out === "" ? "Done." : out));
@@ -294,7 +315,7 @@ export const simulatorSession = (deps: SessionDeps) => {
 
         try {
           const outcome = jsonOutcome(
-            await run(["screenshot", path, "--json", ...target.flags], { timeoutMs: 90_000 }),
+            await run(target.argv(["screenshot", "--json"], [path]), { timeoutMs: 90_000 }),
             Schema.Unknown
           );
 
@@ -341,32 +362,34 @@ export const simulatorSession = (deps: SessionDeps) => {
         "simulator_snapshot",
         "The snapshot",
         ["snapshot", "-i", "--timeout", String(SNAPSHOT_TIMEOUT_MS)],
+        [],
         SNAPSHOT_TIMEOUT_MS + KILL_MARGIN_MS
       ),
     tap: (target: ReadonlyArray<string>) =>
-      plain("simulator_tap", "The tap", ["press", ...target, "--settle"]),
+      plain("simulator_tap", "The tap", ["press", "--settle"], target),
     type: (value: string, into: string | undefined) =>
       plain(
         "simulator_type",
         "Typing",
-        into === undefined ? ["type", value] : ["fill", into, value, "--settle"]
+        into === undefined ? ["type"] : ["fill", "--settle"],
+        into === undefined ? [value] : [into, value]
       ),
     swipe: (from: readonly [number, number], to: readonly [number, number]) =>
-      plain("simulator_swipe", "The swipe", ["swipe", ...[...from, ...to].map(String)]),
+      plain("simulator_swipe", "The swipe", ["swipe"], [...from, ...to].map(String)),
     scroll: (direction: string, amount: number | undefined) =>
-      plain("simulator_scroll", "The scroll", [
-        "scroll",
-        direction,
-        ...(amount === undefined ? [] : [String(amount)]),
-        "--settle",
-      ]),
+      plain(
+        "simulator_scroll",
+        "The scroll",
+        ["scroll", "--settle"],
+        [direction, ...(amount === undefined ? [] : [String(amount)])]
+      ),
     press: (key: PressKey) => plain("simulator_press", "The key press", PRESS_ARGS[key]),
     screenshot,
     launch: (app: string) =>
-      plain("simulator_launch", "Launching the app", ["open", app, "--foreground"]),
-    openUrl: (url: string) => plain("simulator_openurl", "Opening the URL", ["open", url]),
+      plain("simulator_launch", "Launching the app", ["open", "--foreground"], [app]),
+    openUrl: (url: string) => plain("simulator_openurl", "Opening the URL", ["open"], [url]),
     close: () =>
-      plain("simulator_close", "Closing", ["close"], 90_000, () => {
+      plain("simulator_close", "Closing", ["close"], [], 90_000, () => {
         current = null;
       }),
   };
