@@ -442,11 +442,13 @@ const simulate = (
   main: string,
   invariants: ReadonlyArray<string>,
   witnesses: ReadonlyArray<string> = [],
-  file = "polaris.qnt"
+  file = "polaris.qnt",
+  step = "step"
 ) => [
   "run",
   file,
   `--main=${main}`,
+  `--step=${step}`,
   "--invariants",
   ...invariants,
   `--max-samples=${samples}`,
@@ -461,11 +463,14 @@ const simulate = (
 const simulateWitnessed = (
   main: string,
   witnesses: ReadonlyArray<string>,
-  file = "polaris.qnt"
+  file = "polaris.qnt",
+  step = "step"
 ) => {
+  const label = step === "step" ? main : `${main} (${step})`;
+
   const simulated = run(
-    `simulate ${main}: safety, ${samples} traces of up to 60 steps`,
-    simulate(main, ["safety"], witnesses, file)
+    `simulate ${label}: safety, ${samples} traces of up to 60 steps`,
+    simulate(main, ["safety"], witnesses, file, step)
   );
 
   for (const witness of witnesses) {
@@ -495,10 +500,17 @@ simulateWitnessed(
     "witnessAudit",
     "witnessSlotAudit",
     "witnessRelay",
-    "witnessRecovery",
     "witnessLease",
   ],
   "constellations.qnt"
+);
+
+// `step` reached recovery in 1 of 3000 traces; its own step keeps it covered (ENG-352).
+simulateWitnessed(
+  "current_constellations",
+  ["witnessRecovery"],
+  "constellations.qnt",
+  "recoveryStep"
 );
 
 simulateWitnessed(
