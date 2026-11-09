@@ -1,4 +1,4 @@
-// RT1 repro (ENG-656): error Spans have no age or size bound. Expected to FAIL on 08798fa8f.
+// RT1 regression (ENG-656): error Spans are bound by age and size like any other.
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { join } from "node:path";

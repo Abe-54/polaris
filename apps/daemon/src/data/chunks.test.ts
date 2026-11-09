@@ -27,3 +27,28 @@ test("a wide row whose cells each fit is clipped to the RPC chunk limit and End 
     QueryDataStreamItem.cases.End.make({ returned: 2, truncated: true, elapsedMs: 1 })
   );
 });
+
+test("many small rows stream in order, at most 500 to a Rows item", () => {
+  const rows = Array.from({ length: 1201 }, (_, i) => [i, `row ${i}`]);
+
+  const items = resultChunks({
+    queryId: "q",
+    columns: [
+      { name: "id", type: "int" },
+      { name: "name", type: "text" },
+    ],
+    rows,
+    truncated: false,
+    elapsedMs: 1,
+  });
+
+  const batches = items.flatMap((item) =>
+    QueryDataStreamItem.guards.Rows(item) ? [item.rows] : []
+  );
+
+  expect(batches.map((batch) => batch.length)).toEqual([500, 500, 201]);
+  expect(batches.flat()).toEqual(rows);
+  expect(items.at(-1)).toEqual(
+    QueryDataStreamItem.cases.End.make({ returned: 1201, truncated: false, elapsedMs: 1 })
+  );
+});
