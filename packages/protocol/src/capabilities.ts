@@ -106,6 +106,8 @@ export const Capability = Schema.Literals([
   "approval.secret",
   /** `PinSession`, `SessionPinned`, and `AgentSession.pinnedAt` and `origin`. */
   "session.pin",
+  /** `Turn.checkpointAfterCommit`: the commit of a Turn's after-checkpoint. */
+  "session.checkpoint-commit",
   /**
    * The `plan` PermissionMode. A Daemon sends a Client without it `supervised` for a planning
    * session; a Client starts a session `supervised` on a Daemon without it.

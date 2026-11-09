@@ -352,6 +352,19 @@ describe("the Critical finding", () => {
       { summaries: new Map([[head, summaryAt(head, [finding()])]]) }
     ));
 
+  test("a Snapshot's Turn names its commit, with no checkpoint on this feed", () =>
+    withThread(
+      (host, thread) =>
+        Effect.gen(function* () {
+          yield* host.push(
+            snapshot([{ turn: turn(1, { checkpointAfter: ref, checkpointAfterCommit: head }) }])
+          );
+          const state = yield* until(thread, (s) => s.findings.length > 0);
+          expect(state.findings.map((f) => f.title)).toEqual(["Secret-like value committed"]);
+        }),
+      { summaries: new Map([[head, summaryAt(head, [finding()])]]) }
+    ));
+
   test("is absent when no summary is cached, and nothing starts one", () =>
     withThread((host, thread) =>
       Effect.gen(function* () {

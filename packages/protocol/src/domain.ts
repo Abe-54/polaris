@@ -405,6 +405,11 @@ export class Turn extends Schema.Class<Turn>("Turn")({
   /** `refs/polaris/checkpoints/<session>/<turn>` taken before and after the Turn. */
   checkpointBefore: Schema.NullOr(Schema.String),
   checkpointAfter: Schema.NullOr(Schema.String),
+  /**
+   * The commit `checkpointAfter` names (capability `session.checkpoint-commit`), the head a
+   * Risk Summary of the Turns through this one is kept under; null without a checkpoint.
+   */
+  checkpointAfterCommit: optionalNullable(Schema.String),
   startedAt: Timestamp,
   endedAt: Schema.NullOr(Timestamp),
 }) {}

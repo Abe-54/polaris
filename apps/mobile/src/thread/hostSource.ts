@@ -5,7 +5,6 @@
 import type { LiveSource } from "@polaris/client/resume";
 import { Effect } from "effect";
 import type { HostConnection, LiveHost } from "../runtime/hostConnection.ts";
-import { recordedSessionSummary } from "../review/sessionSummaries.ts";
 import { daemonThreadSource, type ThreadClient, type ThreadSource } from "./source.ts";
 
 /** Waits for the connection's live client at `minEpoch` or later. */
@@ -35,5 +34,4 @@ export const hostThreadSource = (connection: HostConnection, live: LiveHost): Th
   daemonThreadSource({
     live: liveSourceOf(connection),
     capabilities: new Set(live.capabilities),
-    summaryOf: (sessionId) => recordedSessionSummary(connection.hostId, sessionId),
   });

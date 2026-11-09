@@ -11,6 +11,7 @@
 import { SqliteMigrator } from "@effect/sql-sqlite-bun";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
+import { backfillTurnFields } from "./turnFields.backfill.ts";
 import { backfillUserTurns } from "./userTurns.backfill.ts";
 
 const init = Effect.gen(function* () {
@@ -187,6 +188,8 @@ export const migrations = SqliteMigrator.fromRecord({
   /** `session.user-turns`: the user-Turn numbers and reply previews of Turns already logged. */
   "0005_user_turns": backfillUserTurns,
   "0006_continuity": continuity,
+  /** `Turn.checkpointAfterCommit` for Turns already logged. */
+  "0007_turn_fields": backfillTurnFields,
 });
 
 export const MigrationsLayer = SqliteMigrator.layer({ loader: migrations });

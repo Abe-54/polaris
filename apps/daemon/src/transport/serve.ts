@@ -273,6 +273,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "session.compaction",
   "session.notify",
   "session.pin",
+  "session.checkpoint-commit",
   "session.limited",
   "session.plan-mode",
   "session.user-turns",

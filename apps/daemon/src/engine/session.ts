@@ -183,7 +183,7 @@ const turnEnded = (
 
   events.push(
     ...withdrawPending(record, "harness", "The Turn ended", turn.id),
-    endTurn(turn, status, event.at, event.checkpoint?.ref ?? turn.checkpointAfter)
+    endTurn(turn, status, event.at, event.checkpoint)
   );
 
   return settle(enq, record, events, withState ? turnEndState(event) : undefined);
