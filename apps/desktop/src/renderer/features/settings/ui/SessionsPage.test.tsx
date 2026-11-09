@@ -32,11 +32,13 @@ afterEach(() => {
   disconnect();
 });
 
-const mount = () => {
+const mount = (dotfilesIsGit = true) => {
   const state: AppState = {
     ...initialState,
     hosts: [{ ...hostView("mac"), label: "Mac Studio" }],
-    hostModels: { mac: hostModel([{ id: "polaris" }, { id: "dotfiles" }]) },
+    hostModels: {
+      mac: hostModel([{ id: "polaris" }, { id: "dotfiles", isGitRepo: dotfilesIsGit }]),
+    },
   };
 
   const store = createStore<AppState>(() => state);
@@ -101,4 +103,12 @@ test("a workspace that commits differently names its host, and × makes it follo
 
   expect(fake.sent("settings.setSessions")).toEqual([{ patch: { workspaceAcceptBranch: {} } }]);
   expect(accepting.getByText("Every workspace commits alike")).toBeTruthy();
+});
+
+test("an override for a workspace that isn't a git repo still names it and its host", () => {
+  const { card } = mount(false);
+  const accepting = card("Accepting work");
+
+  expect(accepting.getByText("dotfiles")).toBeTruthy();
+  expect(accepting.getByText("Mac Studio · overrides")).toBeTruthy();
 });

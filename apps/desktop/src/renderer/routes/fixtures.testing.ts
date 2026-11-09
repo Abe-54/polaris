@@ -48,6 +48,7 @@ export interface WorkspaceSpec {
   readonly id: string;
   readonly sessions?: ReadonlyArray<SessionSpec>;
   readonly hidden?: boolean;
+  readonly isGitRepo?: boolean;
 }
 
 const time = (n: number) => new Date(Date.UTC(2026, 8, 29, 0, n)).toISOString();
@@ -61,7 +62,7 @@ export const hostModel = (workspaces: ReadonlyArray<WorkspaceSpec>): HostModel =
           id: WorkspaceId.make(w.id),
           path: `/code/${w.id}`,
           name: w.id,
-          isGitRepo: true,
+          isGitRepo: w.isGitRepo ?? true,
           worktreeRoot: `/code/${w.id}.worktrees`,
           hidden: w.hidden ?? false,
           registeredAt: time(i),
