@@ -55,6 +55,7 @@ for (const binary of ["node", "bun"])
 // P4-2: the completion job of a finished process is rejected when 32 jobs are queued, the
 // recording becomes "failed" and its artifact is never parsed, though it is still on disk.
 test("P4-2: a process that exits while the profile queue is full still completes its recording", async () => {
+  const seen = new Set<string>();
   let hold = false;
   let release!: () => void;
 
@@ -101,7 +102,7 @@ test("P4-2: a process that exits while the profile queue is full still completes
         await until(() => refusals > 0);
         await writeFile(flag, "");
         await until(() => !isRunning(original.pid));
-        await Bun.sleep(300);
+        await until(() => seen.has("completion-waiting"));
       } finally {
         release();
       }
@@ -111,7 +112,7 @@ test("P4-2: a process that exits while the profile queue is full still completes
       const detail = await runtime.runPromise(profiles.get(TEST_SESSION, original.id));
       expect(detail.profile.status).toBe("completed");
     },
-    { worker }
+    { worker, observe: (moment) => seen.add(moment) }
   );
 }, 30000);
 
@@ -269,16 +270,23 @@ test("P4-7: restart reserves the live slot while the old artifact is being parse
 
   await withProfiles(
     async ({ root, runtime }) => {
-      const script = join(root, "server.js");
-      await writeFile(script, "setInterval(()=>{},1000);");
+      const ready = (i: number) => join(root, `ready-${i}`);
       const profiles = await runtime.runPromise(Profiles);
       const originals = [];
 
-      for (let i = 0; i < 4; i++)
+      for (let i = 0; i < 4; i++) {
+        const script = join(root, `server-${i}.js`);
+        await writeFile(
+          script,
+          `require("fs").writeFileSync(${JSON.stringify(ready(i))}, ""); setInterval(()=>{},1000);`
+        );
         originals.push(
           await runtime.runPromise(profiles.capture(TEST_SESSION, ["node", script], 0.01))
         );
-      await Bun.sleep(300);
+      }
+
+      // Every recording's process is running before the restart stops the first.
+      await until(() => [0, 1, 2, 3].every((i) => existsSync(ready(i))));
       const restart = runtime.runPromise(profiles.restart(TEST_SESSION, originals[0]!.pid));
 
       const flag = join(root, "contender-started");
@@ -348,10 +356,23 @@ test("P4-4: parsing a finished command does not consume a live recording slot", 
         await runtime.runPromise(profiles.capture(TEST_SESSION, ["node", script], 0.01));
       await runtime.runPromise(profiles.capture(TEST_SESSION, ["node", "-e", "0"], 0.01));
       await until(() => reached);
-      const admitted = runtime.runPromise(profiles.capture(TEST_SESSION, ["node", script], 0.01));
+      const started = join(root, "admitted-started");
+      const admittedScript = join(root, "admitted.js");
+      await writeFile(
+        admittedScript,
+        `require("fs").writeFileSync(${JSON.stringify(started)}, ""); setInterval(()=>{},1000);`
+      );
+      let settled = false;
+
+      const admitted = runtime
+        .runPromise(profiles.capture(TEST_SESSION, ["node", admittedScript], 0.01))
+        .finally(() => {
+          settled = true;
+        });
 
       try {
-        await Bun.sleep(50);
+        // Admitted while the parse is held: its process starts, or the capture is refused.
+        await until(() => settled || existsSync(started));
       } finally {
         hold = false;
         release();
@@ -364,6 +385,7 @@ test("P4-4: parsing a finished command does not consume a live recording slot", 
 }, 30000);
 
 test("P4-2: shutdown drains an exited child's completion waiting for queue space", async () => {
+  const seen = new Set<string>();
   let hold = false;
   let release!: () => void;
 
@@ -408,9 +430,9 @@ test("P4-2: shutdown drains an exited child's completion waiting for queue space
         await until(() => refusals > 0);
         await writeFile(flag, "");
         await until(() => !isRunning(original.pid));
-        await Bun.sleep(100);
+        await until(() => seen.has("completion-waiting"));
         shutdown = runtime.dispose();
-        await Bun.sleep(100);
+        await until(() => seen.has("closing"));
       } finally {
         release();
       }
@@ -431,7 +453,7 @@ test("P4-2: shutdown drains an exited child's completion waiting for queue space
       expect(saved.status).toBe("completed");
       expect(existsSync(join(directory, "detail.json"))).toBe(true);
     },
-    { worker }
+    { worker, observe: (moment) => seen.add(moment) }
   );
 }, 30000);
 
