@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import {
   Command,
-  ExtensionDaemonRpcs,
+  ExtensionClientRpcs,
   NotGranted,
   SessionId,
   SessionPlacement,
@@ -44,7 +44,7 @@ test("the socket carries the Pairing's Grant into the Engine and returns its typ
 
         const connect = () =>
           Effect.flatMap(socketTransport(server.socketPath), (transport) =>
-            connectRpcWith(ExtensionDaemonRpcs, transport)
+            connectRpcWith(ExtensionClientRpcs, transport)
           );
 
         const desktop = yield* connect();

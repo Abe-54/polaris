@@ -792,3 +792,19 @@ export class DaemonRpcs extends RpcGroup.make(
 export class ExtensionDaemonRpcs extends DaemonRpcs.omit("dispatch")
   .add(Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])))
   .middleware(GrantGate) {}
+
+/**
+ * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests, which only the Desktop App
+ * may call (RPC_GRANTS: client); leaving it out keeps the client type within the checker's depth.
+ */
+export class ExtensionClientRpcs extends ExtensionDaemonRpcs.omit(
+  "requests.watch",
+  "requests.save",
+  "requests.send",
+  "requests.variables",
+  "requests.sendLog.page",
+  "requests.sendLog.watch",
+  "requests.send.get",
+  "requests.curl.parse",
+  "requests.curl.format"
+) {}
