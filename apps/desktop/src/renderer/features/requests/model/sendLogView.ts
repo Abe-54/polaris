@@ -8,7 +8,7 @@ import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { draftFromAdHoc, refString } from "./draft.ts";
 import { type RequestsSessionKey, sessionString } from "./session.ts";
-import { openNewDraft, openRequest, setLatestSend } from "./store.ts";
+import { openNewDraft, openRequest, setEnvironment, setLatestSend } from "./store.ts";
 
 interface SendLogView {
   readonly filter: string;
@@ -55,6 +55,8 @@ const adHocOf = (send: Send): AdHocRequest => {
 };
 
 export const openSend = (at: RequestsSessionKey, send: Send, taken: ReadonlySet<string>) => {
+  if (send.environment !== undefined) setEnvironment(at, send.environment);
+
   if (send.requestRef === null) openNewDraft(at, draftFromAdHoc(adHocOf(send), taken));
   else openRequest(at, refString(send.requestRef));
   setLatestSend(at, send);

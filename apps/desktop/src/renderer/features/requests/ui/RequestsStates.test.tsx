@@ -21,7 +21,7 @@ import { clearSendLogView } from "../model/sendLogView.ts";
 import { clearRequestsView } from "../model/store.ts";
 import { fixtureOriginApproval, withPendingApprovals } from "../preview/approvalFixtures.ts";
 import { fixtureRequestsApi, type FixtureOptions } from "../preview/fixtureApi.ts";
-import { fixtureSends } from "../preview/sendLogFixtures.ts";
+import { fixtureSends, SEND_SPECS } from "../preview/sendLogFixtures.ts";
 import { RequestsMode } from "./RequestsMode.tsx";
 import { SendFixtureLayers } from "./send/fixture.tsx";
 
@@ -108,6 +108,28 @@ test("the send log lists the checkout's Sends; a saved one opens its Request and
   );
   expect(screen.getByTestId("requests-send-pane").textContent).toContain("422");
   expect(sendRow("/invoices/inv_2291").getAttribute("aria-current")).toBe("true");
+});
+
+test("opening a Send restores the environment it went out in, so sending it again hits the same base", async () => {
+  const specs = SEND_SPECS.map((spec) =>
+    spec.id === "d4c3f5a7" ? { ...spec, environment: "staging" } : spec
+  );
+
+  const sends = fixtureSends(Date.now(), specs);
+
+  mount({ sends });
+  await openSendLog();
+  expect(screen.getByTestId("requests-environment").getAttribute("aria-label")).toBe(
+    "Environment, dev"
+  );
+
+  fireEvent.click(sendRow("/invoices/inv_2291"));
+
+  await waitFor(() =>
+    expect(screen.getByTestId("requests-environment").getAttribute("aria-label")).toBe(
+      "Environment, staging"
+    )
+  );
 });
 
 test("an agent's ad-hoc Send opens as a new, unsaved Request as it was sent", async () => {

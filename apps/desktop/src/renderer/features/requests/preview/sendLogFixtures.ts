@@ -15,6 +15,8 @@ const JSON_TYPE = { name: "Content-Type", value: "application/json" };
 export interface SendSpec {
   readonly id: string;
   readonly minutesAgo: number;
+  /** "dev" when absent. */
+  readonly environment?: string;
   readonly method: Send["method"];
   readonly url: string;
   readonly outcome: Send["outcome"];
@@ -38,7 +40,7 @@ export const fixtureSend = (spec: SendSpec, now: number): Send => {
     id: spec.id,
     checkout: LEDGER_CHECKOUT,
     requestRef: spec.ref ?? null,
-    environment: "dev",
+    environment: spec.environment ?? "dev",
     method: spec.method,
     url: spec.url,
     requestHeaders: spec.body === undefined ? [] : [JSON_TYPE],
