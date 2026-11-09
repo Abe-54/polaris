@@ -148,7 +148,7 @@ const Section = ({
         {section.rows.map((row, index) => (
           <LongPressMenu
             key={row.key}
-            menu={hostMenu({ hostId: row.key, state: row.state })}
+            menu={hostMenu({ hostId: row.key, name: row.name, state: row.state })}
             onAction={onMenu}
           >
             <HostRow

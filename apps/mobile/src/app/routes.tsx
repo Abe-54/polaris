@@ -36,6 +36,7 @@ export { ReviewTab } from "../review/index.ts";
 /** A new agent session; once it starts, its thread takes the screen's place. */
 export const NewSessionRoute = (props: {
   readonly workspaceId: string | null;
+  readonly hostId?: string;
   readonly onBack: () => void;
 }) => {
   const navigation = useNavigation();
@@ -47,6 +48,7 @@ export const NewSessionRoute = (props: {
       hosts={hosts}
       api={api}
       {...(props.workspaceId === null ? {} : { workspaceId: props.workspaceId })}
+      {...(props.hostId === undefined ? {} : { hostId: props.hostId })}
       connectionFor={(hostId) => connections.find((c) => c.hostId === hostId) ?? null}
       onStarted={(hostId, sessionId) =>
         navigation.replace({ screen: "thread", hostId, sessionId, rise: true })

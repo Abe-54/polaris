@@ -137,8 +137,12 @@ const Screen = () => {
         thread: ({ hostId, sessionId, rise }) => (
           <ThreadRoute hostId={hostId} sessionId={sessionId} rise={rise} onBack={navigation.back} />
         ),
-        newSession: ({ workspaceId }) => (
-          <NewSessionRoute workspaceId={workspaceId} onBack={navigation.back} />
+        newSession: ({ workspaceId, hostId }) => (
+          <NewSessionRoute
+            workspaceId={workspaceId}
+            {...(hostId === undefined ? {} : { hostId })}
+            onBack={navigation.back}
+          />
         ),
         constellation: ({ hostId, constellationId }) => (
           <ConstellationRoute
