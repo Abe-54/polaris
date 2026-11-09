@@ -1,6 +1,7 @@
 import { FRAME_HEIGHT_MAX, FRAME_HEIGHT_MIN } from "@polaris/visualization";
 import { describe, expect, test } from "bun:test";
 import { frameRequest } from "./messages.ts";
+import { STATE_MAX_BYTES } from "./state.ts";
 
 // SAFETY: the filter only compares `source` by identity; plain objects stand in for windows.
 const frame = {} as Window;
@@ -70,5 +71,20 @@ describe("frame messages", () => {
 
   test("unknown message types are dropped", () => {
     expect(from(frame, { type: "pv:navigate", url: "https://example.com" })).toBeNull();
+  });
+
+  test("a pv.state too large to keep is dropped without serialising it whole", () => {
+    let read = 0;
+
+    const state = Array.from({ length: 100_000 }, (_, n) => ({
+      get n() {
+        read += 1;
+
+        return n;
+      },
+    }));
+
+    expect(from(frame, { type: "pv:state", state })).toBeNull();
+    expect(read).toBeLessThan(STATE_MAX_BYTES);
   });
 });

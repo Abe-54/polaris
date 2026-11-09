@@ -1,9 +1,8 @@
 /**
  * One Visualization's frame (ADR 0089): a WebView limited to its own HTML string, no file access,
- * every navigation refused, and only schema-checked messages taken from it.
+ * every navigation refused, and only schema-checked messages taken from it, size- and rate-limited.
  */
 import { buildFrameDocument, HostMessage } from "@polaris/visualization";
-import { Match } from "effect";
 import { useEffect, useMemo, useRef } from "react";
 import { type StyleProp, type ViewStyle } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
@@ -15,9 +14,9 @@ import {
   LOCKDOWN_SCRIPT,
   navigationPolicy,
 } from "./frame.ts";
-import { clampHeight, parseFrameMessage, type Visualization } from "./model.ts";
+import { type FrameBridge, openBridge } from "./bridge.ts";
+import type { Visualization } from "./model.ts";
 import { fileStateStore, type VisualizationStateStore } from "./stateStore.ts";
-import { writerFor } from "./stateWriter.ts";
 
 export interface VisualizationFrameProps {
   readonly visualization: Visualization;
@@ -61,9 +60,24 @@ export const VisualizationFrame = ({
     [html, title, mode, id, store]
   );
 
-  const writer = useMemo(() => writerFor(id, store), [id, store]);
+  const handlers = useRef({ onHeight, onOpenLink });
+  const bridge = useRef<FrameBridge | null>(null);
 
-  useEffect(() => () => writer.flush(), [writer]);
+  handlers.current = { onHeight, onOpenLink };
+
+  useEffect(() => {
+    const opened = openBridge(id, store, () => ({
+      onHeight: (height) => handlers.current.onHeight?.(height),
+      onOpenLink: (url) => handlers.current.onOpenLink(url),
+    }));
+
+    bridge.current = opened;
+
+    return () => {
+      bridge.current = null;
+      opened.close();
+    };
+  }, [id, store]);
 
   // A new document starts a new load, so it gets its own policy.
   const policy = useMemo(() => navigationPolicy(), [document]);
@@ -81,24 +95,8 @@ export const VisualizationFrame = ({
     view.current?.injectJavaScript(hostMessageScript(message));
   }, [theme]);
 
-  const onMessage = ({ nativeEvent }: WebViewMessageEvent) => {
-    const message = parseFrameMessage(nativeEvent.data);
-
-    if (message === null) return;
-    Match.value(message).pipe(
-      Match.discriminatorsExhaustive("type")({
-        "pv:height": ({ height }) => {
-          const clamped = clampHeight(height);
-
-          if (clamped !== null) onHeight?.(clamped);
-        },
-        "pv:open-link": ({ url }) => onOpenLink(url),
-        "pv:state": ({ state }) => {
-          writer.offer(state);
-        },
-      })
-    );
-  };
+  const onMessage = ({ nativeEvent }: WebViewMessageEvent) =>
+    bridge.current?.receive(nativeEvent.data);
 
   return (
     // The package types `WebView<P = undefined>` as `Props & P`, which is never without a `P`.

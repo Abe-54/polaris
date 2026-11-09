@@ -116,4 +116,21 @@ describe("how often pv.state is written", () => {
 
     expect(writes).toEqual(["1"]);
   });
+
+  test("an oversized state is never held; the last one that fits is written", () => {
+    const writes: Array<string> = [];
+
+    const store = {
+      load: () => undefined,
+      save: (_: string, json: string) => writes.push(json) > 0,
+    };
+
+    const writer = stateWriter(store, "viz_a", clock().timers);
+
+    writer.save("1");
+    writer.save(JSON.stringify("x".repeat(STATE_MAX_BYTES)));
+    writer.flush();
+
+    expect(writes).toEqual(["1"]);
+  });
 });

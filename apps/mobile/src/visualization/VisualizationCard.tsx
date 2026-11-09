@@ -13,6 +13,7 @@ import { maxHeight } from "../sheet/detents.ts";
 import type { CelestialBody, HarnessKind } from "@polaris/protocol";
 import { type MobileColours, themedStyles, useTheme } from "../theme/index.ts";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
+import { linkConfirms } from "@polaris/visualization";
 import { confirmLink } from "./confirmLink.ts";
 import type { Visualization } from "./model.ts";
 import { flushState } from "./stateWriter.ts";
@@ -92,11 +93,13 @@ const SHEET_CHROME = 76;
 const ExpandedSheet = ({
   visualization,
   open,
+  onOpenLink,
   onClose,
   onStopped,
 }: {
   readonly visualization: Visualization;
   readonly open: boolean;
+  readonly onOpenLink: (url: string) => void;
   readonly onClose: () => void;
   readonly onStopped: () => void;
 }) => {
@@ -125,7 +128,7 @@ const ExpandedSheet = ({
           <VisualizationFrame
             visualization={visualization}
             mode="expanded"
-            onOpenLink={(url) => confirmLink(visualization.title, url)}
+            onOpenLink={onOpenLink}
             onStopped={onStopped}
             style={styles.fill}
           />
@@ -208,6 +211,13 @@ const VisualizationCardView = ({
   const [sheeted, setSheeted] = useState(false);
   const [stopped, setStopped] = useState(false);
   const [openedRevision, setOpenedRevision] = useState(false);
+  // Shared by the inline frame and the sheet: one confirm at a time, then none (ENG-634).
+  const [confirms] = useState(linkConfirms);
+
+  const openLink = useCallback(
+    (url: string) => confirmLink(title, url, confirms),
+    [title, confirms]
+  );
 
   const onHeight = useCallback(
     (next: number) => {
@@ -269,7 +279,7 @@ const VisualizationCardView = ({
               visualization={visualization}
               mode="inline"
               onHeight={onHeight}
-              onOpenLink={(url) => confirmLink(title, url)}
+              onOpenLink={openLink}
               onStopped={stop}
               style={styles.fill}
             />
@@ -290,6 +300,7 @@ const VisualizationCardView = ({
         <ExpandedSheet
           visualization={visualization}
           open={expanded}
+          onOpenLink={openLink}
           onClose={close}
           onStopped={stop}
         />

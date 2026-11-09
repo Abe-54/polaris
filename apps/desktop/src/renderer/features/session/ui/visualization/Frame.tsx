@@ -4,14 +4,17 @@
  */
 import {
   buildFrameDocument,
+  coalesced,
   type FrameDocumentOptions,
+  frameInbox,
   type HostMessage,
+  laneOfType,
 } from "@polaris/visualization";
 import { cn } from "@polaris/ui";
 import { Option, Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { polaris } from "../../../bridge.ts";
-import { frameRequest } from "./messages.ts";
+import { fromFrame, requestOf, typeOf } from "./messages.ts";
 import { stateWriter, visualizationStates, windowTimers } from "./state.ts";
 import { frameTheme, onFrameTheme } from "./theme.ts";
 
@@ -84,15 +87,27 @@ export const Frame = (props: FrameProps) => {
   useEffect(() => {
     const states = stateWriter(visualizationStates, id, windowTimers);
 
-    const onMessage = (event: MessageEvent) => {
-      const request = frameRequest(event, ref.current?.contentWindow ?? null);
+    const heights = coalesced<number>(
+      (height) => {
+        setLoaded(true);
+        handlers.current.onHeight?.(height);
+      },
+      (run) => {
+        const frame = window.requestAnimationFrame(run);
+
+        return () => window.cancelAnimationFrame(frame);
+      }
+    );
+
+    // Rate-limited before anything is decoded or serialised (ENG-634).
+    const inbox = frameInbox<Pick<MessageEvent<unknown>, "data">>((event) => {
+      const request = requestOf(event);
 
       if (request === null) return;
 
       switch (request.kind) {
         case "height":
-          setLoaded(true);
-          handlers.current.onHeight?.(request.height);
+          heights.offer(request.height);
           break;
         case "open-link":
           handlers.current.onOpenLink(request.url);
@@ -101,16 +116,28 @@ export const Frame = (props: FrameProps) => {
           states.save(request.json);
           break;
       }
+    });
+
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (!fromFrame(event, ref.current?.contentWindow ?? null)) return;
+      inbox.receive(laneOfType(typeOf(event)), { data: event.data });
+    };
+
+    const flush = () => {
+      inbox.flush();
+      states.flush();
     };
 
     window.addEventListener("message", onMessage);
     // A reload or quit never unmounts the frame: write its pending state on the way out.
-    window.addEventListener("pagehide", states.flush);
+    window.addEventListener("pagehide", flush);
 
     return () => {
       window.removeEventListener("message", onMessage);
-      window.removeEventListener("pagehide", states.flush);
-      states.flush();
+      window.removeEventListener("pagehide", flush);
+      heights.cancel();
+      flush();
+      inbox.dispose();
     };
   }, [id]);
 

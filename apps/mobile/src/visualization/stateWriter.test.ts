@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { SavedState } from "./stateStore.ts";
-import { STATE_MAX_BYTES, stateWriter } from "./stateWriter.ts";
+import {
+  flushState,
+  heldWriters,
+  holdWriter,
+  STATE_MAX_BYTES,
+  stateWriter,
+} from "./stateWriter.ts";
 
 const harness = () => {
   const written: Array<SavedState> = [];
@@ -51,5 +57,36 @@ describe("pv.state writes", () => {
     writer.offer({ pv: 1, value: 3 });
     writer.flush();
     expect(written).toEqual([{ pv: 1, value: 3 }]);
+  });
+
+  test("a writer is shared while held and evicted when the last frame lets go", () => {
+    const written: Array<SavedState> = [];
+
+    const store = {
+      read: () => undefined,
+      write: (_id: string, state: SavedState) => written.push(state),
+    };
+
+    const before = heldWriters();
+    const inline = holdWriter("viz_held", store);
+    const sheet = holdWriter("viz_held", store);
+
+    expect(sheet.writer).toBe(inline.writer);
+    inline.release();
+    inline.release();
+    expect(heldWriters()).toBe(before + 1);
+    sheet.writer.offer({ pv: 1, value: 7 });
+    sheet.release();
+    expect(written).toEqual([{ pv: 1, value: 7 }]);
+    expect(heldWriters()).toBe(before);
+    expect(flushState("viz_held")).toBeUndefined();
+  });
+
+  test("many Visualizations mounted and unmounted leave no writers behind", () => {
+    const store = { read: () => undefined, write: () => undefined };
+    const before = heldWriters();
+
+    for (let n = 0; n < 1000; n++) holdWriter(`viz_${n}`, store).release();
+    expect(heldWriters()).toBe(before);
   });
 });

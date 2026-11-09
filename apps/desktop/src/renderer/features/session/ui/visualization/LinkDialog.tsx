@@ -18,9 +18,10 @@ export const LinkDialog = ({
   readonly title: string;
   /** An https URL (`messages.ts` drops anything else); null while closed. */
   readonly url: string | null;
-  readonly onClose: () => void;
+  /** `opened` is true when the user chose to open it. */
+  readonly onClose: (opened: boolean) => void;
 }) => (
-  <Dialog open={url !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
+  <Dialog open={url !== null} onOpenChange={(open) => (open ? undefined : onClose(false))}>
     <DialogContent data-testid="visualization-link">
       <DialogHeader>
         <DialogTitle>Open this link?</DialogTitle>
@@ -35,14 +36,14 @@ export const LinkDialog = ({
         </div>
       )}
       <DialogFooter>
-        <Button variant="ghost" autoFocus onClick={onClose}>
+        <Button variant="ghost" autoFocus onClick={() => onClose(false)}>
           Cancel
         </Button>
         <Button
           variant="primary"
           onClick={() => {
             if (url !== null) void polaris().request("shell.openExternal", { url });
-            onClose();
+            onClose(true);
           }}
         >
           Open in browser
