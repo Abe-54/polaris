@@ -1,9 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync, symlinkSync } from "node:fs";
-import { join, sep } from "node:path";
+import { chmodSync, existsSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { delimiter, join, sep } from "node:path";
 import { FileError } from "@polaris/protocol";
 import { Effect, Fiber, Stream } from "effect";
 import { makeRepo, removeTempDir, tempDir, suiteTempDir, write } from "../git/testing.ts";
+import { executableOf } from "../platform/executable.ts";
+import { isRunning } from "../platform/processes.ts";
 import { FileSearch, FileSearchLive } from "./FileSearch.ts";
 import { handleGrep, handleSearchPaths } from "./FilesRpcs.ts";
 import { fuzzyScore, gitGrepThreads } from "./search/fallback.ts";
@@ -54,6 +56,14 @@ const withSearch = <A, E>(useFff: boolean, effect: Effect.Effect<A, E, FileSearc
 
 /** Beyond the product's worst case to arm a watch: fff's scan wait plus its watcher wait. */
 const ARM_DEADLINE_MS = 15_000;
+
+const until = async (check: () => boolean, ms: number) => {
+  const end = Date.now() + ms;
+
+  while (!check() && Date.now() < end) await Bun.sleep(20);
+
+  return check();
+};
 
 const waitFor = async (predicate: () => boolean, what: string) => {
   const deadline = Date.now() + 8000;
@@ -339,6 +349,50 @@ describe("FileSearch lifecycle", () => {
     expect(error).toBeInstanceOf(FileError);
     expect(error.code).toBe("ENOTDIR");
   });
+
+  test.skipIf(process.platform === "win32")(
+    "ENG-364: a canceled fallback grep leaves no git running",
+    async () => {
+      const root = await fixture();
+      const bin = tempDir();
+      cleanup.push(bin);
+      const pidFile = join(bin, "grep.pid");
+      // A git whose grep never ends: it records its pid, then waits.
+      write(
+        bin,
+        "git",
+        `#!/bin/sh\nif [ "$1" = grep ]; then echo $$ > "${pidFile}.tmp"; mv "${pidFile}.tmp" "${pidFile}"; exec sleep 30; fi\n` +
+          `exec "${executableOf("git")}" "$@"\n`
+      );
+      chmodSync(join(bin, "git"), 0o755);
+      const path = process.env.PATH;
+      process.env.PATH = `${bin}${delimiter}${path ?? ""}`;
+
+      try {
+        await withSearch(
+          false,
+          Effect.gen(function* () {
+            const search = yield* FileSearch;
+
+            const fiber = yield* Effect.forkChild(
+              search.grep(root, { pattern: "x", regex: false, caseSensitive: false, limit: 10 })
+            );
+
+            yield* Effect.promise(() => until(() => existsSync(pidFile), 10_000));
+            const grep = Number(readFileSync(pidFile, "utf8").trim());
+            expect(isRunning(grep)).toBe(true);
+
+            yield* Fiber.interrupt(fiber);
+
+            expect(yield* Effect.promise(() => until(() => !isRunning(grep), 3_000))).toBe(true);
+          })
+        );
+      } finally {
+        process.env.PATH = path;
+      }
+    },
+    20_000
+  );
 
   test("POLARIS_FFF=off forces the fallback", async () => {
     process.env.POLARIS_FFF = "off";
