@@ -37,13 +37,14 @@ import {
 } from "../drive.ts";
 import type { Sampler } from "../sampler.ts";
 import { SELF_SPANS_PER_BATCH, type SelfTraceTally, sendSelfTraces } from "../selfTraces.ts";
-import { summarize } from "../stats.ts";
+import { MiB, summarize } from "../stats.ts";
 import {
   cpu,
   latency,
   type Metric,
   memory,
   peakMemory,
+  rss,
   type Scenario,
   type ScenarioContext,
   throughput,
@@ -200,7 +201,7 @@ const runPhase = (
         }),
         [`${p}.cpu_avg_pct`]: cpu(report.cpuAvgPct),
         [`${p}.cpu_p95_pct`]: cpu(report.cpuPct.p95),
-        [`${p}.rss_peak_mib`]: peakMemory(report.rssBytes.max),
+        [`${p}.rss_peak_mib`]: rss(peakMemory(report.rssBytes.max)),
       } satisfies Record<string, Metric>);
 
       if (report.footprintBytes) {
@@ -250,13 +251,20 @@ const runBurst = (
         `burst: ${watch.deltas} deltas in ${elapsed.toFixed(2)} s (${(watch.deltas / elapsed).toFixed(0)}/s), p99 ${dl.p99.toFixed(1)} ms`
       );
 
-      return {
+      const metrics: Record<string, Metric> = {};
+
+      Object.assign(metrics, {
         "burst.deltas_per_s": throughput(watch.deltas / elapsed, "/s"),
         "burst.mb_per_s": throughput(watch.deltaBytes / 1e6 / elapsed, "MB/s"),
         "burst.delta_latency_p99_ms": latency(dl.p99, { info: true }),
         "burst.cpu_avg_pct": cpu(report.cpuAvgPct, { info: true }),
-        "burst.rss_peak_mib": peakMemory(report.rssBytes.max),
-      } satisfies Record<string, Metric>;
+        "burst.rss_peak_mib": rss(peakMemory(report.rssBytes.max)),
+      } satisfies Record<string, Metric>);
+
+      if (report.footprintBytes)
+        metrics["burst.footprint_peak_mib"] = peakMemory(report.footprintBytes.max);
+
+      return metrics;
     })
   );
 
@@ -298,7 +306,10 @@ export const sessions: Scenario = {
       const before = sampler.sample();
 
       const metrics: Record<string, Metric> = {};
-      metrics.rss_before_mib = memory(before.rssBytes);
+      metrics.rss_before_mib = rss(memory(before.rssBytes));
+
+      if (before.footprintBytes !== null)
+        metrics.footprint_before_mib = memory(before.footprintBytes);
       const phases = phasesFor(ctx.quick);
 
       for (const phase of phases) {
@@ -333,14 +344,24 @@ export const sessions: Scenario = {
       // Last, so the snapshot's own allocation does not skew the numbers above.
       yield* ctx.peak(daemon, "after-repeat");
 
-      metrics.rss_after_mib = peakMemory(after.rssBytes);
-      metrics.rss_growth_mib = peakMemory(after.rssBytes - before.rssBytes);
-      metrics.rss_growth_repeat_mib = memory(afterRepeat.rssBytes - after.rssBytes, {
-        tolerance: { relative: 0.5, absolute: 10 },
-      });
+      const repeatTolerance = { tolerance: { relative: 0.5, absolute: 10 } };
+      metrics.rss_after_mib = rss(peakMemory(after.rssBytes));
+      metrics.rss_growth_mib = rss(peakMemory(after.rssBytes - before.rssBytes));
+      metrics.rss_growth_repeat_mib = rss(
+        memory(afterRepeat.rssBytes - after.rssBytes, repeatTolerance)
+      );
 
-      if (after.footprintBytes !== null && before.footprintBytes !== null) {
+      if (
+        after.footprintBytes !== null &&
+        before.footprintBytes !== null &&
+        afterRepeat.footprintBytes !== null
+      ) {
+        metrics.footprint_after_mib = peakMemory(after.footprintBytes);
         metrics.footprint_growth_mib = peakMemory(after.footprintBytes - before.footprintBytes);
+        metrics.footprint_growth_repeat_mib = memory(
+          afterRepeat.footprintBytes - after.footprintBytes,
+          repeatTolerance
+        );
       }
 
       const notes = [
@@ -353,7 +374,10 @@ export const sessions: Scenario = {
         );
       }
 
-      const repeatGrowth = (afterRepeat.rssBytes - after.rssBytes) / 1024 / 1024;
+      const repeatGrowth =
+        (afterRepeat.footprintBytes !== null && after.footprintBytes !== null
+          ? afterRepeat.footprintBytes - after.footprintBytes
+          : afterRepeat.rssBytes - after.rssBytes) / MiB;
 
       if (repeatGrowth > 20) {
         notes.push(

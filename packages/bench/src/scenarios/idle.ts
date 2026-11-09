@@ -15,7 +15,7 @@ import { awaitReady, cleanup, connect, createTempDir } from "../daemon.ts";
 import { registerWorkspace, settle, startSession, waitUntil, watchSession } from "../drive.ts";
 import { smallRepo } from "../fixtures.ts";
 import { startSampler } from "../sampler.ts";
-import { cpu, type Metric, memory, type Scenario, throughput } from "../types.ts";
+import { cpu, type Metric, memory, rss, type Scenario, throughput } from "../types.ts";
 
 const WORKSPACES = 3;
 
@@ -122,7 +122,7 @@ export const idle: Scenario = {
             tolerance: { relative: 1, absolute: 0.5 },
           });
           metrics.client_cpu_max_pct = cpu(report.cpuPct.max, { info: true });
-          metrics.client_rss_mib = memory(report.rssBytes.median);
+          metrics.client_rss_mib = rss(memory(report.rssBytes.median));
 
           if (report.footprintBytes)
             metrics.client_footprint_mib = memory(report.footprintBytes.median);
@@ -168,7 +168,7 @@ export const idle: Scenario = {
       metrics.noclient_cpu_avg_pct = cpu(report.cpuAvgPct, {
         tolerance: { relative: 1, absolute: 0.5 },
       });
-      metrics.noclient_rss_mib = memory(report.rssBytes.median);
+      metrics.noclient_rss_mib = rss(memory(report.rssBytes.median));
 
       if (report.footprintBytes)
         metrics.noclient_footprint_mib = memory(report.footprintBytes.median);

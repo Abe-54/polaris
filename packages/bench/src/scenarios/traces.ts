@@ -4,7 +4,17 @@ import { Effect, Option, Stream } from "effect";
 import { awaitReady, cleanup, connect, createTempDir } from "../daemon.ts";
 import { registerWorkspace, settle, startSession, waitUntil, watchSession } from "../drive.ts";
 import { smallRepo } from "../fixtures.ts";
-import { cpu, latency, memory, peakMemory, type Scenario, throughput, time } from "../types.ts";
+import {
+  cpu,
+  latency,
+  memory,
+  type Metric,
+  peakMemory,
+  rss,
+  type Scenario,
+  throughput,
+  time,
+} from "../types.ts";
 
 const batch = (index: number) => {
   const traceId = (index + 1).toString(16).padStart(32, "0");
@@ -118,15 +128,28 @@ export const traces: Scenario = {
       yield* ctx.peak(daemon, "traces-quiet");
       latencies.sort((a, b) => a - b);
 
+      const metrics: Record<string, Metric> = {};
+
+      Object.assign(metrics, {
+        spans_per_s: throughput((count * 1000) / (elapsed / 1000), "spans/s"),
+        ingest_ms: time(elapsed),
+        cpu_avg_pct: cpu(report.cpuAvgPct),
+        rss_peak_over_base_mib: rss(peakMemory(report.rssBytes.max - base.rssBytes)),
+        rss_after_quiet_mib: rss(memory(settled.rssBytes)),
+        rpc_during_p99_ms: latency(latencies[Math.ceil(latencies.length * 0.99) - 1]!),
+      } satisfies Record<string, Metric>);
+
+      if (report.footprintBytes && base.footprintBytes !== null) {
+        metrics.footprint_peak_over_base_mib = peakMemory(
+          report.footprintBytes.max - base.footprintBytes
+        );
+      }
+
+      if (settled.footprintBytes !== null)
+        metrics.footprint_after_quiet_mib = memory(settled.footprintBytes);
+
       return {
-        metrics: {
-          spans_per_s: throughput((count * 1000) / (elapsed / 1000), "spans/s"),
-          ingest_ms: time(elapsed),
-          cpu_avg_pct: cpu(report.cpuAvgPct),
-          rss_peak_over_base_mib: peakMemory(report.rssBytes.max - base.rssBytes),
-          rss_after_quiet_mib: memory(settled.rssBytes),
-          rpc_during_p99_ms: latency(latencies[Math.ceil(latencies.length * 0.99) - 1]!),
-        },
+        metrics,
         notes: [
           `Forwarding: ${process.env.POLARIS_BENCH_TRACE_FORWARDING === "down" ? "enabled, collector unavailable at loopback port 1" : "unconfigured"}.`,
           `${count * 1000} spans in ${count} JSON batches; real receiver, SQLite worker, concurrent files.stat; 32s quiet worker retirement.`,

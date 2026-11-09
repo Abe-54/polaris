@@ -6,7 +6,7 @@ import { attachTerminal } from "@polaris/client";
 import { Effect, Predicate, Stream } from "effect";
 import { awaitReady, cleanup, connect, createTempDir } from "../daemon.ts";
 import { settle } from "../drive.ts";
-import { cpu, type Metric, peakMemory, type Scenario, throughput, time } from "../types.ts";
+import { cpu, type Metric, peakMemory, rss, type Scenario, throughput, time } from "../types.ts";
 
 export const terminal: Scenario = {
   name: "terminal",
@@ -80,7 +80,7 @@ export const terminal: Scenario = {
         mb_per_s: throughput(received / 1e6 / seconds, "MB/s"),
         stream_ms: time(seconds * 1000, { info: true }),
         cpu_avg_pct: cpu(report.cpuAvgPct),
-        rss_peak_over_base_mib: peakMemory(report.rssBytes.max - base.rssBytes),
+        rss_peak_over_base_mib: rss(peakMemory(report.rssBytes.max - base.rssBytes)),
       } satisfies Record<string, Metric>);
 
       if (report.footprintBytes && base.footprintBytes !== null) {
@@ -89,7 +89,10 @@ export const terminal: Scenario = {
         );
       }
 
-      metrics.rss_after_close_mib = peakMemory(after.rssBytes);
+      metrics.rss_after_close_mib = rss(peakMemory(after.rssBytes));
+
+      if (after.footprintBytes !== null)
+        metrics.footprint_after_close_mib = peakMemory(after.footprintBytes);
 
       return { metrics, notes };
     }),

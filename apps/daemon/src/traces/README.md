@@ -349,10 +349,13 @@ the same receiver/store and baseline metrics. The idle scenario leaves the queue
 
 `self/` holds Polaris's own Spans. `serve` installs `selfTracer` as the root Tracer. While
 `DeveloperModeState` (from `developerMode/service.ts`) is not effective, its `span` is the native
-tracer's, so there is no exportable Span, buffer, timer or store worker wake-up. `selfTraceExport`
-follows the state's `changes`. While it is effective, ended sampled Spans are buffered (at most
-1,024; extra are counted and dropped) and flushed every 250 ms as `polaris-daemon`. On a switch,
-Spans already buffered go to the old sink.
+tracer's, so there is no exportable Span, buffer or store worker wake-up. `selfTraceExport`
+follows the state's `changes`. While it is effective, ended sampled Spans wait in memory and go
+to the store as `polaris-daemon` once 64 are waiting, when a read includes the Self-Trace scope,
+on a switch (to the old sink) or at shutdown. There is no timer, so a lone Span never wakes the
+store's worker. Connection upkeep (`QUIET_SPANS`: hello, `authenticateConnection`,
+`presence.report`, `developerMode.lease`) and the Spans under it are never exported, so an idle
+Host's Clients don't keep that worker alive (ENG-721).
 
 Self-Spans become OTLP JSON and go through `TraceStore.ingest`: the same decoder, redaction and
 bounds as the receiver. They are stored under the reserved checkout key `polaris:self`, which is
