@@ -8,6 +8,7 @@ import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { FileError } from "@polaris/protocol";
 import { Context, Effect, Layer, Queue, type Scope, Stream } from "effect";
+import { interruptibleGit, uninterrupted } from "../git/interrupt.ts";
 import { resolveHostPath, toFsFailure } from "./fs.ts";
 import { openFallbackBackend } from "./search/fallback.ts";
 import { openFffBackend } from "./search/fff.ts";
@@ -130,33 +131,46 @@ export const makeFileSearch = (options: FileSearchOptions) =>
       })
     );
 
+    /**
+     * The index is shared, so it opens out of reach of this caller's interrupt; only the
+     * search runs under it, and an interrupt kills its git (ENG-364).
+     */
     const withBackend = <A extends PathHit | GrepHit>(
       input: string,
       f: (backend: SearchBackend) => Promise<ReadonlyArray<A>>
     ) =>
-      Effect.tryPromise({
-        try: async () => {
-          const requestedRoot = resolveHostPath(input);
-          const root = await canonicalRoot(requestedRoot);
-          const index = open(root);
-          index.busy++;
+      Effect.gen(function* () {
+        const requestedRoot = resolveHostPath(input);
+        const failed = (cause: unknown) => fileError(requestedRoot, cause);
 
-          try {
-            const hits = await f(await index.backend);
+        const root = yield* Effect.tryPromise({
+          try: () => canonicalRoot(requestedRoot),
+          catch: failed,
+        });
 
-            // Indexes share real roots; each response keeps the caller's Workspace spelling.
-            return root === requestedRoot
-              ? hits
-              : hits.map((hit) => ({
-                  ...hit,
-                  path: join(requestedRoot, relative(root, hit.path)),
-                }));
-          } finally {
-            index.busy--;
-            index.lastUsed = Date.now();
-          }
-        },
-        catch: (cause) => fileError(resolveHostPath(input), cause),
+        const index = uninterrupted(() => open(root));
+
+        const hits = yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            index.busy++;
+          }),
+          () =>
+            Effect.tryPromise({ try: () => index.backend, catch: failed }).pipe(
+              Effect.flatMap((backend) =>
+                interruptibleGit({ try: () => f(backend), catch: failed })
+              )
+            ),
+          () =>
+            Effect.sync(() => {
+              index.busy--;
+              index.lastUsed = Date.now();
+            })
+        );
+
+        // Indexes share real roots; each response keeps the caller's Workspace spelling.
+        return root === requestedRoot
+          ? hits
+          : hits.map((hit) => ({ ...hit, path: join(requestedRoot, relative(root, hit.path)) }));
       });
 
     return FileSearch.of({
