@@ -50,10 +50,17 @@ export const readInlineTexts = Effect.fn("harness.readInlineTexts")(function* (
   return read;
 });
 
-/** An inlined attachment as the prompt carries it: its name, path and text. */
+const attribute = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+/** An inlined attachment as the prompt carries it: its name, path and text, which can't close it. */
 export const inlineTextBlock = (attachment: Attachment, text: string): string =>
   [
-    `<attached-file name="${attachment.name}" type="${baseType(attachment.mimeType)}" path="${attachment.hostPath}">`,
-    text.endsWith("\n") ? text.slice(0, -1) : text,
+    `<attached-file name="${attribute(attachment.name)}" type="${attribute(baseType(attachment.mimeType))}" path="${attribute(attachment.hostPath)}">`,
+    (text.endsWith("\n") ? text.slice(0, -1) : text).replaceAll(/<\/(attached-file)/giu, "<\\/$1"),
     "</attached-file>",
   ].join("\n");
