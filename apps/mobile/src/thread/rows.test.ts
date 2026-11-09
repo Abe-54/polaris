@@ -327,6 +327,17 @@ describe("a finished turn's receipt (MX-E)", () => {
     expect(rows.at(-1)).toMatchObject({ kind: "receipt", text: "12s" });
   });
 
+  test("a completed turn with no prompt and nothing back shows no receipt to long-press", () => {
+    expect(finished([], { prompt: "" })).toEqual([]);
+  });
+
+  test("a stopped turn with nothing back still says it stopped", () => {
+    expect(finished([], { prompt: "", status: "interrupted" }).at(-1)).toMatchObject({
+      kind: "receipt",
+      text: "Stopped · 1m 41s",
+    });
+  });
+
   test("a working turn has none, and its replies offer no menu yet", () => {
     const rows = threadRows(
       foldOf([working([reply("a", "Still going"), command("b", "bun test", 0)])])?.turns ?? [],
@@ -427,6 +438,12 @@ describe("the thread header", () => {
       state: "Idle",
       rest: "",
     });
+  });
+
+  test("while the host is away, the last known state says when it was known", () => {
+    expect(
+      headerLine({ state: "working", turnCount: 24, currentUserTurn: null }, "polaris", "11:42")
+    ).toEqual({ state: "Working", rest: "as of 11:42 · turn 24 · polaris" });
   });
 
   test("a turn's menu heading names it and when it started, in the phone's time", () => {

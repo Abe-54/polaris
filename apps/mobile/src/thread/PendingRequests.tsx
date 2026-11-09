@@ -1,6 +1,6 @@
 /**
  * The composer's floating notice strip (Paper MX-E): the oldest open request with "+n" for the
- * rest, else Working. A permission shows Approve and Deny beside a command that fits one line,
+ * rest, else Working, with Queue while a steer is typed. A permission shows Approve and Deny beside a command that fits one line,
  * and opens to every line (and Always here) otherwise; questions show their options and Send;
  * a Secret Request its masked field (`SecretCard.tsx`).
  */
@@ -69,6 +69,10 @@ export interface NoticeStripProps extends PendingRequestsProps {
   readonly subagents?: ReadonlyArray<Subagent>;
   /** When the Turn in flight started; null when none is working. */
   readonly workingSince: string | null;
+  /** While the Host is away, when the Working shown was last known ("11:42"); the dither stills. */
+  readonly asOf?: string | null;
+  /** Holds the typed steer for after this Turn; null when there's nothing to queue. */
+  readonly onQueue?: (() => void) | null;
 }
 
 interface CardProps {
@@ -315,27 +319,65 @@ const Questions = ({ request, live, onRespond }: CardProps) => {
   );
 };
 
-const Working = ({ harness, since }: { readonly harness: HarnessKind; readonly since: string }) => {
+/** Working's quiet action: the typed steer waits for the Turn to end (ENG-557). */
+const QueueAction = ({ onQueue }: { readonly onQueue: () => void }) => {
   const { colours } = useTheme();
-  const time = useElapsed(since);
+
+  return (
+    <Pressable
+      onPress={() => {
+        haptics.send();
+        onQueue();
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Queue for after this turn"
+      hitSlop={8}
+      style={styles.queue}
+    >
+      <Text
+        style={[styles.answerLabel, { color: colours.textSubtle }]}
+        maxFontSizeMultiplier={CONTROL_TEXT_SCALE}
+      >
+        Queue
+      </Text>
+    </Pressable>
+  );
+};
+
+const Working = ({
+  harness,
+  since,
+  asOf,
+  onQueue,
+}: {
+  readonly harness: HarnessKind;
+  readonly since: string;
+  readonly asOf: string | null;
+  readonly onQueue: (() => void) | null;
+}) => {
+  const { colours } = useTheme();
+  const time = useElapsed(asOf === null ? since : null);
   const hue = harnessHue(colours, harness);
 
   return (
-    <View style={styles.row} accessibilityLiveRegion="polite">
-      <Dither color={hue} size={14} moving />
-      <Text
-        style={[styles.headline, styles.working, { color: hue }]}
-        numberOfLines={2}
-        maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
-      >
-        {harnessName(harness)} is working
-      </Text>
-      <Text
-        style={[styles.time, { color: colours.textFaint }]}
-        maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
-      >
-        · {time}
-      </Text>
+    <View style={styles.row}>
+      <View style={[styles.row, styles.working]} accessibilityLiveRegion="polite">
+        <Dither color={hue} size={14} moving={asOf === null} />
+        <Text
+          style={[styles.headline, styles.working, { color: hue }]}
+          numberOfLines={2}
+          maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
+        >
+          {harnessName(harness)} is working
+        </Text>
+        <Text
+          style={[styles.time, { color: colours.textFaint }]}
+          maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
+        >
+          · {asOf === null ? time : `as of ${asOf}`}
+        </Text>
+      </View>
+      {onQueue === null ? null : <QueueAction onQueue={onQueue} />}
     </View>
   );
 };
@@ -381,7 +423,12 @@ const Notice = ({
 
   if (notice.kind === "working")
     return props.workingSince === null ? null : (
-      <Working harness={props.harness} since={props.workingSince} />
+      <Working
+        harness={props.harness}
+        since={props.workingSince}
+        asOf={props.asOf ?? null}
+        onQueue={notice.queue ? (props.onQueue ?? null) : null}
+      />
     );
   const { request } = notice;
 
@@ -446,6 +493,7 @@ export const PendingRequests = (props: NoticeStripProps) => {
   const strip: Strip | null = stripOf({
     requests: props.requests,
     working: props.workingSince !== null,
+    queue: props.onQueue != null,
     harness,
     subagents: props.subagents ?? [],
     settled: props.settled ?? null,
@@ -508,6 +556,7 @@ const styles = StyleSheet.create({
   detail: { ...mobileType.index },
   whole: { maxHeight: 160 },
   working: { flexShrink: 1 },
+  queue: { marginLeft: "auto", minHeight: 30, paddingHorizontal: 7, justifyContent: "center" },
   time: { ...mobileType.footnote, fontSize: 12, lineHeight: 16, flexShrink: 0 },
   buttons: { flexDirection: "row", alignItems: "center", gap: 4 },
   answer: {

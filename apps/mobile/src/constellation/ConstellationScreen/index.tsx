@@ -5,15 +5,15 @@
  */
 import { SessionId } from "@polaris/protocol";
 import { mobileType } from "@polaris/ui/tokens";
-import { useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LayoutAnimation, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "../../app/navigation.tsx";
 import { shortHostName } from "../../home/model/format.ts";
 import type { HostConnection, HostStatus } from "../../runtime/hostConnection.ts";
 import { useHost, useHostStatus } from "../../runtime/hosts.tsx";
 import { useAfter } from "../../runtime/useAfter.ts";
-import { themedStyles } from "../../theme/index.ts";
+import { themedStyles, useReducedMotion } from "../../theme/index.ts";
 import { ThreadScreen } from "../../thread/index.ts";
 import { elapsed } from "../copy.ts";
 import { type ConstellationSource, constellationView } from "../model.ts";
@@ -22,6 +22,7 @@ import { useConstellation } from "../useConstellation.ts";
 import { useVerdicts } from "../useVerdicts.ts";
 import { ChartPanel } from "./ChartPanel.tsx";
 import { ClaimNotice } from "./ClaimNotice.tsx";
+import { headerCollapsed } from "./collapse.ts";
 import { taskDetail } from "./detail.ts";
 import { type OpenSheet, renderClaimSheet, renderStatsSheet } from "./sheets.tsx";
 import { starChartOf } from "./stars.ts";
@@ -69,6 +70,28 @@ const runTime = (source: ConstellationSource, now: number): string => {
   return elapsed(Date.parse(c.createdAt), until);
 };
 
+/** Folds the header as the thread scrolls back (`collapse.ts`), easing the change unless reduced. */
+const useCollapse = () => {
+  const reduced = useReducedMotion();
+  const [collapsed, setCollapsed] = useState(false);
+  const held = useRef(false);
+
+  const onScrollOffset = useCallback(
+    (offset: number) => {
+      const next = headerCollapsed(held.current, offset);
+
+      if (next === held.current) return;
+      held.current = next;
+
+      if (!reduced) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setCollapsed(next);
+    },
+    [reduced]
+  );
+
+  return { collapsed, onScrollOffset };
+};
+
 export interface ChartedThreadProps {
   readonly connection: HostConnection;
   readonly constellationId: string;
@@ -97,6 +120,7 @@ export const ChartedThread = ({
   const statsRevision = useThrottled(c.revision, now);
   const stats = useConstellationStats(connection, constellationId, statsRevision);
   const read = stats.kind === "ready" ? stats.stats : null;
+  const { collapsed, onScrollOffset } = useCollapse();
 
   const close = () => setSheet(null);
   const openTask = (taskId: string) => setSheet({ kind: "task", taskId });
@@ -132,9 +156,11 @@ export const ChartedThread = ({
         hostId={connection.hostId}
         sessionId={SessionId.make(view.leadSessionId)}
         onBack={onBack ?? (() => undefined)}
+        onScrollOffset={onScrollOffset}
         belowHeader={
           <ChartPanel
             chart={chart}
+            collapsed={collapsed}
             stats={chipReading(runTime(source, now), read, reportedPrice)}
             selectedTaskId={selected}
             onPressTask={openTask}
