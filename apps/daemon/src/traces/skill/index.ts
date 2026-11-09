@@ -14,7 +14,7 @@ import {
   TracingSkillRpcs,
 } from "@polaris/protocol";
 import { Effect } from "effect";
-import { BUNDLED_SKILL, SKILL_NAME } from "./bundled.ts";
+import { SKILL_NAME } from "./name.ts";
 
 export interface SkillHome {
   readonly home: string;
@@ -48,6 +48,9 @@ export const skillFolders = (harness: HarnessKind | null, at: SkillHome): Readon
 /** Replaces `folder` with the bundled copy; a skills CLI symlink there is replaced, not followed. */
 const writeSkill = async (folder: string) => {
   const staging = `${folder}.${randomBytes(4).toString("hex")}.tmp`;
+
+  // The skill's text loads on first install, keeping it out of the Daemon's start-up graph.
+  const { BUNDLED_SKILL } = await import("./bundled.ts");
 
   try {
     for (const [path, contents] of BUNDLED_SKILL) {

@@ -6,8 +6,6 @@ import next from "../../../../../skills/polaris-tracing/references/next.md" with
 import node from "../../../../../skills/polaris-tracing/references/node.md" with { type: "text" };
 import tracingHelper from "../../../../../skills/polaris-tracing/references/tracing-helper.md" with { type: "text" };
 
-export const SKILL_NAME = "polaris-tracing";
-
 /** Each file relative to the skill's folder. */
 export const BUNDLED_SKILL: ReadonlyArray<readonly [path: string, contents: string]> = [
   ["SKILL.md", skill],
