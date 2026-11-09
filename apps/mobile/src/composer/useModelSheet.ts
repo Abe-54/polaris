@@ -30,7 +30,7 @@ import {
   setModelCommand,
   setPermissionCommand,
 } from "./modelSheet.ts";
-import { modelsFor, rememberModels } from "./modelNames.ts";
+import { modelsFor, rememberModels, rememberSteersAttachments } from "./modelNames.ts";
 
 export interface ModelSheetInput {
   readonly open: boolean;
@@ -98,6 +98,7 @@ const useModels = (hostId: string, connection: HostConnection | null, harness: H
       .run((client) => client["harness.models"]({ harness, refresh: false }))
       .then((reply) => {
         rememberModels(hostId, harness, reply.models);
+        rememberSteersAttachments(hostId, harness, reply.steersAttachments);
 
         if (live) setListed({ models: reply.models, switchesModel: reply.switchesModel });
       })

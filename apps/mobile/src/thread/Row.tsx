@@ -372,7 +372,14 @@ const RowView = ({
         </Text>
       );
     case "steered":
-      return <Bubble text={row.text} note="Steered this turn" hostId={hostId} />;
+      return (
+        <Bubble
+          text={row.text}
+          note="Steered this turn"
+          hostId={hostId}
+          attachments={row.attachments}
+        />
+      );
     case "outgoing":
       return row.failed ? (
         <Pressable
@@ -380,7 +387,14 @@ const RowView = ({
           accessibilityRole="button"
           accessibilityHint="Puts the message back in the composer"
         >
-          <Bubble text={row.text} note={row.note} hostId={hostId} faded failed />
+          <Bubble
+            text={row.text}
+            note={row.note}
+            hostId={hostId}
+            attachments={row.attachments}
+            faded
+            failed
+          />
         </Pressable>
       ) : (
         <Bubble

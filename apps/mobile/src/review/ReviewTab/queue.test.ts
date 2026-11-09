@@ -9,6 +9,7 @@ import {
   type QueueItem,
   queueAcceptState,
   queueItem,
+  queueLanes,
   queueSummary,
   riskNote,
   type TurnRisk,
@@ -106,6 +107,27 @@ describe("the review queue", () => {
 
     expect(keys(queue.clean)).toEqual(["resolved", "clean"]);
     expect(keys(queue.pages)).toEqual(["loading", "unreviewed", "failed", "reading"]);
+  });
+
+  test("the lanes under the hero: the turns behind it, then the clean ones; an empty lane has none", () => {
+    const lanes = (queue: ReturnType<typeof buildQueue>) =>
+      queueLanes(queue).map((lane) => `${lane.label}: ${keys(lane.data).join(", ")}`);
+
+    expect(
+      lanes(
+        buildQueue([
+          item("critical", 100, reviewed(finding("c", "critical"))),
+          item("medium", 200, reviewed(finding("m", "medium"))),
+          item("clean", 300, reviewed()),
+        ])
+      )
+    ).toEqual(["waiting · 1: medium", "clean · 1: clean"]);
+    expect(lanes(buildQueue([item("critical", 100, reviewed(finding("c", "critical")))]))).toEqual(
+      []
+    );
+    expect(
+      lanes(buildQueue(Array.from({ length: 1001 }, (_, n) => item(`c${n}`, n, reviewed()))))[0]
+    ).toStartWith("clean · 1,001: ");
   });
 
   test("the header counts open Criticals and every turn", () => {

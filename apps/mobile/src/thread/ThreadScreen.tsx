@@ -36,6 +36,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "../app/navigation.tsx";
 import { Celestial, sessionCelestial } from "../celestial";
 import { useAttachments } from "../composer/useAttachments.ts";
+import { steersAttachmentsFor } from "../composer/modelNames.ts";
 import { sheetContextOf } from "../composer/useModelSheet.ts";
 import { useVoiceInput } from "../composer/useVoiceInput.ts";
 import type { HostConnection } from "../runtime/hostConnection.ts";
@@ -369,7 +370,15 @@ export const ThreadScreen = ({
   const [onScreen, setOnScreen] = useState<ReadonlyArray<number>>([]);
   const liveFrames = useMemo(() => liveVisualizations(rows, onScreen), [rows, onScreen]);
 
-  const editSteer = useCallback((id: string) => controller?.editSteer(id), [controller]);
+  const restoreRef = useRef(attachments.restore);
+  restoreRef.current = attachments.restore;
+
+  // A failed steer's files come back as chips with its text.
+  const editSteer = useCallback(
+    (id: string) => restoreRef.current(controller?.editSteer(id) ?? []),
+    [controller]
+  );
+
   const sendAgain = useCallback((id: string) => controller?.sendAgain(id), [controller]);
 
   const rowsRef = useRef<ReadonlyArray<ThreadRow>>(rows);
@@ -607,7 +616,8 @@ export const ThreadScreen = ({
             onSend={() => {
               voice?.release();
               const sent = attachments.submission();
-              void controller?.submit(sent.attachments).then((taken) => {
+              const steers = steersAttachmentsFor(hostId, session.harness);
+              void controller?.submit(sent.attachments, steers).then((taken) => {
                 if (taken) sent.done();
               });
             }}
