@@ -20,14 +20,7 @@ import {
 import { constellationRef, mergedInto } from "../git/constellationBundles.ts";
 import { commitSigning, signingOptions } from "../git/signing.ts";
 import { gitStatus } from "../git/status.ts";
-import {
-  bothChangeDependencies,
-  regenerable,
-  regenerate,
-  restoreInstall,
-  staleNotices,
-  type Unregenerated,
-} from "./regenerate.ts";
+import { bothChangeDependencies, regenerable, regenerate, staleNotices } from "./regenerate.ts";
 
 const refused = (code: string, message: string, fix: string) =>
   new ConstellationTransferError({ code, message, retryable: false, fix });
@@ -135,28 +128,21 @@ interface Merged {
   readonly regenerated?: boolean;
 }
 
-const untried: Unregenerated = { why: "", installed: false };
-
 /**
  * A merge stopped only on generated shared files, regenerated and committed (ENG-276).
- * Null once committed; else why not, with an empty `why` when it wasn't tried.
+ * Null once committed; else why not, or "" when it wasn't tried.
  */
-const regenerated = async (
-  leadPath: string,
-  commit: ReadonlyArray<string>
-): Promise<Unregenerated | null> => {
-  if ((await resolveCommit(leadPath, "MERGE_HEAD")) === null) return untried;
+const regenerated = async (leadPath: string, commit: ReadonlyArray<string>) => {
+  if ((await resolveCommit(leadPath, "MERGE_HEAD")) === null) return "";
   const conflicts = await conflicted(leadPath);
 
-  if (!regenerable(conflicts)) return untried;
-  const failed = await regenerate(leadPath, conflicts);
+  if (!regenerable(conflicts)) return "";
+  const why = await regenerate(leadPath, conflicts);
 
-  if (failed !== null) return failed;
+  if (why !== null) return why;
   const committed = await runGitRaw(leadPath, commit);
 
-  return committed.code === 0
-    ? null
-    : { why: `git commit failed: ${committed.stderr.trim()}`, installed: true };
+  return committed.code === 0 ? null : `git commit failed: ${committed.stderr.trim()}`;
 };
 
 /**
@@ -179,20 +165,18 @@ const mergeOrRestore = async (
     if (killed && (await resolveCommit(leadPath, "HEAD")) !== before)
       return { result: { ...result, code: 0 }, conflicts: null };
 
-    const unresolved = killed ? untried : await regenerated(leadPath, commit);
+    const unresolved = killed ? "" : await regenerated(leadPath, commit);
 
     if (unresolved === null)
       return { result: { ...result, code: 0 }, conflicts: null, regenerated: true };
 
     const conflicts = await abandon(leadPath);
 
-    if (unresolved.installed) await restoreInstall(leadPath);
-
     // Killed before it committed: the index and work tree may hold half of it.
     if (killed && (await resolveCommit(leadPath, "MERGE_HEAD")) === null)
       await gitText(leadPath, [...HOOKS_OFF, "reset", "-q", "--merge", before]);
 
-    return { result, conflicts, unresolved: unresolved.why };
+    return { result, conflicts, unresolved };
   });
 };
 

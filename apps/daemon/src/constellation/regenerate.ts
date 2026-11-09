@@ -2,8 +2,6 @@
  * Accept's merge regenerates the root `bun.lock` instead of refusing on its conflict, and
  * keeps the Lead's notices, which it never regenerates: it runs no repository code (ENG-276).
  */
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { ConstellationFinding } from "@polaris/protocol";
 import { gitText, HOOKS_OFF, runGitRaw } from "../git/git.ts";
 import { executableOf, findExecutable } from "../platform/executable.ts";
@@ -26,8 +24,11 @@ export const staleNotices = ConstellationFinding.make({
 export const regenerable = (conflicts: ReadonlyArray<string>) =>
   conflicts.length > 0 && conflicts.every((path) => path === LOCKFILE || path === NOTICES);
 
-const isDependencyFile = (path: string) =>
-  path === LOCKFILE || path === "package.json" || path.endsWith("/package.json");
+/** A manifest by name in any case, since macOS's file system ignores case. */
+const isManifest = (path: string) =>
+  (path.split("/").at(-1) ?? "").normalize("NFC").toLowerCase() === "package.json";
+
+const isDependencyFile = (path: string) => path === LOCKFILE || isManifest(path);
 
 /** Files bun install reads on its own, in any directory and any case (macOS ignores it). */
 const isBunConfig = (path: string) => {
@@ -57,7 +58,7 @@ const unsafeToInstall = async (root: string) => {
     if (mode === "120000" || isBunConfig(path) || segments.includes("node_modules"))
       refused.push(path);
 
-    if (path === "package.json" || path.endsWith("/package.json")) manifests.push(path);
+    if (isManifest(path)) manifests.push(path);
   }
 
   if (refused.length > 0) return `the merged branch changes ${refused.join(", ")}`;
@@ -85,7 +86,7 @@ export const bothChangeDependencies = async (root: string, ours: string, theirs:
 };
 
 const install = async (cwd: string, bun: string) => {
-  const proc = Bun.spawn([executableOf(bun), "install", "--ignore-scripts"], {
+  const proc = Bun.spawn([executableOf(bun), "install", "--lockfile-only", "--ignore-scripts"], {
     cwd,
     stdin: "ignore",
     stdout: "ignore",
@@ -96,54 +97,34 @@ const install = async (cwd: string, bun: string) => {
 
   const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
 
-  return code === 0 ? null : `bun install --ignore-scripts failed (${code}): ${stderr.trim()}`;
+  return code === 0 ? null : `bun install --lockfile-only failed (${code}): ${stderr.trim()}`;
 };
-
-/** Puts node_modules back to the Lead's lockfile after a failed regeneration. */
-export const restoreInstall = async (root: string) => {
-  const bun = findExecutable("bun");
-
-  if (bun !== null) await install(root, bun);
-};
-
-/** Why a regeneration stopped, and whether it had already changed node_modules. */
-export interface Unregenerated {
-  readonly why: string;
-  readonly installed: boolean;
-}
 
 /**
- * In a merge stopped on `conflicts`, takes the Lead's side of each, regenerates the lockfile
- * with `bun install --ignore-scripts`, and stages them. Null once resolved and staged.
+ * In a merge stopped on `conflicts`, takes the Lead's side of each, rewrites the lockfile with
+ * `bun install --lockfile-only --ignore-scripts` (no node_modules, no code), and stages them.
+ * Returns why it couldn't, or null once resolved and staged.
  */
 export const regenerate = async (
   root: string,
   conflicts: ReadonlyArray<string>
-): Promise<Unregenerated | null> => {
-  const before = (why: string) => ({ why, installed: false });
+): Promise<string | null> => {
   const bun = findExecutable("bun");
 
-  if (conflicts.includes(LOCKFILE) && bun === null)
-    return before("bun is not on the Daemon's PATH");
+  if (conflicts.includes(LOCKFILE) && bun === null) return "bun is not on the Daemon's PATH";
 
   const unsafe = await unsafeToInstall(root);
 
-  if (unsafe !== null) return before(unsafe);
+  if (unsafe !== null) return unsafe;
   await gitText(root, [...HOOKS_OFF, "checkout", "--ours", "--", ...conflicts]);
 
   if (conflicts.includes(LOCKFILE) && bun !== null) {
     const failed = await install(root, bun);
 
-    if (failed !== null) return { why: failed, installed: true };
+    if (failed !== null) return failed;
   }
 
-  const staged = existsSync(join(root, LOCKFILE))
-    ? [...new Set([...conflicts, LOCKFILE])]
-    : conflicts;
+  const added = await runGitRaw(root, [...HOOKS_OFF, "add", "--", ...conflicts]);
 
-  const added = await runGitRaw(root, [...HOOKS_OFF, "add", "--", ...staged]);
-
-  return added.code === 0
-    ? null
-    : { why: `git add failed: ${added.stderr.trim()}`, installed: conflicts.includes(LOCKFILE) };
+  return added.code === 0 ? null : `git add failed: ${added.stderr.trim()}`;
 };

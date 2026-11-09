@@ -78,7 +78,7 @@ const conflicting = { "bun.lock": "worker\n", "THIRD_PARTY_NOTICES.md": "worker\
 const leadSide = { "bun.lock": "lead\n", "THIRD_PARTY_NOTICES.md": "lead\n", "lead.txt": "x\n" };
 
 test(
-  "Accept's merge regenerates a conflicting lockfile, keeps the Lead's notices, runs no repo script and flags them stale",
+  "Accept's merge regenerates a conflicting lockfile, keeps the Lead's notices, runs no repo script and writes no node_modules and flags them stale",
   async () => {
     const s = await setup({ ...conflicting, "work.txt": "worker\n" }, leadSide);
 
@@ -87,6 +87,7 @@ test(
     expect(readFileSync(join(s.root, "bun.lock"), "utf8")).toContain('"fixture-pkg"');
     expect(readFileSync(join(s.root, "THIRD_PARTY_NOTICES.md"), "utf8")).toBe("lead\n");
     expect(existsSync(join(s.root, "ran-licenses"))).toBe(false);
+    expect(existsSync(join(s.root, "node_modules"))).toBe(false);
     expect(await gitText(s.root, ["status", "--porcelain", "--untracked-files=no"])).toBe("");
   },
   WORK_MS
