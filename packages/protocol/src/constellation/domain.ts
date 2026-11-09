@@ -314,6 +314,11 @@ export class Constellation extends Schema.Class<Constellation>("Constellation")(
   workspaceId: WorkspaceId,
   hostId: HostId,
   leadSessionId: SessionId,
+  /**
+   * The branch Accept merges into, recorded at start from the Lead's checkout (ADR 0099).
+   * Absent on graphs started before it was recorded.
+   */
+  leadBranch: Schema.optional(Schema.NonEmptyString),
   name: Schema.NonEmptyString,
   state: ConstellationState,
   revision: Revision,

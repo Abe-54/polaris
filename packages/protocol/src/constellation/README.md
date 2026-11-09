@@ -41,10 +41,14 @@ Desktop App authorization is checked by the Daemon, not asserted in a payload.
   both record metadata while keeping Review. A review of a Claim in review stays current
   from the Claim's `claimRevision` up to the Attempt's revision: progress, approval and
   hand-up don't make it stale, an amended Claim does. Accept supplies the claimed head
-  (`mergedHead`) and receipts; before deciding, the owner merges that head into the Lead's
-  current branch (safe git config, no repository hooks) unless it already contains it, and
-  refuses with the exact fix on a conflict (`E-MERGE-CONFLICT`, merge aborted), a dirty,
-  detached or mid-merge Lead checkout (`E-LEAD-DIRTY`, `E-LEAD-DETACHED`, `E-LEAD-MERGING`),
+  (`mergedHead`) and receipts; before deciding, the owner merges that head into the
+  Constellation's `leadBranch`, recorded at start from the Lead's checkout, in the checkout
+  holding it or a Daemon-owned lead worktree (ADR 0099; graphs without one use the Lead's
+  current branch), with safe git config and no repository hooks, unless it already contains it,
+  and refuses with the exact fix on a conflict (`E-MERGE-CONFLICT`, merge aborted), a dirty,
+  detached or mid-merge lead checkout (`E-LEAD-DIRTY`, `E-LEAD-DETACHED`, `E-LEAD-MERGING`),
+  a deleted lead branch (`E-LEAD-BRANCH`), an unknown directory at the lead worktree's path
+  (`E-LEAD-WORKTREE`),
   a merge commit `commit.gpgSign` asks to sign that can't be signed with the Host's own
   signing settings or whose signing failed (`E-MERGE-SIGN`, ADR 0068), or an unfetched head (`E-GIT`). The decider checks the head against the Claim and resolves
   every verified reference. SendBack

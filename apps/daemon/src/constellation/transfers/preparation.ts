@@ -1,7 +1,8 @@
 import { Predicate, Effect } from "effect";
 import type { ConstellationPreparation, ConstellationRuntimeService } from "../runtime.ts";
 import { ConstellationOwner } from "../runtime.ts";
-import { ConstellationWorktrees, transferError } from "../worktrees.ts";
+import { ConstellationWorktrees, gitOperation, transferError } from "../worktrees.ts";
+import { currentBranch } from "../leadCheckout.ts";
 import { acceptFindings } from "../attempts.ts";
 import { finding, refusal } from "../decision.ts";
 import { RelayFacts } from "./outbox.ts";
@@ -41,6 +42,13 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
     > {
       const prepared = yield* runtime.prepare(binding, command, model, commandId);
       const record = model.constellations.get(command.constellationId);
+
+      if (
+        Predicate.isTagged(command, "Plan") &&
+        command.start !== undefined &&
+        record === undefined
+      )
+        return { ...prepared, leadBranch: yield* startBranch(model, command.start.leadSessionId) };
 
       if (record === undefined || !("attemptId" in command)) return prepared;
       const attempt = record.graph.attempts.find((a) => a.id === command.attemptId);
@@ -105,6 +113,22 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
       };
     }) satisfies ConstellationRuntimeService["prepare"],
   } satisfies ConstellationRuntimeService;
+});
+
+/** The Lead checkout's branch, recorded as the graph's lead branch; none when it can't be read. */
+const startBranch = Effect.fnUntraced(function* (
+  model: import("../../store/model.ts").ReadModel,
+  leadSessionId: import("@polaris/protocol").SessionId
+) {
+  const cwd = model.sessions.get(leadSessionId)?.session.cwd;
+
+  if (cwd === undefined) return undefined;
+
+  const branch = yield* gitOperation(() => currentBranch(cwd)).pipe(
+    Effect.catchTag("ConstellationTransferError", () => Effect.succeed(null))
+  );
+
+  return branch ?? undefined;
 });
 
 const acceptedChecks = Effect.fnUntraced(function* (
