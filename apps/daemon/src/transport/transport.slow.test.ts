@@ -313,7 +313,11 @@ describe("transport", () => {
     const reason = await run(
       Effect.gen(function* () {
         const log = yield* makeLog;
-        yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
+        yield* startServer({
+          ...serverOptions(home),
+          handlers: testHandlers(log),
+          capabilities: ["files.read", "attachments.stage"],
+        });
         const conn = yield* localHost(home);
         const session = yield* conn.awaitSession;
 
@@ -350,7 +354,11 @@ describe("transport", () => {
           )
         );
 
-        yield* startServer({ ...serverOptions(home), handlers });
+        yield* startServer({
+          ...serverOptions(home),
+          handlers,
+          capabilities: ["session.terminal-command"],
+        });
 
         const conn = yield* localHost(home, {
           identity: { ...identity, capabilities: [...identity.capabilities, "session.live-items"] },
@@ -376,7 +384,11 @@ describe("transport", () => {
     const result = await run(
       Effect.gen(function* () {
         const log = yield* makeLog;
-        yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
+        yield* startServer({
+          ...serverOptions(home),
+          handlers: testHandlers(log),
+          capabilities: ["files.read", "attachments.stage"],
+        });
         const conn = yield* localHost(home);
         const session = yield* conn.awaitSession;
 
@@ -440,7 +452,12 @@ describe("transport", () => {
     const seen = await run(
       Effect.gen(function* () {
         const log = yield* makeLog;
-        const server = yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
+
+        const server = yield* startServer({
+          ...serverOptions(home),
+          handlers: testHandlers(log),
+          capabilities: ["files.read", "attachments.stage"],
+        });
 
         const conns = yield* Effect.forEach(Array.from({ length: 6 }), (_, i) =>
           localHost(home, { key: `c${i}` })
@@ -481,9 +498,11 @@ describe("transport", () => {
         const startOn = () =>
           Effect.gen(function* () {
             const scope = yield* Scope.make();
-            yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) }).pipe(
-              Scope.provide(scope)
-            );
+            yield* startServer({
+              ...serverOptions(home),
+              handlers: testHandlers(log),
+              capabilities: ["files.read", "attachments.stage"],
+            }).pipe(Scope.provide(scope));
 
             return scope;
           });
@@ -556,7 +575,11 @@ describe("transport", () => {
         const log = yield* makeLog;
 
         for (let i = 0; i < 3; i++) yield* log.append;
-        yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
+        yield* startServer({
+          ...serverOptions(home),
+          handlers: testHandlers(log),
+          capabilities: ["files.read", "attachments.stage"],
+        });
         const conn = yield* localHost(home);
         yield* conn.subscribeHost.pipe(Stream.take(2), Stream.runDrain);
         yield* log.append;
@@ -574,7 +597,11 @@ describe("transport", () => {
     const error = await run(
       Effect.gen(function* () {
         const log = yield* makeLog;
-        yield* startServer({ ...serverOptions(home), handlers: testHandlers(log) });
+        yield* startServer({
+          ...serverOptions(home),
+          handlers: testHandlers(log),
+          capabilities: ["files.read", "attachments.stage"],
+        });
         const conn = yield* localHost(home);
 
         return yield* conn
@@ -672,7 +699,11 @@ describe("transport", () => {
 
     const diff = await run(
       Effect.gen(function* () {
-        yield* startServer({ ...serverOptions(home), handlers: GitRpcsLive });
+        yield* startServer({
+          ...serverOptions(home),
+          handlers: GitRpcsLive,
+          capabilities: ["git.diff"],
+        });
         const conn = yield* localHost(home);
         const session = yield* conn.awaitSession;
 
@@ -702,6 +733,7 @@ describe("transport", () => {
           handlers: AttachmentRpcsLive.pipe(
             Layer.provide(AttachmentStoreLive({ root: join(home, "staging") }))
           ),
+          capabilities: ["attachments.stage"],
         });
         const conn = yield* localHost(home);
         yield* conn.awaitSession;

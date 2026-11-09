@@ -49,6 +49,7 @@ const connect = <ROut, E>(handlers: Layer.Layer<ROut, E>) =>
       lockPath: join(home, "daemon.lock"),
       root: home,
       handlers,
+      capabilities: ["session.terminal-command"],
     });
 
     const connection = yield* makeHostConnection({
