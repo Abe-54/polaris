@@ -139,6 +139,7 @@ export const ByteStreamRpcsLive = BrowserStackRpcs.toLayer(
     return BrowserStackRpcs.of({
       "hostAddress.open": (payload, { client }) =>
         openHostAddress(streams, quota, held, client.id, payload),
+      "hostAddress.names": () => Effect.map(streams.names, (names) => ({ names })),
       "byteStream.credit": ({ streamId, bytes }, { client }) =>
         Effect.suspend(() => {
           const endpoint = held.get(client.id)?.get(streamId);

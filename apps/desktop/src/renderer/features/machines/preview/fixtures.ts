@@ -1,4 +1,5 @@
 /** Hosts for the Settings → Hosts preview: every daemon update state, no real host involved. */
+import { clientCopy } from "../../../../shared/clientCopy.ts";
 import { Capability, HostId, type Platform } from "@polaris/protocol";
 import type {
   ConnectionStatusView,
@@ -13,7 +14,8 @@ const MINUTE = 60_000;
 const connected = (
   platform: typeof Platform.Type,
   version: string,
-  latencyMs: number | null
+  latencyMs: number | null,
+  hostname = "host"
 ): ConnectionStatusView => ({
   state: "connected",
   failure: null,
@@ -22,7 +24,7 @@ const connected = (
   nextAttemptAt: null,
   host: {
     hostId: HostId.make(`h-${platform}-${version}`),
-    hostname: "host",
+    hostname,
     platform,
     daemonVersion: version,
     homeDir: "/home/lucas",
@@ -317,11 +319,12 @@ const live = (): ReadonlyArray<MachineView> => [
 
 /** A Windows PC (Paper W1–W2): WSL Hosts connected, with wsl.exe gone, and with the distro gone. */
 const wsl = (): ReadonlyArray<MachineView> => [
+  // The Client's own Host under its default name; its hello's hostname names it (ENG-337).
   machine(
     "local",
-    "Lucas's PC",
+    clientCopy().localHost,
     null,
-    connected("linux-x64", "0.5.0", null),
+    connected("windows-x64", "0.5.0", null, "LUCAS-DESKTOP"),
     daemon({ installedVersion: "0.5.0", updateAvailable: false })
   ),
   machine(

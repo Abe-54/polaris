@@ -1,5 +1,5 @@
 /** Host-address streams on a Host's connection in the Client runtime, failures as proxy statuses. */
-import { HostTarget, openHostAddressStream } from "@polaris/client";
+import { HostTarget, hostAddressNames, openHostAddressStream } from "@polaris/client";
 import type { HostAddressFailure } from "@polaris/protocol";
 import { Effect, Match, Stream, SubscriptionRef } from "effect";
 import { HostDirectory } from "../hosts.ts";
@@ -27,6 +27,16 @@ export const openThroughHost =
         RpcClientError: () => Effect.fail<ProxyStatus>(503),
       })
     );
+
+/** The names the Host's hosts file maps to loopback; none when it can't be asked (ENG-621). */
+export const namesThroughHost = (hostKey: string) =>
+  HostDirectory.use((directory) => directory.connection(hostKey)).pipe(
+    Effect.flatMap((connection) => connection.session),
+    Effect.flatMap(hostAddressNames),
+    // A Host that isn't connected yet must not hold the partition's first load.
+    Effect.timeout("2 seconds"),
+    Effect.orElseSucceed((): ReadonlyArray<string> => [])
+  );
 
 /** The Host's loopback is this machine's: the local Host, or one on a local socket. */
 export const isLocalHost = (hostKey: string) =>

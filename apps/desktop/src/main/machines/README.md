@@ -37,6 +37,12 @@ stateDiagram-v2
   installing --> ready: applied (installed / upgraded)
   installing --> blocked: failed (a task conflict keeps its work)
   blocked --> installing: takeOver (task conflict only; reruns it with --replace-task)
+  idle --> blocked: startConflict (holds the start)
+  ready --> blocked: startConflict
+  approval --> blocked: startConflict
+  dismissed --> blocked: startConflict
+  blocked --> blocked: startConflict
+  installing --> idle: started (a taken-over start ran)
 ```
 
 - **Only the user installs.** A check is `user` (added the Host, Install, Approve, Try again) or `background`. A background check that finds no Daemon asks for approval, even when this build's SHA-256 was approved before: the planner returns `NeedsApproval(background)`, and the machine turns even an `Install` plan on a background check into a question (tested from every state).
@@ -48,7 +54,7 @@ stateDiagram-v2
 - **Background checks** run once per occasion (`backgroundCheckKey`): entering Needs Attention for `polaris-not-installed` or `protocol-mismatch`, or a new connection to a Daemon older than the bundled build. Not every 2-minute retry. Build metadata refreshes on connection occasions and explicit checks, including when an earlier manifest was missing.
 - "Not now" parks the Host (`dismissed`); background checks leave it parked.
 - An ssh failure during the check (`SshError`) is problem `ssh`: the row shows the Connection State's own card (host key, auth) instead.
-- **A Windows sign-in task another Polaris home holds** (`polaris install|upgrade` exit 3, `TaskConflictError`; ADR 0060) is the typed `TaskConflict` from both paths: this PC's `polaris.exe` (`windowsLocal.ts`) and a Windows SSH Host (`@polaris/client/install`, `runPolaris`). It becomes problem `task-conflict` with the task and the other home, and `blocked` keeps the work. The row says which home holds the task and offers "Take over sign-in task", confirmed inline; only the confirmation (`machines.takeOverTask`, event `takeOver`) reruns the same install or upgrade with `--replace-task`. Nothing takes the task over on its own, and any check clears the held work.
+- **A Windows sign-in task another Polaris home holds** (`polaris install|upgrade` exit 3, `TaskConflictError`; ADR 0060) is the typed `TaskConflict` from both paths: this PC's `polaris.exe` (`windowsLocal.ts`) and a Windows SSH Host (`@polaris/client/install`, `runPolaris`). It becomes problem `task-conflict` with the task and the other home, and `blocked` keeps the work. The row says which home holds the task and offers "Take over sign-in task", confirmed inline; only the confirmation (`machines.takeOverTask`, event `takeOver`) reruns the same install or upgrade with `--replace-task`. Start daemon (`startDaemon`, this PC's `polaris.exe install --json` or a Windows SSH Host's `startCommand`) meets the same conflict: event `startConflict` blocks with the start held, so the same card shows instead of a toast, and the take-over reruns the start with `--replace-task` (event `started` when it ran; ENG-327). Nothing takes the task over on its own, and any check clears the held work.
 - Linux linger needing an admin (`linger: "needs-admin"` in the report) becomes the outcome's `adminCommand`, shown as a card with the exact `sudo loginctl enable-linger <user>`.
 
 ## Daemon builds

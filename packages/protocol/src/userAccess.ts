@@ -159,6 +159,7 @@ export const USER_RPCS = {
   "host.stats.watch": "any",
   "byteStream.credit": "any",
   "hostAddress.open": "any",
+  "hostAddress.names": "any",
   "browser.host": "any",
   "browser.claim": "any",
   "browser.release": "any",

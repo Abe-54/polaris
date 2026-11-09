@@ -134,6 +134,7 @@ export const RPC_GRANTS = {
   "host.stats.watch": "client",
   "byteStream.credit": "client",
   "hostAddress.open": "client",
+  "hostAddress.names": "client",
   "browser.host": "client",
   "browser.claim": "client",
   "browser.release": "client",
