@@ -2,13 +2,20 @@ import { Schema } from "effect";
 import { describe, expect, test } from "bun:test";
 import { ApprovalRequest, DomainEvent, type HostStreamItem } from "@polaris/protocol";
 import type { PushMessage } from "@polaris/protocol/relay";
-import { emptyPlan, nextSettle, type PlanState, planItem, planSettled, SETTLE_MS } from "./plan.ts";
+import {
+  emptyPlan,
+  markDigestTurn,
+  nextSettle,
+  type PlanState,
+  planItem,
+  planSettled,
+  SETTLE_MS,
+} from "./plan.ts";
 import {
   approval,
   event,
   approvalRequested,
   backgroundTasks,
-  leadNotified,
   notified,
   sessionCreated,
   snapshot,
@@ -20,8 +27,16 @@ import {
 
 const host = { hostId: "host-1", hostName: "studio" };
 
+/** The notifier learned from the store model that this Turn is a digest's. */
+interface DigestMark {
+  readonly digestTurn: string;
+}
+
 /** Feeds items at `now`, collecting what they push; then lets settles run until `until`. */
-const run = (items: ReadonlyArray<readonly [number, HostStreamItem]>, until: number) => {
+const run = (
+  items: ReadonlyArray<readonly [number, HostStreamItem | DigestMark]>,
+  until: number
+) => {
   let state: PlanState = emptyPlan;
   const sent: Array<PushMessage & { readonly sentAt: number }> = [];
 
@@ -35,6 +50,12 @@ const run = (items: ReadonlyArray<readonly [number, HostStreamItem]>, until: num
 
   for (const [now, item] of items) {
     settleUpTo(now);
+
+    if ("digestTurn" in item) {
+      state = markDigestTurn(state, item.digestTurn);
+      continue;
+    }
+
     const planned = planItem(state, item, { ...host, now });
     state = planned.state;
     sent.push(...planned.send.map(({ message }) => ({ ...message, sentAt: now })));
@@ -162,8 +183,8 @@ describe("push plan", () => {
     const sent = run(
       [
         ...start,
-        [10, leadNotified("digest")],
         [10, turnStarted("digest")],
+        [100, { digestTurn: "digest" }],
         [100, turnEnded("digest", "Dispatched B")],
         [20_000, turnStarted("t2")],
         [21_000, turnEnded("t2", "Merged A")],

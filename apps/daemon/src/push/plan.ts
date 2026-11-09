@@ -41,7 +41,7 @@ interface Tracked {
 export interface PlanState {
   readonly synchronized: boolean;
   readonly sessions: ReadonlyMap<string, Tracked>;
-  /** Lead Turns Polaris started for a digest (LeadNotified): their ends aren't the user's news. */
+  /** Lead Turns Polaris started for a digest (`markDigestTurn`): their ends aren't the user's news. */
   readonly digestTurns: ReadonlySet<string>;
 }
 
@@ -270,12 +270,19 @@ const applyEvent = (state: PlanState, event: DomainEvent, context: PlanContext):
               : [notified(sessionId, session, notification, context)],
         };
       },
-      LeadNotified: ({ turnId, steered }) =>
-        same(steered ? state : { ...state, digestTurns: new Set(state.digestTurns).add(turnId) }),
     }),
     Match.orElse(() => same(state))
   );
 };
+
+/**
+ * Turn `turnId` is a Lead Turn Polaris started for a digest. The Host stream never carries
+ * `LeadNotified`, so the notifier reads it from the store model (ENG-587).
+ */
+export const markDigestTurn = (state: PlanState, turnId: string): PlanState => ({
+  ...state,
+  digestTurns: new Set(state.digestTurns).add(turnId),
+});
 
 /** Applies one Host stream item. Only items after `Synchronized` push anything. */
 export const planItem = (state: PlanState, item: HostStreamItem, context: PlanContext): Planned =>
