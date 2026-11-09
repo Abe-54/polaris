@@ -4,6 +4,7 @@ import {
   type Attempt,
   type EventEnvelope,
   type TaskDefinition,
+  type TaskId,
 } from "@polaris/protocol";
 import { Match } from "effect";
 import type { SessionRecord } from "../store/model.ts";
@@ -13,6 +14,7 @@ import { childTasks, isParent } from "./parents.ts";
 import { activeAttempt, latestAttempt, projectTask } from "./projections.ts";
 import { type HostSlots, phaseOf, phaseText, slotLine, workerLine } from "./slots.ts";
 import { heldWait } from "./waiting.ts";
+import { eventTask, statusScope, type StatusScope, type StatusView } from "./statusView.ts";
 
 export const proposalDetails = (task: TaskDefinition): ReadonlyArray<string> => [
   `  Kind: ${task.kind} · parent: ${task.parent ?? "none"} · group: ${task.group ?? "none"}`,
@@ -150,11 +152,19 @@ const taskLines = (
 
 const treeLines = (
   record: ConstellationRecord,
+  scope: StatusScope | null,
   sessions?: ReadonlyMap<Attempt["sessionId"], SessionRecord>,
   host?: HostSlots
 ): ReadonlyArray<string> => {
   const lines: Array<string> = [];
-  const roots = record.graph.tasks.filter((task) => task.parent === null);
+  const shown = (task: Task) => scope === null || scope.shown(task.id);
+
+  const roots = record.graph.tasks.filter(
+    (task) =>
+      shown(task) &&
+      (task.parent === null || !record.graph.tasks.some((t) => t.id === task.parent && shown(t)))
+  );
+
   const groups = [...new Set(roots.map((task) => task.group))];
 
   const append = (task: Task, depth: number) => {
@@ -162,7 +172,8 @@ const treeLines = (
       ...taskLines(record, task, sessions, host).map((line) => `${"  ".repeat(depth)}${line}`)
     );
 
-    for (const child of childTasks(record.graph.tasks, task.id)) append(child, depth + 1);
+    for (const child of childTasks(record.graph.tasks, task.id).filter(shown))
+      append(child, depth + 1);
   };
 
   for (const group of groups) {
@@ -175,32 +186,41 @@ const treeLines = (
   return lines;
 };
 
+const scopedAttempt = (record: ConstellationRecord, scope: StatusScope, attemptId: string) => {
+  const task = record.graph.attempts.find((a) => a.id === attemptId)?.taskId;
+
+  return task !== undefined && scope.inScope(task);
+};
+
 /** A stable, readable outline, computed only when requested. */
 export const statusOutline = (
   record: ConstellationRecord,
   sessions?: ReadonlyMap<Attempt["sessionId"], SessionRecord>,
-  host?: HostSlots
+  host?: HostSlots,
+  view: StatusView = {}
 ): string => {
   const { graph } = record;
+  const scope = statusScope(record, view);
+  const inScope = (attemptId: string) => scope === null || scopedAttempt(record, scope, attemptId);
 
   const lines = [
     `${graph.name} · ${graph.state} · revision ${graph.revision}`,
     `Lead: ${graph.leadSessionId}`,
   ];
 
-  lines.push(...treeLines(record, sessions, host));
+  lines.push(...treeLines(record, scope, sessions, host));
 
   if (graph.tasks.length === 0) lines.push("No tasks yet.");
 
   // A worker writes the question: keep it on its own line of the Lead's status.
   const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
-  for (const { attemptId, question } of graph.openQuestions)
+  for (const { attemptId, question } of graph.openQuestions.filter((q) => inScope(q.attemptId)))
     lines.push(
       `Question ${oneLine(question.id)} · ${attemptId} · to ${question.to}${question.blocking ? " · blocking" : ""}: ${oneLine(question.text)}`
     );
 
-  for (const [id, proposal] of record.proposals) {
+  for (const [id, proposal] of [...record.proposals].filter(([, p]) => inScope(p.by))) {
     lines.push(`Proposal ${id} · ${proposal.task.id} · by ${proposal.by}: ${proposal.task.title}`);
     lines.push(...proposalDetails(proposal.task));
   }
@@ -295,28 +315,36 @@ export const statusSince = (
   events: ReadonlyArray<EventEnvelope>,
   since: number,
   sessions?: ReadonlyMap<Attempt["sessionId"], SessionRecord>,
-  host?: HostSlots
+  host?: HostSlots,
+  view: StatusView = {}
 ): string => {
   const { graph } = record;
+  const scope = statusScope(record, view);
+
+  const about = (id: TaskId | null) =>
+    scope === null || view.task === undefined || (id !== null && scope.inScope(id));
 
   const changes = events.flatMap((envelope) => {
     const event = graphEvent(envelope.event);
 
-    if (event === null || event.revision <= since) return [];
+    if (event === null || event.revision <= since || !about(eventTask(record, event))) return [];
     const text = eventLine(record, event);
 
     return text === null ? [] : [`${event.revision} · ${envelope.occurredAt} · ${text}`];
   });
 
   const ready = graph.tasks
-    .filter((task) => !isParent(graph, task.id) && projectTask(record, task).state === "ready")
+    .filter(
+      (task) =>
+        about(task.id) && !isParent(graph, task.id) && projectTask(record, task).state === "ready"
+    )
     .map((task) => task.id);
 
   // The same phase the Desktop App shows: stalled, idle, starting, waiting for a slot.
   const notWorking = graph.attempts.flatMap((a) => {
     const session = sessions?.get(a.sessionId);
 
-    if (a.state !== "working" || session === undefined) return [];
+    if (a.state !== "working" || session === undefined || !about(a.taskId)) return [];
     const phase = phaseOf(record, a, session, host);
 
     return phase.kind === "working" ? [] : [`${a.taskId} (${phaseText(phase, host?.now ?? null)})`];
@@ -327,7 +355,7 @@ export const statusSince = (
     ...(changes.length === 0 ? ["Nothing changed."] : changes),
     `In review: ${
       graph.attempts
-        .filter((a) => a.state === "review")
+        .filter((a) => a.state === "review" && about(a.taskId))
         .map((a) => a.taskId)
         .join(", ") || "none"
     }`,

@@ -71,7 +71,7 @@ describe("polarisToolView", () => {
       `{"start":{"name":"Constellations v1","workspaceId":"w"},"operations":[
         {"_tag":"Add","task":{"id":"B6","title":"Lease bench","kind":"task","deps":["B2"]}},
         {"_tag":"Add","task":{"id":"G2","title":"Spec and tools merged","kind":"gate"}},
-        {"_tag":"Edit","taskId":"A2","revision":1,"task":{"id":"A2","title":"Decider","kind":"task"}},
+        {"_tag":"Edit","taskId":"A2","revision":1,"task":{"deps":null,"brief":null}},
         {"_tag":"Cancel","taskId":"A3","revision":1}]}`
     );
 

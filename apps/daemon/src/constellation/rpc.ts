@@ -95,7 +95,12 @@ export const ConstellationRpcHandlers = ConstellationRpcs.toLayer(
           Effect.provideService(RemoteWorkers, workers)
         ),
       "constellation.status": ({ constellationId, json, since }, { client }) =>
-        graphs.status(caller(client.annotations), constellationId, json === true, since),
+        graphs.status(
+          caller(client.annotations),
+          constellationId,
+          json === true,
+          since === undefined ? {} : { since }
+        ),
       "constellation.stats": ({ constellationId }, { client }) =>
         stats.get(caller(client.annotations), constellationId),
       "constellation.subscribe": ({ constellationId, afterSequence }, { client }) =>

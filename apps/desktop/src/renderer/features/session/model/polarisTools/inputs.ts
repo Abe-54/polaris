@@ -23,9 +23,9 @@ export const TaskDef = Schema.Struct({
   id: opt(Str),
   title: opt(Str),
   kind: opt(Str),
-  deps: List(Str),
-  area: List(Str),
-  brief: opt(Str),
+  deps: opt(Schema.NullOr(Schema.Array(Str))),
+  area: opt(Schema.NullOr(Schema.Array(Str))),
+  brief: opt(Schema.NullOr(Str)),
 });
 
 const Operation = Schema.TaggedUnion({

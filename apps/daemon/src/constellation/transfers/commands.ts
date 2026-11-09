@@ -58,12 +58,12 @@ export const withRemoteWorkerCommands = Effect.fnUntraced(function* (
               Effect.catchTag("ConstellationTransferError", (error) => Effect.fail(mapError(error)))
             );
     }),
-    status: Effect.fnUntraced(function* (binding, id, json) {
+    status: Effect.fnUntraced(function* (binding, id, json, view) {
       const assignment = yield* mirror(binding, id);
 
       return assignment === null
-        ? yield* local.status(binding, id, json)
-        : graphResult(recordOf(assignment), null, json);
+        ? yield* local.status(binding, id, json, view)
+        : graphResult(recordOf(assignment), null, json, undefined, undefined, undefined, view);
     }),
     resolve: Effect.fnUntraced(function* (binding, id, kind, name) {
       const assignment = yield* mirror(binding, id);
