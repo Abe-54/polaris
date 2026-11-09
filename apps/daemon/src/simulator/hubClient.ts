@@ -16,7 +16,15 @@ const LIST_TIMEOUT_MS = 90_000;
 
 const ADMIT_TIMEOUT_MS = 5_000;
 
-const BARRIER_TIMEOUT_MS = 2_000;
+export interface BarrierTiming {
+  readonly admitMs: number;
+  /** A cold socket's first config waits for the capture session: ~2 s on an idle Mac. */
+  readonly configMs: number;
+  /** The spike saw barriers answered within 3 ms. */
+  readonly answerMs: number;
+}
+
+const BARRIER_TIMING: BarrierTiming = { admitMs: 5_000, configMs: 20_000, answerMs: 2_000 };
 
 export class HubRequestError extends Error {}
 
@@ -155,7 +163,7 @@ const ConfigFrame = Schema.fromJsonString(
 
 const decodeConfig = Schema.decodeUnknownOption(ConfigFrame);
 
-type Verdict = "live" | "wedged" | "unknown";
+export type Verdict = "live" | "wedged" | "unknown";
 
 const verdictOf = (bytes: Uint8Array, inputUnavailable: boolean): Verdict | null => {
   if (bytes[0] !== 0x91) return null;
@@ -167,10 +175,14 @@ const verdictOf = (bytes: Uint8Array, inputUnavailable: boolean): Verdict | null
 };
 
 /**
- * One input socket to `udid`: admitted (`0x83`), a no-op scroll, then a barrier (`0x11`) that
- * must come back (`0x91 ok`). A socket never admitted has no capture session: not a wedge.
+ * One input socket to `udid`: admitted (`0x83`), configured (`0x82`), then a no-op scroll and a
+ * barrier (`0x11`) that must come back (`0x91 ok`). Never admitted or configured: not a wedge.
  */
-export const inputBarrier = (endpoint: HubEndpoint, udid: string): Promise<Verdict> =>
+export const inputBarrier = (
+  endpoint: HubEndpoint,
+  udid: string,
+  timing: BarrierTiming = BARRIER_TIMING
+): Promise<Verdict> =>
   new Promise((resolve) => {
     const socket = new WebSocket(
       `ws://127.0.0.1:${endpoint.port}/vendor/serve-sim/helper/ws?device=${encodeURIComponent(udid)}`,
@@ -179,7 +191,8 @@ export const inputBarrier = (endpoint: HubEndpoint, udid: string): Promise<Verdi
 
     socket.binaryType = "arraybuffer";
     let inputUnavailable = false;
-    let timer = setTimeout(() => finish("unknown"), ADMIT_TIMEOUT_MS);
+    let configured = false;
+    let timer = setTimeout(() => finish("unknown"), timing.admitMs);
 
     const finish = (verdict: Verdict) => {
       clearTimeout(timer);
@@ -193,14 +206,18 @@ export const inputBarrier = (endpoint: HubEndpoint, udid: string): Promise<Verdi
       if (!(event.data instanceof ArrayBuffer)) return;
       const bytes = new Uint8Array(event.data);
 
-      if (bytes[0] === 0x82)
+      if (bytes[0] === 0x83) {
+        clearTimeout(timer);
+        timer = setTimeout(() => finish("unknown"), timing.configMs);
+      }
+
+      if (bytes[0] === 0x82 && !configured) {
+        configured = true;
         inputUnavailable =
           Option.getOrNull(decodeConfig(new TextDecoder().decode(bytes.subarray(1))))
             ?.inputUnavailable === true;
-
-      if (bytes[0] === 0x83) {
         clearTimeout(timer);
-        timer = setTimeout(() => finish("wedged"), BARRIER_TIMEOUT_MS);
+        timer = setTimeout(() => finish("wedged"), timing.answerMs);
         socket.send(frame(0x0b, { dx: 0, dy: 0 }));
         socket.send(frame(0x11, { requestId: 1 }));
       }
