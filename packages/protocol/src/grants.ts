@@ -8,9 +8,9 @@
 import type { RpcGroup } from "effect/rpc";
 import { Command } from "./commands.ts";
 import { type Grant, type GrantKind, NotGranted, type Pairing } from "./extensions.ts";
-import type { DaemonRpcs } from "./rpc.ts";
+import type { DaemonRpcDefinitions } from "./rpc.ts";
 
-export type DaemonRpcTag = RpcGroup.Rpcs<typeof DaemonRpcs>["_tag"];
+export type DaemonRpcTag = RpcGroup.Rpcs<typeof DaemonRpcDefinitions>["_tag"];
 
 /**
  * `open`: any connection, even before it is scoped. `client`: token-less Clients

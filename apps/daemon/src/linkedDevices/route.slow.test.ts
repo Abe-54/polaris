@@ -198,14 +198,16 @@ test("a linked device reaches the Daemon with Client power and is recorded as th
 
         // The route is off until turned on, and linking needs it on.
         expect((yield* desktop["relayRoute.status"]()).state).toBe("off");
-        expect((yield* Effect.flip(desktop["devices.link"]())).reason).toBe("route-off");
+        expect(yield* Effect.flip(desktop["devices.link"]())).toMatchObject({
+          reason: "route-off",
+        });
 
         // RX1-10: no ws:// to a relay off this machine.
         const insecure = yield* Effect.flip(
           desktop["relayRoute.enable"]({ url: "ws://relay.example/v1" })
         );
 
-        expect(insecure.reason).toBe("invalid-url");
+        expect(insecure).toMatchObject({ reason: "invalid-url" });
 
         yield* desktop["relayRoute.enable"]({ url: relay.url });
         const status = yield* waitConnected(desktop);

@@ -8,6 +8,7 @@ import { PixelFailedIcon, showToast } from "@polaris/ui";
 import { createElement } from "react";
 import type { IpcError } from "../../../shared/api.ts";
 import { Commands, newCommandId } from "../../commands.ts";
+import { hostTextOf } from "../../store/hostKinds.ts";
 import { polaris } from "../bridge.ts";
 import { actionTraces, selfTraces } from "../selfTraces/index.ts";
 import { BACKGROUND_FAILED_TITLE } from "./model/backgroundFailures.ts";
@@ -36,8 +37,17 @@ export const dispatch = async (hostKey: string, command: Command): Promise<Sent>
   return result.ok ? { ok: true } : { ok: false, error: result.error };
 };
 
+/** The user gate's refusal (ADR 0100): who holds user access, and how to move it here. */
+const userAccessText = (error: IpcError, hostKey: string | undefined): string => {
+  const host = hostTextOf(hostKey);
+  const what = error.message.startsWith("dispatch:RespondToApproval") ? "approve" : "do this";
+
+  return `This desktop app can't ${what} on ${host} yet: another one holds user access. To move it here, delete ~/.polaris/user-access.json on ${host} and reconnect.`;
+};
+
 /** The Daemon's reason, first letter up: "Interrupt the Turn in flight before archiving". */
-export const refusalText = (error: IpcError): string => {
+export const refusalText = (error: IpcError, hostKey?: string): string => {
+  if (error.code === "UserAccessRequired") return userAccessText(error, hostKey);
   const text = error.message.replace(/^CommandRejected:\s*/, "").trim();
 
   return text === "" ? error.code : text.charAt(0).toUpperCase() + text.slice(1);
@@ -52,14 +62,14 @@ export const showFailure = (title: string, message: string) =>
     message,
   });
 
-export const showRefusal = (title: string, error: IpcError) =>
-  showFailure(title, refusalText(error));
+export const showRefusal = (title: string, error: IpcError, hostKey?: string) =>
+  showFailure(title, refusalText(error, hostKey));
 
 /** Dispatch, and toast the refusal under `title` ("Couldn't archive"). */
 export const send = async (hostKey: string, command: Command, title: string) => {
   const sent = await dispatch(hostKey, command);
 
-  if (!sent.ok) showRefusal(title, sent.error);
+  if (!sent.ok) showRefusal(title, sent.error, hostKey);
 
   return sent.ok;
 };

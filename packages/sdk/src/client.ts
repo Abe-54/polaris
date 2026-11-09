@@ -214,6 +214,8 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
       return link
         .call((client) => client.dispatch({ commandId, command }))
         .pipe(
+          // A Pairing's token keeps an Extension out of the user gate (ADR 0100): never refused.
+          Effect.catchTag("UserAccessRequired", (refused) => Effect.die(refused)),
           Effect.retry({
             times: 1,
             while: (error) => Predicate.isTagged(error, "HostUnreachable"),
