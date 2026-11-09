@@ -5,7 +5,7 @@
  * waiting for the whole pass.
  */
 import { afterEach, expect, test } from "bun:test";
-import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -74,14 +74,14 @@ const times = new BigInt64Array(4);
 const threadCpuMs = () => {
   if ("GetThreadTimes" in clock.symbols) {
     const k32 = clock.symbols;
-    const at = (i: number) => ptr(times, i * 8);
+    const at = (i: number) => times.subarray(i, i + 1);
     k32.GetThreadTimes(k32.GetCurrentThread(), at(0), at(1), at(2), at(3));
 
     // Kernel plus user time, as FILETIMEs: 100 ns ticks.
     return Number(times[2]! + times[3]!) / 1e4;
   }
 
-  clock.symbols.clock_gettime(CLOCK_THREAD_CPUTIME_ID, ptr(times));
+  clock.symbols.clock_gettime(CLOCK_THREAD_CPUTIME_ID, times);
   const [seconds = 0n, nanoseconds = 0n] = times;
 
   return Number(seconds) * 1000 + Number(nanoseconds) / 1e6;

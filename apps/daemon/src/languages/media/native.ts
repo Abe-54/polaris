@@ -1,4 +1,4 @@
-import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
 import { closeSync, constants, fstatSync, openSync } from "node:fs";
 import { sep } from "node:path";
 import { LanguageError } from "@polaris/protocol";
@@ -44,7 +44,7 @@ function openAt(directory: number, name: string, isDirectory: boolean) {
     closeOnExec |
     (isDirectory ? constants.O_DIRECTORY : 0);
 
-  const fd = library.symbols.openat(directory, ptr(encoded), flags);
+  const fd = library.symbols.openat(directory, encoded, flags);
 
   if (fd < 0) throw failure();
 
