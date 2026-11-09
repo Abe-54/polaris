@@ -40,8 +40,13 @@ export const LANGUAGE_NAVIGATION: readonly LanguageNavigationCommand[] = [
     title: "Go to definition",
     action: "definition",
     key: "F12",
-    // gD too: the protocol has no textDocument/declaration, so declaration falls back to definition.
-    vim: ["gd", "gD"],
+    vim: ["gd"],
+  },
+  {
+    id: "editor.language.declaration",
+    title: "Go to declaration",
+    action: "declaration",
+    vim: ["gD"],
   },
   {
     id: "editor.language.typeDefinition",
