@@ -1,9 +1,11 @@
 /** What a Polaris tool row opens to: the call's well, a refusal's fix, the raw call. */
 import { JsonText } from "../json.tsx";
 import { CheckIcon, cn, CopyButton, harnessHue, PixelFailedIcon } from "@polaris/ui";
+import { useOpenSession } from "./target.ts";
 import type {
   CheckMark,
   FieldRow,
+  HistoryRow,
   PolarisToolView,
   Refusal,
   Segment,
@@ -144,6 +146,37 @@ const Turns = ({ well }: { readonly well: Extract<Well, { kind: "turns" }> }) =>
     </div>
   ));
 
+/** A session the row names: a link to it when the row sits in a session, else its title. */
+const SessionName = ({ session }: { readonly session: NonNullable<HistoryRow["session"]> }) => {
+  const open = useOpenSession();
+
+  if (open === null) return <span className="text-text-default truncate">{session.title}</span>;
+
+  return (
+    <button
+      type="button"
+      title={session.id}
+      onClick={() => open(session.id)}
+      className="text-text-strong decoration-text-faint hover:decoration-text-subtle min-w-0 cursor-pointer truncate underline underline-offset-2"
+    >
+      {session.title}
+    </button>
+  );
+};
+
+const History = ({ well }: { readonly well: Extract<Well, { kind: "history" }> }) =>
+  well.rows.map((row, i) => (
+    <div key={i} className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-caption text-text-subtle flex min-w-0 items-baseline gap-1.5">
+        {row.session === null ? null : <SessionName session={row.session} />}
+        <span className="shrink-0">{row.heading}</span>
+      </span>
+      {row.text === null ? null : (
+        <span className="text-caption text-text-default wrap-anywhere">{row.text}</span>
+      )}
+    </div>
+  ));
+
 export const WellBody = ({ well, from }: { readonly well: Well; readonly from: string | null }) => {
   switch (well.kind) {
     case "fields":
@@ -160,6 +193,8 @@ export const WellBody = ({ well, from }: { readonly well: Well; readonly from: s
       return <Banner well={well} from={from} />;
     case "turns":
       return <Turns well={well} />;
+    case "history":
+      return <History well={well} />;
   }
 };
 

@@ -13,7 +13,7 @@ import { type PolarisToolView, withBanner } from "../../model/polarisTools/index
 // The glyph alone: the Constellation feature's index imports the session feature.
 import { ConstellationMark } from "../../../constellation/ui/glyphs.tsx";
 import { Segments, RawBody, RefusalBody, WellBody } from "./well.tsx";
-import { useSessionTarget } from "./target.ts";
+import { useOpenSession, useSessionTarget } from "./target.ts";
 
 export { SessionTargetContext } from "./target.ts";
 
@@ -63,7 +63,9 @@ const Foot = ({
   readonly onRaw: () => void;
 }) => {
   const { openTask } = useSessionChrome();
+  const openSession = useOpenSession();
   const links = openTask === undefined ? [] : view.links;
+  const sessions = openSession === null ? [] : view.sessions;
 
   return (
     <div className="border-hairline flex min-w-0 items-center gap-1 border-t pt-1.5">
@@ -71,6 +73,17 @@ const Foot = ({
       {links.map((link) => (
         <Button key={link.taskId} variant="ghost" size="sm" onClick={() => openTask?.(link.taskId)}>
           {link.label}
+        </Button>
+      ))}
+      {sessions.map((session) => (
+        <Button
+          key={session.id}
+          variant="ghost"
+          size="sm"
+          title={session.id}
+          onClick={() => openSession?.(session.id)}
+        >
+          Open {session.title}
         </Button>
       ))}
       <Button variant="ghost" size="sm" onClick={onRaw} data-testid="polaris-tool-show-raw">
