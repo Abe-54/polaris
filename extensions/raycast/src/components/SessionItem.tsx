@@ -3,7 +3,7 @@
 import { Action, ActionPanel, Icon, Keyboard, List } from "@raycast/api";
 import { harnessEntry } from "@polaris/sdk";
 import { usePolaris } from "../polaris.tsx";
-import { PERMISSION_MODES, STATE_LABEL } from "../lib/copy.ts";
+import { permissionModeLabel, STATE_LABEL } from "../lib/copy.ts";
 import { canSendTurn } from "../lib/actions.ts";
 import { sessionLink } from "../lib/links.ts";
 import { fence, plain, quote } from "../lib/markdown.ts";
@@ -59,13 +59,7 @@ const SessionDetail = (props: { readonly row: SessionRow }) => {
             text={harnessEntry(session.harness)?.name ?? session.harness}
           />
           <Meta.Label title="Model" text={session.model ?? "Default"} />
-          <Meta.Label
-            title="Permission mode"
-            text={
-              PERMISSION_MODES.find((m) => m.mode === session.permissionMode)?.label ??
-              session.permissionMode
-            }
-          />
+          <Meta.Label title="Permission mode" text={permissionModeLabel(session.permissionMode)} />
           <Meta.Separator />
           <Meta.Label title="Workspace" text={props.row.workspaceName} />
           <Meta.Label title="Directory" text={session.cwd} />

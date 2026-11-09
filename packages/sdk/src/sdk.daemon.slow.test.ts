@@ -132,6 +132,24 @@ describe.each(["socket", "gateway"] as const)(
 
       expect(second.turns.map((t) => t.turn.prompt)).toEqual([APPROVAL_PROMPT, "and again"]);
     }, 60_000);
+
+    test("starts a session in plan mode and sees it planning, not supervised", async () => {
+      const sessionId = await polaris.startSession(daemon.hostId, {
+        workspaceId,
+        harness: "claude",
+        prompt: "plan it",
+        permissionMode: "plan",
+      });
+
+      const view = await until(polaris.subscribeHost(daemon.hostId), (v: HostView) =>
+        v.sessions.some((entry) => entry.session.id === sessionId)
+      );
+
+      expect(view.capabilities).toContain("session.plan-mode");
+      expect(view.sessions.find((e) => e.session.id === sessionId)?.session.permissionMode).toBe(
+        "plan"
+      );
+    }, 30_000);
   }
 );
 

@@ -14,6 +14,7 @@ import {
   type HarnessKind,
   type HostInfo,
   type PermissionMode,
+  permissionModeFor,
   RequestId,
   SessionId,
   SessionPlacement,
@@ -51,7 +52,10 @@ export interface StartSessionInput {
   readonly workspaceId: string;
   readonly harness: HarnessKind;
   readonly prompt: string;
-  /** Default `supervised`: anything else also needs the `approve` Grant. */
+  /**
+   * Default `supervised`: anything but `plan` also needs the `approve` Grant. `plan` becomes `supervised`
+   * on a Daemon without `session.plan-mode` (`HostView.capabilities`).
+   */
   readonly permissionMode?: PermissionMode;
   /** Work in a new Worktree on this branch instead of the Workspace itself. */
   readonly worktree?: { readonly branch: string; readonly baseRef?: string };
@@ -155,6 +159,7 @@ const disconnected = (entry: HostEntry, error: Error): HostView => ({
   hostName: entry.hostName,
   connected: false,
   error,
+  capabilities: [],
   workspaces: [],
   sessions: [],
   archived: [],
@@ -223,8 +228,8 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
                 afterSequence: state.synchronized ? state.sequence : null,
               }),
             apply: applyHostItem,
-            view: (state, connected) =>
-              state.synchronized ? hostView(state, link.entry, connected) : null,
+            view: (state, connected, capabilities) =>
+              state.synchronized ? hostView(state, link.entry, connected, capabilities) : null,
           },
           reconnect
         )
@@ -293,8 +298,7 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
     startSession: (hostId, input) => {
       const sessionId = SessionId.make(randomId());
 
-      return dispatch(
-        hostId,
+      const start = (permissionMode: PermissionMode) =>
         Command.cases.StartSession.make({
           sessionId,
           workspaceId: WorkspaceId.make(input.workspaceId),
@@ -306,13 +310,23 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
                   branch: input.worktree.branch,
                   baseRef: input.worktree.baseRef ?? null,
                 }),
-          permissionMode: input.permissionMode ?? "supervised",
+          permissionMode,
           model: input.model === undefined ? null : ModelId.make(input.model),
           effort: null,
           prompt: input.prompt,
           attachments: [],
-        })
-      ).pipe(Effect.as(sessionId));
+        });
+
+      return linkOf(hostId).pipe(
+        Effect.flatMap((link) => link.live),
+        Effect.flatMap((live) =>
+          dispatch(
+            hostId,
+            start(permissionModeFor(input.permissionMode ?? "supervised", live.capabilities))
+          )
+        ),
+        Effect.as(sessionId)
+      );
     },
     transcribe: (hostId, audio) =>
       Stream.unwrap(Effect.map(linkOf(hostId), (link) => transcribeOn(link, audio))),
