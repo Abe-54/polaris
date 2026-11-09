@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { SessionId, type SimulatorAttachItem, type SimulatorWatchItem } from "@polaris/protocol";
-import { Effect, Fiber, Layer, Option, Predicate, Schema, Stream } from "effect";
+import { Effect, Fiber, Layer, Option, Predicate, Schedule, Schema, Stream } from "effect";
 import { everySessionLive } from "../browser/relaySessions.ts";
 import { bunRuntime, installSimulatorTools } from "../install/simulator/install.ts";
 import { HostPlatform } from "../platform/index.ts";
@@ -63,15 +63,13 @@ const stateOf = (id: string) =>
   );
 
 /** A fresh boot may refuse input for a moment (close 1013): "unknown" until it admits. */
-const settledBarrier = async (endpoint: SimulatorAttachItem, id: string) => {
-  const deadline = Date.now() + 60_000;
-  let verdict = await inputBarrier(endpoint, id);
-
-  // Each attempt waits on the hub (admission, config, barrier), so no sleep between them.
-  while (verdict === "unknown" && Date.now() < deadline) verdict = await inputBarrier(endpoint, id);
-
-  return verdict;
-};
+const settledBarrier = (endpoint: SimulatorAttachItem, id: string) =>
+  Effect.promise(() => inputBarrier(endpoint, id)).pipe(
+    Effect.filterOrFail((verdict) => verdict !== "unknown"),
+    // Spaced: the hub refuses a ninth input socket, so back-to-back retries would keep it full.
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
+    Effect.orElseSucceed(() => "unknown" as const)
+  );
 
 const isSnapshot = (item: SimulatorWatchItem) => Predicate.isTagged(item, "Snapshot");
 
@@ -126,12 +124,12 @@ describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
 
             yield* Effect.promise(() => until(() => items.length === 1, 120_000));
             const first = items[0]!;
-            expect(yield* Effect.promise(() => settledBarrier(first, id))).toBe("live");
+            expect(yield* settledBarrier(first, id)).toBe("live");
 
             yield* hub.restart;
             yield* Effect.promise(() => until(() => items.length === 2, 120_000));
             expect(items[1]!.token).not.toBe(first.token);
-            expect(yield* Effect.promise(() => settledBarrier(items[1]!, id))).toBe("live");
+            expect(yield* settledBarrier(items[1]!, id)).toBe("live");
 
             // Detached and idle: the hub stops and shuts down the Simulator Polaris booted.
             yield* Fiber.interrupt(attach);

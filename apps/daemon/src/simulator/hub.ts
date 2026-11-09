@@ -206,10 +206,13 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
 
   /** Shuts down only the Simulators Polaris booted; never anyone else's. */
   const shutDownOurs = async (endpoint: HubEndpoint) => {
+    // A fresh list: nothing polls without a watch, and the last may predate a boot finishing.
+    await inventory.refresh();
+
     for (const id of Array.from(booted.all)) {
       const simulator = inventory.find(id);
 
-      if (simulator?.state === "Booted")
+      if (simulator !== null && simulator.state !== "Shutdown")
         await shutdownDevice(endpoint, deviceOf(simulator)).catch((error) =>
           log(`shutting down Simulator ${id} failed: ${String(error)}`)
         );
@@ -247,7 +250,10 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
     command = report.androidSdk === null ? base : withAndroidSdk(base, report.androidSdk);
   });
 
-  const find = Effect.fnUntraced(function* (id: string) {
+  /** `fresh` lists again first, for a decision on the Simulator's state. */
+  const find = Effect.fnUntraced(function* (id: string, fresh = false) {
+    if (fresh) yield* Effect.promise(() => inventory.refresh());
+
     const simulator =
       inventory.find(id) ?? (yield* Effect.promise(() => inventory.refresh()), inventory.find(id));
 
@@ -261,7 +267,7 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
 
   const boot = Effect.fnUntraced(function* (id: string) {
     yield* prepare;
-    const simulator = yield* find(id);
+    const simulator = yield* find(id, true);
 
     if (simulator.state === "Booted") return;
     inventory.markBooting(id);
@@ -279,9 +285,10 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
 
   const shutdown = Effect.fnUntraced(function* (id: string, force: boolean) {
     yield* requireCapable;
-    const simulator = yield* find(id);
+    const simulator = yield* find(id, true);
 
-    if (simulator.state === "Shutdown") return;
+    // One Polaris just booted may still list as Shutdown: shut it down anyway.
+    if (simulator.state === "Shutdown" && !booted.has(id)) return;
 
     if (!force && !booted.has(id)) return yield* new SimulatorNotBootedByPolaris({ id });
     yield* prepare;
