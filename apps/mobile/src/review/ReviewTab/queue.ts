@@ -6,7 +6,7 @@
 import type { RiskFinding, RiskSummary } from "@polaris/protocol";
 import { Match } from "effect";
 import { openCriticals as criticalsOf } from "../accept/confirmation.ts";
-import { counted, shortHostName } from "../../home/model/format.ts";
+import { counted, grouped, shortHostName } from "../../home/model/format.ts";
 import type { SessionRow } from "../../home/model/home.ts";
 import {
   type AcceptState,
@@ -111,6 +111,25 @@ export const buildQueue = (items: ReadonlyArray<QueueItem>): Queue => {
     total: items.length,
   };
 };
+
+/** One lane under the hero: the turns waiting behind it, or the clean ones. */
+export interface QueueLane {
+  readonly kind: "waiting" | "clean";
+  /** "waiting · 3", as its head reads. */
+  readonly label: string;
+  readonly data: ReadonlyArray<QueueItem>;
+}
+
+/** The lanes under the hero, in order; a lane with no turns is left out. */
+export const queueLanes = (queue: Queue): ReadonlyArray<QueueLane> =>
+  [
+    { kind: "waiting" as const, data: queue.pages.slice(1) },
+    { kind: "clean" as const, data: queue.clean },
+  ].flatMap((lane) =>
+    lane.data.length === 0
+      ? []
+      : [{ ...lane, label: `${lane.kind} · ${grouped(lane.data.length)}` }]
+  );
 
 /** "1 critical · 4 turns to review": the Critical part is the header's tinted half. */
 export const queueSummary = (queue: Queue) => ({
