@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, renameSync } from "node:fs";
+import { basename, join } from "node:path";
 import { Effect, Layer } from "effect";
 import { makeBenchDriver } from "./bench/BenchDriver.ts";
 import { isBenchKind } from "./bench/kinds.ts";
@@ -13,6 +13,7 @@ import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
 import { DRIVER_CAPABILITIES, harnessRegistryLayer, lazyDriver } from "./registry.ts";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
+import { shellFake } from "./testing/shellFake.ts";
 
 describe("lazyDriver", () => {
   test("loads the real driver once, on first probe, not when built", async () => {
@@ -143,6 +144,10 @@ describe("binaries found at each use (ENG-413)", () => {
   test("a Codex installed on PATH after the registry is built is available without a restart", async () => {
     const dir = newTempDir("polaris-registry-");
     const bin = join(dir, "bin");
+    // Written aside before PATH narrows (on Windows the fake's .cmd needs sh), moved in later.
+    const staged = join(dir, "staged");
+    mkdirSync(staged);
+    const fake = basename(shellFake(staged, "codex", "echo codex-cli 0.98.0"));
 
     const vars = {
       PATH: bin,
@@ -171,11 +176,7 @@ describe("binaries found at each use (ENG-413)", () => {
             const missing = yield* codex.probe;
             const claude = yield* (yield* registry.get("claude")).probe;
 
-            yield* Effect.sync(() => {
-              mkdirSync(bin);
-              writeFileSync(join(bin, "codex"), "#!/bin/sh\necho codex-cli 0.98.0\n");
-              chmodSync(join(bin, "codex"), 0o755);
-            });
+            yield* Effect.sync(() => renameSync(staged, bin));
 
             return [missing, yield* codex.probe, claude] as const;
           })
@@ -193,7 +194,7 @@ describe("binaries found at each use (ENG-413)", () => {
         version: null,
         detail: `codex was not found on the Daemon's PATH (${bin})`,
       });
-      expect(after).toEqual({ available: true, version: "0.98.0", detail: join(bin, "codex") });
+      expect(after).toEqual({ available: true, version: "0.98.0", detail: join(bin, fake) });
       expect(claude.detail).toBe(`\`claude\` was not found on the Daemon's PATH (${bin})`);
     } finally {
       restoreEnv(saved);
