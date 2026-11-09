@@ -34,7 +34,13 @@ import { SelfTraceRpcs } from "./selfTraces.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
-import { ProfilesRpcs, TraceCompareRpcs, TracesRpcs, TracesSettingsRpcs } from "./traces.ts";
+import {
+  ProfilesRpcs,
+  TraceCompareRpcs,
+  TracesRpcs,
+  TracesSettingsRpcs,
+  TracingSkillRpcs,
+} from "./traces.ts";
 import { HostStatsRpcs } from "./hostStats.ts";
 import { HostHarnesses } from "./availability.ts";
 import { PredictionRpcs } from "./predictionRpcs.ts";
@@ -779,7 +785,8 @@ export class DaemonRpcs extends RpcGroup.make(
     TracesRpcs,
     TracesSettingsRpcs,
     ProfilesRpcs,
-    TraceCompareRpcs
+    TraceCompareRpcs,
+    TracingSkillRpcs
   )
   .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs) {}
 

@@ -6,6 +6,8 @@ import {
   GetSpan,
   GetTrace,
   GetWorkspaceTracesSettings,
+  InstallTracingSkill,
+  type InstalledTracingSkill,
   SetWorkspaceTracesSettings,
   type Profile,
   type ProfileDetail,
@@ -34,6 +36,7 @@ export const TracesRequestInputs = {
     ...OnHost,
     ...SetWorkspaceTracesSettings.payloadSchema.fields,
   }),
+  "traces.installSkill": Schema.Struct({ ...OnHost, ...InstallTracingSkill.payloadSchema.fields }),
   "profiles.attach": Schema.Struct({ ...OnHost, ...AttachProfile.payloadSchema.fields }),
   "profiles.get": Schema.Struct({ ...OnHost, ...GetProfile.payloadSchema.fields }),
   "profiles.restartWithProfiling": Schema.Struct({
@@ -49,6 +52,8 @@ export interface TracesRequestOutputs {
   /** Workspace policy and detected exporters; header values never cross IPC. */
   readonly "traces.settings": WorkspaceTracesSettings;
   readonly "traces.setSettings": WorkspaceTracesSettings;
+  /** The skill folders the Daemon wrote. */
+  readonly "traces.installSkill": InstalledTracingSkill;
   readonly "profiles.attach": Profile;
   readonly "profiles.get": ProfileDetail;
   /** The new recording. */

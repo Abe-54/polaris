@@ -86,6 +86,9 @@ export const traceRuntimeLayerAt = (filename: string | null, port = TRACE_PORT) 
 
         if (changed) yield* store.notify;
 
+        // ENG-676: a Reviewer exports no telemetry, so its session gets no endpoint at all.
+        if (Option.isSome(policy) && policy.value.readOnly(id)) return {};
+
         if (!TraceAvailability.guards.Listening(availability)) return {};
 
         if (!(yield* sessions.active(id))) return {};
@@ -112,8 +115,7 @@ export const traceRuntimeLayerAt = (filename: string | null, port = TRACE_PORT) 
           source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT === undefined &&
           session !== undefined &&
           session.permissionMode !== "plan" &&
-          session.origin !== "reviewer" &&
-          !(Option.isSome(policy) && policy.value.readOnly(id))
+          session.origin !== "reviewer"
             ? yield* Effect.tryPromise(() =>
                 targets.value.environment(id, { ...source, ...instrumentation }.NODE_OPTIONS)
               ).pipe(Effect.orElseSucceed(() => ({})))

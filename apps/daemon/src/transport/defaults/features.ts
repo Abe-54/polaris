@@ -8,6 +8,7 @@ import {
   ProfilesRpcs,
   SelfTraceRpcs,
   TraceCompareRpcs,
+  TracingSkillRpcs,
   TracesRpcs,
   TracesSettingsRpcs,
 } from "@polaris/protocol";
@@ -66,6 +67,7 @@ const traceDefaults = Layer.mergeAll(
     "profiles.restartWithProfiling": unsupported("traces.profiles"),
   }),
   TraceCompareRpcs.toLayer({ "traces.compare": unsupported("traces.compare") }),
+  TracingSkillRpcs.toLayer({ "traces.installSkill": unsupported("traces.skill") }),
   // Until ENG-708's DT (Self-Traces) lands.
   SelfTraceRpcs.toLayer({ "traces.ingestSelf": unsupported("traces.self") })
 );

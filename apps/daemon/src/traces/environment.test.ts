@@ -11,8 +11,10 @@ import { Terminals, TerminalsLive } from "../terminal/Terminals.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { postTraces, TEST_SESSION, TRACE_ID, withTraceFixture } from "./testing.ts";
 
-for (const readOnly of [false, true]) {
-  test(`Claude ${readOnly ? "reviewer" : "agent"} keeps its live endpoint after Harness retirement`, () =>
+{
+  const readOnly = false;
+
+  test("Claude agent keeps its live endpoint after Harness retirement", () =>
     withTraceFixture(async (f) => {
       const fake = new FakeClaude();
 
@@ -38,14 +40,6 @@ for (const readOnly of [false, true]) {
             endpoint = fake.options?.env?.OTEL_EXPORTER_OTLP_ENDPOINT ?? "";
             expect(endpoint).toBe(f.endpoint!);
 
-            if (readOnly) {
-              expect(fake.options?.sandbox?.network?.allowedDomains).toEqual([]);
-              expect(fake.options?.sandbox?.credentials?.envVars).not.toContainEqual({
-                name: "OTEL_EXPORTER_OTLP_ENDPOINT",
-                mode: "deny",
-              });
-            }
-
             expect((yield* Effect.promise(() => postTraces(endpoint))).status).toBe(200);
           }).pipe(Effect.provideService(TraceRuntime, f.runtime))
         )
@@ -55,7 +49,7 @@ for (const readOnly of [false, true]) {
       expect((await postTraces(endpoint)).status).toBe(401);
     }));
 
-  test(`Codex ${readOnly ? "reviewer" : "agent"} shell environment reaches the receiver with unknown launch Turn`, () =>
+  test("Codex agent shell environment reaches the receiver with unknown launch Turn", () =>
     withTraceFixture(async (f) => {
       const turn = TraceTurn.make({
         sessionId: TEST_SESSION,
@@ -102,6 +96,83 @@ for (const readOnly of [false, true]) {
       }
     }));
 }
+
+const otlpKeys = (env: Readonly<Record<string, string | undefined>> | undefined) =>
+  Object.keys(env ?? {}).filter((key) => key.startsWith("OTEL_"));
+
+const DAEMON_EXPORTER = { OTEL_EXPORTER_OTLP_ENDPOINT: "https://api.axiom.co" };
+
+test("a Claude Reviewer's session carries no OTLP endpoint, injected or inherited (ENG-676)", () =>
+  withTraceFixture(
+    async (f) => {
+      const fake = new FakeClaude();
+
+      const driver = makeClaudeDriver({
+        query: fake.query,
+        claudePath: () => "/opt/bin/claude",
+        sandbox: () => ({ available: true }),
+      });
+
+      await Effect.runPromise(
+        Effect.scoped(
+          driver
+            .open({
+              sessionId: TEST_SESSION,
+              cwd: f.root,
+              permissionMode: "supervised",
+              model: null,
+              effort: null,
+              resumeCursor: null,
+              readOnly: true,
+              environment: DAEMON_EXPORTER,
+            })
+            .pipe(Effect.provideService(TraceRuntime, f.runtime))
+        )
+      );
+
+      expect(otlpKeys(fake.options?.env)).toEqual([]);
+      expect(fake.options?.sandbox?.network?.allowedDomains).toEqual([]);
+    },
+    { readOnly: (id) => id === TEST_SESSION }
+  ));
+
+test("a Codex Reviewer's shell carries no OTLP endpoint (ENG-676)", () =>
+  withTraceFixture(
+    async (f) => {
+      const withSession = sessionWith((options) =>
+        makeCodexDriver(options).pipe(
+          Effect.map((driver) => ({
+            ...driver,
+            open: (options) =>
+              driver
+                .open({
+                  ...options,
+                  sessionId: TEST_SESSION,
+                  cwd: f.root,
+                  environment: DAEMON_EXPORTER,
+                })
+                .pipe(Effect.provideService(TraceRuntime, f.runtime)),
+          }))
+        )
+      );
+
+      try {
+        const result = await withSession(
+          scripted(() => {}),
+          () => Effect.void,
+          { readOnly: true }
+        );
+
+        const params = result.server.requests("thread/start")[0]?.params;
+
+        expect(params).toMatchObject({ config: { "shell_environment_policy.inherit": "core" } });
+        expect(JSON.stringify(params)).not.toContain("OTEL_");
+      } finally {
+        for (const fn of cleanup.splice(0)) fn();
+      }
+    },
+    { readOnly: (id) => id === TEST_SESSION }
+  ));
 
 test("terminals use a Workspace endpoint in both ordinary and repository environments", () =>
   withTraceFixture(async (f) => {
@@ -162,3 +233,18 @@ test("an existing exporter no longer suppresses injection or marks setup as user
       ).toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
     }
   }));
+
+test("a Reviewer's session gets no OTLP endpoint while others still do (ENG-676)", () =>
+  withTraceFixture(
+    async (f) => {
+      expect(f.endpoint).toBeNull();
+      expect(
+        await Effect.runPromise(
+          f.runtime.environment(TEST_SESSION, {
+            OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example",
+          })
+        )
+      ).toEqual({});
+    },
+    { readOnly: (id) => id === TEST_SESSION }
+  ));

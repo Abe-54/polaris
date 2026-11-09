@@ -216,4 +216,18 @@ describe("the Reviewer's environment", () => {
       readOnlyEnv({ ...daemon, CLAUDE_CODE_USE_BEDROCK: "0" }, confinement)
     ).not.toHaveProperty("AWS_SECRET_ACCESS_KEY");
   });
+
+  test("carries no OTLP endpoint, inherited or injected: a Reviewer exports no telemetry (ENG-676)", () => {
+    const env = readOnlyEnv(
+      {
+        ...daemon,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4319/otlp/token",
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "https://api.axiom.co/v1/traces",
+        OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: "https://api.axiom.co/v1/logs",
+      },
+      confinement
+    );
+
+    expect(Object.keys(env).filter((key) => key.startsWith("OTEL_"))).toEqual([]);
+  });
 });

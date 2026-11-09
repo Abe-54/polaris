@@ -115,6 +115,7 @@ export const DEVICE_RPCS = {
   "traces.span": "local",
   "traces.settings": "local",
   "traces.setSettings": "local",
+  "traces.installSkill": "local",
   "profiles.watch": "local",
   "profiles.get": "local",
   "profiles.attach": "device",

@@ -60,6 +60,7 @@ import { HostSecrets } from "../secrets/index.ts";
 import { VoiceRpcsLive } from "../voice/VoiceRpcs.ts";
 import { ResourceRpcsLive } from "../resources/rpc.ts";
 import { HostStats, HostStatsRpcsLive } from "../hostStats/index.ts";
+import { TracingSkillRpcsLive } from "../traces/skill/index.ts";
 import { paths } from "../paths.ts";
 import { startServer } from "./server.ts";
 import { ByteStreamRpcsLive } from "./byteStreams.ts";
@@ -188,6 +189,7 @@ export const daemonHandlers = Layer.mergeAll(
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),
+  TracingSkillRpcsLive,
   PushNotifierLive,
   LiveNotifierLive,
   ResourceRpcsLive,
@@ -239,6 +241,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "traces",
   "traces.settings",
   "traces.compare",
+  "traces.skill",
   "traces.profiles",
   "traces.profiles.attach",
   "traces.self",

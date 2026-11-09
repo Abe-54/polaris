@@ -114,6 +114,7 @@ export const RPC_GRANTS = {
   "traces.span": "client",
   "traces.settings": "client",
   "traces.setSettings": "client",
+  "traces.installSkill": "client",
   "profiles.watch": "client",
   "profiles.get": "client",
   "profiles.attach": "approve",

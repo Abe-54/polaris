@@ -68,7 +68,7 @@ import type { ConstellationAttachment } from "../constellation/attachment.ts";
 import { type HarnessCall, harnessCallOf } from "./slash.ts";
 import { logStart } from "../startLog.ts";
 import type { BrowserMcp } from "../browser/index.ts";
-import { sessionTraceEnvironment, traceEndpointEnvironment } from "../../traces/environment.ts";
+import { sessionTraceEnvironment } from "../../traces/environment.ts";
 import { codexBrowserConfig } from "./browser.ts";
 
 export interface SessionConfig {
@@ -196,7 +196,6 @@ export const openSession = (
       sandbox: policy.sandbox,
       userAgent: decodeInitialize(initialized)?.userAgent ?? "",
       cwd: options.cwd,
-      traceEnvironment: { ...traceEndpointEnvironment(env), ...traceEnv },
       readConfig: conn.request("config/read", { cwd: options.cwd, includeLayers: false }),
       appServerState: config.appServer.stateFile,
     });
