@@ -2,7 +2,7 @@ import "../../../test/dom.testing.ts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { TooltipProvider } from "@polaris/ui";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { createStore } from "zustand/vanilla";
 import { createCommandRegistry } from "../../../routes/commands.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
@@ -68,7 +68,10 @@ const Harness = ({ onForeignKey }: { onForeignKey: (value: DataValue | undefined
   );
 };
 
-const mount = (onForeignKey: (value: DataValue | undefined) => void = () => undefined) => {
+const mount = (onForeignKey: (value: DataValue | undefined) => void = () => undefined) =>
+  mountGrid(<Harness onForeignKey={onForeignKey} />);
+
+const mountGrid = (grid: ReactNode) => {
   const store = createStore<AppState>(() => ({ ...initialState, density: "calm" }));
 
   render(
@@ -84,9 +87,7 @@ const mount = (onForeignKey: (value: DataValue | undefined) => void = () => unde
         commands: createCommandRegistry({ platform: "mac" }),
       }}
     >
-      <TooltipProvider>
-        <Harness onForeignKey={onForeignKey} />
-      </TooltipProvider>
+      <TooltipProvider>{grid}</TooltipProvider>
     </AppProvider>
   );
 };
@@ -100,6 +101,43 @@ test("10,000 rows render only the rows in view, with typed headers", () => {
   expect(rows.length).toBeLessThan(60);
   expect(screen.getByRole("grid").getAttribute("aria-rowcount")).toBe("10001");
   expect(screen.getByText("uuid → customers")).not.toBeNull();
+});
+
+const Arriving = () => {
+  const [rows, setRows] = useState<ReadonlyArray<ReadonlyArray<DataValue>>>([]);
+
+  return (
+    <>
+      <button type="button" onClick={() => setRows([[1, "x".repeat(40), "y".repeat(40)]])}>
+        arrive
+      </button>
+      <DataGrid
+        label="arriving"
+        columns={COLUMNS}
+        rows={rows}
+        selection={emptySelection}
+        onSelectionChange={() => undefined}
+      />
+    </>
+  );
+};
+
+test("columns widened by the first rows keep the header as wide as its cells", () => {
+  mountGrid(<Arriving />);
+
+  fireEvent.click(screen.getByText("arrive"));
+
+  const [header] = screen.getAllByRole("row");
+  const [gutter, spacer] = Array.from(header?.children ?? []);
+  const cells = screen.getAllByRole("columnheader");
+
+  const sum = [gutter, spacer, ...cells].reduce(
+    // SAFETY: the header's children are all elements with inline widths.
+    (total, el) => total + parseFloat((el as HTMLElement | undefined)?.style.width ?? "0"),
+    0
+  );
+
+  expect(parseFloat(header?.style.width ?? "")).toBe(sum);
 });
 
 test("a foreign key opens its value; a click selects the row and ⇧↓ extends it", () => {

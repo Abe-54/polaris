@@ -6,7 +6,15 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@polaris/ui";
 import { Predicate } from "effect";
-import { memo, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  type KeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import { CellEditor } from "./CellEditor.tsx";
 import { CellInspector } from "./CellInspector.tsx";
@@ -232,11 +240,15 @@ export const DataGrid = ({
     initialRect: FIRST_RECT,
   });
 
+  // A new key function per laying: the virtualizer re-reads widths only when its options change.
+  const columnKey = useCallback((at: number) => at, [laid]);
+
   const colVirtualizer = useVirtualizer({
     horizontal: true,
     count: laid.length,
     getScrollElement: () => scroller.current,
     estimateSize: (at) => laid[at]?.width ?? 120,
+    getItemKey: columnKey,
     overscan: 1,
     initialRect: FIRST_RECT,
   });
