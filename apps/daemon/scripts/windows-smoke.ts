@@ -16,7 +16,7 @@ import { connectRpc, socketTransport } from "@polaris/client";
 import { checksPipeOwner } from "../../../packages/client/src/transport.ts";
 import { attachTerminal } from "../../../packages/client/src/terminal.ts";
 import { localEndpoint } from "@polaris/protocol/endpoint";
-import { Effect, Predicate, Schedule, Stream } from "effect";
+import { Effect, Predicate, Redacted, Schedule, Stream } from "effect";
 
 const [home, repo, harness] = process.argv.slice(2);
 
@@ -61,6 +61,8 @@ const program = Effect.gen(function* () {
     clientVersion: "0.2.0",
     deviceLabel: "smoke",
     capabilities: ["host.any-platform"],
+    // As the Desktop App: the fresh home enrols it, so terminal.input is allowed (ADR 0100).
+    userKey: Redacted.make("a".repeat(64)),
   });
 
   console.log(
