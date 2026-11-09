@@ -87,6 +87,7 @@ import type { LinkedDeviceView, LinkedDevicesRequestOutputs } from "./linkedDevi
 import type { GitHubRequestOutputs, GitHubSubscriptionItems } from "./githubContract.ts";
 import type { GitRequestOutputs, GitSubscriptionItems } from "./gitContract.ts";
 import type { BrowserRequestOutputs, BrowserSubscriptionItems } from "./browserContract.ts";
+import type { SimulatorRequestOutputs, SimulatorSubscriptionItems } from "./simulatorContract.ts";
 import type { NeedsYouAction, ReviewTarget } from "./needsYou.ts";
 import type {
   CachedHost,
@@ -450,6 +451,7 @@ export interface RequestOutputs
     SecretRequestOutputs,
     DataRequestOutputs,
     TracesRequestOutputs,
+    SimulatorRequestOutputs,
     PredictionPlacementOutputs,
     PredictionOutcomeOutputs {
   "constellation.stats": ConstellationStatsView;
@@ -592,7 +594,8 @@ export interface SubscriptionItems
     GitSubscriptionItems,
     BrowserSubscriptionItems,
     DataSubscriptionItems,
-    TracesSubscriptionItems {
+    TracesSubscriptionItems,
+    SimulatorSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
   "prediction.edit": EditPredictionFeedItem;
   "prediction.managed.watch": import("@polaris/protocol").ManagedServerStatus;

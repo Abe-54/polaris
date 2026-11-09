@@ -146,7 +146,7 @@ const concat = (a: Uint8Array, b: Uint8Array) => {
 };
 
 /** Writes and waits until the socket can take more, so `incoming` is read no faster than it drains. */
-const writeTo = (socket: Socket, chunk: Uint8Array) =>
+export const writeTo = (socket: Socket, chunk: Uint8Array) =>
   Effect.callback<void>((resume) => {
     if (socket.destroyed) return resume(Effect.void);
 

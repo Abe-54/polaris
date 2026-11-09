@@ -39,6 +39,7 @@ import { remoteAccessHandlers } from "./remoteAccess.ts";
 import { linkedDevicesHandlers } from "./linkedDevices.ts";
 import { voiceHandlers } from "./voice.ts";
 import { browserHandlers } from "../browser/ipc.ts";
+import { simulatorHandlers } from "../simulator/ipc.ts";
 import type { Registry as Browsers } from "../browser/registry.ts";
 import { secretHandlers } from "./secrets.ts";
 import { Machines } from "../machines/service.ts";
@@ -270,6 +271,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...secretHandlers,
   ...dataHandlers,
   ...tracesHandlers,
+  ...simulatorHandlers,
   "updates.get": () => Effect.sync(ctx.updates.get),
   "updates.check": () => Effect.sync(ctx.updates.check),
   "updates.setAutomatic": ({ enabled }) => Effect.sync(() => ctx.updates.setAutomatic(enabled)),
