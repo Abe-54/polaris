@@ -11,7 +11,7 @@ const decodeState = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ pid: Schema.Int, url: Schema.String }))
 );
 
-/** A fake `opencode`: `serve` answers `/global/health` behind basic auth, like the real one. */
+/** A fake `opencode`: `serve` answers behind basic auth; `/api/info` only as OpenCode 2 does. */
 const FAKE_OPENCODE = `if (process.env.FAKE_OPENCODE_FAIL) {
   console.error("boom");
   process.exit(1);
@@ -21,9 +21,11 @@ const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   fetch: (req) =>
-    req.headers.get("authorization") === expected
-      ? Response.json({ healthy: true })
-      : new Response(null, { status: 401 }),
+    req.headers.get("authorization") !== expected
+      ? new Response(null, { status: 401 })
+      : new URL(req.url).pathname === "/api/info" && process.env.FAKE_OPENCODE_VERSION
+        ? Response.json({ version: process.env.FAKE_OPENCODE_VERSION })
+        : Response.json({ healthy: true }),
 });
 console.log("opencode server listening on http://127.0.0.1:" + server.port);
 `;
@@ -175,5 +177,17 @@ describe("the OpenCode server", () => {
     expect(failed.message).toContain("exited before listening");
     expect(existsSync(stateFile)).toBe(false);
     expect(readFileSync(join(dir, "logs", "opencode.log"), "utf8")).toContain("boom");
+  });
+
+  test("an OpenCode 2 server is stopped at once with a plain reason (ENG-571)", async () => {
+    const { dir, bin, stateFile } = setup();
+    const v2 = await serverIn(dir, bin, { ...process.env, FAKE_OPENCODE_VERSION: "2.0.28" });
+    const failed = await Effect.runPromise(Effect.flip(Effect.scoped(v2.server.lease)));
+
+    expect(failed.message).toBe(
+      "OpenCode 2.0.28 isn't supported yet: Polaris works with OpenCode 1 (1.18.33 or newer)"
+    );
+    expect(await Effect.runPromise(v2.server.running)).toBe(false);
+    expect(existsSync(stateFile)).toBe(false);
   });
 });

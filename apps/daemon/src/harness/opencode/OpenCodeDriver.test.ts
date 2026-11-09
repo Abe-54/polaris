@@ -5,127 +5,40 @@ import {
   ApprovalDecision,
   Attachment,
   AttachmentId,
-  type PermissionMode,
   RequestId,
   SessionId,
   TurnId,
   TurnItem,
 } from "@polaris/protocol";
-import { Effect, Schema, Stream } from "effect";
-import { HarnessEvent, type HarnessSession } from "../HarnessDriver.ts";
+import { Effect, Schema } from "effect";
+import { HarnessEvent } from "../HarnessDriver.ts";
 import { rulesetFor } from "./mapping.ts";
 import { makeOpenCodeDriver, probeOpenCode } from "./OpenCodeDriver.ts";
 import { openSession } from "./OpenCodeSession.ts";
 import { events as eventsFor, readFixture } from "./testing/events.ts";
-import { FAKE_SESSION_ID, type FakeServer, makeFakeServer } from "./testing/FakeServer.ts";
+import { FAKE_SESSION_ID, makeFakeServer } from "./testing/FakeServer.ts";
+import { CWD, ofTag, onCleanup, stopFakes, turnInput, withSession } from "./testing/FakeServer.ts";
 import { shellFake, shPath } from "../testing/shellFake.ts";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
-type EventOf<T extends HarnessEvent["_tag"]> = Extract<HarnessEvent, { readonly _tag: T }>;
-
-const ofTag = <T extends HarnessEvent["_tag"]>(events: ReadonlyArray<HarnessEvent>, tag: T) =>
-  events.filter(HarnessEvent.$is(tag));
-
-const CWD = "/repo";
-
 const ev = eventsFor(FAKE_SESSION_ID);
 
-const cleanup: Array<() => void> = [];
-
-afterEach(() => {
-  for (const fn of cleanup.splice(0)) fn();
-});
-
-interface Harness {
-  readonly session: HarnessSession;
-  readonly fake: FakeServer;
-  readonly events: Array<HarnessEvent>;
-  readonly emit: (...payloads: ReadonlyArray<unknown>) => void;
-  /** The first event with `tag` (and matching `where`), waiting up to two seconds. */
-  readonly waitFor: <T extends HarnessEvent["_tag"]>(
-    tag: T,
-    where?: (e: EventOf<T>) => boolean
-  ) => Effect.Effect<EventOf<T>>;
-}
-
-interface Options {
-  readonly resumeCursor?: string;
-  readonly permissionMode?: PermissionMode;
-  readonly model?: string | null;
-  readonly sessionId?: string;
-  readonly setup?: (fake: FakeServer) => void;
-}
-
-/** Opens a session against a fake server and runs `body`; the scope closes afterwards. */
-const withSession = async <A>(
-  body: (h: Harness) => Effect.Effect<A, unknown>,
-  options: Options = {}
-) => {
-  const fake = makeFakeServer({ sessionId: options.sessionId ?? FAKE_SESSION_ID });
-  cleanup.push(fake.stop);
-  options.setup?.(fake);
-  const events: Array<HarnessEvent> = [];
-
-  const program = Effect.gen(function* () {
-    const session = yield* openSession(
-      fake.asServer("/home/user/.polaris/opencode-server.password"),
-      {
-        sessionId: SessionId.make("s1"),
-        cwd: CWD,
-        permissionMode: options.permissionMode ?? "supervised",
-        model: options.model ?? null,
-        effort: null,
-        resumeCursor: options.resumeCursor ?? null,
-      }
-    );
-
-    yield* session.events.pipe(
-      Stream.runForEach((e) => Effect.sync(() => events.push(e))),
-      Effect.forkDetach
-    );
-
-    const waitFor = <T extends HarnessEvent["_tag"]>(
-      tag: T,
-      where: (e: EventOf<T>) => boolean = () => true
-    ) =>
-      Effect.promise(async () => {
-        for (let i = 0; i < 200; i++) {
-          const found = ofTag(events, tag).find(where);
-
-          if (found) return found;
-          await Bun.sleep(10);
-        }
-
-        throw new Error(`timed out waiting for ${tag}; saw ${events.map((e) => e._tag).join(",")}`);
-      });
-
-    const emit = (...payloads: ReadonlyArray<unknown>) => {
-      for (const payload of payloads) fake.emit(CWD, payload);
-    };
-
-    return yield* body({ session, fake, events, emit, waitFor });
-  });
-
-  const result = await Effect.runPromise(Effect.scoped(program));
-  await Bun.sleep(20);
-
-  return { result, events, fake };
-};
-
-const turnInput = (
-  turnId: string,
-  prompt: string,
-  model: string | null = null,
-  effort: string | null = null
-) => ({
-  turnId: TurnId.make(turnId),
-  prompt,
-  attachments: [],
-  model,
-  effort,
-});
+afterEach(stopFakes);
 
 const allow = ApprovalDecision.cases.Allow.make({ remember: false });
+
+const BIG_PICKLE = {
+  providers: [
+    {
+      id: "opencode",
+      name: "OpenCode Zen",
+      models: {
+        "big-pickle": { id: "big-pickle", name: "Big Pickle", limit: { context: 200_000 } },
+      },
+    },
+  ],
+  default: { opencode: "big-pickle" },
+};
 
 describe("OpenCode driver", () => {
   test("a full Turn replayed from a real OpenCode 1.18.33 trace, with a command approval", async () => {
@@ -136,6 +49,7 @@ describe("OpenCode driver", () => {
     const { events, fake } = await withSession(
       ({ session, emit, waitFor }) =>
         Effect.gen(function* () {
+          yield* Effect.promise(() => Bun.sleep(30)); // the Models' windows load aside
           yield* session.sendTurn(
             turnInput(
               "turn-1",
@@ -150,7 +64,7 @@ describe("OpenCode driver", () => {
           emit(...fixture.slice(asked + 1));
           yield* waitFor("TurnEnded");
         }),
-      { sessionId }
+      { sessionId, setup: (fake) => fake.respond("GET /config/providers", () => BIG_PICKLE) }
     );
 
     const [prompt] = fake.sent(`POST /session/${sessionId}/prompt_async`);
@@ -205,6 +119,11 @@ describe("OpenCode driver", () => {
     ]);
     expect(ofTag(events, "TurnEnded")).toEqual([
       HarnessEvent.TurnEnded({ turnId: TurnId.make("turn-1"), status: "completed", error: null }),
+    ]);
+    // Each model call's tokens (OpenCode's own `total`), of big-pickle's window (ENG-571).
+    expect(ofTag(events, "ContextUsed")).toEqual([
+      HarnessEvent.ContextUsed({ usedTokens: 34_550, windowTokens: 200_000 }),
+      HarnessEvent.ContextUsed({ usedTokens: 34_570, windowTokens: 200_000 }),
     ]);
     // Closing the session ends the stream cleanly.
     expect(events.at(-1)).toEqual(HarnessEvent.Exited({ error: null }));
@@ -569,7 +488,7 @@ describe("OpenCode driver", () => {
 
   test("resuming a session OpenCode no longer has fails", async () => {
     const fake = makeFakeServer();
-    cleanup.push(fake.stop);
+    onCleanup(fake.stop);
     fake.respond(
       `GET /session/${FAKE_SESSION_ID}`,
       () => new Response("not found", { status: 404 })
@@ -597,7 +516,7 @@ describe("OpenCode driver", () => {
 describe("OpenCode Models and probe", () => {
   test("listModels asks the server's providers; keys and options are never read", async () => {
     const fake = makeFakeServer();
-    cleanup.push(fake.stop);
+    onCleanup(fake.stop);
     fake.respond("GET /config", () => ({ model: "openai/gpt-5.5" }));
     fake.respond("GET /config/providers", () => ({
       providers: [
@@ -631,7 +550,7 @@ describe("OpenCode Models and probe", () => {
       default: { opencode: "big-pickle", openai: "gpt-5.5" },
     }));
     const dir = newTempDir("polaris-opencode-models-");
-    cleanup.push(() => removeTempDir(dir));
+    onCleanup(() => removeTempDir(dir));
 
     const models = await Effect.runPromise(
       Effect.scoped(
@@ -657,7 +576,7 @@ describe("OpenCode Models and probe", () => {
 
   test("probe runs --version only, with throwaway XDG directories", async () => {
     const dir = newTempDir("polaris-opencode-probe-test-");
-    cleanup.push(() => removeTempDir(dir));
+    onCleanup(() => removeTempDir(dir));
 
     const bin = shellFake(
       dir,

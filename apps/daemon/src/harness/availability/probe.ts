@@ -16,6 +16,7 @@ import {
 } from "@polaris/protocol";
 import { Effect, Option, Schema } from "effect";
 import { type AcpHarness, COPILOT, GEMINI } from "../acp/harnesses.ts";
+import { unsupportedOpenCode } from "../opencode/version.ts";
 
 /** The environment a probe resolves binaries and homes from (the Daemon's by default). */
 export type ProbeEnv = Readonly<Record<string, string | undefined>>;
@@ -43,6 +44,8 @@ interface Prober {
   /** A variable `--version` gets pointed at an empty scratch directory (see `../acp/harnesses.ts`). */
   readonly scratchHomeEnv?: string | null;
   readonly signIn: (path: string, env: ProbeEnv) => Effect.Effect<SignInState>;
+  /** Why an installed version (at or above the minimum) can't be driven; null when it can. */
+  readonly unsupported?: (version: string | null) => string | null;
 }
 
 const PROBE_TIMEOUT_MS = 5_000;
@@ -200,6 +203,7 @@ const opencode: Prober = {
     XDG_CACHE_HOME: join(opencodeScratch, "cache"),
   }),
   signIn: () => Effect.succeed({ status: "ready", detail: null }),
+  unsupported: unsupportedOpenCode,
 };
 
 /**
@@ -310,6 +314,10 @@ export const probeHarness = Effect.fn("harness.availability.probe")(function* (
       detail: `${entry.name} ${version} is older than ${entry.minVersion}`,
       signInArgv,
     });
+  const unsupported = prober.unsupported?.(version) ?? null;
+
+  if (unsupported !== null)
+    return availability(entry, { status: "unknown", version, detail: unsupported, signInArgv });
   const signIn = yield* prober.signIn(path, probeEnv);
 
   const { kind, ...state } = signIn;
