@@ -70,7 +70,7 @@ test(
     const result = await merge(s);
     const after = await leadHead(s.root);
 
-    expect(result).toEqual({ ok: { merged: true, leadHead: after } });
+    expect(result).toEqual({ ok: { merged: true, leadHead: after, findings: [] } });
     expect(after).not.toBe(before);
     expect(await gitText(s.root, ["rev-parse", "HEAD^1", "HEAD^2"])).toBe(`${before}\n${s.head}`);
     expect(await gitText(s.root, ["log", "-1", "--format=%s"])).toBe("Merge polaris/A (A)");
@@ -206,7 +206,9 @@ describe("Accept's merge with commit.gpgSign", () => {
 
       const result = await merge(s);
 
-      expect(result).toEqual({ ok: { merged: true, leadHead: await leadHead(s.root) } });
+      expect(result).toEqual({
+        ok: { merged: true, leadHead: await leadHead(s.root), findings: [] },
+      });
       expect(await gitText(s.root, ["rev-parse", "HEAD^1", "HEAD^2"])).toBe(`${before}\n${s.head}`);
       expect(await gitText(s.root, ["cat-file", "-p", "HEAD"])).toContain(
         "gpgsig -----BEGIN PGP SIGNATURE-----"
