@@ -30,6 +30,7 @@ import { ReviewCheckouts } from "./reviewCheckouts.ts";
 import { EngineRuntime } from "./runtime.ts";
 import { SecretRequests } from "./secretRequests.ts";
 import { noHarness, recordRefusedSteer } from "./steerRefusal.ts";
+import { nothingMovedReason, recordBackgroundFailure, refusedReason } from "./backgroundFailure.ts";
 import { Supervisor } from "./supervisor.ts";
 import { TerminalHandoff } from "./terminal.ts";
 import { Worktrees } from "./worktrees.ts";
@@ -180,10 +181,10 @@ const make = Effect.gen(function* () {
       if (session?.backgroundCommand === undefined) return;
       const moved = yield* session.backgroundCommand(itemId);
 
-      if (!moved) yield* Effect.logWarning(`${sessionId}: ${itemId} was no longer running`);
+      if (!moved) yield* recordBackgroundFailure(rt, sessionId, itemId, nothingMovedReason(itemId));
     }).pipe(
       Effect.catchTag("HarnessError", (error) =>
-        Effect.logWarning(`couldn't run in the background: ${error.message}`)
+        recordBackgroundFailure(rt, sessionId, itemId, refusedReason(error))
       )
     );
 

@@ -5,6 +5,8 @@
  */
 export { NewSessionPage, type NewSessionPageProps } from "./ui/NewSessionPage.tsx";
 
+export { BackgroundFailureToasts } from "./ui/BackgroundFailureToasts.tsx";
+
 export { SessionIntent, type SessionViewProps } from "./ui/SessionIntent.tsx";
 
 export { SessionOutput, type SessionOutputProps } from "./ui/SessionOutput.tsx";
