@@ -9,8 +9,12 @@ import { gitStatus } from "../git/status.ts";
 import { listWorktrees, samePath } from "../git/WorktreeTracker.ts";
 
 /** `@` keeps it apart from Task worktrees, whose IDs are plain path components. */
-export const leadWorktreePath = (leadPath: string, constellationId: string) =>
-  `${leadPath}.worktrees/${constellationId}/@lead`;
+export const leadWorktreePath = (leadPath: string, constellationId: string) => {
+  if (!/^[a-zA-Z0-9_-]+$/.test(constellationId))
+    throw new Error("Constellation IDs must be single path components");
+
+  return `${leadPath}.worktrees/${constellationId}/@lead`;
+};
 
 /** The ref new work branches from and merges are checked against: the lead branch, else HEAD. */
 export const leadRef = (graph: Constellation) =>
@@ -23,8 +27,8 @@ const refused = (code: string, message: string, fix: string) =>
   new ConstellationTransferError({ code, message, retryable: false, fix });
 
 /**
- * The checkout already on the lead branch, else the Daemon-owned lead worktree, created or
- * switched to it. A graph without a recorded lead branch keeps the Lead's own checkout.
+ * The Lead's checkout when it is on the lead branch, else the Daemon-owned lead worktree,
+ * created or switched to it; refuses when another checkout holds the branch. A graph without a recorded lead branch keeps the Lead's own checkout.
  */
 export const leadCheckout = async (
   graph: Constellation,
@@ -36,8 +40,18 @@ export const leadCheckout = async (
 
   const worktrees = await listWorktrees(leadPath);
   const holder = worktrees.find((w) => w.branch === branch);
+  const path = leadWorktreePath(leadPath, graph.id);
 
-  if (holder !== undefined) return holder.path;
+  if (holder !== undefined && (samePath(holder.path, leadPath) || samePath(holder.path, path)))
+    return holder.path;
+
+  // Another session's checkout: merging there would move work under it.
+  if (holder !== undefined)
+    return refused(
+      "E-LEAD-BRANCH-BUSY",
+      `The lead branch ${branch} is checked out at ${holder.path}`,
+      `Switch that checkout off ${branch}, then accept again; Polaris merges in its own worktree.`
+    );
 
   if ((await resolveCommit(leadPath, `refs/heads/${branch}`)) === null)
     return refused(
@@ -46,7 +60,6 @@ export const leadCheckout = async (
       `Recreate ${branch} at the integrated work, then accept again.`
     );
 
-  const path = leadWorktreePath(leadPath, graph.id);
   const registered = worktrees.find((w) => samePath(w.path, path));
 
   if (registered !== undefined) {
