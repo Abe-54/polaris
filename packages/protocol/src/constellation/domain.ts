@@ -10,6 +10,12 @@ export type ConstellationId = typeof ConstellationId.Type;
 
 export const TaskId = Schema.NonEmptyString.pipe(Schema.brand("TaskId"));
 
+/**
+ * What a new Task id may contain: it names worktree and branch path components (ENG-741).
+ * Checked when a Task is declared, not on TaskId, so logs with older ids still decode.
+ */
+export const taskIdPattern = /^[A-Za-z0-9_-]+$/;
+
 export type TaskId = typeof TaskId.Type;
 
 export const AttemptId = Schema.String.pipe(Schema.brand("AttemptId"));
@@ -111,6 +117,25 @@ export class TaskDefinition extends Schema.Class<TaskDefinition>("TaskDefinition
   group: optionalNullable(Schema.String),
   parent: optionalNullable(TaskId),
 }) {}
+
+/**
+ * An Edit's changes: an omitted field keeps its value, null or [] clears it (ENG-412).
+ * `id`, when given, must match the edited Task.
+ */
+export const TaskPatch = Schema.Struct({
+  id: Schema.optionalKey(TaskId),
+  title: Schema.optionalKey(Schema.NonEmptyString),
+  kind: Schema.optionalKey(TaskDefinition.fields.kind),
+  deps: Schema.optionalKey(Schema.NullOr(Schema.Array(TaskId))),
+  area: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.NonEmptyString))),
+  brief: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  criteria: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
+  suggested: Schema.optionalKey(Schema.NullOr(HarnessSelection)),
+  group: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  parent: Schema.optionalKey(Schema.NullOr(TaskId)),
+});
+
+export type TaskPatch = typeof TaskPatch.Type;
 
 /** Task state and Gate readiness are derived from Attempts, never written here. */
 export class Task extends Schema.Class<Task>("ConstellationTask")({

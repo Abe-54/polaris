@@ -32,7 +32,9 @@ export const gitOperation = <A>(f: () => Promise<A>) =>
 
 const component = (name: string) => {
   if (!/^[a-zA-Z0-9_-]+$/.test(name))
-    throw new Error("Constellation and Task IDs must be single path components");
+    throw new Error(
+      `${name} is not a single path component: Constellation and Task IDs may contain only letters, digits, - and _`
+    );
 
   return name;
 };
