@@ -1113,6 +1113,15 @@ The sixth mode, ⌘6 (Desktop App only): a small HTTP client whose reason to exi
 - **In Traces.** The trace bar of a trace a send started reads "from Requests" and gets "Resend in Requests ⌘6" before "Add to agent session ⌘L"; it opens the Request with the same body and headers. Other HTTP traces get nothing yet (ENG-811).
 - **Status bar.** "Sends from ‹host› · traces to ‹receiver›".
 
+### Computer use (proposed, ENG-846; not accepted, not built)
+
+Agents seeing and using a host's desktop apps, one app at a time (Paper "Computer use (ENG-846)", CU0–CU5; CU0 holds the open questions, including the glossary entries for computer use and controlled app). Moonlit only so far.
+
+- **Host page (CU1, CU2).** A "Computer use" instrument card on the host page (HS-D), above Remote access and Daemon, with an on/off switch. A status well ("1 of 2 permissions", "Ready", "On ‹host›, approve the prompt") with a live "checked 2s ago" kicker; a checklist (Accessibility, Screen Recording) with live state and "Open System Settings" per row, primary only on the row that's off; then "Always allowed on ‹host›": app icon, name, "Allowed from ‹session› · date", Remove. A remote Mac's buttons read "Open System Settings on ‹host›". Linux shows no checklist ("Linux asks for no permissions; the live view shows the last frame"); a Windows host whose daemon has no desktop says why, with "Check again"; a headless host collapses the card to one line.
+- **Onboarding and inline prompt (CU3).** A skippable card, once per local Mac, in the Orchestrator's empty panel: the pixel window, "Let agents use apps on this Mac", the same checklist, "Skip for now", then "Computer use is ready on ‹host›" and Done. A turn that needs computer use while it's off puts the session in Needs you with an inline transcript card ("Claude Code wants to use Simulator" / "Screen Recording is off on ‹host›" / "On ‹host›, approve the prompt") and one fix plus "Not now".
+- **Approvals (CU4).** App approval: session title over host · workspace · age, a well with the app icon and "‹Harness› wants to use ‹app›" with the agent's reason; Allow once, Always allow on ‹host›, Deny. Headed input (the real pointer and keyboard) is Allow once and Deny only. The Mobile App shows it as a bottom sheet; the Even G2 shows "Use ‹app›?" with "Always here" in place of the long label.
+- **Transcript and peek (CU5).** A computer use Tool Run line ("Using Simulator · clicking Book · 2 actions") ends in a window thumbnail with a Starlight edge while live; hovering it opens a popover with the app's window (never the whole screen), "LIVE" in Starlight, what the agent is doing and "Open in Output". Space on a session row (the sidebar peek) shows the same live view. Last frame (Linux, Windows), "In use by ‹session›" (waiting, with "Open ‹session›") and "‹host›'s screen is locked" (paused) are neutral.
+
 ## Do's and Don'ts
 
 ### Do:
