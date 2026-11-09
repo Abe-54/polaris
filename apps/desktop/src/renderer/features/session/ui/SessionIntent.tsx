@@ -231,6 +231,7 @@ export const SessionIntent = ({ hostKey, sessionId }: SessionViewProps) => {
     hostKey,
     root: session.cwd,
     workspaceId: session.workspaceId,
+    sessionId: session.id,
     windows: isWindowsHost(host),
   };
 

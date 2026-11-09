@@ -1,7 +1,8 @@
 import "../../../../test/dom.testing.ts";
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import { Toaster } from "@polaris/ui";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { SessionId, WorkspaceId } from "@polaris/protocol";
 import type { ReactNode } from "react";
 import { createStore } from "zustand/vanilla";
 import { png } from "../../../../../shared/raster/fixtures.testing.ts";
@@ -13,7 +14,9 @@ import { AppProvider } from "../../../../shell/hooks.ts";
 import { type AppState, type Connection, initialState } from "../../../../store/store.ts";
 import { installFakeBridge } from "../../../../test/bridge.testing.ts";
 import { standInBridge } from "../../../bridge.ts";
+import { browserUi } from "../../../browser/index.ts";
 import { EditorPlaceProvider } from "../../../editor-links/index.ts";
+import { uiKey } from "../../state.ts";
 import Streamed from "./Streamed.tsx";
 
 const HOST = "ubuntu-box";
@@ -136,4 +139,62 @@ test("a link to a URL stays a link", () => {
   expect(view.getByRole("link", { name: "Effect" }).getAttribute("href")).toBe(
     "https://effect.website/docs"
   );
+});
+
+describe("a localhost link in a session (ENG-761)", () => {
+  const SESSION = SessionId.make("s1");
+  const WORKSPACE = WorkspaceId.make("repo");
+
+  const inSession = (text: string) =>
+    render(
+      <Providers>
+        <EditorPlaceProvider
+          value={{ hostKey: HOST, root: "/code/repo", workspaceId: WORKSPACE, sessionId: SESSION }}
+        >
+          <Streamed text={text} live={false} />
+        </EditorPlaceProvider>
+      </Providers>
+    );
+
+  test("opens a tab in the session's Browser and shows the Browser", async () => {
+    const bridge = installFakeBridge();
+    const view = inSession("Running at [the app](http://localhost:5173/settings).");
+
+    await act(async () => {
+      fireEvent.click(view.getByRole("link", { name: "the app" }));
+      await Bun.sleep(5);
+    });
+
+    expect(bridge.sent("browser.openTab")).toEqual([
+      {
+        hostKey: HOST,
+        workspaceId: WORKSPACE,
+        sessionId: SESSION,
+        url: "http://localhost:5173/settings",
+      },
+    ]);
+    expect(browserUi(uiKey(HOST, SESSION)).shown).toBe(true);
+  });
+
+  test("a tab the app can't open says so", async () => {
+    const bridge = installFakeBridge();
+
+    bridge.refuse("browser.openTab", { code: "Unsupported", message: "no browser" });
+    const view = inSession("See http://127.0.0.1:8080/");
+
+    await act(async () => {
+      fireEvent.click(view.getByRole("link", { name: "http://127.0.0.1:8080/" }));
+      await Bun.sleep(5);
+    });
+
+    expect(await page().findByText("Couldn't open the link in the browser")).not.toBeNull();
+  });
+
+  test("a public link still opens in the user's browser", () => {
+    const bridge = installFakeBridge();
+    const view = inSession("Docs: [Effect](https://effect.website/docs)");
+
+    expect(view.getByRole("link", { name: "Effect" }).getAttribute("target")).toBe("_blank");
+    expect(bridge.sent("browser.openTab")).toEqual([]);
+  });
 });

@@ -1,8 +1,8 @@
 /**
  * An assistant message as Markdown (Streamdown): incomplete syntax mid-stream
  * renders as it will end, code in the code font with a copy action, Mermaid
- * and KaTeX once their plugins load, links open in the browser, images and links naming a path
- * open from the session's Host.
+ * and KaTeX once their plugins load, links open in the user's browser (a Host address in the
+ * session's Browser), images and links naming a path open from the session's Host.
  */
 import "./markdown.css";
 import {
@@ -12,7 +12,9 @@ import {
   defaultRehypePlugins,
   Streamdown,
 } from "streamdown";
+import { browserLinkOf } from "../../../browser/index.ts";
 import { FileLink, useEditorPlace } from "../../../editor-links/index.ts";
+import { BrowserLink } from "./BrowserLink.tsx";
 import { COPY_CODE, COPY_TABLE } from "./copyControls.tsx";
 import { editorLinkOf, rehypeFileLinks } from "./fileLinks.ts";
 import { HostImage } from "./HostImage.tsx";
@@ -65,13 +67,17 @@ const COMPONENTS: Components = {
       <HostImage path={path} alt={props.alt ?? ""} />
     );
   },
-  // `path:line` (rehypeFileLinks) opens in the editor, a Host path as `HostLink` says, other
-  // web links in the user's browser (HTTP or HTTPS, including localhost).
+  // `path:line` (rehypeFileLinks) opens in the editor, a Host path as `HostLink` says, a Host
+  // address (localhost) in the session's Browser, other web links in the user's browser.
   a: ({ href, children, node }) => {
     const target = editorLinkOf(node?.properties);
     const hostPath = hostLinkOf(node?.properties);
 
     if (hostPath !== null) return <HostLink path={hostPath}>{children}</HostLink>;
+
+    const local = browserLinkOf(href);
+
+    if (local !== null) return <BrowserLink url={local}>{children}</BrowserLink>;
 
     if (target !== null)
       return (

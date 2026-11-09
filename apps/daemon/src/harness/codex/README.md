@@ -117,7 +117,7 @@ The table follows T3 Code's runtime modes. These values go on `thread/start`/`th
 
 ### Other commands
 
-- `sendTurn`: `turn/start` with a text input, plus a `localImage` input (staged Host path) per image attachment. Other attachments are listed by path at the end of the prompt. Fails if a Turn is already in flight.
+- `sendTurn`: `turn/start` with a text input, plus a `localImage` input (staged Host path) per image attachment. Markdown and plain-text attachments up to 8 KB go inline in the prompt (`../inlineText.ts`); other attachments are listed by path at the end of it. Fails if a Turn is already in flight.
 - `steer`: `turn/steer` with `expectedTurnId` set to the in-flight turn. Fails if none is in flight. Codex's answer records it as a `UserMessage` item; a Turn's later `userMessage` items (a steer from a co-attached TUI) do too, and `steers.ts` keeps one item when both report the same steer. The Turn's first user message is its prompt.
 - `interrupt`: `turn/interrupt`, or nothing when idle. The Turn then ends `interrupted`, and open approvals come back as `ApprovalWithdrawn`.
 
