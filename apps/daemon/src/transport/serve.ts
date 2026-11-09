@@ -208,7 +208,7 @@ export const daemonHandlers = Layer.mergeAll(
 ).pipe(Layer.provide(daemonServices));
 
 /** What the lazy language handlers serve: unavailable where no language artifact runs. */
-const LANGUAGE_CAPABILITIES: ReadonlyArray<Capability> = [
+export const LANGUAGE_CAPABILITIES: ReadonlyArray<Capability> = [
   "prediction.context",
   "languages",
   "languages.trust",

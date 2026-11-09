@@ -133,7 +133,7 @@ export const daemon = (
       lockPath: join(home, "daemon.lock"),
       root: home,
       handlers,
-      capabilities: ["host-address", "browser.host"],
+      capabilities: ["host-address", "browser.host", "presence"],
     });
 
     const hosting = found[0];
