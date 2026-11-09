@@ -19,6 +19,10 @@
  * items; if the feed was idle, the upstream restarts from the cached sequence
  * and revalidates. A Snapshot may arrive at any point (e.g. after the cache
  * overflowed and the feed asked for a fresh one), and replaces all prior state.
+ *
+ * A defect on the upstream (a chunk that fails to decode) ends the feed with
+ * that cause for every subscriber, as a non-connection error does; it never
+ * resubscribes on its own (ENG-492).
  */
 import {
   HostStreamItem,
@@ -28,6 +32,7 @@ import {
   SessionStreamItem,
 } from "@polaris/protocol";
 import {
+  Cause,
   Effect,
   Exit,
   Fiber,
@@ -74,7 +79,7 @@ export interface FeedOptions<C, A, E> {
 }
 
 export interface Feed<A, E> {
-  /** Cached items first, then live ones, across reconnects. Fails only with non-connection errors. */
+  /** Cached items first, then live ones, across reconnects. Fails with non-connection errors and upstream defects. */
   readonly stream: Stream.Stream<A, E>;
   readonly lastSequence: () => number | null;
   readonly subscribers: () => number;
@@ -86,6 +91,13 @@ type Message<A, E> = Exit.Exit<A, E>;
 class Reopen {
   readonly _tag = "Reopen";
   constructor(readonly fresh: boolean) {}
+}
+
+/** Where a pump resumes from: the epoch to wait for, a fresh Snapshot, reopens in a row that stalled. */
+interface Resume {
+  minEpoch: number;
+  fresh: boolean;
+  stalled: number;
 }
 
 /** The first pause before a reopen that made no progress, doubled each time up to the max. */
@@ -109,7 +121,7 @@ export const openFeed = Effect.fnUntraced(function* <C, A, E>(
   let snapshot: A | null = null;
   let events: Array<A> = [];
   let synchronized: A | null = null;
-  let failure: { readonly error: E } | null = null;
+  let failure: { readonly cause: Cause.Cause<E> } | null = null;
   let refCount = 0;
   let upstream: Fiber.Fiber<void> | null = null;
 
@@ -160,53 +172,64 @@ export const openFeed = Effect.fnUntraced(function* <C, A, E>(
       })
     );
 
+  /** Ends the feed: every subscriber, and any that joins before it restarts, fails with `cause`. */
+  const end = (cause: Cause.Cause<E>) =>
+    lock.withPermit(
+      Effect.suspend(() => {
+        failure = { cause };
+
+        return Effect.asVoid(publish(Exit.failCause(cause)));
+      })
+    );
+
+  /** After the upstream failed with `error`: null to resume, or the error that ends the feed. */
+  const resumes = (at: Resume, error: E | Reopen, epoch: number, before: number | null) =>
+    Effect.gen(function* () {
+      if (error instanceof Reopen) {
+        at.minEpoch = epoch;
+        at.fresh = error.fresh;
+        at.stalled = lastSequence !== before ? 0 : at.stalled + 1;
+
+        if (at.stalled > 0) yield* Effect.sleep(reopenBackoff(at.stalled));
+
+        return null;
+      }
+
+      if (options.isDisconnect(error)) {
+        at.minEpoch = epoch + 1;
+
+        return null;
+      }
+
+      return { error };
+    });
+
   const run = Effect.gen(function* () {
-    let minEpoch = 0;
-    let fresh = false;
-    /** Reopens in a row that saw no new event: each waits longer. */
-    let stalled = 0;
+    const at: Resume = { minEpoch: 0, fresh: false, stalled: 0 };
 
     while (true) {
-      const live = yield* options.source.next(minEpoch);
-      const after: number | null = fresh ? null : lastSequence;
+      const live = yield* options.source.next(at.minEpoch);
+      const after: number | null = at.fresh ? null : lastSequence;
       const before = lastSequence;
-      fresh = false;
+      at.fresh = false;
 
-      const result: Result.Result<void, E | Reopen> = yield* options
+      const exit: Exit.Exit<void, E | Reopen> = yield* options
         .open(live.client, after)
-        .pipe(Stream.runForEach(handle), Effect.result);
+        .pipe(Stream.runForEach(handle), Effect.exit);
 
-      if (Result.isSuccess(result)) {
-        minEpoch = live.epoch;
+      if (Exit.isSuccess(exit)) {
+        at.minEpoch = live.epoch;
         yield* Effect.sleep(options.reopenDelayMs ?? 1000);
         continue;
       }
 
-      const error: E | Reopen = result.failure;
+      const found: Result.Result<E | Reopen, Cause.Cause<never>> = Cause.findError(exit.cause);
 
-      if (error instanceof Reopen) {
-        minEpoch = live.epoch;
-        fresh = error.fresh;
-        stalled = lastSequence !== before ? 0 : stalled + 1;
+      // A defect or an interruption from the upstream: no typed error to retry on.
+      if (Result.isFailure(found)) return yield* end(found.failure);
+      const fatal = yield* resumes(at, found.success, live.epoch, before);
 
-        if (stalled > 0) yield* Effect.sleep(reopenBackoff(stalled));
-        continue;
-      }
-
-      if (options.isDisconnect(error)) {
-        minEpoch = live.epoch + 1;
-        continue;
-      }
-
-      yield* lock.withPermit(
-        Effect.suspend(() => {
-          failure = { error };
-
-          return publish(Exit.fail(error));
-        })
-      );
-
-      return;
+      if (fatal !== null) return yield* end(Cause.fail(fatal.error));
     }
   });
 
@@ -267,7 +290,7 @@ export const openFeed = Effect.fnUntraced(function* <C, A, E>(
         Stream.mapEffect((message) => message)
       );
 
-      if (failed !== null) return Stream.fail(failed.error);
+      if (failed !== null) return Stream.failCause(failed.cause);
 
       return Stream.concat(Stream.fromIterable(replay), live);
     })

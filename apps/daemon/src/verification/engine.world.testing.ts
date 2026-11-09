@@ -84,6 +84,7 @@ export const reached = {
   interruptedByRestart: 0,
   feedSnapshots: 0,
   feedDrops: 0,
+  feedDefects: 0,
   disconnects: 0,
 };
 
@@ -122,6 +123,10 @@ export interface FeedState {
   /** What the feed's subscriber received, in order. */
   readonly seen: Array<Seen>;
   readonly errors: Array<string>;
+  /** The next chunk on this feed's stream fails to decode (a defect, ENG-492). */
+  corrupt: boolean;
+  /** Its subscriber ended with that defect: the feed failed visibly. */
+  failed: boolean;
   /** Snapshot contents: session → [state, pending request ids]. */
   readonly snapshots: Array<{
     readonly seq: number;
@@ -307,6 +312,12 @@ export class World {
     this.conns.set(client, { ...conn, epoch: conn.epoch + 1, closed: Deferred.makeUnsafe<void>() });
   }
 
+  /** One feed's stream starts sending chunks that fail to decode; at most one feed per run. */
+  corruptFeed(index: number) {
+    if (this.feeds.some((fs) => fs.corrupt)) return;
+    this.feeds[index % this.feeds.length]!.corrupt = true;
+  }
+
   /** The Daemon goes away; every connection with it. */
   async crash() {
     const runtime = this.rt;
@@ -363,6 +374,7 @@ export class World {
     const wire = <A, E>(conn: Conn, upstream: Stream.Stream<A, E>) =>
       Stream.unwrap(
         Effect.gen(function* () {
+          if (fs.failed) fs.errors.push("the feed resubscribed after it failed");
           const queue = yield* Queue.bounded<A, E | Cause.Done>(1);
 
           const server = Effect.runFork(
@@ -378,6 +390,9 @@ export class World {
 
           return Stream.fromQueue(queue).pipe(
             Stream.tap(() => fs.gate.await),
+            Stream.mapEffect((item) =>
+              fs.corrupt ? Effect.die(new Error("a chunk failed to decode")) : Effect.succeed(item)
+            ),
             Stream.interruptWhen(
               Deferred.await(conn.closed).pipe(Effect.andThen(Effect.fail(new Disconnected())))
             )
@@ -432,6 +447,8 @@ export class World {
           gate: Latch.makeUnsafe(true),
           seen: [],
           errors: [],
+          corrupt: false,
+          failed: false,
           snapshots: [],
           feed: null,
           consumer: null,
@@ -443,7 +460,12 @@ export class World {
           feed.stream.pipe(
             Stream.runForEach((item) => Effect.sync(() => onItem(fs, item))),
             Effect.catchCause((cause) =>
-              Effect.sync(() => void fs.errors.push(Cause.pretty(cause)))
+              Effect.sync(() => {
+                if (fs.corrupt && Cause.hasDies(cause)) {
+                  fs.failed = true;
+                  reached.feedDefects++;
+                } else fs.errors.push(Cause.pretty(cause));
+              })
             )
           )
         );

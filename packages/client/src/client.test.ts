@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Data, Effect, Fiber, Queue, Stream } from "effect";
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Option, Queue, Stream } from "effect";
 import {
   classifyExit,
   type NeedsAttentionReason,
@@ -193,6 +193,61 @@ describe("resumable feed", () => {
 
     expect(result.opens).toEqual([null, 5]);
     expect(result.error).toBe("NotFound");
+  });
+
+  // ENG-492: a chunk that fails to decode is a defect (`orDie`), not an RpcClientError.
+  test("a defect on the upstream fails every subscriber and does not resubscribe", async () => {
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let opens = 0;
+          const undecodable = new Error("chunk failed to decode");
+          const bothSubscribed = yield* Deferred.make<void>();
+
+          const feed = yield* makeFeed<number, Item, Disconnected>({
+            source: { next: () => Effect.succeed({ epoch: 1, client: 0 }) },
+            open: () => {
+              opens++;
+
+              return Stream.fromIterable<Item>([
+                Snapshot({ sequence: 1 }),
+                Event({ sequence: 2 }),
+              ]).pipe(
+                Stream.concat(Stream.drain(Stream.fromEffect(Deferred.await(bothSubscribed)))),
+                Stream.concat(Stream.die(undecodable))
+              );
+            },
+            mark,
+            isDisconnect: (e) => e instanceof Disconnected,
+            gapless: false,
+          });
+
+          const subscriber = feed.stream.pipe(
+            Stream.runCollect,
+            Effect.exit,
+            Effect.timeoutOption("1 second")
+          );
+
+          const both = yield* Effect.forkChild(
+            Effect.all([subscriber, subscriber], { concurrency: "unbounded" })
+          );
+
+          while (feed.subscribers() < 2) yield* Effect.yieldNow;
+          yield* Deferred.succeed(bothSubscribed, undefined);
+          const [first, second] = yield* Fiber.join(both);
+
+          return { first, second, opens, undecodable };
+        })
+      )
+    );
+
+    for (const outcome of [result.first, result.second]) {
+      expect(Option.isSome(outcome)).toBe(true);
+      const exit = Option.getOrThrow(outcome);
+      expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(result.undecodable);
+    }
+
+    expect(result.opens).toBe(1);
   });
 
   // ENG-209 finding 1: the host stream leaves out session-only events, so its sequences have gaps.

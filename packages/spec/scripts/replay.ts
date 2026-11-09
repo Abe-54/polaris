@@ -552,6 +552,7 @@ module ${name} {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set(${[...cmdIds].map(q).join(", ")}),
