@@ -35,6 +35,8 @@ export interface NewSessionInput {
   readonly api: NewSessionApi;
   /** Opens on this Workspace (and its Host) instead of the last used one. */
   readonly workspaceId?: string;
+  /** Opens on this Host (ENG-494): its last used Workspace, else its first. */
+  readonly hostId?: string;
   /** The Host's connection, for Attach and the mic; without it neither is offered. */
   readonly connectionFor: (hostId: string) => HostConnection | null;
   readonly onStarted: (hostId: string, sessionId: string) => void;
@@ -84,7 +86,7 @@ const sendBlocker = (host: SheetHost | null, prompt: string, choice: HarnessChoi
 export const useNewSession = (input: NewSessionInput): NewSession => {
   const { hosts, api } = input;
   const [picked, setPicked] = useState<Target | null>(null);
-  const target = picked ?? defaultTarget(hosts, input.workspaceId);
+  const target = picked ?? defaultTarget(hosts, input.workspaceId, input.hostId);
   const host = hosts.find((h) => h.hostId === target?.hostId) ?? null;
   const workspace = host?.workspaces.find((w) => w.id === target?.workspaceId) ?? null;
   const draft = useDraft(target, input.draftStore);

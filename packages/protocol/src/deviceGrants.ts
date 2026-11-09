@@ -306,8 +306,9 @@ export const DEVICE_COMMANDS = {
   Interrupt: "device",
   StopBackgroundTasks: "local",
   BackgroundCommand: "local",
-  Continue: "local",
-  Retry: "local",
+  // ENG-494: the phone's Needs You menus pick up an Interrupted Turn or resend a Failed one.
+  Continue: "device",
+  Retry: "device",
   RespondToApproval: "device",
   RenameSession: "device",
   PinSession: "device",
