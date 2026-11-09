@@ -105,7 +105,8 @@ export function selectorOf(element: PageElement, escape: (value: string) => stri
 export function pickInPage(
   page: PageGlobals,
   select: (element: PageElement, escape: (value: string) => string) => string,
-  limits: PickLimits
+  limits: PickLimits,
+  mark: string
 ): Promise<PagePick | null> {
   const { document } = page;
 
@@ -195,6 +196,9 @@ export function pickInPage(
       const top = Math.max(0, rect.top);
       const html = element.outerHTML;
 
+      // For the main world's React lookup (`react.ts`); main takes it off again.
+      element.setAttribute("data-polaris-pick", mark);
+
       return {
         url: page.location.href.slice(0, limits.url),
         title: document.title.slice(0, limits.title),
@@ -266,8 +270,24 @@ export function cancelPick(page: PageGlobals): void {
   page.__polarisPick?.cancel();
 }
 
-/** The script that starts a pick, for `executeJavaScriptInIsolatedWorld`: the world's window. */
-export const pickScript = (limits: PickLimits) =>
-  `(${pickInPage.toString()})(window, ${selectorOf.toString()}, ${JSON.stringify(limits)})`;
+/** Takes the pick's mark off the element it was left on. */
+export function unmarkPick(
+  page: { document: { querySelector: (selector: string) => PageElement | null } },
+  mark: string
+): void {
+  page.document
+    .querySelector(`[data-polaris-pick="${mark}"]`)
+    ?.removeAttribute("data-polaris-pick");
+}
+
+/**
+ * The script that starts a pick, for `executeJavaScriptInIsolatedWorld`: the world's window.
+ * `mark` is left on the picked element for `react.ts` until `unmarkScript`.
+ */
+export const pickScript = (limits: PickLimits, mark: string) =>
+  `(${pickInPage.toString()})(window, ${selectorOf.toString()}, ${JSON.stringify(limits)}, ${JSON.stringify(mark)})`;
 
 export const cancelScript = () => `(${cancelPick.toString()})(window)`;
+
+export const unmarkScript = (mark: string) =>
+  `(${unmarkPick.toString()})(window, ${JSON.stringify(mark)})`;
