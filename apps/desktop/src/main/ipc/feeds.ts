@@ -27,6 +27,7 @@ import { constellationFeed } from "./constellation.ts";
 import { Machines } from "../machines/service.ts";
 import type { PredictionBridge } from "../prediction/bridge.ts";
 import { browserOpeners } from "../browser/ipc.ts";
+import { simulatorOpeners } from "../simulator/ipc.ts";
 import type { Registry as Browsers } from "../browser/registry.ts";
 
 export type Feed<K extends SubscriptionKind> = Stream.Stream<
@@ -84,6 +85,7 @@ const openers: Openers = {
   ...tracesOpeners,
   ...githubOpeners,
   ...gitOpeners,
+  ...simulatorOpeners,
   ...browserOpeners(undefined),
   hosts: () => Stream.unwrap(HostDirectory.useSync((dir) => SubscriptionRef.changes(dir.views))),
   machines: () =>
