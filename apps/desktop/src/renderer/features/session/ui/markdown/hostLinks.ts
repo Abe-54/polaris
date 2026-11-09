@@ -8,6 +8,7 @@ import {
   each,
   sanitizableHostPath,
   hostPathOf,
+  type HostPaths,
   type MutableElement,
   type PropertyValue,
 } from "./hostImages.ts";
@@ -36,22 +37,26 @@ const eachLink = (tree: Node, visit: (link: MutableElement, href: string) => voi
   });
 
 /** Before sanitizing, preserve file URLs and Windows drives as paths rather than URL schemes. */
-export const rehypeFileHrefs = () => (tree: Node) =>
-  eachLink(tree, (link, href) => {
-    const path = sanitizableHostPath(href);
+export const rehypeFileHrefs =
+  ({ windows }: HostPaths) =>
+  (tree: Node) =>
+    eachLink(tree, (link, href) => {
+      const path = sanitizableHostPath(href, windows);
 
-    if (path !== null && link.properties !== undefined) link.properties["href"] = path;
-  });
+      if (path !== null && link.properties !== undefined) link.properties["href"] = path;
+    });
 
 /** After sanitizing, before hardening (which would send a path to the window as a URL). */
-export const rehypeHostLinks = () => (tree: Node) =>
-  eachLink(tree, (link, href) => {
-    const path = href.startsWith("?") ? null : hostPathOf(href);
+export const rehypeHostLinks =
+  ({ windows }: HostPaths) =>
+  (tree: Node) =>
+    eachLink(tree, (link, href) => {
+      const path = href.startsWith("?") ? null : hostPathOf(href, windows);
 
-    if (path === null || link.properties === undefined) return;
-    link.properties["href"] = HOST_LINK_HREF;
-    link.properties["dataHostPath"] = path;
-  });
+      if (path === null || link.properties === undefined) return;
+      link.properties["href"] = HOST_LINK_HREF;
+      link.properties["dataHostPath"] = path;
+    });
 
 /** The Host path a marked link opens; null for a link to a URL. */
 export const hostLinkOf = (
