@@ -22,7 +22,7 @@ import {
 import { useEffect, useRef } from "react";
 import { currentKeyPlatform } from "../../../../../shared/chord.ts";
 import { loadLanguage } from "../../../editor/cm/languages.ts";
-import { shellSafe } from "../../../editor/cm/keys.ts";
+import { shellChords, shellSafe } from "../../../editor/cm/keys.ts";
 import { editorLook } from "../../../editor/cm/theme.ts";
 import type { BodyLanguage } from "../../model/draft.ts";
 
@@ -91,7 +91,8 @@ export const BodyEditor = ({ text, language, onChange }: BodyEditorProps) => {
           keymap.of(
             shellSafe(
               [...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab],
-              currentKeyPlatform()
+              currentKeyPlatform(),
+              shellChords(currentKeyPlatform(), "mode.requests")
             )
           ),
           editorLook,
