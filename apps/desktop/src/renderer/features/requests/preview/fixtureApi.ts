@@ -11,6 +11,7 @@ import {
   RequestTarget,
   type ResolvedVariable,
   Send,
+  SendLookup,
   SessionId,
   TraceId,
 } from "@polaris/protocol";
@@ -119,6 +120,8 @@ export interface FixtureOptions {
   /** A Request opened with unsaved edits, as Q1 shows "Recalculate overdue". */
   readonly files?: ReadonlyArray<RequestFile>;
   readonly environments?: ReadonlyArray<string>;
+  /** Sends already in the log, newest first, for `getSend`. */
+  readonly sends?: ReadonlyArray<Send>;
 }
 
 const targetUrl = (target: RequestTarget, files: ReadonlyArray<RequestFile>) =>
@@ -220,6 +223,7 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
   const environments = options.environments ?? ["dev", "staging"];
   const watchers = new Set<Watch<RequestsSnapshot>>();
   let sends = 0;
+  let log = options.sends ?? [];
   const snapshot = (): RequestsSnapshot => ({ files, environments });
 
   return {
@@ -250,7 +254,28 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
 
       return { ok: true, value: next };
     },
-    send: async (_at, input) => ({ ok: true, value: sendOf(input, files, ++sends) }),
+    send: async (_at, input) => {
+      const sent = sendOf(input, files, ++sends);
+
+      log = [sent, ...log];
+
+      return { ok: true, value: sent };
+    },
+    getSend: async (_at, lookup) => {
+      const found = log.find((s) =>
+        SendLookup.match(lookup, {
+          ById: ({ id }) => s.id === id,
+          ByTrace: ({ traceId }) => s.traceId === traceId,
+        })
+      );
+
+      return found === undefined
+        ? {
+            ok: false,
+            error: { code: "E-SEND-NOT-FOUND", message: "No such send", fix: "Send it again" },
+          }
+        : { ok: true, value: found };
+    },
     variables: async () => ({ ok: true, value: VARIABLES }),
     parseCurl: async (_at, text) => {
       const parsed = parseCurl(text);
