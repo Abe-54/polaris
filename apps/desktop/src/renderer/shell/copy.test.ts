@@ -69,6 +69,18 @@ describe("session row line", () => {
     expect(sessionLine(entry(), activityOf(undefined))).toBe("Working · turn 1");
   });
 
+  test("Working with a tool in hand reads its verb, not its raw name", () => {
+    const message = TurnItem.cases.ToolCall.make({
+      id: "m",
+      name: "SendMessage",
+      input: { to: "Fix tests", summary: "rebase on main" },
+      output: null,
+      status: "running",
+    });
+
+    expect(activityOf(working(message))).toBe("Messaging Fix tests · rebase on main");
+  });
+
   test("Idle with background tasks reads as waiting on them, not idle", () => {
     const tasks = [
       new BackgroundTask({ id: "a", kind: "subagent", description: "Explore the store" }),
@@ -81,6 +93,18 @@ describe("session row line", () => {
       sessionLine({ ...waiting, session: { ...waiting.session, backgroundTasks: tasks } })
     ).toBe("Waiting on 2 subagents");
     expect(sessionLine(waiting)).toBe("Idle · turn 1");
+  });
+
+  test("a row's own count (the open session's roster) wins over the Host's tasks", () => {
+    const tasks = [new BackgroundTask({ id: "a", kind: "subagent", description: "Explore" })];
+
+    const idle = {
+      ...base,
+      session: { ...base.session, state: "idle" as const, backgroundTasks: tasks },
+    };
+
+    // The roster says that Subagent has ended: the row reads idle, not waiting.
+    expect(sessionLine(idle, null, { subagents: [], tasks: [] })).toBe("Idle · turn 1");
   });
 
   test("Idle numbers user Turns: a Harness-started Turn doesn't add one", () => {

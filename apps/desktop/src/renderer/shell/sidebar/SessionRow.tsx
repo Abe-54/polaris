@@ -1,8 +1,14 @@
 import type { Worktree } from "@polaris/protocol";
 import { BranchIcon, cn, Row } from "@polaris/ui";
-import type { KeyboardEvent, ReactElement } from "react";
+import { type KeyboardEvent, type ReactElement, useMemo } from "react";
 import { slots } from "../../app/slots.tsx";
-import { waitingOn } from "../../features/session/model/background.ts";
+import {
+  isWaiting,
+  rowWaiting,
+  type Waiting,
+  waitingTasks,
+} from "../../features/session/model/background.ts";
+import { hasCapability } from "../../features/session/hooks.ts";
 import { useLeadConstellation } from "../../features/constellation/hooks.ts";
 import { ConstellationPeek, useSpacePeek } from "../../features/constellation/ui/peek.tsx";
 import { BackgroundTasksHover } from "../../features/session/ui/background.tsx";
@@ -51,8 +57,33 @@ export const buttonProps = (select: () => void) => ({
   },
 });
 
-/** Background tasks an Idle row waits on; none while it needs you. */
-const waitingFor = (entry: SessionEntry) => (needsYou(entry) ? [] : waitingOn(entry.session));
+const NOT_WAITING: Waiting = { subagents: [], tasks: [] };
+
+/**
+ * What an Idle row waits on; nothing while it needs you. An open session's Subagents come from its
+ * roster, so an ended one leaves the count when its card does.
+ */
+const useWaiting = (hostKey: string, entry: SessionEntry): Waiting => {
+  const { session } = entry;
+  const asked = session.state === "idle" && !needsYou(entry);
+
+  // Only an Idle row reads the feed, so a Working one doesn't re-render on its deltas.
+  const turns = useApp((s) =>
+    asked ? s.sessions[sessionKey(hostKey, session.id)]?.turns : undefined
+  );
+
+  const streams = useApp((s) =>
+    hasCapability(
+      s.hosts.find((h) => h.key === hostKey),
+      "session.subagents"
+    )
+  );
+
+  return useMemo(
+    () => (asked ? rowWaiting(session, turns, streams) : NOT_WAITING),
+    [asked, session, turns, streams]
+  );
+};
 
 /**
  * A row that needs you gets its hover card (the NeedsYouHover slot); one waiting on
@@ -67,18 +98,19 @@ export const WithHover = ({
   readonly entry: SessionEntry;
   readonly children: ReactElement;
 }) => {
+  const waiting = useWaiting(hostKey, entry);
+
   if (needsYou(entry))
     return (
       <slots.NeedsYouHover hostKey={hostKey} sessionId={entry.session.id}>
         {children}
       </slots.NeedsYouHover>
     );
-  const waiting = waitingFor(entry);
 
-  return waiting.length === 0 ? (
+  return !isWaiting(waiting) ? (
     children
   ) : (
-    <BackgroundTasksHover tasks={waiting} side="right">
+    <BackgroundTasksHover tasks={waitingTasks(waiting)} side="right">
       {children}
     </BackgroundTasksHover>
   );
@@ -101,7 +133,7 @@ export const SessionRow = ({ hostKey, entry, now }: SessionRowProps) => {
   const selected = useSelectedSession(hostKey, entry);
   const { session } = entry;
   const state = shownState(entry);
-  const waiting = waitingFor(entry).length > 0;
+  const waiting = useWaiting(hostKey, entry);
 
   // What a Working session is doing now, from its feed if open; a string, so deltas don't re-render.
   const activity = useApp((s) =>
@@ -137,15 +169,17 @@ export const SessionRow = ({ hostKey, entry, now }: SessionRowProps) => {
               session.title || "Untitled session"
             )
           }
-          description={sessionLine(entry, activity)}
+          description={sessionLine(entry, activity, waiting)}
           meta={
             <span
               data-testid="row-state"
               data-state={state}
-              aria-label={waiting ? "waiting" : sessionStateLabel[state]}
+              aria-label={isWaiting(waiting) ? "waiting" : sessionStateLabel[state]}
             >
               {/* Compact drops the second line, so the wait takes the age's place. */}
-              {waiting && density === "compact" ? "waiting" : age(session.createdAt, now)}
+              {isWaiting(waiting) && density === "compact"
+                ? "waiting"
+                : age(session.createdAt, now)}
             </span>
           }
         />

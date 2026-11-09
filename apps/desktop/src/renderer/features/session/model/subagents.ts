@@ -8,7 +8,7 @@ import { Option, Predicate, Schema } from "effect";
 import type { Subagent, TurnItem } from "@polaris/protocol";
 import type { SubagentView, TurnView } from "../../../store/sessionModel.ts";
 import { completedItemView, type ItemView, liveItemView } from "./items.ts";
-import { type Entry, groupItems } from "./runs.ts";
+import { type Entry, groupItems, toolActivity } from "./runs.ts";
 
 export interface SubagentCard {
   readonly id: string;
@@ -72,7 +72,7 @@ const ACTIVITY: Partial<Record<ItemView["kind"], (item: ItemView) => string>> = 
   command: (i) =>
     i.kind === "command" && i.command !== "" ? `Running ${i.command}` : "Running a command",
   files: (i) => (i.kind === "files" ? `Editing ${i.changes[0]?.path ?? "files"}` : "Editing"),
-  tool: (i) => (i.kind === "tool" ? `${i.name} ${i.summary}`.trim() : "Using a tool"),
+  tool: (i) => (i.kind === "tool" ? toolActivity(i) : "Using a tool"),
 };
 
 const activityOf = (live: ReadonlyArray<ItemView>, done: ReadonlyArray<ItemView>) => {

@@ -147,3 +147,45 @@ test("without the level, a notification's report is pending on the change it mak
   });
   expect(tasks.onMessage(notification("c"))).toMatchObject([{ tasks: [], reportsPending: true }]);
 });
+
+const startedInBackground = (task_id: string, task_type = "local_agent") => ({
+  type: "system" as const,
+  subtype: "task_started" as const,
+  task_id,
+  task_type,
+  is_backgrounded: true,
+  description: "Research",
+  uuid: crypto.randomUUID(),
+  session_id: "s",
+});
+
+// The `task_updated` that ends a Subagent, as fixtures/subagent-turn.jsonl recorded it.
+test("without the level, a task whose update ends it leaves the tasks", () => {
+  const tasks = new ClaudeBackgroundTasks();
+  tasks.onMessage(startedInBackground("a"));
+  tasks.onMessage(startedInBackground("b"));
+
+  const ended = tasks.onMessage({
+    type: "system",
+    subtype: "task_updated",
+    task_id: "a",
+    patch: { status: "completed", end_time: 1790828024047 },
+    uuid: crypto.randomUUID(),
+    session_id: "s",
+  });
+
+  expect(ended).toMatchObject([{ tasks: [{ id: "b" }], reportsPending: false }]);
+  expect(tasks.onMessage(notification("a"))).toMatchObject([
+    { tasks: [{ id: "b" }], reportsPending: true },
+  ]);
+  expect(tasks.takeReports()).toEqual([{ id: "a", kind: "subagent" }]);
+});
+
+test("without the level, an ending with no transcript still leaves the tasks, unreported", () => {
+  const tasks = new ClaudeBackgroundTasks();
+  tasks.onMessage(startedInBackground("a"));
+  expect(tasks.onMessage({ ...notification("a"), skip_transcript: true })).toMatchObject([
+    { tasks: [] },
+  ]);
+  expect(tasks.takeReports()).toEqual([]);
+});
