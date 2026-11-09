@@ -19,7 +19,9 @@ import {
 } from "../features/session/index.ts";
 import { TerminalDock } from "../features/terminal/index.ts";
 import { useBrowserFeed } from "../features/browser/index.ts";
-import { onAgentTab, useShownSubagent } from "../features/session/index.ts";
+import { onAgentSimulator, onAgentTab, useShownSubagent } from "../features/session/index.ts";
+import { useSimulatorFeed } from "../features/simulator/index.ts";
+import { useApp } from "./hooks.ts";
 
 export interface OutputLaneProps {
   readonly hostKey: string;
@@ -102,6 +104,15 @@ export const OutputLane = ({ hostKey, workspaceId, sessionId, lane }: OutputLane
 
   useBrowserFeed(hostKey, sessionId, () =>
     onAgentTab({ hostKey, workspaceId }, sessionId, subagentShown)
+  );
+
+  const simulatorCapable = useApp(
+    (s) =>
+      s.hosts.find((h) => h.key === hostKey)?.status.capabilities.includes("simulator") ?? false
+  );
+
+  useSimulatorFeed(hostKey, sessionId, `${hostKey}\u0000${sessionId}`, simulatorCapable, () =>
+    onAgentSimulator({ hostKey, workspaceId }, sessionId, subagentShown)
   );
 
   if (!shown) {

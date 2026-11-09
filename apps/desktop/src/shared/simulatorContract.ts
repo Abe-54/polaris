@@ -1,9 +1,17 @@
 /**
- * The Simulator stream's bridge (ENG-829): main carries the hub's bytes, on the Host's loopback,
- * to the renderer (whose CSP keeps it off loopback). Only the stream and input routes are
- * reachable; main builds every path itself, so nothing else on the hub is.
+ * The Simulator's bridge (ENG-829): the Daemon's `simulator.*` RPCs, and main carrying the hub's
+ * bytes, on the Host's loopback, to the renderer (whose CSP keeps it off loopback). Only the
+ * stream and input routes are reachable; main builds every path itself, so nothing else is.
  */
-import { HostAddressPort, SimulatorId, SimulatorPlatform } from "@polaris/protocol";
+import {
+  HostAddressPort,
+  SessionId,
+  SimulatorId,
+  SimulatorPlatform,
+  type SimulatorAttachItem,
+  type SimulatorSessionItem,
+  type SimulatorWatchItem,
+} from "@polaris/protocol";
 import { Schema } from "effect";
 
 const HostKey = Schema.String.check(Schema.isMinLength(1));
@@ -35,6 +43,12 @@ export type SimulatorSocketItem =
   | { readonly kind: "close"; readonly code: number; readonly reason: string };
 
 export const SimulatorSubscriptionInputs = {
+  /** The Host's support and Simulators: `Snapshot` first; subscribing checks support again. */
+  "simulator.watch": Schema.Struct({ hostKey: HostKey }),
+  /** Holds the hub up for the session's shown Simulator: `Attached`, again after each restart. */
+  "simulator.attach": Schema.Struct({ hostKey: HostKey, sessionId: SessionId, id: SimulatorId }),
+  /** The session's shown Simulator and its agents' activity, `Showing` first. */
+  "simulator.sessionFeed": Schema.Struct({ hostKey: HostKey, sessionId: SessionId }),
   /** The body of `stream.avcc` or `stream.mjpeg`, as it arrives. */
   "simulator.video": Schema.Struct({ ...Hub, format: SimulatorVideoFormat }),
   /** The input socket: `open` first, then the hub's messages, `close` last. */
@@ -42,11 +56,18 @@ export const SimulatorSubscriptionInputs = {
 };
 
 export interface SimulatorSubscriptionItems {
+  "simulator.watch": SimulatorWatchItem;
+  "simulator.attach": SimulatorAttachItem;
+  "simulator.sessionFeed": SimulatorSessionItem;
   "simulator.video": Uint8Array;
   "simulator.socket": SimulatorSocketItem;
 }
 
 export const SimulatorRequestInputs = {
+  "simulator.boot": Schema.Struct({ hostKey: HostKey, id: SimulatorId }),
+  /** The user's own shutdown from the picker: forced, since Simulators are the Host's. */
+  "simulator.shutdown": Schema.Struct({ hostKey: HostKey, id: SimulatorId }),
+  "simulator.restart": Schema.Struct({ hostKey: HostKey }),
   /** Sends on an open `simulator.socket`; a closed one fails with `Closed`. */
   "simulator.send": Schema.Struct({
     socketId: Schema.String,
@@ -58,5 +79,8 @@ export const SimulatorRequestInputs = {
 };
 
 export interface SimulatorRequestOutputs {
+  "simulator.boot": null;
+  "simulator.shutdown": null;
+  "simulator.restart": null;
   "simulator.send": null;
 }

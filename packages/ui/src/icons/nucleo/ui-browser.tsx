@@ -230,3 +230,139 @@ export function PickElementIcon({ size = 16, strokeWidth = STROKE, ...props }: N
     </svg>
   );
 }
+
+/** Nucleo UI outline `HouseOutline18`. */
+export function HomeIcon({ size = 16, strokeWidth = STROKE, ...props }: NucleoIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <path
+        d="M3.145 5.95L8.395 1.96C8.753 1.688 9.248 1.688 9.605 1.96L14.855 5.95C15.104 6.139 15.25 6.434 15.25 6.746V14.25C15.25 15.355 14.355 16.25 13.25 16.25H4.75C3.645 16.25 2.75 15.355 2.75 14.25V6.746C2.75 6.433 2.896 6.139 3.145 5.95Z"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      ></path>
+    </svg>
+  );
+}
+
+/** Nucleo UI outline `RotateObjAnticlockwiseOutline18`. */
+export function RotateLeftIcon({ size = 16, strokeWidth = STROKE, ...props }: NucleoIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <rect
+        x="3.75"
+        y="7.75"
+        width={7.5}
+        height={7.5}
+        rx="1.5"
+        ry="1.5"
+        transform="translate(15 23) rotate(-180)"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></rect>
+      <path
+        d="M15.75,7.25c0-2.209-1.791-4-4-4h-2.25"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></path>
+      <polyline
+        points="11.75 1 9.5 3.25 11.75 5.5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></polyline>
+    </svg>
+  );
+}
+
+/** Nucleo UI outline `CameraOutline18`. */
+export function CameraIcon({ size = 16, strokeWidth = STROKE, ...props }: NucleoIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <path
+        d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></path>
+      <circle
+        cx="9"
+        cy="9"
+        r="2.75"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></circle>
+      <circle cx="4.25" cy="6.25" r=".75" fill="currentColor" data-stroke="none"></circle>
+    </svg>
+  );
+}
+
+/** Nucleo UI outline `PowerOffOutline18`. */
+export function PowerIcon({ size = 16, strokeWidth = STROKE, ...props }: NucleoIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 18 18"
+      aria-hidden="true"
+      focusable="false"
+      {...props}
+    >
+      <path
+        d="M5.5,3.236c-1.946,1.184-3.25,3.319-3.25,5.764,0,3.728,3.022,6.75,6.75,6.75s6.75-3.022,6.75-6.75c0-2.445-1.304-4.579-3.25-5.764"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></path>
+      <line
+        x1="9"
+        y1="1.75"
+        x2="9"
+        y2="8.25"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={strokeWidth}
+      ></line>
+    </svg>
+  );
+}

@@ -6,3 +6,8 @@
     transform: translateX(calc(100% - 240px));
   }
 }
+
+/* The Simulator's device bezel (DESIGN.md, Simulator): neutral, a phone's own black in both themes. */
+:root {
+  --simulator-bezel: light-dark(#1d1e21, #050506);
+}
