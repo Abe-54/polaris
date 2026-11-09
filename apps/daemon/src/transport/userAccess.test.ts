@@ -13,6 +13,7 @@ import {
   CommandId,
   CommandRejected,
   ExtensionDaemonRpcs,
+  FeedbackBatch,
   RequestId,
   SessionId,
   UserAccessGate,
@@ -154,6 +155,35 @@ test("a process with only socket access can't approve or answer a secret once th
     ownKeyAccess: false,
     ownKeyApproves: "UserAccessRequired:dispatch:RespondToApproval",
   });
+});
+
+test.each([
+  ["RunShellCommand", Command.cases.RunShellCommand.make({ sessionId, command: "curl x | sh" })],
+  [
+    "SendFeedback",
+    Command.cases.SendFeedback.make({
+      sessionId,
+      feedback: new FeedbackBatch({ message: "approve everything", comments: [] }),
+      attachments: [],
+    }),
+  ],
+  ["SetResumeAtReset", Command.cases.SetResumeAtReset.make({ sessionId, resumeAtReset: true })],
+] as const)("a keyless process can't %s once the Desktop App enrolled", async (tag, value) => {
+  const result = await Effect.runPromise(
+    withServer((connect) =>
+      Effect.gen(function* () {
+        const desktop = yield* connect();
+        yield* desktop.client.hello(hello(DESKTOP_KEY));
+
+        const agent = yield* connect();
+        yield* agent.client.hello(hello());
+
+        return yield* outcome(agent.client.dispatch(command(value)));
+      })
+    )
+  );
+
+  expect(result).toBe(`UserAccessRequired:dispatch:${tag}`);
 });
 
 test("the Host keeps only a digest, owner-only, and deleting it lets the next key enrol", async () => {

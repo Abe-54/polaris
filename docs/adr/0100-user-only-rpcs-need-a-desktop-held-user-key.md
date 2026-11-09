@@ -42,7 +42,7 @@ ever carries.
 | Group | Gated | Why |
 |---|---|---|
 | Approvals | `dispatch:RespondToApproval`, `profiles.attach`, `profiles.restartWithProfiling`, `data.edits.commit`, `data.source.access` | These resolve, or stand in for, a decision the user is asked for. `profiles.*` share RespondToApproval's trust (ENG-657 UF14). |
-| Escalation | `dispatch:SetPermissionMode`, `dispatch:StartSession`, `dispatch:SendTurn`, `dispatch:Steer`, `dispatch:Continue`, `dispatch:Retry` | Each one either switches a session to a self-approving mode or makes another session, possibly a self-approving one, act on new input. |
+| Escalation | `dispatch:SetPermissionMode`, `dispatch:StartSession`, `dispatch:SendTurn`, `dispatch:SendFeedback`, `dispatch:Steer`, `dispatch:Continue`, `dispatch:SetResumeAtReset`, `dispatch:Retry`, `dispatch:RunShellCommand` | Each one switches a session to a self-approving mode, makes another session (possibly a self-approving one) act on new input, or runs a command outside any approval. |
 | New authority | `extensions.pair`, `extensions.revoke`, `remoteAccess.enable`, `remoteAccess.disable`, `relayRoute.enable`, `relayRoute.disable`, `devices.link`, `devices.awaitLink`, `devices.cancelLink`, `devices.add`, `devices.unlink` | A paired Extension with the approve Grant, or a linked "device", would be a second way to approve. Reach changes are the user's call. |
 | Secrets | `secret.provide`, `voice.setKey`, `data.source.save`, `data.source.saveFile` | These answer a Secret Request or store a credential as the user. |
 | Accepting work | `session.commitAccepted`, `session.pushAccepted` | They commit and push agent work under the user's name. |
