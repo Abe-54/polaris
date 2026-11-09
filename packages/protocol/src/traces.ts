@@ -174,9 +174,14 @@ export const TraceDetail = Schema.Struct({
 
 export type TraceDetail = typeof TraceDetail.Type;
 
+/** Where an older page of a Span's logs starts: the oldest record already read. */
+export const LogCursor = Schema.Struct({ timeUnixNano: TraceNanoseconds, id: Schema.String });
+
+export type LogCursor = typeof LogCursor.Type;
+
 export const SpanDetail = Schema.Struct({
   span: Span,
-  /** At most 20 matching records, newest first. */
+  /** At most 20 matching records, newest first; with `before`, the 20 older than it. */
   logs: Schema.Array(LogRecord).check(Schema.isMaxLength(20)),
   /** Total matching retained log records, before the 20-record limit. */
   logCount: Count,
@@ -264,6 +269,8 @@ export const GetSpan = Rpc.make("traces.span", {
     traceId: TraceIdPrefix,
     spanId: SpanIdPrefix,
     scope: TraceScopeSelector,
+    /** Read the records older than this one; absent reads the newest. */
+    before: Schema.optionalKey(LogCursor),
   },
   success: SpanDetail,
   error: Errors,

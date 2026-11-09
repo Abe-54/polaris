@@ -1,8 +1,9 @@
-/** The Logs tab: the log records written during the Span, newest first, at most 20 of `count`. */
+/** The Logs tab: the Span's log records, newest first, 20 at a time with "Show older" past them. */
 import type { LogRecord } from "@polaris/protocol";
 import { cn } from "@polaris/ui";
 import { fieldText } from "../../model/span/fields.ts";
 import { plural } from "../../../session/model/format.ts";
+import type { OlderLogs } from "../../data/hooks.tsx";
 import { offsetLabel, Quiet, Value } from "./parts.tsx";
 
 /** OTLP severity numbers: 17 and up are ERROR or FATAL, 13–16 WARN. */
@@ -41,29 +42,57 @@ const Log = ({ log, start }: { readonly log: LogRecord; readonly start: string }
   </li>
 );
 
+const More = ({
+  shown,
+  count,
+  older,
+}: {
+  readonly shown: ReadonlyArray<LogRecord>;
+  readonly count: number;
+  readonly older: OlderLogs;
+}) => (
+  <div className="flex items-center gap-3 px-4 py-3" data-testid="span-logs-more">
+    <p className="text-caption text-text-subtle min-w-0 flex-1">
+      {older.error === null
+        ? `The newest ${shown.length.toLocaleString("en-US")} of ${plural(count, "log record")}`
+        : `Couldn't read older logs: ${older.error.message}`}
+    </p>
+    <button
+      type="button"
+      disabled={older.reading}
+      onClick={() => older.more(shown)}
+      data-testid="span-logs-older"
+      className="text-caption text-text-subtle hover:text-text-default focus-visible:ring-starlight rounded-control shrink-0 cursor-default px-1 outline-none focus-visible:ring-2 disabled:opacity-60"
+    >
+      {older.reading ? "Reading…" : "Show older"}
+    </button>
+  </div>
+);
+
 export const Logs = ({
   logs,
   count,
   start,
+  older,
 }: {
   readonly logs: ReadonlyArray<LogRecord>;
   readonly count: number;
   /** The Span's start, for each record's offset. */
   readonly start: string;
-}) =>
-  logs.length === 0 ? (
+  readonly older: OlderLogs;
+}) => {
+  const shown = older.logs.length === 0 ? logs : [...logs, ...older.logs];
+
+  return shown.length === 0 ? (
     <Quiet>No logs were written during this span.</Quiet>
   ) : (
     <>
       <ul className="flex flex-col">
-        {logs.map((log) => (
+        {shown.map((log) => (
           <Log key={log.id} log={log} start={start} />
         ))}
       </ul>
-      {count > logs.length ? (
-        <Quiet>
-          The newest {logs.length} of {plural(count, "log record")}
-        </Quiet>
-      ) : null}
+      {count > shown.length ? <More shown={shown} count={count} older={older} /> : null}
     </>
   );
+};

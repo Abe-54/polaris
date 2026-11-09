@@ -5,6 +5,7 @@
  */
 import { TraceAvailability } from "@polaris/protocol";
 import type {
+  LogCursor,
   SpanDetail,
   SpanIdPrefix,
   TraceCompareSelector,
@@ -36,11 +37,12 @@ export interface TracesApi {
     at: TracesSessionKey,
     traceId: typeof TraceIdPrefix.Type
   ) => Promise<Result<TraceDetail>>;
-  /** One span with its newest 20 log records. */
+  /** One span with its newest 20 log records, or the 20 older than `before`. */
   readonly span: (
     at: TracesSessionKey,
     traceId: typeof TraceIdPrefix.Type,
-    spanId: typeof SpanIdPrefix.Type
+    spanId: typeof SpanIdPrefix.Type,
+    before?: LogCursor
   ) => Promise<Result<SpanDetail>>;
   /** Per route, `a`'s traces (before) against `b`'s (after); needs `traces.compare`. */
   readonly compare: (
@@ -124,7 +126,10 @@ const watch: TracesApi["watch"] = (at, filter, on) => {
 export const liveTracesApi: TracesApi = {
   watch,
   get: (at, traceId) => polaris().request("traces.get", { ...session(at), traceId }),
-  span: (at, traceId, spanId) =>
-    polaris().request("traces.span", { ...session(at), traceId, spanId }),
+  span: (at, traceId, spanId, before) => {
+    const input = { ...session(at), traceId, spanId };
+
+    return polaris().request("traces.span", before === undefined ? input : { ...input, before });
+  },
   compare: (at, a, b) => polaris().request("traces.compare", { ...session(at), a, b }),
 };

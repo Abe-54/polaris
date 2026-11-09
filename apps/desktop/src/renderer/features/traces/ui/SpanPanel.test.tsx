@@ -15,7 +15,7 @@ import { fixtureDataApi } from "../../data/preview/fixtureApi.ts";
 import type { TracesApi } from "../data/api.ts";
 import { TracesLayer } from "../data/hooks.tsx";
 import { publishOpenTrace } from "../model/openTrace.ts";
-import { FIXTURE_DETAILS } from "../preview/fixtures.ts";
+import { FIXTURE_DETAILS, FIXTURE_LOGS } from "../preview/fixtures.ts";
 import { selectSpan, selectTrace, tracesSelection } from "../model/store.ts";
 import { fixtureTracesApi } from "../preview/fixtureApi.ts";
 import { BIG_TRACE, ERROR_TRACE, FIXTURE_SESSION } from "../preview/fixtures.ts";
@@ -169,4 +169,64 @@ test("the panel omits usual duration on an old Daemon without history", async ()
   mount(BIG_TRACE.id, UPDATE, fixtureTracesApi(), false);
   await screen.findByTestId("span-name");
   expect(screen.queryByTestId("span-usual")).toBeNull();
+});
+
+const manyLogs = (base: TracesApi, total: number, failOlder = false): TracesApi => ({
+  ...base,
+  span: async (at, traceId, spanId, before) => {
+    const read = await base.span(at, traceId, spanId);
+
+    if (!read.ok) return read;
+
+    if (failOlder && before !== undefined)
+      return { ok: false, error: { code: "E-HOST-AWAY", message: "lucas-rpi is offline" } };
+    const template = FIXTURE_LOGS[0]!;
+    const start = BigInt(read.value.span.startTimeUnixNano);
+
+    const logs = Array.from({ length: total }, (_, i) => ({
+      ...template,
+      id: `log-${i}`,
+      spanId: read.value.span.id,
+      timeUnixNano: (start + BigInt(total - i) * 1_000_000n).toString(),
+      body: `record ${i}`,
+    }));
+
+    const from = before === undefined ? 0 : logs.findIndex((l) => l.id === before.id) + 1;
+
+    return {
+      ok: true,
+      value: { ...read.value, logs: logs.slice(from, from + 20), logCount: total },
+    };
+  },
+});
+
+test("Show older reads a span's logs past the newest 20 until all are shown", async () => {
+  mount(BIG_TRACE.id, UPDATE, manyLogs(fixtureTracesApi(), 45));
+  fireEvent.click(await screen.findByRole("tab", { name: /Logs/ }));
+
+  expect(screen.getAllByTestId("span-log")).toHaveLength(20);
+  expect(screen.getByTestId("span-logs-more").textContent).toContain(
+    "The newest 20 of 45 log records"
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Show older" }));
+  await screen.findByText("The newest 40 of 45 log records");
+  fireEvent.click(screen.getByRole("button", { name: "Show older" }));
+  await screen.findByText("record 44");
+
+  const shown = screen.getAllByTestId("span-log").map((l) => l.textContent);
+
+  expect(shown).toHaveLength(45);
+  expect(shown[20]).toContain("record 20");
+  expect(screen.queryByTestId("span-logs-more")).toBeNull();
+});
+
+test("Show older that fails says why and keeps the logs already shown", async () => {
+  mount(BIG_TRACE.id, UPDATE, manyLogs(fixtureTracesApi(), 45, true));
+  fireEvent.click(await screen.findByRole("tab", { name: /Logs/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Show older" }));
+
+  await screen.findByText("Couldn't read older logs: lucas-rpi is offline");
+  expect(screen.getAllByTestId("span-log")).toHaveLength(20);
+  expect(screen.getByRole("button", { name: "Show older" })).toBeTruthy();
 });
