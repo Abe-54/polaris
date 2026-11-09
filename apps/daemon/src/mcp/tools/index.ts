@@ -110,7 +110,7 @@ export const constellationTools = (
 
   const status = define(
     "status",
-    "Read the graph as a tree by group and parent, with Claims, questions and ready Tasks. Narrow it with task (that Task and its children), openOnly (hide done and canceled Tasks) or since (what changed after a graph revision, then where things stand). json adds the graph with each Task's latest Attempt. Do not poll; updates arrive as Lead Turns.",
+    "Read the graph as a tree by group and parent, with Claims, questions and ready Tasks. Narrow it with task (that Task and its children), openOnly (hide done and canceled Tasks) or since (what changed after a graph revision, then where things stand). json adds the graph with each Task's latest Attempt and the one it follows. Do not poll; updates arrive as Lead Turns.",
     Schema.Struct({
       json: Schema.optionalKey(Schema.Boolean),
       task: Schema.optionalKey(TaskId),

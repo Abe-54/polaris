@@ -93,14 +93,20 @@ export const graphSlice = (result: ConstellationResult) =>
         projections: result.projections,
       });
 
-/** Status JSON keeps each Task's latest Attempt; earlier ones show in the outline's send-back lines. */
+/** Status JSON keeps each Task's latest Attempt and the one it follows, with its verbatim feedback. */
 export const latestAttemptsOnly = (result: ConstellationResult): ConstellationResult => {
   const graph = result.constellation;
 
   if (graph === null) return result;
 
   const latest = new Set(
-    graph.tasks.flatMap((task) => graph.attempts.findLast((a) => a.taskId === task.id)?.id ?? [])
+    graph.tasks.flatMap((task) => {
+      const attempt = graph.attempts.findLast((a) => a.taskId === task.id);
+
+      if (attempt === undefined) return [];
+
+      return "ref" in attempt.cause ? [attempt.id, attempt.cause.ref] : [attempt.id];
+    })
   );
 
   return new ConstellationResult({
