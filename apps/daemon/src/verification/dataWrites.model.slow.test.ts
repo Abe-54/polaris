@@ -213,6 +213,7 @@ test(
         (steps) => {
           const actual = new Actual();
           let expected: Reference = { phase: "new", active: true, claims: 0 };
+          let claims = 0;
 
           try {
             for (const step of steps) {
@@ -220,9 +221,12 @@ test(
               const claimed = actual.step(step);
               expect(claimed).toBe(next.claims > expected.claims);
               expected = next;
+
+              if (claimed) claims++;
               expect(actual.repo.writes.find("write")?.status ?? "new").toBe(expected.phase);
               expect(actual.record.pending.size).toBe(expected.phase === "pending" ? 1 : 0);
-              expect(expected.claims).toBeLessThanOrEqual(1);
+              // The real gate runs a write at most once, across restarts.
+              expect(claims).toBeLessThanOrEqual(1);
             }
           } finally {
             actual.db.close();

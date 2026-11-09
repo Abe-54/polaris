@@ -302,7 +302,12 @@ const step = (ref: Reference, op: number, index: number): Step => {
 
 let traceIndex = 0;
 
-const run = (operations: ReadonlyArray<number>) => {
+interface Outcome {
+  codes: ReadonlyArray<string>;
+  events: ReadonlyArray<DomainEvent>;
+}
+
+const run = (operations: ReadonlyArray<number>): ReadonlyArray<Outcome> => {
   const start = C.Plan.make({
     constellationId: CID,
     start: {
@@ -330,6 +335,8 @@ const run = (operations: ReadonlyArray<number>) => {
     { hostId: HOST, events: first.events },
   ];
 
+  const outcomes: Array<Outcome> = [];
+
   for (const [index, op] of operations.entries()) {
     const input = step(ref, op, index);
     const decision = decideConstellation(record, input.command, input.context);
@@ -337,6 +344,10 @@ const run = (operations: ReadonlyArray<number>) => {
       decision.rejection === null,
       JSON.stringify({ op, findings: decision.rejection?.findings })
     ).toBe(input.allowed);
+    outcomes.push({
+      codes: decision.rejection?.findings.map((f) => f.code) ?? [],
+      events: decision.events,
+    });
 
     if (!input.allowed) expect(decision.events).toEqual([]);
     else {
@@ -363,6 +374,8 @@ const run = (operations: ReadonlyArray<number>) => {
       JSON.stringify({ version: 1, ownerHostId: HOST, batches })
     );
   }
+
+  return outcomes;
 };
 
 const RUNS = pbtRuns(100);
@@ -373,7 +386,9 @@ test(
     fc.assert(
       fc.property(
         fc.array(fc.integer({ min: 0, max: 35 }), { minLength: 20, maxLength: 100 }),
-        run
+        (operations) => {
+          run(operations);
+        }
       ),
       { numRuns: RUNS, ...pbtSeed() }
     );
@@ -385,12 +400,24 @@ test("model parent dependency edits preserve active rollup and gate descendants 
   run([30, 30, 0, 6, 30, 9, 1, 2, 8, 11, 1, 7, 10]);
 });
 
+const tags = (outcome: Outcome | undefined) => outcome?.events.map((event) => event._tag) ?? [];
+
 test("blocked SendBack is modeled and emitted in a complete committed trace", () => {
-  run([30, 0, 33, 12]);
+  // Clear P's dependency on X, dispatch A, block it on B, then send it back while blocked.
+  const outcomes = run([30, 30, 0, 33, 12]);
+
+  expect(tags(outcomes[2])).toContain("AttemptStarted");
+  expect(tags(outcomes[3])).toContain("AttemptBlocked");
+  expect(tags(outcomes[4])).toContain("AttemptRejected");
+  expect(tags(outcomes[4])).toContain("AttemptStarted");
 });
 
 test("a blocked Attempt cannot be accepted without a Claim after a parent dependency edit", () => {
-  run([0, 30, 2, 35, 0, 11]);
+  // X is blocked on A when the Accept arrives at the latest revision (index % 3 === 0).
+  const outcomes = run([0, 30, 2, 35, 0, 0, 11]);
+
+  expect(tags(outcomes[3])).toContain("AttemptBlocked");
+  expect(outcomes[6]?.codes).toEqual(["E-REVIEW"]);
 });
 
 test("model rejects mutual blocks through sibling Attempts", () => {
@@ -402,5 +429,13 @@ test("model rejects a parent edit that closes a live block through inherited dep
 });
 
 test("model ignores a blocked target's accepted wait edges during a parent edit", () => {
-  run([0, 30, 2, 0, 35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 9, 0, 0, 0, 30]);
+  // X waits on A; A is claimed and accepted (i21, at the latest revision); P then depends on X.
+  const outcomes = run([
+    0, 30, 2, 0, 35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 9, 0, 0, 30,
+  ]);
+
+  expect(tags(outcomes[4])).toContain("AttemptBlocked");
+  expect(tags(outcomes[21])).toContain("AttemptAccepted");
+  expect(outcomes[24]?.codes).toEqual([]);
+  expect(tags(outcomes[24])).toContain("TaskEdited");
 });

@@ -426,6 +426,22 @@ module constellations {
     }
   }
 
+  // `quint run --step=recoveryStep`: the Attempt lifecycle around a restart, so `witnessRecovery`
+  // doesn't depend on how many other options `step` has (ENG-352).
+  action recoveryStep = {
+    nondet t = TASKS.oneOf()
+    nondet s = SESSIONS.oneOf()
+    nondet a = view.attempts.indices().union(Set(-1)).oneOf()
+    val rev = if (view.attempts.indices().contains(a)) view.attempts[a].revision else 1
+    nondet dep = TASKS.oneOf()
+    any {
+      plan([Add({ task: t, deps: Set(), parent: -1, gate: t == 2 })]), setState("running"),
+      start(t, s, latest(view, t)), startFirstTurn(a), progress(a, rev), claim(a, rev, 42, false, true),
+      block(a, Set(dep), rev), unblock(a, rev, "Lead", true), reject(a, rev), stop(a, rev), harnessFail(a),
+      handover(s), interrupt(a), recoverPending, restart, availability(true, false, Set()), availability(true, true, Set()),
+    }
+  }
+
   val graphAcyclic = validGraph(view)
   val firstTurnValid = log.indices().forall(i => match log[i].kind {
     | FirstTurnStarted(a) => { val before = foldEvents(log.slice(0, i));

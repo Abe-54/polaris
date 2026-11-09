@@ -186,7 +186,10 @@ existing store/session spec. `constellations_test.qnt` contains 53 command/race
 scenarios and 37 malformed-event probes that must violate the corresponding
 property. `scripts/check.ts` typechecks both files, runs both test modules, then
 simulates the Constellation `safety` conjunction with required witnesses for
-Claim, acceptance, Gate, handover, delivery, relay, recovery and lease grants.
+Claim, acceptance, Gate, handover, delivery, relay and lease grants. Recovery has
+its own simulation, `--step=recoveryStep` (the Attempt lifecycle around interrupt,
+restart and `recoverPending`), because the full `step` reached `witnessRecovery` in
+1 of 3000 traces with seed `0x5eed`; `recoveryStep` reaches it in 78 (ENG-352).
 
 The default `current_constellations` instance has three Tasks, four sessions, six resource/outbox request IDs, one
 Constellation owner and one capacity-two Host resource. Dependency closure is
