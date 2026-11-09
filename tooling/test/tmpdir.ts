@@ -1,7 +1,8 @@
 /**
  * Test preload: each `bun test` run gets its own temp root, swept on exit,
  * so helpers that `mkdtempSync(tmpdir())` without cleanup can't fill /tmp.
- * Code that falls back to the real Polaris home (`~/.polaris`) gets one inside it too.
+ * POLARIS_HOME always points inside it, whatever the caller exported (an Agent Session exports
+ * the real `~/.polaris`), and the session's Daemon socket and id are dropped (ENG-826).
  */
 import { afterAll, beforeAll } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
@@ -18,7 +19,9 @@ if (process.platform === "win32") {
   process.env.TMP = root;
 }
 
-process.env.POLARIS_HOME ??= join(root, "polaris-home");
+process.env.POLARIS_HOME = join(root, "polaris-home");
+
+for (const name of ["POLARIS_HOST_SOCKET", "POLARIS_SESSION_ID"]) delete process.env[name];
 
 // `--rerun-each` runs the hooks again but not this module: each rerun recreates the root.
 beforeAll(() => {
