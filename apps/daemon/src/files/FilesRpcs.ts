@@ -15,6 +15,7 @@ import {
 } from "@polaris/protocol";
 import { Effect, Layer, Stream } from "effect";
 import { RpcGroup } from "effect/rpc";
+import { noteFileRead } from "../memory/fileReads.ts";
 import { BlobChannel, ServiceError } from "../services.ts";
 import { EditorFilesRpcsLive } from "./EditorFilesRpcs.ts";
 import { FileSearch } from "./FileSearch.ts";
@@ -74,6 +75,8 @@ export const handleReadFile = Effect.fn("files.read")(function* ({
   const { content } = result;
 
   if (ReadContent.$is("Inline")(content)) {
+    noteFileRead(content.text.length);
+
     return { size: result.size, mimeType: result.mimeType, content };
   }
 
@@ -86,8 +89,10 @@ export const handleReadFile = Effect.fn("files.read")(function* ({
           evaluate: () => Bun.file(content.path).slice(content.start, content.end).stream(),
           onError: (cause) =>
             new ServiceError({ service: "files.read", message: String(cause), cause }),
-        })
+        }).pipe(Stream.onEnd(Effect.sync(() => noteFileRead(content.end - content.start))))
   );
+
+  if (ReadContent.$is("Bytes")(content)) noteFileRead(content.bytes.byteLength);
 
   return {
     size: result.size,
