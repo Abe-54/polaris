@@ -77,18 +77,11 @@ export const traceRuntimeLayerAt = (filename: string | null, port = TRACE_PORT) 
       const revokeSession = (id: SessionId) =>
         vaultCall(() => vault.revokeSession(id)).pipe(Effect.ignore, Effect.andThen(store.notify));
 
-      const environment = Effect.fnUntraced(function* (
+      const tracedEnvironment = Effect.fnUntraced(function* (
         id: SessionId,
         source: TraceEnvironment,
         launchTurn?: TurnId
       ) {
-        const changed = yield* vaultCall(() => vault.markExported(id, false));
-
-        if (changed) yield* store.notify;
-
-        if (!TraceAvailability.guards.Listening(availability)) return {};
-
-        if (!(yield* sessions.active(id))) return {};
         const context = yield* sessions.session(id);
 
         if (Option.isSome(settings))
@@ -102,24 +95,51 @@ export const traceRuntimeLayerAt = (filename: string | null, port = TRACE_PORT) 
           instrumentationServices
         ).pipe(Effect.orElseSucceed(() => ({})));
 
+        return { ...injected, ...instrumentation };
+      });
+
+      // Independent of the trace receiver, so attach works while another process holds its port.
+      const profileBootstrap = Effect.fnUntraced(function* (
+        id: SessionId,
+        source: TraceEnvironment,
+        traced: TraceEnvironment
+      ) {
         const session = Option.isSome(events)
           ? (yield* events.value.model).sessions.get(id)?.session
           : undefined;
 
-        const cooperative =
-          Option.isSome(targets) &&
-          source.OTEL_EXPORTER_OTLP_ENDPOINT === undefined &&
-          source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT === undefined &&
-          session !== undefined &&
-          session.permissionMode !== "plan" &&
-          session.origin !== "reviewer" &&
-          !(Option.isSome(policy) && policy.value.readOnly(id))
-            ? yield* Effect.tryPromise(() =>
-                targets.value.environment(id, { ...source, ...instrumentation }.NODE_OPTIONS)
-              ).pipe(Effect.orElseSucceed(() => ({})))
-            : {};
+        if (
+          Option.isNone(targets) ||
+          source.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
+          source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined ||
+          session === undefined ||
+          session.permissionMode === "plan" ||
+          session.origin === "reviewer" ||
+          (Option.isSome(policy) && policy.value.readOnly(id))
+        )
+          return {};
 
-        return { ...injected, ...instrumentation, ...cooperative };
+        return yield* Effect.tryPromise(() =>
+          targets.value.environment(id, { ...source, ...traced }.NODE_OPTIONS)
+        ).pipe(Effect.orElseSucceed(() => ({})));
+      });
+
+      const environment = Effect.fnUntraced(function* (
+        id: SessionId,
+        source: TraceEnvironment,
+        launchTurn?: TurnId
+      ) {
+        const changed = yield* vaultCall(() => vault.markExported(id, false));
+
+        if (changed) yield* store.notify;
+
+        if (!(yield* sessions.active(id))) return {};
+
+        const traced = TraceAvailability.guards.Listening(availability)
+          ? yield* tracedEnvironment(id, source, launchTurn)
+          : {};
+
+        return { ...traced, ...(yield* profileBootstrap(id, source, traced)) };
       });
 
       const authenticate = Effect.fnUntraced(function* (token: string) {
