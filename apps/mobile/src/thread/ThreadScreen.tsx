@@ -9,6 +9,7 @@ import type {
   HarnessKind,
   RiskFinding,
   SessionId,
+  Turn,
   Workspace,
   WorkspaceId,
 } from "@polaris/protocol";
@@ -78,8 +79,8 @@ export interface ThreadScreenProps {
   readonly header?: ReactNode;
   /** Drawn under the header, above the transcript: a constellation's star chart panel. */
   readonly belowHeader?: ReactNode;
-  /** After the newest Turn, in the transcript: a constellation's completion card. */
-  readonly atLatest?: ReactNode;
+  /** After the newest Turn, in the transcript: a constellation's completion card, given that Turn. */
+  readonly atLatest?: ((last: Turn | null) => ReactNode) | undefined;
   /** Over the suggestions and composer: the lead's notice of a claim handed to the user. */
   readonly aboveComposer?: ReactNode;
   /** Just started from New session: the celestial rises off the horizon into the header (MX-AS). */
@@ -517,7 +518,7 @@ export const ThreadScreen = ({
             )}
             ListHeaderComponent={
               <>
-                {atLatest}
+                {atLatest?.(last)}
                 {critical === null ? null : (
                   <FindingRow
                     finding={critical}

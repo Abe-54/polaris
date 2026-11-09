@@ -2,7 +2,7 @@
  * What the constellation screen's presses open and what its chip and notice say (Paper MX-W,
  * MX-AA, MX-AB, MX-AC). Pure; the screen renders it.
  */
-import type { Constellation, ConstellationStats } from "@polaris/protocol";
+import type { Constellation, ConstellationStats, Turn } from "@polaris/protocol";
 import { type ConstellationSource, constellationView, type TaskRow } from "../model.ts";
 import { type PriceUsage, usd } from "../stats/model.ts";
 import type { StarChartData } from "./stars.ts";
@@ -59,3 +59,11 @@ export const claimNotice = (
 /** The completion card shows once the constellation is completed or archived (ENG-532). */
 export const completes = (state: Constellation["state"]): boolean =>
   state === "completed" || state === "archived";
+
+/** The completion card's "Review turn 31": the lead's last Turn, once it has ended (ENG-575). */
+export const reviewTurnOf = (
+  last: Turn | null
+): { readonly label: string; readonly turnId: string } | null =>
+  last === null || last.status === "working"
+    ? null
+    : { label: `Review turn ${last.userTurnNumber ?? last.index + 1}`, turnId: last.id };

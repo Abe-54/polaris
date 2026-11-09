@@ -27,7 +27,7 @@ import { type OpenSheet, renderClaimSheet, renderStatsSheet } from "./sheets.tsx
 import { starChartOf } from "./stars.ts";
 import { TaskSheet } from "./TaskSheet.tsx";
 import { TasksSheet } from "./TasksSheet.tsx";
-import { chipReading, claimNotice, completes } from "./wiring.ts";
+import { chipReading, claimNotice, completes, reviewTurnOf } from "./wiring.ts";
 
 /** Re-render elapsed times while the screen is open; nothing runs on the Host for it. */
 const useNow = (everyMs: number) => {
@@ -114,6 +114,23 @@ export const ChartedThread = ({
 
   const detail = star === null ? null : taskDetail(source, star, hostName, now);
 
+  // The lead's last Turn opens in Review, as its thread's Review pill would.
+  const reviewButton = (turn: ReturnType<typeof reviewTurnOf>) =>
+    turn === null
+      ? {}
+      : {
+          reviewTurn: {
+            label: turn.label,
+            onPress: () =>
+              navigation.push({
+                screen: "review",
+                hostId: connection.hostId,
+                sessionId: view.leadSessionId,
+                turnId: turn.turnId,
+              }),
+          },
+        };
+
   const slot = {
     sheet,
     onClose: close,
@@ -146,15 +163,18 @@ export const ChartedThread = ({
           notice === null ? undefined : <ClaimNotice notice={notice} onOpen={openClaim} />
         }
         atLatest={
-          completes(c.state) ? (
-            <View style={styles.latest}>
-              <CompletionCardContent
-                source={source}
-                stats={read}
-                onViewAllTasks={() => setSheet({ kind: "tasks" })}
-              />
-            </View>
-          ) : undefined
+          completes(c.state)
+            ? (last) => (
+                <View style={styles.latest}>
+                  <CompletionCardContent
+                    source={source}
+                    stats={read}
+                    {...reviewButton(reviewTurnOf(last))}
+                    onViewAllTasks={() => setSheet({ kind: "tasks" })}
+                  />
+                </View>
+              )
+            : undefined
         }
       />
       <TasksSheet
