@@ -16,7 +16,8 @@ import {
   TurnId,
   WorkspaceId,
 } from "@polaris/protocol";
-import { Effect } from "effect";
+import { fromBase64Url, HostSlice, LIVE_HPKE_INFO, PUSH_ENC_BYTES } from "@polaris/protocol/relay";
+import { Effect, Option, Schema } from "effect";
 import { patchSession } from "../store/model.ts";
 
 const at = "2026-10-27T12:00:00.000Z";
@@ -92,7 +93,11 @@ export const event = (domain: DomainEvent): HostStreamItem =>
     }),
   });
 
-export const turn = (id: string, replyPreview: string | null = null) =>
+export const turn = (
+  id: string,
+  replyPreview: string | null = null,
+  status: Turn["status"] = replyPreview === null ? "working" : "completed"
+) =>
   new Turn({
     id: TurnId.make(id),
     sessionId: SESSION_ID,
@@ -102,7 +107,7 @@ export const turn = (id: string, replyPreview: string | null = null) =>
     attachments: [],
     model: null,
     effort: null,
-    status: replyPreview === null ? "working" : "completed",
+    status,
     checkpointBefore: null,
     checkpointAfter: null,
     startedAt: at,
@@ -131,6 +136,14 @@ export const turnStarted = (id: string) =>
 
 export const turnEnded = (id: string, reply: string) =>
   event(DomainEvent.cases.TurnEnded.make({ turn: turn(id, reply) }));
+
+/** Turn `id` ended failed, with `reply` or none. */
+export const turnFailed = (id: string, reply: string | null) =>
+  event(
+    DomainEvent.cases.TurnEnded.make({
+      turn: turn(id, reply, "failed"),
+    })
+  );
 
 export const approvalRequested = (id: string, kind?: ApprovalRequest["kind"]) =>
   event(DomainEvent.cases.ApprovalRequested.make({ request: approval(id, kind) }));
@@ -163,3 +176,21 @@ export const notified = (id: string, automatic: boolean) =>
 
 export const sessionCreated = (created: AgentSession) =>
   event(DomainEvent.cases.SessionCreated.make({ session: created, actor: null }));
+
+/** Opens a slice `sealSlice` sealed to the key pair whose private half is `recipientKey`. */
+export const openSlice = async (recipientKey: CryptoKey, sealed: string): Promise<HostSlice> => {
+  const { pushSuite } = await import("./seal.ts");
+  const bytes = Option.getOrThrow(fromBase64Url(sealed));
+
+  const recipient = await pushSuite.createRecipientContext({
+    recipientKey,
+    enc: new Uint8Array(bytes.subarray(0, PUSH_ENC_BYTES)),
+    info: new TextEncoder().encode(LIVE_HPKE_INFO),
+  });
+
+  const plain = new TextDecoder().decode(
+    await recipient.open(new Uint8Array(bytes.subarray(PUSH_ENC_BYTES)))
+  );
+
+  return Schema.decodeUnknownSync(Schema.fromJsonString(HostSlice))(plain);
+};

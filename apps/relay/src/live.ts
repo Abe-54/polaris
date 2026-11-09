@@ -57,6 +57,8 @@ export interface LiveDeps {
   /** Activities one host may hold slices in. */
   readonly maxPerHost: number;
   readonly intervalMs?: number;
+  /** How long a host's socket may be gone before its slices leave (ENG-585). */
+  readonly hostGoneMs: number;
   readonly now?: () => number;
 }
 
@@ -85,11 +87,15 @@ const keyOf = (put: Pick<LivePut, "peer" | "environment" | "token">) =>
 export class LiveActivities {
   private readonly activities = new Map<string, Activity>();
   private readonly keysOf = new Map<RelayAddress, Set<string>>();
+  /** Hosts whose socket is gone: the timer that drops their slices. */
+  private readonly away = new Map<RelayAddress, ReturnType<typeof setTimeout>>();
   private readonly intervalMs: number;
+  private readonly hostGoneMs: number;
   private readonly now: () => number;
 
   constructor(private readonly deps: LiveDeps) {
     this.intervalMs = deps.intervalMs ?? LIVE_INTERVAL_MS;
+    this.hostGoneMs = deps.hostGoneMs;
     this.now = deps.now ?? Date.now;
   }
 
@@ -115,11 +121,34 @@ export class LiveActivities {
     }
   }
 
+  /** `host`'s socket is gone: its slices leave after `hostGoneMs` unless it comes back. */
+  hostGone(host: RelayAddress): void {
+    if (this.away.has(host) || !this.keysOf.has(host)) return;
+
+    const timer = setTimeout(() => {
+      this.away.delete(host);
+
+      for (const key of Array.from(this.keysOf.get(host) ?? [])) this.leave(host, key);
+    }, this.hostGoneMs);
+
+    timer.unref?.();
+    this.away.set(host, timer);
+  }
+
+  /** `host` is connected again: its slices stay. */
+  hostBack(host: RelayAddress): void {
+    clearTimeout(this.away.get(host));
+    this.away.delete(host);
+  }
+
   get size(): number {
     return this.activities.size;
   }
 
   stop(): void {
+    for (const timer of this.away.values()) clearTimeout(timer);
+    this.away.clear();
+
     for (const activity of this.activities.values()) this.cancel(activity);
     this.activities.clear();
     this.keysOf.clear();

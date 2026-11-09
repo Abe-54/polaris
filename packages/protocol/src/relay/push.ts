@@ -60,6 +60,8 @@ export const PushRegistration = Schema.Struct({
   ticket: PushTicket,
   /** This device's setting for automatic notifications (Constellations); absent means on. */
   automatic: Schema.optionalKey(Schema.Boolean),
+  /** This device's switch for this Host: false and it sends no pushes at all; absent means on. */
+  notifications: Schema.optionalKey(Schema.Boolean),
 });
 
 export type PushRegistration = typeof PushRegistration.Type;

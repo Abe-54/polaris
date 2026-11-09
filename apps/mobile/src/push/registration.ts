@@ -13,17 +13,25 @@ export interface PushDevice {
   readonly identity: RelayIdentity;
 }
 
-/** `automatic`: this iPhone's switch for notifications when a constellation needs you. */
+/** This iPhone's switches a Host follows when it pushes. */
+export interface PushSwitches {
+  /** When a constellation needs you, for every Host (Settings → Notifications). */
+  readonly automatic: boolean;
+  /** This Host's own (the host details sheet): off and it sends nothing (ENG-561). */
+  readonly notifications: boolean;
+}
+
 export const pushRegistration = (
   device: PushDevice,
   hostAddress: RelayAddress,
-  automatic: boolean
+  switches: PushSwitches
 ): PushRegistration => ({
   token: device.token,
   environment: device.environment,
   pushKey: device.pushKey,
   ticket: signPushTicket(device.identity, hostAddress, device.environment, device.token),
-  automatic,
+  automatic: switches.automatic,
+  notifications: switches.notifications,
 });
 
 /** Re-registering replaces the Host's registration for this device (a new token, key or switch). */
@@ -31,10 +39,10 @@ export const registerPush = (
   host: HostConnection,
   device: PushDevice,
   hostAddress: RelayAddress,
-  automatic: boolean
+  switches: PushSwitches
 ): Promise<void> =>
   host.run((client) =>
-    client["devices.registerPush"](pushRegistration(device, hostAddress, automatic))
+    client["devices.registerPush"](pushRegistration(device, hostAddress, switches))
   );
 
 /** How long an unlink waits for each Host to drop this device's registration. */

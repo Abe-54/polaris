@@ -24,6 +24,8 @@ export interface RelayConfig extends GateLimits {
   readonly maxWakesInFlight: number;
   /** Live Activities the relay holds slices for at once (ADR 0088). */
   readonly maxLiveActivities: number;
+  /** How long a host's socket may be gone before its Live Activity slices leave (ENG-585). */
+  readonly liveHostGoneMs: number;
 }
 
 export const defaultRelayConfig: RelayConfig = {
@@ -45,6 +47,7 @@ export const defaultRelayConfig: RelayConfig = {
   wakeBurst: 20,
   maxWakesInFlight: 256,
   maxLiveActivities: 10_000,
+  liveHostGoneMs: 120_000,
 };
 
 const int = (name: string, fallback: number) => Config.Int(name).pipe(Config.withDefault(fallback));
@@ -91,4 +94,5 @@ export const relayConfig: Config.Config<RelayConfig> = Config.all({
   wakeBurst: int("POLARIS_RELAY_WAKE_BURST", d.wakeBurst),
   maxWakesInFlight: int("POLARIS_RELAY_MAX_WAKES_IN_FLIGHT", d.maxWakesInFlight),
   maxLiveActivities: int("POLARIS_RELAY_MAX_LIVE_ACTIVITIES", d.maxLiveActivities),
+  liveHostGoneMs: int("POLARIS_RELAY_LIVE_HOST_GONE_MS", d.liveHostGoneMs),
 });

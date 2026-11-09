@@ -204,6 +204,7 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
         Layer.succeed(PushHostEvents)({
           subscribe: () => Stream.unwrap(following),
           isDigestTurn: () => Effect.succeed(false),
+          attemptFailure: () => Effect.succeed(null),
         })
       )
     )

@@ -8,6 +8,7 @@ import { LIVE_DEBOUNCE_MS, LiveHostEvents, LiveNotifier } from "./liveNotifier.t
 import {
   approvalRequested,
   event,
+  openSlice,
   SESSION_ID,
   snapshot,
   synchronized,
@@ -173,6 +174,31 @@ test(
         expect(sent[1]?.sealed).not.toBe(sent[0]?.sealed);
       })
     ),
+  SLOW_TEST_MS
+);
+
+test(
+  "a clean shutdown sends a last idle slice, so the activity stops saying working",
+  async () => {
+    let kept: ReadonlyArray<LiveSlice> = [];
+
+    await withNotifier([target], ({ sent }) =>
+      Effect.sync(() => {
+        kept = sent;
+      })
+    );
+
+    expect(flags(kept)).toEqual([
+      { active: true, alert: false },
+      { active: false, alert: false },
+    ]);
+    const last = kept[1]?.sealed ?? "";
+    expect(await openSlice(keys.privateKey, last)).toMatchObject({
+      working: 0,
+      needs: 0,
+      step: null,
+    });
+  },
   SLOW_TEST_MS
 );
 

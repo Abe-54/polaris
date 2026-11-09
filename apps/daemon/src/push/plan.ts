@@ -15,13 +15,16 @@ import {
   type Turn,
 } from "@polaris/protocol";
 import type { PushMessage } from "@polaris/protocol/relay";
-import { Match } from "effect";
+import { Match, Predicate } from "effect";
 
 /** How long a settle must hold before a finished Turn is pushed (ADR 0073). */
 export const SETTLE_MS = 3_000;
 
 /** The body when a Turn ended without a reply (the Desktop App's `NO_REPLY`). */
 export const NO_REPLY = "Ready for the next turn";
+
+/** The body when a failed Turn left no reply. */
+export const FAILED_NO_REPLY = "It ended with an error";
 
 interface Tracked {
   readonly title: string;
@@ -34,6 +37,8 @@ interface Tracked {
   readonly ended: {
     readonly index: number;
     readonly reply: string | null;
+    /** The Turn failed: a failure, which a Host's switch covers with Needs You (ENG-561). */
+    readonly failed: boolean;
     readonly settledAt: number | null;
   } | null;
 }
@@ -62,6 +67,8 @@ export interface Need {
   readonly sessionId: string;
   /** Needs You: handled once this request is answered or withdrawn. */
   readonly requestId: string | null;
+  /** A session waiting on Continue: handled once it leaves Needs You (`restoredNeeds`). */
+  readonly continues?: boolean;
 }
 
 /** A push, and whether it is automatic: devices that turned those off don't get it. */
@@ -132,7 +139,7 @@ const needsYou = (
 const turnEnded = (
   sessionId: string,
   session: Tracked,
-  reply: string | null,
+  ended: { readonly reply: string | null; readonly failed: boolean },
   context: PlanContext
 ): PushMessage => ({
   v: 1,
@@ -142,9 +149,12 @@ const turnEnded = (
   sessionId,
   requestId: null,
   category: null,
-  title: cut(`${session.harness} finished a turn`, 120),
+  title: cut(
+    ended.failed ? `${session.harness}'s turn failed` : `${session.harness} finished a turn`,
+    120
+  ),
   subtitle: cut(`${context.hostName} · ${session.title}`, 160),
-  body: cut(reply ?? NO_REPLY, 600),
+  body: cut(ended.reply ?? (ended.failed ? FAILED_NO_REPLY : NO_REPLY), 600),
   at: new Date(context.now).toISOString(),
 });
 
@@ -217,6 +227,7 @@ const endTurn = (state: PlanState, turn: Turn, now: number): PlanState => {
         : {
             index: turn.index,
             reply: turn.replyPreview ?? null,
+            failed: turn.status === "failed",
             settledAt: s.backgroundTasks === 0 ? now : null,
           },
     }),
@@ -275,6 +286,69 @@ const applyEvent = (state: PlanState, event: DomainEvent, context: PlanContext):
   );
 };
 
+/** A Constellation Task's Attempt that settled failed, as the store model names it (ENG-561). */
+export interface AttemptFailure {
+  readonly constellationId: string;
+  readonly constellation: string;
+  readonly leadSessionId: string;
+  readonly taskId: string;
+  readonly reason: string;
+}
+
+/** A failed Attempt's push: on the Lead's session, opening its Constellation. */
+export const attemptFailed = (failure: AttemptFailure, context: PlanContext): Push => ({
+  automatic: false,
+  need: { sessionId: failure.leadSessionId, requestId: null },
+  message: {
+    v: 1,
+    kind: "notify",
+    hostId: context.hostId,
+    hostName: context.hostName,
+    sessionId: failure.leadSessionId,
+    requestId: null,
+    category: null,
+    title: cut(`${failure.taskId} failed`, 120),
+    subtitle: cut(`${context.hostName} · ${failure.constellation}`, 160),
+    body: cut(failure.reason, 600),
+    at: new Date(context.now).toISOString(),
+    constellationId: failure.constellationId,
+  },
+});
+
+/** The body of a Needs You for a session waiting to be continued (no request to answer). */
+export const CONTINUE_BODY = "Waiting for you to continue";
+
+/**
+ * Re-plans the Needs You a Daemon restart would lose (ENG-500): recovery withdraws every
+ * request, so each user's session the Snapshot shows Needs You waits on Continue.
+ */
+export const restoredNeeds = (item: HostStreamItem, context: PlanContext): ReadonlyArray<Push> =>
+  Predicate.isTagged(item, "Snapshot")
+    ? item.sessions.flatMap(({ session }): ReadonlyArray<Push> => {
+        if (session.state !== "needs-you" || isWorkerSession(session)) return [];
+        const shown = tracked(session);
+
+        return [
+          push(
+            {
+              v: 1,
+              kind: "needs-you",
+              hostId: context.hostId,
+              hostName: context.hostName,
+              sessionId: session.id,
+              requestId: null,
+              category: null,
+              title: cut(`${shown.harness} needs you`, 120),
+              subtitle: cut(`${context.hostName} · ${shown.title}`, 160),
+              body: CONTINUE_BODY,
+              at: new Date(context.now).toISOString(),
+            },
+            { sessionId: session.id, requestId: null, continues: true }
+          ),
+        ];
+      })
+    : [];
+
 /**
  * Turn `turnId` is a Lead Turn Polaris started for a digest. The Host stream never carries
  * `LeadNotified`, so the notifier reads it from the store model (ENG-587).
@@ -316,7 +390,7 @@ export const planSettled = (state: PlanState, context: PlanContext): Planned => 
 
     if (state.synchronized)
       send.push(
-        push(turnEnded(sessionId, session, session.ended.reply, context), {
+        push(turnEnded(sessionId, session, session.ended, context), {
           sessionId,
           requestId: null,
         })
