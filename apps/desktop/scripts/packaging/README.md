@@ -76,6 +76,17 @@ Measured on 0.1.0-alpha.2, unsigned: `Polaris.app` 423 MB (was 980 MB),
 `Resources/daemon` 101 MB (was 657 MB), DMG 174 MB (was about 390 MB), update ZIP
 174 MB. The five archives are 37 MB (darwin-arm64) to 56 MB (linux-x64).
 
+## Size budget
+
+`package --release` fails when the Mac DMG is over 225 MiB or the installed
+`Polaris.app` is over 540 MiB (`size.ts`, ENG-251). Sizes are the bytes of regular
+files; symlinks (Electron's `Versions/Current`) count once. On failure it prints
+both sizes and the app's largest parts (`Frameworks`, `Resources/daemon`,
+`app.asar`). The budgets leave about 15% over 0.8.5's DMG (194 MiB) and 0.8.2's
+installed app (470 MiB: Frameworks 289 MiB, the darwin-arm64 Daemon 144 MiB).
+Dev packages bundle every platform's Daemon and aren't checked. Raising a budget
+is a decision: record why in the commit that changes `SIZE_BUDGET`.
+
 ## Windows (experimental, unsigned)
 
 `bun run --cwd apps/desktop package --windows --reuse-daemon` builds win32 x64
