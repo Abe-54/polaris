@@ -51,7 +51,7 @@ export const AGENT_BROWSER_ASSETS = {
     18_240_608,
     "9585897e9453517683a4ca42f3c3f8d8376282f3160268d911ed219b2e0ad62a"
   ),
-  "win32-x64": pinned(
+  "windows-x64": pinned(
     "agent-browser-win32-x64.exe",
     18_057_728,
     "dee86b78071cbe7217f71ec1c9df6a50efa73cd44d64a18877bb36556fc8e270"

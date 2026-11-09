@@ -5,6 +5,7 @@
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { paths } from "../../paths.ts";
+import { background, type Installer, type InstallPolicy, POLICY } from "../background.ts";
 import { runtimePlatform } from "../../platform/index.ts";
 import {
   type InstallOptions,
@@ -23,87 +24,15 @@ export class AgentBrowserUnavailable extends Schema.TaggedError<AgentBrowserUnav
   { message: Schema.String }
 ) {}
 
-export interface AgentBrowserInstaller {
-  readonly onDisk: (options: InstallOptions) => Promise<InstalledAgentBrowser | null>;
-  readonly install: (options: InstallOptions) => Promise<InstalledAgentBrowser>;
-}
+export type AgentBrowserInstaller = Installer<InstallOptions, InstalledAgentBrowser>;
 
-export interface InstallPolicy {
-  /** Each attempt is cancelled after this; a stalled download can't hold the install forever. */
-  readonly attemptTimeoutMs: number;
-  /** The waits before each retry; after the last attempt fails, the next caller starts again. */
-  readonly retryDelaysMs: ReadonlyArray<number>;
-}
+export type { InstallPolicy } from "../background.ts";
 
-const POLICY: InstallPolicy = { attemptTimeoutMs: 10 * 60_000, retryDelaysMs: [5_000, 30_000] };
-
-const attempts = (
-  install: AgentBrowserInstaller["install"],
-  resolved: InstallOptions,
-  policy: InstallPolicy,
-  delays: ReadonlyArray<number> = policy.retryDelaysMs
-): Promise<InstalledAgentBrowser> => {
-  const signal = AbortSignal.timeout(policy.attemptTimeoutMs);
-  const minutes = Math.round(policy.attemptTimeoutMs / 60_000);
-
-  return install({ ...resolved, signal }).catch(async (cause: Error) => {
-    const [delay, ...rest] = delays;
-    const reason = signal.aborted ? new Error(`timed out after ${minutes} min`) : cause;
-
-    if (delay === undefined) throw reason;
-    await Bun.sleep(delay);
-
-    return attempts(install, resolved, policy, rest);
-  });
-};
-
-/** One install at a time, shared by every caller, each attempt bounded and retried. */
-const background = (
-  options: () => InstallOptions,
-  installer: AgentBrowserInstaller,
-  policy: InstallPolicy
-) => {
-  let ready: InstalledAgentBrowser | null = null;
-  let installing: Promise<void> | null = null;
-  let failure: string | null = null;
-
-  const start = (resolved: InstallOptions) => {
-    installing ??= attempts(installer.install, resolved, policy).then(
-      (installed) => {
-        ready = installed;
-      },
-      (cause: Error) => {
-        failure = cause.message;
-        installing = null;
-      }
-    );
-  };
-
-  const unavailable = (message: string) => new AgentBrowserUnavailable({ message });
-
-  return Effect.gen(function* () {
-    if (ready !== null) return ready;
-
-    const resolved = yield* Effect.try({
-      try: options,
-      catch: () => unavailable("can't tell which agent-browser build this Host needs"),
-    });
-
-    const found = yield* Effect.tryPromise({
-      try: () => installer.onDisk(resolved),
-      catch: (cause) => unavailable(cause instanceof Error ? cause.message : "no build"),
-    });
-
-    if (found !== null) return (ready = found);
-    const failed = installing === null ? failure : null;
-    start(resolved);
-
-    return yield* unavailable(
-      failed === null
-        ? `agent-browser ${AGENT_BROWSER_VERSION} is installing; later sessions get the Browser`
-        : `installing agent-browser failed (${failed}); trying again`
-    );
-  });
+const TOOL = {
+  name: "agent-browser",
+  version: AGENT_BROWSER_VERSION,
+  ready: "later sessions get the Browser",
+  unavailable: (message: string) => new AgentBrowserUnavailable({ message }),
 };
 
 export class AgentBrowser extends Context.Service<
@@ -123,7 +52,7 @@ export class AgentBrowser extends Context.Service<
     policy: InstallPolicy = POLICY
   ) =>
     Layer.sync(AgentBrowser, () =>
-      AgentBrowser.of({ current: background(options, installer, policy) })
+      AgentBrowser.of({ current: background(TOOL, options, installer, policy) })
     );
 
   static readonly layer = AgentBrowser.layerWith(() => ({
