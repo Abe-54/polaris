@@ -325,6 +325,10 @@ _Avoid_: Runtime view (Runtime is avoided for Harness), APM, observability tab
 The view for writing the Requests in the selected Agent Session's checkout, sending them from its Host, and inspecting the Sends that the user and its agents made.
 _Avoid_: API client, Postman, HTTP tab
 
+**Output**:
+The third pane of an Agent Session, beside its conversation, holding what its work produced and the tools the user and its agents share: Changes (or Constellation), Data, Traces, Browser, Simulator and Subagents.
+_Avoid_: Output window, right pane, side panel
+
 **Browser**:
 An Agent Session's web browser in its Output, holding that session's own tabs, which the user and the session's agents (Subagents included) both use; its logins and cookies are shared across the Workspace.
 _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
@@ -332,6 +336,10 @@ _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
 **Host address**:
 A loopback URL opened in a Browser (`localhost`, any `*.localhost` name such as a Portless app, or a loopback IP), which always means the Agent Session's Host, never the machine the Client runs on; any other URL loads from the Client's own network.
 _Avoid_: Forwarded port, tunnel, local URL
+
+**Simulator**:
+An iOS Simulator or Android Emulator on the Agent Session's Host, shown live in its Output, which the user and the session's agents (Subagents included) both see and drive; Simulators belong to the Host and are shared, each Agent Session remembering the one it shows. Only a Host that can run one (a Mac with Xcode, or a Host with the Android emulator) has them.
+_Avoid_: Emulator, device (that is a Linked Device), Preview (that is the Markdown or diff preview), device panel, mirror
 
 **Developer Mode**:
 The setting that shows Polaris's own internals (its Self-Traces and its Daemon Sources) for the work of building Polaris itself; it is on or off for all of the user's Hosts at once. Off by default, but always on while a development build of Polaris is connected.
