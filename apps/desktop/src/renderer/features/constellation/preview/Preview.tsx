@@ -19,6 +19,7 @@ import { type ConstellationRecord, startedRecord, type WorkerFacts } from "../mo
 import { type LeadUi, leadKey, patchLeadUi, setSignals } from "../state.ts";
 import { fakeClient } from "./fakeClient.ts";
 import {
+  askedYou,
   c1Record,
   constellationOf,
   DEVBOX,
@@ -109,6 +110,7 @@ const SCENES = [
   "failures",
   "steered",
   "startup",
+  "asks-you",
   "chrome",
   "worst-one",
   "worst-80",
@@ -145,6 +147,8 @@ const recordFor = (scene: Scene): ConstellationRecord => {
   if (scene === "handed-approved") return slugRecord({ attempts: handedUpAttempts(true) });
 
   if (scene === "setup" || scene === "setup-focus") return setupRecord();
+
+  if (scene === "asks-you") return slugRecord({ openQuestions: askedYou() });
 
   if (scene === "completed") return c1Record({ state: "completed", attempts: completedAttempts() });
 
@@ -209,6 +213,7 @@ const TREE_FOLDS = new Map([
 
 const UI: Readonly<Record<Scene, Partial<LeadUi>>> = {
   lead: {},
+  "asks-you": {},
   digests: {},
   failures: {},
   steered: {},
