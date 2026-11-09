@@ -15,7 +15,7 @@ import {
   type Turn,
 } from "@polaris/protocol";
 import type { PushMessage } from "@polaris/protocol/relay";
-import { Match } from "effect";
+import { Match, Predicate } from "effect";
 
 /** How long a settle must hold before a finished Turn is pushed (ADR 0073). */
 export const SETTLE_MS = 3_000;
@@ -62,6 +62,8 @@ export interface Need {
   readonly sessionId: string;
   /** Needs You: handled once this request is answered or withdrawn. */
   readonly requestId: string | null;
+  /** A session waiting on Continue: handled once it leaves Needs You (`restoredNeeds`). */
+  readonly continues?: boolean;
 }
 
 /** A push, and whether it is automatic: devices that turned those off don't get it. */
@@ -274,6 +276,40 @@ const applyEvent = (state: PlanState, event: DomainEvent, context: PlanContext):
     Match.orElse(() => same(state))
   );
 };
+
+/** The body of a Needs You for a session waiting to be continued (no request to answer). */
+export const CONTINUE_BODY = "Waiting for you to continue";
+
+/**
+ * Re-plans the Needs You a Daemon restart would lose (ENG-500): recovery withdraws every
+ * request, so each user's session the Snapshot shows Needs You waits on Continue.
+ */
+export const restoredNeeds = (item: HostStreamItem, context: PlanContext): ReadonlyArray<Push> =>
+  Predicate.isTagged(item, "Snapshot")
+    ? item.sessions.flatMap(({ session }): ReadonlyArray<Push> => {
+        if (session.state !== "needs-you" || isWorkerSession(session)) return [];
+        const shown = tracked(session);
+
+        return [
+          push(
+            {
+              v: 1,
+              kind: "needs-you",
+              hostId: context.hostId,
+              hostName: context.hostName,
+              sessionId: session.id,
+              requestId: null,
+              category: null,
+              title: cut(`${shown.harness} needs you`, 120),
+              subtitle: cut(`${context.hostName} · ${shown.title}`, 160),
+              body: CONTINUE_BODY,
+              at: new Date(context.now).toISOString(),
+            },
+            { sessionId: session.id, requestId: null, continues: true }
+          ),
+        ];
+      })
+    : [];
 
 /**
  * Turn `turnId` is a Lead Turn Polaris started for a digest. The Host stream never carries

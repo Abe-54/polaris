@@ -61,6 +61,11 @@ as a banner, and a burst of them when the user leaves would be stale (ENG-524). 
 held instead, dropped once its request is resolved or withdrawn, and the rest go out when
 presence ends, oldest first (at most 200 kept).
 
+Held pushes live in memory. A restart withdraws every request (recovery), so the Daemon's first
+Snapshot re-plans what still needs the user: each user's session in Needs You gets a held
+Needs You ("Waiting for you to continue"), sent when the user next leaves a Desktop App and
+dropped once the session leaves Needs You (ENG-500).
+
 ## Cost
 
 No registration: no subscription, no timers. A registered Live Activity adds its own Host

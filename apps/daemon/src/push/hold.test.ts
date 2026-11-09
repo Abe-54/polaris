@@ -3,7 +3,13 @@
  * Host stream, read positions and the relay's wake).
  */
 import { expect, test } from "bun:test";
-import { ApprovalDecision, DomainEvent, type HostStreamItem, RequestId } from "@polaris/protocol";
+import {
+  type AgentSession,
+  ApprovalDecision,
+  DomainEvent,
+  type HostStreamItem,
+  RequestId,
+} from "@polaris/protocol";
 import type { PushMessage } from "@polaris/protocol/relay";
 import { Effect, Layer, PubSub, Stream } from "effect";
 import { RelayRoute } from "../linkedDevices/route.ts";
@@ -11,12 +17,14 @@ import type { PushTarget } from "../linkedDevices/store.ts";
 import { HostPresence } from "../presence/index.ts";
 import { hold } from "./hold.ts";
 import { PushHostEvents, PushNotifier } from "./notifier.ts";
-import { emptyPlan, planItem, planSettled, type Push, SETTLE_MS } from "./plan.ts";
+import { patchSession } from "../store/model.ts";
+import { CONTINUE_BODY, emptyPlan, planItem, planSettled, type Push, SETTLE_MS } from "./plan.ts";
 import {
   approvalRequested,
   event,
   notified,
   SESSION_ID,
+  session,
   snapshot,
   synchronized,
   turnEnded,
@@ -44,7 +52,8 @@ const withNotifier = (
     readonly feed: (item: HostStreamItem) => void;
     readonly presence: HostPresence["Service"];
     readonly woken: ReadonlyArray<PushMessage>;
-  }) => Effect.Effect<void>
+  }) => Effect.Effect<void>,
+  listed: AgentSession = session
 ) =>
   Effect.runPromise(
     Effect.scoped(
@@ -85,7 +94,7 @@ const withNotifier = (
                 Layer.succeed(PushHostEvents)({
                   subscribe: () =>
                     Stream.concat(
-                      Stream.make(snapshot(), synchronized()),
+                      Stream.make(snapshot(listed), synchronized()),
                       Stream.fromPubSub(events)
                     ),
                   isDigestTurn: () => Effect.succeed(false),
@@ -176,6 +185,42 @@ test("with two Desktop Apps the Host stays quiet until both are away", () =>
       yield* Effect.sleep("50 millis");
       expect(requestIds(woken)).toEqual(["r1"]);
     })
+  ));
+
+// ENG-500: recovery withdrew the request; what still needs the user is Continue.
+const waiting = patchSession(session, { state: "needs-you" });
+
+const stateChanged = (state: AgentSession["state"]) =>
+  event(DomainEvent.cases.SessionStateChanged.make({ sessionId: SESSION_ID, state, reason: null }));
+
+test("after a restart, a session waiting on Continue is held and goes out when the user leaves", () =>
+  withNotifier(
+    60_000,
+    ({ presence, woken }) =>
+      Effect.gen(function* () {
+        presence.report(1, "present");
+        presence.report(1, "away");
+        yield* Effect.sleep("50 millis");
+        expect(woken.map(({ kind, requestId, body }) => ({ kind, requestId, body }))).toEqual([
+          { kind: "needs-you", requestId: null, body: CONTINUE_BODY },
+        ]);
+      }),
+    waiting
+  ));
+
+test("a held Continue never pushes once the session leaves Needs You at the Mac", () =>
+  withNotifier(
+    60_000,
+    ({ feed, presence, woken }) =>
+      Effect.gen(function* () {
+        presence.report(1, "present");
+        feed(stateChanged("starting"));
+        yield* Effect.sleep("50 millis");
+        presence.report(1, "away");
+        yield* Effect.sleep("50 millis");
+        expect(woken).toEqual([]);
+      }),
+    waiting
   ));
 
 const host = { hostId: "host-1", hostName: "studio" };

@@ -3,6 +3,7 @@
  * (apps/relay README: Push). It follows the Engine's Host stream only while some device is
  * registered, so a Host without one pays nothing; a timer runs only while a Turn settles.
  * While the user is at a Desktop App (`HostPresence`) Needs You is held and the rest dropped (`hold.ts`).
+ * After a restart, the sessions waiting on Continue are held again from the first Snapshot (ENG-500).
  */
 import type { Capability, HostStreamItem, TurnId } from "@polaris/protocol";
 import { Context, Effect, Fiber, Layer, Predicate, Stream } from "effect";
@@ -20,6 +21,7 @@ import {
   planItem,
   planSettled,
   type Push,
+  restoredNeeds,
 } from "./plan.ts";
 
 /** What the plan reads beyond the base Host stream. */
@@ -72,6 +74,8 @@ export const PushNotifier = Layer.effectDiscard(
     let following: Fiber.Fiber<void> | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let held: Held = [];
+    /** Whether this Daemon's first Snapshot was re-planned yet (`restoredNeeds`). */
+    let restored = false;
 
     const contextNow = () => ({ ...route.host, now: Date.now() });
 
@@ -127,6 +131,13 @@ export const PushNotifier = Layer.effectDiscard(
         if (ended !== null && (yield* events.isDigestTurn(ended)))
           plan = markDigestTurn(plan, ended);
         held = settleItem(held, item);
+
+        // Held, whatever the presence now: the user hears of them when they next leave.
+        if (!restored && Predicate.isTagged(item, "Snapshot")) {
+          restored = true;
+          held = hold(held, restoredNeeds(item, contextNow()));
+        }
+
         const planned = planItem(plan, item, contextNow());
         plan = planned.state;
         send(planned.send);
