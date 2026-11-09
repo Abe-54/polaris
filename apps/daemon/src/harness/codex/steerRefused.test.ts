@@ -8,7 +8,7 @@ import {
   SessionPlacement,
   type TurnItem,
 } from "@polaris/protocol";
-import { Duration, Effect } from "effect";
+import { Deferred, Duration, Effect, Stream } from "effect";
 import { Engine } from "../../engine/Engine.ts";
 import {
   cid,
@@ -21,6 +21,7 @@ import {
 } from "../../engine/testing.ts";
 import { newTempDir } from "../../platform/tempDir.testing.ts";
 import { EventStore } from "../../store/EventStore.ts";
+import { type HarnessDriver, HarnessEvent } from "../HarnessDriver.ts";
 import { makeCodexDriver } from "./CodexDriver.ts";
 import type { FakeAppServer, FakeConnection, Handler } from "./testing/FakeAppServer.ts";
 import { startFakeAppServer } from "./testing/FakeAppServer.ts";
@@ -69,7 +70,8 @@ const refusedIn = (found: ReadonlyArray<{ readonly item: TurnItem }>) =>
 
 const runEngine = <A, E>(
   handler: Handler,
-  body: (server: FakeAppServer) => Effect.Effect<A, E, Engine | EventStore>
+  body: (server: FakeAppServer) => Effect.Effect<A, E, Engine | EventStore>,
+  wrap: (driver: HarnessDriver) => HarnessDriver = (driver) => driver
 ) => {
   const socketDir = newTempDir("pcx-", { short: true });
   const socketPath = join(socketDir, "s.sock");
@@ -104,11 +106,13 @@ const runEngine = <A, E>(
     run: Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const driver = yield* makeCodexDriver({
+          const codex = yield* makeCodexDriver({
             socketPath,
             spawnAppServer: false,
             codexPath: "/opt/codex/bin/codex",
           });
+
+          const driver = wrap(codex);
 
           const layer = engineLayer({
             filename: join(tempDir(), "state.sqlite"),
@@ -223,4 +227,77 @@ test("a steer Codex refuses on its running Turn stays in the Turn, refused", asy
     message:
       "This message didn't reach the agent: turn/steer: cannot steer a compact turn (code -32600)",
   });
+});
+
+/** The driver, with each session's TurnEnded held from the Engine until `release` completes. */
+const holdingTurnEnded =
+  (held: Deferred.Deferred<void>, release: Deferred.Deferred<void>) =>
+  (driver: HarnessDriver): HarnessDriver => ({
+    ...driver,
+    open: (options) =>
+      Effect.map(driver.open(options), (session) => ({
+        ...session,
+        events: session.events.pipe(
+          Stream.tap((event) =>
+            HarnessEvent.$is("TurnEnded")(event)
+              ? Deferred.succeed(held, undefined).pipe(Effect.andThen(Deferred.await(release)))
+              : Effect.void
+          )
+        ),
+      })),
+  });
+
+test("a steer sent after turn/completed, before the Engine folds TurnEnded, stays in the Turn, refused", async () => {
+  let connection: FakeConnection | null = null;
+  const held = Deferred.makeUnsafe<void>();
+  const release = Deferred.makeUnsafe<void>();
+
+  const { server, run } = runEngine(
+    scripted((request, conn) => {
+      connection = conn;
+
+      if (request.method === "turn/start") {
+        conn.reply({ turn: turn("t1") });
+        started(conn, "t1");
+      }
+
+      if (request.method === "turn/steer") conn.reply({ turnId: "t1" });
+    }),
+    (server) =>
+      Effect.gen(function* () {
+        yield* waitUntil(() => server.requests("turn/start").length === 1, 5000);
+        yield* waitFor(
+          (m) => m.sessions.get(sessionId)?.turns.length === 1,
+          5000,
+          "the Turn starts"
+        );
+
+        completed(connection!, "t1");
+        // The driver has ended the Turn; the Engine hasn't folded it, so it still takes the steer.
+        yield* Deferred.await(held);
+        yield* dispatch(
+          Command.cases.Steer.make({ sessionId, text: "and the docs", attachments: [] })
+        );
+        const found = yield* items(2);
+        const before = (yield* waitFor(() => true)).sessions.get(sessionId)!;
+
+        yield* Deferred.succeed(release, undefined);
+        const after = yield* waitFor(idle, 5000, "the Turn ends");
+
+        return { found, before, ended: after.sessions.get(sessionId)!.turns.at(-1)! };
+      }),
+    holdingTurnEnded(held, release)
+  );
+
+  const { found, before, ended } = await run;
+
+  expect(before.session.state).toBe("working");
+  expect(server.requests("turn/steer")).toHaveLength(0);
+  expect(found.every((event) => event.turnId === ended.id)).toBe(true);
+  expect(refusedIn(found).map((item) => item._tag)).toEqual(["UserMessage", "Error"]);
+  expect(refusedIn(found)).toMatchObject([
+    { text: "and the docs" },
+    { message: "This message didn't reach the agent: No Turn is in progress to steer" },
+  ]);
+  expect(ended).toMatchObject({ status: "completed" });
 });
