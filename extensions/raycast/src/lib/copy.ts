@@ -3,6 +3,7 @@
  * refusal says what the pairing lacks and where to fix it.
  */
 import {
+  type Capability,
   CommandRejected,
   ExtensionTokenRejected,
   type GrantKind,
@@ -30,17 +31,27 @@ export const STATE_LABEL: Readonly<Record<SessionState, string>> = {
   archived: "Archived",
 };
 
-/** Permission modes as Polaris's picker lists them, least trust first. */
+/** Permission modes in the Desktop App's picker order and words, least trust first. */
 export const PERMISSION_MODES: ReadonlyArray<{
   readonly mode: PermissionMode;
   readonly label: string;
   readonly detail: string;
 }> = [
+  { mode: "plan", label: "Plan", detail: "Reads and plans, asks before editing" },
   { mode: "supervised", label: "Supervised", detail: "Asks before edits and commands" },
-  { mode: "auto-edits", label: "Auto edits", detail: "Edits freely, asks before commands" },
-  { mode: "auto", label: "Auto", detail: "Asks only for risky actions" },
+  { mode: "auto-edits", label: "Auto-edits", detail: "Edits freely, asks before commands" },
+  { mode: "auto", label: "Auto", detail: "Runs freely, asks for risky actions" },
   { mode: "full-access", label: "Full access", detail: "Never asks" },
 ];
+
+/** The modes a Host offers: Plan needs its Daemon's `session.plan-mode`. */
+export const permissionModesOn = (capabilities: ReadonlyArray<Capability>) =>
+  capabilities.includes("session.plan-mode")
+    ? PERMISSION_MODES
+    : PERMISSION_MODES.filter((m) => m.mode !== "plan");
+
+export const permissionModeLabel = (mode: PermissionMode): string =>
+  PERMISSION_MODES.find((m) => m.mode === mode)?.label ?? mode;
 
 /** A Grant as Settings → Extensions labels it, and what it lets Raycast do. */
 export const GRANT_COPY: Readonly<

@@ -3,6 +3,7 @@
  * and feed, dropped when lost and reopened by the next use. Feeds reconnect
  * on their own and resume from the last sequence they applied.
  */
+import type { Capability } from "@polaris/protocol";
 import { Deferred, Duration, Effect, Exit, Predicate, Scope, Semaphore, Stream } from "effect";
 import type { RpcClientError } from "effect/rpc/RpcClientError";
 import {
@@ -119,8 +120,12 @@ export interface FeedSpec<Item, State, View> {
     state: State
   ) => Stream.Stream<Item, FeedError | RpcClientError>;
   readonly apply: (state: State, item: Item) => State;
-  /** The view to emit, or null while there is nothing to show yet. */
-  readonly view: (state: State, connected: boolean) => View | null;
+  /** The view to emit, or null while there is nothing to show yet; `capabilities` are the Daemon's. */
+  readonly view: (
+    state: State,
+    connected: boolean,
+    capabilities: ReadonlyArray<Capability>
+  ) => View | null;
 }
 
 /** What a feed's RPC itself fails with. */
@@ -149,21 +154,24 @@ export const resilientFeed = <Item, State, View>(
     let state = spec.initial;
     let seen = false;
     let attempt = 0;
+    let capabilities: ReadonlyArray<Capability> = [];
 
     const once = Stream.unwrap(
-      Effect.map(link.live, (live) =>
-        spec
+      Effect.map(link.live, (live) => {
+        capabilities = live.capabilities;
+
+        return spec
           .open(live.client, state)
           .pipe(
             Stream.catchTag("RpcClientError", (error) =>
               Stream.fail(new HostUnreachable({ hostId: link.entry.hostId, detail: error.message }))
             )
-          )
-      )
+          );
+      })
     ).pipe(
       Stream.map((item: Item) => {
         state = spec.apply(state, item);
-        const view = spec.view(state, true);
+        const view = spec.view(state, true, capabilities);
 
         if (view !== null) {
           seen = true;
@@ -181,7 +189,7 @@ export const resilientFeed = <Item, State, View>(
           if (link.isClosed()) return Stream.empty;
 
           if (!reconnect.enabled || !seen) return Stream.fail(error);
-          const last = spec.view(state, false);
+          const last = spec.view(state, false, capabilities);
           const wait = delayFor(attempt++, reconnect);
 
           return Stream.concat(

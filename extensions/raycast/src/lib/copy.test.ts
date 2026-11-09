@@ -1,6 +1,24 @@
 import { expect, test } from "bun:test";
 import { HostUnreachable, InvalidPairing } from "@polaris/sdk";
-import { describeFailure, failureMarkdown, unavailableMarkdown } from "./copy.ts";
+import {
+  describeFailure,
+  failureMarkdown,
+  permissionModeLabel,
+  permissionModesOn,
+  unavailableMarkdown,
+} from "./copy.ts";
+
+test("Plan is offered only on a Host whose Daemon has plan mode, and labelled as on the Desktop", () => {
+  expect(permissionModesOn(["session.plan-mode"]).map((m) => m.mode)).toEqual([
+    "plan",
+    "supervised",
+    "auto-edits",
+    "auto",
+    "full-access",
+  ]);
+  expect(permissionModesOn([]).map((m) => m.mode)).not.toContain("plan");
+  expect(permissionModeLabel("plan")).toBe("Plan");
+});
 
 test("a failure before the feed opens cannot embed images, links or HTML", () => {
   const failure = describeFailure(
