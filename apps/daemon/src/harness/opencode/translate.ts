@@ -16,6 +16,7 @@ import {
   toolItem,
 } from "./mapping.ts";
 import * as P from "./protocol.ts";
+import { OpenCodeContext } from "./context.ts";
 
 const decodeEnvelope = P.decoder(P.Envelope);
 
@@ -34,6 +35,8 @@ const decodeStatus = P.decoder(P.SessionStatusChanged);
 const decodeIdle = P.decoder(P.SessionIdle);
 
 const decodeError = P.decoder(P.SessionError);
+
+const decodeCompacted = P.decoder(P.SessionCompacted);
 
 const decodePermission = P.decoder(P.PermissionRequest);
 
@@ -80,6 +83,8 @@ export interface Translator {
   readonly openQuestion: (request: P.QuestionRequest) => void;
   /** Takes an open request to answer it; its later `replied` event is then not a withdrawal. */
   readonly takeRequest: (requestId: RequestId) => OpenRequest | null;
+  /** The context window's use, reported as `ContextUsed`. */
+  readonly context: OpenCodeContext;
 }
 
 const newTurnId = () => TurnId.make(crypto.randomUUID());
@@ -98,6 +103,7 @@ export const translatorFor = (
   const userMessages = new Set<string>();
   const pending = new Map<RequestId, OpenRequest>();
   const byOpenId = new Map<string, RequestId>();
+  const context = new OpenCodeContext();
 
   const ours = <T extends { readonly sessionID?: string | undefined }>(p: T | null): p is T =>
     p !== null && sessionId !== null && p.sessionID === sessionId;
@@ -201,6 +207,21 @@ export const translatorFor = (
     );
   };
 
+  const onUserPart = (part: P.Part) => {
+    if (part.type === "text") onUserText(part);
+    else if (part.type === "compaction") context.compactionStarted(part.auto);
+  };
+
+  const onAssistantPart = (part: P.Part) => {
+    if (part.type === "tool") onTool(part);
+    else if (part.type === "text" || part.type === "reasoning") onText(part);
+    else if (part.type === "step-finish") {
+      const report = context.stepFinished(part);
+
+      if (report !== null) emit(report);
+    }
+  };
+
   const onPart = (properties: P.Payload) => {
     const update = decodePartUpdated(properties);
 
@@ -209,14 +230,8 @@ export const translatorFor = (
 
     if (part === null) return;
 
-    if (userMessages.has(part.messageID)) {
-      if (part.type === "text") onUserText(part);
-
-      return;
-    }
-
-    if (part.type === "tool") onTool(part);
-    else onText(part);
+    if (userMessages.has(part.messageID)) onUserPart(part);
+    else onAssistantPart(part);
   };
 
   const resolved = (openId: string) => {
@@ -298,7 +313,10 @@ export const translatorFor = (
         if (!ours(p)) return;
 
         if (p.info.role === "user") onUserMessage(p.info.id);
-        else current();
+        else {
+          context.assistantMessage(p.info);
+          current();
+        }
       },
     ],
     ["message.part.updated", onPart],
@@ -325,6 +343,15 @@ export const translatorFor = (
     ],
     ["session.idle", (properties) => ours(decodeIdle(properties)) && onIdle()],
     ["session.error", onError],
+    [
+      "session.compacted",
+      (properties) => {
+        if (!ours(decodeCompacted(properties))) return;
+        const report = context.compacted();
+
+        if (report !== null) emit(report);
+      },
+    ],
     [
       "permission.asked",
       (properties) => {
@@ -402,6 +429,7 @@ export const translatorFor = (
     },
     openPermission,
     openQuestion,
+    context,
     takeRequest: (requestId) => {
       const request = pending.get(requestId);
 
