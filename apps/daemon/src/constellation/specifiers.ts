@@ -4,6 +4,7 @@
  */
 import { Option, Schema } from "effect";
 import { HOOKS_OFF, runGitRaw } from "../git/git.ts";
+import { hasDuplicateKeys } from "./duplicateKeys.ts";
 
 /** Keys whose string leaves, at any depth, are specifiers or paths bun install acts on. */
 const FIELDS = [
@@ -74,17 +75,16 @@ interface Read {
 
 const absent: Read = { specs: new Map(), globs: "null" };
 
-/** A manifest's dependency leaves and workspace globs; null when it isn't strict JSON. */
+/** A manifest's dependency leaves and workspace globs; null unless strict JSON, keys once each. */
 const read = async (root: string, ref: string, path: string): Promise<Read | null> => {
   const shown = await runGitRaw(root, [...HOOKS_OFF, "show", `${ref}:${path}`]);
 
   if (shown.code !== 0) return absent;
 
-  const manifest = Schema.decodeUnknownOption(Schema.fromJsonString(Manifest))(
-    new TextDecoder().decode(shown.stdout)
-  );
+  const text = new TextDecoder().decode(shown.stdout);
+  const manifest = Schema.decodeUnknownOption(Schema.fromJsonString(Manifest))(text);
 
-  if (Option.isNone(manifest)) return null;
+  if (Option.isNone(manifest) || hasDuplicateKeys(text)) return null;
   const specs = new Map<string, Leaf>();
   const workspaces = manifest.value.workspaces;
   const nested = workspaces !== undefined && isObject(workspaces) ? workspaces : {};
@@ -104,15 +104,15 @@ const read = async (root: string, ref: string, path: string): Promise<Read | nul
   return { specs, globs: JSON.stringify(packages ?? null) };
 };
 
-/** What `manifests` gain from HEAD to MERGE_HEAD that bun could fetch off the registry. */
+/** What `manifests` gain from HEAD to the merged index that bun could fetch off the registry. */
 export const addedOffRegistry = async (root: string, manifests: ReadonlyArray<string>) => {
   const added: Array<string> = [];
 
   for (const path of manifests) {
-    const theirs = await read(root, "MERGE_HEAD", path);
+    const theirs = await read(root, "", path);
 
     if (theirs === null) {
-      added.push(`${path}: not valid JSON`);
+      added.push(`${path}: not strict JSON, or repeats a key`);
       continue;
     }
 

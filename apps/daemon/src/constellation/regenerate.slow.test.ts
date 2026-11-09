@@ -206,9 +206,14 @@ test.each([
     "pkg/package.json: dependencies.a.b@file:../x",
   ],
   [
+    "a repeated key, which bun reads first and JSON.parse last",
+    '{"name":"fixture-pkg","dependencies":{"x":"file:../x"},"dependencies":{"x":"^1"}}',
+    "pkg/package.json: not strict JSON, or repeats a key",
+  ],
+  [
     "a manifest that isn't strict JSON",
     "{ name: 'fixture-pkg', }",
-    "pkg/package.json: not valid JSON",
+    "pkg/package.json: not strict JSON, or repeats a key",
   ],
 ])(
   "Accept's merge installs nothing from a branch whose manifest has %s",

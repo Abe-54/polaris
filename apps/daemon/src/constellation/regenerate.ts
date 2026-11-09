@@ -44,7 +44,7 @@ const isBunConfig = (path: string) => {
 const unsafeToInstall = async (root: string) => {
   // -z: paths unquoted, NUL-separated, as `:<old mode> <new mode> … <status>` then the path.
   const fields = (
-    await gitText(root, [...HOOKS_OFF, "diff", "--raw", "-z", "--no-renames", "HEAD...MERGE_HEAD"])
+    await gitText(root, [...HOOKS_OFF, "diff", "--cached", "--raw", "-z", "--no-renames", "HEAD"])
   ).split("\0");
 
   const refused: Array<string> = [];
@@ -113,10 +113,12 @@ export const regenerate = async (
 
   if (conflicts.includes(LOCKFILE) && bun === null) return "bun is not on the Daemon's PATH";
 
+  await gitText(root, [...HOOKS_OFF, "checkout", "--ours", "--", ...conflicts]);
+
+  // The merged index, which is what bun reads, against the Lead's HEAD.
   const unsafe = await unsafeToInstall(root);
 
   if (unsafe !== null) return unsafe;
-  await gitText(root, [...HOOKS_OFF, "checkout", "--ours", "--", ...conflicts]);
 
   if (conflicts.includes(LOCKFILE) && bun !== null) {
     const failed = await install(root, bun);
