@@ -257,6 +257,7 @@ export const SessionIntent = ({ hostKey, sessionId }: SessionViewProps) => {
             ctx={ctx}
           />
         )}
+        {chrome.dock}
         <InTerminalBar
           session={{
             hostKey,

@@ -36,6 +36,7 @@ import { leadKey, patchLeadUi, useLeadUi } from "../state.ts";
 import { DigestCard } from "./cards.tsx";
 import { ConstellationTab } from "./ConstellationTab.tsx";
 import { HandoverFocus, useWorkerChrome, WorkerFocus } from "./focus.tsx";
+import { LeadQuestions } from "./questions.tsx";
 
 export interface SessionSlot {
   readonly hostKey: string;
@@ -122,6 +123,7 @@ const LeadIntent = ({
         />
       );
     },
+    dock: <LeadQuestions hostKey={hostKey} record={record} />,
   };
 
   return (
