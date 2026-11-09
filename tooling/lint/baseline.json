@@ -1,6 +1,9 @@
 {
   "$comment": "Existing lint violations, per file and rule. `bun run lint` fails when a count goes up; `bun run lint:baseline` lowers them. Never raise a count by hand: fix the code. See packages/lint-config/README.md.",
   "violations": {
+    "apps/daemon/src/constellation/regenerate.ts": {
+      "polaris/child-env": 1
+    },
     "apps/daemon/src/engine/Engine.autoArchive.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
@@ -9,6 +12,9 @@
     },
     "apps/daemon/src/engine/Engine.subagents.test.ts": {
       "polaris/no-fixed-sleep": 4
+    },
+    "apps/daemon/src/engine/shellRun.ts": {
+      "polaris/child-env": 1
     },
     "apps/daemon/src/files/FileSearch.slow.test.ts": {
       "polaris/no-fixed-sleep": 1
@@ -24,6 +30,9 @@
     },
     "apps/daemon/src/harness/availability/AvailabilityRpcs.slow.test.ts": {
       "polaris/no-fixed-sleep": 3
+    },
+    "apps/daemon/src/harness/claude/autoMode.ts": {
+      "polaris/child-env": 1
     },
     "apps/daemon/src/harness/claude/ClaudeDriver.e2e.test.ts": {
       "polaris/no-fixed-sleep": 4
@@ -49,6 +58,9 @@
     "apps/daemon/src/languages/install/performance.testing.ts": {
       "polaris/no-fixed-sleep": 2
     },
+    "apps/daemon/src/languages/projectFormat/run.ts": {
+      "polaris/child-env": 1
+    },
     "apps/daemon/src/languages/runtime/bench.testing.ts": {
       "polaris/no-fixed-sleep": 2
     },
@@ -58,11 +70,23 @@
     "apps/daemon/src/languages/runtime/lifecycleDemand.slow.test.ts": {
       "polaris/no-fixed-sleep": 4
     },
+    "apps/daemon/src/languages/runtime/process-capacity.ts": {
+      "polaris/child-env": 1
+    },
+    "apps/daemon/src/languages/runtime/process.ts": {
+      "polaris/child-env": 1
+    },
     "apps/daemon/src/linkedDevices/wake.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
     "apps/daemon/src/mcp/tools/traceCapture.test.ts": {
       "polaris/no-fixed-sleep": 2
+    },
+    "apps/daemon/src/platform/processes.ts": {
+      "polaris/child-env": 2
+    },
+    "apps/daemon/src/prediction/managed/process.ts": {
+      "polaris/child-env": 3
     },
     "apps/daemon/src/presence/presence.test.ts": {
       "polaris/no-fixed-sleep": 3
@@ -72,6 +96,9 @@
     },
     "apps/daemon/src/push/push.e2e.slow.test.ts": {
       "polaris/no-fixed-sleep": 9
+    },
+    "apps/daemon/src/remoteAccess/tailscale.ts": {
+      "polaris/child-env": 1
     },
     "apps/daemon/src/resources/lostExit.test.ts": {
       "polaris/no-fixed-sleep": 1
@@ -100,6 +127,9 @@
     "apps/daemon/src/traces/attach/lifecycle.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
+    "apps/daemon/src/traces/attach/startup.ts": {
+      "polaris/child-env": 1
+    },
     "apps/daemon/src/traces/forwarding.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
@@ -108,6 +138,9 @@
     },
     "apps/daemon/src/traces/profiles/regressions.slow.test.ts": {
       "polaris/no-fixed-sleep": 4
+    },
+    "apps/daemon/src/traces/profiles/stop.ts": {
+      "polaris/child-env": 1
     },
     "apps/daemon/src/transport/byteStreams.test.ts": {
       "polaris/no-fixed-sleep": 2
@@ -186,6 +219,9 @@
     },
     "packages/client/src/rpc.test.ts": {
       "polaris/no-fixed-sleep": 3
+    },
+    "packages/lint-config/plugins/polaris/childEnv.mjs": {
+      "anti-slop/require-readable-spacing": 3
     },
     "packages/lint-config/plugins/polaris/fixedSleep.mjs": {
       "anti-slop/no-runtime-typeof": 3,
