@@ -93,7 +93,11 @@ export const event = (domain: DomainEvent): HostStreamItem =>
     }),
   });
 
-export const turn = (id: string, replyPreview: string | null = null) =>
+export const turn = (
+  id: string,
+  replyPreview: string | null = null,
+  status: Turn["status"] = replyPreview === null ? "working" : "completed"
+) =>
   new Turn({
     id: TurnId.make(id),
     sessionId: SESSION_ID,
@@ -103,7 +107,7 @@ export const turn = (id: string, replyPreview: string | null = null) =>
     attachments: [],
     model: null,
     effort: null,
-    status: replyPreview === null ? "working" : "completed",
+    status,
     checkpointBefore: null,
     checkpointAfter: null,
     startedAt: at,
@@ -128,6 +132,14 @@ export const turnStarted = (id: string) =>
 
 export const turnEnded = (id: string, reply: string) =>
   event(DomainEvent.cases.TurnEnded.make({ turn: turn(id, reply) }));
+
+/** Turn `id` ended failed, with `reply` or none. */
+export const turnFailed = (id: string, reply: string | null) =>
+  event(
+    DomainEvent.cases.TurnEnded.make({
+      turn: turn(id, reply, "failed"),
+    })
+  );
 
 export const approvalRequested = (id: string, kind?: ApprovalRequest["kind"]) =>
   event(DomainEvent.cases.ApprovalRequested.make({ request: approval(id, kind) }));

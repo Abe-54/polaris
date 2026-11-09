@@ -280,10 +280,14 @@ opaquely; the Notification Service Extension opens it.
   once the Host's connection is live, within a background task (about 30 s). `usePushLinks`
   (in `Shell`) opens what a tap points at: the constellation for one about a constellation
   (`constellationId` in `userInfo.polaris`), else the session.
-- This iPhone's switch, Hosts → Notifications on this iPhone (`src/push/constellations.ts`,
-  SecureStore `polaris.push.constellations`, on by default), rides on the registration as
-  `automatic`; turning it off registers again, and each Host stops sending Polaris's own
-  constellation notifications here. Approvals and agents' `notify` still arrive.
+- This iPhone's switches ride on each registration, and a change registers again (ENG-561):
+  - per Host, on its details sheet (`src/push/hostNotifications.ts`, SecureStore
+    `polaris.push.hosts-off`, on by default), as `notifications`: off, that Host sends this
+    iPhone no pushes at all (Needs You, finished Turns, notifications and failures);
+  - when a constellation needs you, for every Host, in Settings → Notifications
+    (`src/push/constellations.ts`, SecureStore `polaris.push.constellations`, kept from when it
+    sat on the Host sheet), as `automatic`: off, each Host stops sending Polaris's own
+    constellation notifications here.
 
 Unlinking this iPhone asks each Host to drop its registration (`devices.unregisterPush`, up to
 3 s) before the connections close, and rotates the push key, so a Host that missed it can't be

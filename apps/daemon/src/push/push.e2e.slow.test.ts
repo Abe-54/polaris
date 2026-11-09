@@ -179,6 +179,7 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
           subscribe: () =>
             Stream.concat(Stream.make(snapshot(), synchronized()), Stream.fromPubSub(events)),
           isDigestTurn: () => Effect.succeed(false),
+          attemptFailure: () => Effect.succeed(null),
         })
       )
     )

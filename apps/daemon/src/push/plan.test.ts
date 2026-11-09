@@ -4,6 +4,7 @@ import { ApprovalRequest, DomainEvent, type HostStreamItem } from "@polaris/prot
 import type { PushMessage } from "@polaris/protocol/relay";
 import {
   emptyPlan,
+  FAILED_NO_REPLY,
   markDigestTurn,
   nextSettle,
   type PlanState,
@@ -21,6 +22,7 @@ import {
   snapshot,
   synchronized,
   turnEnded,
+  turnFailed,
   turnStarted,
   workerSession,
 } from "./push.testing.ts";
@@ -119,6 +121,18 @@ describe("push plan", () => {
         "All green",
         100 + SETTLE_MS,
       ],
+    ]);
+  });
+
+  test("a failed Turn pushes as a failure, with its reply or a stand-in", () => {
+    const sent = run(
+      [...start, [100, turnFailed("t1", "Rate limited")], [10_000, turnFailed("t2", null)]],
+      100_000
+    );
+
+    expect(sent.map((m) => [m.kind, m.title, m.body])).toEqual([
+      ["turn-ended", "Claude Code's turn failed", "Rate limited"],
+      ["turn-ended", "Claude Code's turn failed", FAILED_NO_REPLY],
     ]);
   });
 
