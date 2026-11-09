@@ -528,7 +528,7 @@ const handleList = (handles: ReadonlyArray<Handle>): Uint8Array => {
       list,
       0,
       BigInt(PROC_THREAD_ATTRIBUTE_HANDLE_LIST),
-      ptr(list, listBytes),
+      values,
       BigInt(values.byteLength),
       null,
       null

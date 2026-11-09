@@ -68,6 +68,7 @@
     "polaris/no-fixed-sleep": "error",
     "polaris/await-expect-promise": "error",
     "polaris/effect-cleanup-return": "error",
+    "polaris/no-ptr-argument": "error",
     "security/git-spawn": "error",
     "security/git-config-mode": "error",
     "security/image-decode": "error",

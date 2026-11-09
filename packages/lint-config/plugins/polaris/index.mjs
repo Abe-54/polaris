@@ -2,6 +2,7 @@
 // See packages/lint-config/README.md.
 
 import { noFixedSleep } from "./fixedSleep.mjs";
+import { noPtrArgument } from "./ptrArgument.mjs";
 
 const MAX_PROSE_LINES = 2;
 
@@ -165,6 +166,7 @@ export default {
   meta: { name: "polaris" },
   rules: {
     "no-fixed-sleep": noFixedSleep,
+    "no-ptr-argument": noPtrArgument,
     "no-long-comment": {
       meta: {
         type: "suggestion",

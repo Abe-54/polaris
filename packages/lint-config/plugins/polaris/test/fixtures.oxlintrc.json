@@ -4,6 +4,7 @@
     "polaris/no-long-comment": "error",
     "polaris/no-fixed-sleep": "error",
     "polaris/await-expect-promise": "error",
-    "polaris/effect-cleanup-return": "error"
+    "polaris/effect-cleanup-return": "error",
+    "polaris/no-ptr-argument": "error"
   }
 }

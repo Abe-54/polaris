@@ -4,7 +4,7 @@
  * One inotify instance serves every watch; Bun's reader waits on it in the event loop's
  * epoll, so an idle watch wakes nothing. It closes with the last watch.
  */
-import { dlopen, FFIType, ptr, read } from "bun:ffi";
+import { dlopen, FFIType, read } from "bun:ffi";
 import { constants } from "node:os";
 import { libcPath } from "../platform/index.ts";
 
@@ -184,7 +184,7 @@ export const watchDirectory = (directory: string, listener: DirectoryListener): 
   const instance = current ?? start(symbols);
   current = instance;
   const path = Buffer.from(`${directory}\0`);
-  const wd = symbols.inotify_add_watch(instance.fd, ptr(path), MASK);
+  const wd = symbols.inotify_add_watch(instance.fd, path, MASK);
 
   if (wd < 0) {
     const error = failure("watch", directory);

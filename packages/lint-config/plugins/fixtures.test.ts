@@ -184,6 +184,19 @@ describe("custom oxlint plugins", () => {
   );
 
   test(
+    "polaris/no-ptr-argument reports bun:ffi ptr() passed straight to a call, however imported",
+    () => {
+      const lines = lintFixtures("polaris")
+        .filter((d) => d.code === "polaris(no-ptr-argument)")
+        .map((d) => `${d.filename}:${d.labels?.[0]?.span.line ?? 0}`);
+
+      // Typed arrays, a stored BigInt(ptr()) and an offset ptr() kept in a const stay silent.
+      expect(lines).toEqual([7, 8, 9, 10].map((line) => `fixtures/ptr-argument.ts:${line}`));
+    },
+    SPAWN_TIMEOUT_MS
+  );
+
+  test(
     "sonarjs/cognitive-complexity reports only the tangled function",
     () => {
       const diagnostics = lintFixtures("sonarjs");
