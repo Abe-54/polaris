@@ -45,12 +45,18 @@ const isLocal = (machine: Pick<MachineView, "kind">) => machine.kind === "local"
 export const hostName = (machine: Pick<MachineView, "kind" | "label">): string =>
   isLocal(machine) ? clientCopy().localHost : machine.label;
 
-/** The local Host's own name ("MacBook Pro") goes in its line; "This Mac" is already the title. */
+/**
+ * The local Host's own name ("MacBook Pro") goes in its line, "This Mac" being the title; with
+ * the default name, the machine's hostname from its Daemon's hello stands in (ENG-337).
+ */
 const where = (machine: MachineView): ReadonlyArray<string> => {
   if (!isLocal(machine)) return [hostWhere(machine)];
   const same = machine.label.toLowerCase() === clientCopy().localHost.toLowerCase();
+  const hostname = machine.status?.host?.hostname ?? "";
 
-  return same ? [] : [machine.label];
+  if (!same) return [machine.label];
+
+  return hostname === "" ? [] : [hostname];
 };
 
 /** "ssh studio · macOS arm64" or "MacBook Pro · macOS arm64": the list row's line. */

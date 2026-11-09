@@ -183,9 +183,11 @@ export const AddMachine = ({
         </p>
       ) : null}
       {aliases === null ? (
-        <p className="text-caption text-text-subtle">Reading ~/.ssh/config…</p>
+        <p className={cn("text-caption text-text-subtle", withWsl && "px-row-x")}>
+          Reading ~/.ssh/config…
+        </p>
       ) : offered.length === 0 ? (
-        <p className="text-caption text-text-subtle">
+        <p className={cn("text-caption text-text-subtle", withWsl && "px-row-x")}>
           No other hosts in ~/.ssh/config. Add a Host block there, then open this again.
         </p>
       ) : (
