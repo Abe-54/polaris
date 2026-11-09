@@ -6,10 +6,13 @@ import { localHost, type DataConnection, type Candidate } from "./connection.ts"
 
 import { linuxOwners } from "./linuxListener.ts";
 
-interface Owner {
+export interface Owner {
   readonly pid: number;
   readonly executable: string;
 }
+
+/** What the owner lookup needs: a TCP port on loopback, or a Unix socket path. */
+export type ListenerAddress = Pick<DataConnection, "hostname" | "port" | "path">;
 
 /** Settles within `limit` ms even when the child never exits (lsof stuck in state U). */
 export const command = (file: string, args: string[], limit = 1000) =>
@@ -32,13 +35,13 @@ export const command = (file: string, args: string[], limit = 1000) =>
     }, limit);
   });
 
-const socketPath = (connection: DataConnection) =>
+const socketPath = (connection: ListenerAddress) =>
   connection.path ||
   (connection.hostname.startsWith("/")
     ? posix.join(connection.hostname, `.s.PGSQL.${connection.port}`)
     : undefined);
 
-export const lsofOwners = (text: string, connection: DataConnection): Owner[] => {
+export const lsofOwners = (text: string, connection: ListenerAddress): Owner[] => {
   const socket = socketPath(connection);
   const owners = new Map<number, Owner>();
   let pid = 0;
@@ -64,7 +67,7 @@ export const lsofOwners = (text: string, connection: DataConnection): Owner[] =>
   return [...owners.values()];
 };
 
-const macOwners = async (connection: DataConnection) => {
+const macOwners = async (connection: ListenerAddress) => {
   const owners = lsofOwners(
     await command("/usr/sbin/lsof", [
       "-nP",
@@ -98,7 +101,7 @@ const macOwners = async (connection: DataConnection) => {
   );
 };
 
-export const listenerOwners = (connection: DataConnection) => {
+export const listenerOwners = (connection: ListenerAddress): Promise<Owner[]> => {
   // Windows has no supported listener-owner inspection; locality remains unverified.
   if (process.platform === "win32") return Promise.resolve([]);
 

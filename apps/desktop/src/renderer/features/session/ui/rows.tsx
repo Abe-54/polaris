@@ -55,6 +55,7 @@ import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCa
 import { sourceForTarget } from "../../data/approval/decide.ts";
 import { askedBy, type DataSourceTarget, dataSourceTarget } from "../../data/approval/model.ts";
 import { useDataSources } from "../../data/data/hooks.tsx";
+import { OriginApprovalCard } from "../../requests/approval/OriginApprovalCard.tsx";
 import { dataOpeners } from "../../data/output/open.ts";
 import { useWriteEntry } from "../../data/write/hooks.ts";
 import type { DataWrite } from "../../data/write/model.ts";
@@ -458,6 +459,32 @@ const DataApproval = ({
   );
 };
 
+/** An agent's Send to a Remote Origin: the same card Requests shows. */
+const OriginApproval = ({
+  request,
+  target,
+  ctx,
+}: {
+  request: ApprovalRequest;
+  target: NonNullable<ApprovalRequest["origin"]>;
+  ctx: RowContext;
+}) => {
+  const { hostKey, sessionId } = ctx.diff;
+  const hostLabel = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.label ?? "this Host");
+  const title = useApp((s) => s.hostModels[hostKey]?.sessions.get(sessionId)?.session.title ?? "");
+
+  return (
+    <OriginApprovalCard
+      hostKey={hostKey}
+      request={request}
+      target={target}
+      who={askedBy(title)}
+      turn={null}
+      hostLabel={hostLabel}
+    />
+  );
+};
+
 /** An agent's write: the dry run, before and after, and Run or Deny with a reason. */
 const DataWriteApproval = ({
   request,
@@ -520,6 +547,9 @@ const Approval = ({
   const target = dataSourceTarget(request);
 
   if (target !== null) return <DataApproval request={request} target={target} ctx={ctx} />;
+
+  if (request.origin !== undefined)
+    return <OriginApproval request={request} target={request.origin} ctx={ctx} />;
   const who = ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name;
   const respond = (decision: ApprovalDecision) => ctx.onRespond(request, decision);
 

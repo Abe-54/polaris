@@ -21,6 +21,7 @@ import {
 import { type ClientServices, HostDirectory, toIpcError } from "../hosts.ts";
 import { toDataIpcError } from "./data.ts";
 import { tracesOpeners } from "./traces.ts";
+import { httpRequestsOpeners } from "./httpRequests.ts";
 import { githubOpeners } from "../github/ipc.ts";
 import { gitOpeners } from "./git.ts";
 import { constellationFeed } from "./constellation.ts";
@@ -82,6 +83,7 @@ const openers: Openers = {
   "data.queryLog.watch": ({ hostKey, ...input }) =>
     onData(hostKey, (session) => watchDataQueryLog(session, input)),
   ...tracesOpeners,
+  ...httpRequestsOpeners,
   ...githubOpeners,
   ...gitOpeners,
   ...browserOpeners(undefined),

@@ -4,9 +4,19 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 from fixture import temporary_root, npm_environment, server_environment, start, stop, run, group_exists
+
+
+def wait_for_text(path, seconds):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if path.is_file() and (text := path.read_text()):
+            return text
+        time.sleep(0.02)
+    raise AssertionError(f'{path.name} not written within {seconds} s')
 
 
 class FixtureTest(unittest.TestCase):
@@ -45,12 +55,16 @@ if sys.argv[1] != 'timeout': sys.exit(int(sys.argv[1]))
 while True: time.sleep(.1)
 """
         with tempfile.TemporaryDirectory(dir='/tmp') as name:
-            root = pathlib.Path(name)
             for outcome in ('0', '1', 'timeout'):
+                root = pathlib.Path(name) / outcome
+                root.mkdir()
                 process = start([sys.executable, '-c', worker, outcome], root, server_environment(root))
                 try:
-                    with self.assertRaises(subprocess.TimeoutExpired):
-                        process.communicate(timeout=.3)
+                    # group.txt follows SIG_IGN and the fork: cleanup must not race the worker's startup.
+                    self.assertEqual(wait_for_text(root / 'group.txt', 10), str(process.pid))
+                    if outcome != 'timeout':
+                        process.wait(timeout=10)
+                    self.assertTrue(group_exists(process.pid))
                 finally:
                     proof = stop(process)
                     for pipe in (process.stdin, process.stdout, process.stderr):

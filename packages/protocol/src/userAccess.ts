@@ -318,6 +318,16 @@ export const USER_RPCS = {
   "traces.ingestSelf": "any",
   // Writes a skill into every Harness's global config: it steers all future agents.
   "traces.installSkill": "user",
+  // Sends, saves or resolves variables (which may hold secrets) only for the user (ENG-809).
+  "requests.watch": "any",
+  "requests.save": "user",
+  "requests.send": "user",
+  "requests.variables": "user",
+  "requests.sendLog.page": "any",
+  "requests.sendLog.watch": "any",
+  "requests.send.get": "any",
+  "requests.curl.parse": "any",
+  "requests.curl.format": "user",
 } as const satisfies Record<DaemonRpcTag, UserAccessNeed>;
 
 /** The RPCs the user gate decides: every `user` one, and `dispatch`, decided per Command. */

@@ -32,6 +32,8 @@ export const Capability = Schema.Literals([
   /** CPU Profiles watch, details and owned-process restart; advertised only when implemented. */
   "traces.profiles",
   "traces.profiles.attach",
+  /** `requests.*`: Requests, Sends and the Send Log (ADR 0098); advertised only when implemented. */
+  "requests",
   /** `developerMode.*`: the Developer Mode setting, leases and watch (ADR 0095); when implemented. */
   "developer-mode",
   /** `traces.ingestSelf`: Clients' Self-Trace batches (ADR 0095); advertised only when implemented. */

@@ -1,0 +1,32 @@
+### GET request with a header
+GET https://httpbin.org/ip
+Accept: application/json
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
+
+<> 2026-11-09T120000.200.json
+
+### POST request with a JSON body from a file
+POST https://httpbin.org/post
+Content-Type: application/json
+X-Request-Id: {{$random.uuid}}
+
+< ./payload.json
+
+###
+# @no-redirect
+// @name Login
+POST {{host}}/login
+Content-Type: application/x-www-form-urlencoded
+
+username={{username}}&password={{password}}
+
+>> login-response.json
+
+### Authorized request
+GET {{host}}/me
+Authorization: Bearer {{token}}

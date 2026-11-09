@@ -71,6 +71,17 @@ describe("editor keys on Windows", () => {
 
     expect(defaultKeymap.filter((b) => !kept.has(b)).map((b) => b.key)).toEqual(["Mod-i"]);
   });
+
+  test("Requests' body editor gives Ctrl+Enter to Send; other editors keep it", () => {
+    const requests = new Set(
+      shellSafe(defaultKeymap, "windows", shellChords("windows", "mode.requests"))
+    );
+
+    expect(defaultKeymap.filter((b) => !requests.has(b)).map((b) => b.key)).toEqual([
+      "Mod-Enter",
+      "Mod-i",
+    ]);
+  });
 });
 
 describe("reloading in place", () => {

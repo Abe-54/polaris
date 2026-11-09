@@ -2,11 +2,18 @@
  * How every place answers a Data Source Approval the same way: the scope its card shows, the
  * decision Approve sends from any path, and what this device already decided, so each view agrees.
  */
-import type { ApprovalDecision, ApprovalRequest, DataSource, SessionId } from "@polaris/protocol";
+import type {
+  ApprovalDecision,
+  ApprovalRequest,
+  DataSource,
+  OriginScope,
+  SessionId,
+} from "@polaris/protocol";
 import { Predicate } from "effect";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { Decisions } from "../../../commands.ts";
+import { approveOrigin, neededScope, originTarget } from "../../requests/approval/model.ts";
 import {
   approveDecision,
   type DataScope,
@@ -23,13 +30,20 @@ interface Grant {
 interface State {
   /** The scope each request's card shows; "target" until the user picks. */
   readonly scopes: Readonly<Record<string, DataScope>>;
+  /** The scope each Origin Approval's card shows; what its Send needs until the user picks. */
+  readonly originScopes: Readonly<Record<string, OriginScope>>;
   /** Requests this device answered, until the Daemon resolves them. */
   readonly decided: Readonly<Record<string, "approved" | "denied">>;
   /** Targets approved here, for other sessions still asking for them. */
   readonly grants: ReadonlyArray<Grant>;
 }
 
-export const decisionStore = createStore<State>(() => ({ scopes: {}, decided: {}, grants: [] }));
+export const decisionStore = createStore<State>(() => ({
+  scopes: {},
+  originScopes: {},
+  decided: {},
+  grants: [],
+}));
 
 export const approvalScope = (requestId: string): DataScope =>
   decisionStore.getState().scopes[requestId] ?? "target";
@@ -43,6 +57,29 @@ export const setApprovalScope = (requestId: string, scope: DataScope) =>
 export const useDecidedHere = (requestId: string) =>
   useStore(decisionStore, (s) => s.decided[requestId] ?? null);
 
+/** An Origin Approval's scope: the user's pick, else what the waiting Send needs. */
+export const originApprovalScope = (request: ApprovalRequest): OriginScope => {
+  const target = originTarget(request);
+
+  return (
+    decisionStore.getState().originScopes[request.id] ??
+    (target === null ? "reads" : neededScope(target))
+  );
+};
+
+export const useOriginApprovalScope = (requestId: string, needed: OriginScope): OriginScope =>
+  useStore(decisionStore, (s) => s.originScopes[requestId] ?? needed);
+
+export const setOriginApprovalScope = (requestId: string, scope: OriginScope) =>
+  decisionStore.setState((s) => ({
+    ...s,
+    originScopes: { ...s.originScopes, [requestId]: scope },
+  }));
+
+/** A request whose card remembers its decision and shows it in every view. */
+const hasCard = (request: ApprovalRequest) =>
+  dataSourceTarget(request) !== null || originTarget(request) !== null;
+
 /**
  * Approve from any path: a Data Source Approval's is the card's, remembered; writes and profiles run once;
  * others as asked.
@@ -51,16 +88,16 @@ export const allowFor = (request: ApprovalRequest, remember: boolean): ApprovalD
   if (request.dataWrite !== undefined || request.profileAttach !== undefined)
     return Decisions.Allow({ remember: false });
 
+  if (originTarget(request) !== null) return approveOrigin(originApprovalScope(request));
+
   return dataSourceTarget(request) === null
     ? Decisions.Allow({ remember })
     : approveDecision(approvalScope(request.id));
 };
 
-/** No path offers "Always allow" for a Data Source Approval (its card chooses), write or profile. */
+/** No path offers "Always allow" for a Data Source or Origin Approval (its card chooses), write or profile. */
 export const offersAlwaysAllow = (request: ApprovalRequest) =>
-  dataSourceTarget(request) === null &&
-  request.dataWrite === undefined &&
-  request.profileAttach === undefined;
+  !hasCard(request) && request.dataWrite === undefined && request.profileAttach === undefined;
 
 /** The same server, database and user, as the Daemon keys an approval. */
 export const sameTarget = (
@@ -90,7 +127,7 @@ export const sourceForTarget = (
 
 /** Records a decision being sent, so every view of the request shows it at once. */
 export const noteDecision = (request: ApprovalRequest, decision: ApprovalDecision) => {
-  if (dataSourceTarget(request) === null) return;
+  if (!hasCard(request)) return;
   const approved = Predicate.isTagged(decision, "Allow");
 
   decisionStore.setState((s) => ({

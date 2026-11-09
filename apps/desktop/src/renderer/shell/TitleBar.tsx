@@ -13,7 +13,7 @@ import { AppMenuButton, CaptionSpace } from "./windowsChrome.tsx";
 /**
  * The title bar (DESIGN.md, Titlebar; Chrome redesign): on the ground with no fill. On macOS
  * the lockup after the traffic lights; on Windows the lockup as the app menu, with the native
- * caption buttons over the right end. Then the mode pill tabs (⌘1–5), the offline indicator,
+ * caption buttons over the right end. Then the mode pill tabs (⌘1–6), the offline indicator,
  * the jump pill (K) and, outside Review, New session (⌘N) in Starlight. While Settings is open
  * no mode is selected; picking one leaves Settings for it.
  */
@@ -69,6 +69,8 @@ export const TitleBar = () => {
       label: <span title={tracesUnavailable ?? undefined}>Traces</span>,
       disabled: tracesUnavailable !== null,
     },
+    // An older Daemon is explained inside the view, so ⌘6 always opens it.
+    { value: "requests", label: "Requests" },
   ];
 
   return (

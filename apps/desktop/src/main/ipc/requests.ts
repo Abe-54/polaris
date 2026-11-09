@@ -6,6 +6,7 @@
 import { hostDeveloperModes } from "../developerMode/index.ts";
 import { dataHandlers } from "./data.ts";
 import { tracesHandlers } from "./traces.ts";
+import { httpRequestsHandlers } from "./httpRequests.ts";
 import { modelServerResources } from "@polaris/client/prediction/probe";
 import type { MainPredictionPlacement } from "../prediction/placement.ts";
 import type { PredictionSettings } from "../prediction/preferences.ts";
@@ -270,6 +271,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...secretHandlers,
   ...dataHandlers,
   ...tracesHandlers,
+  ...httpRequestsHandlers,
   "updates.get": () => Effect.sync(ctx.updates.get),
   "updates.check": () => Effect.sync(ctx.updates.check),
   "updates.setAutomatic": ({ enabled }) => Effect.sync(() => ctx.updates.setAutomatic(enabled)),

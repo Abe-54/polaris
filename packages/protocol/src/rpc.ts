@@ -34,6 +34,7 @@ import { SelfTraceRpcs } from "./selfTraces.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
+import { RequestsRpcs } from "./requests.ts";
 import {
   ProfilesRpcs,
   TraceCompareRpcs,
@@ -790,9 +791,11 @@ export const DaemonRpcDefinitions = RpcGroup.make(
     TraceCompareRpcs,
     TracingSkillRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs);
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs);
 
-export class DaemonRpcs extends gateUserRpcs(DaemonRpcDefinitions) {}
+// A const, not a class: inferring `RpcGroup.Rpcs` from a class over the gated group is
+// too deep for the linter's single-program checker (TS2589), which types every Client as `any`.
+export const DaemonRpcs = gateUserRpcs(DaemonRpcDefinitions);
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with
@@ -807,3 +810,19 @@ export class ExtensionDaemonRpcs extends DaemonRpcs.omit("dispatch")
     )
   )
   .middleware(GrantGate) {}
+
+/**
+ * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests, which only the Desktop App
+ * may call (RPC_GRANTS: client); leaving it out keeps the client type within the checker's depth.
+ */
+export class ExtensionClientRpcs extends ExtensionDaemonRpcs.omit(
+  "requests.watch",
+  "requests.save",
+  "requests.send",
+  "requests.variables",
+  "requests.sendLog.page",
+  "requests.sendLog.watch",
+  "requests.send.get",
+  "requests.curl.parse",
+  "requests.curl.format"
+) {}

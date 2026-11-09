@@ -36,14 +36,16 @@ import {
 export type NavStore = StoreApi<NavState>;
 
 const keepsMode = (mode: Route): Route =>
-  mode === "edit" || mode === "data" || mode === "traces" ? mode : "orchestrate";
+  mode === "edit" || mode === "data" || mode === "traces" || mode === "requests"
+    ? mode
+    : "orchestrate";
 
 const NO_OVERLAY = { jumpOpen: false, paletteOpen: false, helpOpen: false, folder: null } as const;
 
 const STORAGE_KEY = "polaris.navigation.v1";
 
 const Persisted = Schema.Struct({
-  mode: Schema.Literals(["orchestrate", "review", "edit", "data", "traces"]),
+  mode: Schema.Literals(["orchestrate", "review", "edit", "data", "traces", "requests"]),
   hostKey: Schema.NullOr(Schema.String),
   workspaceId: Schema.NullOr(Schema.String),
   sessionId: Schema.NullOr(Schema.String),
