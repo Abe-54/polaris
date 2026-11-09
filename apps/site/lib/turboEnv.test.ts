@@ -63,7 +63,10 @@ const declared = () => {
 const siteReads = () => {
   const reads = new Map<string, string>();
 
-  for (const file of new Bun.Glob("**/*.{ts,tsx,mts,js,mjs}").scanSync(SITE)) {
+  for (const found of new Bun.Glob("**/*.{ts,tsx,mts,js,mjs}").scanSync(SITE)) {
+    // Bun's glob yields backslashes on Windows.
+    const file = found.replaceAll("\\", "/");
+
     if (SKIPPED.test(file)) continue;
 
     for (const name of envReads(readFileSync(join(SITE, file), "utf8"))) {
