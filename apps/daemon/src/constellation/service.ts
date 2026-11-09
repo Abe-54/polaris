@@ -29,6 +29,7 @@ import { ConstellationOwner, ConstellationRuntime } from "./runtime.ts";
 import { emptyResources } from "../resources/model.ts";
 import { type HostSlots } from "./slots.ts";
 import { statusOutline, statusSince } from "./status.ts";
+import { ignoredTierNotes } from "./serviceTier.ts";
 import { scopedResult, statusScope, type StatusView } from "./statusView.ts";
 import { subscribeConstellation } from "./streams.ts";
 
@@ -376,7 +377,7 @@ const make = Effect.gen(function* () {
         finding("E-NOT-FOUND", "The constellation does not exist", "Start it with plan."),
       ]);
 
-    return graphResult(
+    const result = graphResult(
       record,
       commit.sequence,
       true,
@@ -385,6 +386,22 @@ const make = Effect.gen(function* () {
       }),
       model.sessions
     );
+
+    const notes = Predicate.isTagged(commit, "Committed")
+      ? ignoredTierNotes(input, record, prepared.attempts, model.sessions)
+      : [];
+
+    return notes.length === 0
+      ? result
+      : new ConstellationResult({
+          summary: result.summary,
+          next: [...notes, result.next].join(" "),
+          revision: result.revision,
+          sequence: result.sequence,
+          constellation: result.constellation,
+          projections: result.projections,
+          proposals: result.proposals,
+        });
   });
 
   return {

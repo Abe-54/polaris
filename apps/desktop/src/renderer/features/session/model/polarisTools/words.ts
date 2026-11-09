@@ -29,7 +29,13 @@ export const workerSegments = (worker: typeof Worker.Type | undefined): Readonly
   if (worker.session !== undefined)
     return [{ text: "in its session" }, { text: worker.session, mono: true }];
   const harness = worker.selection?.harness;
-  const parts = [harness === undefined ? null : harnessName(harness), worker.selection?.model];
+
+  const parts = [
+    harness === undefined ? null : harnessName(harness),
+    worker.selection?.model,
+    worker.selection?.serviceTier === "priority" ? "fast mode" : null,
+  ];
+
   const text = [...parts, worker.host].filter((part) => part != null && part !== "").join(" · ");
 
   if (text === "") return [];

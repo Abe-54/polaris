@@ -51,14 +51,17 @@ describe("polarisToolView", () => {
     expect(call("polaris_1.status", "{}").tool).toBe("status");
   });
 
-  test("dispatch reads as the Task started and where, never JSON", () => {
+  test.each([
+    ["", "Started B1 Codex · gpt-5.5 · Mac Studio"],
+    [',"serviceTier":"priority"', "Started B1 Codex · gpt-5.5 · fast mode · Mac Studio"],
+  ])("dispatch reads as the Task started and where, never JSON (%s)", (tier, expected) => {
     const view = call(
       "mcp__polaris__dispatch",
-      '{"tasks":[{"taskId":"B1","worker":{"host":"Mac Studio","selection":{"harness":"codex","model":"gpt-5.5"}}}]}',
+      `{"tasks":[{"taskId":"B1","worker":{"host":"Mac Studio","selection":{"harness":"codex","model":"gpt-5.5"${tier}}}}]}`,
       recorded("Dispatch recorded.")
     );
 
-    expect(line(view)).toBe("Started B1 Codex · gpt-5.5 · Mac Studio");
+    expect(line(view)).toBe(expected);
     expect(view.detail[0]?.hue).toBe("codex");
     expect(view.reply).toBe("Dispatch recorded · revision 9");
     expect(view.links).toEqual([{ label: "Open B1", taskId: "B1" }]);

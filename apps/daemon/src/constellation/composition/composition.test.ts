@@ -227,16 +227,26 @@ test("production composition acquires a slot before first Turn, installs MCP/env
           expect(holds).toBe(0);
           expect(driver.sessions).toHaveLength(0);
           yield* configure("mkdir -p node_modules; printf setup-ready", "repair-setup");
-          yield* graphs.command(
+
+          // Fast mode chosen at dispatch reaches the first Turn (ENG-475).
+          const dispatched = yield* graphs.command(
             { kind: "user" },
-            CommandId.make("dispatch-real"),
+            CommandId.make("dispatch-fast"),
             C.Dispatch.make({
               constellationId: CID,
               tasks: [
-                { taskId: task().id, worker: WorkerPlacement.cases.New.make({ hostId: HOST }) },
+                {
+                  taskId: task().id,
+                  worker: WorkerPlacement.cases.New.make({
+                    hostId: HOST,
+                    selection: { serviceTier: "priority" },
+                  }),
+                },
               ],
             })
           );
+
+          expect(dispatched.next).not.toContain("service tier");
           const attempt = (yield* store.model).constellations.get(CID)!.graph.attempts[0]!;
 
           const prepared = (yield* store.model).sessions.get(attempt.sessionId)!.session
@@ -263,6 +273,11 @@ test("production composition acquires a slot before first Turn, installs MCP/env
           expect(harness.options.constellations).toHaveLength(1);
           expect(harness.options.constellations![0]!.instructions).toContain("claim");
           expect(harness.turns[0]!.prompt).toContain("Build A");
+          expect(harness.options.serviceTier).toBe("priority");
+          expect(harness.turns[0]!.serviceTier).toBe("priority");
+          expect((yield* store.model).sessions.get(attempt.sessionId)!.turns[0]!.serviceTier).toBe(
+            "priority"
+          );
           const liveness = yield* ConstellationLiveness;
           const live = yield* liveness.subscribe(CID);
 

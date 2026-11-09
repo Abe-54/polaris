@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 import { HarnessKind } from "../harnesses.ts";
 import { HostId, SessionId, Timestamp, TurnId, WorkspaceId } from "../ids.ts";
-import { ModelId, optionalArray, optionalNullable, ReasoningEffort } from "../models.ts";
+import {
+  ModelId,
+  optionalArray,
+  optionalNullable,
+  ReasoningEffort,
+  ServiceTier,
+} from "../models.ts";
 import { WorkerLiveness } from "./liveness.ts";
 
 export const ConstellationId = Schema.String.pipe(Schema.brand("ConstellationId"));
@@ -103,6 +109,8 @@ export class HarnessSelection extends Schema.Class<HarnessSelection>("HarnessSel
   harness: Schema.optionalKey(HarnessKind),
   model: Schema.optionalKey(ModelId),
   effort: Schema.optionalKey(ReasoningEffort),
+  /** Codex's service tier (`priority` is fast mode); a Harness without tiers ignores it (ENG-475). */
+  serviceTier: Schema.optionalKey(Schema.NullOr(ServiceTier)),
 }) {}
 
 export class TaskDefinition extends Schema.Class<TaskDefinition>("TaskDefinition")({
