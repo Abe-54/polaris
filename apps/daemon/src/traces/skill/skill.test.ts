@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, readdir, rm, symlink, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { Effect } from "effect";
 import { installTracingSkill, skillFolders } from "./index.ts";
 import { BUNDLED_SKILL } from "./bundled.ts";
@@ -13,7 +13,7 @@ const filesUnder = async (root: string): Promise<ReadonlyArray<string>> => {
 
   return entries
     .filter((e) => e.isFile())
-    .map((e) => relative(root, join(e.parentPath, e.name)))
+    .map((e) => relative(root, join(e.parentPath, e.name)).split(sep).join("/"))
     .toSorted();
 };
 
@@ -53,13 +53,15 @@ describe("the bundled polaris-tracing skill", () => {
   test("follows CLAUDE_CONFIG_DIR and XDG_CONFIG_HOME, and one Harness gets only its folder", () => {
     const env = { CLAUDE_CONFIG_DIR: "/c", XDG_CONFIG_HOME: "/x" };
 
-    expect(skillFolders("claude", { home: "/h", env })).toEqual(["/c/skills/polaris-tracing"]);
+    expect(skillFolders("claude", { home: "/h", env })).toEqual([
+      join("/c", "skills/polaris-tracing"),
+    ]);
     expect(skillFolders("opencode", { home: "/h", env })).toEqual([
-      "/x/opencode/skills/polaris-tracing",
+      join("/x", "opencode/skills/polaris-tracing"),
     ]);
     expect(skillFolders("my-agent", { home: "/h", env: {} })).toEqual([
-      "/h/.claude/skills/polaris-tracing",
-      "/h/.agents/skills/polaris-tracing",
+      join("/h", ".claude/skills/polaris-tracing"),
+      join("/h", ".agents/skills/polaris-tracing"),
     ]);
   });
 
