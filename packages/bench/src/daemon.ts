@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs
 import { join, resolve } from "node:path";
 import { connectRpc, type RpcConnection, socketTransport, spawnTransport } from "@polaris/client";
 import type { Capability } from "@polaris/protocol";
-import { Duration, Effect, type Scope } from "effect";
+import { Duration, Effect, Redacted, type Scope } from "effect";
 import { startSampler, type Sampler } from "./sampler.ts";
 
 export const REPO_ROOT = resolve(import.meta.dir, "..", "..", "..");
@@ -199,11 +199,15 @@ export interface Client {
   readonly capabilities: ReadonlyArray<Capability>;
 }
 
+/** The bench acts as the Desktop App: its fresh home enrols this key on first hello (ADR 0099). */
+const BENCH_USER_KEY = Redacted.make("b".repeat(64));
+
 const identity = (label: string) => ({
   clientName: "polaris-bench",
   clientVersion: "0.0.0",
   deviceLabel: label,
   capabilities: [],
+  userKey: BENCH_USER_KEY,
 });
 
 /** Connect one Client and say hello. */

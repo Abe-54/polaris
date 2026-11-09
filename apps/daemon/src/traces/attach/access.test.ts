@@ -16,6 +16,7 @@ import {
 import { Effect, Layer, Redacted } from "effect";
 import { ServerRpcs } from "../../transport/rpcs.ts";
 import { startServer } from "../../transport/server.ts";
+import { TEST_USER_KEY } from "../../transport/userAccess.testing.ts";
 
 // The real transport gate must reject both paths before they reach their handlers.
 test("P9-6: a paired caller without approve cannot start a user capture or answer an approval", async () => {
@@ -67,7 +68,7 @@ test("P9-6: a paired caller without approve cannot start a user capture or answe
         };
 
         const desktop = yield* connect();
-        yield* desktop.client.hello(identity);
+        yield* desktop.client.hello({ ...identity, ...TEST_USER_KEY });
 
         for (const approve of [false, true]) {
           const pairing = yield* desktop.client["extensions.pair"]({

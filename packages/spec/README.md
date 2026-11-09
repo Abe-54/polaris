@@ -13,6 +13,7 @@ It covers the event store's group commit, receipts and gapless sequence (`apps/d
 | `scripts/check.ts` | Runs every check (`bun run spec`). |
 | `scripts/replay.ts` | Trace validation: replays logs the real Engine committed through the model (below). |
 | `extensions.qnt` | Pairings and Grants (ENG-398): connections scoped by `hello`, the Grant gate, revocation closing live connections. `scripts/replay-extensions.ts` replays a runtime trace through it. |
+| `user-access.qnt` | User access (ENG-700, ADR 0099): `hello` enrols the first user key and holds access for enrolled ones; the user gate refuses user-only requests without it; deleting the enrolment file lets the next key enrol. `transport/userAccess.ts` and the protocol's `userAccess.ts`; `transport/userAccess.test.ts` checks the same scenarios over a real socket. Safety: one key enrolled at a time, and a user-only request is allowed only on a connection holding access. No event-store commit, acknowledgement or resume semantics change. |
 | `rpc-admission.qnt` | Extension RPC reservations (ENG-418): `transport/rpcAdmission.ts` bounds requests before decoding/forking; `transport/server.ts` connects acquisition, terminal responses, handler finalization and disconnect. Active work retains capacity after disconnect. `transport/rpcAdmission.test.ts` exercises real granted handlers, socket/WebSocket floods, streaming cancellation, failures and token-less Client isolation. No event-store commit, acknowledgement or resume semantics change. |
 
 ## Running it

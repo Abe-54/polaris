@@ -56,6 +56,8 @@ export * from "./grants.ts";
 
 export * from "./deviceGrants.ts";
 
+export * from "./userAccess.ts";
+
 export * from "./hello.ts";
 
 export * from "./notification.ts";

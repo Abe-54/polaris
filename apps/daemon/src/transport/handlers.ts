@@ -35,6 +35,7 @@ import { BlobChannel } from "../services.ts";
 import { ServerRpcs } from "./rpcs.ts";
 import { languageDefaults } from "./languageDefaults.ts";
 import { helloHost } from "./hostInfo.ts";
+import { bindUserAccess } from "./userAccess.ts";
 import { bindLanguageIdentity } from "./languageIdentity.ts";
 import { pairingOf, revokePairing, scopeConnection } from "../extensions/connection.ts";
 import { Pairings } from "../extensions/pairings.ts";
@@ -74,6 +75,8 @@ const fileError = (path: string, what: string) =>
 type DefaultOptions = {
   readonly hostInfo: HostInfo;
   readonly capabilities: ReadonlyArray<Capability>;
+  /** Where this Host's enrolled user keys live (`userAccess.ts`). */
+  readonly userAccessFile?: string;
 };
 
 export const defaultHandlers = (options: DefaultOptions) =>
@@ -314,7 +317,7 @@ const serverDefaults = (options: DefaultOptions) =>
     // Record which device this connection is (for ApprovalResolved.resolvedBy), what it
     // understands (e.g. whether to send it ItemProgress), and the Pairing it acts as.
     hello: (
-      { deviceLabel, capabilities, languageProof, extensionToken, protocolVersions },
+      { deviceLabel, capabilities, languageProof, extensionToken, protocolVersions, userKey },
       { client }
     ) =>
       Effect.gen(function* () {
@@ -344,9 +347,21 @@ const serverDefaults = (options: DefaultOptions) =>
         client.annotate(ClientCapabilities, capabilities);
         admissionOf(client).protocolReady = true;
 
+        // Extensions and Linked Devices have their own gates; only a token-less Client holds a key.
+        const userAccess =
+          pairing === null &&
+          deviceOf(client) === null &&
+          bindUserAccess(client, {
+            hostId: options.hostInfo.hostId,
+            key: userKey,
+            label: deviceLabel,
+            file: options.userAccessFile,
+          });
+
         const response = {
           ...helloHost(options.hostInfo, capabilities),
           capabilities: options.capabilities,
+          userAccess,
         };
 
         return languageIdentity === null ? response : { ...response, languageIdentity };

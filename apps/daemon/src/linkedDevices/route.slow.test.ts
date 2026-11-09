@@ -50,6 +50,7 @@ import {
   type TestDevice,
 } from "./device.testing.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 /** `dispatch` answers with who asked: the label and the Actor the Engine would record. */
 const handlers = ServerRpcs.toLayerHandler("dispatch", ({ commandId }, { client }) =>
@@ -124,7 +125,7 @@ const daemon = (scope: Scope.Scope, relayLinks?: LinkTiming) =>
       yield* socketTransport(server.socketPath)
     ).pipe(Scope.provide(scope));
 
-    yield* desktop.client.hello(hello);
+    yield* desktop.client.hello({ ...hello, ...TEST_USER_KEY });
 
     return desktop.client;
   });

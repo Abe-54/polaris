@@ -47,6 +47,7 @@ import {
   replayExtensions,
 } from "../../../../packages/spec/scripts/extensions-replay/index.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "./userAccess.testing.ts";
 
 const temporary = scopedTempDir("pl-ext-", { short: true });
 
@@ -127,7 +128,7 @@ test("an Extension gets its Grant and nothing more, and revoking cuts it off", a
           );
 
         const desktop = yield* connect();
-        yield* desktop.client.hello(hello());
+        yield* desktop.client.hello({ ...hello(), ...TEST_USER_KEY });
         record(
           ExtensionsTraceEvent.cases.Hello.make({ connection: 0, pairing: null, observed: "ok" })
         );
@@ -374,7 +375,7 @@ test("the pairing string names this Host and carries the token, with no url whil
           connectRpcWith(ExtensionDaemonRpcs, transport)
         );
 
-        const { host } = yield* desktop.client.hello(hello());
+        const { host } = yield* desktop.client.hello({ ...hello(), ...TEST_USER_KEY });
         const paired = yield* desktop.client["extensions.pair"]({ name: "Glasses", grant: [] });
 
         return { host, paired };

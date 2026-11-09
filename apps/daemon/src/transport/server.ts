@@ -15,6 +15,7 @@ import {
   type ByteTransport,
   type Capability,
   GrantGate,
+  UserAccessGate,
   type HostInfo,
   type LinkedDevice,
   makeWire,
@@ -63,6 +64,7 @@ import { defaultHandlers } from "./handlers.ts";
 import { loadHostInfo } from "./hostInfo.ts";
 import { acquireLock, type DaemonAlreadyRunning, LockError } from "./lock.ts";
 import { ConnectionBlobs, ServerRpcs } from "./rpcs.ts";
+import { userAccessFile, userAccessGateFor } from "./userAccess.ts";
 import { listen, prepareSocketPath } from "./socket.ts";
 import { languageIdentityFor, revokeLanguageIdentity } from "./languageIdentity.ts";
 import {
@@ -392,7 +394,9 @@ export const startServer = <ROut = never, E = never, RIn = never>(
 
     const handlers = yield* Layer.build(
       Layer.merge(
-        defaultHandlers({ hostInfo, capabilities }).pipe(Layer.provide(extensionServices)),
+        defaultHandlers({ hostInfo, capabilities, userAccessFile: userAccessFile(root) }).pipe(
+          Layer.provide(extensionServices)
+        ),
         // SAFETY: `handlers` is omitted only when ROut, E and RIn keep their `never` defaults.
         ((options.handlers ?? Layer.empty) as Layer.Layer<ROut, E, RIn>).pipe(
           Layer.provide(
@@ -415,6 +419,12 @@ export const startServer = <ROut = never, E = never, RIn = never>(
       )
     );
 
+    const transportFacts = {
+      tokenRequired: (client: Rpc.ServerClient) =>
+        connections.get(client.id)?.tokenRequired ?? options.extensionTokenRequired ?? false,
+      deviceOf: (client: Rpc.ServerClient) => connections.get(client.id)?.device ?? null,
+    };
+
     // A defect fails only its own request (ADR 0064).
     yield* RpcServer.make(ServerRpcs, {
       spanPrefix: "polaris.rpc",
@@ -422,14 +432,8 @@ export const startServer = <ROut = never, E = never, RIn = never>(
     }).pipe(
       Effect.provideService(RpcServer.Protocol, protocol),
       Effect.provideService(ConnectionBlobs, blobsMiddleware),
-      Effect.provideService(
-        GrantGate,
-        grantGateFor({
-          tokenRequired: (client) =>
-            connections.get(client.id)?.tokenRequired ?? options.extensionTokenRequired ?? false,
-          deviceOf: (client) => connections.get(client.id)?.device ?? null,
-        })
-      ),
+      Effect.provideService(GrantGate, grantGateFor(transportFacts)),
+      Effect.provideService(UserAccessGate, userAccessGateFor(transportFacts)),
       Effect.provideContext(handlers),
       Effect.forkScoped
     );

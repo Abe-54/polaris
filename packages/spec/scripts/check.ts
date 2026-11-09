@@ -191,6 +191,20 @@ run("Worker admission safety", [
   `--seed=${seed}`,
 ]);
 
+run("typecheck user-access.qnt", ["typecheck", "user-access.qnt"]);
+
+run("User access scenarios", ["test", "user-access.qnt", "--main=user_access_test"]);
+
+run("User access safety", [
+  "run",
+  "user-access.qnt",
+  "--main=user_access",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=30",
+  `--seed=${seed}`,
+]);
+
 run("typecheck constellations.qnt", ["typecheck", "constellations.qnt"]);
 
 run("typecheck constellations_test.qnt", ["typecheck", "constellations_test.qnt"]);
