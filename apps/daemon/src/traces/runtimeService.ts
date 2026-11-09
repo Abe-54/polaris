@@ -12,6 +12,13 @@ import type { IngestContext } from "./ingest.ts";
 
 export const TRACE_PORT = 4319;
 
+/** The receiver's port: POLARIS_TRACE_PORT lets a throwaway Daemon run beside the user's. */
+export const tracePort = (env: Readonly<Record<string, string | undefined>> = process.env) => {
+  const port = Number(env.POLARIS_TRACE_PORT);
+
+  return Number.isInteger(port) && port > 0 && port < 65_536 ? port : TRACE_PORT;
+};
+
 export type TraceEnvironment = Readonly<Record<string, string | undefined>>;
 
 type TraceSetup = Pick<TracesSnapshot, "availability" | "endpoint" | "userExported">;

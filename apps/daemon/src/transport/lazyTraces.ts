@@ -8,7 +8,7 @@ import {
   SelfTraceRpcs,
 } from "@polaris/protocol";
 import { DeveloperModeState } from "../developerMode/service.ts";
-import { TraceRuntime } from "../traces/runtimeService.ts";
+import { TraceRuntime, tracePort } from "../traces/runtimeService.ts";
 import { TraceSessions } from "../traces/sessionsService.ts";
 import { TraceStore } from "../traces/storeService.ts";
 import { Profiles } from "../traces/profiles/service.ts";
@@ -192,7 +192,7 @@ export const lazyTracesAt = (options: Omit<ReceiverOptions, "handler"> = {}) =>
     })
   );
 
-export const lazyTraces = lazyTracesAt();
+export const lazyTraces = lazyTracesAt({ port: tracePort() });
 
 const group = TracesRpcs.merge(TracesSettingsRpcs)
   .merge(TraceCompareRpcs)
