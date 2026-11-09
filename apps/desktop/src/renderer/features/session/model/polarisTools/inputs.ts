@@ -92,6 +92,20 @@ export const ReadWorkerInput = Schema.Struct({
   since: opt(Schema.Number),
 });
 
+export const SessionsInput = Schema.Struct({ scope: opt(Str), query: opt(Str) });
+
+export const SearchHistoryInput = Schema.Struct({
+  query: opt(Str),
+  scope: opt(Str),
+  session: opt(Str),
+});
+
+export const ReadHistoryInput = Schema.Struct({
+  session: opt(Str),
+  turns: opt(Schema.Number),
+  since: opt(Schema.Number),
+});
+
 export const WaitInput = Schema.Struct({ task: opt(Str), timeoutSeconds: opt(Schema.Number) });
 
 export const NotifyInput = Schema.Struct({ title: opt(Str), body: opt(Str) });

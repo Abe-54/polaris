@@ -307,7 +307,7 @@ export const setState = ({ action }: typeof SetStateInput.Type): Built => {
 
 const TURN = /^## Turn (\d+) · (\w+)(?: · started (\S+))?/;
 
-const clock = (iso: string | undefined) => {
+export const clock = (iso: string | undefined) => {
   const at = iso === undefined ? Number.NaN : Date.parse(iso);
 
   return Number.isNaN(at)

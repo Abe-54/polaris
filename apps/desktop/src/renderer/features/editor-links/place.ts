@@ -9,6 +9,8 @@ export interface EditorPlace {
   /** A session's cwd, a Review Checkout, a Worktree; relative paths resolve against it. */
   readonly root: string | null;
   readonly workspaceId?: WorkspaceId | null;
+  /** The Host runs Windows: a drive path (`C:\…`) is absolute there; elsewhere it is a URL. */
+  readonly windows?: boolean;
 }
 
 export const EditorPlaceContext = createContext<EditorPlace | null>(null);

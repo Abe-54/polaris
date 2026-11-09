@@ -81,21 +81,26 @@ const decoded = (path: string): string => {
   }
 };
 
-/** A file URL or Windows drive path made safe to carry through Markdown's URL sanitizer. */
-export const sanitizableHostPath = (source: string): string | null => {
+/** What the Markdown steps know of the session's Host: on Windows, drive paths are absolute. */
+export interface HostPaths {
+  readonly windows: boolean;
+}
+
+/** A file URL, or a drive path on a Windows Host, made safe to carry through the URL sanitizer. */
+export const sanitizableHostPath = (source: string, windows: boolean): string | null => {
   const file = fileUrlPath(source);
 
   if (file !== null) return file;
 
-  return /^[A-Za-z]:[\\/]/.test(decoded(source)) ? `/${source}` : null;
+  return windows && /^[A-Za-z]:[\\/]/.test(decoded(source)) ? `/${source}` : null;
 };
 
 /** The Host path an image source names, decoded; null for a URL, a fragment or nothing. */
-export const hostPathOf = (src: string): string | null => {
+export const hostPathOf = (src: string, windows: boolean): string | null => {
   const file = fileUrlPath(src);
   const path = decoded(file ?? src);
 
-  if (WINDOWS_ABSOLUTE.test(path)) return windowsPath(path);
+  if (windows && WINDOWS_ABSOLUTE.test(path)) return windowsPath(path);
 
   if (file !== null) return path;
 
@@ -112,22 +117,26 @@ export const hostPathOf = (src: string): string | null => {
 };
 
 /** Before sanitizing, preserve file URLs and Windows drives as paths rather than URL schemes. */
-export const rehypeFileImages = () => (tree: Node) =>
-  eachImage(tree, (image, src) => {
-    const path = sanitizableHostPath(src);
+export const rehypeFileImages =
+  ({ windows }: HostPaths) =>
+  (tree: Node) =>
+    eachImage(tree, (image, src) => {
+      const path = sanitizableHostPath(src, windows);
 
-    if (path !== null && image.properties !== undefined) image.properties["src"] = path;
-  });
+      if (path !== null && image.properties !== undefined) image.properties["src"] = path;
+    });
 
 /** After sanitizing, before hardening (which drops relative and `~` sources): marks Host images. */
-export const rehypeHostImages = () => (tree: Node) =>
-  eachImage(tree, (image, src) => {
-    const path = hostPathOf(src);
+export const rehypeHostImages =
+  ({ windows }: HostPaths) =>
+  (tree: Node) =>
+    eachImage(tree, (image, src) => {
+      const path = hostPathOf(src, windows);
 
-    if (path === null || image.properties === undefined) return;
-    image.properties["src"] = HOST_IMAGE_SRC;
-    image.properties["dataHostPath"] = path;
-  });
+      if (path === null || image.properties === undefined) return;
+      image.properties["src"] = HOST_IMAGE_SRC;
+      image.properties["dataHostPath"] = path;
+    });
 
 /** The Host path a marked image reads; null for an image Streamdown shows itself. */
 export const hostImageOf = (
@@ -139,14 +148,13 @@ export const hostImageOf = (
   });
 
 /** The path on the Host: as written when absolute or under `~`, else under `root`; null without one. */
-export const onHost = (root: string | null, path: string): string | null => {
-  if (WINDOWS_ABSOLUTE.test(path)) return windowsPath(path);
+export const onHost = (root: string | null, path: string, windows: boolean): string | null => {
+  if (windows && WINDOWS_ABSOLUTE.test(path)) return windowsPath(path);
 
   if (path.startsWith("/") || path === "~" || path.startsWith("~/")) return path;
 
   if (root === null) return null;
 
-  const windows = WINDOWS_ABSOLUTE.test(root);
   const directory = windows ? windowsPath(root) : root;
   const relative = windows ? path.replaceAll("\\", "/") : path;
 

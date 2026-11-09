@@ -19,7 +19,13 @@ import Streamed from "./Streamed.tsx";
 const HOST = "ubuntu-box";
 
 /** A Host with one Workspace, `/code/repo`, which the session works in. */
-const Providers = ({ children }: { readonly children: ReactNode }) => {
+const Providers = ({
+  children,
+  windows = false,
+}: {
+  readonly children: ReactNode;
+  readonly windows?: boolean;
+}) => {
   const store = createStore<AppState>(() => ({
     ...initialState,
     hostModels: { [HOST]: hostModel([{ id: "repo" }]) },
@@ -40,16 +46,16 @@ const Providers = ({ children }: { readonly children: ReactNode }) => {
         commands: createCommandRegistry({ platform: "mac" }),
       }}
     >
-      <EditorPlaceProvider value={{ hostKey: HOST, root: "/code/repo" }}>
+      <EditorPlaceProvider value={{ hostKey: HOST, root: "/code/repo", windows }}>
         {children}
       </EditorPlaceProvider>
     </AppProvider>
   );
 };
 
-const message = (text: string) =>
+const message = (text: string, windows = false) =>
   render(
-    <Providers>
+    <Providers windows={windows}>
       <Streamed text={text} live={false} />
     </Providers>
   );
@@ -90,30 +96,38 @@ test("a link to an HTML page outside every Workspace says so instead of doing no
 });
 
 test.each([
-  ["/home/ubuntu/shots/before.png", "/home/ubuntu/shots/before.png"],
-  ["C:/Users/Developer/shots/before.png", "C:/Users/Developer/shots/before.png"],
-  ["<C:\\Users\\Example User\\shots\\before.png>", "C:/Users/Example User/shots/before.png"],
-  ["file:///C:/Users/Example%20User/shots/before.png", "C:/Users/Example User/shots/before.png"],
-])("an image link %s opens in the viewer from the session's Host", async (source, path) => {
-  const bridge = installFakeBridge();
+  ["/home/ubuntu/shots/before.png", false, "/home/ubuntu/shots/before.png"],
+  ["/c:/shots/before.png", false, "/c:/shots/before.png"],
+  ["C:/Users/Developer/shots/before.png", true, "C:/Users/Developer/shots/before.png"],
+  ["<C:\\Users\\Example User\\shots\\before.png>", true, "C:/Users/Example User/shots/before.png"],
+  [
+    "file:///C:/Users/Example%20User/shots/before.png",
+    true,
+    "C:/Users/Example User/shots/before.png",
+  ],
+])(
+  "an image link %s (Windows Host: %p) opens in the viewer from %s",
+  async (source, windows, path) => {
+    const bridge = installFakeBridge();
 
-  bridge.answerOk("files.read", {
-    size: 100,
-    mimeType: "image/png",
-    content: { kind: "bytes", bytes: png(16, 16) },
-  });
-  const view = message(`Before: [before.png](${source})`);
+    bridge.answerOk("files.read", {
+      size: 100,
+      mimeType: "image/png",
+      content: { kind: "bytes", bytes: png(16, 16) },
+    });
+    const view = message(`Before: [before.png](${source})`, windows);
 
-  fireEvent.click(view.getByRole("button", { name: "before.png" }));
-  await act(async () => {
-    await Bun.sleep(5);
-  });
+    fireEvent.click(view.getByRole("button", { name: "before.png" }));
+    await act(async () => {
+      await Bun.sleep(5);
+    });
 
-  expect(bridge.sent("files.read")).toMatchObject([{ hostKey: HOST, path }]);
-  expect(page().getByTestId("image-viewer").querySelector("img")?.getAttribute("src")).toStartWith(
-    "blob:"
-  );
-});
+    expect(bridge.sent("files.read")).toMatchObject([{ hostKey: HOST, path }]);
+    expect(
+      page().getByTestId("image-viewer").querySelector("img")?.getAttribute("src")
+    ).toStartWith("blob:");
+  }
+);
 
 test("a link to a URL stays a link", () => {
   installFakeBridge();

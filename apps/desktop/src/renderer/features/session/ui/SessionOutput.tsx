@@ -24,6 +24,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { lazy, type ReactNode, Suspense, useMemo, useRef, useState } from "react";
 import { type DiffRow, diffRows, ROW_HEIGHT } from "../diffRows.ts";
 import { type DiffSyntax, lineSyntax } from "../diffSyntax.ts";
+import { isWindowsHost } from "../../../shell/hostPlatform.ts";
 import { useHost, useSession } from "../hooks.ts";
 import { useDiffSyntax } from "../useDiffSyntax.ts";
 import { LineCode } from "./LineCode.tsx";
@@ -415,8 +416,10 @@ const harnessOf = (session: ShownSession) =>
   session !== null && isKnownHarness(session.harness) ? session.harness : null;
 
 /** Where Open in Editor opens the session's files. */
-const placeOf = (hostKey: string, session: ShownSession) =>
-  session === null ? null : { hostKey, root: session.cwd, workspaceId: session.workspaceId };
+const placeOf = (hostKey: string, session: ShownSession, windows: boolean) =>
+  session === null
+    ? null
+    : { hostKey, root: session.cwd, workspaceId: session.workspaceId, windows };
 
 /** The Data tab for the Turn shown: visible when it touched data, shown when picked and nothing else is. */
 const useDataTab = (
@@ -499,7 +502,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
     setFolded(next);
   };
 
-  const place = placeOf(hostKey, session);
+  const place = placeOf(hostKey, session, isWindowsHost(useHost(hostKey)));
 
   return (
     <EditorPlaceProvider value={place}>

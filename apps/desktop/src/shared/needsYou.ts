@@ -93,6 +93,8 @@ export interface NeedsYouNotification {
   readonly body: string;
   /** Polaris sent it because a Constellation needs you, not the agent (Settings → Sessions). */
   readonly automatic?: boolean;
+  /** The Constellation it is about; a click opens the Constellation view then. */
+  readonly constellationId?: string | null;
 }
 
 export interface NeedsYouSummary {
@@ -112,6 +114,8 @@ export interface NeedsYouSummary {
 /** What the menu bar and notifications ask the renderer to do. */
 export type NeedsYouAction =
   | { readonly action: "open"; readonly hostKey: string; readonly sessionId: string }
+  /** The Lead's session with its Constellation view in front. */
+  | { readonly action: "open-constellation"; readonly hostKey: string; readonly sessionId: string }
   | {
       readonly action: "approve" | "deny";
       readonly hostKey: string;

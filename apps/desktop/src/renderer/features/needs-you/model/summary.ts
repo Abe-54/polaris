@@ -149,6 +149,7 @@ export const notificationsOf = ({
               title: entry.lastNotification.title,
               body: entry.lastNotification.body,
               automatic: entry.lastNotification.automatic,
+              constellationId: entry.lastNotification.constellationId ?? null,
             },
           ]
     )
