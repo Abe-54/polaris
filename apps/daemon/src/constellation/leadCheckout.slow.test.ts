@@ -151,3 +151,28 @@ test(
   }),
   GIT_WORK_MS
 );
+
+test(
+  "a lead branch checked out in another session's worktree refuses the merge and leaves it alone",
+  withRepo(async (s) => {
+    const other = `${s.root}.worktrees/someone-else`;
+    await gitText(s.root, ["worktree", "add", "-q", other, "integration"]);
+    const before = await gitText(other, ["rev-parse", "HEAD"]);
+
+    const result = await run(
+      Effect.gen(function* () {
+        return yield* (yield* ConstellationWorktrees).mergeClaim(
+          s.graph,
+          s.attempt,
+          s.root,
+          s.head
+        );
+      })
+    );
+
+    expect(result).toMatchObject({ error: { code: "E-LEAD-BRANCH-BUSY" } });
+    expect(await gitText(other, ["rev-parse", "HEAD"])).toBe(before);
+    expect(existsSync(join(other, "work.txt"))).toBe(false);
+  }),
+  GIT_WORK_MS
+);

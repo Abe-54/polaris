@@ -23,14 +23,16 @@ pure decider through its context. Nothing changes it afterwards.
 Accept merges the claimed head into the checkout that holds the lead branch
 (`constellation/leadCheckout.ts`):
 
-- a worktree already on the lead branch (often the Lead's own checkout), because git checks a
-  branch out in one worktree only and moving the ref under it would corrupt its index;
+- the Lead's own checkout when it is on the lead branch, because git checks a branch out in
+  one worktree only and moving the ref under it would corrupt its index;
 - otherwise a Daemon-owned worktree at `<Lead checkout>.worktrees/<Constellation>/@lead`, added
   on the lead branch when missing and switched back to it if it was moved.
 
 The merge's checks are unchanged (no hooks, refuses on a dirty, detached or mid-merge checkout
-or a conflict, ADR 0068 for signing). A deleted lead branch refuses with `E-LEAD-BRANCH`, a
-directory git doesn't know at the lead worktree's path with `E-LEAD-WORKTREE`.
+or a conflict, ADR 0068 for signing). Another checkout holding the lead branch, such as another
+session's worktree, refuses with `E-LEAD-BRANCH-BUSY` rather than merging under it. A deleted
+lead branch refuses with `E-LEAD-BRANCH`, a directory git doesn't know at the lead worktree's
+path with `E-LEAD-WORKTREE`.
 
 The same checkout hosts a Gate's session, a worker's default base is the lead branch, and
 worktree cleanup checks that work is merged into the lead branch rather than the Lead's `HEAD`.
