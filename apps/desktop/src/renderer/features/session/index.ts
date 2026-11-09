@@ -25,6 +25,8 @@ export { leaveBrowser, onAgentTab, pickBrowser } from "./output/browser.ts";
 
 export { BrowserOutputTab } from "./ui/BrowserOutput.tsx";
 
+export { leaveSimulator, onAgentSimulator, pickSimulator } from "./output/simulator.ts";
+
 export { clampWidth, defaultWidth, KEY_STEP, RAIL_WIDTH, widthCss } from "./output/layout.ts";
 
 export { useFilesTick } from "./output/watch.ts";

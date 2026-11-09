@@ -2,7 +2,7 @@
  * Output collapsed (DESIGN.md, Output): a 240px rail of facts about the
  * session's Workspace, so the conversation gets the room. The session's
  * first edit in a Turn opens the panel; so do the chevron, the changes row,
- * the Browser row and ⌘⌥B.
+ * the Browser and Simulator rows, and ⌘⌥B.
  */
 import {
   BranchIcon,
@@ -12,6 +12,7 @@ import {
   GlobeIcon,
   hueVar,
   IconButton,
+  MobileIcon,
   ServerIcon,
   type TintHue,
 } from "@polaris/ui";
@@ -30,6 +31,9 @@ import { diffRevision, useTurnDiff } from "../turnDiff.ts";
 import type { SessionViewProps } from "../ui/SessionIntent.tsx";
 import { useBrowserUi } from "../../browser/index.ts";
 import { pickBrowser } from "./browser.ts";
+import { pickSimulator } from "./simulator.ts";
+import { useSimulatorTab } from "../ui/SimulatorOutput.tsx";
+import { useHostSimulators, useSimulatorUi } from "../../simulator/index.ts";
 import { type GitFacts, useGitFacts } from "./gitStatus.ts";
 import { RAIL_WIDTH } from "./layout.ts";
 import { useSettings } from "../../settings/index.ts";
@@ -145,6 +149,38 @@ const BrowserRow = ({ hostKey, sessionId, harness }: SessionViewProps & { harnes
   );
 };
 
+/** The session's Simulator: the device it shows, and the dot an agent's Simulator left. */
+const SimulatorRow = ({ hostKey, sessionId, harness }: SessionViewProps & { harness: TintHue }) => {
+  const { dot, showing } = useSimulatorUi(uiKey(hostKey, sessionId));
+  const device = useHostSimulators(hostKey, true)?.simulators.find((s) => s.id === showing);
+
+  const show = () => {
+    pickSimulator(hostKey, sessionId);
+    setOutputOpen(uiKey(hostKey, sessionId), true);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={show}
+      className="hover:bg-fill-hover h-row px-row-x gap-row-x flex cursor-default items-center text-left"
+      data-testid="output-rail-simulator"
+    >
+      <MobileIcon size={14} className="text-text-subtle shrink-0" />
+      <span className="text-label text-text-default shrink-0">Simulator</span>
+      <span className="text-caption text-text-subtle min-w-0 truncate">{device?.name ?? ""}</span>
+      <span className="flex-1" />
+      {dot ? (
+        <span
+          className="size-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: hueVar(harness) }}
+          aria-label="An agent opened a Simulator"
+        />
+      ) : null}
+    </button>
+  );
+};
+
 export const OutputRail = ({ hostKey, sessionId }: SessionViewProps) => {
   const model = useSession(hostKey, sessionId);
   const host = useHost(hostKey);
@@ -176,6 +212,7 @@ export const OutputRail = ({ hostKey, sessionId }: SessionViewProps) => {
 
   const open = () => setOutputOpen(key, true);
   const session = model.session;
+  const simulator = useSimulatorTab(hostKey);
 
   return (
     <section aria-label="Output" className="flex min-h-0 flex-1 flex-col" data-testid="output-rail">
@@ -236,6 +273,13 @@ export const OutputRail = ({ hostKey, sessionId }: SessionViewProps) => {
           sessionId={sessionId}
           harness={session?.harness ?? "starlight"}
         />
+        {simulator ? (
+          <SimulatorRow
+            hostKey={hostKey}
+            sessionId={sessionId}
+            harness={session?.harness ?? "starlight"}
+          />
+        ) : null}
       </div>
     </section>
   );

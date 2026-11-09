@@ -16,6 +16,8 @@ export interface SimulatorStreamHandle {
   /** A quarter turn left (iOS). */
   readonly rotate: () => void;
   readonly focus: () => void;
+  /** The frame on screen as a PNG, turned upright; null before one paints. */
+  readonly snapshot: () => Promise<Blob | null>;
 }
 
 export interface SimulatorStreamProps {
@@ -27,10 +29,30 @@ export interface SimulatorStreamProps {
   readonly onStatus?: (status: SimulatorStatus) => void;
   /** Skip WebCodecs and stream MJPEG (a local Host only; for checks). */
   readonly preferMjpeg?: boolean;
+  /** Draws the frame in a device bezel this many px wide, inside the area. */
+  readonly bezel?: number;
   readonly ref?: Ref<SimulatorStreamHandle>;
 }
 
 const EMPTY: Rect = { left: 0, top: 0, width: 0, height: 0 };
+
+/** The canvas's frame as a PNG, turned as the screen shows it. */
+const uprightPng = (source: HTMLCanvasElement | null, turns: QuarterTurns) =>
+  new Promise<Blob | null>((resolve) => {
+    if (source === null || source.width === 0 || source.height === 0) return resolve(null);
+    const sideways = turns % 2 === 1;
+    const out = document.createElement("canvas");
+
+    out.width = sideways ? source.height : source.width;
+    out.height = sideways ? source.width : source.height;
+    const context = out.getContext("2d");
+
+    if (context === null) return resolve(null);
+    context.translate(out.width / 2, out.height / 2);
+    context.rotate((turns * Math.PI) / 2);
+    context.drawImage(source, -source.width / 2, -source.height / 2);
+    out.toBlob(resolve, "image/png");
+  });
 
 export function SimulatorStream({
   target,
@@ -38,6 +60,7 @@ export function SimulatorStream({
   label,
   onStatus,
   preferMjpeg,
+  bezel = 0,
   ref,
 }: SimulatorStreamProps) {
   const area = useRef<HTMLDivElement>(null);
@@ -50,6 +73,9 @@ export function SimulatorStream({
   const [phase, setPhase] = useState<SimulatorStatus["phase"]>("connecting");
 
   reported.current = onStatus;
+  const inset = useRef(bezel);
+
+  inset.current = bezel;
 
   /** Places the canvas, turned upright, over the fitted rect; no render. */
   const layout = () => {
@@ -58,7 +84,10 @@ export function SimulatorStream({
 
     if (element === null || surface === null || screen.current === null) return;
     const shown = turnedSize(screen.current, turns.current);
-    const rect = fitRect({ width: element.clientWidth, height: element.clientHeight }, shown);
+    const pad = inset.current;
+    const room = { width: element.clientWidth - pad * 2, height: element.clientHeight - pad * 2 };
+    const inner = fitRect(room, shown);
+    const rect = { ...inner, left: inner.left + pad, top: inner.top + pad };
     const sideways = turns.current % 2 === 1;
 
     fitted.current = rect;
@@ -139,6 +168,7 @@ export function SimulatorStream({
       press: (button) => connection.current?.button(button),
       rotate: () => connection.current?.rotate(),
       focus: () => area.current?.focus({ preventScroll: true }),
+      snapshot: () => uprightPng(canvas.current, turns.current),
     }),
     []
   );
@@ -155,6 +185,14 @@ export function SimulatorStream({
       <canvas
         ref={canvas}
         className="absolute top-0 left-0 origin-top-left transition-opacity duration-150 data-[dim=true]:opacity-45"
+        style={
+          bezel > 0
+            ? {
+                borderRadius: bezel * 3,
+                boxShadow: `0 0 0 ${bezel}px var(--simulator-bezel), 0 0 0 ${bezel + 1}px var(--color-hairline)`,
+              }
+            : undefined
+        }
         data-dim={phase === "reconnecting" || phase === "failed"}
       />
     </div>
