@@ -20,6 +20,7 @@ import { useAvailability, useHarnessModels } from "../live.ts";
 import {
   choose,
   effortFor,
+  findModel,
   type ModelChoice,
   type ModelData,
   modelLabel,
@@ -128,7 +129,7 @@ export const HarnessChip = (props: HarnessChipProps) => {
   const shownModel = staged?.model ?? model;
   const shownEffort = staged === null ? effort : staged.effort;
   const shownTier = staged === null ? props.serviceTier : staged.serviceTier;
-  const selected = models.models.find((m) => m.id === shownModel);
+  const selected = findModel(models.models, shownModel);
   const version = options.find((o) => o.kind === harness)?.version ?? null;
 
   // One send per opening: what was staged, if it differs from what the session has.
@@ -205,7 +206,7 @@ export const HarnessChip = (props: HarnessChipProps) => {
               key="models"
               top={top}
               more={more}
-              shown={shownModel}
+              shown={selected?.id ?? shownModel}
               note={props.modelNote}
               blocked={props.modelBlocked}
               loading={models.loading}
