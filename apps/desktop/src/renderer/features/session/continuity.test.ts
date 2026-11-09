@@ -1,12 +1,13 @@
 import "../../test/dom.testing.ts";
 import { ComposerDraft, ContinuityItem, SessionId, TurnId } from "@polaris/protocol";
-import { DRAFT_SAVE_DELAY_MS } from "@polaris/client/continuity";
+import { DRAFT_SAVE_DELAY_MS, type DraftStatus } from "@polaris/client/continuity";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { type FakeBridge, installFakeBridge } from "../../test/bridge.testing.ts";
 import { standInBridge } from "../bridge.ts";
 import { useSessionContinuity } from "./continuity.ts";
 import { patchSessionUi, uiKey, useSessionUi } from "./state.ts";
+import { draftCaption } from "./ui/ComposerStatus.tsx";
 
 const at = "2026-10-27T00:00:00.000Z";
 
@@ -169,4 +170,44 @@ test("a read report the Host refused goes again on reopening and when the Host's
   expect(bridge.sent("continuity.markRead")).toEqual(
     Array.from({ length: 3 }, () => ({ hostKey, sessionId, turnId }))
   );
+});
+
+const caption = (ui: { readonly draft: string; readonly draftStatus: DraftStatus | null }) =>
+  draftCaption(ui.draft, ui.draftStatus);
+
+test("'Draft saved' shows once the Host holds the typing, and 'Draft not saved' when it refused", async () => {
+  const { sessionId, key, view } = openSession(null);
+  act(() => bridge.feeds("continuity").at(-1)!.listener.items([snapshot()]));
+
+  bridge.answer("continuity.saveDraft", ({ text }) => ({
+    ok: true,
+    value: { sessionId, text, revision: 1, at },
+  }));
+  act(() => patchSessionUi(key, () => ({ draft: "Check the token" })));
+  expect(caption(view.result.current)).toBeNull();
+  await waitFor(() => expect(caption(view.result.current)).toBe("Draft saved"), {
+    timeout: DRAFT_SAVE_DELAY_MS * 4,
+  });
+
+  bridge.refuse("continuity.saveDraft", offline);
+  act(() => patchSessionUi(key, () => ({ draft: "Check the token again" })));
+  await waitFor(() => expect(caption(view.result.current)).toBe("Draft not saved"), {
+    timeout: DRAFT_SAVE_DELAY_MS * 4,
+  });
+});
+
+test("a draft restored from the Host reads as saved, and an empty composer says nothing", () => {
+  const { sessionId, key, view } = openSession(null);
+  act(() =>
+    bridge
+      .feeds("continuity")
+      .at(-1)!
+      .listener.items([
+        snapshot(new ComposerDraft({ sessionId, text: "From the phone", revision: 1, at })),
+      ])
+  );
+  expect(caption(view.result.current)).toBe("Draft saved");
+
+  act(() => patchSessionUi(key, () => ({ draft: "" })));
+  expect(caption(view.result.current)).toBeNull();
 });

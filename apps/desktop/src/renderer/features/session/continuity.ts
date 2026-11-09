@@ -4,7 +4,7 @@
  * becomes the session's read position on every Client. One `continuity` feed
  * per Host while any of its sessions is open.
  */
-import { type DraftSync, makeDraftSync } from "@polaris/client/continuity";
+import { type DraftStatus, type DraftSync, makeDraftSync } from "@polaris/client/continuity";
 import { ContinuityItem, SessionId, type TurnId } from "@polaris/protocol";
 import { useEffect } from "react";
 import { polaris } from "../bridge.ts";
@@ -26,6 +26,10 @@ const REOPEN_MS = 1_000;
 /** Set while a Host's draft is put into the composer, so it isn't written straight back. */
 let adopting = false;
 
+/** A write in flight keeps the last answer, so "Draft saved" doesn't blink at each pause. */
+const shownStatus = (shown: DraftStatus | null, next: DraftStatus): DraftStatus =>
+  next === "saving" && shown !== null ? shown : next;
+
 const syncOf = (hostKey: string): DraftSync => {
   const existing = syncs.get(hostKey);
 
@@ -43,9 +47,14 @@ const syncOf = (hostKey: string): DraftSync => {
     },
     adopt: (sessionId, text) => {
       adopting = true;
-      patchSessionUi(uiKey(hostKey, sessionId), () => ({ draft: text }));
+      // The Host's draft is the saved one.
+      patchSessionUi(uiKey(hostKey, sessionId), () => ({ draft: text, draftStatus: "saved" }));
       adopting = false;
     },
+    status: (sessionId, status) =>
+      patchSessionUi(uiKey(hostKey, sessionId), (ui) => ({
+        draftStatus: shownStatus(ui.draftStatus, status),
+      })),
   });
 
   syncs.set(hostKey, sync);
