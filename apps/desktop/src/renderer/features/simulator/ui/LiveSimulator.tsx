@@ -3,7 +3,7 @@
  * token; U1's stream draws the frames. Unmounting detaches, so the Daemon can go idle.
  */
 import type { SessionId, Simulator } from "@polaris/protocol";
-import { type Ref, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { polaris } from "../../bridge.ts";
 import type { SimulatorStatus } from "../connection.ts";
 import { SimulatorStream, type SimulatorStreamHandle } from "../SimulatorStream.tsx";
@@ -53,7 +53,8 @@ const useAttach = (hostKey: string, sessionId: SessionId, id: string, epoch: num
       );
     };
 
-    setAttach({ kind: "starting" });
+    // A restart (a new epoch) keeps the old attach on screen until the fresh `Attached`.
+    setAttach((was) => (was.kind === "failed" ? { kind: "starting" } : was));
     open();
 
     return () => {
@@ -80,7 +81,7 @@ export interface LiveSimulatorProps {
   readonly onLive: (live: boolean) => void;
   /** A fresh `Attached` came: a restart is over. */
   readonly onAttached: () => void;
-  readonly streamRef: Ref<SimulatorStreamHandle>;
+  readonly streamRef: RefObject<SimulatorStreamHandle | null>;
 }
 
 /** Over the dimmed last frame while the stream comes back (DESIGN.md, Streaming, Restarting). */
@@ -154,34 +155,50 @@ export const LiveSimulator = ({
   const reconnecting = restarting || (painted && status?.phase === "reconnecting");
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col" data-testid="simulator-live">
-      {reconnecting ? <Reconnecting device={device.name} /> : null}
-      <div className="relative min-h-0 flex-1 p-4" data-dim={restarting}>
-        <div className="h-full w-full data-[dim=true]:opacity-45" data-dim={restarting}>
-          <SimulatorStream
-            ref={streamRef}
-            target={{
-              port: attach.port,
-              token: attach.token,
-              id: device.id,
-              platform: device.platform,
-            }}
-            transport={transport}
-            label={device.name}
-            bezel={BEZEL}
-            onStatus={setStatus}
-          />
-        </div>
-        {painted ? null : (
-          <div className="absolute inset-0 flex">
-            <EmptyBezel
-              busy
-              title={`Connecting to ${device.name}`}
-              fact={`${device.osVersion} · ${hostLabel}`}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+    <Streaming reconnecting={reconnecting} painted={painted} device={device} hostLabel={hostLabel}>
+      <SimulatorStream
+        ref={streamRef}
+        target={{
+          port: attach.port,
+          token: attach.token,
+          id: device.id,
+          platform: device.platform,
+        }}
+        transport={transport}
+        label={device.name}
+        bezel={BEZEL}
+        onStatus={setStatus}
+      />
+    </Streaming>
   );
 };
+
+const Streaming = ({
+  reconnecting,
+  painted,
+  device,
+  hostLabel,
+  children,
+}: {
+  readonly reconnecting: boolean;
+  readonly painted: boolean;
+  readonly device: Simulator;
+  readonly hostLabel: string;
+  readonly children: ReactNode;
+}) => (
+  <div className="relative flex min-h-0 flex-1 flex-col" data-testid="simulator-live">
+    {reconnecting ? <Reconnecting device={device.name} /> : null}
+    <div className="relative min-h-0 flex-1 p-4">
+      <div className={reconnecting ? "h-full w-full opacity-45" : "h-full w-full"}>{children}</div>
+      {painted ? null : (
+        <div className="absolute inset-0 flex">
+          <EmptyBezel
+            busy
+            title={`Connecting to ${device.name}`}
+            fact={`${device.osVersion} · ${hostLabel}`}
+          />
+        </div>
+      )}
+    </div>
+  </div>
+);
