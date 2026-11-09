@@ -224,6 +224,10 @@ only for `http`, `https` and `mailto`; images show their alt text; HTML shows as
 
 The diff renderer is Pierre Diffs' patch parser on Hermes. Metro resolves `@pierre/diffs` to its DOM-free `parsePatchFiles` module only, about 13 KB, without Shiki or the DOM renderer. Rows are drawn by a React Native `FlatList`. There is no syntax colouring or word-level highlighting yet. `colourblind` switches to the `-cvd` diff pair.
 
+The app is portrait: `expo-screen-orientation`'s plugin starts it locked to portrait, and the file
+diff screen unlocks landscape while it is open (`src/diff/orientation.ts`), where it lays out MX-R's
+before/after split. Adding the module needs a new native build or dev client.
+
 The diff bench measures it on a device or simulator. It renders Review over a synthetic 2,000-line Turn and reports parse time and frame intervals on screen (and as `POLARIS_DIFF_BENCH {json}` in the log):
 
 ```sh
@@ -340,6 +344,22 @@ Connection State machine, the resumable feed, the Markdown parser and the Self-T
 `bun run --cwd apps/mobile hermes` runs the same check and prints each result.
 `src/runtime/vmHost.ts` supplies the two things React Native adds over the bare VM that the check
 needs: `console` and timers that honour their delay.
+
+The app's own code runs on Bun in its tests, so those tests run without Hermes' gaps:
+`src/runtime/hermesMissing.json` lists the builtin methods Bun has and the app's Hermes lacks
+(`Array.prototype.toSorted` among them), and `bunfig.toml` preloads
+`src/runtime/hermesBuiltins.preload.ts`, which deletes them, so a test that reaches one fails as the
+app would. The list comes from the VM: `bun run hermes` fails when it is stale and `--write`
+rewrites it. Run the tests from `apps/mobile` (`bun run --cwd apps/mobile test`); a `bun test` from
+the repository root reads the root's `bunfig.toml` and keeps Bun's builtins.
+
+## Fixtures in a release bundle
+
+Fixtures and worst-case data live in `*.testing.ts` modules. Galleries and dev data use them only
+in `__DEV__`, so `metro.config.mjs` resolves them to an empty module when Metro bundles for
+release. A module that imports one may read it only inside a function or a `__DEV__` branch, never
+while it loads: `scripts/testingImports.test.ts` fails on a load-time read, directly or through a
+local helper. Build gallery data in a `*.testing.ts` module (as `home/ui/galleryRows.testing.ts`).
 
 ## Tokens
 

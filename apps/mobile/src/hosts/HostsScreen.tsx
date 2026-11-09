@@ -4,7 +4,7 @@
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackBar } from "../app/BackBar.tsx";
@@ -15,7 +15,7 @@ import { hostMenu, LongPressMenu, useMenuActions } from "../menus/index.ts";
 import { useRelay } from "../relay/RelayProvider.tsx";
 import { Chevron } from "../settings/icons.tsx";
 import { themedStyles, useTheme } from "../theme/index.ts";
-import { CHROME_TEXT_SCALE, CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
+import { ACCESSIBILITY_SCALE, CHROME_TEXT_SCALE, CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { DevSegments } from "../home/ui/DevDataToggle.tsx";
 import {
   chooseDevHosts,
@@ -76,6 +76,22 @@ const HostRow = ({
   const styles = useStyles();
   const { colours } = useTheme();
   const offline = row.state === "offline";
+  // At accessibility sizes the meter stacks under the state line, so the name keeps the width.
+  const stacked = useWindowDimensions().fontScale >= ACCESSIBILITY_SCALE;
+
+  const meter = (
+    <View style={stacked ? styles.stackedMeter : styles.meter}>
+      <Text
+        style={[styles.roundTrip, row.state === "connected" ? null : styles.faint]}
+        maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
+      >
+        {row.roundTrip}
+      </Text>
+      <Text style={styles.route} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
+        {row.route}
+      </Text>
+    </View>
+  );
 
   return (
     <Pressable
@@ -92,7 +108,7 @@ const HostRow = ({
       <View style={styles.text}>
         <Text
           style={[styles.name, offline ? styles.offlineName : null]}
-          numberOfLines={1}
+          numberOfLines={stacked ? 2 : 1}
           ellipsizeMode="middle"
           maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
         >
@@ -100,23 +116,14 @@ const HostRow = ({
         </Text>
         <Text
           style={[styles.line, { color: stateLineColour(row.state, colours) }]}
-          numberOfLines={1}
+          numberOfLines={stacked ? undefined : 1}
           maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
         >
           {row.line}
         </Text>
+        {stacked ? meter : null}
       </View>
-      <View style={styles.meter}>
-        <Text
-          style={[styles.roundTrip, row.state === "connected" ? null : styles.faint]}
-          maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
-        >
-          {row.roundTrip}
-        </Text>
-        <Text style={styles.route} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
-          {row.route}
-        </Text>
-      </View>
+      {stacked ? null : meter}
       <Chevron color={colours.textFaint} />
     </Pressable>
   );
@@ -353,6 +360,7 @@ const useStyles = themedStyles((colours) => ({
   offlineName: { color: colours.textSubtle },
   line: { ...mobileType.footnote },
   meter: { alignItems: "flex-end", flexShrink: 0 },
+  stackedMeter: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 8 },
   roundTrip: {
     fontFamily: mobileFont.mono,
     fontSize: 13,

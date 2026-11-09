@@ -45,7 +45,7 @@ const harness = (id = "viz_a") => {
   const advance = (ms: number) => {
     now += ms;
 
-    for (const timer of timers.filter(({ at }) => at <= now).toSorted((a, b) => a.at - b.at)) {
+    for (const timer of timers.filter(({ at }) => at <= now).sort((a, b) => a.at - b.at)) {
       timers.splice(timers.indexOf(timer), 1);
       timer.run();
     }

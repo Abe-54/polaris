@@ -1,0 +1,4 @@
+# `bun test` from apps/mobile (the package's test script): the root's temp-root preload, and
+# Bun without the builtins the app's Hermes lacks (src/runtime/hermesBuiltins.preload.ts).
+[test]
+preload = ["../../tooling/test/tmpdir.ts", "./src/runtime/hermesBuiltins.preload.ts"]
