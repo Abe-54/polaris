@@ -3,6 +3,7 @@
  * wedge, and stopped once nothing holds it and no agent called for `idleMs`. Stopping the hub
  * is the only way to stop serve-sim's capture, so this is the Simulator's idle mechanism.
  */
+import { Option, Schema } from "effect";
 import type { HubEndpoint, HubProcess } from "./hubProcess.ts";
 
 /** No attach open and no agent call for 5 minutes stops the hub. */
@@ -30,6 +31,20 @@ export const DEFAULT_HUB_TIMING: HubTiming = {
   wedgeCheckMs: HUB_WEDGE_CHECK_MS,
   backoffMs: [1_000, 2_000, 5_000, 15_000, 30_000],
   healthyMs: 60_000,
+};
+
+const IdleOverride = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0));
+
+/**
+ * The default timing, with `POLARIS_SIMULATOR_IDLE_MS` as the idle time when it is a positive
+ * integer: end-to-end runs watch the idle stop without waiting 5 minutes.
+ */
+export const hubTimingFromEnv = (env: Readonly<Record<string, string | undefined>>): HubTiming => {
+  const idleMs = Option.getOrNull(
+    Schema.decodeUnknownOption(IdleOverride)(env.POLARIS_SIMULATOR_IDLE_MS)
+  );
+
+  return idleMs === null ? DEFAULT_HUB_TIMING : { ...DEFAULT_HUB_TIMING, idleMs };
 };
 
 export interface SupervisorDeps {

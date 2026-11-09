@@ -41,7 +41,12 @@ import { Inventory, WATCH_POLL_MS } from "./inventory.ts";
 import { SessionFeeds } from "./sessionFeeds.ts";
 import { simulatorCapable } from "./support.ts";
 import type { HubDevices } from "./hubDevices.ts";
-import { DEFAULT_HUB_TIMING, HubSupervisor, type HubTiming } from "./supervisor.ts";
+import {
+  DEFAULT_HUB_TIMING,
+  HubSupervisor,
+  type HubTiming,
+  hubTimingFromEnv,
+} from "./supervisor.ts";
 
 /** A hub that hasn't answered `/healthz` this long after spawning failed to start. */
 const HUB_START_TIMEOUT_MS = 60_000;
@@ -105,6 +110,7 @@ export class SimulatorHub extends Context.Service<
         })),
         listIos: () => listLocalIos(liveProbe().run),
         sessions: sessionsFromStore(store),
+        timing: hubTimingFromEnv(process.env),
       });
     })
   ).pipe(Layer.provideMerge(Layer.merge(SimulatorTools.layer, SimulatorDetection.layer)));
