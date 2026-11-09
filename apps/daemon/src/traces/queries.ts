@@ -7,6 +7,7 @@ import {
   TraceSummary,
   type TraceDetail,
   type TraceFilter,
+  type LogCursor,
   type SpanDetail,
 } from "@polaris/protocol";
 import { decodeValueRows, refreshSummary, sortableTime } from "./database.ts";
@@ -134,7 +135,8 @@ export const getSpan = (
   db: Database,
   checkout: string,
   tracePrefix: string,
-  spanPrefix: string
+  spanPrefix: string,
+  before?: LogCursor
 ): SpanDetail => {
   const summary = summaryFor(db, checkout, tracePrefix);
 
@@ -150,12 +152,20 @@ export const getSpan = (
 
   const params = [checkout, summary.id, span.id];
 
+  // Newest first, ties by id, so a cursor's page starts right after the record it names.
+  const older = before === undefined ? "" : " AND (time<? OR (time=? AND id>?))";
+
+  const cursor =
+    before === undefined
+      ? []
+      : [sortableTime(before.timeUnixNano), sortableTime(before.timeUnixNano), before.id];
+
   const logs = decodeValueRows(
     db
       .query(
-        "SELECT value FROM logs WHERE checkout=? AND trace_id=? AND span_id=? ORDER BY time DESC,id LIMIT 20"
+        `SELECT value FROM logs WHERE checkout=? AND trace_id=? AND span_id=?${older} ORDER BY time DESC,id LIMIT 20`
       )
-      .all(...params)
+      .all(...params, ...cursor)
   ).map((row) => decodeLog(row.value));
 
   const logCount = decodeCount(

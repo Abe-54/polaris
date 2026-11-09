@@ -80,8 +80,9 @@ there is no idle sweep. SQLite allocation and indexes add overhead to accounting
 ## Consumers
 
 `TraceStore.list(checkout, filter?)` returns `{traces,total}`; `get(checkout,prefix)`
-returns all retained Spans; `span(checkout,tracePrefix,spanPrefix)` returns the Span,
-newest 20 correlated logs, and total log count. Prefixes fail on ambiguity and all
+returns all retained Spans; `span(checkout,tracePrefix,spanPrefix,before?)` returns the Span,
+newest 20 correlated logs (or, with a `before` cursor naming the oldest record read, the 20
+older than it, ties ordered by id), and total log count. Prefixes fail on ambiguity and all
 queries stay checkout-scoped. `link(checkout,tracePrefix)` pins explicitly; reads
 never pin. `watch` emits an initial page then at most four updates per second.
 The `traces.watch/get/span` RPCs resolve checkout from the selected Agent Session.
