@@ -5,6 +5,7 @@ import {
   fitControlRow,
   litSegments,
   moonsOf,
+  sendDisabled,
   sendPress,
   STOP_GRACE_MS,
 } from "./controlRow.ts";
@@ -128,6 +129,14 @@ describe("control row fit", () => {
 });
 
 describe("send and stop", () => {
+  test("while the host is away Stop is off, and Send still takes a message to queue", () => {
+    const away = { empty: false, blocked: false, away: true };
+
+    expect([sendDisabled({ ...away, stop: true }), sendDisabled({ ...away, stop: false })]).toEqual(
+      [true, false]
+    );
+  });
+
   test("a second tap just after Send doesn't stop the Turn it sent", () => {
     expect(sendPress({ stop: true, now: 1_000 + STOP_GRACE_MS - 1, sentAt: 1_000 })).toBe("ignore");
   });

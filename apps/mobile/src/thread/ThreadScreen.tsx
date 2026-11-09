@@ -48,7 +48,14 @@ import { useMenuActions } from "../menus/index.ts";
 import { type MobileColours, themedStyles } from "../theme/index.ts";
 import { RiseHorizon, RiseLayer, SLOT_SIZE, useRise } from "./Rise.tsx";
 import { Diamond, Row, type RowSession, type ThreadFocus } from "./Row.tsx";
-import { type HeaderLine, headerLine, outgoingRows, threadRows, type ThreadRow } from "./rows.ts";
+import {
+  clockOf,
+  type HeaderLine,
+  headerLine,
+  outgoingRows,
+  threadRows,
+  type ThreadRow,
+} from "./rows.ts";
 import {
   canReview,
   chipAction,
@@ -90,7 +97,20 @@ interface HeldThread {
   readonly controller: ThreadController | null;
   /** False while the Host reconnects; the controller and its transcript stay. */
   readonly live: boolean;
+  /** When the Host was last live, in the phone's time ("11:42"); null while it is. */
+  readonly lostAt: string | null;
 }
+
+/** When `live` last went false, as the phone's clock read it; null while live. */
+const useLostAt = (live: boolean): string | null => {
+  const [lostAt, setLostAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLostAt(live ? null : clockOf(new Date()));
+  }, [live]);
+
+  return live ? null : lostAt;
+};
 
 /**
  * The Host and session's thread, opened once the Host is first live and kept
@@ -138,7 +158,9 @@ const useController = (connection: HostConnection | null, sessionId: SessionId):
     controller?.hostLive(live !== null);
   }, [controller, live]);
 
-  return { controller, live: live !== null };
+  const lostAt = useLostAt(live !== null);
+
+  return { controller, live: live !== null, lostAt };
 };
 
 const noSubscribe = () => () => {};
@@ -173,7 +195,7 @@ const Header = ({
   readonly onReview?: (() => void) | undefined;
   /** The celestial is still on its way up (MX-AS): its slot stays empty. */
   readonly rising?: boolean;
-  /** The Host is reconnecting (MX-AV): the celestial dims, nothing else changes. */
+  /** The Host is reconnecting (MX-AV): the celestial dims and stills; the line says "as of". */
   readonly away?: boolean;
   /** The slot's place in the header, for the rise to land in. */
   readonly onSlot?: (slot: LayoutRectangle) => void;
@@ -303,7 +325,7 @@ export const ThreadScreen = ({
   const navigation = useNavigation();
   const styles = useStyles();
   const onMenuAction = useMenuActions();
-  const { controller, live } = useController(connection, sessionId);
+  const { controller, live, lostAt } = useController(connection, sessionId);
   const state = useThreadState(controller);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const visible = useRef<ReadonlyArray<string>>([]);
@@ -408,6 +430,7 @@ export const ThreadScreen = ({
 
   // Brief reconnects (the app coming back, a network change) stay quiet.
   const away = useAfter(!live);
+  const asOf = away ? lostAt : null;
   const slowToOpen = useAfter(state === null || fold === null);
 
   // A new Turn ending on screen, or coming back to the app, moves the read position.
@@ -472,11 +495,11 @@ export const ThreadScreen = ({
         {header ?? (
           <Header
             title={session.title === "" ? "Untitled" : session.title}
-            line={headerLine(session, workspace?.name ?? null)}
+            line={headerLine(session, workspace?.name ?? null, asOf)}
             celestial={{
               body: sessionCelestial(session.celestial),
               harness: session.harness,
-              working: session.state === "working" || session.state === "starting",
+              working: !away && (session.state === "working" || session.state === "starting"),
             }}
             criticals={criticals.length}
             onBack={onBack}
@@ -568,6 +591,7 @@ export const ThreadScreen = ({
             contextUsage={session.contextUsage}
             sheet={sheetContextOf(connection, live, fold)}
             workingSince={last?.status === "working" ? last.startedAt : null}
+            asOf={asOf}
             draftStatus={state.draftStatus}
             error={state.error}
             onChange={(text) => controller?.type(text)}

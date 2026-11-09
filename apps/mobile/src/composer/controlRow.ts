@@ -124,6 +124,19 @@ export const fitControlRow = (width: number | null, fontScale: number, parts: Ro
   return fit;
 };
 
+/** Send needs text and an open field; Stop needs the Host, which it can't reach while away. */
+export const sendDisabled = ({
+  stop,
+  empty,
+  blocked,
+  away,
+}: {
+  readonly stop: boolean;
+  readonly empty: boolean;
+  readonly blocked: boolean;
+  readonly away: boolean;
+}): boolean => (stop ? away : empty || blocked);
+
 /** How long Stop ignores a tap after Send: a double tap must not interrupt what it just sent. */
 export const STOP_GRACE_MS = 600;
 

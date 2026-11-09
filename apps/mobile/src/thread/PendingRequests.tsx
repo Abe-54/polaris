@@ -69,6 +69,8 @@ export interface NoticeStripProps extends PendingRequestsProps {
   readonly subagents?: ReadonlyArray<Subagent>;
   /** When the Turn in flight started; null when none is working. */
   readonly workingSince: string | null;
+  /** While the Host is away, when the Working shown was last known ("11:42"); the dither stills. */
+  readonly asOf?: string | null;
   /** Holds the typed steer for after this Turn; null when there's nothing to queue. */
   readonly onQueue?: (() => void) | null;
 }
@@ -345,20 +347,22 @@ const QueueAction = ({ onQueue }: { readonly onQueue: () => void }) => {
 const Working = ({
   harness,
   since,
+  asOf,
   onQueue,
 }: {
   readonly harness: HarnessKind;
   readonly since: string;
+  readonly asOf: string | null;
   readonly onQueue: (() => void) | null;
 }) => {
   const { colours } = useTheme();
-  const time = useElapsed(since);
+  const time = useElapsed(asOf === null ? since : null);
   const hue = harnessHue(colours, harness);
 
   return (
     <View style={styles.row}>
       <View style={[styles.row, styles.working]} accessibilityLiveRegion="polite">
-        <Dither color={hue} size={14} moving />
+        <Dither color={hue} size={14} moving={asOf === null} />
         <Text
           style={[styles.headline, styles.working, { color: hue }]}
           numberOfLines={2}
@@ -370,7 +374,7 @@ const Working = ({
           style={[styles.time, { color: colours.textFaint }]}
           maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
         >
-          · {time}
+          · {asOf === null ? time : `as of ${asOf}`}
         </Text>
       </View>
       {onQueue === null ? null : <QueueAction onQueue={onQueue} />}
@@ -422,6 +426,7 @@ const Notice = ({
       <Working
         harness={props.harness}
         since={props.workingSince}
+        asOf={props.asOf ?? null}
         onQueue={notice.queue ? (props.onQueue ?? null) : null}
       />
     );

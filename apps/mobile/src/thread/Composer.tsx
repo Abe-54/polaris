@@ -17,6 +17,7 @@ import {
   moonsOf,
   type RowFit,
   type RowParts,
+  sendDisabled,
   sendPress,
 } from "../composer/controlRow.ts";
 import {
@@ -83,6 +84,8 @@ export interface ComposerProps {
   readonly celestial?: CelestialBody | null | undefined;
   /** When the Turn in flight started; null when none is working. */
   readonly workingSince: string | null;
+  /** While the Host is away, when its state was last known ("11:42"): Stop can't reach it. */
+  readonly asOf?: string | null;
   readonly draftStatus: DraftStatus | null;
   readonly error: string | null;
   /** The session's open requests, for the notice strip; null shows none. */
@@ -234,6 +237,7 @@ export const Composer = (props: ComposerProps) => {
           harness={harness}
           subagents={props.subagents ?? []}
           workingSince={workingSince}
+          asOf={props.asOf ?? null}
           onQueue={queue ? props.onQueue : null}
         />
       )}
@@ -256,7 +260,7 @@ export const Composer = (props: ComposerProps) => {
         />
       </View>
       <View style={styles.row} onLayout={({ nativeEvent }) => measure(nativeEvent.layout.width)}>
-        {props.control ?? <SessionChip {...props} working={working} />}
+        {props.control ?? <SessionChip {...props} working={working && props.asOf == null} />}
         <SubagentMoons harness={harness} moons={moons} shown={fit.moons} />
         <View style={styles.spring} />
         <Tools
@@ -267,7 +271,7 @@ export const Composer = (props: ComposerProps) => {
         />
         <SendButton
           stop={stop}
-          disabled={!stop && (empty || blocked)}
+          disabled={sendDisabled({ stop, empty, blocked, away: props.asOf != null })}
           label={mode.kind === "queue" ? "Queue a follow-up" : "Send"}
           onPress={send}
         />

@@ -562,27 +562,35 @@ export interface HeaderLine {
   readonly rest: string;
 }
 
-/** The thread header's second line (MX-E). */
+/** "09:05": a moment in the phone's time; null when it isn't one. */
+export const clockOf = (at: Date): string | null =>
+  Number.isNaN(at.getTime())
+    ? null
+    : `${at.getHours().toString().padStart(2, "0")}:${at.getMinutes().toString().padStart(2, "0")}`;
+
+/**
+ * The thread header's second line (MX-E). While the Host is away it says when the state was last
+ * known, "Working · as of 11:42", never passing the last state off as live (MX-AV, ENG-550).
+ */
 export const headerLine = (
   session: Pick<Session, "state" | "turnCount" | "currentUserTurn">,
-  place: string | null
+  place: string | null,
+  asOf: string | null = null
 ): HeaderLine => {
   const turn =
     session.turnCount > 0 ? `turn ${session.currentUserTurn?.number ?? session.turnCount}` : null;
 
   return {
     state: STATE_WORDS[session.state],
-    rest: [turn, place].filter((part) => part !== null && part !== "").join(" · "),
+    rest: [asOf === null ? null : `as of ${asOf}`, turn, place]
+      .filter((part) => part !== null && part !== "")
+      .join(" · "),
   };
 };
 
 /** "Turn 23 · 11:42": the long-press menu's first header line, in the phone's time. */
 export const turnHeading = (facts: Pick<TurnFacts, "number" | "startedAt">): string => {
-  const at = new Date(facts.startedAt);
-
-  const time = Number.isNaN(at.getTime())
-    ? null
-    : `${at.getHours().toString().padStart(2, "0")}:${at.getMinutes().toString().padStart(2, "0")}`;
-
-  return [`Turn ${facts.number}`, time].filter((part) => part !== null).join(" · ");
+  return [`Turn ${facts.number}`, clockOf(new Date(facts.startedAt))]
+    .filter((part) => part !== null)
+    .join(" · ");
 };

@@ -440,6 +440,12 @@ describe("the thread header", () => {
     });
   });
 
+  test("while the host is away, the last known state says when it was known", () => {
+    expect(
+      headerLine({ state: "working", turnCount: 24, currentUserTurn: null }, "polaris", "11:42")
+    ).toEqual({ state: "Working", rest: "as of 11:42 · turn 24 · polaris" });
+  });
+
   test("a turn's menu heading names it and when it started, in the phone's time", () => {
     const startedAt = new Date(2026, 9, 27, 9, 5).toISOString();
 
