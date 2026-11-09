@@ -57,6 +57,7 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
       const relay = (yield* RelayFacts).packet;
       let probe = prepared.claimProbe;
       const checks = [...prepared.recordedChecks];
+      let mergeFindings: ReadonlyArray<import("@polaris/protocol").ConstellationFinding> = [];
 
       const mapError = (e: import("@polaris/protocol").ConstellationTransferError) =>
         refusal(record, [
@@ -94,22 +95,25 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
         const findings = acceptFindings(record, command);
 
         if (findings.length > 0) return yield* refusal(record, findings);
-        checks.push(
-          ...(yield* acceptedChecks(
-            record,
-            attempt,
-            model,
-            command.action.mergedHead,
-            worktrees,
-            storage
-          ).pipe(Effect.mapError(mapError)))
-        );
+
+        const accepted = yield* acceptedChecks(
+          record,
+          attempt,
+          model,
+          command.action.mergedHead,
+          worktrees,
+          storage
+        ).pipe(Effect.mapError(mapError));
+
+        checks.push(...accepted.checks);
+        mergeFindings = accepted.findings;
       }
 
       return {
         ...prepared,
         claimProbe: probe,
         recordedChecks: checks,
+        mergeFindings,
       };
     }) satisfies ConstellationRuntimeService["prepare"],
   } satisfies ConstellationRuntimeService;
@@ -143,7 +147,7 @@ const acceptedChecks = Effect.fnUntraced(function* (
 
   if (leadPath === undefined)
     return yield* transferError("E-LEAD", "The Lead checkout is unavailable");
-  yield* worktrees.mergeClaim(record.graph, attempt, leadPath, head);
+  const merged = yield* worktrees.mergeClaim(record.graph, attempt, leadPath, head);
   const checks: Array<import("../../engine/constellation.inputs.ts").RecordedCheck> = [];
 
   for (const stored of yield* storage.receipts) {
@@ -157,5 +161,5 @@ const acceptedChecks = Effect.fnUntraced(function* (
       checks.push(...packet.recordedChecks);
   }
 
-  return checks;
+  return { checks, findings: merged.findings };
 });

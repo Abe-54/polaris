@@ -84,7 +84,7 @@ test(
       })
     );
 
-    expect(result).toEqual({ ok: { merged: true, leadHead: s.head } });
+    expect(result).toEqual({ ok: { merged: true, leadHead: s.head, findings: [] } });
     expect(await gitText(s.root, ["rev-parse", "refs/heads/integration"])).toBe(s.head);
     expect(await gitText(s.root, ["branch", "--show-current"])).toBe("someone-else");
     expect(await gitText(s.root, ["rev-parse", "HEAD"])).toBe(rootHead);
@@ -122,7 +122,7 @@ test(
       })
     );
 
-    expect(result).toEqual({ ok: { merged: true, leadHead: s.head } });
+    expect(result).toEqual({ ok: { merged: true, leadHead: s.head, findings: [] } });
     expect(readFileSync(join(s.root, "work.txt"), "utf8")).toBe("worker\n");
     expect(existsSync(leadWorktreePath(s.root, CID))).toBe(false);
   }),

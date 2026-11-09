@@ -14,6 +14,7 @@ import { childTasks, isParent } from "./parents.ts";
 import { activeAttempt, latestAttempt, projectTask } from "./projections.ts";
 import { type HostSlots, phaseOf, phaseText, slotLine, workerLine } from "./slots.ts";
 import { heldWait } from "./waiting.ts";
+import { sharedFilesWarning } from "./sharedFiles.ts";
 import { eventTask, statusScope, type StatusScope, type StatusView } from "./statusView.ts";
 
 export const proposalDetails = (task: TaskDefinition): ReadonlyArray<string> => [
@@ -41,8 +42,14 @@ export const areaWarnings = (record: ConstellationRecord): ReadonlyArray<string>
         task.area.some((a) =>
           peer.area.some((b) => prefix(a).startsWith(prefix(b)) || prefix(b).startsWith(prefix(a)))
         )
-      )
+      ) {
         warnings.push(`${task.id} and ${peer.id} may share an area`);
+        continue;
+      }
+
+      const shared = sharedFilesWarning(task, peer);
+
+      if (shared !== null) warnings.push(shared);
     }
 
   return warnings;
@@ -138,6 +145,9 @@ const taskLines = (
 
     lines.push(...reviewLines(record, attempt, sessions?.get(attempt.sessionId), host));
     lines.push(...failureLines(attempt));
+
+    for (const finding of attempt.acceptFindings)
+      lines.push(`  Finding ${finding.code}: ${finding.message}: ${finding.fix}`);
 
     if (attempt.claim !== null && attempt.state === "review")
       lines.push(
@@ -286,7 +296,8 @@ const eventLine = (record: ConstellationRecord, e: ConstellationEvent): string |
     AttemptInterrupted: (x) => `${task(x.attemptId)}: Turn interrupted by a Daemon restart.`,
     AttemptStale: (x) => `${task(x.attemptId)}: Host offline.`,
     AttemptFresh: (x) => `${task(x.attemptId)}: Host back.`,
-    AttemptAccepted: (x) => `${task(x.attemptId)}: accepted at ${x.mergedHead} (${x.evidence}).`,
+    AttemptAccepted: (x) =>
+      `${task(x.attemptId)}: accepted at ${x.mergedHead} (${x.evidence}).${(x.findings ?? []).map((f) => ` ${f.message}: ${f.fix}.`).join("")}`,
     AttemptRejected: (x) =>
       `${task(x.attemptId)}: sent back${x.by === "user" ? " by the user" : ""} · ${first(x.reason)}.`,
     AttemptSettled: (x) =>
