@@ -27,9 +27,10 @@ bun tooling/language-catalog/audit.ts
 ```
 
 The Python scripts need Python 3.11 or newer (`hashlib.file_digest`); macOS's
-`/usr/bin/python3` is 3.9. `bounded-build.slow.test.ts` uses the first of
-`POLARIS_PYTHON`, `python3`, `python3.15`…`python3.11` that is 3.11+, and skips
-with a warning when none is (under `CI` it fails instead).
+`/usr/bin/python3` is 3.9. The Python-running tests (`bounded-build`, `fixture`;
+`python.testing.ts`) use the first of `POLARIS_PYTHON`, `python3`,
+`python3.15`…`python3.11` that is 3.11+, and skip with a warning when none is
+(under `CI` they fail instead).
 
 `check.ts` validates immutable evidence roots, catalog/lock identities, retained
 notice bytes, and honest eligibility flags. It succeeds with explicitly blocked

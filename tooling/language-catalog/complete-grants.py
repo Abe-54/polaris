@@ -7,14 +7,26 @@ import pathlib
 import tarfile
 import tomllib
 import zipfile
-from importlib.machinery import SourceFileLoader
+import importlib.util
+import sys
 
-legal = SourceFileLoader('legal', str(pathlib.Path(__file__).with_name('complete-notices.py'))).load_module()
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+legal = load('legal', str(pathlib.Path(__file__).with_name('complete-notices.py')))
 
 
 
 def enrich(records, inventory, php, args, cache):
-    inspector = SourceFileLoader('legal_search', str(pathlib.Path(__file__).with_name('legal-search.py'))).load_module()
+    inspector = load('legal_search', str(pathlib.Path(__file__).with_name('legal-search.py')))
     catalog = json.loads((args.output / '../../apps/daemon/src/languages/catalog/catalog.json').read_text())
     inventories = {name: json.loads((args.output / (name + '-crates.json')).read_text())['packages']
                    for name in ('ruff', 'rust-analyzer')}

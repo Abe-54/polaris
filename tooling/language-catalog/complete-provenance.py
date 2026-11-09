@@ -11,8 +11,20 @@ temporary_root = Path('/tmp').resolve()
 if not private_root.is_relative_to(temporary_root) or private_root == temporary_root:
     parser.error('Private temporary root required')
 import pathlib,json,hashlib,tarfile
-from importlib.machinery import SourceFileLoader
-m=SourceFileLoader('legal','tooling/language-catalog/complete-notices.py').load_module();o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache';rows=[]
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+m=load('legal','tooling/language-catalog/complete-notices.py');o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache';rows=[]
 items=[('phpactor','phpactor/phpactor','f67b7753b966c874735a064978dd89837a369f59',['box.json','.github/build-phar.sh','.github/workflows/release-phar.yml']),('shellcheck','koalaman/shellcheck','aac0823e6b58f8a499e856e93738082691cbf212',['ShellCheck.cabal','stack.yaml','builders/darwin.aarch64/Dockerfile','builders/darwin.x86_64/Dockerfile','builders/linux.aarch64/Dockerfile','builders/linux.x86_64/Dockerfile','builders/linux.x86_64/build','.github/workflows/build.yml']),('flexmark','vsch/flexmark-java','f63c7959601288efcfe6328252490da72fd81283',['pom.xml'])]
 for tool,repo,commit,paths in items:
  for p in paths:

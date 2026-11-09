@@ -1,6 +1,6 @@
 /**
- * The file-level quality checks behind the git hooks: oxfmt formatting, then the
- * oxlint ratchet. Same rules as `bun run lint` in CI, scoped to the given files.
+ * The file-level quality checks behind the git hooks and `bun run quality`: oxlint's
+ * safe fixes, oxfmt, then the oxlint ratchet. Same rules as `bun run lint` in CI, scoped to the given files.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -8,7 +8,8 @@ import { ROOT } from "../lint/oxlint.ts";
 
 export { ROOT };
 
-export type Mode = "fix" | "check";
+/** `fix` also applies oxlint's safe fixes; `format` (pre-commit) only formats; `check` changes nothing. */
+export type Mode = "fix" | "format" | "check";
 
 export interface Step {
   readonly label: string;
@@ -26,8 +27,8 @@ const bin = (name: string) => join(ROOT, "node_modules/.bin", name);
 export const installed = () => existsSync(bin("oxfmt")) && existsSync(bin("oxlint"));
 
 /**
- * oxfmt formats (or checks) the files, then the ratchet lints them. Deleted files are
- * skipped; oxfmt applies oxfmt.config.mts's ignorePatterns to explicit paths too.
+ * In fix mode oxlint fixes what it safely can; oxfmt formats (or checks) the files; the ratchet
+ * lints them. Deleted files are skipped; oxfmt applies oxfmt.config.mts's ignorePatterns to explicit paths too.
  */
 export const planChecks = (files: ReadonlyArray<string>, mode: Mode): ReadonlyArray<Step> => {
   const present = [...new Set(files)].filter((f) => existsSync(join(ROOT, f)));
@@ -36,9 +37,20 @@ export const planChecks = (files: ReadonlyArray<string>, mode: Mode): ReadonlyAr
 
   const check = mode === "check" ? ["--check"] : [];
 
+  const lintFix: ReadonlyArray<Step> =
+    mode === "fix"
+      ? [
+          {
+            label: "oxlint --fix",
+            command: [process.execPath, join(ROOT, "tooling/quality/lint-fix.ts"), ...present],
+          },
+        ]
+      : [];
+
   return [
+    ...lintFix,
     {
-      label: mode === "fix" ? "oxfmt" : "oxfmt --check",
+      label: mode === "check" ? "oxfmt --check" : "oxfmt",
       command: [bin("oxfmt"), ...check, "--no-error-on-unmatched-pattern", ...present],
     },
     {
