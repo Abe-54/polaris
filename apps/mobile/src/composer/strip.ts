@@ -2,7 +2,7 @@
  * The composer's floating notice strip (Paper MX-E, MX-D's strip): the oldest open request,
  * with the rest behind "+n", else Working while a Turn runs. Nothing to know, no strip.
  */
-import type { ApprovalRequest } from "@polaris/protocol";
+import type { ApprovalRequest, Subagent } from "@polaris/protocol";
 import { approvalDetail } from "../home/model/lines.ts";
 import type { SecretOutcome } from "../thread/fold.ts";
 
@@ -30,8 +30,10 @@ export type StripNotice =
   | {
       readonly kind: "approval";
       readonly request: ApprovalRequest;
-      /** "Claude Code wants to run". */
+      /** "Claude Code wants to run"; "A subagent wants to run" when a Subagent asks. */
       readonly headline: string;
+      /** The asking Subagent's place among the session's, which picks its moon; null for the lead. */
+      readonly moon: number | null;
       /** Every line of the command, file or tool; null when the Harness named none. */
       readonly detail: string | null;
       /** Short plain text: Approve may sit beside it; the view still opens if it wraps. */
@@ -63,18 +65,34 @@ export const revealHidden = (text: string): string =>
 
 const fitsOneLine = (text: string) => PLAIN.test(text) && text.length <= COMPACT_CHARACTERS;
 
-const noticeOf = (request: ApprovalRequest, harness: string): StripNotice => {
+/** Who asks: a Subagent, else the Harness by name. */
+const askerOf = (request: ApprovalRequest, harness: string) =>
+  request.subagentId === null ? harness : "A subagent";
+
+const moonOf = (request: ApprovalRequest, subagents: ReadonlyArray<Subagent>) => {
+  const index = subagents.findIndex((subagent) => subagent.id === request.subagentId);
+
+  return request.subagentId === null || index < 0 ? null : index;
+};
+
+const noticeOf = (
+  request: ApprovalRequest,
+  harness: string,
+  subagents: ReadonlyArray<Subagent>
+): StripNotice => {
   if (request.kind === "question") return { kind: "question", request };
+  const asker = askerOf(request, harness);
 
   if (request.kind === "secret")
-    return { kind: "secret", request, headline: `${harness} ${WANTS.secret}` };
+    return { kind: "secret", request, headline: `${asker} ${WANTS.secret}` };
   const raw = approvalDetail(request)?.text ?? null;
   const detail = raw === null ? null : revealHidden(raw);
 
   return {
     kind: "approval",
     request,
-    headline: `${harness} ${WANTS[request.kind]}`,
+    headline: `${asker} ${WANTS[request.kind]}`,
+    moon: moonOf(request, subagents),
     detail,
     compact: raw === null || fitsOneLine(raw),
   };
@@ -83,11 +101,12 @@ const noticeOf = (request: ApprovalRequest, harness: string): StripNotice => {
 /** Every open request as the strip shows it, oldest first. */
 export const noticesOf = (
   requests: ReadonlyArray<ApprovalRequest>,
-  harness: string
+  harness: string,
+  subagents: ReadonlyArray<Subagent> = []
 ): ReadonlyArray<StripNotice> =>
   [...requests]
     .sort((a, b) => a.openedAt.localeCompare(b.openedAt))
-    .map((request) => noticeOf(request, harness));
+    .map((request) => noticeOf(request, harness, subagents));
 
 /**
  * The strip: requests first, oldest first, whether or not the Turn is still working (a
@@ -97,15 +116,18 @@ export const stripOf = ({
   requests,
   working,
   harness,
+  subagents = [],
   settled = null,
 }: {
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly working: boolean;
   /** The Harness's name, "Claude Code". */
   readonly harness: string;
+  /** The session's Subagents, in the order they started (the control row's moons). */
+  readonly subagents?: ReadonlyArray<Subagent>;
   readonly settled?: SecretOutcome | null;
 }): Strip | null => {
-  const oldest = noticesOf(requests, harness)[0];
+  const oldest = noticesOf(requests, harness, subagents)[0];
 
   if (oldest !== undefined) return { notice: oldest, more: requests.length - 1, settled: null };
 

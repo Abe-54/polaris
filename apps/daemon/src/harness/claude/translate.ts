@@ -304,6 +304,11 @@ export class ClaudeTranslator {
     if (this.subagents.size === 0) this.delivered.clear();
   }
 
+  /** A permission request's Turn, and the Subagent whose call it is once its `tool_use` was seen. */
+  approvalScope(turnId: TurnId, toolUseId: string) {
+    return scoped({ turnId, subagentId: this.tools.get(toolUseId)?.scope.subagentId ?? null });
+  }
+
   /** The user (or an interrupt) declined this tool call; its result reads as `declined`. */
   markDeclined(toolUseId: string): void {
     this.declined.add(toolUseId);

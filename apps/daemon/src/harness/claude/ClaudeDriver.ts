@@ -322,7 +322,7 @@ const openSession = Effect.fnUntraced(function* (
     const questions = isQuestionTool(toolName) ? parseQuestions(input) : [];
     emit(
       HarnessEvent.ApprovalRequested({
-        turnId: turn.turnId,
+        ...translator.approvalScope(turn.turnId, context.toolUseID),
         requestId,
         kind: approvalKind(toolName),
         title: isQuestionTool(toolName) ? described.title : (context.title ?? described.title),

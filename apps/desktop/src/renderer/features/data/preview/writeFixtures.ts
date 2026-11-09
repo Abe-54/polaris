@@ -80,6 +80,7 @@ export const fixtureWriteApproval = (
   sessionId: change.sessionId ?? FIXTURE_SESSIONS.backfill.id,
   turnId: TurnId.make(change.turnId ?? "turn-5"),
   kind: "tool",
+  subagentId: null,
   dataWrite: write,
   title: `Run ${write.affected}-row write`,
   detail: `Dry run · rolled back · ${write.affected} rows\n${write.sql}\n${write.reason}`,

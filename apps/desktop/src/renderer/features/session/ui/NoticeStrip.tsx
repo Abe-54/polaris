@@ -21,6 +21,7 @@ import { capacityReset } from "../../constellation/model/failure.ts";
 import { approvalNotice, type Notice, stripLayout } from "../model/notices.ts";
 import type { TodoList } from "../model/todoList.ts";
 import { WELL } from "./marks.tsx";
+import { SubagentMoon } from "./subagentRow.tsx";
 import { Step } from "./plan.tsx";
 
 export interface NoticeStripProps {
@@ -88,10 +89,12 @@ interface RowProps {
 
 const Approval = ({
   request,
+  moon,
   props,
   more,
 }: {
   readonly request: ApprovalRequest;
+  readonly moon: number | null;
   readonly props: NoticeStripProps;
   readonly more: ReactNode;
 }) => {
@@ -102,9 +105,13 @@ const Approval = ({
       className={cn(ROW, "bg-[color-mix(in_oklab,var(--color-needs-you)_7%,transparent)]")}
       data-testid="notice-approval"
     >
-      <PixelHandIcon size={14} className="text-needs-you shrink-0" />
+      {moon === null ? (
+        <PixelHandIcon size={14} className="text-needs-you shrink-0" />
+      ) : (
+        <SubagentMoon index={moon} working harness={props.harness} className="shrink-0" />
+      )}
       <span className="text-body text-needs-you-text shrink-0 font-medium">
-        {harnessHue(props.harness).name} {view.wants}
+        {view.asker ?? harnessHue(props.harness).name} {view.wants}
       </span>
       {view.shown === null ? null : (
         <code
@@ -323,7 +330,7 @@ const Limited = ({
 const NoticeRow = ({ notice, props, more }: RowProps) => {
   switch (notice.kind) {
     case "approval":
-      return <Approval request={notice.request} props={props} more={more} />;
+      return <Approval request={notice.request} moon={notice.moon} props={props} more={more} />;
     case "working":
       return <Working props={props} more={more} />;
     case "todo":

@@ -626,6 +626,11 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   sessionId: SessionId,
   turnId: TurnId,
   kind: ApprovalKind,
+  /**
+   * The Subagent whose tool call asks (capability `session.subagents`); null for the Turn's own
+   * request, and from Daemons before ENG-547.
+   */
+  subagentId: optionalNullable(SubagentId),
   profileAttach: Schema.optionalKey(
     Schema.Struct({
       pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),

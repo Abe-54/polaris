@@ -290,6 +290,7 @@ const make = (
                     sessionId,
                     turnId: e.turnId,
                     kind: e.kind,
+                    subagentId: e.subagentId ?? null,
                     title: redactText(e.title),
                     detail: redactNullable(e.detail),
                     options: [...e.options],
