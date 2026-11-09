@@ -4,6 +4,7 @@
 import { Effect, Schema } from "effect";
 import { ScrubbedDataValue, ScrubbedText } from "./dataValues.ts";
 import { DataWritePreviewFacts } from "./data.ts";
+import { HttpMethod } from "./requests.ts";
 import { CelestialBody } from "./celestial.ts";
 import { HarnessKind } from "./harnesses.ts";
 import {
@@ -621,6 +622,21 @@ export class DataSourceApproval extends Schema.Class<DataSourceApproval>("DataSo
   user: Schema.String,
 }) {}
 
+/** An agent Send to a Remote Origin the user is deciding (ADR 0098); never a secret's value. */
+export class OriginApproval extends Schema.Class<OriginApproval>("OriginApproval")({
+  /** `scheme://host:port`, the port always explicit. */
+  origin: Schema.String,
+  /** The variable the URL's origin came from, and the environment it was resolved in. */
+  variable: Schema.optionalKey(Schema.String),
+  environment: Schema.optionalKey(Schema.String),
+  method: HttpMethod,
+  path: Schema.String,
+  /** Any method but GET, HEAD and OPTIONS. */
+  write: Schema.Boolean,
+  /** Where an auth token came from: its file (an env or `.env` file) and variable name. */
+  tokenSource: Schema.optionalKey(Schema.Struct({ file: Schema.String, name: Schema.String })),
+}) {}
+
 export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequest")({
   id: RequestId,
   sessionId: SessionId,
@@ -635,6 +651,7 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
     })
   ),
   dataSource: Schema.optionalKey(DataSourceApproval),
+  origin: Schema.optionalKey(OriginApproval),
   dataWrite: Schema.optionalKey(
     Schema.Struct({
       target: DataSourceApproval,
@@ -672,10 +689,16 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   openedAt: Timestamp,
 }) {}
 
+export const OriginScope = Schema.Literals(["reads", "reads-and-writes"]);
+
+export type OriginScope = typeof OriginScope.Type;
+
 export const ApprovalDecision = Schema.TaggedUnion({
   Allow: {
     remember: Schema.Boolean,
     dataScope: Schema.optionalKey(Schema.Literals(["target", "server"])),
+    /** For an Origin Approval: absent means `reads`. */
+    originScope: Schema.optionalKey(OriginScope),
   },
   Deny: { reason: Schema.NullOr(Schema.String) },
   Answer: {

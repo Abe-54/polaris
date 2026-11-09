@@ -118,4 +118,6 @@ export * from "./data.ts";
 
 export * from "./traces.ts";
 
+export * from "./requests.ts";
+
 export * from "./schemaDiff.ts";
