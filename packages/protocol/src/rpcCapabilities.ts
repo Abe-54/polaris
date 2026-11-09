@@ -224,6 +224,7 @@ export const RPC_CAPABILITIES = {
   "profiles.attach": "traces.profiles.attach",
   "byteStream.credit": ["host-address", browser],
   "hostAddress.open": "host-address",
+  "hostAddress.names": "host-address.names",
   "browser.host": browser,
   "browser.claim": browser,
   "browser.release": browser,
