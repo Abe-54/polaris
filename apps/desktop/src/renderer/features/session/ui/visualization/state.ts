@@ -64,7 +64,7 @@ export const stateStore = (storage: Storage | null): StateStore => {
 export const STATE_SAVE_MS = 500;
 
 export interface StateWriter {
-  /** Keeps the latest state, written at most once per `STATE_SAVE_MS`. */
+  /** Keeps the latest state that fits, written at most once per `STATE_SAVE_MS`. */
   readonly save: (json: string) => void;
   /** Writes what is pending now (the frame is going away). */
   readonly flush: () => void;
@@ -94,6 +94,8 @@ export const stateWriter = <H>(store: StateStore, id: string, timers: Timers<H>)
 
   return {
     save: (json) => {
+      // An oversized state is never held: the last one that fits stays pending.
+      if (bytes(json) > STATE_MAX_BYTES) return;
       pending = json;
       timer ??= timers.setTimeout(flush, STATE_SAVE_MS);
     },

@@ -6,6 +6,25 @@ import { Schema } from "effect";
 import { buildFrameDocumentWith, type FrameLibraries } from "./frame/document.ts";
 import { type VisualizationProblem, validateWith } from "./validate/index.ts";
 
+export {
+  boundedJson,
+  type BridgeClock,
+  type Coalesced,
+  coalesced,
+  FRAME_MESSAGE_MAX_BYTES,
+  FRAME_MESSAGE_RATE,
+  type FrameInbox,
+  frameInbox,
+  type FrameLane,
+  laneOfText,
+  laneOfType,
+  LINK_CONFIRM_COOLDOWN_MS,
+  LINK_CONFIRM_MAX_DECLINED,
+  type LinkConfirms,
+  linkConfirms,
+  timerClock,
+} from "./bridge/index.ts";
+
 export { FRAME_CSP, type FrameLibraries } from "./frame/document.ts";
 
 export { VISUALIZE_TOOL_DESCRIPTION, visualizeGuidance } from "./guidance.ts";
