@@ -48,6 +48,11 @@ describe("Accept", () => {
     expect(acceptLabel(state, 3)).toBe("Accept turn 3");
   });
 
+  test("at accessibility sizes Accept drops the turn number; other states keep their words", () => {
+    expect(acceptLabel({ kind: "paused", critical: 6 }, 9999, false)).toBe("Accept");
+    expect(acceptLabel({ kind: "working" }, 9999, false)).toBe("Turn 9999 is still working");
+  });
+
   test("goes ahead once the only Critical is dismissed, even though it stays listed", () => {
     expect(
       acceptState({ ...ready, risk: risk(finding("a", "critical", { status: "dismissed" })) })
