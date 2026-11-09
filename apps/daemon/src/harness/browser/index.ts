@@ -65,22 +65,37 @@ export class BrowserMcp extends Context.Service<
     ) => Effect.Effect<BrowserMcpServer | null, never, Scope.Scope>;
   }
 >()("polaris/daemon/harness/BrowserMcp") {
-  /** Session configs go in `dir()`, read on the first session. */
+  /** Session configs go in `dir()`; building the layer restores them with fresh relay URLs. */
   static readonly layerAt = (dir: () => string, options: BrowserMcpOptions = {}) =>
     Layer.effect(
       BrowserMcp,
       Effect.gen(function* () {
         const relay = yield* CdpRelay;
         const agentBrowser = yield* AgentBrowser;
-        let configs: ReturnType<typeof sessionConfigs> | null = null;
+        const configs = sessionConfigs(dir(), options.files);
+
+        // The relay rotated its tokens at start: live sessions' configs get their fresh URL.
+        yield* configs
+          .restore((sessionId) =>
+            relay.issue(sessionId).pipe(
+              Effect.map(({ url }) => url),
+              Effect.catchCause(() => Effect.succeed(null))
+            )
+          )
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `browser session configs not restored: ${redactRelayUrls(String(Cause.squash(cause)))}`
+              )
+            )
+          );
 
         return BrowserMcp.of({
           forSession: (sessionId) =>
             Effect.gen(function* () {
               const { binary } = yield* agentBrowser.current;
               const { url } = yield* relay.issue(sessionId);
-              configs ??= sessionConfigs(dir(), options.files);
-              const config = yield* configs(sessionId, url);
+              const config = yield* configs.hold(sessionId, url);
 
               return agentBrowserServer(binary, sessionId, config);
             }).pipe(

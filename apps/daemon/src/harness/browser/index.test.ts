@@ -1,10 +1,10 @@
 import { expectPrivate } from "../../secrets/privacy.testing.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { SessionId } from "@polaris/protocol";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Duration, Effect, Exit, Layer, Logger, ManagedRuntime, Scope } from "effect";
-import { CdpRelay } from "../../browser/cdpRelay.ts";
+import { CdpRelay, CdpSessionNotLive } from "../../browser/cdpRelay.ts";
 import {
   AgentBrowser,
   type AgentBrowserInstaller,
@@ -78,7 +78,10 @@ const harness = (
     return { server, close: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
   };
 
-  return { open, logs, dir };
+  /** Builds the layer, as the Daemon does at start. */
+  const start = () => runtime.runPromise(Effect.void);
+
+  return { open, start, logs, dir };
 };
 
 const configOf = (server: BrowserMcpServer | null) => server?.env["AGENT_BROWSER_CONFIG"] ?? "";
@@ -99,6 +102,30 @@ describe("BrowserMcp", () => {
     expectPrivate(configOf(server), "file");
     await close();
     expect(existsSync(configOf(server))).toBe(false);
+  });
+
+  test("at start a live session's config gets its rotated URL and a gone session's is removed", async () => {
+    const live = SessionId.make("live session");
+    const fresh = "ws://127.0.0.1:4200/browser/live%20session/rotated";
+
+    const h = harness(
+      relay((sessionId) =>
+        sessionId === live
+          ? Effect.succeed({ url: fresh })
+          : Effect.fail(new CdpSessionNotLive({ sessionId, presence: "archived" }))
+      )
+    );
+
+    const sessions = join(h.dir, "sessions");
+    mkdirSync(sessions);
+    writeFileSync(join(sessions, "live%20session.json"), '{"cdp":"ws://127.0.0.1:4100/stale"}');
+    writeFileSync(join(sessions, "gone.json"), '{"cdp":"ws://127.0.0.1:4100/stale"}');
+    writeFileSync(join(sessions, "live%20session.json.0123456789abcdef.tmp"), "");
+    await h.start();
+
+    expect(readdirSync(sessions)).toEqual(["live%20session.json"]);
+    expect(await Bun.file(join(sessions, "live%20session.json")).json()).toEqual({ cdp: fresh });
+    expectPrivate(join(sessions, "live%20session.json"), "file");
   });
 
   test("the config stays while another open of the session still holds it", async () => {
