@@ -16,7 +16,8 @@ const FAKE_HUB = join(import.meta.dir, "fakeHub.testing.ts");
 
 const ready = SimulatorSupport.cases.Ready.make({});
 
-const detection = Layer.succeed(
+/** Detection that reports iOS ready and Android unsupported. */
+export const iosReadyDetection = Layer.succeed(
   SimulatorDetection,
   SimulatorDetection.of({
     current: Effect.succeed({
@@ -89,7 +90,10 @@ export const fakeHost = (idleMs = 300): FakeHost => {
         startTimeoutMs: 5_000,
       }).pipe(
         Layer.provide(
-          Layer.merge(HostPlatform.test({ os: "darwin", arch: "arm64", libc: "none" }), detection)
+          Layer.merge(
+            HostPlatform.test({ os: "darwin", arch: "arm64", libc: "none" }),
+            iosReadyDetection
+          )
         )
       ),
   };

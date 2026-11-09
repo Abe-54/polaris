@@ -123,8 +123,12 @@ export class Inventory {
       emulators: hub?.emulators ?? [],
     };
 
+    // Only a shutdown seen after a boot: `simctl` may not say Booted yet when the boot returns.
+    const wentDown = (d: HubDevices["simulators"][number]) =>
+      !d.booted && this.known.get(d.id)?.state === "Booted";
+
     this.deps.booted.forgetShutDown(
-      [...devices.simulators, ...devices.emulators].flatMap((d) => (d.booted ? [] : [d.id]))
+      [...devices.simulators, ...devices.emulators].flatMap((d) => (wentDown(d) ? [d.id] : []))
     );
     const { simulators } = simulatorsFromHub(devices, this.deps.booted.all);
     const next = new Map<string, Simulator>();
