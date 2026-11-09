@@ -1,7 +1,25 @@
 /** Approval rules the Session machine applies: Secret Requests' decisions, and withdrawals. */
-import { ApprovalDecision, DomainEvent, type RequestId } from "@polaris/protocol";
+import {
+  ApprovalDecision,
+  DomainEvent,
+  type ApprovalRequest,
+  type RequestId,
+} from "@polaris/protocol";
 import type { SessionRecord } from "../store/model.ts";
 import { workingTurn } from "../store/model.ts";
+
+/** Why a text Answer can't close `request`, or null when it can. */
+const answerRefusal = (request: ApprovalRequest | undefined) => {
+  if (request?.profileAttach !== undefined)
+    return "an inspector attach takes an allow once or a deny";
+
+  if (request?.dataSource !== undefined || request?.dataWrite !== undefined)
+    return "a Data Source Approval takes an allow or a deny";
+
+  if (request?.origin !== undefined) return "an Origin Approval takes an allow or a deny";
+
+  return request?.kind === "secret" ? "a Secret Request takes a secret or a decline" : null;
+};
 
 /** Why `decision` can't answer the pending request, or null when it can. */
 export const decisionRefusal = (
@@ -12,23 +30,18 @@ export const decisionRefusal = (
   const request = record.pending.get(requestId);
   const secret = request?.kind === "secret";
   const attach = request?.profileAttach !== undefined;
-  const data = request?.dataSource !== undefined || request?.dataWrite !== undefined;
 
   return ApprovalDecision.match(decision, {
-    Allow: (allow) =>
-      attach && (allow.remember || allow.dataScope !== undefined)
-        ? "an inspector attach requires a new approval every time"
-        : secret
-          ? "a Secret Request takes a secret or a decline"
-          : null,
-    Answer: () =>
-      attach
-        ? "an inspector attach takes an allow once or a deny"
-        : data
-          ? "a Data Source Approval takes an allow or a deny"
-          : secret
-            ? "a Secret Request takes a secret or a decline"
-            : null,
+    Allow: (allow) => {
+      if (allow.originScope !== undefined && request?.origin === undefined)
+        return "only an Origin Approval takes an origin scope";
+
+      if (attach && (allow.remember || allow.dataScope !== undefined))
+        return "an inspector attach requires a new approval every time";
+
+      return secret ? "a Secret Request takes a secret or a decline" : null;
+    },
+    Answer: () => answerRefusal(request),
     Deny: () => null,
     Provided: () => (secret ? null : `request ${requestId} is not a Secret Request`),
   });
@@ -55,10 +68,23 @@ export const withdrawn = (record: SessionRecord, withdrawal: Withdrawal) =>
     reason: withdrawal.reason,
   });
 
-/** Only the Daemon may request Data access; the same pending target shares one card. */
+/** Requests only the Daemon raises and answers itself: never forwarded to a Harness. */
+export const daemonOwned = (
+  request: Pick<ApprovalRequest, "dataSource" | "dataWrite" | "origin" | "profileAttach">
+) =>
+  request.dataSource !== undefined ||
+  request.dataWrite !== undefined ||
+  request.origin !== undefined ||
+  request.profileAttach !== undefined;
+
+/** One card per origin across the Session's pending requests (ADR 0098). */
+const originPending = (record: SessionRecord, origin: string) =>
+  [...record.pending.values()].some((request) => request.origin?.origin === origin);
+
+/** Only the Daemon may request Data or origin access; the same pending target shares one card. */
 export const canRequestDataApproval = (
   record: SessionRecord,
-  event: { type: string; request: import("@polaris/protocol").ApprovalRequest }
+  event: { type: string; request: ApprovalRequest }
 ) => {
   const target = event.request.dataSource;
 
@@ -66,13 +92,19 @@ export const canRequestDataApproval = (
 
   const attach = event.request.profileAttach;
 
+  const origin = event.request.origin;
+
   if (event.type === "inspector.approvalRequested")
-    return attach !== undefined && target === undefined && write === undefined;
+    return (
+      attach !== undefined && target === undefined && write === undefined && origin === undefined
+    );
 
   if (attach !== undefined) return false;
 
-  if (event.type === "harness.approvalRequested")
-    return target === undefined && write === undefined;
+  if (event.type === "harness.approvalRequested") return !daemonOwned(event.request);
+
+  if (origin !== undefined)
+    return target === undefined && write === undefined && !originPending(record, origin.origin);
 
   if (write !== undefined)
     return (
@@ -102,9 +134,7 @@ export const canRequestDataApproval = (
 /** An upgrade leaves the terminal Harness alive, but its Daemon-owned approval waiters are gone. */
 export const withdrawDaemonApprovals = (record: SessionRecord) =>
   [...record.pending.values()].flatMap((request) =>
-    request.profileAttach === undefined &&
-    request.dataSource === undefined &&
-    request.dataWrite === undefined
+    !daemonOwned(request)
       ? []
       : [
           withdrawn(record, {

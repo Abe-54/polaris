@@ -21,7 +21,8 @@ import { writeApprovalMethods } from "./writeApprovals.ts";
 import { daemonDenied, isDaemonSource } from "./daemonSources.ts";
 import { DataApprovalRequired, type DataApprovalOutcome } from "./approvalRequired.ts";
 
-const approvalItem = (item: LiveItem, id?: RequestId) => {
+/** A commit that opens, answers or withdraws an approval (`id`, when given). */
+export const approvalItem = (item: LiveItem, id?: RequestId) => {
   if (!Predicate.isTagged(item, "Event")) return false;
   const event = item.envelope.event;
 
