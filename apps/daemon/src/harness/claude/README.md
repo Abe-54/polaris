@@ -59,7 +59,7 @@ Engine wiring: with a hook receiver the driver offers `terminalFollow` (`receive
 
 ## Known gaps / TODO
 
-- Claude Code doesn't report Bash exit codes; `exitCode` is always null (failure shows as `status: failed`).
+- Claude Code doesn't report Bash exit codes: a successful foreground result records exit 0; a failure `status: failed` with a null `exitCode` (so it can't back a Verified receipt), and an interrupted run, one with a `returnCodeInterpretation` (a non-zero exit Claude Code didn't count as an error) or one in the background null.
 - Steer was verified against a real mid-Turn run (`apps/daemon/scripts/e2e-claude-steer.ts`, gated by `POLARIS_E2E_CLAUDE_STEER=1`, `haiku`): a Turn counting to 10 with one `sleep 1; echo N` Bash call per number was steered "stop at 5" after 2; Claude folded it in between tool calls, echoed 1–5, replied "I stopped at 5 as requested.", and the Polaris Turn ended once, `completed`, with no second Turn.
 - In Terminal, permission prompts are informational only; answering them from a Client would need a `PermissionRequest` hook that blocks the TUI, which we chose not to do.
 - A user setting `allowedHttpHookUrls` without a loopback entry, or `disableAllHooks`, silently disables follow-along.
