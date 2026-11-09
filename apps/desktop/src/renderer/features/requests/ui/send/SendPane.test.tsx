@@ -254,3 +254,48 @@ test("Send again sends the recorded request inline, and is off when a secret was
   mount(new Send({ ...AGENT_SEND_FIELDS, url: "http://localhost:4000/void?token=[redacted]" }));
   expect(within(document.body).getByTestId("send-again").hasAttribute("disabled")).toBe(true);
 });
+
+const LONE_TRACE = buildTrace(
+  {
+    id: "9a8b7c6d9a8b7c6d9a8b7c6d9a8b7c6d",
+    startedAt: "2026-11-09T14:56:28.000Z",
+    turn: null,
+    launchedTurn: null,
+    spans: [
+      {
+        id: "1a2b3c4d5e6f7081",
+        parent: null,
+        name: "send",
+        service: "polaris",
+        kind: "client",
+        at: 0,
+        ms: 1,
+        attributes: { "http.request.method": "GET", "url.full": "http://127.0.0.1:4801/invoices" },
+      },
+    ],
+  },
+  FIXTURE_CHECKOUT
+);
+
+test.each([
+  ["an answered send", { outcome: "ok", status: 200, statusText: "OK" } as const, true],
+  ["a refused send", { outcome: "refused", error: "ECONNREFUSED" } as const, false],
+])(
+  "with only the send span, %s says the server sent no spans only when it answered",
+  async (_, fields, noSpans) => {
+    const { status: _s, statusText: _t, responseBody: _b, ...rest } = USER_SEND;
+
+    mount(
+      new Send({
+        ...rest,
+        ...fields,
+        id: `send-lone-${fields.outcome}`,
+        traceId: TraceId.make(LONE_TRACE.summary.id),
+      }),
+      sendTracesApi([LONE_TRACE])
+    );
+
+    await waitFor(() => expect(rowNames()).toEqual(["send · polaris"]));
+    expect(screen.queryByTestId("requests-no-spans") !== null).toBe(noSpans);
+  }
+);

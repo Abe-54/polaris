@@ -69,7 +69,16 @@ const Sent = ({ at, send }: { readonly at: RequestsSessionKey; readonly send: Se
   );
 };
 
-const Traced = ({ at, traceId }: { readonly at: RequestsSessionKey; readonly traceId: string }) => {
+const Traced = ({
+  at,
+  traceId,
+  answered,
+}: {
+  readonly at: RequestsSessionKey;
+  readonly traceId: string;
+  /** False when the server never answered: no spans then says nothing about its tracing. */
+  readonly answered: boolean;
+}) => {
   const trace = useSendTrace(at, traceId);
   const open = useOpenElsewhere(at);
 
@@ -79,6 +88,7 @@ const Traced = ({ at, traceId }: { readonly at: RequestsSessionKey; readonly tra
         at={at}
         traceId={traceId}
         trace={trace}
+        answered={answered}
         onOpen={(spanId) => open.trace(traceId, spanId)}
       />
       {trace.status === "ready" ? <DataSection at={at} detail={trace.value} /> : null}
@@ -107,7 +117,9 @@ const Answer = ({
       ) : (
         <SendFailureSlot at={at} send={send} onSendAgain={() => void sendAgain()} />
       )}
-      {send.traceId === null ? null : <Traced key={send.traceId} at={at} traceId={send.traceId} />}
+      {send.traceId === null ? null : (
+        <Traced key={send.traceId} at={at} traceId={send.traceId} answered={answered} />
+      )}
     </>
   );
 };

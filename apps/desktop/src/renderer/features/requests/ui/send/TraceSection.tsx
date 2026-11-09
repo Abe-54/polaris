@@ -155,11 +155,13 @@ export const TraceSection = ({
   at,
   traceId,
   trace,
+  answered,
   onOpen,
 }: {
   readonly at: RequestsSessionKey;
   readonly traceId: string;
   readonly trace: Loaded<TraceDetail>;
+  readonly answered: boolean;
   /** Opens the trace in Traces, at a span when one is named. */
   readonly onOpen: (spanId: string | null) => void;
 }) => (
@@ -183,6 +185,6 @@ export const TraceSection = ({
         Open in Traces
       </Pill>
     </div>
-    <Shown trace={trace} onOpen={onOpen} noSpans={<NoSpansSlot at={at} />} />
+    <Shown trace={trace} onOpen={onOpen} noSpans={answered ? <NoSpansSlot at={at} /> : null} />
   </section>
 );
