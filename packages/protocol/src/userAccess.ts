@@ -6,7 +6,7 @@
  * gates (`grants.ts`, `deviceGrants.ts`) and never pass through this one.
  */
 import { Schema } from "effect";
-import { RpcMiddleware } from "effect/rpc";
+import { type Rpc, type RpcGroup, RpcMiddleware } from "effect/rpc";
 import type { Command } from "./commands.ts";
 import type { DaemonRpcTag } from "./grants.ts";
 
@@ -318,6 +318,28 @@ export const USER_RPCS = {
   // Writes a skill into every Harness's global config: it steers all future agents.
   "traces.installSkill": "user",
 } as const satisfies Record<DaemonRpcTag, UserAccessNeed>;
+
+/** The RPCs the user gate decides: every `user` one, and `dispatch`, decided per Command. */
+type GatedTag =
+  | "dispatch"
+  | {
+      [K in keyof typeof USER_RPCS]: (typeof USER_RPCS)[K] extends "user" ? K : never;
+    }[keyof typeof USER_RPCS];
+
+const isGated = (tag: string) =>
+  tag === "dispatch" || (Object.hasOwn(USER_RPCS, tag) && needOf(USER_RPCS, tag) === "user");
+
+/**
+ * `group` with the user gate on what it decides, so a Client decodes its `UserAccessRequired`;
+ * RPCs it never refuses keep their errors.
+ */
+export const gateUserRpcs = <R extends Rpc.Any>(group: RpcGroup.RpcGroup<R>) => {
+  const tags = [...group.requests.keys()];
+  const gated = tags.filter((tag): tag is Extract<R["_tag"], GatedTag> => isGated(tag));
+  const open = tags.filter((tag): tag is Exclude<R["_tag"], GatedTag> => !isGated(tag));
+
+  return group.omit(...gated).merge(group.omit(...open).middleware(UserAccessGate));
+};
 
 const needOf = (table: Readonly<Record<string, UserAccessNeed>>, tag: string): UserAccessNeed =>
   Object.hasOwn(table, tag) ? (table[tag] ?? "user") : "user";

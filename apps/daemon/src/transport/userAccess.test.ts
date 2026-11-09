@@ -15,8 +15,8 @@ import {
   ExtensionDaemonRpcs,
   FeedbackBatch,
   RequestId,
+  DaemonRpcs,
   SessionId,
-  UserAccessGate,
 } from "@polaris/protocol";
 import { Cause, Effect, Exit, Layer, Option, Redacted, type Scope } from "effect";
 import { ServerRpcs } from "./rpcs.ts";
@@ -24,9 +24,6 @@ import { startServer } from "./server.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
 
 const temporary = scopedTempDir("pl-ua-", { short: true });
-
-/** The client group decodes both gates' refusals. */
-const Rpcs = ExtensionDaemonRpcs.middleware(UserAccessGate);
 
 const REACHED = "reached the handler";
 
@@ -85,14 +82,17 @@ const outcome = <A, E extends { readonly _tag: string }>(effect: Effect.Effect<A
     return "what" in error ? `${error._tag}:${String(error.what)}` : error._tag;
   });
 
+/** The SDK's group, which decodes both gates' refusals. */
 const connectAt = (socketPath: string) =>
-  Effect.flatMap(socketTransport(socketPath), (transport) => connectRpcWith(Rpcs, transport));
+  Effect.flatMap(socketTransport(socketPath), (transport) =>
+    connectRpcWith(ExtensionDaemonRpcs, transport)
+  );
 
 type Connect = () => ReturnType<typeof connectAt>;
 
 /** A server with this module's handlers in a throwaway root, and how to connect to it. */
 const withServer = <A, E>(
-  body: (connect: Connect, root: string) => Effect.Effect<A, E, Scope.Scope>
+  body: (connect: Connect, root: string, socketPath: string) => Effect.Effect<A, E, Scope.Scope>
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -105,7 +105,7 @@ const withServer = <A, E>(
         handlers,
       });
 
-      return yield* body(() => connectAt(server.socketPath), root);
+      return yield* body(() => connectAt(server.socketPath), root, server.socketPath);
     })
   );
 
@@ -154,6 +154,30 @@ test("a process with only socket access can't approve or answer a secret once th
     keylessRenames: "reached",
     ownKeyAccess: false,
     ownKeyApproves: "UserAccessRequired:dispatch:RespondToApproval",
+  });
+});
+
+test("a token-less Client on DaemonRpcs, as the Desktop and Mobile Apps use, decodes the refusal", async () => {
+  const result = await Effect.runPromise(
+    withServer((connect, _root, socketPath) =>
+      Effect.gen(function* () {
+        yield* (yield* connect()).client.hello(hello(DESKTOP_KEY));
+
+        const transport = yield* socketTransport(socketPath);
+        const { client } = yield* connectRpcWith(DaemonRpcs, transport);
+        yield* client.hello(hello());
+
+        return {
+          approves: yield* outcome(client.dispatch(approve)),
+          secret: yield* outcome(client["secret.provide"](secret)),
+        };
+      })
+    )
+  );
+
+  expect(result).toEqual({
+    approves: "UserAccessRequired:dispatch:RespondToApproval",
+    secret: "UserAccessRequired:secret.provide",
   });
 });
 

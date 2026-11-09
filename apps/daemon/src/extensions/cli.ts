@@ -10,7 +10,6 @@ import {
   type GrantKind,
   type Pairing,
   PairingId,
-  UserAccessGate,
 } from "@polaris/protocol";
 import { Effect, Match, Predicate } from "effect";
 import { renderUnicodeCompact } from "uqr";
@@ -119,11 +118,9 @@ export const formatPairings = (pairings: ReadonlyArray<Pairing>): string =>
         .map((p) => [p.id, p.name, grantLine(p), usedLine(p)].map(terminalText).join("  ·  "))
         .join("\n");
 
-/** `DaemonRpcs` with the user gate's refusal, which a terminal gets for pair and revoke (ADR 0100). */
-const CliRpcs = DaemonRpcs.middleware(UserAccessGate);
-
+/** `DaemonRpcs` carries the user gate's refusal, which a terminal gets for pair and revoke (ADR 0100). */
 const connectCli = (transport: Parameters<typeof connectRpcWith>[1]) =>
-  connectRpcWith(CliRpcs, transport);
+  connectRpcWith(DaemonRpcs, transport);
 
 /** A terminal holds no user key, so an agent there can't pair itself an Extension. */
 const NEEDS_DESKTOP =

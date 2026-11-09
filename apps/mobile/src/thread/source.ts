@@ -32,6 +32,7 @@ import {
   type TurnPage,
   type WorkspaceId,
   RiskSummaryRef,
+  gateUserRpcs,
 } from "@polaris/protocol";
 import { type LiveSource, makeFeed, type SequenceMark } from "@polaris/client/resume";
 import { Data, Effect, Option, Predicate, type Redacted, Stream } from "effect";
@@ -129,18 +130,20 @@ export const newCommandId = (): CommandId => {
   );
 };
 
-/** The RPCs the thread calls; a full `DaemonClient` is one of these. */
-export const ThreadRpcs = RpcGroup.make(
-  SubscribeHost,
-  SubscribeSession,
-  Dispatch,
-  WatchContinuity,
-  MarkRead,
-  SaveDraft,
-  GetRiskSummary,
-  WatchRiskSummary,
-  ReadTurns,
-  ProvideSecret
+/** The RPCs the thread calls, behind the user gate as on `DaemonRpcs`; a full `DaemonClient` is one of these. */
+export const ThreadRpcs = gateUserRpcs(
+  RpcGroup.make(
+    SubscribeHost,
+    SubscribeSession,
+    Dispatch,
+    WatchContinuity,
+    MarkRead,
+    SaveDraft,
+    GetRiskSummary,
+    WatchRiskSummary,
+    ReadTurns,
+    ProvideSecret
+  )
 );
 
 export type ThreadClient = RpcClient.RpcClient<RpcGroup.Rpcs<typeof ThreadRpcs>, RpcClientError>;

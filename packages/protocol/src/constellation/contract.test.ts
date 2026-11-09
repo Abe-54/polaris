@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Schema } from "effect";
 import { DomainEvent } from "../events.ts";
 import { HostId, SessionId } from "../ids.ts";
-import { DaemonRpcs } from "../rpc.ts";
+import { DaemonRpcDefinitions, DaemonRpcs } from "../rpc.ts";
 import { ConstellationCommand } from "./commands.ts";
 import {
   AttemptState,
@@ -50,7 +50,8 @@ describe("Constellation contract", () => {
 
   test("the subgroup is mounted under DaemonRpcs with no role supplied by the caller", () => {
     for (const [tag, rpc] of ConstellationRpcs.requests) {
-      expect(DaemonRpcs.requests.get(tag)).toBe(rpc);
+      expect(DaemonRpcDefinitions.requests.get(tag)).toBe(rpc);
+      expect(DaemonRpcs.requests.get(tag)?.key).toBe(rpc.key);
     }
 
     const plan = Schema.decodeUnknownSync(ConstellationPlan.payloadSchema)({
