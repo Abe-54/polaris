@@ -32,13 +32,16 @@ export interface TestDaemon {
   readonly stop: () => Promise<void>;
 }
 
+/** The user key a test Daemon's fresh home enrols first; a dev Client acting as the Desktop App presents it. */
+export const TEST_USER_KEY = "5".repeat(64);
+
 const identity = {
   clientName: "sdk-tests",
   clientVersion: "0.0.0",
   deviceLabel: "SDK tests",
   capabilities: [],
   /** Acts as the Desktop App, which pairs: the fresh home enrols it (ADR 0100). */
-  userKey: Redacted.make("5".repeat(64)),
+  userKey: Redacted.make(TEST_USER_KEY),
 };
 
 /** A port nothing listens on now, so a restarted Daemon's gateway keeps its URL. */
