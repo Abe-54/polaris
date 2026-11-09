@@ -119,6 +119,22 @@ describe("a Host's slice", () => {
     });
   });
 
+  test("a command's own cd goes from the takeover, so what it runs shows", () => {
+    const [slice] = slicesOf([
+      host("a", [
+        snapshot({
+          sessions: [
+            summary(session({ id: "s1", state: "needs-you" }), [
+              commandApproval("s1", "r", "cd /code/polaris && bun run backfill --dry-run=false"),
+            ]),
+          ],
+        }),
+      ]),
+    ]);
+
+    expect(slice?.need?.line).toBe("bun run backfill --dry-run=false");
+  });
+
   test("a secret takes over as a question, which opens the app: never Approve and Deny", () => {
     const [slice] = slicesOf([
       host("a", [
