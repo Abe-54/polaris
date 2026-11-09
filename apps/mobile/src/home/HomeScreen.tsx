@@ -9,11 +9,17 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Pressable,
-  ScrollView,
   SectionList,
   Text,
   View,
 } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Celestial, sessionCelestial } from "../celestial/index.tsx";
@@ -21,7 +27,14 @@ import { HORIZON_INSET, HorizonScreen } from "../horizon/index.tsx";
 import { constellationMenu, type MenuAction, sessionMenu, useMenuActions } from "../menus/index.ts";
 import { themedStyles, useReducedMotion, useTheme } from "../theme/index.ts";
 import { useHomeHosts } from "./feed/useHomeHosts.ts";
-import { type HeroPage, heroKicker, nextUpIndex, nextUpMeta, pageIndex } from "./model/hero.ts";
+import {
+  type HeroPage,
+  heroKicker,
+  nextUpIndex,
+  nextUpMeta,
+  pageHeights,
+  pageIndex,
+} from "./model/hero.ts";
 import { buildHome, type HomeRow, type SessionRow as Row, unreachableOf } from "./model/home.ts";
 import {
   constellationsOnScreen,
@@ -107,6 +120,8 @@ const useStyles = themedStyles((c) => ({
     minWidth: 0,
   },
   nextUpMeta: { ...mobileType.index, color: c.textSubtle },
+  pager: { overflow: "hidden" },
+  pages: { alignItems: "flex-start" },
 }));
 
 /** Re-renders each minute so ages ("42m") stay true. */
@@ -184,6 +199,41 @@ const NextUp = ({
 };
 
 /** The raised needs you card: a page per waiting row, swiped or stepped through next up. */
+/**
+ * The pager's height follows the page under the finger, blending neighbours' measured heights as it
+ * scrolls, so a short page never sits in the tallest one's height.
+ */
+const usePagerHeight = (rows: ReadonlyArray<Row>, width: number) => {
+  const [measured, setMeasured] = useState<ReadonlyMap<string, number>>(new Map());
+  const heights = useMemo(() => pageHeights(rows, measured), [rows, measured]);
+  const offset = useSharedValue(0);
+
+  const onScroll = useAnimatedScrollHandler((event) => {
+    offset.set(event.contentOffset.x);
+  });
+
+  const style = useAnimatedStyle(() => {
+    if (heights === null || width === 0) return {};
+
+    if (heights.length === 1) return { height: heights[0] };
+
+    const pages = heights.map((_, n) => n);
+
+    return {
+      height: interpolate(offset.get() / width, pages, [...heights], Extrapolation.CLAMP),
+    };
+  });
+
+  const measure = useCallback((key: string, height: number) => {
+    setMeasured((current) =>
+      current.get(key) === height ? current : new Map(current).set(key, height)
+    );
+  }, []);
+
+  return { style, onScroll, measure };
+};
+
+/** The raised needs you card: a page per waiting row, swiped or stepped through next up. */
 const NeedsYouHero = ({
   rows,
   actions,
@@ -193,12 +243,13 @@ const NeedsYouHero = ({
 }) => {
   const styles = useStyles();
   const reduced = useReducedMotion();
-  const pager = useRef<ComponentRef<typeof ScrollView>>(null);
+  const pager = useRef<ComponentRef<typeof Animated.ScrollView>>(null);
   const [width, setWidth] = useState(0);
   const [page, setPage] = useState<HeroPage>({ key: rows[0]?.key ?? null, index: 0 });
   const index = pageIndex(rows, page);
   const next = nextUpIndex(index, rows.length);
   const nextRow = next === null ? undefined : rows[next];
+  const height = usePagerHeight(rows, width);
 
   // Keeps the pager on its row as rows above it are answered.
   useEffect(() => {
@@ -230,17 +281,29 @@ const NeedsYouHero = ({
         </Text>
         <PageDots count={rows.length} index={index} />
       </View>
-      <View onLayout={({ nativeEvent }: LayoutChangeEvent) => setWidth(nativeEvent.layout.width)}>
-        <ScrollView
+      <Animated.View
+        style={[styles.pager, height.style]}
+        onLayout={({ nativeEvent }: LayoutChangeEvent) => setWidth(nativeEvent.layout.width)}
+      >
+        <Animated.ScrollView
           ref={pager}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           scrollEnabled={rows.length > 1}
+          scrollEventThrottle={16}
+          onScroll={height.onScroll}
           onMomentumScrollEnd={onSettle}
+          contentContainerStyle={styles.pages}
         >
           {rows.map((row) => (
-            <View key={row.key} style={{ width }}>
+            <View
+              key={row.key}
+              style={{ width }}
+              onLayout={({ nativeEvent }: LayoutChangeEvent) =>
+                height.measure(row.key, nativeEvent.layout.height)
+              }
+            >
               <NeedsYouCard
                 item={row}
                 hostId={row.hostId}
@@ -250,8 +313,8 @@ const NeedsYouHero = ({
               />
             </View>
           ))}
-        </ScrollView>
-      </View>
+        </Animated.ScrollView>
+      </Animated.View>
       {nextRow === undefined || next === null ? null : (
         <NextUp row={nextRow} now={actions.now} onPress={() => show(next)} />
       )}

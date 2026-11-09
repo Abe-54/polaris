@@ -126,7 +126,7 @@ export const InboxSheet = ({
       <StatusFooter {...(inbox.away ? { note: "answer when it's back" } : {})}>
         {inbox.hosts.map((host) => (
           <StatusItem
-            key={host.hostId}
+            key={host.key}
             color={dotColour(colours, host.connection)}
             label={host.label}
           />

@@ -12,7 +12,7 @@ import { RIDGE_TOP } from "../horizon/scene.ts";
 import { useRelay } from "../relay/RelayProvider.tsx";
 import { CHROME_TEXT_SCALE } from "../theme/textScale.ts";
 import { themedStyles } from "../theme/index.ts";
-import { HEADING_TOP_MIN, headingTop, scanSheetHeight, starLight } from "./model.ts";
+import { HEADING_TOP_MIN, headingTop, scanSheetHeight, skyShows, starLight } from "./model.ts";
 import { type LinkingState, PAIRING_COPY, ScanSheetView, useLinking } from "./ScanSheet.tsx";
 import { Sky } from "./Sky.tsx";
 import { STAR_SIZE } from "./Star.tsx";
@@ -53,12 +53,22 @@ export const Pairing = ({ linking, onCancel }: PairingProps) => {
   const top = headingTop(room, heading);
   const headingBottom = insets.top + top + heading;
 
+  const starTop = starTopFor(height, headingBottom, titled);
+
+  const shows = skyShows({
+    sheetTop: height - lift,
+    headingBottom,
+    starBottom: starTop + STAR_SIZE,
+  });
+
   return (
     <View style={styles.screen}>
       <Sky
         light={starLight(step)}
-        starTop={starTopFor(height, headingBottom, titled)}
+        starTop={starTop}
         lift={lift}
+        star={shows.star}
+        moon={shows.moon}
         hosts={step.kind === "linked" ? step.hosts : undefined}
       />
       <ScrollView
