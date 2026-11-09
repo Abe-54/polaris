@@ -54,6 +54,8 @@ export * from "./pairingString.ts";
 
 export * from "./grants.ts";
 
+export * from "./rpcCapabilities.ts";
+
 export * from "./deviceGrants.ts";
 
 export * from "./userAccess.ts";

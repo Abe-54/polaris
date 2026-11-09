@@ -352,6 +352,46 @@ test("timed-out transport retains bounded capacity until actual settlement", asy
 const answered = <A>(answers: ReadonlyArray<{ provider: LanguageProvider; payload: A }>) =>
   answers.map(({ provider, payload }) => [provider.context.providerId, payload] as const);
 
+test("declaration asks servers that declare it, and the definition of those that don't", async () => {
+  const f = fixture();
+  const [first, second] = f.providers;
+
+  f.setProviders([
+    {
+      ...first!,
+      capabilities: {
+        ...first!.capabilities,
+        methods: [...first!.capabilities.methods, "textDocument/declaration"],
+      },
+    },
+    second!,
+  ]);
+
+  const at = (line: number) => ({
+    uri: "file:///fixture/closed.ts",
+    range: { start: { line, character: 0 }, end: { line, character: 1 } },
+  });
+
+  const declaration = f.features.declaration(0);
+  await Promise.resolve();
+
+  const sent = f.pending.map(({ request }) => [request.fence.context.providerId, request.method]);
+
+  for (const [index, { request }] of f.pending.entries())
+    f.reply(index, [at(request.method === "textDocument/declaration" ? 1 : 2)]);
+
+  expect(sent.toSorted((a, b) => a.join().localeCompare(b.join()))).toEqual([
+    ["first", "textDocument/declaration"],
+    ["first", "textDocument/definition"],
+    ["second", "textDocument/definition"],
+  ]);
+  expect(answered(await declaration)).toEqual([
+    ["first", [at(1)]],
+    ["second", [at(2)]],
+  ]);
+  f.features.dispose();
+});
+
 test("navigation, references, symbols, actions and pull reports decode method payloads", async () => {
   const f = fixture();
 

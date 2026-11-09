@@ -23,6 +23,8 @@ export * from "./resume.ts";
 
 export * from "./rpc.ts";
 
+export * from "./rpcGuard.ts";
+
 export * from "./ssh.ts";
 
 export * from "./terminal.ts";

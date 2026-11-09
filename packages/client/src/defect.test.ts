@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   type ByteTransport,
+  type Capability,
   Hello,
+  SessionId,
   HostId,
   HostInfo,
   makeWire,
@@ -24,6 +26,7 @@ import {
   Stream,
 } from "effect";
 import { RpcSerialization } from "effect/rpc";
+import { RpcClientError } from "effect/rpc/RpcClientError";
 import {
   type ExitEncoded,
   type FromServerEncoded,
@@ -31,6 +34,7 @@ import {
 } from "effect/rpc/RpcMessage";
 import { HostTarget, type LiveSession, makeHostConnection } from "./HostConnection.ts";
 import { connectRpc, isDaemonDefect } from "./rpc.ts";
+import { isCapabilityRefusal } from "./rpcGuard.ts";
 import type { ClientTransport } from "./transport.ts";
 
 /** The parts of a message from the Client that the fake Daemon looks at. */
@@ -63,25 +67,24 @@ const connectionDefect = encodeJson(
 
 const { Success } = Data.taggedEnum<ExitEncoded<unknown, unknown>>();
 
-/** The fake Daemon's answer to each RPC it serves. */
-const answers = new Map<string, ExitEncoded<unknown, unknown>>([
-  [
-    "hello",
-    Success({
-      value: Schema.encodeSync(Schema.toCodecJson(Hello.successSchema))({
-        host: new HostInfo({
-          hostId: HostId.make("old-host"),
-          hostname: "old",
-          platform: "linux-x64",
-          daemonVersion: "0.1.0",
-          homeDir: "/home/old",
-          startedAt: "2026-10-01T00:00:00.000Z",
-        }),
-        protocolVersion: PROTOCOL_VERSION,
-        capabilities: [],
+const helloAnswer = (capabilities: ReadonlyArray<Capability>) =>
+  Success({
+    value: Schema.encodeSync(Schema.toCodecJson(Hello.successSchema))({
+      host: new HostInfo({
+        hostId: HostId.make("old-host"),
+        hostname: "old",
+        platform: "linux-x64",
+        daemonVersion: "0.1.0",
+        homeDir: "/home/old",
+        startedAt: "2026-10-01T00:00:00.000Z",
       }),
+      protocolVersion: PROTOCOL_VERSION,
+      capabilities,
     }),
-  ],
+  });
+
+/** The fake Daemon's answer to each RPC it serves besides `hello`. */
+const answers = new Map<string, ExitEncoded<unknown, unknown>>([
   ["harness.spinnerVerbs", Success({ value: null })],
 ]);
 
@@ -96,8 +99,12 @@ interface FakeConnection {
 /**
  * One connection to a fake older Daemon, through the protocol's Wire: it answers `hello` and
  * pings, holds `harness.spinnerVerbs` while `hold` is set, and answers it with null otherwise.
+ * Any other request tag gets the connection-level Defect an older Daemon sends for one it doesn't know.
  */
-const fakeDaemon = (hold: boolean) =>
+const fakeDaemon = (
+  hold: boolean,
+  capabilities: ReadonlyArray<Capability> = ["harness.spinner-verbs"]
+) =>
   Effect.gen(function* () {
     const toPeer: Pipe = yield* Queue.unbounded<Uint8Array, TransportError | Cause.Done>();
     const toClient: Pipe = yield* Queue.unbounded<Uint8Array, TransportError | Cause.Done>();
@@ -113,10 +120,16 @@ const fakeDaemon = (hold: boolean) =>
     const answer = (peer: Wire, message: typeof Sent.Type) => {
       if (Predicate.isTagged(message, "Ping")) return peer.sendJson(encodeJson(Pong()));
 
+      if (message.tag === "hello" && message.id !== undefined)
+        return peer.sendJson(
+          encodeJson(ResponseExit({ requestId: message.id, exit: helloAnswer(capabilities) }))
+        );
       const exit = message.tag === undefined ? undefined : answers.get(message.tag);
 
-      if (message.id === undefined || exit === undefined || (hold && message.tag !== "hello"))
-        return Effect.void;
+      if (message.id !== undefined && message.tag !== undefined && exit === undefined)
+        return peer.sendJson(connectionDefect);
+
+      if (message.id === undefined || exit === undefined || hold) return Effect.void;
 
       return peer.sendJson(encodeJson(ResponseExit({ requestId: message.id, exit })));
     };
@@ -263,4 +276,62 @@ test("a HostConnection to an older Daemon reconnects after its defect, and a req
   expect(result.answered).toBeNull();
   expect(result.failures).toEqual([`connection-lost: ${dropped} (Error: listing /broken broke)`]);
   expect(logs.filter((line) => line.includes(dropped))).toHaveLength(1);
+});
+
+test("a HostConnection never sends an older Daemon an RPC its hello didn't announce, and stays connected", async () => {
+  const { result } = await withLogs(
+    Effect.gen(function* () {
+      const daemons: Array<FakeConnection> = [];
+
+      const host = yield* makeHostConnection({
+        key: "old",
+        name: "old",
+        target: HostTarget.Local({ socketPath: "/unused" }),
+        identity: {
+          name: "t",
+          version: "0",
+          deviceLabel: "t",
+          capabilities: ["harness.spinner-verbs", "data", "git.log"],
+        },
+        connector: Effect.suspend(() =>
+          Effect.map(fakeDaemon(false), ({ transport, connection }) => {
+            daemons.push(connection);
+
+            return transport;
+          })
+        ),
+        rpc: { pingIntervalMs: 20 },
+      });
+
+      const session = yield* host.awaitSession;
+
+      const call = yield* session.client["git.log"]({ cwd: "/repo", limit: 5 }).pipe(Effect.flip);
+
+      const stream = yield* session.client["data.sources.watch"]({
+        sessionId: SessionId.make("s"),
+      }).pipe(Stream.runDrain, Effect.flip);
+
+      const answered = yield* session.client["harness.spinnerVerbs"](verbs).pipe(
+        Effect.timeout(1000)
+      );
+
+      return {
+        refused: [call, stream].map((error) =>
+          error instanceof RpcClientError ? [isCapabilityRefusal(error), error.message] : error
+        ),
+        tags: daemons.flatMap((daemon) => daemon.received.flatMap((m) => m.tag ?? [])),
+        connections: daemons.length,
+        answered,
+      };
+    })
+  );
+
+  expect(result.refused).toEqual([
+    [true, "RpcClientDefect: the Daemon doesn't announce git.log"],
+    [true, "RpcClientDefect: the Daemon doesn't announce data"],
+  ]);
+  expect(result.tags).not.toContain("git.log");
+  expect(result.tags).not.toContain("data.sources.watch");
+  expect(result.answered).toBeNull();
+  expect(result.connections).toBe(1);
 });
