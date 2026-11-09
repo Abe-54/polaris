@@ -8,6 +8,8 @@ export { browserKey, useBrowserFeed } from "./feed.ts";
 
 export { agentOpened, type OutputPlace } from "./model.ts";
 
+export { type BrowserLinkTarget, browserLinkOf, openBrowserLink } from "./links.ts";
+
 export { BrowserForget } from "./forget.tsx";
 
 export { BrowserWorking } from "./working.tsx";

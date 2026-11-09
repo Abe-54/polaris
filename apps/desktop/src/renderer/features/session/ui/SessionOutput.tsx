@@ -419,7 +419,13 @@ const harnessOf = (session: ShownSession) =>
 const placeOf = (hostKey: string, session: ShownSession, windows: boolean) =>
   session === null
     ? null
-    : { hostKey, root: session.cwd, workspaceId: session.workspaceId, windows };
+    : {
+        hostKey,
+        root: session.cwd,
+        workspaceId: session.workspaceId,
+        sessionId: session.id,
+        windows,
+      };
 
 /** The Data tab for the Turn shown: visible when it touched data, shown when picked and nothing else is. */
 const useDataTab = (
