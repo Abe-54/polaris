@@ -1,5 +1,5 @@
 import { TurnItem, type TurnId } from "@polaris/protocol";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { polarisPreamble, sessionAttachments } from "../../constellation/skills/preamble.ts";
 import type { OpenOptions } from "../HarnessDriver.ts";
 
@@ -27,6 +27,42 @@ export const preambleProbe = Effect.fnUntraced(function* (options: OpenOptions, 
   return TurnItem.cases.ToolCall.make({
     id: `${turnId}-preamble`,
     name: match[1]!,
+    input,
+    output: { content: result.content, isError: result.isError ?? false },
+    status: result.isError === true ? "failed" : "completed",
+  });
+});
+
+const ToolInput = Schema.fromJsonString(Schema.JsonObject);
+
+const TOOL_PROBE = /^polaris tool (\S+) (\{.*\})$/s;
+
+/** `polaris tool <name> <json>`: calls one attached Polaris tool, for served-Daemon tests. */
+export const isToolProbe = (prompt: string) => TOOL_PROBE.test(prompt.trim());
+
+export const toolProbe = Effect.fnUntraced(function* (
+  options: OpenOptions,
+  turnId: TurnId,
+  prompt: string
+) {
+  const [, name = "", json = "{}"] = TOOL_PROBE.exec(prompt.trim()) ?? [];
+  const input = Schema.decodeUnknownSync(ToolInput)(json);
+
+  const tool = sessionAttachments(options)
+    .flatMap((attachment) => attachment.tools)
+    .find((candidate) => candidate.name === name);
+
+  if (tool === undefined)
+    return TurnItem.cases.AssistantMessage.make({
+      id: `${turnId}-tool`,
+      text: `No Polaris tool named ${name}.`,
+    });
+
+  const result = yield* Effect.promise(() => tool.call(input));
+
+  return TurnItem.cases.ToolCall.make({
+    id: `${turnId}-tool`,
+    name,
     input,
     output: { content: result.content, isError: result.isError ?? false },
     status: result.isError === true ? "failed" : "completed",

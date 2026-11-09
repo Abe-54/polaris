@@ -33,6 +33,7 @@ export { formatCurl, parseCurl, shellQuote } from "./curl.ts";
 
 export {
   REQUEST_FILE_LIMIT,
+  dotenvSources,
   dotenvValues,
   fileVariables,
   isRequestFile,

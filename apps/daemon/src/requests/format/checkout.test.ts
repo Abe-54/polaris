@@ -7,6 +7,7 @@ import { Result } from "effect";
 import { tempDir } from "../../platform/tempDir.testing.ts";
 import {
   MASK,
+  REQUEST_FILE_LIMIT,
   fileVariables,
   formatCurl,
   loadSnapshot,
@@ -80,7 +81,12 @@ test("each variable source resolves: env, private env, file @vars and $dotenv, s
     { name: "base", source: "env", masked: false, value: "http://localhost:4000", origin: "local" },
     { name: "tenant", source: "file", masked: false, value: "acme" },
     { name: "admin", source: "env", masked: false, value: "ops" },
-    { name: "$dotenv LEDGER_ADMIN_PASSWORD", source: "dotenv", masked: true },
+    {
+      name: "$dotenv LEDGER_ADMIN_PASSWORD",
+      source: "dotenv",
+      masked: true,
+      file: ".env.local",
+    },
   ]);
   expect(staging.variables).toContainEqual({ name: "admin", source: "env", masked: true });
   expect(staging.variables[0]).toMatchObject({ origin: "remote" });
@@ -110,4 +116,16 @@ test("a package's .env overrides the root's for $dotenv", async () => {
   expect(Result.isSuccess(resolved) && resolved.success.request.headers[0]?.value).toBe(
     "from-http-dir"
   );
+  expect(Result.isSuccess(resolved) && resolved.success.variables[0]?.file).toBe("http/.env");
+});
+
+test("a request file over the read limit is a parse error, not an empty file", async () => {
+  const big = `GET https://ledger.example/\n# ${"x".repeat(REQUEST_FILE_LIMIT)}\n`;
+  const { snapshot } = await loadSnapshot(await ledger({ "http/huge.http": big }));
+  const huge = snapshot.files.find((file) => file.path === "http/huge.http");
+
+  expect(huge?.requests).toEqual([]);
+  expect(huge?.parseErrors).toEqual([
+    { line: 1, message: "http/huge.http is too large to read (over 1 MiB)" },
+  ]);
 });

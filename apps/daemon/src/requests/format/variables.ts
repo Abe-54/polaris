@@ -14,6 +14,8 @@ export interface VariableSources {
   readonly public: Readonly<Record<string, string>>;
   readonly private: Readonly<Record<string, string>>;
   readonly dotenv: Readonly<Record<string, string>>;
+  /** The checkout-relative `.env` file each `dotenv` value came from. */
+  readonly dotenvFiles?: Readonly<Record<string, string>>;
   /** The locality of a URL-valued variable's origin; Local needs no Origin Approval. */
   readonly locality?: (url: URL) => typeof OriginLocality.Type | undefined;
   readonly now?: () => Date;
@@ -38,7 +40,9 @@ interface Found {
   readonly value: string;
 }
 
-type Lookup = { value: string; source: ResolvedVariable["source"]; secret: boolean } | undefined;
+type Lookup =
+  | { value: string; source: ResolvedVariable["source"]; secret: boolean; file?: string }
+  | undefined;
 
 const lookup = (sources: VariableSources, name: string): Lookup => {
   const dotenv = /^\$dotenv\s+(\S+)$/.exec(name)?.[1];
@@ -46,7 +50,13 @@ const lookup = (sources: VariableSources, name: string): Lookup => {
   if (dotenv !== undefined) {
     const value = sources.dotenv[dotenv];
 
-    return value === undefined ? undefined : { value, source: "dotenv", secret: true };
+    const file = sources.dotenvFiles?.[dotenv];
+
+    if (value === undefined) return undefined;
+
+    if (file === undefined) return { value, source: "dotenv", secret: true };
+
+    return { value, source: "dotenv", secret: true, file };
   }
 
   if (name in sources.file) return { value: sources.file[name]!, source: "file", secret: false };
@@ -159,6 +169,8 @@ class Resolver {
     if (!masked) Object.assign(record, { value: inner.value });
 
     if (locality) Object.assign(record, { origin: locality });
+
+    if (found.file !== undefined) Object.assign(record, { file: found.file });
 
     this.found.set(name, { record, value: inner.value });
 
