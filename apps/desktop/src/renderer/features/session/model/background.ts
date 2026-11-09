@@ -3,14 +3,15 @@
  * an Idle session with tasks still running is waiting on them, and a Turn the
  * Harness started itself says which reports woke it.
  */
-import type {
+import {
   BackgroundTask,
-  BackgroundTaskKind,
-  BackgroundTaskRef,
-  SessionState,
-  TurnTrigger,
+  type BackgroundTaskKind,
+  type BackgroundTaskRef,
+  type SessionState,
+  type TurnTrigger,
 } from "@polaris/protocol";
-import type { RosterRow, SubagentRoster } from "./subagents.ts";
+import type { TurnView } from "../../../store/sessionModel.ts";
+import { type RosterRow, type SubagentRoster, subagentRoster } from "./subagents.ts";
 
 type Counts = Readonly<Record<BackgroundTaskKind, number>>;
 
@@ -73,6 +74,30 @@ export const waitingFor = (
 
   return { subagents: roster.working, tasks: tasks.filter((t) => t.kind !== "subagent") };
 };
+
+/**
+ * What a sidebar row waits on: an open session (`turns`) counts its roster's running Subagents,
+ * so ended ones never linger; a closed one has only the Host's background tasks.
+ */
+export const rowWaiting = (
+  session: {
+    readonly state: SessionState;
+    readonly backgroundTasks: ReadonlyArray<BackgroundTask>;
+  },
+  turns: ReadonlyArray<TurnView> | undefined,
+  streamsSubagents: boolean
+): Waiting =>
+  turns === undefined
+    ? { subagents: [], tasks: waitingOn(session) }
+    : waitingFor(session, subagentRoster(turns), streamsSubagents);
+
+/** A `Waiting` as one task list: the running Subagents by their task, then the rest. */
+export const waitingTasks = (waiting: Waiting): ReadonlyArray<BackgroundTask> => [
+  ...waiting.subagents.map(
+    (s) => new BackgroundTask({ id: s.id, kind: "subagent", description: s.task })
+  ),
+  ...waiting.tasks,
+];
 
 /** "Waiting on 2 subagents and 1 command" for a `Waiting`. */
 export const waitingLine = (waiting: Waiting): string =>

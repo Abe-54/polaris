@@ -6,6 +6,8 @@ import { findSubagent, resultText, subagentCard, subagentRoster } from "./subage
 
 const I = TurnItem.cases;
 
+type ToolCallInput = Parameters<typeof I.ToolCall.make>[0]["input"];
+
 const subagent = (
   status: "working" | "completed",
   report: string | null = null,
@@ -89,6 +91,22 @@ describe("subagent cards", () => {
 
     expect(card.report).toBeNull();
     expect(card.activity).toBe("Running bun test");
+  });
+
+  test("a Claude Code tool it is using reads as its verb, never the raw tool name", () => {
+    const using = (name: string, input: ToolCallInput) =>
+      subagentCard(
+        view("working", [
+          I.ToolCall.make({ id: "x", name, input, output: null, status: "completed" }),
+        ]),
+        call
+      ).activity;
+
+    expect(using("SendMessage", { to: "Fix tests", summary: "rebase on main" })).toBe(
+      "Messaging Fix tests · rebase on main"
+    );
+    expect(using("TaskStop", { task_id: "b7" })).toBe("Stopping a task b7");
+    expect(using("Grep", { pattern: "waitingOn" })).toBe("Searching waitingOn");
   });
 
   test("the Harness's report wins; interim text and the handback stay in the transcript", () => {
