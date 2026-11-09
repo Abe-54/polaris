@@ -44,6 +44,10 @@ the extension's own Swift (needs swiftc).
 
 Presence doesn't hold slices: the activity is the phone's, and the relay sends it anyway.
 
+A clean shutdown sends a last idle slice (nothing working, nothing waiting) before the relay
+socket closes; a Host that goes without one (sleep, crash) leaves the activity when the relay
+has missed its socket for 2 minutes (ENG-585, `apps/relay/README.md`).
+
 ## Presence (ENG-495)
 
 While the user is at a Desktop App, its connection reports `presence.report { presence: "present" }`
