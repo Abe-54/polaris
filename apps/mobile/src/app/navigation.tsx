@@ -7,6 +7,8 @@ import { Platform, Settings } from "react-native";
 
 import {
   type HomeTab,
+  hostsClosed,
+  hostsOpened,
   initialNavigation,
   type Layer,
   layersOf,
@@ -16,18 +18,24 @@ import {
   replaced,
   selected,
   topOf,
+  type SettingsRoute,
   wentBack,
 } from "./navigationState.ts";
 import type { Route } from "./route.ts";
 
-export type { HomeTab, Layer, Route };
+export type { HomeTab, Layer, Route, SettingsRoute };
 
 export interface Navigation {
   readonly top: Route;
   /** The top screen and the one beneath it, which a swipe back uncovers. */
   readonly layers: ReadonlyArray<Layer>;
   readonly tab: HomeTab;
+  /** What the Settings tab shows: Settings, or Hosts under it. */
+  readonly settings: SettingsRoute;
   readonly selectTab: (tab: HomeTab) => void;
+  /** Hosts on the Settings tab, from anywhere; `closeHosts` returns to Settings. */
+  readonly openHosts: () => void;
+  readonly closeHosts: () => void;
   readonly push: (route: Route) => void;
   /** Swaps the top screen for `route`. */
   readonly replace: (route: Route) => void;
@@ -44,7 +52,7 @@ const NavigationContext = createContext<Navigation | null>(null);
 const launchedNavigation = (): NavigationState => {
   const value: unknown = __DEV__ && Platform.OS === "ios" ? Settings.get("polarisDevRoute") : null;
 
-  if (value === "hosts") return pushed(initialNavigation, { screen: "hosts" });
+  if (value === "hosts") return hostsOpened(initialNavigation);
 
   if (value === "review" || value === "settings") return selected(initialNavigation, value);
 
@@ -61,7 +69,10 @@ export const NavigationProvider = ({ children }: { readonly children: ReactNode 
       top: topOf(state),
       layers: layersOf(state),
       tab: state.tab,
+      settings: state.settings,
       selectTab: (tab) => setState((current) => selected(current, tab)),
+      openHosts: () => setState(hostsOpened),
+      closeHosts: () => setState(hostsClosed),
       push: (route) => setState((current) => pushed(current, route)),
       replace: (route) => setState((current) => replaced(current, route)),
       back: () => setState(wentBack),
