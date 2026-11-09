@@ -5,7 +5,7 @@ import { source as d3Source } from "../vendor/d3.ts";
 import { bootstrapScript } from "./bootstrap/index.ts";
 import { KIT_CSS } from "./kit-css.ts";
 
-/** The only policy a frame runs under; it is the first thing in `<head>` (ADR 0089). */
+/** The only policy a frame runs under; it is the first thing in `<head>` (ADR 0101). */
 export const FRAME_CSP = [
   "default-src 'none'",
   "script-src 'unsafe-inline'",

@@ -1,5 +1,5 @@
 /**
- * What a Visualization frame may ask of the app (ADR 0089): its height, a link to open after
+ * What a Visualization frame may ask of the app (ADR 0101): its height, a link to open after
  * the user confirms, and its `pv.state`. Anything else, or anything from another window, is dropped.
  */
 import {

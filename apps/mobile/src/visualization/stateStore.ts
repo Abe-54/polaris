@@ -1,5 +1,5 @@
 /**
- * Each Visualization's `pv.state`, on this phone only (ADR 0089), as JSON in the document
+ * Each Visualization's `pv.state`, on this phone only (ADR 0101), as JSON in the document
  * directory, keyed by Visualization id; read synchronously so a frame's document carries it.
  */
 import type { FrameMessage } from "@polaris/visualization";

@@ -1,5 +1,5 @@
 /**
- * Visualization frames (ADR 0089): each frame document is served once at
+ * Visualization frames (ADR 0101): each frame document is served once at
  * `app://polaris/frame/<token>` under its own CSP, since a `srcdoc` frame would inherit the
  * app's CSP and its inline scripts would be blocked. The iframe's sandbox gives it an opaque origin.
  */

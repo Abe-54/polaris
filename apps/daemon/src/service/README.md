@@ -7,7 +7,7 @@ Everything that gets a `polaris` binary onto a Host, keeps it running as a user 
 | `platform.ts` | `VERSION`: the version `scripts/build-daemon.ts` compiled in (`process.env.POLARIS_BUILD_VERSION`, replaced by a constant), else `apps/daemon/package.json`'s when run from source; a dev build is `<version>-dev.<commit count>.<sha>` (with `.dirty<seconds>` from an uncommitted tree), a `--release` build the package version as it is; the three shipped platforms, `polaris version` output and its parser. |
 | `templates.ts` | Pure launchd plist and systemd `--user` unit renderers. |
 | `install.ts` | `install` / `uninstall` / `stageBinary` / `pointCurrentAt`. |
-| `bundle.ts` | macOS: the Daemon's app bundle (`PolarisDaemon.app`, `dev.lux.polaris.daemon`), its `Info.plist`, where each of its files lives, and finding them beside an upload or inside a bundle (ADR 0094). |
+| `bundle.ts` | macOS: the Daemon's app bundle (`PolarisDaemon.app`, `dev.lux.polaris.daemon`), its `Info.plist`, where each of its files lives, and finding them beside an upload or inside a bundle (ADR 0102). |
 | `current.ts` | `bin/current`: a relative symlink, or on Windows a directory junction; `readCurrent`, `pointCurrent`. |
 | `windowsTask.ts` | Windows: the scheduled task's name, its supervisor loop and its XML, and reading one back: `describeTask` (whose it is, what it runs, its home) and `claimTask` (pure). |
 | `windowsProfile.ts` | Windows: the real profile directory from the process token, which the task name follows. |
@@ -33,7 +33,7 @@ apps/daemon/dist/<platform>/betterleaks   the Rules' secrets scanner, pinned and
 apps/daemon/dist/darwin-arm64/PolarisDaemon.app/Contents/{MacOS/polaris,MacOS/betterleaks,Info.plist,Resources/Polaris.icns,_CodeSignature/CodeResources}
 ```
 
-**macOS builds are an app bundle** (ADR 0094), so System Settings shows "Polaris" and its icon for the Daemon's permission prompts and Login Items rather than a bare executable. `PolarisDaemon.app` is `dev.lux.polaris.daemon`, `LSUIElement` and `LSBackgroundOnly`, with Betterleaks in `Contents/MacOS`; the build signs the whole bundle ad hoc (`--deep --strict` must verify) and the release signer re-signs it with Developer ID. There is no flat `darwin-arm64/polaris`: the manifest gives each file's `path` inside the platform directory, and archives and uploads carry the five files flat, byte for byte, so the signature survives. Linux and Windows builds are unchanged.
+**macOS builds are an app bundle** (ADR 0102), so System Settings shows "Polaris" and its icon for the Daemon's permission prompts and Login Items rather than a bare executable. `PolarisDaemon.app` is `dev.lux.polaris.daemon`, `LSUIElement` and `LSBackgroundOnly`, with Betterleaks in `Contents/MacOS`; the build signs the whole bundle ad hoc (`--deep --strict` must verify) and the release signer re-signs it with Developer ID. There is no flat `darwin-arm64/polaris`: the manifest gives each file's `path` inside the platform directory, and archives and uploads carry the five files flat, byte for byte, so the signature survives. Linux and Windows builds are unchanged.
 
 for `darwin-arm64`, `linux-x64` and `linux-arm64` (glibc), `linux-x64-musl` and `linux-arm64-musl` (musl, for Alpine), and `windows-x64` (the binary is `polaris.exe`). The build runs `polaris selftest` on the host platform's binary. CI runs it on each glibc Linux binary on native runners (not yet on the musl ones), and on the Windows binary (`smoke-windows`).
 

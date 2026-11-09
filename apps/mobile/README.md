@@ -178,7 +178,7 @@ module `modules/polaris-live-activity` and `src/live/`.
 
 ## Visualizations
 
-`src/visualization/` draws the `visualize` Tool Call (ENG-599, ADR 0089, DESIGN.md Visualizations) as
+`src/visualization/` draws the `visualize` Tool Call (ENG-599, ADR 0101, DESIGN.md Visualizations) as
 a card in the thread, never folded into a run: `model.ts` reads the Daemon's `viz_…` id from the
 call's output and finds the earlier ones a later call `replaces` (they collapse to "Revised below");
 `VisualizationFrame` renders `@polaris/visualization`'s `buildFrameDocument` in a

@@ -1,5 +1,5 @@
 /**
- * One Visualization's frame (ADR 0089): a WebView limited to its own HTML string, no file access,
+ * One Visualization's frame (ADR 0101): a WebView limited to its own HTML string, no file access,
  * every navigation refused, and only schema-checked messages taken from it, size- and rate-limited.
  */
 import { buildFrameDocument, HostMessage } from "@polaris/visualization";

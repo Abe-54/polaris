@@ -1,5 +1,5 @@
 /**
- * Each Visualization's `pv.state` (a slider, a tab), on this device only (ADR 0089): kept in
+ * Each Visualization's `pv.state` (a slider, a tab), on this device only (ADR 0101): kept in
  * local storage by Visualization id, size-capped, oldest dropped first. It never goes to the agent.
  */
 import { Option, Schema } from "effect";

@@ -1,5 +1,5 @@
 /**
- * The Visuals setting (ENG-597, ADR 0089): how readily agents reach for the `visualize` tool on
+ * The Visuals setting (ENG-597, ADR 0101): how readily agents reach for the `visualize` tool on
  * the Polaris MCP. `off` removes the tool and its guidance. One setting for every Host: the
  * Desktop App keeps it and writes it to each with `sessions.setVisuals`.
  */

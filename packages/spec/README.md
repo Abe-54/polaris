@@ -835,7 +835,7 @@ and preserves both Clients' unsaved documents. The repository is configuration,
 outside EventStore. `sql/dialect.test.ts` exercises actual persistence, racing
 revisions and Review isolation. `sql/live.testing.ts` verifies the authenticated
 RPC and real provider replacement with document versions retained. SQL generic
-formatting-only behavior is the owner decision recorded in ADR-0023.
+formatting-only behavior is the owner decision recorded in ADR-0103.
 
 
 ### Managed web providers (slice 7a)

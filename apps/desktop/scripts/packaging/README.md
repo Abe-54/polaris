@@ -59,7 +59,7 @@ A release app bundles only the Daemon its machine runs ([ADR 0043](../../../../d
 With `--release`, after the darwin-arm64 build is signed, `archives.ts` writes
 `apps/daemon/dist/release/polaris-daemon-<version>-<platform>.tar.gz` for all five
 platforms (a deterministic gzipped ustar of `polaris` and `betterleaks`, with their
-modes; on macOS the Daemon's app bundle files too, flat, read from their manifest `path`, ADR 0094) and `polaris-daemon-<version>-SHA256SUMS`, and records in `manifest.json`
+modes; on macOS the Daemon's app bundle files too, flat, read from their manifest `path`, ADR 0102) and `polaris-daemon-<version>-SHA256SUMS`, and records in `manifest.json`
 each archive's name, SHA-256 and size plus the download URL template
 (`https://polaris.lux.dev/api/daemon/{version}/{platform}`). Each target then gets
 its own staged `Resources/daemon` (`stageDaemon`): the Mac only `darwin-arm64/`,

@@ -1,5 +1,5 @@
 /**
- * One Visualization frame (ADR 0089): `sandbox="allow-scripts"` with no same-origin, its document
+ * One Visualization frame (ADR 0101): `sandbox="allow-scripts"` with no same-origin, its document
  * served by the main process under its own CSP (`main/frames.ts`). A second page tears it down.
  */
 import {

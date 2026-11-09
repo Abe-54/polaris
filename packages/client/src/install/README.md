@@ -42,7 +42,7 @@ const result = yield* ensureDaemon(alias, builds, { trigger: "user", approvedSha
 
    Then check each file's SHA-256 on the Host (`sha256sum`, or `shasum -a 256` on macOS) against the bundled manifest, and run:
    - Install: `<upload>/polaris install --json`
-   - Upgrade: `<upload>/polaris upgrade <upload>/polaris --json` (execve hand-off, same PID; Harnesses keep running). The uploaded binary stages itself, so a new build can change the install layout, as the macOS app bundle did (ADR 0094).
+   - Upgrade: `<upload>/polaris upgrade <upload>/polaris --json` (execve hand-off, same PID; Harnesses keep running). The uploaded binary stages itself, so a new build can change the install layout, as the macOS app bundle did (ADR 0102).
 
    `applyPlan` accepts `ApplyOptions`: `progress` reports `downloading` (`via: "host"` with no byte count, or `via: "client"` with real bytes), uploading byte counts across all files, then switching after all hashes match. Progress is throttled to 10 updates/s and has no idle timer. The upload directory is removed after a failed upload as well as after a completed install/upgrade. The JSON line the Daemon prints is returned in `applied.report`. Show its `notes` to the user; in particular `supervisor: "fallback"` means the Linux Host has no systemd user bus and the Daemon runs under Polaris' own supervisor, which only returns after a reboot if `autostart` includes `cron`.
 

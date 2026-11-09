@@ -1,5 +1,5 @@
 /**
- * Visualizations (ENG-594, ADR 0089): the `visualize` tool's input, the validation the
+ * Visualizations (ENG-594, ADR 0101): the `visualize` tool's input, the validation the
  * Daemon runs when the agent submits, the frame document, and the frame↔app messages.
  */
 import { Schema } from "effect";
