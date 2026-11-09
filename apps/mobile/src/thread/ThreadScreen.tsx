@@ -516,26 +516,13 @@ export const ThreadScreen = ({
               />
             )}
             ListHeaderComponent={
-              <>
-                {atLatest}
-                {critical === null ? null : (
-                  <FindingRow
-                    finding={critical}
-                    onPress={
-                      onFocus === undefined || last === null
-                        ? undefined
-                        : () =>
-                            onFocus({
-                              key: `finding:${critical.id}`,
-                              turnId: last.id,
-                              kind: "finding",
-                              label: critical.title,
-                              paths: [critical.path],
-                            })
-                    }
-                  />
-                )}
-              </>
+              <Latest
+                empty={session.turnCount === 0 && rows.length === 0}
+                atLatest={atLatest}
+                critical={critical}
+                lastTurnId={last?.id ?? null}
+                onFocus={onFocus}
+              />
             }
             // Inverted: the end is the top, the oldest Turn; older ones page in from there.
             onEndReached={() => controller?.loadOlder()}
@@ -610,6 +597,51 @@ export const ThreadScreen = ({
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+};
+
+/** The newest end of the transcript: "No turns yet", a constellation's card, the open finding. */
+const Latest = ({
+  empty,
+  atLatest,
+  critical,
+  lastTurnId,
+  onFocus,
+}: {
+  readonly empty: boolean;
+  readonly atLatest: ReactNode;
+  readonly critical: RiskFinding | null;
+  readonly lastTurnId: string | null;
+  readonly onFocus: ((focus: ThreadFocus) => void) | undefined;
+}) => {
+  const styles = useStyles();
+
+  return (
+    <>
+      {empty ? (
+        <Text style={styles.noTurns} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
+          No turns yet
+        </Text>
+      ) : null}
+      {atLatest}
+      {critical === null ? null : (
+        <FindingRow
+          finding={critical}
+          onPress={
+            onFocus === undefined || lastTurnId === null
+              ? undefined
+              : () =>
+                  onFocus({
+                    key: `finding:${critical.id}`,
+                    turnId: lastTurnId,
+                    kind: "finding",
+                    label: critical.title,
+                    paths: [critical.path],
+                  })
+          }
+        />
+      )}
+    </>
   );
 };
 
@@ -707,6 +739,7 @@ const makeStyles = (colours: MobileColours) =>
     findingWhere: { ...mobileType.index, color: colours.textFaint },
     // MX-E: the composer's foot sits on the home-indicator inset, with nothing added.
     bottom: { gap: 10, paddingHorizontal: 10, paddingTop: 4 },
+    noTurns: { ...mobileType.callout, color: colours.textSubtle, textAlign: "center", padding: 12 },
     older: { ...mobileType.footnote, color: colours.textFaint, textAlign: "center", padding: 12 },
     missing: { ...mobileType.callout, color: colours.textSubtle, padding: 16 },
   }) as const;

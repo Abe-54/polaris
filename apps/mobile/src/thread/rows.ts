@@ -420,6 +420,9 @@ const factsOf = (entry: TurnEntry, rows: ReadonlyArray<ThreadRow>): TurnFacts =>
 /** A finished Turn: its replies carry its facts, and the last one its receipt. */
 const withReceipt = (entry: TurnEntry, rows: Array<ThreadRow>): ReadonlyArray<ThreadRow> => {
   if (entry.turn.status === "working") return rows;
+
+  // A completed Turn that showed nothing has nothing to report or offer: no lone "0s" (ENG-551).
+  if (rows.length === 0 && ENDINGS[entry.turn.status] === null) return rows;
   const turn = factsOf(entry, rows);
   // The receipt ends the Turn: under its last reply only when nothing follows that reply.
   const summary = rows.at(-1)?.kind === "reply" ? rows.length - 1 : -1;
