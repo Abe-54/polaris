@@ -48,7 +48,7 @@ import { benchDraftReply, isAcceptDraftPrompt } from "./accept.ts";
 import { benchReviewReply, isReviewerPrompt } from "./review.ts";
 import { benchBreakdown } from "./context.ts";
 import { runSubagent } from "./subagent.ts";
-import { isPreambleProbe, preambleProbe } from "./preamble.ts";
+import { isPreambleProbe, isToolProbe, preambleProbe, toolProbe } from "./preamble.ts";
 import { steerItem } from "../userMessage.ts";
 
 const BenchTurnScriptSchema = Schema.Struct({
@@ -332,7 +332,8 @@ const openBenchSession = Effect.fn("BenchDriver.open")(function* (options: OpenO
     Effect.gen(function* () {
       const reviewer = isReviewerPrompt(input.prompt);
       const drafting = isAcceptDraftPrompt(input.prompt);
-      const probing = isPreambleProbe(input.prompt);
+      const calling = isToolProbe(input.prompt);
+      const probing = isPreambleProbe(input.prompt) || calling;
 
       const script = probing
         ? { ...DEFAULT_SCRIPT, items: 0 }
@@ -356,7 +357,12 @@ const openBenchSession = Effect.fn("BenchDriver.open")(function* (options: OpenO
 
       if (probing)
         yield* emit(
-          HarnessEvent.ItemCompleted({ turnId, item: yield* preambleProbe(options, turnId) })
+          HarnessEvent.ItemCompleted({
+            turnId,
+            item: calling
+              ? yield* toolProbe(options, turnId, input.prompt)
+              : yield* preambleProbe(options, turnId),
+          })
         );
       const files = touchFiles(options.cwd, turnId, script.touchFiles);
 

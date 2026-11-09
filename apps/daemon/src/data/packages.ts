@@ -147,6 +147,10 @@ const walkedFiles = async (checkout: string, signal?: AbortSignal) => {
   return files;
 };
 
+/** The checkout's files that aren't gitignored, or a bounded walk's outside git; relative, `/`-separated. */
+export const checkoutFiles = async (checkout: string, signal?: AbortSignal) =>
+  (await gitFiles(checkout, signal)) ?? (await walkedFiles(checkout, signal));
+
 /** The nested package directories of `checkout`, relative with `/` separators. */
 export const findPackages = async (checkout: string, signal?: AbortSignal) =>
-  packageDirs((await gitFiles(checkout, signal)) ?? (await walkedFiles(checkout, signal)));
+  packageDirs(await checkoutFiles(checkout, signal));

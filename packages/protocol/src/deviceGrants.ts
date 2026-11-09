@@ -289,6 +289,15 @@ export const DEVICE_RPCS = {
   "developerMode.lease": "local",
   "developerMode.watch": "device",
   "traces.ingestSelf": "device",
+  "requests.watch": "local",
+  "requests.save": "local",
+  "requests.send": "local",
+  "requests.variables": "local",
+  "requests.sendLog.page": "local",
+  "requests.sendLog.watch": "local",
+  "requests.send.get": "local",
+  "requests.curl.parse": "local",
+  "requests.curl.format": "local",
 } as const satisfies Record<DaemonRpcTag, DeviceAccess>;
 
 export const DEVICE_COMMANDS = {

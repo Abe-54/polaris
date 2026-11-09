@@ -46,6 +46,7 @@ import { RelayRoute } from "../linkedDevices/route.ts";
 import { HostPresence } from "../presence/index.ts";
 import { browserDefaults } from "../browser/index.ts";
 import { DEVELOPER_MODE_DEFAULT_TAGS, developerModeDefaults } from "./developerModeDefaults.ts";
+import { REQUESTS_DEFAULT_TAGS, requestsDefaults } from "./requestsDefaults.ts";
 
 const notADevice = () =>
   new PushRegistrationError({
@@ -77,11 +78,11 @@ type DefaultOptions = {
 };
 
 export const defaultHandlers = (options: DefaultOptions) =>
-  Layer.merge(serverDefaults(options), developerModeDefaults);
+  Layer.mergeAll(serverDefaults(options), developerModeDefaults, requestsDefaults);
 
 /** Leaves the newer groups to their own layer, keeping this object under TS's instantiation depth. */
 const serverDefaults = (options: DefaultOptions) =>
-  ServerRpcs.omit(...DEVELOPER_MODE_DEFAULT_TAGS).toLayer({
+  ServerRpcs.omit(...DEVELOPER_MODE_DEFAULT_TAGS, ...REQUESTS_DEFAULT_TAGS).toLayer({
     ...languageDefaults,
     ...browserDefaults,
     "prediction.capability": () =>

@@ -18,6 +18,9 @@ import { TraceRuntime } from "../traces/runtimeService.ts";
 import { TraceSessions } from "../traces/sessionsService.ts";
 import { sessionTraceTools } from "./sessions/traces.ts";
 import { sessionDataTools } from "./sessions/data.ts";
+import { sessionRequestTools } from "./sessions/requests.ts";
+import { RequestSends } from "../requests/sendsService.ts";
+import { OriginApprovals, registerOriginGate } from "../requests/approvals/index.ts";
 import { McpTokens } from "./tokens.ts";
 import { loopbackRequest } from "../transport/loopbackHttp.ts";
 import { DeveloperModeState } from "../developerMode/service.ts";
@@ -132,6 +135,22 @@ const traceToolsFromContext = (sources: Parameters<typeof sessionTraceTools>[3])
     );
   });
 
+/** `send_request`, when Requests runs here; the gate registers once per Host, as agents send only here. */
+const requestToolsFromContext = (store: EventStore["Service"]) =>
+  Effect.gen(function* () {
+    const sends = yield* Effect.serviceOption(RequestSends);
+    const approvals = yield* Effect.serviceOption(OriginApprovals);
+
+    if (Option.isNone(sends) || Option.isNone(approvals)) return undefined;
+
+    yield* registerOriginGate.pipe(
+      Effect.provideService(RequestSends, sends.value),
+      Effect.provideService(OriginApprovals, approvals.value)
+    );
+
+    return sessionRequestTools(store, sends.value, approvals.value);
+  });
+
 /** One listener per Host; JSON responses only, with no SSE connection or per-session process. */
 export const mcpHttp = (
   commands: ConstellationCommands,
@@ -170,6 +189,10 @@ export const mcpHttp = (
         Object.assign(sessions, {
           profiles: sessionProfileTools(profiles.value, traceSessions.value, traceStore.value),
         });
+
+      const requests = yield* requestToolsFromContext(store.value);
+
+      if (requests !== undefined) Object.assign(sessions, { requests });
 
       attachSessionTools(
         commands,
