@@ -23,6 +23,7 @@ import {
   TurnItem,
   TurnId,
   TurnTrigger,
+  type WorkspaceId,
 } from "@polaris/protocol";
 import {
   Cause,
@@ -86,6 +87,8 @@ export const reached = {
   feedDrops: 0,
   feedDefects: 0,
   disconnects: 0,
+  removed: 0,
+  feedsEnded: 0,
 };
 
 export type HarnessWhat =
@@ -127,6 +130,8 @@ export interface FeedState {
   corrupt: boolean;
   /** Its subscriber ended with that defect: the feed failed visibly. */
   failed: boolean;
+  /** It reopened after its session was removed, and the Daemon answered NotFound. */
+  ended: boolean;
   /** Snapshot contents: session → [state, pending request ids]. */
   readonly snapshots: Array<{
     readonly seq: number;
@@ -218,6 +223,12 @@ export interface Sent {
   answer: string | null;
 }
 
+const isNotFound = (cause: Cause.Cause<unknown>) => {
+  const error = Cause.findErrorOption(cause);
+
+  return Option.isSome(error) && Predicate.isTagged(error.value, "NotFound");
+};
+
 /** What a device heard back for a command, as `Sent.answer` records it (null: nothing). */
 const answerOf = (
   exit: Exit.Exit<{ readonly sequence: Sequence | null }, CommandRejected | NotFound | NotGranted>
@@ -229,6 +240,17 @@ const answerOf = (
     reached.rejected++;
 
     return `rejected:${error.value.reason}`;
+  }
+
+  // A removed Workspace's sessions are gone from the model: the reference decider rejects them.
+  if (
+    Option.isSome(error) &&
+    Predicate.isTagged(error.value, "NotFound") &&
+    ["session", "workspace"].includes(error.value.what)
+  ) {
+    reached.rejected++;
+
+    return `rejected:no ${error.value.what} ${error.value.id}`;
   }
 
   return Cause.hasInterruptsOnly(exit.cause) ? null : `failed:${Cause.pretty(exit.cause)}`;
@@ -260,6 +282,8 @@ export class World {
   /** Turns a fake Harness already reported ended. */
   readonly endedTurns = new Set<string>();
   itemCounter = 0;
+  /** The one Workspace every session is in, once setup registered it. */
+  workspaceId: WorkspaceId | null = null;
 
   constructor(
     readonly capacity: number,
@@ -374,7 +398,7 @@ export class World {
     const wire = <A, E>(conn: Conn, upstream: Stream.Stream<A, E>) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          if (fs.failed) fs.errors.push("the feed resubscribed after it failed");
+          if (fs.failed || fs.ended) fs.errors.push("the feed resubscribed after it ended");
           const queue = yield* Queue.bounded<A, E | Cause.Done>(1);
 
           const server = Effect.runFork(
@@ -449,6 +473,7 @@ export class World {
           errors: [],
           corrupt: false,
           failed: false,
+          ended: false,
           snapshots: [],
           feed: null,
           consumer: null,
@@ -464,6 +489,9 @@ export class World {
                 if (fs.corrupt && Cause.hasDies(cause)) {
                   fs.failed = true;
                   reached.feedDefects++;
+                } else if (isNotFound(cause)) {
+                  fs.ended = true;
+                  reached.feedsEnded++;
                 } else fs.errors.push(Cause.pretty(cause));
               })
             )
