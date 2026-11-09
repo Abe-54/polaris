@@ -23,7 +23,14 @@ import { Duration, Effect, Match, Predicate, type Scope, Stream } from "effect";
 import type { ConnectError, OpenTransport } from "./connection.ts";
 import { UnknownHost } from "./errors.ts";
 import { applyHostItem, emptyHostState, hostView, type HostView } from "./hostView.ts";
-import { type HostEntry, type HostLink, openLink, type Reconnect, resilientFeed } from "./link.ts";
+import {
+  delayFor,
+  type HostEntry,
+  type HostLink,
+  openLink,
+  type Reconnect,
+  resilientFeed,
+} from "./link.ts";
 import { decodePairing, type InvalidPairing, type ParsedPairing } from "./pairing.ts";
 import { applySessionItem, sessionView, type SessionView } from "./sessionView.ts";
 import { SDK_VERSION } from "./version.ts";
@@ -79,7 +86,8 @@ export interface Polaris {
   readonly subscribeHost: (hostId: string) => Stream.Stream<HostView, DispatchError>;
   /**
    * Every Host at once: the latest view of each, re-emitted when any changes.
-   * A Host that can't be reached shows as disconnected with `error` set.
+   * A Host that can't be reached shows as disconnected with `error` set; one that was never
+   * reached is retried with backoff, unlike `subscribeHost`, which fails at once.
    */
   readonly subscribeHosts: () => Stream.Stream<ReadonlyArray<HostView>>;
   /** One session's Turns, items, approvals and streaming text. */
@@ -231,6 +239,29 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
       )
     );
 
+  /** `subscribeHost` for `subscribeHosts`: a Host not reached yet shows disconnected and is retried. */
+  const watchHost = (entry: HostEntry): Stream.Stream<HostView> => {
+    let attempt = 0;
+
+    const loop = (): Stream.Stream<HostView> =>
+      subscribeHost(entry.hostId).pipe(
+        Stream.catchTag("HostUnreachable", (error) => {
+          const view = Stream.make(disconnected(entry, error));
+
+          if (!reconnect.enabled) return view;
+          const wait = delayFor(attempt++, reconnect);
+
+          return Stream.concat(
+            view,
+            Stream.unwrap(Effect.as(Effect.sleep(wait), Stream.suspend(loop)))
+          );
+        }),
+        Stream.catch((error) => Stream.make(disconnected(entry, error)))
+      );
+
+    return Stream.suspend(loop);
+  };
+
   return {
     hosts,
     connect: (hostId) =>
@@ -239,10 +270,7 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
     subscribeHosts: () =>
       Stream.mergeAll(
         hosts.map((entry, index) =>
-          subscribeHost(entry.hostId).pipe(
-            Stream.catch((error) => Stream.make(disconnected(entry, error))),
-            Stream.map((view) => [index, view] as const)
-          )
+          watchHost(entry).pipe(Stream.map((view) => [index, view] as const))
         ),
         { concurrency: "unbounded" }
       ).pipe(
