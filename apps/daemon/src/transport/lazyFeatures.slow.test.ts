@@ -283,90 +283,95 @@ test("a restart that left a Risk Summary running fails it on start, before any R
   }
 }, 60_000);
 
-test("a served Daemon's agent sends through send_request into the Send Log the Desktop reads", async () => {
-  const repo = await makeRepo();
-  dirs.push(repo);
-  const home = tempDir("polaris-lazy-home-");
-  const { daemon, socket } = await startDaemon(home);
-  const app = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("pong") });
-  const sessionId = SessionId.make("lazy-requests-session");
-  const url = `http://127.0.0.1:${app.port}/ping`;
-  let commands = 0;
+// Windows can't verify a loopback port's owner, so this Send would wait on an Origin Approval.
+test.skipIf(process.platform === "win32")(
+  "a served Daemon's agent sends through send_request into the Send Log the Desktop reads",
+  async () => {
+    const repo = await makeRepo();
+    dirs.push(repo);
+    const home = tempDir("polaris-lazy-home-");
+    const { daemon, socket } = await startDaemon(home);
+    const app = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("pong") });
+    const sessionId = SessionId.make("lazy-requests-session");
+    const url = `http://127.0.0.1:${app.port}/ping`;
+    let commands = 0;
 
-  try {
-    // Nothing loads Requests until an agent or the Desktop uses them.
-    expect(existsSync(join(home, "requests.sqlite"))).toBe(false);
+    try {
+      // Nothing loads Requests until an agent or the Desktop uses them.
+      expect(existsSync(join(home, "requests.sqlite"))).toBe(false);
 
-    const result = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { client } = yield* connectRpc(yield* socketTransport(socket));
+      const result = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { client } = yield* connectRpc(yield* socketTransport(socket));
 
-          yield* client.hello({
-            clientName: "lazy-test",
-            clientVersion: "0",
-            deviceLabel: "test",
-            capabilities: [],
-          });
+            yield* client.hello({
+              clientName: "lazy-test",
+              clientVersion: "0",
+              deviceLabel: "test",
+              capabilities: [],
+            });
 
-          const dispatch = (command: Command) =>
-            client.dispatch({ commandId: CommandId.make(`lazy-rq-${++commands}`), command });
+            const dispatch = (command: Command) =>
+              client.dispatch({ commandId: CommandId.make(`lazy-rq-${++commands}`), command });
 
-          yield* dispatch(Command.cases.RegisterWorkspace.make({ path: repo, name: "lazy" }));
+            yield* dispatch(Command.cases.RegisterWorkspace.make({ path: repo, name: "lazy" }));
 
-          const snapshot = yield* client
-            .subscribeHost({ afterSequence: null })
-            .pipe(Stream.filter(HostStreamItem.guards.Snapshot), Stream.runHead);
+            const snapshot = yield* client
+              .subscribeHost({ afterSequence: null })
+              .pipe(Stream.filter(HostStreamItem.guards.Snapshot), Stream.runHead);
 
-          const workspace = Option.getOrThrow(snapshot).workspaces.find((w) => w.name === "lazy");
+            const workspace = Option.getOrThrow(snapshot).workspaces.find((w) => w.name === "lazy");
 
-          yield* dispatch(
-            Command.cases.StartSession.make({
-              sessionId,
-              workspaceId: workspace!.id,
-              harness: "claude",
-              placement: SessionPlacement.cases.InPlace.make({}),
-              permissionMode: "supervised",
-              model: null,
-              effort: null,
-              prompt: `polaris tool send_request ${JSON.stringify({ method: "GET", url })}`,
-              attachments: [],
-            })
-          );
-
-          const call = yield* client
-            .subscribeSession({ sessionId, afterSequence: null, turnLimit: null })
-            .pipe(
-              Stream.flatMap((item) =>
-                SessionStreamItem.guards.Event(item) &&
-                DomainEvent.guards.TurnItemCompleted(item.envelope.event) &&
-                TurnItem.guards.ToolCall(item.envelope.event.item)
-                  ? Stream.make(item.envelope.event.item)
-                  : Stream.empty
-              ),
-              Stream.runHead,
-              Effect.map(Option.getOrThrow),
-              Effect.timeout("20 seconds")
+            yield* dispatch(
+              Command.cases.StartSession.make({
+                sessionId,
+                workspaceId: workspace!.id,
+                harness: "claude",
+                placement: SessionPlacement.cases.InPlace.make({}),
+                permissionMode: "supervised",
+                model: null,
+                effort: null,
+                prompt: `polaris tool send_request ${JSON.stringify({ method: "GET", url })}`,
+                attachments: [],
+              })
             );
 
-          const page = yield* client["requests.sendLog.page"]({ sessionId });
+            const call = yield* client
+              .subscribeSession({ sessionId, afterSequence: null, turnLimit: null })
+              .pipe(
+                Stream.flatMap((item) =>
+                  SessionStreamItem.guards.Event(item) &&
+                  DomainEvent.guards.TurnItemCompleted(item.envelope.event) &&
+                  TurnItem.guards.ToolCall(item.envelope.event.item)
+                    ? Stream.make(item.envelope.event.item)
+                    : Stream.empty
+                ),
+                Stream.runHead,
+                Effect.map(Option.getOrThrow),
+                Effect.timeout("20 seconds")
+              );
 
-          return { call, page };
-        })
-      )
-    );
+            const page = yield* client["requests.sendLog.page"]({ sessionId });
 
-    expect(result.call).toMatchObject({ name: "send_request", status: "completed" });
-    expect(result.page.sends).toHaveLength(1);
-    expect(result.page.sends[0]).toMatchObject({
-      url,
-      status: 200,
-      responseBody: "pong",
-      by: { kind: "agent", sessionId },
-    });
-  } finally {
-    await app.stop(true);
-    daemon.kill();
-    await daemon.exited;
-  }
-}, 60_000);
+            return { call, page };
+          })
+        )
+      );
+
+      expect(result.call).toMatchObject({ name: "send_request", status: "completed" });
+      expect(result.page.sends).toHaveLength(1);
+      expect(result.page.sends[0]).toMatchObject({
+        url,
+        status: 200,
+        responseBody: "pong",
+        by: { kind: "agent", sessionId },
+      });
+    } finally {
+      await app.stop(true);
+      daemon.kill();
+      await daemon.exited;
+    }
+  },
+  60_000
+);

@@ -1,7 +1,7 @@
 /** The Requests RPCs (ADR 0098, ENG-809): each acts on the checkout of its Agent Session. */
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, posix, relative } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, posix, relative } from "node:path";
 import {
   RequestsError,
   RequestsRpcs,
@@ -12,7 +12,7 @@ import {
   type RequestsSnapshot,
   type SessionId,
 } from "@polaris/protocol";
-import { Duration, Effect, Layer, Queue, Result, Stream } from "effect";
+import { Duration, Effect, Layer, PubSub, Queue, Result, Stream } from "effect";
 import { read } from "../data/read.ts";
 import { subscribeDirectoryChanges } from "../files/watch.ts";
 import { FileSearch } from "../files/FileSearch.ts";
@@ -227,6 +227,9 @@ const ENV_NAMES = new Set([ENV_FILE, PRIVATE_ENV_FILE]);
 
 const relevant = (path: string) => isRequestFile(path) || ENV_NAMES.has(basename(path));
 
+/** A file, or a directory that may hold some: Linux arms a new directory after its first writes. */
+const mayHoldRequests = (path: string) => relevant(path) || extname(path) === "";
+
 /** The directories whose env files a snapshot reads: each request file's and its ancestors. */
 const envDirectories = (root: string, snapshot: RequestsSnapshot) => {
   const dirs = new Set([root]);
@@ -246,11 +249,18 @@ const sameSnapshot = (a: RequestsSnapshot, b: RequestsSnapshot) =>
  * the folders the snapshot reads (env files are often gitignored), the files/ watcher for the rest
  * of the tree. No polling; the directory watches are armed before the first snapshot is sent.
  */
-export const watchSnapshot = (search: FileSearch["Service"], checkout: string, settleMs: number) =>
+export const watchSnapshot = (
+  search: FileSearch["Service"],
+  checkout: string,
+  settleMs: number,
+  saves?: PubSub.PubSub<string>
+) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const root = yield* Effect.tryPromise({ try: () => realpath(checkout), catch: unavailable });
       const ticks = yield* Queue.sliding<void>(1);
+      // The tree watcher arms asynchronously; a save from Requests reloads even before it has.
+      const saved = saves === undefined ? undefined : yield* PubSub.subscribe(saves);
       const watches = new Map<string, () => void>();
 
       yield* Effect.addFinalizer(() =>
@@ -274,7 +284,7 @@ export const watchSnapshot = (search: FileSearch["Service"], checkout: string, s
             watches.set(
               dir,
               subscribeDirectoryChanges(dir, (path) => {
-                if (relevant(path)) Queue.offerUnsafe(ticks, undefined);
+                if (mayHoldRequests(path)) Queue.offerUnsafe(ticks, undefined);
               })
             );
       };
@@ -291,11 +301,25 @@ export const watchSnapshot = (search: FileSearch["Service"], checkout: string, s
 
       const tree = search.watch(root).pipe(
         Stream.mapError(unavailable),
-        Stream.filter((batch) => batch.some((change) => relevant(change.path))),
+        Stream.filter((batch) =>
+          batch.some((change) =>
+            change.kind !== "modified" ? mayHoldRequests(change.path) : relevant(change.path)
+          )
+        ),
         Stream.as(undefined)
       );
 
-      const changes = Stream.merge(tree, Stream.fromQueue(ticks)).pipe(
+      const ownSaves =
+        saved === undefined
+          ? Stream.empty
+          : Stream.fromSubscription(saved).pipe(
+              Stream.filter((path) => path === root),
+              Stream.as(undefined)
+            );
+
+      const changes = Stream.mergeAll([tree, ownSaves, Stream.fromQueue(ticks)], {
+        concurrency: "unbounded",
+      }).pipe(
         Stream.debounce(Duration.millis(settleMs)),
         Stream.mapEffect(() => reload)
       );
@@ -310,17 +334,24 @@ export const requestsHandlers = (checkoutOf: CheckoutOf, options: RequestsRpcsOp
       const sends = yield* RequestSends;
       const search = yield* FileSearch;
       const settleMs = options.settleMs ?? WATCH_SETTLE_MS;
+      const saves = yield* PubSub.unbounded<string>();
 
       return {
         "requests.watch": ({ sessionId }) =>
           Stream.unwrap(
             Effect.map(checkoutOf(sessionId), (checkout) =>
-              watchSnapshot(search, checkout, settleMs)
+              watchSnapshot(search, checkout, settleMs, saves)
             )
           ),
         "requests.save": ({ sessionId, request, previousName }) =>
           Effect.flatMap(checkoutOf(sessionId), (checkout) =>
-            attempt(() => saveRequest(checkout, request, previousName))
+            attempt(() => saveRequest(checkout, request, previousName)).pipe(
+              Effect.tap(() =>
+                Effect.promise(() => realpath(checkout).catch(() => checkout)).pipe(
+                  Effect.flatMap((root) => PubSub.publish(saves, root))
+                )
+              )
+            )
           ),
         "requests.send": ({ sessionId, target, environment }) =>
           Effect.flatMap(checkoutOf(sessionId), (checkout) =>

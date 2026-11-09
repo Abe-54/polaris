@@ -204,9 +204,13 @@ test("VARIABLES shows each origin's locality and the .env file a $dotenv value c
         const variables = (environment: string) =>
           client["requests.variables"]({ sessionId: TEST_SESSION, target, environment });
 
-        // Nothing listens on staging's loopback port: the Send can't leave the Host.
+        // Nothing listens on staging's loopback port: the Send can't leave the Host. Windows
+        // can't verify a loopback port's owner, so every origin there stays remote.
         const staging = yield* variables("staging");
-        expect(staging[0]).toMatchObject({ name: "base", origin: "local" });
+        expect(staging[0]).toMatchObject({
+          name: "base",
+          origin: process.platform === "win32" ? "remote" : "local",
+        });
         expect(staging[1]).toEqual({
           name: "$dotenv LEDGER_TOKEN",
           source: "dotenv",
