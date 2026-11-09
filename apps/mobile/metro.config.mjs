@@ -15,7 +15,12 @@ const pierreParser = join(
   "parsePatchFiles.js"
 );
 
+// Fixtures and worst-case data only act in __DEV__; a release bundle gets an empty module (ENG-555).
+const testingModule = /\.testing(\.tsx?)?$/;
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (!context.dev && testingModule.test(moduleName)) return { type: "empty" };
+
   if (moduleName === "sodium-universal") return { type: "sourceFile", filePath: sodium };
 
   if (moduleName === "@pierre/diffs") return { type: "sourceFile", filePath: pierreParser };

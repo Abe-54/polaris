@@ -349,6 +349,14 @@ app would. The list comes from the VM: `bun run hermes` fails when it is stale a
 rewrites it. Run the tests from `apps/mobile` (`bun run --cwd apps/mobile test`); a `bun test` from
 the repository root reads the root's `bunfig.toml` and keeps Bun's builtins.
 
+## Fixtures in a release bundle
+
+Fixtures and worst-case data live in `*.testing.ts` modules. Galleries and dev data use them only
+in `__DEV__`, so `metro.config.mjs` resolves them to an empty module when Metro bundles for
+release. A module that imports one may read it only inside a function or a `__DEV__` branch, never
+while it loads: `scripts/testingImports.test.ts` fails on a load-time read, directly or through a
+local helper. Build gallery data in a `*.testing.ts` module (as `home/ui/galleryRows.testing.ts`).
+
 ## Tokens
 
 Colours and type come from `@polaris/ui/tokens` (Midnight and the mobile type scale), plain
