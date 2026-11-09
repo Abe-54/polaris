@@ -133,6 +133,8 @@ export type HarnessEvent = Data.TaggedEnum<{
     readonly options: ReadonlyArray<string>;
     /** For questions: every question asked; absent or empty for one bare prompt. */
     readonly questions?: ReadonlyArray<ApprovalQuestion>;
+    /** The Subagent whose tool call asks; absent for the Turn's own. */
+    readonly subagentId?: SubagentId;
   };
   /** The Harness withdrew or resolved a request itself (e.g. the Turn was interrupted). */
   ApprovalWithdrawn: { readonly requestId: RequestId };

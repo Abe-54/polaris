@@ -84,7 +84,8 @@ export const Capability = Schema.Literals([
   /**
    * Subagents: `SubagentStarted`/`SubagentEnded`, a Subagent's own items (with a
    * `subagentId`), and `TurnDetail.subagents`. A Client announces it in `hello`;
-   * the Daemon leaves all of these out for Clients that didn't.
+   * the Daemon leaves all of these out for Clients that didn't. `ApprovalRequest.subagentId`
+   * is sent to every Client (the request must still be answered); one without it ignores it.
    */
   "session.subagents",
   /** Live background task snapshots and SessionBackgroundTasksChanged events. */

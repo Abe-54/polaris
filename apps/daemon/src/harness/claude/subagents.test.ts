@@ -562,3 +562,31 @@ test("a continued autonomous Turn still accepts its user's next prompt as a stee
     await t.close();
   }
 });
+
+test("a Subagent's permission request names the Subagent; the Turn's own names none", async () => {
+  const t = await openWithTurn();
+
+  const call = (id: string, command: string) => ({
+    type: "tool_use",
+    id,
+    name: "Bash",
+    input: { command },
+  });
+
+  try {
+    t.fake.emit(agentCall(false));
+    t.fake.emit(taskStarted(AGENT, "Check frame timing", { subagentType: "Explore" }));
+    t.fake.emit(inSubagent(AGENT, assistant("sub-1", [call("toolu_sub", "ls")])));
+    t.fake.emit(assistant("m2", [call("toolu_lead", "pwd")]));
+    await t.settle();
+
+    void t.fake.askPermission("Bash", { command: "ls" }, { toolUseID: "toolu_sub" });
+    void t.fake.askPermission("Bash", { command: "pwd" }, { toolUseID: "toolu_lead" });
+    await t.settle();
+
+    const asked = t.events.filter(HarnessEvent.$is("ApprovalRequested"));
+    expect(asked.map((e) => e.subagentId)).toEqual([SUB, undefined]);
+  } finally {
+    await t.close();
+  }
+});

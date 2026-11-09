@@ -235,7 +235,12 @@ export const Composer = (props: ComposerProps) => {
   return (
     <View style={[styles.box, { backgroundColor: colours.panel, borderColor: colours.hairline }]}>
       {props.requests == null ? null : (
-        <PendingRequests {...props.requests} harness={harness} workingSince={workingSince} />
+        <PendingRequests
+          {...props.requests}
+          harness={harness}
+          subagents={props.subagents ?? []}
+          workingSince={workingSince}
+        />
       )}
       {props.head}
       <View style={styles.field}>
