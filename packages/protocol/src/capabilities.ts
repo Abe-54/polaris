@@ -116,8 +116,9 @@ export const Capability = Schema.Literals([
   /** The Limited Session State, `SetResumeAtReset` and `SessionResumeAtResetChanged`. */
   "session.limited",
   /**
-   * `Turn.userTurnNumber` and `replyPreview`, and `AgentSession.currentUserTurn` and
-   * `lastReplyPreview`: without it they are null, and a Client numbers and times Turns itself.
+   * `Turn.userTurnNumber` and `replyPreview`, `AgentSession.currentUserTurn`, `lastReplyPreview`
+   * and `acceptedThroughUserTurn`, and `TurnsAccepted.throughUserTurn`: without it they are
+   * null, and a Client numbers and times Turns itself.
    */
   "session.user-turns",
   /** `RunShellCommand`, `Turn.shellCommand`, `CommandExecution.origin` and `HarnessModels.runsShellCommands`. */

@@ -326,6 +326,11 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   lastError: Schema.NullOr(Schema.String),
   /** The index of the last Turn the user accepted (`AcceptTurns`); null before any. */
   acceptedThroughIndex: optionalNullable(Schema.Int),
+  /**
+   * The user-Turn number (`Turn.userTurnNumber`) of the Turn at `acceptedThroughIndex`
+   * (capability `session.user-turns`); null before any, or when the Daemon didn't know it.
+   */
+  acceptedThroughUserTurn: optionalNullable(Schema.Int),
   /** The pull request the accepted work was opened as (`LinkPullRequest`). */
   pullRequest: optionalNullable(PullRequestRef),
   /** Set by the Daemon for a Reviewer's or walkthrough's own session; absent for the user's. */

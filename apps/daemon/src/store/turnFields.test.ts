@@ -79,6 +79,17 @@ const run = (t: Turn) => [
   }),
 ];
 
+/** `throughUserTurn` null: as a Daemon before it logged the event. */
+const accepted = (t: Turn, index: number, throughUserTurn: number | null = null) =>
+  DomainEvent.cases.TurnsAccepted.make({
+    sessionId,
+    throughTurnId: t.id,
+    throughIndex: index,
+    throughUserTurn,
+    revertLaterTurns: false,
+    acceptedBy: "test",
+  });
+
 const fold = (events: ReadonlyArray<DomainEvent>): SessionRecord =>
   foldSession(
     sessionId,
@@ -97,8 +108,23 @@ describe("checkpointAfterCommit", () => {
   });
 });
 
+describe("acceptedThroughUserTurn", () => {
+  test("is the accepted Turn's user-Turn number, not its index", () => {
+    const record = fold([...run(u1), ...run(c1), ...run(u2), accepted(c1, 1)]);
+
+    expect(record.session.acceptedThroughIndex).toBe(1);
+    expect(record.session.acceptedThroughUserTurn).toBe(1);
+  });
+
+  test("the event's number wins over a Turn the fold no longer holds", () => {
+    const record = fold([...run(u1), accepted(turn("gone", 7), 7, 4)]);
+
+    expect(record.session.acceptedThroughUserTurn).toBe(4);
+  });
+});
+
 describe("an event log from before these fields", () => {
-  test("migrating fills in each Turn's commit", async () => {
+  test("migrating fills in each Turn's commit and the accepted user Turn", async () => {
     const file = join(tempDir("polaris-turn-fields-"), "state.sqlite");
 
     const storeAt = <A, E>(program: Effect.Effect<A, E, EventStore>) =>
@@ -114,6 +140,7 @@ describe("an event log from before these fields", () => {
               ...run(u1),
               ...run(c1),
               ...run(u2),
+              accepted(c1, 1),
             ]),
         })
       )
@@ -121,6 +148,7 @@ describe("an event log from before these fields", () => {
 
     const db = new Database(file);
     db.run("UPDATE turns SET data = json_remove(data, '$.checkpointAfterCommit')");
+    db.run("UPDATE sessions SET data = json_remove(data, '$.acceptedThroughUserTurn')");
     db.run("DELETE FROM effect_sql_migrations WHERE migration_id >= 7");
     db.close();
 
@@ -136,5 +164,6 @@ describe("an event log from before these fields", () => {
       commitOf(c1),
       commitOf(u2),
     ]);
+    expect(record.session.acceptedThroughUserTurn).toBe(1);
   });
 });

@@ -327,8 +327,11 @@ const fold = (event: DomainEvent): Fold =>
       SubagentStarted: () => unchanged,
       SubagentEnded: () => unchanged,
       CheckpointRecorded: () => unchanged,
-      TurnsAccepted: ({ sessionId, throughIndex }) =>
-        onSession(sessionId, patch({ acceptedThroughIndex: throughIndex })),
+      TurnsAccepted: ({ sessionId, throughIndex, throughUserTurn }) =>
+        onSession(
+          sessionId,
+          patch({ acceptedThroughIndex: throughIndex, acceptedThroughUserTurn: throughUserTurn })
+        ),
       TurnsReverted: () => unchanged,
       SessionPullRequestLinked: ({ sessionId, pullRequest }) =>
         onSession(sessionId, patch({ pullRequest })),

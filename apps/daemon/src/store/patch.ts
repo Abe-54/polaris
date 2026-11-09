@@ -31,6 +31,7 @@ export const patchSession = (session: AgentSession, patch: SessionPatch): AgentS
     worktreeSetup: session.worktreeSetup,
     lastError: session.lastError,
     acceptedThroughIndex: session.acceptedThroughIndex,
+    acceptedThroughUserTurn: session.acceptedThroughUserTurn,
     pullRequest: session.pullRequest,
     origin: session.origin,
     worker: session.worker,

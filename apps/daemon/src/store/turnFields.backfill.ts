@@ -1,6 +1,6 @@
 /**
  * Migration `0007_turn_fields`: `Turn.checkpointAfterCommit` from the log's `CheckpointRecorded`
- * events, for Turns already logged.
+ * events, and `AgentSession.acceptedThroughUserTurn` from the accepted Turn's row.
  */
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
@@ -26,4 +26,11 @@ export const backfillTurnFields = Effect.gen(function* () {
   for (const row of checkpoints)
     yield* sql`UPDATE turns SET data = json_set(data, '$.checkpointAfterCommit', ${row.commit_sha})
       WHERE id = ${row.turn_id} AND json_extract(data, '$.checkpointAfter') = ${row.ref}`;
+
+  yield* sql`UPDATE sessions SET data = json_set(data, '$.acceptedThroughUserTurn', (
+      SELECT json_extract(t.data, '$.userTurnNumber') FROM turns AS t
+      WHERE t.session_id = sessions.id
+        AND t.turn_index = json_extract(sessions.data, '$.acceptedThroughIndex')
+    ))
+    WHERE json_extract(data, '$.acceptedThroughIndex') IS NOT NULL`;
 });

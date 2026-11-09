@@ -188,7 +188,7 @@ export const migrations = SqliteMigrator.fromRecord({
   /** `session.user-turns`: the user-Turn numbers and reply previews of Turns already logged. */
   "0005_user_turns": backfillUserTurns,
   "0006_continuity": continuity,
-  /** `Turn.checkpointAfterCommit` for Turns already logged. */
+  /** `Turn.checkpointAfterCommit` and `AgentSession.acceptedThroughUserTurn` for logged sessions. */
   "0007_turn_fields": backfillTurnFields,
 });
 

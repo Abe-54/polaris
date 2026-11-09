@@ -152,6 +152,8 @@ export const DomainEvent = Schema.TaggedUnion({
     sessionId: SessionId,
     throughTurnId: TurnId,
     throughIndex: Schema.Int,
+    /** That Turn's `userTurnNumber` (capability `session.user-turns`); null when unknown. */
+    throughUserTurn: optionalNullable(Schema.Int),
     revertLaterTurns: Schema.Boolean,
     /** Label of the Client device that accepted. */
     acceptedBy: Schema.String,

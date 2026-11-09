@@ -75,6 +75,8 @@ export const eventSchemas = {
     Schema.Struct({
       turnId: TurnId,
       index: Schema.Int,
+      /** The Turn's `userTurnNumber`, for `TurnsAccepted.throughUserTurn`. */
+      userTurnNumber: Schema.optionalKey(Schema.NullOr(Schema.Int)),
       status: TurnStatus,
       revertLaterTurns: Schema.Boolean,
       acceptedBy: Schema.String,
@@ -195,6 +197,9 @@ export const normalizedInput = (input: SessionInput, at: string) => {
       withdrawnBy: input.withdrawnBy ?? "harness",
       reason: input.reason ?? "The Harness withdrew the request",
     };
+
+  if (input.type === "turns.accept")
+    return { ...input, userTurnNumber: input.userTurnNumber ?? null };
 
   return input.type === "harness.turnEnded" ? { ...input, limit: input.limit ?? null } : input;
 };

@@ -700,8 +700,14 @@ const apply: (event: DomainEvent) => Reducer = DomainEvent.match<Reducer>({
         subagents: withMap(r.subagents, subagent.id, undefined),
       })),
   TurnsAccepted: (event) => (fold) =>
-    updateSession(fold, event.sessionId, () => ({
-      session: { acceptedThroughIndex: event.throughIndex },
+    updateSession(fold, event.sessionId, (r) => ({
+      session: {
+        acceptedThroughIndex: event.throughIndex,
+        acceptedThroughUserTurn:
+          event.throughUserTurn ??
+          r.turns.find((t) => t.id === event.throughTurnId)?.userTurnNumber ??
+          null,
+      },
     })),
   TurnsReverted: (event) => (fold) => updateSession(fold, event.sessionId, () => ({})),
   SessionPullRequestLinked: (event) => (fold) =>
