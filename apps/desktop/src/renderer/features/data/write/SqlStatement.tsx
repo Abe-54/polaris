@@ -3,16 +3,8 @@ import { Button, cn } from "@polaris/ui";
 import { useMemo, useState } from "react";
 import { showBidi } from "../grid/value.ts";
 import { foldedSql, isLongSql } from "./model.ts";
-import { type SqlTokenKind, sqlTokens } from "./sqlTokens.ts";
-
-const COLOUR: Record<SqlTokenKind, string> = {
-  keyword: "text-syntax-keyword",
-  string: "text-syntax-string",
-  number: "text-syntax-type",
-  comment: "text-syntax-comment",
-  punctuation: "text-syntax-punctuation",
-  plain: "",
-};
+import { sqlTokens } from "./sqlTokens.ts";
+import { SQL_COLOUR } from "./SqlText.tsx";
 
 export const SqlStatement = ({
   sql,
@@ -38,7 +30,7 @@ export const SqlStatement = ({
         data-testid="data-write-sql"
       >
         {shown.map((token, i) => (
-          <span key={i} className={COLOUR[token.kind]}>
+          <span key={i} className={SQL_COLOUR[token.kind]}>
             {showBidi(token.text)}
           </span>
         ))}

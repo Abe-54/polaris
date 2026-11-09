@@ -17,7 +17,9 @@ const KEYWORDS = new Set(
     "full cross on using and or not null is in as with group by order having limit offset distinct " +
     "case when then else end create alter drop table index add column constraint primary key " +
     "foreign references default unique truncate replace merge upsert conflict do nothing exists " +
-    "between like ilike true false asc desc union all interval cascade"
+    "between like ilike true false asc desc union all interval cascade check collate if " +
+    "autoincrement generated always stored virtual without rowid strict restrict action no " +
+    "deferrable initially deferred immediate include concurrently match"
   ).split(" ")
 );
 
