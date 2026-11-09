@@ -364,6 +364,9 @@ still authorizes the read, and the first page carries no endpoint.
 
 `transport/traceContext.ts` rebuilds Effect's request `traceId`/`spanId`/`sampled` from the
 `traceparent` header alone, so a handler Span is the child of the Client Span that sent it.
+A stream's handler Span links to that Client Span instead and starts its own trace (ENG-732):
+Effect's RPC client ends a stream's Span only when the stream closes, so a long-lived feed
+(`*.watch`, `subscribeSession`) never exports it and every child showed "parent not kept".
 Effect's own client fields are never trusted. No trace context leaves the Daemon:
 `harnessEnv` is unchanged and still strips `POLARIS_OTEL_*`.
 
