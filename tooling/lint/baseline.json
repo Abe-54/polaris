@@ -13,9 +13,6 @@
     "apps/daemon/src/files/FileSearch.slow.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
-    "apps/daemon/src/files/search/watch.slow.test.ts": {
-      "polaris/no-fixed-sleep": 2
-    },
     "apps/daemon/src/files/write.slow.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
@@ -70,9 +67,6 @@
     "apps/daemon/src/push/hold.test.ts": {
       "polaris/no-fixed-sleep": 2
     },
-    "apps/daemon/src/push/push.e2e.slow.test.ts": {
-      "polaris/no-fixed-sleep": 9
-    },
     "apps/daemon/src/resources/lostExit.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
@@ -105,9 +99,6 @@
     },
     "apps/daemon/src/traces/forwardQueue.test.ts": {
       "polaris/no-fixed-sleep": 1
-    },
-    "apps/daemon/src/traces/profiles/regressions.slow.test.ts": {
-      "polaris/no-fixed-sleep": 4
     },
     "apps/daemon/src/transport/byteStreams.test.ts": {
       "polaris/no-fixed-sleep": 2

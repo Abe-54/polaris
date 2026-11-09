@@ -70,6 +70,8 @@ export interface ProfileOptions {
   readonly maxAgeMs?: number;
   /** Worker boundary for deterministic startup/shutdown tests. */
   readonly worker?: typeof profileJob;
+  /** Test seam: a completion waits for queue space, or shutdown has begun. */
+  readonly observe?: (moment: "completion-waiting" | "closing") => void;
 }
 
 export interface ProfileRecording {
@@ -141,8 +143,11 @@ export const profilesLayerAt = (root: string, options: ProfileOptions = {}) =>
       ): Promise<ProfileReply> => {
         const completion = operation === "discard" || operation === "complete";
 
-        if (completion && queued >= 32)
+        if (completion && queued >= 32) {
+          options.observe?.("completion-waiting");
+
           return tail.catch(() => {}).then(() => job(checkout, operation, id, profile));
+        }
 
         if (queued >= 32 || (closed && !completion)) return Promise.reject(unavailable());
         queued++;
@@ -525,6 +530,7 @@ export const profilesLayerAt = (root: string, options: ProfileOptions = {}) =>
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
           closed = true;
+          options.observe?.("closing");
 
           const stopping = [...launches.values()];
           await Promise.allSettled(
