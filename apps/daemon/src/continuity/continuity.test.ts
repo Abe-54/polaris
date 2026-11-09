@@ -239,7 +239,7 @@ test("upgrading reads every session through its last ended Turn, so nothing turn
   const db = new Database(join(root, "state.sqlite"));
   db.run("DROP TABLE session_reads");
   db.run("DROP TABLE session_drafts");
-  db.run("DELETE FROM effect_sql_migrations WHERE migration_id = 6");
+  db.run("DELETE FROM effect_sql_migrations WHERE migration_id >= 6");
   db.run("UPDATE turns SET status = 'working' WHERE turn_index = 1");
   db.close();
 
