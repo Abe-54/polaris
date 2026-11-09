@@ -2,7 +2,7 @@ import { existsSync, watch as fsWatch } from "node:fs";
 import { opendir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { findRepoRoot, runGit } from "../../git/git.ts";
-import { nativeWatchesLive } from "../fsevents.ts";
+import { nativeWatchesChanged, nativeWatchesLive, onNativeWatchesRebuilt } from "../fsevents.ts";
 import { inotifyAvailable, watchDirectory } from "../inotify.ts";
 
 export const WALK_SKIP = new Set([".git", "node_modules", ".hg", ".svn"]);
@@ -32,7 +32,10 @@ const openWatch: OpenWatch = (path, recursive, changed) => {
   // Home directories can hold sockets that Bun reports as ENXIO error events.
   watcher.on("error", () => undefined);
 
-  return () => watcher.close();
+  return () => {
+    watcher.close();
+    nativeWatchesChanged();
+  };
 };
 
 /**
@@ -58,9 +61,11 @@ export const watchRoot = async (
   let entries = 0;
   let scanning = Promise.resolve();
   const pending = new Set<string>();
+  let stopRescan = () => {};
 
   const stop = () => {
     stopped = true;
+    stopRescan();
 
     for (const close of watchers.values()) close();
     watchers.clear();
@@ -167,6 +172,10 @@ export const watchRoot = async (
 
     // Callers read the tree next, so what changes after this must already be reported.
     await nativeWatchesLive();
+
+    // A rebuild for another watch may drop this one's changes: report the root, as a rescan.
+    if (platform === "darwin" && !stopped)
+      stopRescan = onNativeWatchesRebuilt(() => changed("rename", root));
 
     return stop;
   } catch (cause) {

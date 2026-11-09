@@ -62,6 +62,33 @@ const probe = async (): Promise<void> => {
   }
 };
 
+/** What each live watch runs when a rebuild may have dropped its changes (ENG-370). */
+const rescans = new Set<() => void>();
+
+/**
+ * Runs `rescan` after each proven FSEvents rebuild: on macOS, Bun drops changes to every live
+ * watch while it rebuilds its stream for another watch opening or closing (ADR 0072).
+ */
+export const onNativeWatchesRebuilt = (rescan: () => void): (() => void) => {
+  rescans.add(rescan);
+
+  return () => rescans.delete(rescan);
+};
+
+const rescanAll = () => {
+  for (const rescan of rescans)
+    try {
+      rescan();
+    } catch {
+      // One watch's failure must not keep the others from rescanning.
+    }
+};
+
+/** Call after an `fs.watch` opens or closes; live watches rescan once the stream is back. */
+export const nativeWatchesChanged = (): void => {
+  if (process.platform === "darwin" && rescans.size > 0) void nativeWatchesLive();
+};
+
 let running: Promise<void> | null = null;
 
 let following: Promise<void> | null = null;
@@ -74,9 +101,11 @@ export const nativeWatchesLive = (): Promise<void> => {
   if (process.platform !== "darwin") return Promise.resolve();
 
   if (running === null) {
-    running = probe().finally(() => {
-      running = null;
-    });
+    running = probe()
+      .then(rescanAll)
+      .finally(() => {
+        running = null;
+      });
 
     return running;
   }
