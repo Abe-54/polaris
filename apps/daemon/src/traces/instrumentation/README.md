@@ -71,6 +71,12 @@ prevent duplicate setup even if imports bypass this helper. P9 can append
 the inspector bootstrap to that result. Internal `POLARIS_OTEL_ENDPOINT` and
 `POLARIS_OTEL_SERVICE_NAME` must travel with the complete runtime overlay.
 
+With `autoInstrumentOverride` on, an app whose own SDK registers HTTP instrumentation
+(such as `getNodeAutoInstrumentations`) unwraps Polaris's `http` patch; only
+diagnostics-channel instrumentations such as undici keep reporting. When the
+override bypassed an app SDK, the app ran and no spans arrived, settings report
+that as `autoInstrumentSkipReason` (ENG-703) until spans arrive.
+
 `detectFixedExporters({checkout,appRan,spansArrived})` returns PC's read-only
 `DetectedTraceExporter[]`. Settings reads invoke it after observed application work,
 not on a timer. It returns no evidence before a launch, after spans arrive, or
