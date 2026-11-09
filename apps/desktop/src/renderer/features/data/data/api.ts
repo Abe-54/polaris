@@ -12,11 +12,12 @@ import type {
   QueryLogEntry,
   QueryResult,
   ServerDataEngine,
+  TraceContext,
   TurnId,
 } from "@polaris/protocol";
 import { SchemaTree, TableDetail } from "@polaris/protocol";
 import { Exit, Match, Schema } from "effect";
-import type { IpcError, Result } from "../../../../shared/api.ts";
+import type { IpcError, RequestOptions, Result } from "../../../../shared/api.ts";
 import { polaris } from "../../bridge.ts";
 import type { DataRow } from "../grid/value.ts";
 import type { DataSessionKey } from "../model/store.ts";
@@ -119,14 +120,23 @@ export interface TableChange {
   readonly change: "added" | "modified";
 }
 
+/** The renderer Span a request joins, read when it's sent; undefined while Self-Traces are off. */
+export type TraceOf = () => TraceContext | undefined;
+
 export interface DataApi {
   readonly watchSources: (at: DataSessionKey, on: Snapshots<DataSource>) => () => void;
   readonly watchQueryLog: (at: DataSessionKey, on: Snapshots<QueryLogEntry>) => () => void;
+  /** `options.trace` joins the Daemon's Spans to a renderer Span (Self-Traces). */
   readonly describe: (
     at: DataSessionKey,
-    input: DescribeInput
+    input: DescribeInput,
+    options?: RequestOptions
   ) => Promise<Result<SchemaTree | TableDetail>>;
-  readonly query: (at: DataSessionKey, input: QueryInput) => Promise<Result<QueryResult>>;
+  readonly query: (
+    at: DataSessionKey,
+    input: QueryInput,
+    options?: RequestOptions
+  ) => Promise<Result<QueryResult>>;
   /** Streams a read to the 10,000-row cap; the returned function cancels it. Absent until served. */
   readonly queryStream?: (
     at: DataSessionKey,
@@ -203,15 +213,20 @@ const latest = <A>(on: Snapshots<A>) => ({
 export const liveDataApi: DataApi = {
   watchSources: (at, on) => polaris().subscribe("data.sources.watch", session(at), latest(on)),
   watchQueryLog: (at, on) => polaris().subscribe("data.queryLog.watch", session(at), latest(on)),
-  describe: (at, { source, table, sample }) => {
+  describe: (at, { source, table, sample }, options) => {
     const base = { ...session(at), source };
     const withTable = table === undefined ? base : { ...base, table };
 
     return polaris()
-      .request("data.describe", sample === undefined ? withTable : { ...withTable, sample })
+      .request(
+        "data.describe",
+        sample === undefined ? withTable : { ...withTable, sample },
+        options
+      )
       .then(described);
   },
-  query: (at, input) => polaris().request("data.query", { ...session(at), ...input }),
+  query: (at, input, options) =>
+    polaris().request("data.query", { ...session(at), ...input }, options),
   queryStream: (at, { source, sql, params, limit }, on) => {
     const base = { ...session(at), source, sql };
     const bound = params === undefined ? base : { ...base, params };
