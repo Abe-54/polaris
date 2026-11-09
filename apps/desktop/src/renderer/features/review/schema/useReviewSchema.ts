@@ -33,6 +33,12 @@ export const schemaScope = (turns: ReadonlyArray<ReviewTurn>, pick: TurnPick) =>
   return turn === undefined ? "Start → end of the turn" : `Start → end of turn ${turn.number}`;
 };
 
+/** The picked Turn's group, its opening Turn first: the diff spans them all (ENG-672). */
+const pickedGroup = (turns: ReadonlyArray<ReviewTurn>, pick: TurnPick) =>
+  pick.kind === "turn"
+    ? turns.find((t) => t.id === pick.turnId)?.turns.map((t) => t.id)
+    : undefined;
+
 export const useReviewSchema = ({
   hostKey,
   sessionId,
@@ -49,6 +55,7 @@ export const useReviewSchema = ({
     hostKey,
     sessionId,
     turn: pick.kind === "turn" ? pick.turnId : undefined,
+    turns: pickedGroup(turns, pick),
     supported,
     ended,
   });

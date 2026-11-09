@@ -3,6 +3,7 @@ import {
   DATA_CAPABILITY,
   DATA_WRITE_CAPABILITY,
   SCHEMA_DIFF_CAPABILITY,
+  SCHEMA_DIFF_TURNS_CAPABILITY,
   type GetDataSchemaDiff,
   Unsupported,
   type WatchDataSources,
@@ -106,7 +107,14 @@ export const commitDataEdits = (session: DataSession, input: Input<typeof Commit
     ? session.client["data.edits.commit"](input)
     : Effect.fail(new Unsupported({ capability: DATA_WRITE_CAPABILITY }));
 
+/** A Daemon without Turn groups is asked for `turn` alone, the group's first Turn. */
+const groupFor = (session: DataSession, input: Input<typeof GetDataSchemaDiff>) => {
+  const { turns: _turns, ...one } = input;
+
+  return session.capabilities.includes(SCHEMA_DIFF_TURNS_CAPABILITY) ? input : one;
+};
+
 export const getDataSchemaDiff = (session: DataSession, input: Input<typeof GetDataSchemaDiff>) =>
   session.capabilities.includes(SCHEMA_DIFF_CAPABILITY)
-    ? session.client["data.schemaDiff"](input)
+    ? session.client["data.schemaDiff"](groupFor(session, input))
     : Effect.fail(new Unsupported({ capability: SCHEMA_DIFF_CAPABILITY }));

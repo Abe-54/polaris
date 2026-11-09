@@ -409,8 +409,11 @@ const makeSchemaSnapshots = Effect.fnUntraced(function* (deps: SnapshotDependenc
   );
 
   return {
-    get: (input: { sessionId: SessionId; turn?: TurnId }) =>
-      Effect.try({ try: () => records.diff(input.sessionId, input.turn), catch: storageError }),
+    get: (input: { sessionId: SessionId; turn?: TurnId; turns?: ReadonlyArray<TurnId> }) =>
+      Effect.try({
+        try: () => records.diff(input.sessionId, input.turn, input.turns),
+        catch: storageError,
+      }),
     remove: (sessionId: SessionId) =>
       Effect.try({
         try: () => {

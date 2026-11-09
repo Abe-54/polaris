@@ -278,3 +278,61 @@ test("legacy inline catalogs migrate into bounded, scrubbed, readable references
     db.close();
   }
 });
+
+test("a Turn group's diff runs from its first Turn's before to its last Turn's after", () => {
+  const { db, store } = setup();
+
+  const named = (...names: ReadonlyArray<string>) => ({
+    ...catalog(),
+    tables: names.map((name) => ({
+      ...Schema.encodeSync(TableDetail)(table(name)),
+      identity: `relation-${name}`,
+    })),
+  });
+
+  const opening = TurnId.make("opening");
+  const continued = TurnId.make("continued");
+
+  try {
+    store.put(record({ index: 0, before: named("invoices"), after: named("invoices") }));
+    store.put(
+      record({
+        turn: opening,
+        index: 1,
+        before: named("invoices"),
+        after: named("invoices", "bills"),
+      })
+    );
+    store.put(
+      record({
+        turn: continued,
+        index: 2,
+        before: named("invoices", "bills"),
+        after: named("invoices", "bills", "notes"),
+      })
+    );
+    store.put(
+      record({
+        turn: TurnId.make("later"),
+        index: 3,
+        before: named("invoices", "bills", "notes"),
+        after: named("invoices", "bills", "notes", "audit"),
+      })
+    );
+
+    const added = (diff: ReturnType<typeof store.diff>) =>
+      diff.sources[0]?.tables.map((t) => [t.kind, t.after?.name]);
+
+    expect(added(store.diff(sessionId, opening))).toEqual([["added", "bills"]]);
+
+    const group = store.diff(sessionId, opening, [opening, continued]);
+
+    expect(group.turn).toBe(opening);
+    expect(added(group)).toEqual([
+      ["added", "bills"],
+      ["added", "notes"],
+    ]);
+  } finally {
+    db.close();
+  }
+});

@@ -2,6 +2,7 @@ import "../../../test/dom.testing.ts";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import type { ApprovalRequest } from "@polaris/protocol";
+import { Toaster } from "@polaris/ui";
 import { Predicate } from "effect";
 import { Decisions } from "../../../commands.ts";
 import { type FakeBridge, installFakeBridge } from "../../../test/bridge.testing.ts";
@@ -17,7 +18,7 @@ import {
   notPreviewedWrite,
   worstWrite,
 } from "../preview/writeFixtures.ts";
-import type { DataWrite } from "./model.ts";
+import { type DataWrite, writeName } from "./model.ts";
 import { WriteApprovalCard } from "./WriteApprovalCard.tsx";
 
 let bridge: FakeBridge;
@@ -243,6 +244,18 @@ test.each([
     expect(document.activeElement).toBe(screen.getByTestId("data-write"));
   }
 );
+
+test("Approve from the Inbox with the write's card nowhere on screen says where to review it", async () => {
+  const request = fixtureWriteApproval();
+  // SAFETY: fixtureWriteApproval always carries a dataWrite.
+  const write = request.dataWrite as DataWrite;
+
+  render(<Toaster />);
+
+  expect(await approveFromInbox(request)).toBe(false);
+  expect(decisions()).toEqual([]);
+  expect(await screen.findByText(`Review the ${writeName(write)} in its session`)).not.toBeNull();
+});
 
 test("Approve from elsewhere runs a write whose SQL, dry run and Run row are all in view", async () => {
   const request = fixtureWriteApproval();

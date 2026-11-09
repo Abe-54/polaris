@@ -174,14 +174,25 @@ export interface DataApi {
   /** Tables changed this Turn; no Host serves them yet, so the live feed stays empty. */
   readonly watchTableChanges: (at: DataSessionKey, on: Snapshots<TableChange>) => () => void;
   /**
-   * The session's Schema Diff (`data.schemaDiff`): one Turn's, or the whole session's when
-   * `turn` is omitted. Request/response; fails `Unsupported` on Daemons without it.
+   * The session's Schema Diff (`data.schemaDiff`): one Turn's, a Turn group's when `turns` lists
+   * it (`turn` first), or the whole session's when `turn` is omitted. Fails `Unsupported` on
+   * Daemons without it; one without Turn groups answers `turn`'s.
    */
   readonly schemaDiff: (
     at: DataSessionKey,
-    turn: TurnId | undefined
+    turn: TurnId | undefined,
+    turns?: ReadonlyArray<TurnId>
   ) => Promise<Result<DataSchemaDiff>>;
 }
+
+/** The session's, one Turn's, or a Turn group's (more than one Turn) Schema Diff. */
+const diffInput = (at: DataSessionKey, turn?: TurnId, turns?: ReadonlyArray<TurnId>) => {
+  if (turn === undefined) return session(at);
+
+  if (turns === undefined || turns.length < 2) return { ...session(at), turn };
+
+  return { ...session(at), turn, turns };
+};
 
 const Described = Schema.Union([TableDetail, SchemaTree]);
 
@@ -266,11 +277,7 @@ export const liveDataApi: DataApi = {
   removeSource: (at, source) => polaris().request("data.source.remove", { ...session(at), source }),
   labelSource: (at, source, label) =>
     polaris().request("data.source.label", { ...session(at), source, label }),
-  schemaDiff: (at, turn) =>
-    polaris().request(
-      "data.schemaDiff",
-      turn === undefined ? session(at) : { ...session(at), turn }
-    ),
+  schemaDiff: (at, turn, turns) => polaris().request("data.schemaDiff", diffInput(at, turn, turns)),
   watchTableChanges: (_at, on) => {
     on.next([]);
 

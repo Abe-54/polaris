@@ -8,6 +8,7 @@ import {
 } from "@polaris/protocol";
 import { act, cleanup, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
+import type { DataApi } from "../../data/data/api.ts";
 import type { TableRef } from "../../data/model/tabs.ts";
 import type { ReactNode } from "react";
 import { DataLayer } from "../../data/index.ts";
@@ -223,12 +224,14 @@ describe("fetching the Schema Diff", () => {
 
   const run = (answer: "unsupported" | (() => DataSchemaDiff), query: Partial<SchemaDiffQuery>) => {
     let calls = 0;
+    const asked: Array<Parameters<DataApi["schemaDiff"]>> = [];
     const api = fixtureDataApi({ schemaDiff: answer === "unsupported" ? answer : () => answer() });
 
     const counted = {
       ...api,
       schemaDiff: (...args: Parameters<typeof api.schemaDiff>) => {
         calls += 1;
+        asked.push(args);
 
         return api.schemaDiff(...args);
       },
@@ -250,7 +253,7 @@ describe("fetching the Schema Diff", () => {
       },
     });
 
-    return { hook, calls: () => calls };
+    return { hook, calls: () => calls, asked };
   };
 
   test("a Daemon without data.schemaDiff gets no request and shows nothing", async () => {
@@ -267,6 +270,14 @@ describe("fetching the Schema Diff", () => {
     await waitFor(() => expect(calls()).toBe(1));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(hook.result.current).toBeNull();
+  });
+
+  test("a Turn group's diff is asked for across all its Turns, the opening one first", async () => {
+    const group = [TurnId.make("t-22"), TurnId.make("t-23")];
+    const { asked } = run(() => DIFF, { turn: group[0], turns: group });
+
+    await waitFor(() => expect(asked).toHaveLength(1));
+    expect(asked[0]?.slice(1)).toEqual([group[0], group]);
   });
 
   test("fetches on open and again only when a Turn ends", async () => {

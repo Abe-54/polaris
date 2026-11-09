@@ -41,6 +41,7 @@ export const useTurnData = ({
     hostKey,
     sessionId,
     turn: turnIds[0],
+    turns: turnIds,
     supported: supported && hasCapability(host, SCHEMA_DIFF_CAPABILITY) && turnIds.length > 0,
     ended,
   });

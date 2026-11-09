@@ -3,7 +3,7 @@
  * Turn picked changes and when a Turn ends; never on a timer. Null while there is nothing to
  * show: before the first answer, on a Daemon without the capability, or when it failed.
  */
-import type { DataSchemaDiff, SessionId, TurnId } from "@polaris/protocol";
+import { type DataSchemaDiff, type SessionId, TurnId } from "@polaris/protocol";
 import { useEffect, useState } from "react";
 import { useDataApi } from "../../data/index.ts";
 
@@ -12,6 +12,8 @@ export interface SchemaDiffQuery {
   readonly sessionId: SessionId;
   /** One Turn's diff; the whole session's when undefined. */
   readonly turn: TurnId | undefined;
+  /** `turn`'s group, `turn` first: the diff spans them all (ENG-672). */
+  readonly turns?: ReadonlyArray<TurnId> | undefined;
   /** The Host has `data.schemaDiff`; nothing is fetched without it. */
   readonly supported: boolean;
   /** Turns that have ended: a new one fetches again. */
@@ -22,6 +24,7 @@ export const useSchemaDiff = ({
   hostKey,
   sessionId,
   turn,
+  turns,
   supported,
   ended,
 }: SchemaDiffQuery): DataSchemaDiff | null => {
@@ -31,13 +34,16 @@ export const useSchemaDiff = ({
     null
   );
 
-  const key = `${hostKey}\u0000${sessionId}\u0000${turn ?? ""}`;
+  const group = turns?.join("\u0000") ?? "";
+  const key = `${hostKey}\u0000${sessionId}\u0000${turn ?? ""}\u0000${group}`;
 
   useEffect(() => {
     if (!supported) return undefined;
     let live = true;
 
-    void api.schemaDiff({ hostKey, sessionId }, turn).then((result) => {
+    const span = group === "" ? undefined : group.split("\u0000").map((id) => TurnId.make(id));
+
+    void api.schemaDiff({ hostKey, sessionId }, turn, span).then((result) => {
       if (!live) return;
 
       // A failure keeps what was shown for this key; Unsupported never had anything.
@@ -47,7 +53,7 @@ export const useSchemaDiff = ({
     return () => {
       live = false;
     };
-  }, [api, hostKey, sessionId, turn, supported, ended, key]);
+  }, [api, hostKey, sessionId, turn, group, supported, ended, key]);
 
   return supported && diff?.key === key ? diff.value : null;
 };
