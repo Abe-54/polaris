@@ -285,3 +285,79 @@ test("a parent task is a container: its children have rows, it has none", () => 
   expect(tasks(view.rows).has("B")).toBe(false);
   expect(tasks(view.rows).has("B1")).toBe(true);
 });
+
+const ids = (...list: ReadonlyArray<string>) => ({ deps: list.map((id) => TaskId.make(id)) });
+
+/** A constellation of the given tasks, every one waiting unless `done` names it. */
+const graph = (tasks: ReadonlyArray<Task>, done: ReadonlyArray<string> = []) => ({
+  constellation: new Constellation({
+    id: ConstellationId.make("c"),
+    workspaceId: WorkspaceId.make("w"),
+    hostId: HostId.make("mac"),
+    leadSessionId: SessionId.make("lead"),
+    name: "Tree",
+    state: "running",
+    revision: 1,
+    settings: new ConstellationSettings({}),
+    tasks,
+    attempts: [],
+    pendingNotifications: [],
+    createdAt: "2026-10-27T10:00:00Z",
+    updatedAt: "2026-10-27T11:58:00Z",
+  }),
+  projections: tasks.map((t) => projection(t.id, done.includes(t.id) ? "done" : "waiting")),
+});
+
+/** Each task row as "id@depth", with "← also" when it has other deps; groups as their name. */
+const outline = (source: ReturnType<typeof graph>) =>
+  constellationView(source, NOW).rows.map((r) =>
+    r.kind === "group"
+      ? r.name
+      : `${r.id}@${r.depth}${r.also.length === 0 ? "" : ` ← ${r.also.map((a) => a.id).join(",")}`}`
+  );
+
+test("ENG-690: a chain steps right under the sibling it depends on, other deps after it", () => {
+  const source = graph([
+    task("M", "Contract"),
+    task("C", "Build"),
+    task("R", "Review", ids("C")),
+    task("F", "Fix", ids("M", "R")),
+    task("D", "Docs"),
+  ]);
+
+  expect(outline(source)).toEqual(["M@0", "C@0", "R@1", "F@2 ← M", "D@0"]);
+});
+
+test("ENG-690: a task hangs under its dep declared last among its siblings", () => {
+  const source = graph([task("A", "a"), task("B", "b"), task("X", "x", ids("B", "A"))]);
+
+  expect(outline(source)).toEqual(["A@0", "B@0", "X@1 ← A"]);
+});
+
+test("ENG-690: a gate keeps its place and hosts nothing; nesting stays within a group", () => {
+  const inG = { group: "G" };
+
+  const source = graph(
+    [
+      task("P", "Plan"),
+      task("G1", "Build", { ...inG, ...ids("P") }),
+      task("G2", "Test", { ...inG, ...ids("G1") }),
+      task("Z", "Merged", { kind: "gate", ...ids("G1", "G2") }),
+      task("After", "After the gate", ids("Z")),
+    ],
+    ["P"]
+  );
+
+  expect(outline(source)).toEqual(["P@0", "G", "G1@0 ← P", "G2@1", "Z@0", "After@0 ← Z"]);
+
+  const g1 = constellationView(source, NOW).rows.find((r) => r.kind === "task" && r.id === "G1");
+
+  // The other dep keeps its state's tone, so a done dep reads as done.
+  expect(g1?.kind === "task" ? g1.also : null).toEqual([{ id: "P", tone: "done" }]);
+});
+
+test("ENG-690: a dependency cycle never drops a task", () => {
+  const source = graph([task("A", "a", ids("B")), task("B", "b", ids("A"))]);
+
+  expect(outline(source)).toEqual(["A@0 ← B", "B@1"]);
+});
