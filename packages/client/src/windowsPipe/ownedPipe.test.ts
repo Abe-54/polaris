@@ -70,9 +70,11 @@ describe("the owner check, as data", () => {
     expect(() => ownerVerdict(PIPE, "", "")).toThrow("not a SID");
   });
 
-  test("is on only for a pipe on Windows", () => {
-    expect(checksPipeOwner(PIPE, "darwin")).toBe(false);
-    expect(checksPipeOwner("/h/.polaris/daemon.sock", "win32")).toBe(false);
+  test("is on only for a pipe on Windows under Node", () => {
+    expect(checksPipeOwner(PIPE, "win32", false)).toBe(true);
+    expect(checksPipeOwner(PIPE, "win32", true)).toBe(false);
+    expect(checksPipeOwner(PIPE, "darwin", false)).toBe(false);
+    expect(checksPipeOwner("/h/.polaris/daemon.sock", "win32", false)).toBe(false);
   });
 });
 

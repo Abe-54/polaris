@@ -72,6 +72,6 @@ POLARIS_EDIT_FORMAT=zeta-2.1 \
 bun test packages/predict/src/edit/live.test.ts
 ```
 
-Use `sweep-next-edit` for Sweep; set `POLARIS_EDIT_KIND=ollama` for an Ollama endpoint. The harness skips unless opted in, runs all 30 cases, and prints the quality table and request-to-Final p50. Exact and abstain are scored mechanically; acceptable/wrong/dangerous require a matching hand-reviewed output, and novel outputs print their hunks as `unreviewed`. The harness never starts or stops a model server and refuses port 8080. A live run requires a separately available server; replay evidence is not live model verification.
+Use `sweep-next-edit` for Sweep; set `POLARIS_EDIT_KIND=ollama` for an Ollama endpoint. The harness skips unless opted in, runs all 100 hardening cases, and prints the quality table and request-to-Final p50. Exact and abstain are scored mechanically; acceptable/wrong/dangerous require a matching hand-reviewed output, and novel outputs print their hunks as `unreviewed`. The harness never starts or stops a model server and refuses port 8080. A live run requires a separately available server; replay evidence is not live model verification.
 
 `bun packages/predict/src/edit/bench.ts` measures FIM prompt construction and the complete edit predictor over the recorded responses with an in-memory HTTP boundary, three rounds. It prints p50/p95, not model latency. The Daemon's existing `prediction-context` benchmark separately measures context RPC overhead against the machine baseline.
