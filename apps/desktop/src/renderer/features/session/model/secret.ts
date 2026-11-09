@@ -2,9 +2,11 @@
  * A Secret Request (ADR 0089) as the Desktop App shows it: never approved, only answered with a
  * value on `secret.provide` or declined. Pure, so it is tested.
  */
-import { type ApprovalRequest, SECRET_MAX_BYTES } from "@polaris/protocol";
+import { ApprovalRequest, RequestId, SECRET_MAX_BYTES } from "@polaris/protocol";
+import { Predicate } from "effect";
 import type { IpcError } from "../../../../shared/api.ts";
-import type { SecretOutcome } from "../../../store/sessionModel.ts";
+import type { SecretOutcome, SettledSecret, TurnView } from "../../../store/sessionModel.ts";
+import { secretEnding } from "./polarisTools/index.ts";
 
 export const isSecretRequest = (request: Pick<ApprovalRequest, "kind">) =>
   request.kind === "secret";
@@ -72,3 +74,43 @@ export const askingForSecret = (who: string) => `${who} is asking for a secret`;
 
 /** A session row's or inbox card's line for a Secret Request: the label only, never the reason. */
 export const secretLine = (label: string) => `Asking for a secret · ${label}`;
+
+/** The Secret Requests a Turn's finished `request_secret` calls settled, as their cards show them. */
+const toolSecrets = ({ turn, items }: TurnView): ReadonlyArray<SettledSecret> =>
+  items.flatMap((item) => {
+    const ending = Predicate.isTagged(item, "ToolCall") ? secretEnding(item) : null;
+
+    if (ending === null) return [];
+
+    const request = new ApprovalRequest({
+      id: RequestId.make(`tool:${item.id}`),
+      sessionId: turn.sessionId,
+      turnId: turn.id,
+      kind: "secret",
+      title: ending.label,
+      detail: null,
+      options: [],
+      questions: [],
+      openedAt: item.startedAt ?? turn.startedAt,
+    });
+
+    return [{ request, outcome: ending.outcome }];
+  });
+
+/**
+ * Settled Secret Requests: those this feed saw end, then those only the `request_secret` call's
+ * reply still records (a reload, ENG-631), skipping a label the feed already settled in that Turn.
+ */
+export const secretCards = (
+  views: ReadonlyArray<TurnView>,
+  seen: ReadonlyArray<SettledSecret>
+): ReadonlyArray<SettledSecret> => {
+  const known = new Set(seen.map(({ request }) => `${request.turnId}\u0000${request.title}`));
+
+  return [
+    ...seen,
+    ...views
+      .flatMap(toolSecrets)
+      .filter(({ request }) => !known.has(`${request.turnId}\u0000${request.title}`)),
+  ];
+};
