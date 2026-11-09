@@ -1,7 +1,8 @@
 /**
  * The composer (Paper MX-E): suggested chips above it; inside, the floating notice strip, the
  * field, and one row of the model chip (its sheet holds harness, model, effort and permissions),
- * the Subagents' moons, the context ring, attach, mic, and Send, or Stop while a Turn works.
+ * the Subagents' moons, the context ring, attach, mic, and Send, or Stop while a Turn works;
+ * Queue sits in the strip's Working row, never in the control row (ENG-557).
  */
 import type { CelestialBody, ContextUsage, HarnessKind, Subagent } from "@polaris/protocol";
 import type { DraftStatus } from "@polaris/client/continuity";
@@ -29,7 +30,7 @@ import type { ModelSheetContext } from "../composer/useModelSheet.ts";
 import { usePastedImages } from "../composer/usePastedImages.ts";
 import { haptics } from "../motion";
 import { useTheme } from "../theme";
-import { CONTENT_TEXT_SCALE, CONTROL_TEXT_SCALE } from "../theme/textScale.ts";
+import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { type ComposerMode, placeholderFor } from "./composer.ts";
 import { PendingRequests, type PendingRequestsProps } from "./PendingRequests.tsx";
 import { Diamond } from "./Row.tsx";
@@ -126,6 +127,23 @@ const noticeOf = (props: ComposerProps): { text: string; failed: boolean } | nul
   return props.draftStatus === "unsaved" ? { text: "Draft not saved", failed: false } : null;
 };
 
+const FieldNotice = ({
+  notice,
+}: {
+  readonly notice: { readonly text: string; readonly failed: boolean } | null;
+}) => {
+  const { colours } = useTheme();
+
+  return notice === null ? null : (
+    <Text
+      style={[styles.notice, { color: notice.failed ? colours.failedText : colours.textSubtle }]}
+      maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
+    >
+      {notice.text}
+    </Text>
+  );
+};
+
 /** The ring, attach and the mic, as many as the row has room for. */
 const Tools = ({
   fit,
@@ -159,28 +177,6 @@ const SessionChip = (props: ComposerProps & { readonly working: boolean }) => {
     />
   ) : (
     <ModelControl context={props.sheet} celestial={celestial} working={props.working} />
-  );
-};
-
-const QueueButton = ({ onQueue }: { readonly onQueue: () => void }) => {
-  const { colours } = useTheme();
-
-  return (
-    <Pressable
-      onPress={() => {
-        haptics.send();
-        onQueue();
-      }}
-      accessibilityRole="button"
-      hitSlop={8}
-    >
-      <Text
-        style={[styles.queue, { color: colours.textDefault }]}
-        maxFontSizeMultiplier={CONTROL_TEXT_SCALE}
-      >
-        Queue
-      </Text>
-    </Pressable>
   );
 };
 
@@ -218,14 +214,12 @@ export const Composer = (props: ComposerProps) => {
   const working = workingSince !== null;
   const empty = text.trim() === "" || props.attaching === true || props.canSend === false;
   const stop = working && text.trim() === "";
-  const notice = noticeOf(props);
   const fieldId = usePastedImages(attach, !blocked);
   const moons = moonsOf(props.subagents ?? []);
   const queue = mode.kind === "steer" && !empty;
 
   const [fit, measure] = useRowFit({
     running: moons.running,
-    queue,
     attach: attach !== null && !blocked,
     mic: voice !== null && !blocked,
   });
@@ -240,22 +234,13 @@ export const Composer = (props: ComposerProps) => {
           harness={harness}
           subagents={props.subagents ?? []}
           workingSince={workingSince}
+          onQueue={queue ? props.onQueue : null}
         />
       )}
       {props.head}
       <View style={styles.field}>
         {attach === null ? null : <AttachmentChips attach={attach} />}
-        {notice === null ? null : (
-          <Text
-            style={[
-              styles.notice,
-              { color: notice.failed ? colours.failedText : colours.textSubtle },
-            ]}
-            maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
-          >
-            {notice.text}
-          </Text>
-        )}
+        <FieldNotice notice={noticeOf(props)} />
         <TextInput
           style={[styles.input, { color: colours.textStrong }]}
           value={text}
@@ -280,7 +265,6 @@ export const Composer = (props: ComposerProps) => {
           attach={blocked ? null : attach}
           voice={blocked ? null : voice}
         />
-        {queue ? <QueueButton onQueue={props.onQueue} /> : null}
         <SendButton
           stop={stop}
           disabled={!stop && (empty || blocked)}
@@ -320,5 +304,4 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: "row", alignItems: "center", gap: 6 },
   spring: { flex: 1 },
-  queue: { ...mobileType.footnote, fontWeight: "500", paddingHorizontal: 4 },
 });

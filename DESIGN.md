@@ -1179,7 +1179,7 @@ Accepted 2026-10-29, not built (ENG-534, decided over three rounds). It brings t
 - **Session rows (MX-I).** Working, needs you, done and failed as drawn in MX-I are the spec.
 - **Thread (MX-E).** Turn text on the open ground; wells only for tool runs. Each finished turn shows a quiet mono receipt line under its summary.
 - **Long-press on a turn (MX-J).** A native menu (copy, fork) with the turn's receipt in its header; the lifted turn hides its own receipt.
-- **Composer.** The notice strip floats above the input. A subagent's approval may show in the lead's strip while the lead keeps working. One row under the input holds the harness and model chip, the subagent moons with a count, the context ring, attach, mic, and Send. The permission mode moves into the model sheet.
+- **Composer.** The notice strip floats above the input. A subagent's approval may show in the lead's strip while the lead keeps working. One row under the input holds the harness and model chip, the subagent moons with a count, the context ring, attach, mic, and Send. The permission mode moves into the model sheet. Queue is never in that row (owner, 2026-11-09, ENG-557): while a Turn works and a steer is typed, the strip's Working row ends with a quiet "Queue" (`text-subtle`, "Queue for after this turn" to VoiceOver); an open request takes the strip and Queue waits for it.
 - **Instrument sheets.** The Desktop App's instrument cards become bottom sheets with detents.
 - **Settings (MX-G).** Phase 1's Settings: Appearance with a theme card per dark showing its sky, a Motion row, and links to Hosts and Notifications.
 - **Motion.** Reanimated, Gesture Handler and expo-haptics.

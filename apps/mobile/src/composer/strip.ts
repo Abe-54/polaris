@@ -42,7 +42,8 @@ export type StripNotice =
   | { readonly kind: "question"; readonly request: ApprovalRequest }
   /** A Secret Request: its masked field, Save securely and Decline; never Approve. */
   | { readonly kind: "secret"; readonly request: ApprovalRequest; readonly headline: string }
-  | { readonly kind: "working" };
+  /** Queue offers the typed steer for after this Turn instead (ENG-557). */
+  | { readonly kind: "working"; readonly queue: boolean };
 
 export interface Strip {
   /** Null when only a Secret Request's outcome is left to say. */
@@ -118,9 +119,12 @@ export const stripOf = ({
   harness,
   subagents = [],
   settled = null,
+  queue = false,
 }: {
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly working: boolean;
+  /** There is a steer typed that could wait for the Turn's end instead. */
+  readonly queue?: boolean;
   /** The Harness's name, "Claude Code". */
   readonly harness: string;
   /** The session's Subagents, in the order they started (the control row's moons). */
@@ -131,7 +135,7 @@ export const stripOf = ({
 
   if (oldest !== undefined) return { notice: oldest, more: requests.length - 1, settled: null };
 
-  if (working) return { notice: { kind: "working" }, more: 0, settled };
+  if (working) return { notice: { kind: "working", queue }, more: 0, settled };
 
   return settled === null ? null : { notice: null, more: 0, settled };
 };

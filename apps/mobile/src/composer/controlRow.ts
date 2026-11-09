@@ -67,7 +67,6 @@ export const litSegments = (share: number): number =>
 /** What the row has to hold besides the chip and Send. */
 export interface RowParts {
   readonly running: number;
-  readonly queue: boolean;
   readonly attach: boolean;
   readonly mic: boolean;
 }
@@ -93,8 +92,7 @@ const widthOf = (fit: RowFit, parts: RowParts, scale: number): number => {
     fit.moons === 0 ? 0 : 4 + fit.moons * 16 + 4 + 8 * `${parts.running}`.length * scale;
 
   const ring = fit.ring ? 18 + (fit.ringWords ? 4 + 30 * scale : 0) : 0;
-  const queue = parts.queue ? 8 + 40 * scale : 0;
-  const shown = [moons, ring, parts.attach ? BUTTON : 0, fit.mic ? BUTTON : 0, queue];
+  const shown = [moons, ring, parts.attach ? BUTTON : 0, fit.mic ? BUTTON : 0];
 
   return chip + send + shown.reduce((sum, w) => sum + w + (w > 0 ? GAP : 0), GAP);
 };
