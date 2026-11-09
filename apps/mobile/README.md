@@ -341,6 +341,14 @@ Connection State machine, the resumable feed, the Markdown parser and the Self-T
 `src/runtime/vmHost.ts` supplies the two things React Native adds over the bare VM that the check
 needs: `console` and timers that honour their delay.
 
+The app's own code runs on Bun in its tests, so those tests run without Hermes' gaps:
+`src/runtime/hermesMissing.json` lists the builtin methods Bun has and the app's Hermes lacks
+(`Array.prototype.toSorted` among them), and `bunfig.toml` preloads
+`src/runtime/hermesBuiltins.preload.ts`, which deletes them, so a test that reaches one fails as the
+app would. The list comes from the VM: `bun run hermes` fails when it is stale and `--write`
+rewrites it. Run the tests from `apps/mobile` (`bun run --cwd apps/mobile test`); a `bun test` from
+the repository root reads the root's `bunfig.toml` and keeps Bun's builtins.
+
 ## Tokens
 
 Colours and type come from `@polaris/ui/tokens` (Midnight and the mobile type scale), plain
