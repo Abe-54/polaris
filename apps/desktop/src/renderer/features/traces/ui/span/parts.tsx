@@ -1,30 +1,11 @@
 /** The span panel's small pieces (Paper T1): a key/value row, a value as it reads, a quiet line. */
 import { cn } from "@polaris/ui";
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { showBidi } from "../../../data/grid/value.ts";
-import { type SqlTokenKind, sqlTokens } from "../../../data/write/sqlTokens.ts";
+import { SqlText } from "../../../data/write/SqlText.tsx";
 import { REDACTED } from "../../model/span/fields.ts";
 
 export const KICKER = "font-mono text-[11px] leading-[14px] tracking-[0.06em] uppercase";
-
-const SQL_COLOUR: Record<SqlTokenKind, string> = {
-  keyword: "text-syntax-keyword",
-  string: "text-syntax-string",
-  number: "text-syntax-type",
-  comment: "text-syntax-comment",
-  punctuation: "text-syntax-punctuation",
-  plain: "",
-};
-
-const Sql = ({ text }: { readonly text: string }) => {
-  const tokens = useMemo(() => sqlTokens(text), [text]);
-
-  return tokens.map((t, i) => (
-    <span key={i} className={SQL_COLOUR[t.kind]}>
-      {showBidi(t.text)}
-    </span>
-  ));
-};
 
 /** A value in `code-inline`: "[redacted]" faint (whatever its key), SQL coloured, bidi named. */
 export const Value = ({
@@ -44,7 +25,7 @@ export const Value = ({
       className
     )}
   >
-    {text === REDACTED ? text : sql ? <Sql text={text} /> : showBidi(text)}
+    {text === REDACTED ? text : sql ? <SqlText text={text} /> : showBidi(text)}
   </span>
 );
 

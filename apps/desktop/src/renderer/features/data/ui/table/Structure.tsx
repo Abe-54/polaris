@@ -1,10 +1,12 @@
 /**
  * The Table tab's Structure (DESIGN.md, Data: Table tab): the table's TableDetail as three lists,
- * columns, indexes and constraints, at the density row height. A foreign key opens its table.
+ * columns, indexes and constraints, at the density row height, its SQL syntax-coloured. A foreign
+ * key opens its table.
  */
 import type { TableDetail } from "@polaris/protocol";
 import { Kicker } from "@polaris/ui";
 import type { ReactNode } from "react";
+import { SqlText } from "../../write/SqlText.tsx";
 import type { TableRef } from "./sql.ts";
 
 const Section = ({
@@ -62,15 +64,13 @@ export const Structure = ({
             <span className="text-text-strong font-medium">{c.name}</span>
           </Cell>
           <Cell width={160}>
-            <span className="text-text-subtle">{c.type}</span>
+            <span className="text-syntax-type">{c.type}</span>
           </Cell>
           <Cell width={80}>
-            <span className={c.nullable ? "text-text-subtle" : "text-text-default"}>
-              {c.nullable ? "null" : "not null"}
-            </span>
+            <span className="text-syntax-keyword">{c.nullable ? "null" : "not null"}</span>
           </Cell>
           <Cell>
-            {c.pk ? <span className="text-text-default">primary key </span> : null}
+            {c.pk ? <span className="text-syntax-keyword">primary key </span> : null}
             {c.fk === null ? null : (
               <button
                 type="button"
@@ -83,7 +83,10 @@ export const Structure = ({
               </button>
             )}
             {c.default === null ? null : (
-              <span className="text-text-subtle"> default {c.default}</span>
+              <span>
+                <span className="text-syntax-keyword"> default </span>
+                <SqlText text={c.default} />
+              </span>
             )}
           </Cell>
         </Row>
@@ -97,10 +100,13 @@ export const Structure = ({
           </Cell>
           <Cell width={200}>{index.columns.join(", ")}</Cell>
           <Cell>
-            <span className="text-text-subtle">
-              {index.unique ? "unique · " : ""}
-              {index.definition}
-            </span>
+            {index.unique ? (
+              <>
+                <span className="text-syntax-keyword">unique</span>
+                <span className="text-syntax-punctuation"> · </span>
+              </>
+            ) : null}
+            <SqlText text={index.definition} />
           </Cell>
         </Row>
       ))}
@@ -112,9 +118,11 @@ export const Structure = ({
             <span className="text-text-strong">{constraint.name}</span>
           </Cell>
           <Cell width={120}>
-            <span className="text-text-subtle">{constraint.kind}</span>
+            <span className="text-syntax-keyword">{constraint.kind}</span>
           </Cell>
-          <Cell>{constraint.definition}</Cell>
+          <Cell>
+            <SqlText text={constraint.definition} />
+          </Cell>
         </Row>
       ))}
     </Section>
