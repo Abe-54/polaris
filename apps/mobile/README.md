@@ -224,6 +224,10 @@ only for `http`, `https` and `mailto`; images show their alt text; HTML shows as
 
 The diff renderer is Pierre Diffs' patch parser on Hermes. Metro resolves `@pierre/diffs` to its DOM-free `parsePatchFiles` module only, about 13 KB, without Shiki or the DOM renderer. Rows are drawn by a React Native `FlatList`. There is no syntax colouring or word-level highlighting yet. `colourblind` switches to the `-cvd` diff pair.
 
+The app is portrait: `expo-screen-orientation`'s plugin starts it locked to portrait, and the file
+diff screen unlocks landscape while it is open (`src/diff/orientation.ts`), where it lays out MX-R's
+before/after split. Adding the module needs a new native build or dev client.
+
 The diff bench measures it on a device or simulator. It renders Review over a synthetic 2,000-line Turn and reports parse time and frame intervals on screen (and as `POLARIS_DIFF_BENCH {json}` in the log):
 
 ```sh

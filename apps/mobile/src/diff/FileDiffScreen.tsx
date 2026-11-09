@@ -34,6 +34,7 @@ import {
   splitPath,
 } from "./chrome.tsx";
 import { FilePage, type FilePageHandle } from "./FilePage.tsx";
+import { useLandscapeWhileOpen } from "./orientation.ts";
 import type { FileDiffScreenProps } from "./types.ts";
 
 const NO_FINDINGS: ReadonlyArray<RiskFinding> = [];
@@ -162,6 +163,8 @@ export const FileDiffScreen = ({
   const side = layout === "split" ? Math.max(insets.left, insets.right, 16) : 0;
   const pageWidth = width - side * 2;
   const file = files[index];
+
+  useLandscapeWhileOpen();
 
   // A page change from outside (the pill, the edge tab, the caller) scrolls the pager to it.
   useEffect(() => {
