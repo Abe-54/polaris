@@ -19,7 +19,7 @@ import {
   type WorkspaceId,
 } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
-import { Effect, Option, Stream } from "effect";
+import { Effect, Option, Redacted, Stream } from "effect";
 
 const [home, logFile, stopFile, flag, seedDir] = process.argv.slice(2);
 
@@ -42,6 +42,8 @@ const program = Effect.gen(function* () {
       version: "0.0.0",
       deviceLabel: "e2e",
       capabilities: Capability.literals,
+      // As the Desktop App: the fresh home enrols it, so it may start a session (ADR 0100).
+      userKey: Redacted.make("e".repeat(64)),
     },
     policy: { initialDelayMs: 100, maxDelayMs: 1000, restartGraceMs: 30_000 },
   });

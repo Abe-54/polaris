@@ -179,7 +179,12 @@ test("the Host keeps only a digest, owner-only, and deleting it lets the next ke
     )
   );
 
-  expect(result).toEqual({ holdsKey: false, mode: 0o600, nextAccess: true, previousAccess: false });
+  const { mode, ...access } = result;
+
+  expect(access).toEqual({ holdsKey: false, nextAccess: true, previousAccess: false });
+
+  // Windows has no POSIX modes; its file privacy is ENG-314.
+  if (process.platform !== "win32") expect(mode).toBe(0o600);
 });
 
 test("an Extension with the approve Grant approves without a user key", async () => {

@@ -34,7 +34,8 @@ const fake = (key: "offsetWidth" | "clientWidth", get: (el: HTMLElement) => numb
     },
   });
   restores.push(() => {
-    if (original !== undefined) Object.defineProperty(HTMLElement.prototype, key, original);
+    if (original === undefined) Reflect.deleteProperty(HTMLElement.prototype, key);
+    else Object.defineProperty(HTMLElement.prototype, key, original);
   });
 };
 
