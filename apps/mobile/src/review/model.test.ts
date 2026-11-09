@@ -9,7 +9,7 @@ const risk = (...findings: ReturnType<typeof finding>[]) =>
   ({ kind: "ready", value: summary("completed", findings) }) as const;
 
 describe("which findings stay listed", () => {
-  test("a dismissed Critical stays listed; a dismissed High and a resolved Critical don't", () => {
+  test("a dismissed Critical stays listed after the open ones; a dismissed High and a resolved Critical don't", () => {
     const listed = listedFindings([
       finding("a", "critical", { status: "dismissed" }),
       finding("b", "high", { status: "dismissed" }),
@@ -17,14 +17,14 @@ describe("which findings stay listed", () => {
       finding("d", "low"),
     ]);
 
-    expect(listed.map((f) => f.identity)).toEqual(["a", "d"]);
+    expect(listed.map((f) => f.identity)).toEqual(["d", "a"]);
   });
 
-  test("the tally counts a dismissed Critical, so no verdict hides it", () => {
+  test("the tally leaves out a dismissed Critical", () => {
     expect(
       tally([finding("a", "critical", { status: "dismissed" }), finding("b", "medium")])
     ).toEqual({
-      critical: 1,
+      critical: 0,
       high: 0,
       medium: 1,
       low: 0,
@@ -46,6 +46,11 @@ describe("Accept", () => {
 
     expect(state).toEqual({ kind: "paused", critical: 2 });
     expect(acceptLabel(state, 3)).toBe("Accept turn 3");
+  });
+
+  test("at accessibility sizes Accept drops the turn number; other states keep their words", () => {
+    expect(acceptLabel({ kind: "paused", critical: 6 }, 9999, false)).toBe("Accept");
+    expect(acceptLabel({ kind: "working" }, 9999, false)).toBe("Turn 9999 is still working");
   });
 
   test("goes ahead once the only Critical is dismissed, even though it stays listed", () => {

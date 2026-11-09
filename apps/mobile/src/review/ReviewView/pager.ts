@@ -1,5 +1,5 @@
 /**
- * The severity pager (Paper MX-O's tinted pills on MX-N's readout): each severity's listed
+ * The severity pager (Paper MX-O's tinted pills on MX-N's readout): each severity's open
  * findings in the order Review shows them, and where a tap on its pill goes next.
  */
 import type { RiskFinding, Severity } from "@polaris/protocol";
@@ -13,7 +13,8 @@ export const NO_POSITIONS: PagerPositions = { critical: null, high: null, medium
 export const ofSeverity = (
   findings: ReadonlyArray<RiskFinding>,
   severity: Severity
-): ReadonlyArray<RiskFinding> => findings.filter((f) => f.severity === severity);
+): ReadonlyArray<RiskFinding> =>
+  findings.filter((f) => f.severity === severity && f.status === "open");
 
 /** The next finding of `severity` after the last one visited, cycling; null when it has none. */
 export const pageTo = (

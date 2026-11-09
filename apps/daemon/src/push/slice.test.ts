@@ -26,7 +26,7 @@ const sessionWith = (fields: Partial<typeof encoded>) =>
 
 const reviewer = sessionWith({ id: "s-review", origin: "reviewer" });
 
-const snapshotWith = () =>
+const snapshotWith = (approvals: ReadonlyArray<ApprovalRequest> = [approval("r0")]) =>
   HostStreamItem.cases.Snapshot.make({
     sequence: Sequence.make(1),
     workspaces: [],
@@ -34,7 +34,7 @@ const snapshotWith = () =>
     sessions: [
       new SessionSummary({
         session: sessionWith({ currentUserTurn: { turnId: "t1", number: 1, startedAt: STARTED } }),
-        pendingApprovals: [approval("r0")],
+        pendingApprovals: approvals,
         lastTurnPreview: null,
         subagents: [],
       }),
@@ -111,6 +111,21 @@ test("the oldest open request shows while it is open, and a new one counts as op
     needs: 1,
     need: { requestId: "r1", kind: "question" },
   });
+});
+
+test("a command's own cd goes from the takeover, and a long one is cut in the middle", () => {
+  const run = (title: string) =>
+    renderSlice(fold([snapshotWith([approval("r0", "command", title)])]), host).need?.line;
+
+  const long = `bun run backfill --quarter 2026-Q3 --dry-run=false ${"--table=orders ".repeat(6)}--yes`;
+
+  expect(run("cd /repo/ && bun run backfill --dry-run=false")).toBe(
+    "bun run backfill --dry-run=false"
+  );
+  expect(run("cd /elsewhere && rm -rf build")).toBe("cd /elsewhere && rm -rf build");
+  expect(run(long)).toStartWith("bun run backfill");
+  expect(run(long)).toEndWith("--yes");
+  expect(run(long)).toContain("…");
 });
 
 test("a session stops counting when its Turn ends", () => {

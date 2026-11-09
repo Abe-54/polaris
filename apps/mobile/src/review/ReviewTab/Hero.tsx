@@ -24,7 +24,7 @@ import {
   CHROME_TEXT_SCALE,
   CONTENT_TEXT_SCALE,
 } from "../../theme/textScale.ts";
-import { highest, SEVERITIES } from "../model.ts";
+import { highest, isDismissed, SEVERITIES } from "../model.ts";
 import { SeverityGlyph, severityLabel, severityText } from "../severity.tsx";
 import { AskToFix, QueueAccept } from "./actions.tsx";
 import { heroKicker, heroMeta, type QueueItem, riskNote } from "./queue.ts";
@@ -103,7 +103,7 @@ const Page = ({ item, actions }: { readonly item: QueueItem; readonly actions: H
   const styles = useStyles();
   const { session } = item.row;
   const files = item.turn?.files ?? null;
-  const [top] = item.findings;
+  const top = item.findings.find((f) => !isDismissed(f));
   const wraps = useWindowDimensions().fontScale >= ACCESSIBILITY_SCALE;
   const note = riskNote(item);
 

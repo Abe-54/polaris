@@ -13,6 +13,7 @@ import {
   type TurnItem,
 } from "@polaris/protocol";
 import {
+  commandLine,
   type HostSlice,
   type LiveLine,
   type LiveNeed,
@@ -25,6 +26,8 @@ interface Tracked {
   /** The Harness kind, for the celestial's hue. */
   readonly harness: string;
   readonly body: string;
+  /** Its working directory: a command's leading `cd` into it is dropped from the takeover. */
+  readonly cwd: string;
   /** Unix seconds its working Turn started; null while it isn't working. */
   readonly since: number | null;
 }
@@ -56,16 +59,17 @@ const tracked = (session: AgentSession): Tracked => ({
   title: session.title,
   harness: session.harness,
   body: session.celestial ?? CELESTIAL_PLANETS[0],
+  cwd: session.cwd,
   since:
     session.state === "working"
       ? seconds(session.currentUserTurn?.startedAt ?? session.updatedAt)
       : null,
 });
 
-const needOf = (request: ApprovalRequest): Need => ({
+const needOf = (request: ApprovalRequest, cwd: string): Need => ({
   at: seconds(request.openedAt),
   sessionId: request.sessionId,
-  line: request.title,
+  line: request.kind === "command" ? commandLine(request.title, [cwd]) : request.title,
   requestId: request.id,
   // A secret is typed in the app, which the question takeover opens.
   kind:
@@ -130,10 +134,13 @@ const applyEvent = (state: SliceState, event: DomainEvent, occurredAt: string): 
           ? state
           : { ...state, step: { at: seconds(occurredAt), sessionId, line } };
       },
-      ApprovalRequested: ({ request }) =>
-        state.sessions.has(request.sessionId)
-          ? withNeeds(state, (needs) => needs.set(request.id, needOf(request)))
-          : state,
+      ApprovalRequested: ({ request }) => {
+        const session = state.sessions.get(request.sessionId);
+
+        return session === undefined
+          ? state
+          : withNeeds(state, (needs) => needs.set(request.id, needOf(request, session.cwd)));
+      },
       ApprovalResolved: ({ requestId }) => withNeeds(state, (needs) => needs.delete(requestId)),
       ApprovalWithdrawn: ({ requestId }) => withNeeds(state, (needs) => needs.delete(requestId)),
     }),
@@ -151,7 +158,9 @@ export const sliceItem = (state: SliceState, item: HostStreamItem): SliceState =
           sessions: new Map(users.map((s) => [s.session.id, tracked(s.session)])),
           step: null,
           needs: new Map(
-            users.flatMap((s) => s.pendingApprovals).map((r) => [r.id, needOf(r)] as const)
+            users.flatMap((s) =>
+              s.pendingApprovals.map((r) => [r.id, needOf(r, s.session.cwd)] as const)
+            )
           ),
         };
       },

@@ -1,7 +1,7 @@
 /**
  * A finding in a turn's Review (Paper MX-N): open, a well with its reason, its diff hunk inline
  * (P2's `HunkView`, without its own finding card: the well is the card), "Ask {harness} to fix", "Ask the reviewer" and "Not a problem"; folded, one
- * row in a group of wells. A Critical finding never folds.
+ * row in a group of wells. An open Critical finding never folds; a dismissed one folds and says so.
  */
 import type { RiskFinding, VerdictReason } from "@polaris/protocol";
 import { mobileType } from "@polaris/ui/tokens";
@@ -31,9 +31,12 @@ export interface WellActions {
   readonly openFile: (index: number) => void;
 }
 
-/** "upload.ts:41": the file's name and the first flagged line. */
-export const findingPlace = (finding: RiskFinding) =>
-  `${finding.path.split("/").pop() ?? finding.path}:${finding.lines.start}`;
+/** "upload.ts:41": the file's name and the first flagged line; "dismissed · …" once dismissed. */
+export const findingPlace = (finding: RiskFinding) => {
+  const place = `${finding.path.split("/").pop() ?? finding.path}:${finding.lines.start}`;
+
+  return finding.status === "dismissed" ? `dismissed · ${place}` : place;
+};
 
 const ThumbDown = ({ colour }: { readonly colour: string }) => (
   <Svg width={16} height={16} viewBox="0 0 16 16">
@@ -188,7 +191,9 @@ export const FindingWell = memo(function FindingWell({
             maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
             style={[styles.meta, wraps && styles.under]}
           >
-            {findingMeta(finding)}
+            {finding.status === "dismissed"
+              ? `dismissed · ${findingMeta(finding)}`
+              : findingMeta(finding)}
           </Text>
         </View>
         {finding.reason === "" ? null : (

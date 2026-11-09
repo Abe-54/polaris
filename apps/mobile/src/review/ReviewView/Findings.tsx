@@ -21,9 +21,9 @@ export interface FindingsProps {
   readonly onPlace: (id: string, y: number) => void;
 }
 
-/** A Critical finding never folds (DESIGN.md: nothing hides a critical finding). */
+/** An open Critical never folds; a dismissed one folds with its note (DESIGN.md Review). */
 export const isOpen = (finding: RiskFinding, expanded: ReadonlySet<string>) =>
-  finding.severity === "critical" || expanded.has(finding.id);
+  (finding.severity === "critical" && finding.status === "open") || expanded.has(finding.id);
 
 const GAP = 6;
 

@@ -10,6 +10,7 @@ import {
   queueAcceptState,
   queueItem,
   queueSummary,
+  riskNote,
   type TurnRisk,
   wellMeta,
 } from "./queue.ts";
@@ -66,6 +67,21 @@ describe("the review queue", () => {
 
     expect(keys(queue.pages)).toEqual(["two", "one", "dismissed"]);
     expect(queue.critical).toBe(3);
+  });
+
+  test("a turn with only a dismissed Critical counts nothing and notes it was dismissed", () => {
+    const only = item("d", 900, reviewed(finding("d", "critical", { status: "dismissed" })));
+
+    const mixed = item(
+      "m",
+      900,
+      reviewed(finding("d", "critical", { status: "dismissed" }), finding("h", "high"))
+    );
+
+    expect(only.tally.critical).toBe(0);
+    expect(riskNote(only)).toBe("1 dismissed");
+    expect(riskNote(mixed)).toBeNull();
+    expect(mixed.findings.map((f) => f.identity)).toEqual(["h", "d"]);
   });
 
   test("equal tallies put the newest turn first, and unread turns follow every finding", () => {

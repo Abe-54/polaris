@@ -5,6 +5,7 @@
  */
 import { CELESTIAL_PLANETS, harnessEntry } from "@polaris/protocol";
 import {
+  commandLine,
   encodeHostSlice,
   fitSlice,
   type HostSlice,
@@ -37,6 +38,8 @@ const isUsers = ({ session }: SessionEntry) =>
 
 const since = ({ session }: SessionEntry) =>
   seconds(session.currentUserTurn?.startedAt ?? session.updatedAt);
+
+const cwdOf = (entry: SessionEntry | undefined) => (entry === undefined ? [] : [entry.session.cwd]);
 
 const named = (entry: SessionEntry | undefined) => {
   if (entry === undefined) return { session: "" };
@@ -72,7 +75,10 @@ export const hostSlice = (host: LiveHost): HostSlice => {
             at: seconds(oldest.openedAt),
             sessionId: oldest.sessionId,
             ...named(sessions.get(oldest.sessionId)),
-            line: oldest.title,
+            line:
+              oldest.kind === "command"
+                ? commandLine(oldest.title, cwdOf(sessions.get(oldest.sessionId)))
+                : oldest.title,
             requestId: oldest.id,
             // A secret has no Approve: like a question, the takeover opens the app.
             kind:

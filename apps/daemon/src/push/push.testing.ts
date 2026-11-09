@@ -109,13 +109,17 @@ export const turn = (id: string, replyPreview: string | null = null) =>
     endedAt: null,
   });
 
-export const approval = (id: string, kind: ApprovalRequest["kind"] = "command") =>
+export const approval = (
+  id: string,
+  kind: ApprovalRequest["kind"] = "command",
+  title = "Run bun test"
+) =>
   new ApprovalRequest({
     id: RequestId.make(id),
     sessionId: SESSION_ID,
     turnId: TurnId.make("t1"),
     kind,
-    title: "Run bun test",
+    title,
     detail: "bun test apps/daemon",
     options: [],
     questions: [],

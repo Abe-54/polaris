@@ -76,6 +76,7 @@ export const NeedsYouPage = ({ item, now, onOpen, onReply, menu }: NeedsYouPageP
         ) : (
           <ApprovalActions
             approval={item.approval}
+            cwd={item.session.cwd}
             enabled={!item.stale}
             onReply={onReply}
             onOpen={onOpen}
