@@ -1,0 +1,233 @@
+{
+  "kind": "bash",
+  "node_flags": ["--max-semi-space-size=1"],
+  "lines": 400,
+  "idle_s": 60,
+  "typing_s": 60,
+  "phases": [
+    {
+      "label": "initialize",
+      "rss_median_mib": 69.296875,
+      "rss_max_mib": 74.234375,
+      "footprint_median_mib": 33.784820556640625,
+      "footprint_max_mib": 34.191070556640625,
+      "cpu_avg_pct": 4.276966685407232,
+      "wakeups_per_s": 3.559643163660987,
+      "max_processes": 1,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    },
+    {
+      "label": "open",
+      "rss_median_mib": 434.890625,
+      "rss_max_mib": 633.84375,
+      "footprint_median_mib": 426.98854064941406,
+      "footprint_max_mib": 620.1921005249023,
+      "cpu_avg_pct": 16.991761016588814,
+      "wakeups_per_s": 10.081104841378764,
+      "max_processes": 2,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    },
+    {
+      "label": "idle1",
+      "rss_median_mib": 45.859375,
+      "rss_max_mib": 279.625,
+      "footprint_median_mib": 91.23833465576172,
+      "footprint_max_mib": 248.1134262084961,
+      "cpu_avg_pct": 0.008642290348953764,
+      "wakeups_per_s": 0.9006005091620027,
+      "max_processes": 1,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    },
+    {
+      "label": "typing1",
+      "rss_median_mib": 57.6875,
+      "rss_max_mib": 76.765625,
+      "footprint_median_mib": 99.21269226074219,
+      "footprint_max_mib": 100.3176498413086,
+      "cpu_avg_pct": 5.723143724450564,
+      "wakeups_per_s": 10.924154135578986,
+      "max_processes": 1,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    },
+    {
+      "label": "idle2",
+      "rss_median_mib": 25.921875,
+      "rss_max_mib": 103.8125,
+      "footprint_median_mib": 99.25956726074219,
+      "footprint_max_mib": 129.49444580078125,
+      "cpu_avg_pct": 1.1709860516675143,
+      "wakeups_per_s": 1.8183869149974101,
+      "max_processes": 2,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    },
+    {
+      "label": "typing2",
+      "rss_median_mib": 84.046875,
+      "rss_max_mib": 87.484375,
+      "footprint_median_mib": 106.49492645263672,
+      "footprint_max_mib": 106.68242645263672,
+      "cpu_avg_pct": 6.642651814764022,
+      "wakeups_per_s": 11.16210717277535,
+      "max_processes": 1,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    },
+    {
+      "label": "idle3",
+      "rss_median_mib": 83.5625,
+      "rss_max_mib": 129.34375,
+      "footprint_median_mib": 106.69805145263672,
+      "footprint_max_mib": 137.94855499267578,
+      "cpu_avg_pct": 0.750094693919303,
+      "wakeups_per_s": 1.3174999524490918,
+      "max_processes": 2,
+      "processes": [
+        {
+          "name": "node",
+          "max_rss_mib": 623.6875,
+          "cpu_s": 8.276881416666667
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 45.171875,
+          "cpu_s": 0.209394375
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 44.3125,
+          "cpu_s": 0.3325734166666666
+        },
+        {
+          "name": "shellcheck",
+          "max_rss_mib": 43.09375,
+          "cpu_s": 0.206882125
+        }
+      ]
+    }
+  ]
+}

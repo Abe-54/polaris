@@ -87,6 +87,8 @@ Scenarios are independent and each starts its own Daemons, so any subset can run
 - **Linux**: `/proc/<pid>/stat` (CPU in clock ticks at `USER_HZ` = 100, reaped children included), `/proc/<pid>/status` (VmRSS; footprint = RssAnon + RssShmem) and the voluntary + involuntary **context switches** of all threads as the wakeup count. Children from `/proc/<pid>/task/*/children`.
 - Fallback (or `POLARIS_BENCH_PS=1`): `ps` for RSS and CPU only (10 ms CPU resolution on macOS, whole seconds on Linux).
 
+`src/languageServerMemory.ts` drives one of the Host's managed language servers (`sql` or `bash`) over LSP stdio through open, idle and typing phases under the sampler, to tell steady state from growth and see which process holds the memory; results and method are in `measurements/eng-288/`.
+
 CPU is the change of user + system time over the tree between samples (including children that exited and were reaped in between) divided by wall time: 100% = one core. Memory gates on footprint; RSS is reported but never gates (see "Comparing and tolerances").
 
 ## Results and baselines
@@ -178,6 +180,7 @@ Add `src/scenarios/<name>.ts` exporting a `Scenario` and list it in `src/scenari
 - The Lead's slot-stall wake (`apps/daemon/src/constellation/stall.ts`, `nextSlotStall`) adds nothing to `idle`: it is one timer per Constellation, armed only while a local worker holds a `__workers` slot with no first Turn, for when `workerPhase` would read it stalled, and cleared once the Turn starts or the Lead has heard. A Daemon with no working Constellation never arms it (A/B on the Mac Studio, 3 runs each: `noclient_cpu_over_bare_pct` 0.269 before and after, wakeups 8.83 vs 8.80/s).
 - The release after a burst of file reads (ENG-766, `apps/daemon/src/memory/fileReads.ts`) adds nothing to `idle`: only a read starts its timer. At `--quick`, `editor`'s windows sit a few seconds after a release, so `tabs20_wakeups_per_s` reads 41/s where a full-size window reads 3.8/s (numbers in ADR 0010).
 - Developer Mode (ENG-715) costs nothing while off: on the Mac Studio, off matched the commit before it (3ea8935da) under the same load in `idle` and `sessions` (idle no-Client CPU over bare Bun 0.40 vs 0.41 points, `sessions.rss_before_mib` 120 vs 120). On, the first Span starts the trace store's SQLite worker (~+50 MiB RSS until it retires after 30 s quiet), so a Daemon with a Client renewing its lease keeps it up: `rss_before_mib` +46 MiB, `m50c4.rss_peak_mib` +150 MiB, idle wakeups 1.1 → 8.5/s.
+- `sessions` runs the scripted Harness, so it doesn't count Codex's per-thread MCP servers. A closed Codex session with the Browser leaves its `agent-browser mcp` child running, idle at ~4–6 MiB RSS with no CPU, until app-server unloads the unsubscribed thread 30 minutes later (ENG-630, `measurements/eng-630/`).
 - History is seeded through the Daemon, so full sizes take a while (commit throughput is itself a metric); a much larger store (1M events) would need a direct SQLite seeder.
 - No Desktop App scenarios yet (there is no Desktop App); the sampler is ready for them.
 
