@@ -16,8 +16,8 @@
  * after every decision. A mismatch means the spec and the code disagree.
  *
  * The mapping is the spec's abstraction (README.md): Starting counts as
- * Working, and events the spec leaves out (checkpoints, cursors, renames,
- * Workspaces) are dropped. Anything it cannot map is reported as an error.
+ * Working, and events the spec leaves out (checkpoints, cursors, renames, other
+ * Workspace events) are dropped; a `WorkspaceRemoved` is a host event. Anything it cannot map is reported as an error.
  */
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -56,6 +56,7 @@ const TCommand = Schema.Union([
   SessionCommand("ArchiveSession"),
   SessionCommand("UnarchiveSession"),
   Schema.TaggedStruct("AcceptTurns", { sessionId: Schema.String, throughTurnId: Schema.String }),
+  Schema.TaggedStruct("RemoveWorkspace", { workspaceId: Schema.String }),
   Schema.Struct({ _tag: Schema.String, sessionId: Schema.optional(Schema.String) }),
 ]);
 
@@ -107,7 +108,6 @@ const DROPPED = new Set([
   "SubagentEnded",
   "WorkspaceRegistered",
   "WorkspaceUpdated",
-  "WorkspaceRemoved",
   "WorktreeDetected",
   "WorktreeRemoved",
 ]);
@@ -116,6 +116,9 @@ const DROPPED = new Set([
 const UNMODELLED = new Set(["SessionNotified", "SessionBackgroundCommandFailed"]);
 
 const SESSIONS = ["s1", "s2"];
+
+/** The spec's session for host events (`HOST`). */
+const HOST = "host";
 
 const COMMIT = ["commitBatch", "publishBatch"];
 
@@ -178,6 +181,7 @@ const specCommand = (
       "AcceptTurns",
       (c) => `AcceptTurns({ session: ${q(s)}, through: ${turnNumber(c.throughTurnId)} })`
     ),
+    Match.tag("RemoveWorkspace", () => "RemoveWorkspace"),
     Match.orElse(() => null)
   );
 
@@ -238,6 +242,8 @@ class Replayer {
 
   /** The spec event for an engine event, updating the tracked state; null if dropped. */
   private map(e: TEvent, cmd: string, keepSameState: boolean): SpecEvent | null {
+    if (e.tag === "WorkspaceRemoved") return { session: HOST, cmd, kind: "WorkspaceRemoved" };
+
     if (DROPPED.has(e.tag) || e.session === null) return null;
     const s = e.session;
     const out = (kind: string): SpecEvent => ({ session: s, cmd, kind });
@@ -354,7 +360,7 @@ class Replayer {
     const sent = this.trace.commands[id];
 
     if (sent === undefined) throw new Error(`seq ${e.seq}: unknown command ${id}`);
-    const s = sent.command.sessionId!;
+    const s = "sessionId" in sent.command ? (sent.command.sessionId ?? HOST) : HOST;
     const command = specCommand(sent.command, s, (turnId) => this.turnNumber(s, turnId));
 
     if (command === null) throw new Error(`seq ${e.seq}: no spec command for ${sent.command._tag}`);
@@ -551,7 +557,7 @@ module ${name} {
     CONTINUES_ACCEPTED = false,
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
-    WORKSPACE_REMOVAL = false,
+    WORKSPACE_REMOVAL = true,
     FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],

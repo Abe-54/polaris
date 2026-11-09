@@ -9,10 +9,9 @@ import type { ReadModel } from "../store/model.ts";
 import {
   type AEvent,
   type View,
+  decideAt,
   fold,
-  referenceDecide,
   SESSIONS,
-  sessionOfCommand,
   streamSeqs,
   workingTurnOf,
 } from "./engine.reference.testing.ts";
@@ -87,8 +86,7 @@ const checkAnswers = (id: string, sends: ReadonlyArray<Sent>, block: Block | und
 /** The block a command recorded is what the reference decider expects from the log before it. */
 const checkBlock = (world: World, log: ReadonlyArray<AEvent>, first: Sent, block: Block) => {
   const id = first.id;
-  const view = fold(log, block[0]!.seq - 1).get(sessionOfCommand(first.command))!;
-  const expected = referenceDecide(view, first.command, first.device);
+  const expected = decideAt(log, block[0]!.seq - 1, first.command, first.device);
   const recorded = block.map((e) => e.what).join(" ");
 
   if (expected === "reject" || expected.join(" ") !== recorded) {
@@ -110,8 +108,7 @@ const checkRejection = (world: World, log: ReadonlyArray<AEvent>, id: string, re
   let justified = false;
 
   for (let k = rejected.from; k <= to && !justified; k++) {
-    const view = fold(log, k).get(sessionOfCommand(rejected.command))!;
-    justified = referenceDecide(view, rejected.command, rejected.device) === "reject";
+    justified = decideAt(log, k, rejected.command, rejected.device) === "reject";
   }
 
   if (!justified) {
@@ -234,7 +231,7 @@ const checkTurnsInFlight = (log: ReadonlyArray<AEvent>) => {
   }
 };
 
-/** The read model is the reference fold of the log. */
+/** The read model is the reference fold of the log; a removal purged every session. */
 const checkReadModel = (model: ReadModel, log: ReadonlyArray<AEvent>) => {
   const views = fold(log);
 
@@ -242,9 +239,11 @@ const checkReadModel = (model: ReadModel, log: ReadonlyArray<AEvent>) => {
     const record = model.sessions.get(SessionId.make(s));
     const view = views.get(s);
 
-    if (record === undefined || view === undefined) continue;
-
     if (model.sequence !== log.length) break; // it moved on while we read; next step checks it
+
+    if (record !== undefined && view === undefined) throw new Error(`${s} outlived its removal`);
+
+    if (record === undefined || view === undefined) continue;
     const state: string = record.session.state;
     expect({ s, state }).toEqual({ s, state: view.state });
     expect({ s, pending: [...record.pending.keys()].map(String).sort() }).toEqual({
@@ -284,6 +283,9 @@ const checkFeeds = (feeds: ReadonlyArray<FeedCopy>, log: ReadonlyArray<AEvent>) 
     const label = `${fs.client}/${fs.stream}`;
 
     if (errors.length > 0) throw new Error(`${label}: ${errors.join("; ")}`);
+
+    if (fs.ended && !log.some((e) => e.tag === "WorkspaceRemoved"))
+      throw new Error(`${label} ended NotFound, but its session was never removed`);
     const view = viewOfFeed({ ...fs, seen }, log);
     const stream = streamSeqs(log, fs.stream);
 

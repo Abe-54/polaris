@@ -2,8 +2,10 @@
  * The Engine model-based test's reference side (`engine.model.slow.test.ts`): the
  * committed log abstracted to comparable events, a fold of it into per-session
  * views, and a reference decider for the Client commands the test sends.
+ * Every session is in one Workspace, so a `WorkspaceRemoved` purges them all.
  */
 import { Command, DomainEvent, type EventEnvelope, type RequestId } from "@polaris/protocol";
+import { Predicate } from "effect";
 import { sessionOf } from "../store/model.ts";
 
 export const SESSIONS = ["s1", "s2"] as const;
@@ -147,6 +149,8 @@ export const fold = (log: ReadonlyArray<AEvent>, upTo = log.length): Map<string,
   const views = new Map<string, View>();
 
   for (const e of log.slice(0, upTo)) {
+    if (e.tag === "WorkspaceRemoved") views.clear();
+
     if (e.session === null) continue;
 
     if (e.tag === "SessionCreated") {
@@ -252,3 +256,29 @@ export const referenceDecide = (v: View, command: Command, device: string): Refe
 
 export const sessionOfCommand = (command: Command): string =>
   "sessionId" in command ? command.sessionId : "";
+
+const removedBy = (log: ReadonlyArray<AEvent>, upTo: number) =>
+  log.slice(0, upTo).some((e) => e.tag === "WorkspaceRemoved");
+
+/**
+ * What a command records given the log's first `upTo` events. RemoveWorkspace needs every
+ * session Archived and happens once; a purged session's commands are NotFound.
+ */
+export const decideAt = (
+  log: ReadonlyArray<AEvent>,
+  upTo: number,
+  command: Command,
+  device: string
+): Reference => {
+  const views = fold(log, upTo);
+
+  if (Predicate.isTagged(command, "RemoveWorkspace")) {
+    const archived = [...views.values()].every((v) => v.state === "archived");
+
+    return removedBy(log, upTo) || !archived ? "reject" : ["WorkspaceRemoved"];
+  }
+
+  const view = views.get(sessionOfCommand(command));
+
+  return view === undefined ? "reject" : referenceDecide(view, command, device);
+};

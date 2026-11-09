@@ -6,8 +6,8 @@
  * `HostConnection` does).
  *
  * fast-check generates runs of: concurrent bursts of commands from two devices
- * (fresh and retried command ids, stale and racing approval answers, Archive
- * and Unarchive) mixed with Harness events (items, approval requests and
+ * (fresh and retried command ids, stale and racing approval answers, Archive,
+ * Unarchive, and removing the Workspace that holds both sessions) mixed with Harness events (items, approval requests and
  * withdrawals, Turn ends, and late approval requests for a Turn that ended),
  * in an order and batching `fc.scheduler` picks; pauses of Client feeds (a
  * stalled Client, which the Daemon drops at `subscriberCapacity`); connection
@@ -25,7 +25,8 @@
  *   - no Turn starts or continues without a Client's command;
  *   - an approval is pending, and a session Working, only with a Turn in
  *     flight; an Archived session holds neither;
- *   - the read model equals a reference fold of the log (also after reloads);
+ *   - the read model equals a reference fold of the log (also after reloads), and a
+ *     removed Workspace's sessions are gone from it, their feeds ending NotFound;
  *   - every Client feed has seen exactly a prefix of its committed stream, and
  *     each Snapshot matches the log at its sequence.
  *
@@ -81,7 +82,8 @@ type DispatchKind =
   | "SetModel"
   | "Archive"
   | "Unarchive"
-  | "Accept";
+  | "Accept"
+  | "Remove";
 
 type Action =
   | {
@@ -176,6 +178,10 @@ const commandFor = (world: World, action: DispatchAction): Command | null => {
       return Command.cases.UnarchiveSession.make({ sessionId });
     case "Accept":
       return acceptCommand(world, action, sessionId);
+    case "Remove":
+      return world.workspaceId === null
+        ? null
+        : Command.cases.RemoveWorkspace.make({ workspaceId: world.workspaceId });
     case "Respond":
       return respondCommand(world, action, sessionId);
   }
@@ -336,6 +342,44 @@ class Stall extends Step {
   }
 }
 
+/**
+ * Wind the Workspace down and remove it: both Harnesses end their Turns, a device archives
+ * both sessions, then removes the Workspace (random bursts almost never line these up).
+ */
+class Retire extends Step {
+  constructor(readonly device: ClientName) {
+    super();
+  }
+  override async step(world: World) {
+    for (const s of SESSIONS) world.harness(s, "end", 0);
+    await sleep(5);
+
+    for (const s of SESSIONS) {
+      const command = Command.cases.ArchiveSession.make({
+        sessionId: SessionId.make(s),
+        deleteMergedBranch: false,
+      });
+
+      await world.dispatch(this.device, `cmd-${++idCounter}`, command);
+    }
+
+    const remove = commandFor(world, {
+      tag: "dispatch",
+      device: this.device,
+      kind: "Remove",
+      s: "s1",
+      pick: 0,
+      retry: null,
+    });
+
+    if (remove !== null) await world.dispatch(this.device, `cmd-${++idCounter}`, remove);
+    await sleep(2);
+  }
+  override toString() {
+    return `Retire(${this.device})`;
+  }
+}
+
 /** A feed's upstream starts dying on its chunks: the feed must fail visibly, never hang (ENG-492). */
 class Defect extends Step {
   constructor(readonly index: number) {
@@ -372,7 +416,8 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
               "SetModel",
               "Archive",
               "Unarchive",
-              "Accept"
+              "Accept",
+              "Remove"
             )
           : fc.constantFrom(
               "SendTurn",
@@ -384,7 +429,8 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
               "SetModel",
               "Archive",
               "Unarchive",
-              "Accept"
+              "Accept",
+              "Remove"
             ),
       s: sessionArb,
       pick: fc.nat(40),
@@ -430,7 +476,10 @@ const commandArbs: Array<fc.Arbitrary<Cmd>> = [
   fc
     .tuple(fc.array(actionArb, { minLength: 1, maxLength: 5 }), fc.scheduler(), fc.nat(4))
     .map(([actions, s, n]) => new Burst(actions, s, n)),
-  fc.constant(new Crash()),
+  fc.oneof(
+    { weight: 3, arbitrary: fc.constant(new Crash()) },
+    { weight: 1, arbitrary: fc.constantFrom<ClientName>(...CLIENTS).map((d) => new Retire(d)) }
+  ),
   fc.constantFrom<ClientName>(...CLIENTS).map((d) => new Disconnect(d)),
   fc.tuple(fc.nat(5), fc.boolean()).map(([i, stalled]) => new Stall(i, stalled)),
   fc.nat(5).map((i) => new Defect(i)),
@@ -450,8 +499,15 @@ const tallyLog = (log: ReadonlyArray<AEvent>) => {
 
     if (e.what === "state:dormant" && e.commandId !== null) reached.unarchived++;
 
-    if (e.tag === "TurnsAccepted") reached.accepted++;
+    tallyTag(e);
   }
+};
+
+/** Events counted by their tag alone. */
+const tallyTag = (e: AEvent) => {
+  if (e.tag === "TurnsAccepted") reached.accepted++;
+
+  if (e.tag === "WorkspaceRemoved") reached.removed++;
 };
 
 const tallyAnswerRaces = (world: World) => {
@@ -527,6 +583,7 @@ const setUp = async (world: World) => {
     })
   );
   const workspace = [...world.model().workspaces.values()][0]!;
+  world.workspaceId = workspace.id;
 
   for (const s of SESSIONS) {
     await run(
@@ -558,9 +615,11 @@ const setUp = async (world: World) => {
 const feedsBehind = async (world: World) => {
   const log = await world.readLog();
 
-  // A feed that failed visibly is done: it never resubscribes, so it never catches up.
+  // A feed that failed visibly, or ended with its session, never resubscribes or catches up.
   return world.feeds
-    .filter((fs) => !fs.failed && !isPrefix(streamSeqs(log, fs.stream), viewOfFeed(fs, log)))
+    .filter(
+      (fs) => !fs.failed && !fs.ended && !isPrefix(streamSeqs(log, fs.stream), viewOfFeed(fs, log))
+    )
     .map(
       (fs) =>
         `${fs.client}/${fs.stream} at ${viewOfFeed(fs, log).at(-1)} of ` +
