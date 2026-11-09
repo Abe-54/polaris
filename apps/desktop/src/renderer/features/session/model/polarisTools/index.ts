@@ -15,7 +15,7 @@ import * as visualization from "./visualization.ts";
 import * as worker from "./worker.ts";
 import { lowerFirst } from "./words.ts";
 
-export { type BannerRecord, withBanner } from "./session.ts";
+export { type BannerRecord, secretEnding, withBanner } from "./session.ts";
 
 export type * from "./types.ts";
 

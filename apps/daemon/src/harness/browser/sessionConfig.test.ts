@@ -23,7 +23,7 @@ const tempDir = () => {
 
 const open = async (configs: ReturnType<typeof sessionConfigs>, url: string) => {
   const scope = Effect.runSync(Scope.make());
-  const path = await Effect.runPromise(configs(SESSION, url).pipe(Scope.provide(scope)));
+  const path = await Effect.runPromise(configs.hold(SESSION, url).pipe(Scope.provide(scope)));
 
   return { path, close: () => Effect.runPromise(Scope.close(scope, Exit.void)) };
 };

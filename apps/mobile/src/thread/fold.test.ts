@@ -9,6 +9,7 @@ import {
   SubagentDetail,
   SubagentId,
   TurnDetail,
+  TurnItem,
 } from "@polaris/protocol";
 import { at, event, request, session, sessionId, snapshot, turn } from "./daemon.testing.ts";
 import { applySessionItem, latestSecretOutcome, type SessionFold } from "./fold.ts";
@@ -63,6 +64,8 @@ describe("subagents", () => {
     ]);
   });
 });
+
+type ToolOutput = Extract<TurnItem, { readonly _tag: "ToolCall" }>["output"];
 
 describe("a Secret Request's outcome", () => {
   const secret = request({ kind: "secret", title: "Tailscale auth key", detail: "To join" });
@@ -121,5 +124,34 @@ describe("a Secret Request's outcome", () => {
     );
 
     expect(answered?.secretOutcomes).toEqual([]);
+  });
+
+  const call = (output: ToolOutput, status: "running" | "completed" = "completed") =>
+    TurnItem.cases.ToolCall.make({
+      id: "c-1",
+      name: "mcp__polaris__request_secret",
+      input: { label: "Tailscale auth key", reason: "To join" },
+      output,
+      status,
+    });
+
+  test.each([
+    ["Saved. The secret is in /tmp/s, readable by your commands for 24 hours.", "saved"],
+    [[{ type: "text", text: "The user declined.\nCarry on without it." }], "declined"],
+    [
+      { content: [{ type: "text", text: "No answer in 10 minutes; the request was withdrawn." }] },
+      "ended",
+    ],
+  ] as const)("after a reload, its call's reply %# still says how it ended", (output, outcome) => {
+    const reloaded = fold(snapshot([{ turn: turn(1), items: [call(output)] }]));
+    const shown = reloaded === null ? null : latestSecretOutcome(reloaded);
+
+    expect([shown?.request.title, shown?.outcome]).toEqual(["Tailscale auth key", outcome]);
+  });
+
+  test("a call still waiting on the user says nothing yet", () => {
+    const waiting = fold(snapshot([{ turn: turn(1), items: [call(null, "running")] }]));
+
+    expect(waiting === null ? "none" : latestSecretOutcome(waiting)).toBeNull();
   });
 });
