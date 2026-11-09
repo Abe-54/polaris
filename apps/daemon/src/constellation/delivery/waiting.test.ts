@@ -271,3 +271,28 @@ test("a Codex worker with background processes is nudged at once, as before", as
     })
   );
 });
+
+test("after a Daemon restart stops the background work, the silent-end nudge carries the restart note", async () => {
+  const w = claudeWorld();
+  await w.run(
+    Effect.gen(function* () {
+      yield* start("claude");
+      yield* TestClock.setTime(T0);
+      yield* brief();
+      yield* (yield* ConstellationDelivery).start();
+      yield* background([SCRIPT]);
+      yield* finish(WORKER, "completed", iso(T0));
+      // A real restart commits from a new process, never in the same millisecond as this.
+      yield* Effect.promise(() => Bun.sleep(5));
+      yield* TestClock.setTime(T0 + 60_000);
+      yield* signal(WORKER, { type: "daemon.recover", cause: "restart", at: iso(T0 + 60_000) });
+
+      yield* TestClock.adjust(WAIT_GRACE_MS);
+      yield* wait(() => Effect.succeed(w.turns.length === 1));
+      expect(w.prompts[0]).toContain(
+        "The Polaris Daemon restarted, so this background work was stopped. It will not report back:\n- command: bench.sh"
+      );
+      expect(w.prompts[0]).toContain("Your Attempt isn't claimed");
+    })
+  );
+});
