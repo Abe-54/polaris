@@ -14,4 +14,6 @@ export { liveRequestsApi, type RequestsApi } from "./data/api.ts";
 
 export { openNewDraft, openRequest, requestsView, useRequestsView } from "./model/store.ts";
 
+export { loadSend } from "./model/resend.ts";
+
 export type { RequestsSlotProps, SendPaneProps } from "./ui/slots.ts";

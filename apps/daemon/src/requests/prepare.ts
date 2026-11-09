@@ -35,7 +35,7 @@ export interface PreparedRequest {
   readonly bodyFile?: string;
 }
 
-interface Loaded {
+export interface Loaded {
   readonly ref: RequestRef | null;
   readonly path: string | undefined;
   readonly request: AdHocRequest;
@@ -75,7 +75,8 @@ const loadSaved = async (
   });
 };
 
-const load = (checkout: string, target: RequestTarget) =>
+/** The target as written, with its file's `@var` values; nothing resolved yet. */
+export const loadTarget = (checkout: string, target: RequestTarget) =>
   Match.valueTags(target, {
     Saved: ({ ref }) => loadSaved(checkout, ref),
     Inline: ({ request }) =>
@@ -173,7 +174,7 @@ export const prepare = async (
   environment: string | undefined,
   options: PrepareOptions = {}
 ): Promise<Result.Result<PreparedRequest, RequestsError>> => {
-  const loaded = await load(checkout, target);
+  const loaded = await loadTarget(checkout, target);
 
   if (Result.isFailure(loaded)) return Result.fail(loaded.failure);
   const { ref, path, request, variables } = loaded.success;

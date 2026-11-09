@@ -9,7 +9,6 @@ import type { ReactNode } from "react";
 import { useApp } from "../../../../shell/hooks.ts";
 import { ApprovalWell } from "../../../data/approval/ApprovalAnatomy.tsx";
 import { openTerminalIn } from "../../../terminal/index.ts";
-import { clockTime, sentBy } from "../../model/sendLog.ts";
 import {
   type FailedOutcome,
   failureCode,
@@ -76,23 +75,15 @@ export interface SendFailureProps extends RequestsSlotProps {
 
 export const SendFailure = ({ at, workspaceId, send, source, onSendAgain }: SendFailureProps) => {
   const host = useApp((s) => s.hosts.find((h) => h.key === at.hostKey)?.label ?? "this host");
-  const sessions = useApp((s) => s.hostModels[at.hostKey]?.sessions);
-  const by = sentBy(send, (id) => sessions?.get(id)?.session.title ?? null);
   const code = failureCode(send.outcome);
 
   return (
     <section
-      className="rounded-card border-hairline bg-surface-raised flex flex-col gap-3 border p-4"
+      className="px-panel flex flex-col gap-3 pb-3"
       data-testid="requests-send-failure"
       data-outcome={send.outcome}
       aria-label={failureTitle(send.outcome)}
     >
-      <div className="flex items-baseline gap-2">
-        <h3 className="text-heading-sm text-severity-critical-text min-w-0 flex-1 font-mono font-medium">
-          {failureTitle(send.outcome)}
-        </h3>
-        <span className="text-caption text-text-subtle shrink-0">{`${by} · ${clockTime(send.startedAt)}`}</span>
-      </div>
       <p className="text-body text-text-subtle [overflow-wrap:anywhere]">
         {explanation(send, host, source)}
       </p>

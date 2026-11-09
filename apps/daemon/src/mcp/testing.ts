@@ -48,6 +48,7 @@ export const WORKER_TOOL_NAMES = [
   "trace_capture",
   "trace_compare",
   "compare",
+  "send_request",
   "profile",
   "visualize",
 ];
@@ -79,6 +80,7 @@ export const LEAD_TOOL_NAMES = [
   "trace_capture",
   "trace_compare",
   "compare",
+  "send_request",
   "profile",
   "visualize",
 ];

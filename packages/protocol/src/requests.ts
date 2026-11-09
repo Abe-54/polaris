@@ -96,13 +96,17 @@ export type RequestsSnapshot = typeof RequestsSnapshot.Type;
 /** An origin's locality: Local needs no Origin Approval for an agent's Send. */
 export const OriginLocality = Schema.Literals(["local", "remote"]);
 
-/** `value` is present only when the variable isn't secret; `origin` only for a URL-valued one. */
+/**
+ * `value` is present only when the variable isn't secret; `origin` only for a URL-valued one.
+ * `file` is the checkout-relative `.env` file a `dotenv` value came from.
+ */
 export const ResolvedVariable = Schema.Struct({
   name: Name,
   source: Schema.Literals(["env", "dotenv", "file"]),
   masked: Schema.Boolean,
   value: Schema.optionalKey(Schema.String),
   origin: Schema.optionalKey(OriginLocality),
+  file: Schema.optionalKey(Name),
 }).check(Schema.makeFilter((variable) => !variable.masked || variable.value === undefined));
 
 export type ResolvedVariable = typeof ResolvedVariable.Type;

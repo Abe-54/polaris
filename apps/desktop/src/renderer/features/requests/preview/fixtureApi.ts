@@ -11,6 +11,7 @@ import {
   RequestTarget,
   type ResolvedVariable,
   Send,
+  SendLookup,
   SessionId,
   TraceId,
 } from "@polaris/protocol";
@@ -119,7 +120,7 @@ export interface FixtureOptions {
   /** A Request opened with unsaved edits, as Q1 shows "Recalculate overdue". */
   readonly files?: ReadonlyArray<RequestFile>;
   readonly environments?: ReadonlyArray<string>;
-  /** The Send Log, newest first; none by default. */
+  /** Sends already in the log, newest first, for `getSend` and the send log. */
   readonly sends?: ReadonlyArray<Send>;
 }
 
@@ -221,8 +222,8 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
   let files = options.files ?? FILES;
   const environments = options.environments ?? ["dev", "staging"];
   const watchers = new Set<Watch<RequestsSnapshot>>();
-  const sendLog = options.sends ?? [];
   let sends = 0;
+  let log = options.sends ?? [];
   const snapshot = (): RequestsSnapshot => ({ files, environments });
 
   return {
@@ -253,7 +254,28 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
 
       return { ok: true, value: next };
     },
-    send: async (_at, input) => ({ ok: true, value: sendOf(input, files, ++sends) }),
+    send: async (_at, input) => {
+      const sent = sendOf(input, files, ++sends);
+
+      log = [sent, ...log];
+
+      return { ok: true, value: sent };
+    },
+    getSend: async (_at, lookup) => {
+      const found = log.find((s) =>
+        SendLookup.match(lookup, {
+          ById: ({ id }) => s.id === id,
+          ByTrace: ({ traceId }) => s.traceId === traceId,
+        })
+      );
+
+      return found === undefined
+        ? {
+            ok: false,
+            error: { code: "E-SEND-NOT-FOUND", message: "No such send", fix: "Send it again" },
+          }
+        : { ok: true, value: found };
+    },
     variables: async () => ({ ok: true, value: VARIABLES }),
     parseCurl: async (_at, text) => {
       const parsed = parseCurl(text);
@@ -270,7 +292,7 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
         : { ok: true, value: parsed };
     },
     watchSendLog: (_at, on) => {
-      queueMicrotask(() => on.next(sendLog));
+      queueMicrotask(() => on.next(log));
 
       return () => undefined;
     },

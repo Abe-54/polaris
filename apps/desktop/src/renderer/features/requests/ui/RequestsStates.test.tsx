@@ -23,6 +23,7 @@ import { fixtureOriginApproval, withPendingApprovals } from "../preview/approval
 import { fixtureRequestsApi, type FixtureOptions } from "../preview/fixtureApi.ts";
 import { fixtureSends } from "../preview/sendLogFixtures.ts";
 import { RequestsMode } from "./RequestsMode.tsx";
+import { SendFixtureLayers } from "./send/fixture.tsx";
 
 const AT = { hostKey: HOST, sessionId: FIXTURE_SESSION };
 
@@ -63,7 +64,9 @@ const mount = (
     <AppProvider value={{ connection, navigation, commands }}>
       <TooltipProvider>
         <RequestsLayer api={{ ...fixtureRequestsApi(options), ...change }}>
-          <RequestsMode />
+          <SendFixtureLayers>
+            <RequestsMode />
+          </SendFixtureLayers>
         </RequestsLayer>
       </TooltipProvider>
     </AppProvider>

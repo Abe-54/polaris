@@ -11,6 +11,7 @@ import type {
   RequestTarget,
   ResolvedVariable,
   Send,
+  SendLookup,
 } from "@polaris/protocol";
 import type { IpcError, Result } from "../../../../shared/api.ts";
 import { polaris } from "../../bridge.ts";
@@ -41,6 +42,8 @@ export interface RequestsApi {
     at: RequestsSessionKey,
     input: SendInput
   ) => Promise<Result<ReadonlyArray<ResolvedVariable>>>;
+  /** One Send by id, or the one that started a Trace. */
+  readonly getSend: (at: RequestsSessionKey, lookup: SendLookup) => Promise<Result<Send>>;
   readonly parseCurl: (at: RequestsSessionKey, text: string) => Promise<Result<AdHocRequest>>;
   readonly formatCurl: (at: RequestsSessionKey, input: SendInput) => Promise<Result<string>>;
   /** The checkout's latest 100 Sends, newest first, again on every new Send. */
@@ -71,6 +74,7 @@ export const liveRequestsApi: RequestsApi = {
     ),
   send: (at, input) => polaris().request("requests.send", withEnvironment(at, input)),
   variables: (at, input) => polaris().request("requests.variables", withEnvironment(at, input)),
+  getSend: (at, lookup) => polaris().request("requests.send.get", { ...session(at), lookup }),
   parseCurl: (at, text) => polaris().request("requests.curl.parse", { ...session(at), text }),
   formatCurl: (at, input) => polaris().request("requests.curl.format", withEnvironment(at, input)),
   watchSendLog: (at, on) =>

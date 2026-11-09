@@ -86,7 +86,7 @@ test("a refused connection names the address and the Host, and where the URL cam
 
   const failure = screen.getByTestId("requests-send-failure");
 
-  expect(screen.getByRole("heading").textContent).toBe("Connection refused");
+  expect(failure.getAttribute("aria-label")).toBe("Connection refused");
   expect(failure.textContent).toContain(
     "Nothing is listening on localhost:4000 on Mac Studio. Start the dev server, or check {{base}} in env dev."
   );
@@ -117,6 +117,8 @@ test("a timeout says how long it waited; a denied Send offers no terminal", () =
   cleanup();
 
   show({ outcome: "denied", url: "https://staging.ledger.dev/invoices/overdue" }, null);
-  expect(screen.getByRole("heading").textContent).toBe("Not sent: origin denied");
+  expect(screen.getByTestId("requests-send-failure").getAttribute("aria-label")).toBe(
+    "Not sent: origin denied"
+  );
   expect(screen.queryByRole("button", { name: "Open a terminal" })).toBeNull();
 });

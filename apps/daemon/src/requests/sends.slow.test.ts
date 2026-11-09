@@ -213,11 +213,13 @@ test("a `< ./file` body is read inside the checkout and refused outside it", () 
 
           const error: RequestsError = await Effect.runPromise(
             Effect.flip(
-              sends.send({
-                checkout: f.root,
-                target: inline(`${base}/pay`, { method: "POST", body: "< ../../etc/passwd" }),
-                by: user,
-              })
+              sends
+                .send({
+                  checkout: f.root,
+                  target: inline(`${base}/pay`, { method: "POST", body: "< ../../etc/passwd" }),
+                  by: user,
+                })
+                .pipe(Effect.catchTag("OriginApprovalRequired", Effect.die))
             )
           );
 
@@ -240,11 +242,13 @@ test("a `.env` or private env file is never sent as a body, and its values are m
           for (const file of ["./.env", "./http-client.private.env.json"]) {
             const error: RequestsError = await Effect.runPromise(
               Effect.flip(
-                sends.send({
-                  checkout: f.root,
-                  target: inline(`${base}/x`, { method: "POST", body: `< ${file}` }),
-                  by: agent,
-                })
+                sends
+                  .send({
+                    checkout: f.root,
+                    target: inline(`${base}/x`, { method: "POST", body: `< ${file}` }),
+                    by: agent,
+                  })
+                  .pipe(Effect.catchTag("OriginApprovalRequired", Effect.die))
               )
             );
 

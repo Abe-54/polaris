@@ -2,7 +2,8 @@
  * Requests on fixtures, for screenshots: `#requests/<scene>` renders the whole app on Requests
  * with "Fix overdue totals" in the ledger Workspace selected and the fixture RequestsApi, no
  * Daemon involved. `q1` opens "Recalculate overdue" with an unsaved edit, as Paper Q1; `list`
- * opens the first Request; `states` lays out Q3's cards; the rest are in scenes.ts.
+ * opens the first Request; `q2` shows an agent's ad-hoc send whose write failed (the send pane);
+ * `states` lays out Q3's cards; the rest are in scenes.ts.
  */
 import { RequestTarget } from "@polaris/protocol";
 import { TooltipProvider } from "@polaris/ui";
@@ -18,6 +19,7 @@ import { FIXTURE_SESSION } from "../../traces/preview/fixtures.ts";
 import { RequestsLayer } from "../data/hooks.tsx";
 import { refString } from "../model/draft.ts";
 import { openRequest, setDraft, setLatestSend } from "../model/store.ts";
+import { AGENT_SEND, SendFixtureLayers } from "../ui/send/fixture.tsx";
 import { fixtureRequestsApi } from "./fixtureApi.ts";
 import { statesScene } from "./scenes.ts";
 import { StatesGallery } from "./StatesGallery.tsx";
@@ -92,7 +94,9 @@ export const mountRequestsPreview = (
   navigation.actions.selectSession(at);
   navigation.actions.setMode("requests");
 
-  if (scene === "q1") void playQ1(api);
+  if (scene === "q1" || scene === "q2") void playQ1(api);
+
+  if (scene === "q2") setTimeout(() => setLatestSend(at, AGENT_SEND), 200);
 
   states?.play();
 
@@ -112,7 +116,9 @@ export const mountRequestsPreview = (
 
   createRoot(root).render(
     <RequestsLayer api={api}>
-      <App value={{ connection, navigation, commands }} />
+      <SendFixtureLayers {...(states?.traces === undefined ? {} : { traces: states.traces })}>
+        <App value={{ connection, navigation, commands }} />
+      </SendFixtureLayers>
     </RequestsLayer>
   );
 

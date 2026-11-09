@@ -25,10 +25,12 @@ const home = mkdtempSync(join(tmpdir(), "polaris-requests-states-"));
 
 /** Each scene and what shows once it has drawn. */
 const SCENES = [
-  ["q2", "requests-send-log"],
+  ["send-log", "requests-send-log"],
   ["approval", "origin-approval"],
   ["empty", "requests-empty-checkout"],
   ["offline", "requests-host-offline"],
+  ["refused", "requests-send-failure"],
+  ["no-spans", "requests-no-spans"],
   ["states", "origin-approval"],
 ] as const;
 
