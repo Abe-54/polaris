@@ -61,6 +61,8 @@ export const Command = Schema.TaggedUnion({
     attachments: Schema.Array(AttachmentId),
     /** Set by the Daemon's Reviewer and walkthrough; never by a Client. */
     origin: Schema.optionalKey(Schema.NullOr(SessionOrigin)),
+    /** The Review a Reviewer's or walkthrough's session is for; set by the Daemon only. */
+    reviewSubject: Schema.optionalKey(Schema.NullOr(ReviewSubject)),
   },
   SendTurn: {
     sessionId: SessionId,

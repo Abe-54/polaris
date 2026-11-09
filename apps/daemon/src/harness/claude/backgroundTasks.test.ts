@@ -122,3 +122,28 @@ test("without the level, a foreground command moved to the background joins the 
     { tasks: [{ id: "b1", kind: "command", description: "bun dev" }] },
   ]);
 });
+
+test("a task leaving the level says its report is pending until the reports are taken", () => {
+  const tasks = new ClaudeBackgroundTasks();
+  const build = { task_id: "b", task_type: "local_bash", description: "Build" };
+  const lint = { task_id: "l", task_type: "local_bash", description: "Lint" };
+  expect(tasks.onMessage(level([build, lint]))).toMatchObject([{ reportsPending: false }]);
+  expect(tasks.onMessage(level([lint]))).toMatchObject([{ reportsPending: true }]);
+  tasks.takeReports();
+  expect(tasks.onMessage(level([lint, build]))).toMatchObject([{ reportsPending: false }]);
+});
+
+test("without the level, a notification's report is pending on the change it makes", () => {
+  const tasks = new ClaudeBackgroundTasks();
+  tasks.onMessage({
+    type: "system",
+    subtype: "task_started",
+    task_id: "c",
+    task_type: "local_bash",
+    is_backgrounded: true,
+    description: "Sleep",
+    uuid: crypto.randomUUID(),
+    session_id: "s",
+  });
+  expect(tasks.onMessage(notification("c"))).toMatchObject([{ tasks: [], reportsPending: true }]);
+});

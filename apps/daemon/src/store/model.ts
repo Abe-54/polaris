@@ -507,6 +507,8 @@ const recordTurn =
           turnCount: Math.max(r.session.turnCount, turn.index + 1),
           currentUserTurn: opened ?? r.session.currentUserTurn,
           lastReplyPreview: quiet ? r.session.lastReplyPreview : kept.replyPreview,
+          // A Turn starting is the Harness taking up any reports it had waiting.
+          backgroundReportsPending: started ? false : r.session.backgroundReportsPending,
         },
         turns: upsertTurn(r.turns, kept),
       };
@@ -666,7 +668,11 @@ const apply: (event: DomainEvent) => Reducer = DomainEvent.match<Reducer>({
     updateSession(fold, event.sessionId, () => ({ session: { contextUsage: event.usage } })),
   SessionBackgroundTasksChanged: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({
-      session: { backgroundTasks: event.tasks, backgroundChangedAt: fold.at },
+      session: {
+        backgroundTasks: event.tasks,
+        backgroundChangedAt: fold.at,
+        backgroundReportsPending: event.reportsPending,
+      },
     })),
   SessionCompacted: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({ session: { lastCompaction: event.compaction } })),

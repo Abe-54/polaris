@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import {
   AgentSession,
+  BackgroundTask,
   CommandId,
   DomainEvent,
   SessionId,
@@ -120,6 +121,28 @@ describe("acceptedThroughUserTurn", () => {
     const record = fold([...run(u1), accepted(turn("gone", 7), 7, 4)]);
 
     expect(record.session.acceptedThroughUserTurn).toBe(4);
+  });
+});
+
+describe("backgroundReportsPending", () => {
+  const tasksChanged = (reportsPending: boolean) =>
+    DomainEvent.cases.SessionBackgroundTasksChanged.make({ sessionId, tasks: [], reportsPending });
+
+  test("holds from the change that says so until the Harness starts a Turn", () => {
+    const waiting = fold([...run(u1), tasksChanged(true)]);
+    const continued = fold([...run(u1), tasksChanged(true), ...run(c1)]);
+
+    expect(waiting.session.backgroundReportsPending).toBe(true);
+    expect(continued.session.backgroundReportsPending).toBe(false);
+  });
+
+  test("a change logged before the field had none pending", () => {
+    const old = DomainEvent.cases.SessionBackgroundTasksChanged.make({
+      sessionId,
+      tasks: [new BackgroundTask({ id: "b", kind: "command", description: "Build" })],
+    });
+
+    expect(fold([tasksChanged(true), old]).session.backgroundReportsPending).toBe(false);
   });
 });
 

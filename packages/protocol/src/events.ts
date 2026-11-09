@@ -2,7 +2,7 @@
  * Persisted domain events. The Daemon's event store is the source of truth;
  * every read model a Client sees is a projection of these.
  */
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { constellationEventFields, resourceEventFields } from "./constellation/events.ts";
 import { ConstellationId } from "./constellation/domain.ts";
 import {
@@ -98,7 +98,15 @@ export const DomainEvent = Schema.TaggedUnion({
   SessionContextUsed: { sessionId: SessionId, usage: ContextUsage },
   /** The Harness compacted the context window (see `AgentSession.lastCompaction`). */
   SessionCompacted: { sessionId: SessionId, compaction: Compaction },
-  SessionBackgroundTasksChanged: { sessionId: SessionId, tasks: Schema.Array(BackgroundTask) },
+  SessionBackgroundTasksChanged: {
+    sessionId: SessionId,
+    tasks: Schema.Array(BackgroundTask),
+    /** Finished tasks' reports wait for a Turn (capability `session.background-reports`). */
+    reportsPending: Schema.Boolean.pipe(
+      Schema.withDecodingDefaultKey(Effect.succeed(false)),
+      Schema.withConstructorDefault(Effect.succeed(false))
+    ),
+  },
 
   TurnStarted: { turn: Turn, actor: optionalNullable(Actor) },
   TurnItemCompleted: {

@@ -106,6 +106,13 @@ export const Capability = Schema.Literals([
   "approval.secret",
   /** `PinSession`, `SessionPinned`, and `AgentSession.pinnedAt` and `origin`. */
   "session.pin",
+  /** `AgentSession.reviewSubject`: the Review a Reviewer's or walkthrough's session is for. */
+  "session.review-subject",
+  /**
+   * `AgentSession.backgroundReportsPending` and `SessionBackgroundTasksChanged.reportsPending`:
+   * the Harness will start a Turn for finished background tasks' reports.
+   */
+  "session.background-reports",
   /** `Turn.checkpointAfterCommit`: the commit of a Turn's after-checkpoint. */
   "session.checkpoint-commit",
   /**

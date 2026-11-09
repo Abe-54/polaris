@@ -177,6 +177,8 @@ const onUserOrHarnessTurn = (turn: TurnFacts, ended: boolean) =>
       lastReplyPreview: ended
         ? (turn.replyPreview ?? null)
         : (entry.session.lastReplyPreview ?? null),
+      // A Turn starting is the Harness taking up any reports it had waiting.
+      backgroundReportsPending: ended ? entry.session.backgroundReportsPending : false,
     },
   }));
 
@@ -315,8 +317,11 @@ const fold = (event: DomainEvent): Fold =>
         onSession(sessionId, patch({ worktreeSetup: setup })),
       SessionContextUsed: ({ sessionId, usage }) =>
         onSession(sessionId, patch({ contextUsage: usage })),
-      SessionBackgroundTasksChanged: ({ sessionId, tasks }) =>
-        onSession(sessionId, patch({ backgroundTasks: tasks })),
+      SessionBackgroundTasksChanged: ({ sessionId, tasks, reportsPending }) =>
+        onSession(
+          sessionId,
+          patch({ backgroundTasks: tasks, backgroundReportsPending: reportsPending })
+        ),
       SessionCompacted: ({ sessionId, compaction }) =>
         onSession(sessionId, patch({ lastCompaction: compaction })),
       SessionNotified: ({ sessionId, notification }) =>

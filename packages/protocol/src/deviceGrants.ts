@@ -43,6 +43,7 @@ const DEVICE_START_SESSION = {
   prompt: Schema.String,
   attachments: Schema.Array(AttachmentId),
   origin: absentOrNull,
+  reviewSubject: absentOrNull,
 } satisfies Record<keyof typeof Command.cases.StartSession.fields, Schema.Top>;
 
 const isDeviceStartSession = Schema.is(Schema.Struct(DEVICE_START_SESSION));

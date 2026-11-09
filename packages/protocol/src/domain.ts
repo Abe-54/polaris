@@ -27,7 +27,7 @@ import {
 } from "./models.ts";
 import { WorktreeSetup, WorktreeSetupRun } from "./worktreeSetup.ts";
 import { ConstellationId } from "./constellation/domain.ts";
-import { FeedbackBatch, PullRequestRef } from "./review.ts";
+import { FeedbackBatch, PullRequestRef, ReviewSubject } from "./review.ts";
 
 export { Timestamp } from "./ids.ts";
 
@@ -300,6 +300,14 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   backgroundTasks: optionalArray(BackgroundTask),
   /** When `backgroundTasks` last changed; null before it ever did, or from an older Daemon. */
   backgroundChangedAt: optionalNullable(Timestamp),
+  /**
+   * Finished background tasks whose reports the Harness hasn't yet started a Turn for
+   * (capability `session.background-reports`): a settle with it set isn't the Turn's end.
+   */
+  backgroundReportsPending: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false))
+  ),
   permissionMode: PermissionMode,
   /** The Model the next Turn runs on; null for the Harness's default. Changed by `SetModel`. */
   model: Schema.NullOr(ModelId),
@@ -335,6 +343,11 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   pullRequest: optionalNullable(PullRequestRef),
   /** Set by the Daemon for a Reviewer's or walkthrough's own session; absent for the user's. */
   origin: optionalNullable(SessionOrigin),
+  /**
+   * What a Reviewer's or walkthrough's session reviews: the subject of the Review it was
+   * started for (capability `session.review-subject`); null for every other session.
+   */
+  reviewSubject: optionalNullable(ReviewSubject),
   /** Set by the Daemon on a Constellation worker's session (`SessionWorker`); null for the rest. */
   worker: optionalNullable(SessionWorker),
   /** When the user pinned it to the top of the list (`PinSession`); null when it isn't. */

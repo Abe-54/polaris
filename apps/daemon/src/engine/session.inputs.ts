@@ -111,7 +111,10 @@ export const eventSchemas = {
     })
   ),
   "harness.backgroundTasksChanged": standard(
-    Schema.Struct({ tasks: Schema.Array(BackgroundTask) })
+    Schema.Struct({
+      tasks: Schema.Array(BackgroundTask),
+      reportsPending: Schema.optionalKey(Schema.Boolean),
+    })
   ),
   "harness.subagentStarted": standard(Schema.Struct({ subagent: Subagent })),
   "harness.subagentEnded": standard(
@@ -197,6 +200,9 @@ export const normalizedInput = (input: SessionInput, at: string) => {
       withdrawnBy: input.withdrawnBy ?? "harness",
       reason: input.reason ?? "The Harness withdrew the request",
     };
+
+  if (input.type === "harness.backgroundTasksChanged")
+    return { ...input, reportsPending: input.reportsPending ?? false };
 
   if (input.type === "turns.accept")
     return { ...input, userTurnNumber: input.userTurnNumber ?? null };

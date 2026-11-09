@@ -594,7 +594,7 @@ export const sessionMachine = createMachine({
 
           for (const effect of idleStopEffect(record)) enq.emit(effect);
 
-          return settle(enq, record, backgroundTasksChanged(record, event.tasks));
+          return settle(enq, record, backgroundTasksChanged(record, event));
         },
       },
       states: {

@@ -564,6 +564,7 @@ export const RequestInputs = {
           reply: Schema.NullOr(Schema.String),
           digestStarted: Schema.optionalKey(Schema.Boolean),
           backgroundTasks: Schema.Int,
+          backgroundReportsPending: Schema.optionalKey(Schema.Boolean),
           userTurn: Schema.NullOr(Schema.Struct({ id: Schema.String, startedAt: Schema.String })),
           updatedAt: Schema.String,
           review: Schema.optionalKey(

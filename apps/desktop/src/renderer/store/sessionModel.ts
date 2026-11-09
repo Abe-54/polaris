@@ -397,9 +397,9 @@ const fold = (event: DomainEvent): Fold =>
         (m) =>
           patchSession(m, { lastCompaction: compaction }),
       SessionBackgroundTasksChanged:
-        ({ tasks }): Fold =>
+        ({ tasks, reportsPending }): Fold =>
         (m) =>
-          patchSession(m, { backgroundTasks: tasks }),
+          patchSession(m, { backgroundTasks: tasks, backgroundReportsPending: reportsPending }),
       TurnStarted:
         ({ turn }): Fold =>
         (m) =>
