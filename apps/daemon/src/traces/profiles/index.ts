@@ -2,6 +2,10 @@ import { Profiles } from "./service.ts";
 
 export { Profiles } from "./service.ts";
 
+/** ENG-704: V8 hides code it optimised before an inspector attached (mostly upstream behaviour). */
+export const LATE_ATTACH_LIMIT =
+  "Attached profiles can miss code V8 optimised before the attach, such as a hot setInterval loop that shows only as listOnTimeout. To record such a loop, use Restart with profiling (profile process) or profile the command from the start.";
+
 import { InspectorTargets } from "../attach/registry.ts";
 import { captureAttached } from "../attach/capture.ts";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
