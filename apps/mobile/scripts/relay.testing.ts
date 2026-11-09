@@ -5,8 +5,8 @@
  */
 import { connectRpc, type DaemonClient } from "@polaris/client/rpc";
 import { socketTransport } from "@polaris/sdk";
-import { launchDaemon, type TestDaemon } from "@polaris/sdk/testing";
-import { Effect, Exit, Scope } from "effect";
+import { launchDaemon, TEST_USER_KEY, type TestDaemon } from "@polaris/sdk/testing";
+import { Effect, Exit, Redacted, Scope } from "effect";
 
 const RELAY_DIR = new URL("../../relay/", import.meta.url).pathname;
 
@@ -108,6 +108,8 @@ export const launchRelayDaemon = async (relayUrl: string): Promise<RelayDaemon> 
           clientVersion: "0.0.0",
           deviceLabel: "Relay tests",
           capabilities: [],
+          // Acts as the Desktop App, which turns the relay route on (ADR 0100).
+          userKey: Redacted.make(TEST_USER_KEY),
         });
 
         return connection.client;
