@@ -40,21 +40,28 @@ const isBunConfig = (path: string) => {
  * adds a symlink, or writes under node_modules.
  */
 const unsafeToInstall = async (root: string) => {
-  const raw = (
-    await gitText(root, [...HOOKS_OFF, "diff", "--raw", "--no-renames", "HEAD...MERGE_HEAD"])
+  // -z: git quotes unusual paths otherwise ("d\303\251/.npmrc"), which would slip past the checks.
+  const fields = (
+    await gitText(root, [...HOOKS_OFF, "diff", "--raw", "-z", "--no-renames", "HEAD...MERGE_HEAD"])
   )
-    .split("\n")
-    .filter((line) => line !== "");
+    .split("\0")
+    .filter((field) => field !== "");
 
-  const refused = raw.flatMap((line) => {
-    const [meta = "", path = ""] = line.split("\t");
-    const mode = meta.split(" ")[1] ?? "";
-    const lower = path.toLowerCase();
+  if (fields.length % 2 !== 0) return "git's list of the merged branch's changes couldn't be read";
 
-    return mode === "120000" || isBunConfig(path) || lower.split("/").includes("node_modules")
-      ? [path]
-      : [];
-  });
+  const refused: Array<string> = [];
+
+  for (let i = 0; i < fields.length; i += 2) {
+    const mode = (fields[i] ?? "").split(" ")[1] ?? "";
+    const path = fields[i + 1] ?? "";
+
+    const unsafe =
+      mode === "120000" ||
+      isBunConfig(path) ||
+      path.normalize("NFC").toLowerCase().split("/").includes("node_modules");
+
+    if (unsafe) refused.push(path);
+  }
 
   return refused.length === 0 ? null : `the merged branch changes ${refused.join(", ")}`;
 };

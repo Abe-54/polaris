@@ -100,6 +100,8 @@ test.each([
   ["BUNFIG.toml"],
   ["pkg/.npmrc"],
   ["node_modules/x/index.js"],
+  ["dé/.npmrc"],
+  ["node_modules/é.js"],
 ])(
   "Accept's merge installs nothing from a branch that changes %s and refuses the conflict",
   async (config) => {
