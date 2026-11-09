@@ -10,6 +10,16 @@ import { join } from "node:path";
 import { Effect, Exit, Match, Schema, Scope } from "effect";
 import type { SimulatorActivity } from "./activity.ts";
 import { type AgentDeviceRun, jsonOutcome, type Outcome, textOutcome } from "./agentDevice.ts";
+import {
+  describeDevice,
+  DeviceList,
+  LABEL,
+  NONE_LISTED,
+  OPEN_SLOW,
+  type Platform,
+  platformOf,
+  selectorOf,
+} from "./platforms.ts";
 
 export type ToolContent =
   | { readonly type: "text"; readonly text: string }
@@ -22,8 +32,10 @@ export interface ToolResult {
 
 export interface SessionDeps {
   readonly sessionId: SessionId;
-  /** Why iOS Simulators can't run now, or null. */
-  readonly blocker: () => Promise<string | null>;
+  /** Why `platform`'s Simulators can't run now, or null. */
+  readonly blocker: (platform: Platform) => Promise<string | null>;
+  /** The platforms this Host could run, for a list. */
+  readonly platforms: () => Promise<ReadonlyArray<Platform>>;
   /** agent-device, installed on first use; rejects with the install's own message. */
   readonly agentDevice: () => Promise<AgentDeviceRun>;
   readonly activity: SimulatorActivity;
@@ -39,12 +51,11 @@ export const failure = (body: string): ToolResult => ({
   isError: true,
 });
 
+/** A list's target: it names no device. */
+const NO_TARGET: Target = { platform: "ios", id: "" };
+
 const NO_SIMULATOR =
   "No Simulator is open in this session yet: call simulator_list, then simulator_open with an id.";
-
-/** The first open builds agent-device's iOS runner for this Xcode (47 s in the spike). */
-export const OPEN_SLOW =
-  "The first open on this Host builds agent-device's iOS runner for this Xcode, which takes about a minute (more on a busy Mac).";
 
 const stillRunning = (label: string, note: string) =>
   text(
@@ -68,31 +79,6 @@ const OpenData = Schema.Struct({
     Schema.Struct({ bootOccurred: Schema.optionalKey(Schema.Boolean) })
   ),
 });
-
-export const DeviceList = Schema.Struct({
-  devices: Schema.Array(
-    Schema.Struct({
-      id: Schema.String,
-      name: Schema.String,
-      platform: Schema.String,
-      kind: Schema.optionalKey(Schema.String),
-      model: Schema.optionalKey(Schema.String),
-      osVersion: Schema.optionalKey(Schema.String),
-      booted: Schema.optionalKey(Schema.Boolean),
-    })
-  ),
-});
-
-const describeDevice = (device: (typeof DeviceList.Type)["devices"][number]) =>
-  [
-    device.id,
-    device.name,
-    device.osVersion === undefined ? null : `iOS ${device.osVersion}`,
-    device.model,
-    device.booted === true ? "booted" : "shut down",
-  ]
-    .filter((part) => part !== null && part !== undefined)
-    .join(" · ");
 
 export type PressKey = "home" | "back" | "return" | "dismiss_keyboard";
 
@@ -130,6 +116,12 @@ const settledWithin = async <A>(promise: Promise<A>, ms: number): Promise<A | "p
 const unwrap = <A>(outcome: Outcome<A>, onOk: (data: A) => ToolResult): ToolResult =>
   outcome.ok ? onOk(outcome.data) : failure(outcome.message);
 
+/** One device: an iOS Simulator by UDID, or an Android Emulator by serial or AVD name. */
+export interface Target {
+  readonly platform: Platform;
+  readonly id: string;
+}
+
 export interface Step {
   /** The tool's name: a pending call is joined by the same tool, not run again. */
   readonly tool: string;
@@ -140,8 +132,7 @@ export interface Step {
   readonly target: "chosen" | "current" | "none";
   readonly work: (
     run: AgentDeviceRun,
-    target: {
-      readonly id: string;
+    target: Target & {
       /** `command`, the session's binding, then `values` after `--`, so none reads as a flag. */
       readonly argv: (
         command: ReadonlyArray<string>,
@@ -155,22 +146,25 @@ export const simulatorSession = (deps: SessionDeps) => {
   const { sessionId, activity } = deps;
   const softWaitMs = deps.softWaitMs ?? SOFT_WAIT_MS;
   const name = sessionName(sessionId);
-  let current: string | null = null;
+  let current: Target | null = null;
   let pending: Pending | null = null;
   let used = false;
 
   const argvOf =
-    (id: string) => (command: ReadonlyArray<string>, values: ReadonlyArray<string>) => [
+    (target: Target) => (command: ReadonlyArray<string>, values: ReadonlyArray<string>) => [
       ...command,
-      "--platform",
-      "ios",
-      "--udid",
-      id,
+      ...selectorOf(target.platform, target.id),
       "--session",
       name,
       "--",
       ...values,
     ];
+
+  const shown = async (): Promise<Target | null> => {
+    const id = await Effect.runPromise(activity.shown(sessionId));
+
+    return id === null ? null : { platform: platformOf(id), id };
+  };
 
   const holdDriving = async () => {
     const scope = await Effect.runPromise(Scope.make());
@@ -179,18 +173,15 @@ export const simulatorSession = (deps: SessionDeps) => {
     return () => Effect.runPromise(Scope.close(scope, Exit.void));
   };
 
-  const targetOf = async (step: Step, chosen: string | undefined) =>
+  const targetOf = async (step: Step, chosen: Target | undefined): Promise<Target | null> =>
     Match.value(step.target).pipe(
-      Match.when("none", () => Promise.resolve("")),
+      Match.when("none", () => Promise.resolve(NO_TARGET)),
       Match.when("chosen", () => Promise.resolve(chosen ?? null)),
-      Match.when(
-        "current",
-        async () => current ?? (await Effect.runPromise(activity.shown(sessionId)))
-      ),
+      Match.when("current", async () => current ?? (await shown())),
       Match.exhaustive
     );
 
-  const execute = async (step: Step, id: string): Promise<ToolResult> => {
+  const execute = async (step: Step, target: Target): Promise<ToolResult> => {
     let run: AgentDeviceRun;
 
     try {
@@ -203,7 +194,7 @@ export const simulatorSession = (deps: SessionDeps) => {
     const release = step.target === "none" ? async () => {} : await holdDriving();
 
     try {
-      return await step.work(run, { id, argv: argvOf(id) });
+      return await step.work(run, { ...target, argv: argvOf(target) });
     } catch (error) {
       return failure(`agent-device didn't run: ${String(error)}`);
     } finally {
@@ -223,17 +214,17 @@ export const simulatorSession = (deps: SessionDeps) => {
     return earlier.tool === step.tool ? settled : null;
   };
 
-  const call = async (step: Step, chosen?: string): Promise<ToolResult> => {
+  const call = async (step: Step, chosen?: Target): Promise<ToolResult> => {
     const joined = await joinPending(step);
 
     if (joined !== null) return joined;
-    const blocked = await deps.blocker();
+    const target = await targetOf(step, chosen);
+
+    if (target === null) return failure(NO_SIMULATOR);
+    const blocked = step.target === "none" ? null : await deps.blocker(target.platform);
 
     if (blocked !== null) return failure(blocked);
-    const id = await targetOf(step, chosen);
-
-    if (id === null) return failure(NO_SIMULATOR);
-    const done = execute(step, id);
+    const done = execute(step, target);
     const settled = await settledWithin(done, softWaitMs);
 
     if (settled !== "pending") return settled;
@@ -243,18 +234,18 @@ export const simulatorSession = (deps: SessionDeps) => {
     return stillRunning(step.label, note);
   };
 
-  const opened = async (id: string, bootOccurred: boolean) => {
-    if (bootOccurred) await Effect.runPromise(activity.agentBooted(id));
-    await Effect.runPromise(activity.agentOpened(sessionId, id));
-    current = id;
+  const opened = async (target: Target, bootOccurred: boolean) => {
+    if (bootOccurred) await Effect.runPromise(activity.agentBooted(target.id));
+    await Effect.runPromise(activity.agentOpened(sessionId, target.id));
+    current = { platform: target.platform, id: target.id };
   };
 
-  const open = (id: string | undefined, app: string | undefined) =>
+  const open = (id: string, app: string | undefined, platform = platformOf(id)) =>
     call(
       {
         tool: "simulator_open",
         label: "Opening the Simulator",
-        note: OPEN_SLOW,
+        note: OPEN_SLOW[platform],
         target: "chosen",
         work: async (run, target) => {
           const result = await run(
@@ -274,14 +265,14 @@ export const simulatorSession = (deps: SessionDeps) => {
           const outcome = jsonOutcome(result, OpenData);
 
           if (!outcome.ok) return failure(outcome.message);
-          await opened(target.id, outcome.data.selection?.bootOccurred === true);
+          await opened(target, outcome.data.selection?.bootOccurred === true);
 
           return text(
             `Opened ${outcome.data.device ?? target.id}${app === undefined ? "" : ` with ${app}`}; the user sees it in the session's Simulator tab. Call simulator_snapshot for its accessibility tree.`
           );
         },
       },
-      id
+      { platform, id }
     );
 
   /** A plain command on the session's Simulator, answered with what agent-device printed. */
@@ -329,24 +320,35 @@ export const simulatorSession = (deps: SessionDeps) => {
       },
     });
 
+  /** Each platform's devices, or why it can't run them yet. */
+  const listOne = async (run: AgentDeviceRun, platform: Platform): Promise<string> => {
+    const blocked = await deps.blocker(platform);
+
+    if (blocked !== null) return `${LABEL[platform]}: ${blocked}`;
+
+    const outcome = jsonOutcome(
+      await run(["devices", "--platform", platform, "--json"], { timeoutMs: 60_000 }),
+      DeviceList
+    );
+
+    if (!outcome.ok) return `${LABEL[platform]}: ${outcome.message}`;
+    const { devices } = outcome.data;
+
+    return devices.length === 0
+      ? NONE_LISTED[platform]
+      : devices.map((device) => describeDevice(platform, device)).join("\n");
+  };
+
   const list = () =>
     call({
       tool: "simulator_list",
       label: "Listing the Simulators",
       target: "none",
       work: async (run) => {
-        const outcome = jsonOutcome(
-          await run(["devices", "--platform", "ios", "--json"], { timeoutMs: 60_000 }),
-          DeviceList
-        );
+        const platforms = await deps.platforms();
+        const sections = await Promise.all(platforms.map((platform) => listOne(run, platform)));
 
-        return unwrap(outcome, ({ devices }) =>
-          text(
-            devices.length === 0
-              ? "No iOS Simulators on this Host: create one in Xcode (Window > Devices and Simulators)."
-              : devices.map(describeDevice).join("\n")
-          )
-        );
+        return text(sections.join("\n\n"));
       },
     });
 
