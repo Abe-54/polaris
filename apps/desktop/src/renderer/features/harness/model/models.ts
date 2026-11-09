@@ -133,10 +133,56 @@ export const choose = (model: ModelData, chosen: string | null = null): ModelCho
   effort: effortFor(model, chosen),
 });
 
+/** A Model id's lineage: "claude-opus-5-5" is family "claude opus", version [5, 5]. */
+const idLineage = (id: string): Lineage => {
+  const parts = id
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((p) => p !== "");
+
+  // An 8-digit part is a snapshot date ("claude-opus-4-1-20250805"), not a version.
+  const numbers = parts.filter((p) => /^\d{1,4}$/.test(p)).map(Number);
+  const words = parts.filter((p) => /^[a-z]+$/.test(p));
+
+  return { family: words.join(" "), version: numbers.length === 0 ? null : numbers };
+};
+
+const rowLineage = (m: ModelData): Lineage => {
+  const named = lineage(m.name);
+
+  return named.version === null ? { ...named, version: idLineage(m.id).version } : named;
+};
+
+const sameFamily = (id: string, row: string) => id === row || id.endsWith(` ${row}`);
+
+/**
+ * The listed row for a saved Model: its id, else the one row of its lineage, so a full id
+ * ("claude-opus-5-5") finds the alias the Harness lists ("opus", named "Opus 5.5").
+ */
+export const findModel = (
+  models: ReadonlyArray<ModelData>,
+  model: string | null
+): ModelData | undefined => {
+  if (model === null) return undefined;
+  const exact = models.find((m) => m.id === model);
+
+  if (exact !== undefined) return exact;
+  const want = idLineage(model);
+
+  if (want.family === "") return undefined;
+  const kin = models.filter((m) => sameFamily(want.family, rowLineage(m).family));
+  const same = kin.filter((m) => sameVersion(rowLineage(m).version, want.version));
+
+  if (same.length === 1) return same[0];
+  const unversioned = kin.filter((m) => rowLineage(m).version === null);
+
+  return same.length === 0 && unversioned.length === 1 ? unversioned[0] : undefined;
+};
+
 const nameOf = (models: ReadonlyArray<ModelData>, model: string | null) => {
   if (model === null || model === CLAUDE_DEFAULT_ROW) return "Default";
 
-  return models.find((m) => m.id === model)?.name ?? model;
+  return findModel(models, model)?.name ?? model;
 };
 
 /** The label for a Model and effort, as the Harness names them ("Opus 5 · high"). */
