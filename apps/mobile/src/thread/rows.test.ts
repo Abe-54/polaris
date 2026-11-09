@@ -123,7 +123,7 @@ describe("thread rows", () => {
     ]);
   });
 
-  test("a message's images stay with it: in its Turn's prompt, and while it's queued", () => {
+  test("a message's images stay with it: in its Turn's prompt, a steer, and while either waits", () => {
     const shot = new Attachment({
       id: AttachmentId.make("att-1"),
       name: "shot.png",
@@ -134,11 +134,40 @@ describe("thread rows", () => {
       height: 3,
     });
 
-    const fold = foldOf([snapshot([{ turn: turn(0, { prompt: "", attachments: [shot] }) }])]);
-    const [prompt] = threadRows(fold?.turns ?? [], new Set());
-    const [queued] = outgoingRows([], [{ text: "and this one", attachments: [shot] }]);
+    const steer = TurnItem.cases.UserMessage.make({ id: "u", text: "", attachments: [shot] });
+
+    const fold = foldOf([
+      snapshot([
+        { turn: turn(0, { prompt: "", attachments: [shot] }) },
+        { turn: turn(1, { status: "working", endedAt: null }), items: [steer] },
+      ]),
+    ]);
+
+    const rows = threadRows(fold?.turns ?? [], new Set());
+    const [prompt] = rows;
+    const steered = rows.find((row) => row.kind === "steered");
+
+    const [steering, queued] = outgoingRows(
+      [
+        {
+          id: "s-1",
+          text: "like this",
+          attachments: [shot],
+          turnId: "t-1",
+          baseline: 1,
+          status: "sending",
+          error: null,
+        },
+      ],
+      [{ text: "and this one", attachments: [shot] }]
+    );
 
     expect(prompt?.kind === "prompt" && prompt.attachments).toEqual([shot]);
+    expect(steered?.kind === "steered" && steered.attachments).toEqual([shot]);
+    expect(steering?.kind === "outgoing" && [steering.note, steering.attachments]).toEqual([
+      "Steering…",
+      [shot],
+    ]);
     expect(queued?.kind === "outgoing" && [queued.note, queued.attachments]).toEqual([
       "Queued for after this turn",
       [shot],

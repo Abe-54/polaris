@@ -50,7 +50,11 @@ export type ThreadRow = RowBase &
     /** A Turn the user didn't send, as one quiet line after the Turn before it: idle compaction. */
     | { readonly kind: "quiet"; readonly text: string }
     /** A steer the Harness took, where it landed in the Turn. */
-    | { readonly kind: "steered"; readonly text: string }
+    | {
+        readonly kind: "steered";
+        readonly text: string;
+        readonly attachments: ReadonlyArray<Attachment>;
+      }
     /** A steer or queued follow-up still on its way, or why a steer didn't land. */
     | {
         readonly kind: "outgoing";
@@ -189,8 +193,13 @@ const planStep = (item: Extract<TurnItem, { _tag: "Plan" }>): Step => {
 type Piece =
   | {
       readonly kind: "text";
-      readonly row: "reply" | "steered" | "error";
+      readonly row: "reply" | "error";
       readonly text: string;
+    }
+  | {
+      readonly kind: "steered";
+      readonly text: string;
+      readonly attachments: ReadonlyArray<Attachment>;
     }
   | Step
   | { readonly kind: "visualization"; readonly visualization: Visualization }
@@ -200,7 +209,7 @@ const pieceOf = (item: TurnItem): Piece =>
   Match.value(item).pipe(
     Match.tagsExhaustive({
       AssistantMessage: ({ text }): Piece => ({ kind: "text", row: "reply", text }),
-      UserMessage: ({ text }): Piece => ({ kind: "text", row: "steered", text }),
+      UserMessage: ({ text, attachments = [] }): Piece => ({ kind: "steered", text, attachments }),
       Error: ({ message }): Piece => ({ kind: "text", row: "error", text: message }),
       // Thinking stays out of the phone's thread.
       Reasoning: (): Piece => null,
@@ -330,6 +339,13 @@ const openRows = (
           first: false,
           last: false,
         });
+
+      return;
+    }
+
+    if (piece.kind === "steered") {
+      if (piece.text.trim() !== "" || piece.attachments.length > 0)
+        rows.push({ ...piece, key: `${turn.id}:${id}`, turnId: turn.id });
 
       return;
     }
@@ -504,7 +520,7 @@ export const outgoingRows = (
     turnId: entry.turnId,
     id: entry.id,
     text: entry.text,
-    attachments: [],
+    attachments: entry.attachments,
     failed: entry.status === "failed",
     note: entry.status === "failed" ? `${entry.error ?? "Didn't send"} · Tap to edit` : "Steering…",
   })),

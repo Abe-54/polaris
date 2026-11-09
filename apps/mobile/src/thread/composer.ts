@@ -76,22 +76,36 @@ export const placeholderFor = (mode: ComposerMode): string =>
 /** While a Turn runs, the text can wait for it as a follow-up. */
 export const canQueue = (mode: ComposerMode) => mode.kind === "steer" || mode.kind === "queue";
 
-/** A steer carries text only: a draft with attachments waits for the next Turn instead. */
-export const sendQueues = (mode: ComposerMode, attachments: ReadonlyArray<AttachmentId>) =>
-  mode.kind === "queue" || (mode.kind === "steer" && attachments.length > 0);
+/**
+ * A draft with attachments steers only where the Host and Harness take them
+ * (`steersAttachments`); otherwise it waits for the next Turn instead.
+ */
+export const sendQueues = (
+  mode: ComposerMode,
+  attachments: ReadonlyArray<AttachmentId>,
+  steersAttachments = false
+) =>
+  mode.kind === "queue" || (mode.kind === "steer" && attachments.length > 0 && !steersAttachments);
 
 /** The command Send makes of the text; null when it queues instead or there's nothing to send. */
 export const submitCommand = (
   mode: ComposerMode,
   sessionId: SessionId,
   draft: string,
-  attachments: ReadonlyArray<AttachmentId> = []
+  attachments: ReadonlyArray<AttachmentId> = [],
+  steersAttachments = false
 ): Command | null => {
   const text = draft.trim();
 
-  if (text === "" || mode.kind === "blocked" || sendQueues(mode, attachments)) return null;
+  if (text === "" || mode.kind === "blocked" || sendQueues(mode, attachments, steersAttachments))
+    return null;
 
-  if (mode.kind === "steer") return Command.cases.Steer.make({ sessionId, text });
+  if (mode.kind === "steer")
+    return Command.cases.Steer.make(
+      attachments.length === 0
+        ? { sessionId, text }
+        : { sessionId, text, attachments: [...attachments] }
+    );
 
   if (mode.kind === "answer")
     return Command.cases.RespondToApproval.make({

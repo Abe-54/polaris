@@ -79,6 +79,8 @@ export interface ThreadSource {
   readonly workspace: (workspaceId: WorkspaceId) => Effect.Effect<Workspace | null, ThreadFailure>;
   /** The Daemon has `session.steer`. */
   readonly canSteer: boolean;
+  /** The Daemon has `session.steer-attachments`: a steer may carry files its Harness takes. */
+  readonly canSteerAttachments?: boolean;
   /** Up to `limit` Turns before `beforeIndex`; null on a Host that can't page them to a phone. */
   readonly olderTurns: (
     sessionId: SessionId,
@@ -230,6 +232,7 @@ export const daemonThreadSource = (options: DaemonThreadOptions): ThreadSource =
   return {
     workspace,
     canSteer: has("session.steer"),
+    canSteerAttachments: has("session.steer-attachments"),
     olderTurns: (sessionId, beforeIndex, limit) =>
       has("session.turn-paging")
         ? withClient(live, (client) => client["session.turns"]({ sessionId, beforeIndex, limit }))
