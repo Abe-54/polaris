@@ -2,28 +2,13 @@ import { readdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Option, Redacted, Schema } from "effect";
 import { connectionUrl, metadata, sourceName, type Candidate } from "./connection.ts";
-import { blocks, namedBlocks, literalTarget, unquote } from "./literals.ts";
+import { blocks, namedBlocks, literalTarget } from "./literals.ts";
+import { ENV_FILES, envValues } from "./env.ts";
 import { composeSources, throughCompose } from "./formats.ts";
 import { isSqliteUrl, sqliteFile } from "./sqlite/files.ts";
 
 import { findPackages } from "./packages.ts";
 import { read } from "./read.ts";
-
-const envValues = (text: string) => {
-  const values: Record<string, string> = {};
-
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-
-    if (match?.[1] && match[2] !== undefined) {
-      const value = unquote(match[2]);
-
-      if (!/\$(?:\{|[A-Za-z_])/.test(value)) values[match[1]] = value;
-    }
-  }
-
-  return values;
-};
 
 const candidate = (
   name: string,
@@ -185,8 +170,6 @@ const rails = (text: string, file: string, env: Record<string, string>) => {
 
   return frameworkObject("rails", fields, file);
 };
-
-const ENV_FILES = [".env", ".env.local", ".env.development", ".env.development.local"];
 
 const STAGES = ["production", "staging", "test"];
 
