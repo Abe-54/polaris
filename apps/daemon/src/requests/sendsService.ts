@@ -35,6 +35,8 @@ export interface PendingSend {
   readonly url: string;
   readonly path: string;
   readonly variables: ReadonlyArray<ResolvedVariable>;
+  /** The checkout-relative file a `< ./file` body comes from, so a gate can see it. */
+  readonly bodyFile?: string;
   readonly by: Extract<SendAuthor, { kind: "agent" }>;
 }
 

@@ -47,6 +47,7 @@ const pending = (
     url: mask.url(prepared.request.url),
     path: mask.text(path),
     variables: prepared.variables,
+    ...(prepared.bodyFile === undefined ? undefined : { bodyFile: prepared.bodyFile }),
     by,
   };
 };

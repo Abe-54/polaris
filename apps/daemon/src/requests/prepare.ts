@@ -31,6 +31,8 @@ export interface PreparedRequest {
   readonly headers: ReadonlyArray<HttpHeader>;
   readonly variables: ReadonlyArray<ResolvedVariable>;
   readonly secrets: ReadonlyArray<string>;
+  /** The checkout-relative file a `< ./file` body was read from. */
+  readonly bodyFile?: string;
 }
 
 interface Loaded {
@@ -91,6 +93,17 @@ const bodyFileError = (file: string) =>
     fix: "Point `< ./file` at a file inside the checkout, relative to the .http file.",
   });
 
+/** Env files and key material never become a body: their values would leave unmasked. */
+const SECRET_FILE =
+  /^(?:\.env(?:\..*)?|http-client\.private\.env\.json|id_[a-z0-9]+|.*\.(?:pem|key|p12|pfx|jks|keystore))$/i;
+
+const secretFileError = (file: string) =>
+  new RequestsError({
+    code: "E-INPUT",
+    message: `The body file ${file} holds secrets; Polaris won't send it as a body.`,
+    fix: "Copy the values the body needs into a separate file, or use {{variables}}.",
+  });
+
 /** An empty read is an empty file only when the path is a zero-byte regular file inside. */
 const emptyFile = async (checkout: string, relative: string) => {
   try {
@@ -111,20 +124,34 @@ export const bodyFromFile = async (
   checkout: string,
   requestFile: string | undefined,
   body: string
-): Promise<Result.Result<string, RequestsError>> => {
+): Promise<Result.Result<{ body: string; file?: string }, RequestsError>> => {
   const file = INPUT_FILE.exec(body.trim())?.[1];
 
-  if (file === undefined || body.trim().includes("\n")) return Result.succeed(body);
+  if (file === undefined || body.trim().includes("\n")) return Result.succeed({ body });
   const relative = posix.normalize(posix.join(posix.dirname(requestFile ?? "."), file));
 
   if (isAbsolute(file) || relative === ".." || relative.startsWith("../"))
     return Result.fail(bodyFileError(file));
+
+  if (SECRET_FILE.test(posix.basename(relative))) return Result.fail(secretFileError(file));
   const text = await read(checkout, relative, SEND_BODY_CAP_BYTES);
 
   if (text === "" && !(await emptyFile(checkout, relative)))
     return Result.fail(bodyFileError(file));
 
-  return Result.succeed(text);
+  return Result.succeed({ body: text, file: relative });
+};
+
+/** Values shorter than this are masked only when a Request used them, so "1" isn't masked everywhere. */
+const MIN_UNUSED_SECRET = 6;
+
+/** The resolved secrets plus every private-env and `.env` value, should one reach the body or a response. */
+const allSecrets = (resolved: ReadonlyArray<string>, sources: VariableSources) => {
+  const unused = [...Object.values(sources.private), ...Object.values(sources.dotenv)].filter(
+    (value) => value.length >= MIN_UNUSED_SECRET
+  );
+
+  return [...new Set([...resolved, ...unused])];
 };
 
 /** The headers to send: `auth` becomes Authorization unless the Request sets one itself. */
@@ -163,12 +190,14 @@ export const prepare = async (
   if (Result.isFailure(resolution)) return Result.fail(resolution.failure);
   const resolved = resolution.success.request;
   let body = resolved.body;
+  let bodyFile: string | undefined;
 
   if (body !== undefined) {
     const read = await bodyFromFile(checkout, path, body);
 
     if (Result.isFailure(read)) return Result.fail(read.failure);
-    body = read.success;
+    body = read.success.body;
+    bodyFile = read.success.file;
   }
 
   return Result.succeed({
@@ -177,6 +206,7 @@ export const prepare = async (
     request: { ...resolved, ...(body === undefined ? undefined : { body }) },
     headers: wireHeaders(resolved),
     variables: resolution.success.variables,
-    secrets: resolution.success.secrets,
+    secrets: allSecrets(resolution.success.secrets, sources.success),
+    ...(bodyFile === undefined ? undefined : { bodyFile }),
   });
 };

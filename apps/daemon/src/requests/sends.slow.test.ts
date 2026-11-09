@@ -227,6 +227,39 @@ test("a `< ./file` body is read inside the checkout and refused outside it", () 
     );
   }));
 
+test("a `.env` or private env file is never sent as a body, and its values are masked anyway", () =>
+  withTraceFixture(async (f) => {
+    const unused = "dotenv-only-secret-91c4";
+    await writeFile(join(f.root, ".env"), `STRIPE_KEY=${unused}\n`);
+    await writeFile(join(f.root, "http-client.private.env.json"), "{}");
+
+    await withServer(
+      () => new Response(`leaked ${unused}`),
+      (base) =>
+        withSends(f, async (sends) => {
+          for (const file of ["./.env", "./http-client.private.env.json"]) {
+            const error: RequestsError = await Effect.runPromise(
+              Effect.flip(
+                sends.send({
+                  checkout: f.root,
+                  target: inline(`${base}/x`, { method: "POST", body: `< ${file}` }),
+                  by: agent,
+                })
+              )
+            );
+
+            expect(error.message).toContain("holds secrets");
+          }
+
+          const send = await Effect.runPromise(
+            sends.send({ checkout: f.root, target: inline(`${base}/echo`), by: user })
+          );
+
+          expect(send.responseBody).toBe(`leaked ${MASK}`);
+        })
+    );
+  }));
+
 test("a pre-send hook can deny an agent's Send; a user's Send never reaches it", () =>
   withTraceFixture(async (f) => {
     let hits = 0;
