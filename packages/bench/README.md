@@ -87,6 +87,8 @@ Scenarios are independent and each starts its own Daemons, so any subset can run
 - **Linux**: `/proc/<pid>/stat` (CPU in clock ticks at `USER_HZ` = 100, reaped children included), `/proc/<pid>/status` (VmRSS; footprint = RssAnon + RssShmem) and the voluntary + involuntary **context switches** of all threads as the wakeup count. Children from `/proc/<pid>/task/*/children`.
 - Fallback (or `POLARIS_BENCH_PS=1`): `ps` for RSS and CPU only (10 ms CPU resolution on macOS, whole seconds on Linux).
 
+`src/languageServerMemory.ts` drives one of the Host's managed language servers (`sql` or `bash`) over LSP stdio through open, idle and typing phases under the sampler, to tell steady state from growth and see which process holds the memory; results and method are in `measurements/eng-288/`.
+
 CPU is the change of user + system time over the tree between samples (including children that exited and were reaped in between) divided by wall time: 100% = one core. Prefer footprint over RSS when judging memory on macOS: RSS counts shared libraries and pages the allocator keeps but the system can reclaim.
 
 ## Results and baselines
