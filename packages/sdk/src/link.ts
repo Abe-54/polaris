@@ -137,7 +137,7 @@ export interface Reconnect {
   readonly maxDelay: Duration.Duration;
 }
 
-const delayFor = (attempt: number, reconnect: Reconnect) =>
+export const delayFor = (attempt: number, reconnect: Reconnect) =>
   Duration.min(Duration.millis(250 * 2 ** Math.min(attempt, 10)), reconnect.maxDelay);
 
 /**

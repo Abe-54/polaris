@@ -78,8 +78,11 @@ export const LEGACY_PLATFORMS = ["darwin-arm64", "linux-x64", "linux-arm64"] as 
  */
 export const HostPlatformName = Schema.String;
 
-/** A Linux Host's C library; `HostInfo.platform` leaves it out. */
-export const HostLibc = Schema.Literals(["glibc", "musl"]);
+/**
+ * A Linux Host's C library; `HostInfo.platform` leaves it out. Any name on the wire, like
+ * `HostPlatformName`, so a newer Host still decodes; code picking a build refuses names it doesn't know.
+ */
+export const HostLibc = Schema.String;
 
 export type HostLibc = typeof HostLibc.Type;
 
