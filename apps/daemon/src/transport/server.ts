@@ -8,7 +8,7 @@
  * socket's byte stream replaced by a Wire: each RPC message is one JSON frame
  * (serialized with `RpcSerialization.json`), and blobs travel beside them as
  * binary chunks. Handler layers are composed here, in one place: the defaults
- * from `handlers.ts` first, then whatever the caller passes, which wins.
+ * from `defaults/` first, then whatever the caller passes, which wins.
  */
 import {
   type BlobError,
@@ -59,7 +59,7 @@ import { BlobChannel, ServiceError } from "../services.ts";
 import { ClientCapabilities } from "../engine/rpc.ts";
 import { logDefects } from "./defects.ts";
 import { rpcAdmissionBudget } from "./rpcAdmission.ts";
-import { defaultHandlers } from "./handlers.ts";
+import { defaultHandlers } from "./defaults/index.ts";
 import { loadHostInfo } from "./hostInfo.ts";
 import { acquireLock, type DaemonAlreadyRunning, LockError } from "./lock.ts";
 import { ConnectionBlobs, ServerRpcs } from "./rpcs.ts";

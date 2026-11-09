@@ -8,7 +8,7 @@ The Daemon's socket listener, the RPC server on it, and `polaris bridge`. The se
 | `rpcs.ts` | `ServerRpcs` = `DaemonRpcs` + the server-only `ConnectionBlobs` middleware. |
 | `defects.ts` | Logs a request's defect with its cause; the server fails only that request (ADR 0064). |
 | `rpcAdmission.ts` | Extension RPC reservations before payload decoding or handler forking: 32 per connection, 128 across the server, including streams. |
-| `handlers.ts` | `hello` (HostInfo, capabilities; annotates the connection with the device label and the Client's capabilities, scopes it to a Pairing when it presents an `extensionToken`, and checks the Extension's `protocolVersions` against `PROTOCOL_VERSION`: required on the gateway, refused with `ProtocolMismatch` naming the side to update), the `extensions.*` RPCs, and placeholders for every other RPC. |
+| `defaults/` | One layer per RPC group (a single `toLayer` over all of `DaemonRpcs` hits TS2589): `hello` (HostInfo, capabilities; annotates the connection with the device label and the Client's capabilities, scopes it to a Pairing when it presents an `extensionToken`, and checks the Extension's `protocolVersions` against `PROTOCOL_VERSION`: required on the gateway, refused with `ProtocolMismatch` naming the side to update), the `extensions.*` RPCs, and placeholders for every other RPC. |
 | `socket.ts` | Stale-socket probe, private socket directory, `Bun.listen` bound atomically, upgrade adoption. |
 | `windowsPipe/` | Windows: the user-only, local-only named pipe the Daemon listens on, created through `bun:ffi` (`security.ts` is its descriptor and flags as data; ADR 0059). |
 | `bunSocket.ts` | Bun sockets (listened or adopted by fd) as ByteTransports, with partial-write handling. |
