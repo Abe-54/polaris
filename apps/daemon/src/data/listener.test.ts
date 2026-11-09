@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { realpath } from "node:fs/promises";
 import { Effect, Redacted } from "effect";
 import {
+  command,
   localityProbe,
   lsofOwners,
   composePublished,
@@ -89,6 +90,14 @@ for (const mode of ["TCP", "Unix"])
         )
       )
   );
+
+test("ENG-805: a command that ignores its kill settles empty within its limit", async () => {
+  // Ignoring SIGTERM stands in for an lsof stuck in state U, which no signal ends.
+  const started = performance.now();
+  const output = await command("/bin/sh", ["-c", "trap '' TERM; echo partial; sleep 3"], 200);
+  expect(output).toBe("");
+  expect(performance.now() - started).toBeLessThan(1500);
+});
 
 test("F2: missing listeners and unsupported/unknown owners fail closed", async () => {
   expect(await localityProbe("/checkout")({ ...connection, port: 1 }, candidate)).toBe("remote");
