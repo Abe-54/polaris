@@ -102,6 +102,7 @@ test.each([
   ["node_modules/x/index.js"],
   ["dé/.npmrc"],
   ["node_modules/é.js"],
+  ["ü/.npmrc"],
 ])(
   "Accept's merge installs nothing from a branch that changes %s and refuses the conflict",
   async (config) => {
@@ -153,6 +154,67 @@ test(
     expect("error" in s.result && s.result.error.message).toContain(
       "the merged branch changes pkg/escape"
     );
+    expect(existsSync(join(s.root, "node_modules"))).toBe(false);
+  },
+  WORK_MS
+);
+
+test.each([
+  ["a file: path", "file:../../outside"],
+  ["a git URL", "git+ssh://git@example.com/x.git"],
+  ["a GitHub shorthand", "someone/thing"],
+  ["a tarball URL", "https://example.com/x.tgz"],
+])(
+  "Accept's merge installs nothing from a branch that adds %s dependency",
+  async (_, spec) => {
+    const s = await setup(
+      {
+        ...conflicting,
+        "pkg/package.json": JSON.stringify({ name: "fixture-pkg", dependencies: { x: spec } }),
+      },
+      leadSide
+    );
+
+    expect("error" in s.result && s.result.error.message).toContain(
+      `pkg/package.json: dependencies.x@${spec}`
+    );
+    expect(existsSync(join(s.root, "node_modules"))).toBe(false);
+  },
+  WORK_MS
+);
+
+test.each([
+  [
+    "a catalog entry from git",
+    JSON.stringify({ name: "fixture-pkg", catalog: { x: "github:a/b" } }),
+    "pkg/package.json: catalog.x@github:a/b",
+  ],
+  [
+    "a dependency map that isn't flat",
+    JSON.stringify({ name: "fixture-pkg", dependencies: { x: { nested: "file:../x" } } }),
+    "pkg/package.json: dependencies.x.nested@file:../x",
+  ],
+  [
+    "changed workspace globs",
+    JSON.stringify({ name: "fixture-pkg", workspaces: ["../../elsewhere/*"] }),
+    "pkg/package.json: workspaces",
+  ],
+  [
+    "a dotted key that shadows a nested one",
+    JSON.stringify({ name: "fixture-pkg", dependencies: { "a.b": "^1", a: { b: "file:../x" } } }),
+    "pkg/package.json: dependencies.a.b@file:../x",
+  ],
+  [
+    "a manifest that isn't strict JSON",
+    "{ name: 'fixture-pkg', }",
+    "pkg/package.json: not valid JSON",
+  ],
+])(
+  "Accept's merge installs nothing from a branch whose manifest has %s",
+  async (_, manifest, reason) => {
+    const s = await setup({ ...conflicting, "pkg/package.json": manifest }, leadSide);
+
+    expect("error" in s.result && s.result.error.message).toContain(reason);
     expect(existsSync(join(s.root, "node_modules"))).toBe(false);
   },
   WORK_MS

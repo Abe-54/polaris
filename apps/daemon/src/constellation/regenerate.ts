@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { ConstellationFinding } from "@polaris/protocol";
 import { gitText, HOOKS_OFF, runGitRaw } from "../git/git.ts";
 import { executableOf, findExecutable } from "../platform/executable.ts";
+import { addedOffRegistry } from "./specifiers.ts";
 
 export const LOCKFILE = "bun.lock";
 
@@ -40,30 +41,32 @@ const isBunConfig = (path: string) => {
  * adds a symlink, or writes under node_modules.
  */
 const unsafeToInstall = async (root: string) => {
-  // -z: git quotes unusual paths otherwise ("d\303\251/.npmrc"), which would slip past the checks.
+  // -z: paths unquoted, NUL-separated, as `:<old mode> <new mode> … <status>` then the path.
   const fields = (
     await gitText(root, [...HOOKS_OFF, "diff", "--raw", "-z", "--no-renames", "HEAD...MERGE_HEAD"])
-  )
-    .split("\0")
-    .filter((field) => field !== "");
-
-  if (fields.length % 2 !== 0) return "git's list of the merged branch's changes couldn't be read";
+  ).split("\0");
 
   const refused: Array<string> = [];
+  const manifests: Array<string> = [];
 
-  for (let i = 0; i < fields.length; i += 2) {
-    const mode = (fields[i] ?? "").split(" ")[1] ?? "";
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const mode = fields[i]?.split(" ")[1] ?? "";
     const path = fields[i + 1] ?? "";
+    const segments = path.normalize("NFC").toLowerCase().split("/");
 
-    const unsafe =
-      mode === "120000" ||
-      isBunConfig(path) ||
-      path.normalize("NFC").toLowerCase().split("/").includes("node_modules");
+    if (mode === "120000" || isBunConfig(path) || segments.includes("node_modules"))
+      refused.push(path);
 
-    if (unsafe) refused.push(path);
+    if (path === "package.json" || path.endsWith("/package.json")) manifests.push(path);
   }
 
-  return refused.length === 0 ? null : `the merged branch changes ${refused.join(", ")}`;
+  if (refused.length > 0) return `the merged branch changes ${refused.join(", ")}`;
+
+  const offRegistry = await addedOffRegistry(root, manifests);
+
+  return offRegistry.length === 0
+    ? null
+    : `the merged branch adds dependencies from outside the registry (${offRegistry.join(", ")})`;
 };
 
 const changedFiles = async (root: string, range: string) =>
