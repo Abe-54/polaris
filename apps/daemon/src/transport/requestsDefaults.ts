@@ -18,7 +18,7 @@ export const REQUESTS_DEFAULT_TAGS = [
   "requests.curl.format",
 ] as const;
 
-/** Stubs until ENG-809's Daemon tasks serve Requests and announce `requests`. */
+/** Fallbacks for a server without `lazyRequestHandlers` (tests); `polaris serve` mounts the real ones. */
 export const requestsDefaults = RequestsRpcs.toLayer({
   "requests.watch": feed,
   "requests.save": request,

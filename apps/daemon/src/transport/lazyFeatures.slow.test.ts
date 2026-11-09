@@ -8,6 +8,7 @@ import {
   DomainEvent,
   HostStreamItem,
   LayerRun,
+  RequestsError,
   ReviewerSettings,
   ReviewSubject,
   RiskSummary,
@@ -81,12 +82,17 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
         Effect.gen(function* () {
           const { client } = yield* connectRpc(yield* socketTransport(socket));
 
-          yield* client.hello({
+          const hello = yield* client.hello({
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
             capabilities: ["usage", "review.reviewer-settings", "session.accept"],
           });
+
+          // The lazy Requests handlers answer, not the Unsupported fallbacks.
+          const requests = yield* client["requests.sendLog.page"]({
+            sessionId: SessionId.make("no-such-session"),
+          }).pipe(Effect.flip);
 
           const now = new Date().toISOString();
 
@@ -108,7 +114,7 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
             throughTurnId: null,
           }).pipe(Effect.flip);
 
-          return { usage, reviewer, accept };
+          return { usage, reviewer, accept, requests, capabilities: hello.capabilities };
         })
       )
     );
@@ -116,6 +122,9 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
     expect(result.usage.buckets).toEqual([]);
     expect(result.reviewer.settings.onSessions).toBe(false);
     expect(result.accept._tag).toBe("NotFound");
+    expect(result.capabilities).toContain("requests");
+    expect(result.requests).toBeInstanceOf(RequestsError);
+    expect(result.requests).toMatchObject({ code: "E-INPUT" });
   } finally {
     daemon.kill();
     await daemon.exited;

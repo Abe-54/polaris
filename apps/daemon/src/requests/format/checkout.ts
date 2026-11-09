@@ -1,6 +1,7 @@
 /** A checkout's request files, environments and `.env` values, read through the bounded safe reader. */
-import { posix } from "node:path";
-import { RequestsError, type RequestsSnapshot } from "@polaris/protocol";
+import { lstat, realpath } from "node:fs/promises";
+import { join, posix } from "node:path";
+import { RequestFile, RequestsError, type RequestsSnapshot } from "@polaris/protocol";
 import { Result } from "effect";
 import { ENV_FILES, envValues } from "../../data/env.ts";
 import { checkoutFiles } from "../../data/packages.ts";
@@ -25,6 +26,31 @@ export const isRequestFile = (path: string) => /\.(?:http|rest)$/i.test(path);
 export const listRequestFiles = async (checkout: string, signal?: AbortSignal) =>
   (await checkoutFiles(checkout, signal)).filter(isRequestFile).sort();
 
+/** The size of a regular file in the checkout, without following a symlink; undefined otherwise. */
+const fileSize = async (checkout: string, path: string) => {
+  try {
+    const stat = await lstat(join(await realpath(checkout), path));
+
+    return stat.isFile() ? stat.size : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** A file `read` would return as empty because it is over the limit: a parse error, not no Requests. */
+const tooLarge = (path: string): RequestDocument => {
+  const parsed = parseDocument("", path);
+
+  return {
+    ...parsed,
+    file: RequestFile.make({
+      path,
+      requests: [],
+      parseErrors: [{ line: 1, message: `${path} is too large to read (over 1 MiB)` }],
+    }),
+  };
+};
+
 export const loadRequestFiles = async (
   checkout: string,
   signal?: AbortSignal
@@ -33,7 +59,12 @@ export const loadRequestFiles = async (
 
   for (const path of await listRequestFiles(checkout, signal)) {
     signal?.throwIfAborted();
-    documents.push(parseDocument(await read(checkout, path, REQUEST_FILE_LIMIT), path));
+    const text = await read(checkout, path, REQUEST_FILE_LIMIT);
+    const size = text === "" ? await fileSize(checkout, path) : undefined;
+
+    documents.push(
+      size !== undefined && size > REQUEST_FILE_LIMIT ? tooLarge(path) : parseDocument(text, path)
+    );
   }
 
   return documents;
@@ -101,18 +132,28 @@ export const loadSnapshot = async (
   };
 };
 
-/** `.env` values for `{{$dotenv}}`: the root's files, then the request file's own directory's over them. */
-export const dotenvValues = async (checkout: string, path: string) => {
+/**
+ * `.env` values for `{{$dotenv}}`: the root's files, then the request file's own directory's over
+ * them; `files` names the checkout-relative file each value came from.
+ */
+export const dotenvSources = async (checkout: string, path: string) => {
   const dir = posix.dirname(path);
   const dirs = dir === "." ? ["."] : [".", dir];
   const values: Record<string, string> = {};
+  const files: Record<string, string> = {};
 
   for (const from of dirs)
     for (const file of ENV_FILES)
-      Object.assign(values, envValues(await read(checkout, at(from, file))));
+      for (const [name, value] of Object.entries(envValues(await read(checkout, at(from, file))))) {
+        values[name] = value;
+        files[name] = at(from, file);
+      }
 
-  return values;
+  return { values, files };
 };
+
+export const dotenvValues = async (checkout: string, path: string) =>
+  (await dotenvSources(checkout, path)).values;
 
 /** Everything `resolveRequest` needs for a Request in `path` (or an ad-hoc one at the root). */
 export const variableSources = async (
@@ -136,11 +177,14 @@ export const variableSources = async (
       })
     );
 
+  const dotenv = await dotenvSources(checkout, path ?? ".");
+
   return Result.succeed({
     file: fileVariables,
     public: values.public,
     private: values.private,
-    dotenv: await dotenvValues(checkout, path ?? "."),
+    dotenv: dotenv.values,
+    dotenvFiles: dotenv.files,
   });
 };
 

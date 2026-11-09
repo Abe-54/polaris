@@ -1,5 +1,6 @@
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
+import { lazyRequestHandlers } from "./lazyRequests.ts";
 import { selfTraceExport } from "../traces/self/export.ts";
 import { selfTracer } from "../traces/self/tracer.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
@@ -172,10 +173,14 @@ const byteStreamHandlers = Layer.merge(ByteStreamRpcsLive, hostingSlot.bind).pip
   )
 );
 
+/** One set of search indexes and tree watches, shared by files.* and requests.watch. */
+const fileSearch = FileSearchLive();
+
 /** Every real handler layer the Daemon mounts. Compose new modules' layers here. */
 export const daemonHandlers = Layer.mergeAll(
   lazyDataHandlers,
   lazyTraceHandlers,
+  lazyRequestHandlers.pipe(Layer.provide(fileSearch)),
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -192,7 +197,7 @@ export const daemonHandlers = Layer.mergeAll(
   LiveNotifierLive,
   ResourceRpcsLive,
   lazyConstellationHandlers,
-  FilesRpcsLive.pipe(Layer.provide(FileSearchLive())),
+  FilesRpcsLive.pipe(Layer.provide(fileSearch)),
   GitRpcsLive,
   AttachmentRpcsLive,
   HarnessRpcsLive,
@@ -242,6 +247,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "traces.profiles",
   "traces.profiles.attach",
   "traces.self",
+  "requests",
   "constellation",
   "constellation.defaults",
   "extensions",
