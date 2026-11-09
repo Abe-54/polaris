@@ -2,7 +2,8 @@
 /**
  * Screenshots of the Orchestrator and Settings → Appearance in Moonlit, Midnight and light
  * (DESIGN.md, Chrome redesign: Themes), switched live through `settings.setAppearance`, and
- * checks the root's computed ground in each. Needs a built app.
+ * checks the root's computed ground in each, then archives two sessions for the toast's Undo
+ * and the sidebar's archived section (ENG-679). Needs a built app.
  *
  *   node scripts/themeScreens.ts <out dir>
  */
@@ -103,13 +104,33 @@ try {
           { title: "Polaris planning", state: "working" },
           { title: "Spike the review screen", state: "needs-you" },
           { title: "Glossary first pass", state: "idle" },
+          { title: "Old feed spike", state: "idle" },
+          { title: "Retry backoff notes", state: "idle" },
         ],
       },
     ])
   );
-  await page.locator('[data-slot="chip"]', { hasText: "polaris" }).first().click();
+  await page
+    .getByRole("navigation", { name: "Workspaces" })
+    .getByRole("button", { name: /polaris/ })
+    .first()
+    .click();
   await page.getByText("Polaris planning", { exact: true }).first().click();
   await eachTheme(page, "orchestrator");
+
+  await page.getByText("Glossary first pass", { exact: true }).first().click();
+
+  // ENG-679: Archive from the row's menu shows Undo; the foot of the list folds archived sessions.
+  for (const title of ["Retry backoff notes", "Old feed spike"]) {
+    await page.getByText(title, { exact: true }).first().click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
+    await page.getByText(`Archived ${title}`).first().waitFor({ timeout: 10_000 });
+  }
+
+  await page.getByTestId("archived-group").getByRole("button").first().click();
+  await page.getByTestId("archived-row").nth(1).waitFor({ timeout: 5_000 });
+  await page.getByTestId("archived-row").first().hover();
+  await eachTheme(page, "archived");
 
   await app.evaluate(({ Menu }) => {
     Menu.getApplicationMenu()?.getMenuItemById("settings.open")?.click();

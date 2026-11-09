@@ -28,8 +28,8 @@ import type { SessionEntry } from "../../../store/hostModel.ts";
 import { send } from "../../session/dispatch.ts";
 import { requestFork } from "../../session/forkRequest.ts";
 import { hasCapability, useHost } from "../../session/hooks.ts";
-import { archiveCommand, renameCommand } from "../../session/model/intent.ts";
-import { settingsStore } from "../../settings/index.ts";
+import { renameCommand } from "../../session/model/intent.ts";
+import { archiveSession, unarchiveSession } from "../../session/archive.ts";
 import { openInTerminalEntry } from "../../terminal/index.ts";
 import { isReviewSession } from "../model/sections.ts";
 
@@ -77,13 +77,9 @@ export const SessionMenu = ({ hostKey, entry, onRename, children, ...slot }: Ses
     );
 
   const archive = () =>
-    void send(
-      hostKey,
-      archived
-        ? Commands.UnarchiveSession({ sessionId: session.id })
-        : archiveCommand(session.id, settingsStore.getState().sessions.deleteMergedBranch),
-      archived ? "Couldn't unarchive" : "Couldn't archive"
-    );
+    void (archived
+      ? unarchiveSession(hostKey, session.id)
+      : archiveSession(hostKey, session.id, session.title));
 
   const entries: ReadonlyArray<MenuEntryInput> = [
     // ↵ on the focused row opens it too.
