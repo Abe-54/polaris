@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 /**
- * Runs every check of the Quint spec (what CI's `spec` job runs).
+ * Runs every check of the Quint spec (CI's `spec` and `spec-simulate` jobs split it with --part).
  *
  *   bun run spec                      typecheck, scenario tests, simulator
  *   bun run spec -- --samples 20000   a longer simulation
  *   bun run spec -- --verify          also Apalache (`quint verify`, needs Java 17+)
  *   bun run spec -- --verify --steps 5
+ *   bun run spec -- --part checks     typecheck and scenario tests only (CI's `spec` job)
+ *   bun run spec -- --part simulate   simulator runs only (CI's `spec-simulate` job)
  *
  * The simulator runs with a fixed seed, so a run is reproducible and the
  * witness counts below are stable; change `--seed` to explore elsewhere.
@@ -27,6 +29,18 @@ const steps = option("steps", "4");
 const seed = option("seed", "0x5eed");
 
 const verify = args.includes("--verify");
+
+const part = option("part", "all");
+
+if (!["all", "checks", "simulate"].includes(part)) {
+  console.log(`--part must be all, checks or simulate, not ${part}`);
+  process.exit(2);
+}
+
+/** Simulator and Apalache runs belong to `simulate`; typecheck and `quint test` to `checks`. */
+
+const inPart = (command: string | undefined) =>
+  part === "all" || (part === "simulate") === (command === "run" || command === "verify");
 
 const dir = join(import.meta.dir, "..");
 
@@ -76,6 +90,8 @@ const FINDINGS = [
 let failed = false;
 
 const run = (label: string, argv: ReadonlyArray<string>, expectFailure = false) => {
+  if (!inPart(argv[0])) return "";
+
   const started = performance.now();
 
   const result = Bun.spawnSync([quint, ...argv], { cwd: dir, stdout: "pipe", stderr: "pipe" });

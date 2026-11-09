@@ -11,7 +11,9 @@ name: CI
 #                     (test-macos); `turbo run test --affected` on a PR. An unaffected part passes in seconds.
 #                     Both test tiers (fast and *.slow.test.ts, ADR 0096); fast files over 2 s are listed in
 #                     the job summary.
-#   spec, spec-traces the Quint spec and Engine trace replays: spec, engine, store, verification, resume.ts.
+#   spec, spec-simulate, spec-traces  the Quint spec (typecheck and scenario tests; the simulator,
+#                     in parallel to fit the budget) and Engine trace replays: spec, engine, store,
+#                     verification, resume.ts.
 #   build-daemon, smoke-*, service-windows: the binaries build, start and serve; Daemon or Client affected.
 #                     build-daemon cross-compiles on Linux what the smokes need; build-daemon-macos builds
 #                     and signs darwin-arm64.
@@ -324,12 +326,32 @@ jobs:
         run: bun packages/spec/scripts/fetch-evaluator.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Quint typecheck, scenario tests, simulation (fixed seed)
-        run: bun run spec
+      - name: Quint typecheck and scenario tests
+        run: bun run spec -- --part checks
+
+  spec-simulate:
+    name: Spec (Quint simulator)
+    # The simulator half of `bun run spec`, on its own runner so neither half sets the lane's time.
+    needs: scope
+    if: needs.scope.outputs.spec == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: Fetch the Quint evaluator
+        run: bun packages/spec/scripts/fetch-evaluator.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Quint simulation (fixed seed), witnesses and mutants
+        run: bun run spec -- --part simulate
 
   spec-traces:
     name: Spec trace validation, Apalache
-    # Apart from `spec`, whose Quint runs take 3-5 minutes on their own.
+    # Apart from `spec` and `spec-simulate`, whose Quint runs take minutes on their own.
     needs: scope
     if: needs.scope.outputs.spec == 'true'
     runs-on: ubuntu-latest
@@ -598,6 +620,7 @@ jobs:
         platform-checks,
         test,
         spec,
+        spec-simulate,
         spec-traces,
         build-daemon,
         smoke-linux,
