@@ -57,6 +57,7 @@ const Rendered = ({ markdown, paths, renderLink }: RenderedProps) => {
       rehypePlugins={rehype}
       components={components}
       controls={{ code: { copy: false, download: false }, table: false }}
+      tableMaxHeight={0}
       shikiTheme={[POLARIS_SHIKI, POLARIS_SHIKI]}
       linkSafety={{ enabled: false }}
       lineNumbers={false}
