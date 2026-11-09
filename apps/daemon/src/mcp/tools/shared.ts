@@ -1,13 +1,16 @@
 import {
   CommandId,
+  Constellation,
+  ConstellationResult,
   ConstellationFinding,
   ConstellationGraphSlice,
   ConstellationRejected,
   type ConstellationCommand,
-  type ConstellationResult,
   type ConstellationId,
 } from "@polaris/protocol";
 import { Effect, Option, Schema } from "effect";
+import { graphData } from "../../constellation/data.ts";
+import type { StatusView } from "../../constellation/statusView.ts";
 import type { SessionBinding } from "../binding.ts";
 import { CallCommandId, RequestId, splitRequestId, type Idempotency } from "./idempotency.ts";
 
@@ -20,7 +23,8 @@ export interface ConstellationCommands {
   readonly status: (
     binding: SessionBinding,
     id: ConstellationId,
-    json: boolean
+    json: boolean,
+    view?: StatusView
   ) => Effect.Effect<ConstellationResult, ConstellationRejected>;
   /** Resolve friendly names against the caller's Constellation and Host catalog. */
   readonly resolve: (
@@ -88,6 +92,30 @@ export const graphSlice = (result: ConstellationResult) =>
         attempts: result.constellation.attempts,
         projections: result.projections,
       });
+
+/** Status JSON keeps each Task's latest Attempt; earlier ones show in the outline's send-back lines. */
+export const latestAttemptsOnly = (result: ConstellationResult): ConstellationResult => {
+  const graph = result.constellation;
+
+  if (graph === null) return result;
+
+  const latest = new Set(
+    graph.tasks.flatMap((task) => graph.attempts.findLast((a) => a.taskId === task.id)?.id ?? [])
+  );
+
+  return new ConstellationResult({
+    summary: result.summary,
+    next: result.next,
+    revision: result.revision,
+    sequence: result.sequence,
+    constellation: new Constellation({
+      ...graphData(graph),
+      attempts: graph.attempts.filter((a) => latest.has(a.id)),
+    }),
+    projections: result.projections,
+    proposals: result.proposals,
+  });
+};
 
 const resultText = (
   result: ConstellationResult,

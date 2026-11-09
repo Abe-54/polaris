@@ -1,4 +1,4 @@
-import { CommandId } from "@polaris/protocol";
+import { CommandId, Revision, TaskId } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import { McpBinding, sessionBinding } from "../binding.ts";
 import { leadTools } from "./lead.ts";
@@ -22,6 +22,7 @@ import {
   type ConstellationCommands,
   type LeadStarted,
   type StartTarget,
+  latestAttemptsOnly,
 } from "./shared.ts";
 
 export { errorResult } from "./shared.ts";
@@ -109,9 +110,17 @@ export const constellationTools = (
 
   const status = define(
     "status",
-    "Read the graph as a tree by group and parent, with Claims, questions and ready Tasks. Do not poll; updates arrive as Lead Turns.",
-    Schema.Struct({ json: Schema.optionalKey(Schema.Boolean) }),
-    (input) => commands.status(caller, binding.constellationId, input.json ?? false),
+    "Read the graph as a tree by group and parent, with Claims, questions and ready Tasks. Narrow it with task (that Task and its children), openOnly (hide done and canceled Tasks) or since (what changed after a graph revision, then where things stand). json adds the graph with each Task's latest Attempt. Do not poll; updates arrive as Lead Turns.",
+    Schema.Struct({
+      json: Schema.optionalKey(Schema.Boolean),
+      task: Schema.optionalKey(TaskId),
+      openOnly: Schema.optionalKey(Schema.Boolean),
+      since: Schema.optionalKey(Revision),
+    }),
+    ({ json, ...view }) =>
+      commands
+        .status(caller, binding.constellationId, json ?? false, view)
+        .pipe(Effect.map(latestAttemptsOnly)),
     { json: (input) => input.json ?? false }
   );
 
