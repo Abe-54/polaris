@@ -2,8 +2,9 @@
  * A fake `tailscale` CLI for tests, its state in `$FAKE_TAILSCALE_DIR`: `status.json` (or
  * `status.fail`: exit 1 with that file's text on stderr), `serve.json` as `serve status --json`
  * prints it, `serve.fail` the same for `serve`, and every call appended to `calls.log`.
+ * `serve.race.json` replaces `serve.json` just before the next changing `serve`, as another CLI would.
  */
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Schema } from "effect";
 
@@ -67,6 +68,7 @@ if (args[0] === "status") {
     existsSync(file("serve.json")) ? readFileSync(file("serve.json"), "utf8") : "{}"
   );
 } else if (args[0] === "serve") {
+  if (existsSync(file("serve.race.json"))) renameSync(file("serve.race.json"), file("serve.json"));
   failWith("serve.fail");
   const path = args[args.indexOf("--set-path") + 1] ?? "/";
   const serve = readServe();
