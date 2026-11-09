@@ -174,6 +174,7 @@ const WorkspaceSessions = ({ hostKey, model, workspace }: WorkspaceListProps) =>
         now={now}
         scope={workspaceKey(hostKey, workspace.id)}
         empty={`None in ${workspace.name}`}
+        workspaceId={workspace.id}
       />
     </div>
   );
