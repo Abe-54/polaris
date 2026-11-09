@@ -1,6 +1,7 @@
 /**
  * The constellation header (Paper MX-W, compressing to MX-X): a panel above the lead's thread
- * with the done count, the stats chip, the star chart and its legend. Tap only.
+ * with the done count, the stats chip, the star chart and its legend. Tap only. Once the thread
+ * scrolls back it folds to its top row (`collapse.ts`).
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import { useState } from "react";
@@ -8,7 +9,7 @@ import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { StarChart, StarLegend, starCounts } from "../../starChart/index.ts";
 import { CHROME_TEXT_SCALE } from "../../theme/textScale.ts";
 import { themedStyles } from "../../theme/index.ts";
-import { chartFit } from "./fit.ts";
+import { type ChartFit, chartFit } from "./fit.ts";
 import type { StarChartData } from "./stars.ts";
 
 /** The chart's share of the screen; past it the waves compress to dots, then bands fold away. */
@@ -19,6 +20,8 @@ export interface ChartPanelProps {
   /** The stats chip's reading, e.g. "1h 12m". */
   readonly stats: string;
   readonly selectedTaskId: string | null;
+  /** Only the top row: the done count and the stats chip. */
+  readonly collapsed?: boolean;
   readonly onPressTask: (taskId: string) => void;
   readonly onOpenStats: () => void;
   readonly onViewAll: () => void;
@@ -28,6 +31,7 @@ export const ChartPanel = ({
   chart,
   stats,
   selectedTaskId,
+  collapsed = false,
   onPressTask,
   onOpenStats,
   onViewAll,
@@ -59,7 +63,41 @@ export const ChartPanel = ({
           </Text>
         </Pressable>
       </View>
-      <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      {collapsed ? null : (
+        <ChartBody
+          chart={chart}
+          fit={fit}
+          selectedTaskId={selectedTaskId}
+          onLayoutWidth={setWidth}
+          onPressTask={onPressTask}
+          onViewAll={onViewAll}
+        />
+      )}
+    </View>
+  );
+};
+
+/** The chart, its "+n more bands" and the legend: what folds away. */
+const ChartBody = ({
+  chart,
+  fit,
+  selectedTaskId,
+  onLayoutWidth,
+  onPressTask,
+  onViewAll,
+}: {
+  readonly chart: StarChartData;
+  readonly fit: ChartFit | null;
+  readonly selectedTaskId: string | null;
+  readonly onLayoutWidth: (width: number) => void;
+  readonly onPressTask: (taskId: string) => void;
+  readonly onViewAll: () => void;
+}) => {
+  const styles = useStyles();
+
+  return (
+    <>
+      <View onLayout={(event) => onLayoutWidth(event.nativeEvent.layout.width)}>
         {fit === null ? null : (
           <StarChart
             tasks={fit.tasks}
@@ -78,7 +116,7 @@ export const ChartPanel = ({
         </Pressable>
       )}
       <StarLegend tasks={chart.tasks} compact={fit?.compact ?? false} onViewAll={onViewAll} />
-    </View>
+    </>
   );
 };
 

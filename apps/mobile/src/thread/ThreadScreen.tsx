@@ -89,6 +89,8 @@ export interface ThreadScreenProps {
   readonly atLatest?: ReactNode;
   /** Over the suggestions and composer: the lead's notice of a claim handed to the user. */
   readonly aboveComposer?: ReactNode;
+  /** The transcript's distance from its newest end as it scrolls: a constellation folds its chart. */
+  readonly onScrollOffset?: (offset: number) => void;
   /** Just started from New session: the celestial rises off the horizon into the header (MX-AS). */
   readonly rise?: boolean;
 }
@@ -318,6 +320,7 @@ export const ThreadScreen = ({
   belowHeader,
   atLatest,
   aboveComposer,
+  onScrollOffset,
   rise: risen = false,
 }: ThreadScreenProps) => {
   const connection = useHost(hostId);
@@ -558,6 +561,8 @@ export const ThreadScreen = ({
             onViewableItemsChanged={onViewable.current}
             viewabilityConfig={VIEWABILITY}
             keyboardDismissMode="interactive"
+            onScroll={({ nativeEvent }) => onScrollOffset?.(nativeEvent.contentOffset.y)}
+            scrollEventThrottle={32}
           />
         </View>
         <View
