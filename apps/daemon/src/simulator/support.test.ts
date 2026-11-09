@@ -1,6 +1,6 @@
 import { type SimulatorRequirement, SimulatorSupport } from "@polaris/protocol";
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer, Option, Stream } from "effect";
 import { HostPlatform, type PlatformFacts } from "../platform/index.ts";
 import { SimulatorDetection } from "./index.ts";
 import {
@@ -12,6 +12,8 @@ import {
 } from "./support.ts";
 
 const READY = SimulatorSupport.cases.Ready.make({});
+
+const UPDATING = SimulatorSupport.cases.Updating.make({ reason: "xcode-first-launch" });
 
 const UNSUPPORTED = SimulatorSupport.cases.Unsupported.make({});
 
@@ -113,11 +115,11 @@ describe("iOS support", () => {
     expect(report.iosBlocked).toBeNull();
   });
 
-  test("Xcode finishing an update is said, without waiting on simctl", async () => {
+  test("Xcode finishing an update is Updating, not missing, without waiting on simctl", async () => {
     const { probe, ran } = host({ commands: { ...XCODE, [PS]: ok(`${FIRST_LAUNCH}\n`) } });
     const report = await detectSupport(MAC, probe);
 
-    expect(report.support.ios).toEqual(needs(["xcode"]));
+    expect(report.support.ios).toEqual(UPDATING);
     expect(report.iosBlocked).toBe(FIRST_LAUNCH_MESSAGE);
     expect(ran).not.toContain(SIMCTL);
   });
@@ -136,6 +138,7 @@ describe("iOS support", () => {
       },
     });
 
+    expect(report.support.ios).toEqual(UPDATING);
     expect(report.iosBlocked).toBe(FIRST_LAUNCH_MESSAGE);
   });
 
@@ -244,5 +247,35 @@ describe("SimulatorDetection", () => {
         expect(ran.filter((c) => c === SIMCTL)).toHaveLength(2);
       }).pipe(Effect.provide(layer))
     );
+  });
+
+  test("while Xcode updates it checks again, and the end of the update is a change to Ready", async () => {
+    let updating = true;
+    const { probe } = host({ commands: XCODE });
+
+    const layer = SimulatorDetection.layerWith(
+      () => ({
+        ...probe,
+        run: async (argv, timeoutMs) =>
+          argv.join(" ") === PS && updating ? ok(`${FIRST_LAUNCH}\n`) : probe.run(argv, timeoutMs),
+      }),
+      10
+    ).pipe(Layer.provide(HostPlatform.test(MAC)));
+
+    const changed = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const detection = yield* SimulatorDetection;
+          const next = yield* Stream.runHead(detection.changes).pipe(Effect.forkScoped);
+
+          expect((yield* detection.current).support.ios).toEqual(UPDATING);
+          updating = false;
+
+          return yield* Fiber.join(next);
+        })
+      ).pipe(Effect.provide(layer))
+    );
+
+    expect(Option.map(changed, (support) => support.ios)).toEqual(Option.some(READY));
   });
 });

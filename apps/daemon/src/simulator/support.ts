@@ -33,8 +33,8 @@ export interface SupportProbe {
 export interface SupportReport {
   readonly support: HostSimulatorSupport;
   /**
-   * Why iOS can't start now although Xcode is installed (it is finishing an update, or `simctl`
-   * hung). The wire says `NeedsSetup` `xcode`; boot and attach fail with this message.
+   * Why iOS can't start now although Xcode is installed: it is `Updating`, or `simctl` hung
+   * (`NeedsSetup` `xcode`). Boot and attach fail with this as `SimulatorUnavailable`.
    */
   readonly iosBlocked: string | null;
   /** The Android SDK the checks found, so the hub can be given its `platform-tools` (adb). */
@@ -86,7 +86,16 @@ const firstLaunchRunning = async (probe: SupportProbe): Promise<boolean> => {
   );
 };
 
-const blockedIos = (iosBlocked: string) => ({ support: needs(["xcode"]), iosBlocked });
+const updating = {
+  support: SimulatorSupport.cases.Updating.make({ reason: "xcode-first-launch" }),
+  iosBlocked: FIRST_LAUNCH_MESSAGE,
+};
+
+/** simctl hung for another reason: Xcode is there but broken, and the message says how. */
+const hung = {
+  support: needs(["xcode"]),
+  iosBlocked: `Xcode's simctl didn't answer within ${SIMCTL_TIMEOUT_MS / 1000} s`,
+};
 
 const checkIos = async (
   facts: PlatformFacts,
@@ -102,19 +111,14 @@ const checkIos = async (
   if (selected.stdout.includes("CommandLineTools"))
     return { support: needs(["xcode"]), iosBlocked: null };
 
-  if (await firstLaunchRunning(probe)) return blockedIos(FIRST_LAUNCH_MESSAGE);
+  if (await firstLaunchRunning(probe)) return updating;
 
   const simctl = await probe.run(
     ["/usr/bin/xcrun", "simctl", "list", "runtimes", "--json"],
     SIMCTL_TIMEOUT_MS
   );
 
-  if (simctl === "timeout")
-    return blockedIos(
-      (await firstLaunchRunning(probe))
-        ? FIRST_LAUNCH_MESSAGE
-        : `Xcode's simctl didn't answer within ${SIMCTL_TIMEOUT_MS / 1000} s`
-    );
+  if (simctl === "timeout") return (await firstLaunchRunning(probe)) ? updating : hung;
 
   return answered(simctl) && simctl.exitCode === 0
     ? { support: ready, iosBlocked: null }
