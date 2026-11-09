@@ -13,6 +13,9 @@ export {
   originLocality,
   ownersLocality,
   parseOrigin,
+  tcpConnect,
+  type ConnectProbe,
+  type LocalityProbes,
   type OwnerLookup,
 } from "./locality.ts";
 

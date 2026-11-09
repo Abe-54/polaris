@@ -20,7 +20,7 @@ const run = <A, E>(
   Effect.runPromise(
     Effect.scoped(Effect.andThen(seedDataSession, program)).pipe(
       Effect.provide(
-        originApprovalsLayer(owners).pipe(
+        originApprovalsLayer({ owners, platform: "darwin" }).pipe(
           Layer.provideMerge(DataDatabase.layerAt(":memory:")),
           Layer.provideMerge(EventStore.layerSqlite(":memory:"))
         )

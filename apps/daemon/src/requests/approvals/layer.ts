@@ -13,7 +13,7 @@ import { workingTurn } from "../../store/model.ts";
 import { decideSession } from "../../engine/session.ts";
 import { DataDatabase } from "../../data/database.ts";
 import { approvalItem } from "../../data/approvals.ts";
-import { originLocality, parseOrigin, type OwnerLookup, type ParsedOrigin } from "./locality.ts";
+import { originLocality, parseOrigin, type LocalityProbes, type ParsedOrigin } from "./locality.ts";
 import { OriginApprovalStore, scopeAllows } from "./store.ts";
 import {
   OriginApprovalRequired,
@@ -57,7 +57,7 @@ const requestOf = (sessionId: SessionId, turnId: ApprovalRequest["turnId"], o: O
     openedAt: new Date().toISOString(),
   });
 
-export const originApprovalsLayer = (owners?: OwnerLookup) =>
+export const originApprovalsLayer = (probes?: LocalityProbes) =>
   Layer.effect(
     OriginApprovals,
     Effect.gen(function* () {
@@ -152,7 +152,7 @@ export const originApprovalsLayer = (owners?: OwnerLookup) =>
             fix: "Send to a full URL, such as https://api.example.com/path.",
           });
 
-        if ((yield* Effect.promise(() => originLocality(parsed, owners))) === "local") return;
+        if ((yield* Effect.promise(() => originLocality(parsed, probes))) === "local") return;
 
         const write = isWriteMethod(send.method);
         yield* sync;
