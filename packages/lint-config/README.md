@@ -106,6 +106,14 @@ The generic rules that matter most day to day:
 - `no-module-mocking`: no `vi.mock`/`jest.mock`-style module mocking; replace dependencies through a real seam (a Layer).
 - `require-readable-spacing`: blank lines between statement groups. Autofixable: `bun run quality <files…>` applies it; oxfmt keeps the blank lines it adds (it only collapses runs of blank lines to one), so the two never fight.
 
+## Caught errors
+
+A `catch` binds `unknown`, and the anti-slop rules (`no-unknown-parameters`, `no-known-value-widening`, SAFETY comments on assertions) reject the quick ways of narrowing it. Judgement, not a rule: decode it at the catch with Effect Schema instead.
+
+- To log it, use `errorInfo` in `apps/site/lib/log`: `Function.flow(Schema.decodeUnknownOption(Schema.instanceOf(Error)), Option.match({ onNone, onSome }))`, where `onSome` is a typed helper taking an `Error` and returning only safe fields (the type name and an HTTP status, never the message).
+- To branch on a known error, decode against its class: `const decodeTimeout = Schema.decodeUnknownOption(Schema.instanceOf(ValidationTimeout))`, then `if (Option.isSome(decodeTimeout(error)))` (as in `apps/site/app/api/email/_lib/validator.ts`).
+- No `catch (error: any)`, `error as Error` or `typeof`/`in` probing; a typed helper takes the decoded value, not `unknown`.
+
 ## Fixtures
 
 `bun run test` (or `bun test` in this package) runs `plugins/fixtures.test.ts`, which lints each plugin's `test/fixtures/` with its `test/fixtures.oxlintrc.json`: the clean fixtures must be silent, `long-comment.ts` must report exactly four groups, and `complex.ts` exactly one function. The security fixtures plant each violation once (one report per line) beside allowlisted and exempt files that must stay silent; their config passes its own `scope` and `allow`. To eyeball one by hand:
