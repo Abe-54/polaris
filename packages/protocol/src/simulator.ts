@@ -25,10 +25,22 @@ export const SimulatorRequirement = Schema.Literals(["xcode", "android-sdk", "ff
 
 export type SimulatorRequirement = typeof SimulatorRequirement.Type;
 
-/** Whether this Host can run a platform: `Unsupported` can never (iOS off a Mac, or the Pi). */
+/**
+ * Why a Host's tools are installed but can't run Simulators yet. `xcode-first-launch`: Xcode is
+ * finishing an update (`xcodebuild -runFirstLaunch`), which blocks `simctl` for minutes.
+ */
+export const SimulatorUpdateReason = Schema.Literals(["xcode-first-launch"]);
+
+export type SimulatorUpdateReason = typeof SimulatorUpdateReason.Type;
+
+/**
+ * Whether this Host can run a platform: `Unsupported` can never (iOS off a Mac, or the Pi).
+ * `Updating` has the tools but is finishing an update; a `SupportChanged` follows when it's done.
+ */
 export const SimulatorSupport = Schema.TaggedUnion({
   Ready: {},
   NeedsSetup: { missing: Schema.Array(SimulatorRequirement) },
+  Updating: { reason: SimulatorUpdateReason },
   Unsupported: {},
 });
 

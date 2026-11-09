@@ -12,6 +12,8 @@ import { PredictionServerLive } from "../prediction/server.ts";
  */
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
+import { hostPlatform } from "../platform/index.ts";
+import { simulatorCapable } from "../simulator/support.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
 import { selfTraceLoggers } from "@polaris/client/selfTraces/logger";
 import { Deferred, Effect, Layer, Logger } from "effect";
@@ -318,6 +320,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host.stats",
   "host-address",
   "browser.host",
+  ...(simulatorCapable(hostPlatform()) ? ["simulator" as const] : []),
 ];
 
 /**
