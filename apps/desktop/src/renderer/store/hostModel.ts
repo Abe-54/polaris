@@ -38,6 +38,12 @@ export interface ResolvedApproval {
 /** How many resolutions a session keeps. */
 const RESOLVED_KEPT = 3;
 
+/** `SessionBackgroundCommandFailed`: the command named (null: every one) and the Harness's reason. */
+export interface BackgroundFailure {
+  readonly itemId: string | null;
+  readonly reason: string;
+}
+
 export interface SessionEntry {
   readonly session: SessionData;
   readonly pendingApprovals: ReadonlyArray<ApprovalRequest>;
@@ -50,6 +56,8 @@ export interface SessionEntry {
   readonly userTurn?: UserTurn | undefined;
   /** The latest notification an agent sent from this session (`notify`), seen live. */
   readonly lastNotification?: SessionNotification;
+  /** The latest Run in background the Harness couldn't carry out, seen live; a new object each time. */
+  readonly lastBackgroundFailure?: BackgroundFailure;
   /** Subagents still working in this session. */
   readonly subagents: ReadonlyArray<Subagent>;
 }
@@ -321,6 +329,11 @@ const fold = (event: DomainEvent): Fold =>
         onSession(sessionId, patch({ lastCompaction: compaction })),
       SessionNotified: ({ sessionId, notification }) =>
         onSession(sessionId, (entry) => ({ ...entry, lastNotification: notification })),
+      SessionBackgroundCommandFailed: ({ sessionId, itemId, reason }) =>
+        onSession(sessionId, (entry) => ({
+          ...entry,
+          lastBackgroundFailure: { itemId, reason },
+        })),
       TurnStarted: ({ turn }) => onTurn(turn, false),
       TurnEnded: ({ turn }) => onTurn(turn, true),
       TurnItemCompleted: () => unchanged,

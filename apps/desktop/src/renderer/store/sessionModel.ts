@@ -357,6 +357,7 @@ const fold = (event: DomainEvent): Fold =>
         (m) =>
           patchSession(m, { title }),
       SessionNotified: () => same,
+      SessionBackgroundCommandFailed: () => same,
       SessionPinned:
         ({ pinnedAt }): Fold =>
         (m) =>

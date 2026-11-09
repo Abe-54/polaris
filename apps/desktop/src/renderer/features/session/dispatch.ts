@@ -10,6 +10,7 @@ import type { IpcError } from "../../../shared/api.ts";
 import { Commands, newCommandId } from "../../commands.ts";
 import { polaris } from "../bridge.ts";
 import { actionTraces, selfTraces } from "../selfTraces/index.ts";
+import { BACKGROUND_FAILED_TITLE } from "./model/backgroundFailures.ts";
 
 export type Sent = { readonly ok: true } | { readonly ok: false; readonly error: IpcError };
 
@@ -42,13 +43,17 @@ export const refusalText = (error: IpcError): string => {
   return text === "" ? error.code : text.charAt(0).toUpperCase() + text.slice(1);
 };
 
-export const showRefusal = (title: string, error: IpcError) =>
+/** A failure toast: "Couldn't archive" over what went wrong. */
+export const showFailure = (title: string, message: string) =>
   showToast({
     source: "starlight",
     icon: createElement(PixelFailedIcon, { size: 16 }),
     title,
-    message: refusalText(error),
+    message,
   });
+
+export const showRefusal = (title: string, error: IpcError) =>
+  showFailure(title, refusalText(error));
 
 /** Dispatch, and toast the refusal under `title` ("Couldn't archive"). */
 export const send = async (hostKey: string, command: Command, title: string) => {
@@ -61,4 +66,4 @@ export const send = async (hostKey: string, command: Command, title: string) => 
 
 /** Move a running command (every one when `itemId` is null) into the background, as Ctrl-B does. */
 export const runInBackground = (hostKey: string, sessionId: SessionId, itemId: string | null) =>
-  send(hostKey, Commands.BackgroundCommand({ sessionId, itemId }), "Couldn't run in background");
+  send(hostKey, Commands.BackgroundCommand({ sessionId, itemId }), BACKGROUND_FAILED_TITLE);

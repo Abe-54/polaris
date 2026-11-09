@@ -99,6 +99,15 @@ export const DomainEvent = Schema.TaggedUnion({
   /** The Harness compacted the context window (see `AgentSession.lastCompaction`). */
   SessionCompacted: { sessionId: SessionId, compaction: Compaction },
   SessionBackgroundTasksChanged: { sessionId: SessionId, tasks: Schema.Array(BackgroundTask) },
+  /**
+   * An accepted `BackgroundCommand` the live Harness couldn't carry out: nothing was left to move,
+   * or it refused (capability `session.background-command-failed`). Clients show `reason`.
+   */
+  SessionBackgroundCommandFailed: {
+    sessionId: SessionId,
+    itemId: Schema.NullOr(Schema.String),
+    reason: Schema.String,
+  },
 
   TurnStarted: { turn: Turn, actor: optionalNullable(Actor) },
   TurnItemCompleted: {
