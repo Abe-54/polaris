@@ -3,7 +3,12 @@
  * before the Accept is decided, with automatic git's safe config (no repository hooks, filters or merge drivers), signed
  * with the Host's own settings when `commit.gpgSign` asks (docs/adr/0068).
  */
-import { type Attempt, type Constellation, ConstellationTransferError } from "@polaris/protocol";
+import {
+  type Attempt,
+  type Constellation,
+  type ConstellationFinding,
+  ConstellationTransferError,
+} from "@polaris/protocol";
 import { Effect } from "effect";
 import { type GitResult, gitText, HOOKS_OFF, resolveCommit, runGitRaw } from "../git/git.ts";
 import {
@@ -15,6 +20,7 @@ import {
 import { constellationRef, mergedInto } from "../git/constellationBundles.ts";
 import { commitSigning, signingOptions } from "../git/signing.ts";
 import { gitStatus } from "../git/status.ts";
+import { bothChangeDependencies, regenerable, regenerate, staleNotices } from "./regenerate.ts";
 
 const refused = (code: string, message: string, fix: string) =>
   new ConstellationTransferError({ code, message, retryable: false, fix });
@@ -36,6 +42,8 @@ export interface MergeOutcome {
   /** False when the Lead's branch already contained the claimed head. */
   readonly merged: boolean;
   readonly leadHead: string;
+  /** What Accept records on the Task: notices a merge may have left stale (ENG-276). */
+  readonly findings: ReadonlyArray<ConstellationFinding>;
 }
 
 const fetched = Effect.fnUntraced(function* (
@@ -95,13 +103,14 @@ const leadBlocker = async (leadPath: string, place: string) => {
   return status.branch;
 };
 
-/** Paths a failed merge left conflicted, then the merge undone so the Lead's tree is as it was. */
-const abandon = async (leadPath: string) => {
-  const conflicts = (
-    await gitText(leadPath, [...HOOKS_OFF, "diff", "--name-only", "--diff-filter=U"])
-  )
+const conflicted = async (leadPath: string) =>
+  (await gitText(leadPath, [...HOOKS_OFF, "diff", "--name-only", "--diff-filter=U"]))
     .split("\n")
     .filter((p) => p !== "");
+
+/** Paths a failed merge left conflicted, then the merge undone so the Lead's tree is as it was. */
+const abandon = async (leadPath: string) => {
+  const conflicts = await conflicted(leadPath);
 
   if ((await resolveCommit(leadPath, "MERGE_HEAD")) !== null)
     await gitText(leadPath, [...HOOKS_OFF, "merge", "--abort"]);
@@ -113,7 +122,28 @@ interface Merged {
   readonly result: GitResult;
   /** Null when the merge went in; else the paths it left conflicted, now undone. */
   readonly conflicts: ReadonlyArray<string> | null;
+  /** Why generated shared files weren't regenerated; empty when none were tried. */
+  readonly unresolved?: string;
+  /** True when the merge went in by regenerating its conflicts. */
+  readonly regenerated?: boolean;
 }
+
+/**
+ * A merge stopped only on generated shared files, regenerated and committed (ENG-276).
+ * Null once committed; else why not, or "" when it wasn't tried.
+ */
+const regenerated = async (leadPath: string, commit: ReadonlyArray<string>) => {
+  if ((await resolveCommit(leadPath, "MERGE_HEAD")) === null) return "";
+  const conflicts = await conflicted(leadPath);
+
+  if (!regenerable(conflicts)) return "";
+  const why = await regenerate(leadPath, conflicts);
+
+  if (why !== null) return why;
+  const committed = await runGitRaw(leadPath, commit);
+
+  return committed.code === 0 ? null : `git commit failed: ${committed.stderr.trim()}`;
+};
 
 /**
  * The merge, undone when it fails, so the Lead's checkout is merged or as it was. An
@@ -122,7 +152,8 @@ interface Merged {
 const mergeOrRestore = async (
   leadPath: string,
   before: string,
-  args: ReadonlyArray<string>
+  args: ReadonlyArray<string>,
+  commit: ReadonlyArray<string>
 ): Promise<Merged> => {
   const result = await runGitRaw(leadPath, args);
   const killed = interruptSignal()?.aborted === true;
@@ -134,13 +165,18 @@ const mergeOrRestore = async (
     if (killed && (await resolveCommit(leadPath, "HEAD")) !== before)
       return { result: { ...result, code: 0 }, conflicts: null };
 
+    const unresolved = killed ? "" : await regenerated(leadPath, commit);
+
+    if (unresolved === null)
+      return { result: { ...result, code: 0 }, conflicts: null, regenerated: true };
+
     const conflicts = await abandon(leadPath);
 
     // Killed before it committed: the index and work tree may hold half of it.
     if (killed && (await resolveCommit(leadPath, "MERGE_HEAD")) === null)
       await gitText(leadPath, [...HOOKS_OFF, "reset", "-q", "--merge", before]);
 
-    return { result, conflicts };
+    return { result, conflicts, unresolved };
   });
 };
 
@@ -164,7 +200,11 @@ export const mergeClaim = Effect.fnUntraced(function* (
   yield* fetched(graph, attempt, leadPath, head);
 
   if (yield* git(() => mergedInto(leadPath, head, "HEAD")))
-    return { merged: false, leadHead: yield* git(() => gitText(leadPath, ["rev-parse", "HEAD"])) };
+    return {
+      merged: false,
+      leadHead: yield* git(() => gitText(leadPath, ["rev-parse", "HEAD"])),
+      findings: [],
+    };
 
   const place = `${attempt.branch} at ${head}`;
   const branch = yield* git(() => leadBlocker(leadPath, place));
@@ -187,30 +227,47 @@ export const mergeClaim = Effect.fnUntraced(function* (
 
   const before = yield* git(() => gitText(leadPath, ["rev-parse", "HEAD"]));
 
-  const { result, conflicts } = yield* finishingGit({
+  const {
+    result,
+    conflicts,
+    unresolved,
+    regenerated: resolved,
+  } = yield* finishingGit({
     try: () =>
-      mergeOrRestore(leadPath, before, [
-        ...HOOKS_OFF,
-        ...signingOptions(signing),
-        "merge",
-        "--ff",
-        ...sign,
-        "--no-edit",
-        "-m",
-        message,
-        head,
-      ]),
+      mergeOrRestore(
+        leadPath,
+        before,
+        [
+          ...HOOKS_OFF,
+          ...signingOptions(signing),
+          "merge",
+          "--ff",
+          ...sign,
+          "--no-edit",
+          "-m",
+          message,
+          head,
+        ],
+        [...HOOKS_OFF, ...signingOptions(signing), "commit", ...sign, "--no-edit", "-q"]
+      ),
     catch: failed,
   });
 
   if (conflicts !== null) {
     return yield* mergeFailure(
-      { place, branch, head, conflicts, signed: signing !== null },
+      { place, branch, head, conflicts, signed: signing !== null, unresolved: unresolved ?? "" },
       result
     );
   }
 
-  return { merged: true, leadHead: yield* git(() => gitText(leadPath, ["rev-parse", "HEAD"])) };
+  const stale =
+    resolved === true || (yield* git(() => bothChangeDependencies(leadPath, before, head)));
+
+  return {
+    merged: true,
+    leadHead: yield* git(() => gitText(leadPath, ["rev-parse", "HEAD"])),
+    findings: stale ? [staleNotices] : [],
+  };
 });
 
 interface Failed {
@@ -219,16 +276,21 @@ interface Failed {
   readonly head: string;
   readonly conflicts: ReadonlyArray<string>;
   readonly signed: boolean;
+  readonly unresolved: string;
 }
 
 /** Why the merge failed, once it's undone: a conflict, signing, or git's own words. */
-const mergeFailure = ({ place, branch, head, conflicts, signed }: Failed, result: GitResult) => {
+const mergeFailure = (
+  { place, branch, head, conflicts, signed, unresolved }: Failed,
+  result: GitResult
+) => {
   const stderr = result.stderr.trim();
+  const regenerating = unresolved === "" ? "" : ` (regenerating them failed: ${unresolved})`;
 
   if (conflicts.length > 0)
     return refused(
       "E-MERGE-CONFLICT",
-      `Merging ${place} into ${branch} conflicts in ${conflicts.slice(0, 5).join(", ")}; nothing was merged`,
+      `Merging ${place} into ${branch} conflicts in ${conflicts.slice(0, 5).join(", ")}${regenerating}; nothing was merged`,
       `Send it back with mergeConflictBase ${branch} so the worker merges ${branch} first, or merge it into ${branch} yourself, then accept with mergedHead ${head}.`
     );
 

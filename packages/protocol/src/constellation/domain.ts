@@ -232,6 +232,8 @@ export class Attempt extends Schema.Class<Attempt>("ConstellationAttempt")({
   mergedHead: optionalNullable(Schema.String),
   receipts: optionalArray(CheckReceipt),
   evidence: optionalNullable(EvidenceTier),
+  /** What Accept recorded about its merge, e.g. notices it may have left stale (ENG-276). */
+  acceptFindings: optionalArray(ConstellationFinding),
   /** When the worker claimed (AttemptClaimed); null before. */
   claimedAt: Schema.NullOr(Timestamp),
   /**
