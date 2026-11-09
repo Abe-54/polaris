@@ -11,7 +11,7 @@ import type { OriginOutcome, OriginRule } from "./store.ts";
 /** Internal handoff: the agent's Send waits on this Origin Approval; never an RPC failure. */
 export class OriginApprovalRequired extends Schema.TaggedError<OriginApprovalRequired>()(
   "OriginApprovalRequired",
-  { approvalId: RequestId, origin: Schema.String }
+  { approvalId: RequestId, origin: Schema.String, write: Schema.Boolean }
 ) {}
 
 /** What an agent's Send carries into the gate; never a secret's value. */

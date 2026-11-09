@@ -13,6 +13,7 @@ import { unavailableSessions, type SessionTools } from "../sessions/index.ts";
 import { dataTools } from "./data.ts";
 import { profileTool } from "./profile.ts";
 import { traceTools } from "./traces.ts";
+import { requestTools } from "./requests.ts";
 import { requestSecretTool } from "./secret.ts";
 import {
   toolFactory,
@@ -161,6 +162,7 @@ export const constellationTools = (
     ...historyTools(binding.sessionId, sessions),
     ...dataTools(binding.sessionId, sessions),
     ...traceTools(binding.sessionId, sessions),
+    ...requestTools(binding.sessionId, sessions, idsFor(commands)),
     profileTool(binding.sessionId, sessions),
     ...(options.visualize === false
       ? []

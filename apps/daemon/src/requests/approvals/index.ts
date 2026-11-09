@@ -20,3 +20,5 @@ export {
 } from "./locality.ts";
 
 export { READS_ONLY, scopeAllows, type OriginOutcome, type OriginRule } from "./store.ts";
+
+export { OriginGrant, originGate, registerOriginGate } from "./gate.ts";
