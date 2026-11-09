@@ -13,6 +13,7 @@ import type {
 } from "@polaris/protocol";
 import { Context, Effect, Layer, type Scope, type Stream } from "effect";
 import { polarisHome } from "../paths.ts";
+import type { OriginApprovalRequired } from "./approvals/service.ts";
 import type { PageOptions } from "./sendLog.ts";
 import type { PrepareOptions } from "./prepare.ts";
 
@@ -44,8 +45,13 @@ export type PreSendVerdict =
   | { readonly allow: true }
   | { readonly allow: false; readonly message: string };
 
-/** Runs before an agent's Send goes out; a user's Send never reaches it. */
-export type PreSendHook = (send: PendingSend) => Effect.Effect<PreSendVerdict, RequestsError>;
+/**
+ * Runs before an agent's Send goes out; a user's Send never reaches it. Failing with
+ * OriginApprovalRequired holds the Send: nothing is sent or recorded.
+ */
+export type PreSendHook = (
+  send: PendingSend
+) => Effect.Effect<PreSendVerdict, RequestsError | OriginApprovalRequired>;
 
 export interface RequestSendsOptions extends PrepareOptions {
   readonly timeoutMs?: number;
@@ -54,7 +60,9 @@ export interface RequestSendsOptions extends PrepareOptions {
 export class RequestSends extends Context.Service<
   RequestSends,
   {
-    readonly send: (input: SendInput) => Effect.Effect<Send, RequestsError>;
+    readonly send: (
+      input: SendInput
+    ) => Effect.Effect<Send, RequestsError | OriginApprovalRequired>;
     readonly page: (
       checkout: string,
       options?: PageOptions

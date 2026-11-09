@@ -183,7 +183,7 @@ export const originApprovalsLayer = (probes?: LocalityProbes) =>
 
         if (active) yield* storage(() => store.join(approvalId, sessionId, active.id));
 
-        return yield* new OriginApprovalRequired({ approvalId, origin: parsed.origin });
+        return yield* new OriginApprovalRequired({ approvalId, origin: parsed.origin, write });
       });
 
       const outcome = (id: RequestId, write: boolean) =>
