@@ -238,7 +238,10 @@ test("the watch re-emits when a gitignored env file adds an environment", () =>
         );
 
         // A native watch arms asynchronously: under load the first write can precede it.
-        const writes = write.pipe(Effect.repeat(Schedule.spaced("200 millis")));
+        const writes = write.pipe(
+          Effect.repeat(Schedule.spaced("200 millis")),
+          Effect.andThen(Effect.never)
+        );
 
         expect((yield* Effect.raceFirst(next, writes)).environments).toContain("qa");
       })
