@@ -60,7 +60,7 @@ const android = (body: AndroidGesture): SimulatorSocketMessage => ({
 export const iosInput = {
   touch: (type: "begin" | "move" | "end", x: number, y: number) =>
     ios(IOS_TAG.touch, { type, x, y }),
-  /** `lock` is the name serve-sim's native HID knows; on iOS 27.0 it had no visible effect. */
+  /** serve-sim's `lock` has no effect on iOS 27 (ENG-851), so the toolbar shows only home. */
   button: (button: HardwareButton) => ios(IOS_TAG.button, { button }),
   key: (type: "down" | "up", usage: number, key?: string) =>
     ios(IOS_TAG.key, key === undefined ? { type, usage } : { type, usage, key }),
