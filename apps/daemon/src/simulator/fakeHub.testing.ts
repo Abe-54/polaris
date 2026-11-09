@@ -6,10 +6,11 @@ import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 
 import { join } from "node:path";
 import { Schema } from "effect";
 
-/** `{ simulators: [{ id, name, version, booted }] }`, shared with the test's `listIos`. */
+/** `{ simulators, emulators? }`, each `[{ id, name, version, booted }]`, shared with the test. */
 const devicesPath = process.env.FAKE_HUB_DEVICES ?? "";
 
-/** One line per event: `start <pid>`, `boot <id>`, `shutdown <id>`, `barrier`, `term <pid>`. */
+/** One line per event: `start <pid>`, `boot <id>`, `shutdown <id>` (each after `route <path>
+ * <id>`), `barrier`, `term <pid>`. */
 const logPath = process.env.FAKE_HUB_LOG ?? "";
 
 /** While this file exists, input barriers are never answered. */
@@ -23,16 +24,17 @@ const token = crypto.randomUUID();
 
 const statePath = join(process.env.EXPO_DEVICE_HUB_STATE_DIR ?? ".", `server-${port}.json`);
 
+const Device = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  version: Schema.String,
+  booted: Schema.Boolean,
+});
+
 const Devices = Schema.fromJsonString(
   Schema.Struct({
-    simulators: Schema.Array(
-      Schema.Struct({
-        id: Schema.String,
-        name: Schema.String,
-        version: Schema.String,
-        booted: Schema.Boolean,
-      })
-    ),
+    simulators: Schema.Array(Device),
+    emulators: Schema.optional(Schema.Array(Device)),
   })
 );
 
@@ -47,11 +49,18 @@ const log = (line: string) => appendFileSync(logPath, `${line}\n`);
 const readDevices = () => Schema.decodeUnknownSync(Devices)(readFileSync(devicesPath, "utf8"));
 
 const setBooted = (id: string, booted: boolean) => {
-  const simulators = readDevices().simulators.map((device) =>
-    device.id === id ? { ...device, booted } : device
-  );
+  const devices = readDevices();
 
-  writeFileSync(devicesPath, JSON.stringify({ simulators }));
+  const flip = (list: ReadonlyArray<typeof Device.Type>) =>
+    list.map((device) => (device.id === id ? { ...device, booted } : device));
+
+  writeFileSync(
+    devicesPath,
+    JSON.stringify({
+      simulators: flip(devices.simulators),
+      emulators: flip(devices.emulators ?? []),
+    })
+  );
 };
 
 const authorized = (request: Request) => request.headers.get("authorization") === `Bearer ${token}`;
@@ -69,6 +78,7 @@ const deviceRoute = async (request: Request, path: string) => {
   const body = Schema.decodeUnknownSync(DeviceBody)(await request.text());
   const id = body.id ?? body.udid ?? "";
   const booting = path === "/api/devices/boot";
+  log(`route ${path} ${id}`);
   log(`${booting ? "boot" : "shutdown"} ${id}`);
   setBooted(id, booting);
 
@@ -90,8 +100,15 @@ const server = Bun.serve({
         ? undefined
         : new Response(null, { status: 400 });
 
-    if (path === "/api/devices")
-      return Response.json({ ...readDevices(), emulators: [], errors: [] });
+    if (path === "/api/devices") {
+      const devices = readDevices();
+
+      return Response.json({
+        simulators: devices.simulators,
+        emulators: devices.emulators ?? [],
+        errors: [],
+      });
+    }
 
     if (
       [

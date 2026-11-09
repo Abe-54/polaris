@@ -151,7 +151,7 @@ try {
   await page.waitForTimeout(3000);
   await bothThemes(page, "live");
 
-  // The toolbar: home, rotate (twice back to portrait), lock, screenshot into the composer.
+  // The toolbar: home, rotate (back to portrait), screenshot into the composer.
   await page.getByRole("button", { name: "Home" }).click();
   await page.waitForTimeout(1500);
   await page.getByRole("button", { name: "Rotate left" }).click();
@@ -163,11 +163,8 @@ try {
     await page.waitForTimeout(1500);
   }
 
-  await page.getByRole("button", { name: "Lock" }).click();
-  await page.waitForTimeout(2500);
-  await shoot(page, "after-lock");
-  await page.getByRole("button", { name: "Lock" }).click();
-  await page.waitForTimeout(1500);
+  // iOS has no Lock: serve-sim's lock does nothing on iOS 27 (ENG-851).
+  assert.equal(await page.getByRole("button", { name: "Lock" }).count(), 0);
   await page.getByTestId("simulator-screenshot").click();
   await page.waitForTimeout(3000);
   await shoot(page, "screenshot-attached");

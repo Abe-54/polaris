@@ -3,6 +3,7 @@
  * wedge, and stopped once nothing holds it and no agent called for `idleMs`. Stopping the hub
  * is the only way to stop serve-sim's capture, so this is the Simulator's idle mechanism.
  */
+import { Option, Schema } from "effect";
 import type { HubEndpoint, HubProcess } from "./hubProcess.ts";
 
 /** No attach open and no agent call for 5 minutes stops the hub. */
@@ -32,12 +33,28 @@ export const DEFAULT_HUB_TIMING: HubTiming = {
   healthyMs: 60_000,
 };
 
+const IdleOverride = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0));
+
+/**
+ * The default timing, with `POLARIS_SIMULATOR_IDLE_MS` as the idle time when it is a positive
+ * integer: end-to-end runs watch the idle stop without waiting 5 minutes.
+ */
+export const hubTimingFromEnv = (env: Readonly<Record<string, string | undefined>>): HubTiming => {
+  const idleMs = Option.getOrNull(
+    Schema.decodeUnknownOption(IdleOverride)(env.POLARIS_SIMULATOR_IDLE_MS)
+  );
+
+  return idleMs === null ? DEFAULT_HUB_TIMING : { ...DEFAULT_HUB_TIMING, idleMs };
+};
+
 export interface SupervisorDeps {
   readonly spawn: () => Promise<HubProcess>;
   /** False when the hub's input is wedged; only asked while something holds the hub. */
   readonly probe: (endpoint: HubEndpoint) => Promise<boolean>;
   /** Runs before an idle stop, while the hub still answers. */
   readonly beforeIdleStop: (endpoint: HubEndpoint) => Promise<void>;
+  /** Simulators Polaris booted may still run: an idle with no hub starts one to stop them. */
+  readonly ownsBooted: () => boolean;
   readonly log: (message: string) => void;
   readonly timing: HubTiming;
 }
@@ -107,7 +124,8 @@ export class HubSupervisor {
   touch(): void {
     this.lastActivity = Date.now();
 
-    if (this.hub !== null && this.holds === 0) this.armIdle();
+    // With no hub too: an agent may have booted a Simulator nothing else will shut down.
+    if (this.holds === 0) this.armIdle();
   }
 
   /** Called with the new endpoint after every start or restart. */
@@ -224,7 +242,7 @@ export class HubSupervisor {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
 
-      if (this.holds > 0 || this.hub === null) return;
+      if (this.holds > 0) return;
 
       if (Date.now() - this.lastActivity < this.deps.timing.idleMs) {
         this.armIdle();
@@ -238,9 +256,19 @@ export class HubSupervisor {
 
   private idleStop(): Promise<void> {
     return this.serial(async () => {
-      const hub = this.hub;
+      if (this.holds > 0 || this.closed) return;
 
-      if (hub === null || this.holds > 0) return;
+      if (this.hub === null && !this.deps.ownsBooted()) return;
+
+      const hub =
+        this.hub ??
+        (await this.startNow().catch((error) => {
+          this.deps.log(`starting the Simulator hub to stop Polaris's Simulators failed: ${error}`);
+
+          return null;
+        }));
+
+      if (hub === null) return;
       await this.deps.beforeIdleStop(hub.endpoint).catch((error) => {
         this.deps.log(`shutting down Polaris's Simulators failed: ${String(error)}`);
       });

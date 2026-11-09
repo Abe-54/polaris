@@ -73,6 +73,30 @@ const settledBarrier = (endpoint: SimulatorAttachItem, id: string) =>
 
 const isSnapshot = (item: SimulatorWatchItem) => Predicate.isTagged(item, "Snapshot");
 
+/** The hub service on a real expo-device-hub, idling out after 3 s. */
+const realHub = async () => {
+  const installed = await installSimulatorTools({ root: tempDir("sim-tools-") });
+  const runtimeCommand = bunRuntime();
+
+  return SimulatorHub.layerWith({
+    dir: join(tempDir("simhub-", { short: true }), "home"),
+    command: Effect.succeed({
+      argv: [...runtimeCommand.argv, installed.hub],
+      env: runtimeCommand.env,
+    }),
+    listIos: () => listLocalIos(liveProbe().run),
+    sessions: everySessionLive,
+    timing: {
+      idleMs: 3_000,
+      stopGraceMs: 60_000,
+      wedgeCheckMs: 5_000,
+      backoffMs: [1_000],
+      healthyMs: 60_000,
+    },
+    pollMs: 1_000,
+  }).pipe(Layer.provide(Layer.merge(HostPlatform.live, iosReadyDetection)));
+};
+
 describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
   test("watch, boot, attach, restart, shutdown and the idle stop", async () => {
     const { runtime, deviceType } = target!;
@@ -82,26 +106,7 @@ describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
     const id = created.out;
 
     try {
-      const installed = await installSimulatorTools({ root: tempDir("sim-tools-") });
-      const runtimeCommand = bunRuntime();
-
-      const layer = SimulatorHub.layerWith({
-        dir: join(tempDir("simhub-", { short: true }), "home"),
-        command: Effect.succeed({
-          argv: [...runtimeCommand.argv, installed.hub],
-          env: runtimeCommand.env,
-        }),
-        listIos: () => listLocalIos(liveProbe().run),
-        sessions: everySessionLive,
-        timing: {
-          idleMs: 3_000,
-          stopGraceMs: 60_000,
-          wedgeCheckMs: 5_000,
-          backoffMs: [1_000],
-          healthyMs: 60_000,
-        },
-        pollMs: 1_000,
-      }).pipe(Layer.provide(Layer.merge(HostPlatform.live, iosReadyDetection)));
+      const layer = await realHub();
 
       await Effect.runPromise(
         Effect.scoped(
@@ -142,6 +147,36 @@ describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
             expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(false);
           })
         ).pipe(Effect.provide(layer))
+      );
+    } finally {
+      simctl("shutdown", id);
+      simctl("delete", id);
+    }
+
+    expect(simctl("list", "devices").out).not.toContain(name);
+  }, 900_000);
+  test("a Simulator an agent booted with no hub running shuts down at idle", async () => {
+    const { runtime, deviceType } = target!;
+    const name = `polaris-test-${crypto.randomUUID().slice(0, 8)}`;
+    const created = simctl("create", name, deviceType, runtime);
+    expect(created.ok).toBe(true);
+    const id = created.out;
+
+    try {
+      // agent-device boots with simctl, never through the hub.
+      expect(simctl("boot", id).ok).toBe(true);
+      const layer = await realHub();
+
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const hub = yield* SimulatorHub;
+          yield* hub.agentBooted(id);
+          yield* Effect.promise(() =>
+            until(() => simctl("list", "devices").out.includes(`${id}) (Shutdown)`), 300_000)
+          );
+          const supervisor = SimulatorHub.testing.supervisorOf(hub)!;
+          yield* Effect.promise(() => until(() => supervisor.pid === null, 120_000));
+        }).pipe(Effect.provide(layer))
       );
     } finally {
       simctl("shutdown", id);

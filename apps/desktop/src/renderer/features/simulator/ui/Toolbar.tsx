@@ -1,6 +1,6 @@
 /**
  * The Simulator's 34px toolbar (DESIGN.md, Simulator, Chrome): the device picker, then home,
- * rotate, lock and screenshot, a hairline, and restart. They're off until the stream is live.
+ * rotate, lock (Android only) and screenshot, a hairline, and restart. Off until the stream is live.
  */
 import type { Simulator, SimulatorPlatform } from "@polaris/protocol";
 import {
@@ -183,13 +183,16 @@ export const Controls = ({
       disabled={!live || platform !== "ios"}
       onClick={onRotate}
     />
-    <IconButton
-      size="sm"
-      label="Lock"
-      icon={<LockIcon size={14} />}
-      disabled={!live}
-      onClick={onLock}
-    />
+    {/* iOS 27 ignores every lock serve-sim can send (ENG-851); Android's is the power key. */}
+    {platform === "android" ? (
+      <IconButton
+        size="sm"
+        label="Lock"
+        icon={<LockIcon size={14} />}
+        disabled={!live}
+        onClick={onLock}
+      />
+    ) : null}
     <IconButton
       size="sm"
       label={canAttach ? "Attach a screenshot" : "Screenshots need a newer Daemon"}
