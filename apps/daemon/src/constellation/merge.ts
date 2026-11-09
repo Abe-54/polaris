@@ -1,6 +1,6 @@
 /**
- * Accept's merge: the claimed head goes into the Lead's checkout before the Accept is decided,
- * with automatic git's safe config (no repository hooks, filters or merge drivers), signed
+ * Accept's merge: the claimed head goes into the lead branch's checkout (`leadCheckout.ts`)
+ * before the Accept is decided, with automatic git's safe config (no repository hooks, filters or merge drivers), signed
  * with the Host's own settings when `commit.gpgSign` asks (docs/adr/0068).
  */
 import { type Attempt, type Constellation, ConstellationTransferError } from "@polaris/protocol";
@@ -69,14 +69,14 @@ const leadBlocker = async (leadPath: string, place: string) => {
   if (status.branch === null || status.head === null)
     return refused(
       "E-LEAD-DETACHED",
-      `The Lead's checkout at ${leadPath} is not on a branch`,
+      `The lead checkout at ${leadPath} is not on a branch`,
       `Check out the Lead's branch, then accept again; Polaris merges ${place} there.`
     );
 
   if ((await resolveCommit(leadPath, "MERGE_HEAD")) !== null)
     return refused(
       "E-LEAD-MERGING",
-      `The Lead's checkout already has a merge in progress on ${status.branch}`,
+      `The lead checkout at ${leadPath} already has a merge in progress on ${status.branch}`,
       `Finish or abort that merge, then accept again.`
     );
 
@@ -85,7 +85,7 @@ const leadBlocker = async (leadPath: string, place: string) => {
   if (tracked.length > 0)
     return refused(
       "E-LEAD-DIRTY",
-      `The Lead's checkout has uncommitted changes on ${status.branch}: ${tracked
+      `The lead checkout at ${leadPath} has uncommitted changes on ${status.branch}: ${tracked
         .slice(0, 5)
         .map((e) => e.path)
         .join(", ")}${tracked.length > 5 ? ` and ${tracked.length - 5} more` : ""}`,

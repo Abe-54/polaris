@@ -54,6 +54,7 @@ export const graphData = (graph: Constellation) => ({
   workspaceId: graph.workspaceId,
   hostId: graph.hostId,
   leadSessionId: graph.leadSessionId,
+  leadBranch: graph.leadBranch,
   name: graph.name,
   state: graph.state,
   revision: graph.revision,
