@@ -375,6 +375,7 @@ export async function createInstaller(options: InstallerOptions) {
     const launched = launches.get(toolId);
 
     if (jobs.has(toolId)) return [];
+    await options.adapters.beforeRecoveryScan?.(toolId);
     const facts = await storage.recoveryFacts(toolId);
 
     // A job launched during the scan owns the lock and stage the scan may have found.
