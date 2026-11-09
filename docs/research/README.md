@@ -35,3 +35,4 @@ The original `research/*` branches remain.
 - [decision-models.md](decision-models.md): System One decision models (Jev, Clef, Kev, Laya, llama.cpp) as the Risk Summary classifier backends (2026-10-13).
 - [bun-child-process-lost-exit.md](bun-child-process-lost-exit.md): draft upstream report for `node:child_process` losing a child's exit under load, with rates on Bun 1.3.13 and 1.4.3 (ENG-357, 2026-10-17).
 - [bun-fs-watch-linux.md](bun-fs-watch-linux.md): draft upstream reports for the two Linux `fs.watch` bugs behind ADR 0046 and ADR 0047 (2026-10-14).
+- [computer-use-spike.md](computer-use-spike.md): agent-desktop under the macOS Daemon: TCC identity, prompts, overlay, headless actions, ScreenCaptureKit cost, Linux status ([ENG-846](https://linear.app/luxdev/issue/ENG-846), 2026-11-09).
