@@ -123,10 +123,13 @@ test("file reads refuse symlink escape, large files and cancellation", async () 
   expect(await readSource(f.root, join(f.root, "escape.ts"), f.signal)).toBeUndefined();
   await writeFile(join(f.root, "large.ts"), "x".repeat(131073));
   expect(await readSource(f.root, join(f.root, "large.ts"), f.signal)).toBeUndefined();
+  expect((await readSource(f.root, join(f.root, "dep.ts"), f.signal))?.text).toBeString();
   const controller = new AbortController();
   controller.abort();
   await Promise.resolve(
-    expect(readSource(f.root, join(f.root, "dep.ts"), controller.signal)).rejects.toBeDefined()
+    expect(readSource(f.root, join(f.root, "dep.ts"), controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    })
   );
 });
 

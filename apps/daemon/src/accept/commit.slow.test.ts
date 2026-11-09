@@ -250,7 +250,7 @@ describe("branch, remote and push", () => {
   );
 
   test(
-    "a push git refuses fails naming the remote",
+    "a push git refuses fails naming the remote, in git's own words",
     async () => {
       const root = await repo();
       await gitText(root, ["remote", "add", "origin", join(root, "nowhere")]);
@@ -259,7 +259,8 @@ describe("branch, remote and push", () => {
         (error: Error) => error
       );
 
-      expect(String(failure)).toMatch(/git push to origin failed/);
+      expect(String(failure)).toMatch(/git push to origin failed: .*nowhere/);
+      expect(String(failure)).toContain("does not appear to be a git repository");
     },
     HEAVY_GIT_MS
   );
