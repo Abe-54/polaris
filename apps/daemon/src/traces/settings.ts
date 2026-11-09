@@ -55,7 +55,24 @@ const defaults = WorkspaceTracesSettings.make({
 interface InstrumentationEvidence {
   readonly skipReason: string | null;
   readonly detectedExporters: ReadonlyArray<DetectedTraceExporter>;
+  /** Set when the override instrumented an app that has its own SDK. */
+  readonly overriddenSdk?: string | null;
+  /** The app ran and no spans have arrived for its checkout. */
+  readonly silent?: boolean;
 }
+
+// ENG-703: an app's own HttpInstrumentation unwraps Polaris's, so Traces can stay empty.
+const silentOverride = (sdk: string) =>
+  `No spans arrived with the override on: instrumentations loaded by the app's ${sdk} (such as getNodeAutoInstrumentations) replace Polaris's.`;
+
+const skipReason = (evidence: InstrumentationEvidence | undefined) => {
+  if (evidence === undefined) return null;
+
+  if (evidence.skipReason !== null || !evidence.silent || !evidence.overriddenSdk)
+    return evidence.skipReason;
+
+  return silentOverride(evidence.overriddenSdk);
+};
 
 type Binding = Pick<IngestContext, "workspaceId" | "checkout" | "sessionId">;
 
@@ -174,7 +191,7 @@ export class TraceSettings extends Context.Service<
               ...(extra?.detectedExporters ?? []),
             ],
             autoInstrumentSkipReason:
-              (value.autoInstrument ?? "off") === "off" ? null : (extra?.skipReason ?? null),
+              (value.autoInstrument ?? "off") === "off" ? null : skipReason(extra),
           });
         };
 
@@ -247,11 +264,10 @@ export class TraceSettings extends Context.Service<
             );
           }
 
-          if (refreshDetection && !appRan && instrumentation.has(id))
-            rememberInstrumentation(id, {
-              skipReason: instrumentation.get(id)?.skipReason ?? null,
-              detectedExporters: [],
-            });
+          const previous = instrumentation.get(id);
+
+          if (refreshDetection && !appRan && previous !== undefined)
+            rememberInstrumentation(id, { ...previous, detectedExporters: [], silent: false });
 
           if (refreshDetection && appRan && Option.isSome(traces)) {
             const page = yield* traces.value.list(checkout).pipe(Effect.orElseSucceed(() => null));
@@ -266,8 +282,10 @@ export class TraceSettings extends Context.Service<
               );
 
               rememberInstrumentation(id, {
-                skipReason: instrumentation.get(id)?.skipReason ?? null,
+                skipReason: previous?.skipReason ?? null,
+                overriddenSdk: previous?.overriddenSdk ?? null,
                 detectedExporters,
+                silent: page.total === 0,
               });
             }
           }
