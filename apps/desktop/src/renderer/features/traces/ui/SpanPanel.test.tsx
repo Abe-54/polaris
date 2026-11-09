@@ -95,6 +95,13 @@ test("a database span opens the table its query wrote in its Data Source, in Dat
   expect(screen.getByTestId("span-open-code").textContent).toContain("overdue.ts:61");
 });
 
+test("the span panel's pills show no ⌘4 or ⌘3, which only switch mode", async () => {
+  mount(BIG_TRACE.id, UPDATE);
+
+  expect((await screen.findByTestId("span-open-data")).textContent).toBe("Open in Data");
+  expect(screen.getByTestId("span-open-code").textContent).toBe("overdue.ts:61");
+});
+
 test("a span that isn't a database call offers no Open in Data", async () => {
   mount(ERROR_TRACE.id, TEST_ROOT);
 
