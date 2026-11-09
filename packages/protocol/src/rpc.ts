@@ -60,6 +60,7 @@ import { SecretRpcs } from "./secrets.ts";
 import { TerminalRpcs } from "./terminal.ts";
 import { RestartRpcs } from "./restart.ts";
 import { BrowserStackRpcs } from "./browser.ts";
+import { SimulatorRpcs } from "./simulator.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { Hello } from "./hello.ts";
 import {
@@ -781,7 +782,7 @@ export class DaemonRpcs extends RpcGroup.make(
     ProfilesRpcs,
     TraceCompareRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs) {}
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs) {}
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with

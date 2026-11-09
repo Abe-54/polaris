@@ -20,6 +20,8 @@ export * from "./bridge.ts";
 
 export * from "./browser.ts";
 
+export * from "./simulator.ts";
+
 export * from "./byteStreamFlow.ts";
 
 export * from "./byteStreams.ts";

@@ -1,4 +1,10 @@
-import { DaemonRpcs, DeveloperModeRpcs, SelfTraceRpcs, Unsupported } from "@polaris/protocol";
+import {
+  DaemonRpcs,
+  DeveloperModeRpcs,
+  SelfTraceRpcs,
+  SimulatorRpcs,
+  Unsupported,
+} from "@polaris/protocol";
 import { Effect, Layer, Stream } from "effect";
 
 const request = (capability: string) => () => Effect.fail(new Unsupported({ capability }));
@@ -14,6 +20,12 @@ export const DEVELOPER_MODE_DEFAULT_TAGS = [
   "developerMode.watch",
   "traces.ingestSelf",
   "data.source.saveFile",
+  "simulator.watch",
+  "simulator.boot",
+  "simulator.shutdown",
+  "simulator.restart",
+  "simulator.attach",
+  "simulator.sessionFeed",
 ] as const;
 
 /** Stubs until ENG-708's tasks S (Developer Mode), DT (Self-Traces) and SQ (SQLite) land. */
@@ -26,5 +38,14 @@ export const developerModeDefaults = Layer.mergeAll(
     "developerMode.watch": feed("developer-mode"),
     "traces.ingestSelf": request("traces.self"),
   }),
-  DaemonRpcs.toLayerHandler("data.source.saveFile", request("data.sqlite"))
+  DaemonRpcs.toLayerHandler("data.source.saveFile", request("data.sqlite")),
+  /** Stubs until ENG-829's Daemon task serves the Simulator. */
+  SimulatorRpcs.toLayer({
+    "simulator.watch": feed("simulator"),
+    "simulator.boot": request("simulator"),
+    "simulator.shutdown": request("simulator"),
+    "simulator.restart": request("simulator"),
+    "simulator.attach": feed("simulator"),
+    "simulator.sessionFeed": feed("simulator"),
+  })
 );
