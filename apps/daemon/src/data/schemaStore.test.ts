@@ -105,6 +105,9 @@ test("persisted per-table counts include own agent writes and user grid commits,
       agent: 6,
       user: 3,
     });
+    expect(
+      store.diff(sessionId, turn, [TurnId.make("next")]).sources[0]?.tables[0]?.rows
+    ).toMatchObject({ value: 9 });
     store.remove(sessionId);
     expect(
       db.query<{ n: number }, []>("SELECT count(*) n FROM data_schema_snapshots").get()?.n

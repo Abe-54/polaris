@@ -323,7 +323,13 @@ export class SchemaStore {
       entries: this.entries(sessionId).filter((x) => x.author.turn && ids.has(x.author.turn)),
     };
   }
-  diff(sessionId: SessionId, turn?: TurnId, turns?: ReadonlyArray<TurnId>) {
+  diff(sessionId: SessionId, turn?: TurnId, asking?: ReadonlyArray<TurnId>) {
+    // A group always holds `turn`, even when a Client left it out of `turns`.
+    const turns =
+      asking === undefined || turn === undefined || asking.length === 0 || asking.includes(turn)
+        ? asking
+        : [turn, ...asking];
+
     const group = turns !== undefined && turns.length > 0 ? this.inTurns(sessionId, turns) : null;
     const records = (group?.records ?? this.records(sessionId, turn)).filter((x) => x.used);
     const groups = new Map<string, SnapshotRecord[]>();
