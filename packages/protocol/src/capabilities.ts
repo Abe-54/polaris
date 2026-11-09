@@ -38,6 +38,8 @@ export const Capability = Schema.Literals([
   "data.sqlite",
   /** Explicit Turn/Trace route comparison; advertised only when implemented. */
   "traces.compare",
+  /** `traces.installSkill`: the polaris-tracing skill bundled with the Daemon (ENG-694). */
+  "traces.skill",
   /** `host.restartPreview` and `host.prepareRestart`: Restart daemon's confirm and clean stop (ADR 0087). */
   "host.restart",
   /** `remoteAccess.status`, `remoteAccess.enable` and `remoteAccess.disable` (Tailscale, ADR 0076). */

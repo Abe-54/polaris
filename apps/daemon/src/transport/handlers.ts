@@ -489,6 +489,7 @@ const serverDefaults = (options: DefaultOptions) =>
     "profiles.restartWithProfiling": () =>
       Effect.fail(new Unsupported({ capability: "traces.profiles" })),
     "traces.compare": () => Effect.fail(new Unsupported({ capability: "traces.compare" })),
+    "traces.installSkill": () => Effect.fail(new Unsupported({ capability: "traces.skill" })),
     "data.queryLog.watch": () => Stream.fail(new Unsupported({ capability: "data" })),
     "data.schemaDiff": () => Effect.fail(new Unsupported({ capability: "data.schemaDiff" })),
     "data.describe": () => Effect.fail(new Unsupported({ capability: "data" })),

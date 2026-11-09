@@ -2,6 +2,7 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
 import { Unsupported } from "./errors.ts";
+import { HarnessKind } from "./harnesses.ts";
 import { SessionId, Timestamp, TurnId, WorkspaceId } from "./ids.ts";
 
 export const TRACES_CAPABILITY = "traces";
@@ -274,6 +275,8 @@ export const TRACES_PROFILES_CAPABILITY = "traces.profiles";
 
 export const TRACES_COMPARE_CAPABILITY = "traces.compare";
 
+export const TRACES_SKILL_CAPABILITY = "traces.skill";
+
 /** Public collector address; credentials, query strings and fragments stay on the Host. */
 export const TraceForwardUrl = Schema.String.check(
   Schema.isMaxLength(2048),
@@ -369,6 +372,27 @@ export const SetWorkspaceTracesSettings = Rpc.make("traces.setSettings", {
   payload: { workspaceId: WorkspaceId, settings: WorkspaceTracesSettingsUpdate },
   success: WorkspaceTracesSettings,
   error: Schema.Union([TraceSettingsError, Unsupported]),
+});
+
+export class TraceSkillError extends Schema.TaggedError<TraceSkillError>()("TraceSkillError", {
+  code: Schema.Literal("E-TRACE-SKILL-INSTALL"),
+  message: Schema.String,
+  fix: Schema.String,
+}) {}
+
+/** Where the bundled skill was written: one folder per skills directory the Harness reads. */
+export const InstalledTracingSkill = Schema.Struct({ paths: Schema.Array(Schema.String) });
+
+export type InstalledTracingSkill = typeof InstalledTracingSkill.Type;
+
+/**
+ * Capability `traces.skill`: installs the polaris-tracing skill bundled with the Daemon, globally,
+ * for `harness` (null: Claude and Codex). No network and no repository files.
+ */
+export const InstallTracingSkill = Rpc.make("traces.installSkill", {
+  payload: { harness: Schema.NullOr(HarnessKind) },
+  success: InstalledTracingSkill,
+  error: Schema.Union([TraceSkillError, Unsupported]),
 });
 
 /** Store-assigned id, scoped to the checkout resolved from the caller's Agent Session. */
@@ -556,6 +580,8 @@ export class TracesSettingsRpcs extends RpcGroup.make(
   GetWorkspaceTracesSettings,
   SetWorkspaceTracesSettings
 ) {}
+
+export class TracingSkillRpcs extends RpcGroup.make(InstallTracingSkill) {}
 
 export class ProfilesRpcs extends RpcGroup.make(
   WatchProfiles,
