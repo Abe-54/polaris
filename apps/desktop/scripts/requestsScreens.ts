@@ -38,7 +38,7 @@ try {
 
   await sizeWindow(app, 1440, 900);
 
-  for (const scene of ["q1", "list"] as const) {
+  for (const scene of ["q1", "q2", "list"] as const) {
     await page.evaluate(`location.hash = "#requests/${scene}"; location.reload()`);
     await page.getByTestId("requests-mode").waitFor({ timeout: 20_000 });
 

@@ -2,7 +2,7 @@
  * Requests on fixtures, for screenshots: `#requests/<scene>` renders the whole app on Requests
  * with "Fix overdue totals" in the ledger Workspace selected and the fixture RequestsApi, no
  * Daemon involved. `q1` opens "Recalculate overdue" with an unsaved edit, as Paper Q1; `list`
- * opens the first Request.
+ * opens the first Request; `q2` shows an agent's ad-hoc send whose write failed (the send pane).
  */
 import { RequestTarget } from "@polaris/protocol";
 import { createRoot } from "react-dom/client";
@@ -16,6 +16,7 @@ import { FIXTURE_SESSION } from "../../traces/preview/fixtures.ts";
 import { RequestsLayer } from "../data/hooks.tsx";
 import { refString } from "../model/draft.ts";
 import { openRequest, setDraft, setLatestSend } from "../model/store.ts";
+import { AGENT_SEND, SendFixtureLayers } from "../ui/send/fixture.tsx";
 import { fixtureRequestsApi } from "./fixtureApi.ts";
 
 const at = { hostKey: HOST, sessionId: FIXTURE_SESSION };
@@ -81,13 +82,17 @@ export const mountRequestsPreview = (
   navigation.actions.selectSession(at);
   navigation.actions.setMode("requests");
 
-  if (scene === "q1") void playQ1(api);
+  if (scene === "q1" || scene === "q2") void playQ1(api);
+
+  if (scene === "q2") setTimeout(() => setLatestSend(at, AGENT_SEND), 200);
 
   createRoot(root).render(
     <RequestsLayer api={api}>
-      <App
-        value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
-      />
+      <SendFixtureLayers>
+        <App
+          value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
+        />
+      </SendFixtureLayers>
     </RequestsLayer>
   );
 
