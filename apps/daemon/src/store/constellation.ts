@@ -372,6 +372,7 @@ export const foldConstellation = (
           mergedHead: e.mergedHead,
           receipts: e.receipts,
           evidence: e.evidence,
+          acceptFindings: e.findings ?? [],
           endedAt: at,
         }),
       });

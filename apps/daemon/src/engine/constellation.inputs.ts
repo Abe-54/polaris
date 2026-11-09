@@ -35,6 +35,8 @@ export interface ConstellationContext {
   readonly leadBranch?: string | undefined;
   readonly claimProbe: ClaimProbe | null;
   readonly recordedChecks: ReadonlyArray<RecordedCheck>;
+  /** What Accept's merge found, recorded on the accepted Attempt (ENG-276). */
+  readonly mergeFindings?: ReadonlyArray<import("@polaris/protocol").ConstellationFinding>;
   readonly offlineSessionIds: ReadonlySet<SessionId>;
   readonly commanded: boolean;
   readonly defaults: import("@polaris/protocol").ConstellationSettings;

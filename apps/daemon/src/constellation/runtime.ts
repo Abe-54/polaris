@@ -16,6 +16,7 @@ export type ConstellationPreparation = Pick<
   | "newLeadSessionId"
   | "claimProbe"
   | "recordedChecks"
+  | "mergeFindings"
   | "handoverDeferred"
   | "leadBranch"
 >;

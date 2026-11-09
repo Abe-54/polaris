@@ -103,10 +103,12 @@ test(
           expect(yield* trees.mergeClaim(graph(review), review, root, head)).toEqual({
             merged: true,
             leadHead: head,
+            findings: [],
           });
           expect(yield* trees.mergeClaim(graph(review), review, root, head)).toEqual({
             merged: false,
             leadHead: head,
+            findings: [],
           });
 
           const sentBack = yield* trees.prepare(

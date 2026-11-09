@@ -10,6 +10,9 @@ export const WORKERS_RESOURCE = "__workers";
 
 export const DEFAULT_HOLD_LIMIT_MS = 30 * 60 * 1000;
 
+/** The repo's script leases (`tooling/leases.ts`), declared on every Host with capacity 1. */
+export const SCRIPT_RESOURCES: ReadonlyArray<string> = ["bench", "smoke"];
+
 /** A queued request and when its envelope committed it. */
 export type LeaseWaiter = typeof ResourceEvent.cases.ResourceLeaseQueued.Type & {
   readonly queuedAt: string;
