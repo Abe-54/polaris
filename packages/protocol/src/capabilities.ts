@@ -23,6 +23,8 @@ export const Capability = Schema.Literals([
   /** Agent execute and user grid commits (ENG-645). */
   "data.writes",
   "data.schemaDiff",
+  /** `turns` on `data.schemaDiff`: one diff across a Turn group (ENG-672). */
+  "data.schemaDiff.turns",
   /** Checkout Traces watch, trace details and Span logs (ADR 0094). */
   "traces",
   /** Workspace Traces settings and exporter detection; advertised only when implemented. */

@@ -57,7 +57,7 @@ export const offsetLabel = (startNano: string, atNano: string) => {
   return `+${ms < 10 ? Number(ms.toFixed(1)) : Math.round(ms)} ms`;
 };
 
-/** A rounded outline action with its shortcut faint after it ("Open in Data ⌘4"). */
+/** A rounded outline action with an optional faint hint after it ("Open profile range 12–40 ms"). */
 export const Pill = ({
   onClick,
   hint,
@@ -67,7 +67,7 @@ export const Pill = ({
   children,
 }: {
   readonly onClick: () => void;
-  readonly hint: string | undefined;
+  readonly hint?: string | undefined;
   readonly mono?: boolean;
   readonly title?: string;
   readonly testId: string;

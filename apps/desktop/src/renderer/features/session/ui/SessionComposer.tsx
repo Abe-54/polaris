@@ -45,7 +45,7 @@ import { promptFor, sentMessages, shellDraft, useMentionSearch } from "../../com
 import { RotatingVerb, useWorkingVerbs } from "../verbs/index.ts";
 import { type ComposerCommands, DraftComposer } from "./DraftComposer.tsx";
 import { useComposerCommands } from "./useComposerCommands.ts";
-import { ComposerStatus } from "./ComposerStatus.tsx";
+import { ComposerStatus, draftCaption } from "./ComposerStatus.tsx";
 import { useCompact } from "./ContextCard.tsx";
 import { NoticeStrip } from "./NoticeStrip.tsx";
 import { notices } from "../model/notices.ts";
@@ -419,6 +419,7 @@ export const SessionComposer = (props: SessionComposerProps) => {
             openSubagent({ hostKey, workspaceId: session.workspaceId }, session.id, id)
           }
           turnNumber={lastTurn === null ? null : turnNumber(model.turns, lastTurn.id)}
+          draft={draftCaption(ui.draft, ui.draftStatus)}
         />
       }
       onEscape={isWorking ? stop : shell.escape}

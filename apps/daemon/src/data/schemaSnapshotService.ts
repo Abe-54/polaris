@@ -15,6 +15,7 @@ export class SchemaSnapshots extends Context.Service<
     readonly get: (input: {
       sessionId: SessionId;
       turn?: TurnId;
+      turns?: ReadonlyArray<TurnId>;
     }) => Effect.Effect<DataSchemaDiff, DataError>;
     readonly remove: (sessionId: SessionId) => Effect.Effect<void, DataError>;
     readonly begin?: (turn: Turn) => Effect.Effect<void, DataError | NotFound | Unsupported>;

@@ -235,6 +235,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data",
   "data.writes",
   "data.schemaDiff",
+  "data.schemaDiff.turns",
   "data.sqlite",
   "traces",
   "traces.settings",
