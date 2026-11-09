@@ -14,6 +14,7 @@ import {
   ToolCallReference,
   CheckReceipt,
   Workspace,
+  WorkerPlacement,
 } from "@polaris/protocol";
 import { Effect, Fiber, Layer, Predicate, Stream } from "effect";
 import {
@@ -386,4 +387,47 @@ describe("Constellation store and service", () => {
       })
     );
   });
+  test.each([
+    ["claude", "A runs on claude, which has no service tier: priority was ignored."],
+    ["codex", null],
+  ] as const)(
+    "a priority tier on a %s worker's dispatch: the result says when it was ignored",
+    async (harness, note) => {
+      const dir = newTempDir("c1-tier-");
+
+      try {
+        await run(
+          join(dir, "state.sqlite"),
+          Effect.gen(function* () {
+            yield* seed;
+            const graphs = yield* Constellations;
+            yield* graphs.command(user, commandId("plan"), start);
+
+            const result = yield* graphs.command(
+              user,
+              commandId("dispatch"),
+              C.Dispatch.make({
+                constellationId: CID,
+                tasks: [
+                  {
+                    taskId: task().id,
+                    worker: WorkerPlacement.cases.New.make({
+                      hostId: HOST,
+                      selection: { harness, serviceTier: "priority" },
+                    }),
+                  },
+                ],
+              })
+            );
+
+            expect(result.constellation?.attempts).toHaveLength(1);
+            expect(result.next.startsWith(note ?? "")).toBe(true);
+            expect(result.next.includes("service tier")).toBe(note !== null);
+          })
+        );
+      } finally {
+        removeTempDir(dir);
+      }
+    }
+  );
 });

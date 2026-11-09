@@ -2,7 +2,7 @@
 
 C1-H implements spec §3–4. The Engine still owns the Agent Session machine and commits; these modules supply instructions, a first-Turn brief and observed liveness facts.
 
-`selectWorker(dispatch, task.suggested, defaults, user)` resolves Harness/Model/Effort precedence. Defaults from another Harness do not supply a model or effort after a Harness override. The caller selects the Constellation's backend or UI defaults and supplies the user's permission mode.
+`selectWorker(dispatch, task.suggested, defaults, user)` resolves Harness/Model/Effort/service tier precedence. Defaults from another Harness do not supply a model, effort or tier after a Harness override; a Harness without tiers (anything but Codex) gets none, and `ignoredServiceTier` names the tier dropped. The caller selects the Constellation's backend or UI defaults and supplies the user's permission mode.
 
 After `AttemptStarted` commits, call `startWorker(assignment, startup)`. `WorkerAssignment` carries the prepared Attempt, Task, accepted dependency Claims, selection, Workspace and user permissions. `WorkerStartup.attach` creates the bound attachment; `startSession` commits the title `<taskId> · <title>` and routes the returned prompt as the first Turn through the Agent Session machine. Provisioning the Worktree belongs to W/L before the decider. A reused session receives the next Attempt's prompt as a new Turn; a fresh session receives it as its first Turn. Review feedback may be appended by the caller.
 

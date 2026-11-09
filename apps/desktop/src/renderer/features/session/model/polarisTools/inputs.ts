@@ -11,7 +11,11 @@ const opt = <S extends Schema.Top>(schema: S) => Schema.optionalKey(schema);
 
 const List = <S extends Schema.Top>(schema: S) => opt(Schema.Array(schema));
 
-export const Selection = Schema.Struct({ harness: opt(Str), model: opt(Str) });
+export const Selection = Schema.Struct({
+  harness: opt(Str),
+  model: opt(Str),
+  serviceTier: opt(Schema.NullOr(Str)),
+});
 
 export const Worker = Schema.Struct({
   host: opt(Str),

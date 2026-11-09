@@ -5,11 +5,13 @@ import {
   AttemptCause,
   AttemptId,
   CommandId,
+  type Constellation,
   DomainEvent,
   SessionId,
   Workspace,
   type HostId,
   type PermissionMode,
+  type TaskDefinition,
 } from "@polaris/protocol";
 import { pickCelestial } from "../../store/celestial.ts";
 import type { ReadModel } from "../../store/model.ts";
@@ -23,6 +25,14 @@ import { exceedsCeiling, workerMode } from "../permissionCeiling.ts";
 import { WorktreeSetupService, type WorktreeSetupUntrusted } from "../setup/index.ts";
 import { startupSetupIntent } from "./startupSetup.ts";
 import type { WorkerPreparation } from "../transfers/prepareWorkers.ts";
+
+export const BUILT_IN = { harness: "codex", model: null, effort: null } as const;
+
+/** The Constellation's default selection for a Task's group (ui and design, or backend). */
+export const taskDefaults = (graph: Constellation, task: TaskDefinition) =>
+  task.group === "ui" || task.group === "design"
+    ? (graph.settings.ui ?? graph.settings.defaults)
+    : (graph.settings.backend ?? graph.settings.defaults);
 
 /** A reused Session broader than the Lead's permission mode is refused before any Attempt. */
 const withinCeiling = (
@@ -77,10 +87,8 @@ export const prepareSession = Effect.fn("Constellation.prepareSession")(function
   const selection = selectWorker(
     Predicate.isTagged(input.placement, "New") ? input.placement.selection : null,
     input.task.suggested,
-    input.task.group === "ui" || input.task.group === "design"
-      ? (input.graph.settings.ui ?? input.graph.settings.defaults)
-      : (input.graph.settings.backend ?? input.graph.settings.defaults),
-    existing ?? lead ?? { harness: "codex", model: null, effort: null }
+    taskDefaults(input.graph, input.task),
+    existing ?? lead ?? BUILT_IN
   );
 
   if (existing?.state === "archived")

@@ -34,8 +34,10 @@ Desktop App authorization is checked by the Daemon, not asserted in a payload.
   placement carries `leadPermissionMode` so the worker Host applies the same ceiling.
 - `constellation.dispatch`: named `tasks` pair short Task IDs with placements;
   empty means every ready Task, using `defaultWorker` and graph defaults.
-  `New` carries Host, optional Harness/Model/effort, base and optional existing
+  `New` carries Host, optional Harness/Model/effort/serviceTier, base and optional existing
   worktree/branch; `Existing` names an idle session. Gates use the Lead's session.
+  `serviceTier` (`priority` is fast mode) applies only on Codex; elsewhere the result's
+  Next says it was ignored (ENG-475).
 - `constellation.review`: Attempt ID, the **Attempt revision** the reviewer saw, and Accept,
   SendBack, Stop, Approve or HandUp. Approve is user-only and HandUp is Lead-only;
   both record metadata while keeping Review. A review of a Claim in review stays current

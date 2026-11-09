@@ -29,6 +29,7 @@ export const newTurn = (
     attachments: [],
     model: session.model,
     effort: session.effort,
+    serviceTier: session.serviceTier ?? null,
     status: "working",
     checkpointBefore: null,
     checkpointAfter: null,
