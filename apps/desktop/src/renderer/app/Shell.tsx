@@ -7,6 +7,7 @@ import { LazyInline } from "../features/editor-inline/index.ts";
 import { useOnboardingState, Welcome } from "../features/onboarding/index.ts";
 import { DataMode } from "../features/data/index.ts";
 import { TracesMode } from "../features/traces/index.ts";
+import { RequestsMode } from "../features/requests/index.ts";
 import { EditMode } from "../features/editor/explorer/index.ts";
 import { Arcade } from "../features/arcade/index.ts";
 import { CommandPalette } from "../features/palette/index.ts";
@@ -23,7 +24,12 @@ import { TitleBar } from "../shell/TitleBar.tsx";
 import { TopBar } from "../shell/TopBar.tsx";
 import { slots } from "./slots.tsx";
 
-const MODE_VIEWS = { edit: EditMode, data: DataMode, traces: TracesMode } as const;
+const MODE_VIEWS = {
+  edit: EditMode,
+  data: DataMode,
+  traces: TracesMode,
+  requests: RequestsMode,
+} as const;
 
 /** Review: the subject open (`routes/review.ts`), or the pull request list. */
 const Review = () => {
@@ -63,7 +69,7 @@ const Body = () => {
 
   if (mode === "review") return <Review key="review" />;
 
-  if (mode === "edit" || mode === "data" || mode === "traces") {
+  if (mode === "edit" || mode === "data" || mode === "traces" || mode === "requests") {
     const View = MODE_VIEWS[mode];
 
     return (

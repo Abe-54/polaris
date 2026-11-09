@@ -84,6 +84,8 @@ export const shellContext =
 
     if (mode === "traces") keys.push("mode.traces");
 
+    if (mode === "requests") keys.push("mode.requests");
+
     return { keys, values };
   };
 
@@ -182,6 +184,7 @@ export const shellCommands = ({
         return tracesUnavailable(app().hosts.find((h) => h.key === hostKey)) === null;
       },
     },
+    "view.requests": { run: () => actions.setMode("requests") },
     "view.wordWrap": {
       run: () => setAppearance({ wordWrap: !settingsStore.getState().appearance.wordWrap }),
     },

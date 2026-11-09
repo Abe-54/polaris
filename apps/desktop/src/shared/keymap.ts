@@ -10,6 +10,7 @@ import { acceleratorLabel, currentKeyPlatform, type KeyPlatform } from "./chord.
 import { DATA_BINDINGS, type DataCommandId } from "./keymapData.ts";
 import { DIFF_BINDINGS, type DiffCommandId } from "./keymapDiff.ts";
 import { TRACES_BINDINGS, type TracesCommandId } from "./keymapTraces.ts";
+import { REQUESTS_BINDINGS, type RequestsCommandId } from "./keymapRequests.ts";
 import { VIEW_BINDINGS, type ViewCommandId } from "./keymapView.ts";
 
 export type CommandId =
@@ -54,6 +55,7 @@ export type CommandId =
   | "editor.addToSession"
   | DataCommandId
   | TracesCommandId
+  | RequestsCommandId
   | "editor.markdownPreview"
   | "git.writeMessage"
   | "editor.save"
@@ -93,6 +95,8 @@ export const CONTEXT_KEYS = [
   "mode.data",
   /** The Traces view is showing. */
   "mode.traces",
+  /** The Requests view is showing. */
+  "mode.requests",
   /** A file is open and focused in Edit. */
   "editor.file",
   "prediction.ghost",
@@ -427,6 +431,7 @@ export const KEYMAP: ReadonlyArray<KeyBinding> = [
   },
   ...DATA_BINDINGS,
   ...TRACES_BINDINGS,
+  ...REQUESTS_BINDINGS,
   {
     id: "session.interrupt",
     title: "Stop the turn",
@@ -732,6 +737,7 @@ export const PC_KEYS: Partial<Record<CommandId, ReadonlyArray<string>>> = {
   "view.edit": ["Alt+3"],
   "view.data": ["Alt+4"],
   "view.traces": ["Alt+5"],
+  "view.requests": ["Alt+6"],
   "view.output": ["CmdOrCtrl+Shift+B"],
   "session.next": ["CmdOrCtrl+PageDown", "Ctrl+Tab"],
   "session.previous": ["CmdOrCtrl+PageUp", "Ctrl+Shift+Tab"],
@@ -749,20 +755,7 @@ export const keymapFor = (platform: KeyPlatform): ReadonlyArray<KeyBinding> =>
         return keys === undefined ? b : { ...b, keys };
       });
 
-/** ⌃` toggles the terminal drawer (Ctrl+` on Windows and Linux); the drawer handles it. */
-export const TERMINAL_TOGGLE = "Ctrl+`";
-
-/** Keys a field or dialog handles itself, so their hints read the platform's way. */
-export const FIELD_CHORDS = {
-  submit: "CmdOrCtrl+Enter",
-  newLine: "Shift+Enter",
-  previousMatch: "Shift+Enter",
-  matchCase: "Alt+C",
-  regex: "Alt+R",
-  folderUp: "CmdOrCtrl+Up",
-  nextHost: "Ctrl+Tab",
-  undo: "CmdOrCtrl+Z",
-} as const;
+export { FIELD_CHORDS, TERMINAL_TOGGLE } from "./keymapFields.ts";
 
 /** ⌃1…⌃0 and ⌥1…⌥0 pick Workspace chips or machines; they are data-driven, so outside KEYMAP. */
 export const SHORTCUT_DIGIT_MODIFIERS: ReadonlyArray<string> = ["Ctrl", "Alt"];

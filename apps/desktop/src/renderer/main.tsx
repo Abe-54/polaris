@@ -137,6 +137,9 @@ const dataSidebarPreview = location.hash.startsWith("#data-sidebar/");
 // `#traces/<scene>`: Traces on fixtures (features/traces/preview).
 const tracesPreview = location.hash.startsWith("#traces/");
 
+// `#requests/<scene>`: Requests on fixtures (features/requests/preview).
+const requestsPreview = location.hash.startsWith("#requests/");
+
 // `#settings/<scene>`: Settings on worst-case fixtures (features/settings/preview).
 const settingsPreview = location.hash.startsWith("#settings/");
 
@@ -267,6 +270,14 @@ if (root !== null && preview) {
 } else if (root !== null && tracesPreview) {
   void import("./features/traces/preview/Preview.tsx").then((m) => {
     setPreviewDensity = m.mountTracesPreview(
+      root,
+      location.hash,
+      settingsStore.getState().appearance
+    );
+  });
+} else if (root !== null && requestsPreview) {
+  void import("./features/requests/preview/Preview.tsx").then((m) => {
+    setPreviewDensity = m.mountRequestsPreview(
       root,
       location.hash,
       settingsStore.getState().appearance
