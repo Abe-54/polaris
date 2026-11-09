@@ -59,7 +59,7 @@ export const clearRequestsView = (at: RequestsSessionKey) =>
     const { [sessionString(at)]: _gone, ...rest } = s;
 
     return rest;
-  });
+  }, true);
 
 export const useRequestsView = (at: RequestsSessionKey): RequestsView =>
   useStore(store, (s) => s[sessionString(at)] ?? EMPTY);

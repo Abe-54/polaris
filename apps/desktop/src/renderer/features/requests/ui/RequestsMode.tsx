@@ -14,11 +14,13 @@ import { useRequestsUnavailable } from "../model/availability.ts";
 import { type Draft, NEW_REQUEST_FILE } from "../model/draft.ts";
 import type { RequestsSessionKey } from "../model/session.ts";
 import { openNewDraft, setEnvironment } from "../model/store.ts";
+import { PendingOriginApprovals } from "../approval/PendingOriginApprovals.tsx";
 import { CurlDialog } from "./CurlDialog.tsx";
 import { RequestPane } from "./RequestPane.tsx";
 import { SendPane } from "./SendPane.tsx";
 import { RequestsSidebar } from "./Sidebar.tsx";
 import type { RequestsSlotProps } from "./slots.ts";
+import { NothingOpen, useNewRequestCommand } from "./states/NothingOpen.tsx";
 import { RequestsStatusBar } from "./StatusBar.tsx";
 import { UrlBar } from "./UrlBar.tsx";
 import { isCurl, useRequestActions, useRequestCommands } from "./useRequestActions.tsx";
@@ -78,7 +80,10 @@ const Workbench = (slot: RequestsSlotProps) => {
   const input = actions.target === null ? null : { target: actions.target, environment };
   const variables = useVariables(at, input);
 
+  const onNew = () => openNewDraft(at, BLANK(taken));
+
   useRequestCommands(actions);
+  useNewRequestCommand(onNew);
 
   const onPaste = (event: ClipboardEvent) => {
     const text = event.clipboardData.getData("text/plain");
@@ -101,18 +106,19 @@ const Workbench = (slot: RequestsSlotProps) => {
           openKey={open?.key ?? null}
           unsaved={shown.unsaved}
           onOpen={shown.select}
-          onNew={() => openNewDraft(at, BLANK(taken))}
+          onNew={onNew}
           onPasteCurl={() => setCurlOpen(true)}
         />
         <Horizon moon={false} />
       </div>
       <section className="border-hairline bg-panel shadow-panel flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border">
+        <PendingOriginApprovals at={at} />
         {open === null ? (
-          <Centered
-            testId="requests-none-open"
-            icon={<PixelHourglassIcon size={24} className="text-text-strong" />}
-            title={snapshot.status === "loading" ? "Reading requests" : "No request open"}
-            fact="Pick a request, start one with +, or paste a curl command"
+          <NothingOpen
+            {...slot}
+            snapshot={snapshot}
+            onNew={onNew}
+            onPasteCurl={() => setCurlOpen(true)}
           />
         ) : (
           <>

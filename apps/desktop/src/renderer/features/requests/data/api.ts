@@ -43,6 +43,8 @@ export interface RequestsApi {
   ) => Promise<Result<ReadonlyArray<ResolvedVariable>>>;
   readonly parseCurl: (at: RequestsSessionKey, text: string) => Promise<Result<AdHocRequest>>;
   readonly formatCurl: (at: RequestsSessionKey, input: SendInput) => Promise<Result<string>>;
+  /** The checkout's latest 100 Sends, newest first, again on every new Send. */
+  readonly watchSendLog: (at: RequestsSessionKey, on: Watch<ReadonlyArray<Send>>) => () => void;
 }
 
 const session = (at: RequestsSessionKey) => ({ hostKey: at.hostKey, sessionId: at.sessionId });
@@ -71,4 +73,13 @@ export const liveRequestsApi: RequestsApi = {
   variables: (at, input) => polaris().request("requests.variables", withEnvironment(at, input)),
   parseCurl: (at, text) => polaris().request("requests.curl.parse", { ...session(at), text }),
   formatCurl: (at, input) => polaris().request("requests.curl.format", withEnvironment(at, input)),
+  watchSendLog: (at, on) =>
+    polaris().subscribe("requests.sendLog.watch", session(at), {
+      items: (items) => {
+        const last = items.at(-1);
+
+        if (last !== undefined) on.next(last);
+      },
+      end: (error) => on.end?.(error),
+    }),
 };

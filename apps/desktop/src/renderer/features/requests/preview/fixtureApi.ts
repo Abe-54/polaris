@@ -119,6 +119,8 @@ export interface FixtureOptions {
   /** A Request opened with unsaved edits, as Q1 shows "Recalculate overdue". */
   readonly files?: ReadonlyArray<RequestFile>;
   readonly environments?: ReadonlyArray<string>;
+  /** The Send Log, newest first; none by default. */
+  readonly sends?: ReadonlyArray<Send>;
 }
 
 const targetUrl = (target: RequestTarget, files: ReadonlyArray<RequestFile>) =>
@@ -219,6 +221,7 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
   let files = options.files ?? FILES;
   const environments = options.environments ?? ["dev", "staging"];
   const watchers = new Set<Watch<RequestsSnapshot>>();
+  const sendLog = options.sends ?? [];
   let sends = 0;
   const snapshot = (): RequestsSnapshot => ({ files, environments });
 
@@ -265,6 +268,11 @@ export const fixtureRequestsApi = (options: FixtureOptions = {}): RequestsApi =>
             },
           }
         : { ok: true, value: parsed };
+    },
+    watchSendLog: (_at, on) => {
+      queueMicrotask(() => on.next(sendLog));
+
+      return () => undefined;
     },
     formatCurl: async (_at, input) => {
       const shown = targetUrl(input.target, files);

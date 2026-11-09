@@ -11,53 +11,26 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   PlusIcon,
-  SearchIcon,
   SegmentedControl,
 } from "@polaris/ui";
 import { useMemo, useState } from "react";
 import { useApp } from "../../../shell/hooks.ts";
 import type { Loaded } from "../data/hooks.tsx";
+import { useSendLog } from "../data/sendLog.tsx";
 import { refString } from "../model/draft.ts";
 import { fileGroups, requestCount } from "../model/sidebar.ts";
 import { setSidebarView, type SidebarView, toggleFile, useRequestsView } from "../model/store.ts";
 import { AgentsHere } from "./sidebar/AgentsHere.tsx";
+import { FilterWell } from "./sidebar/FilterWell.tsx";
 import { Header } from "./sidebar/Header.tsx";
 import { RequestList } from "./sidebar/RequestList.tsx";
-import { SendLog } from "./SendLog.tsx";
+import { SendLog, SendLogFilter } from "./SendLog.tsx";
 import type { RequestsSlotProps } from "./slots.ts";
 
 const Quiet = ({ children }: { readonly children: string }) => (
   <p className="text-caption text-text-subtle px-2 py-2" data-testid="requests-sidebar-quiet">
     {children}
   </p>
-);
-
-const FilterWell = ({
-  text,
-  onText,
-}: {
-  readonly text: string;
-  readonly onText: (text: string) => void;
-}) => (
-  <label className="bg-well ring-hairline focus-within:ring-starlight flex h-[30px] shrink-0 items-center gap-2 rounded-full px-2.5 ring-1 ring-inset focus-within:ring-2">
-    <SearchIcon size={12} className="text-text-faint shrink-0" />
-    <input
-      type="search"
-      aria-label="Filter requests by method, name, URL or file"
-      data-testid="requests-filter"
-      value={text}
-      onChange={(event) => onText(event.target.value)}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && text !== "") {
-          event.stopPropagation();
-          onText("");
-        }
-      }}
-      placeholder="Filter requests"
-      spellCheck={false}
-      className="text-code-inline text-text-default placeholder:text-text-faint min-w-0 flex-1 bg-transparent font-mono outline-none [&::-webkit-search-cancel-button]:hidden"
-    />
-  </label>
 );
 
 /** "+": a new Request, or one from a curl command on the clipboard. */
@@ -130,6 +103,7 @@ export const RequestsSidebar = (props: RequestsSidebarProps) => {
   const { sidebar } = useRequestsView(props.at);
   const { snapshot } = props;
   const count = snapshot.status === "ready" ? requestCount(snapshot.value.files) : null;
+  const log = useSendLog(props.at);
 
   const connected = useApp(
     (s) => s.hosts.find((h) => h.key === props.hostKey)?.status.state === "connected"
@@ -156,13 +130,18 @@ export const RequestsSidebar = (props: RequestsSidebarProps) => {
             onValueChange={(view) => setSidebarView(props.at, view)}
             options={[
               { value: "requests", label: "Requests", badge: <Count n={count} /> },
-              { value: "send-log", label: "Send log" },
+              {
+                value: "send-log",
+                label: "Send log",
+                badge: <Count n={log.status === "ready" ? log.value.length : null} />,
+              },
             ]}
           />
           {/* Hidden, not unmounted, so the filter survives the switch. */}
           <div hidden={sidebar !== "requests"}>
             <FilterWell text={filter} onText={setFilter} />
           </div>
+          {sidebar === "send-log" ? <SendLogFilter {...props} /> : null}
         </div>
       </div>
       <div
@@ -172,7 +151,11 @@ export const RequestsSidebar = (props: RequestsSidebarProps) => {
         )}
         data-testid="requests-sidebar-body"
       >
-        {sidebar === "requests" ? <Requests {...props} filter={filter} /> : <SendLog {...props} />}
+        {sidebar === "requests" ? (
+          <Requests {...props} filter={filter} />
+        ) : (
+          <SendLog {...props} log={log} />
+        )}
       </div>
       <AgentsHere at={props.at} />
     </aside>

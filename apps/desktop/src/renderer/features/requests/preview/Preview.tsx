@@ -2,12 +2,14 @@
  * Requests on fixtures, for screenshots: `#requests/<scene>` renders the whole app on Requests
  * with "Fix overdue totals" in the ledger Workspace selected and the fixture RequestsApi, no
  * Daemon involved. `q1` opens "Recalculate overdue" with an unsaved edit, as Paper Q1; `list`
- * opens the first Request.
+ * opens the first Request; `states` lays out Q3's cards; the rest are in scenes.ts.
  */
 import { RequestTarget } from "@polaris/protocol";
+import { TooltipProvider } from "@polaris/ui";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
 import { App } from "../../../app/App.tsx";
+import { AppProvider } from "../../../shell/hooks.ts";
 import { createCommandRegistry } from "../../../routes/commands.ts";
 import { createNavigation } from "../../../routes/navigation.ts";
 import type { AppState, Connection } from "../../../store/store.ts";
@@ -17,6 +19,8 @@ import { RequestsLayer } from "../data/hooks.tsx";
 import { refString } from "../model/draft.ts";
 import { openRequest, setDraft, setLatestSend } from "../model/store.ts";
 import { fixtureRequestsApi } from "./fixtureApi.ts";
+import { statesScene } from "./scenes.ts";
+import { StatesGallery } from "./StatesGallery.tsx";
 
 const at = { hostKey: HOST, sessionId: FIXTURE_SESSION };
 
@@ -66,8 +70,15 @@ export const mountRequestsPreview = (
   shown: Pick<AppState, "density" | "theme">
 ) => {
   const scene = hash.replace(/^#requests\//, "");
-  const store = createStore<AppState>(() => ({ ...fixtureAppState(), ...shown }));
-  const api = fixtureRequestsApi();
+  const states = statesScene(scene);
+
+  const store = createStore<AppState>(() => ({
+    ...(states?.state ?? ((s: AppState) => s))(fixtureAppState()),
+    ...shown,
+  }));
+
+  const fixture = fixtureRequestsApi(states?.options);
+  const api = states === null ? fixture : states.api(fixture);
 
   const connection: Connection = {
     store,
@@ -83,11 +94,25 @@ export const mountRequestsPreview = (
 
   if (scene === "q1") void playQ1(api);
 
+  states?.play();
+
+  const commands = createCommandRegistry({ platform: "mac" });
+
+  if (scene === "states") {
+    createRoot(root).render(
+      <AppProvider value={{ connection, navigation, commands }}>
+        <TooltipProvider>
+          <StatesGallery at={at} />
+        </TooltipProvider>
+      </AppProvider>
+    );
+
+    return connection.setDensity;
+  }
+
   createRoot(root).render(
     <RequestsLayer api={api}>
-      <App
-        value={{ connection, navigation, commands: createCommandRegistry({ platform: "mac" }) }}
-      />
+      <App value={{ connection, navigation, commands }} />
     </RequestsLayer>
   );
 
