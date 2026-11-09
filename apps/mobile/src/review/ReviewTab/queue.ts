@@ -11,6 +11,7 @@ import type { SessionRow } from "../../home/model/home.ts";
 import {
   type AcceptState,
   acceptState,
+  isDismissed,
   listedFindings,
   SEVERITIES,
   type Tally,
@@ -157,7 +158,11 @@ export const riskNote = (item: QueueItem): string | null => {
 
   if (risk.summary.status === "failed") return "review failed";
 
-  return item.findings.length === 0 ? "no findings" : null;
+  if (item.findings.length === 0) return "no findings";
+
+  const dismissed = item.findings.filter(isDismissed).length;
+
+  return dismissed === item.findings.length ? `${dismissed} dismissed` : null;
 };
 
 const loadedRisk = (risk: TurnRisk | undefined): Loaded<RiskSummary> =>
