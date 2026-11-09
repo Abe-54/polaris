@@ -17,6 +17,7 @@ import { RequestsLayer } from "../data/hooks.tsx";
 import { clearRequestsView } from "../model/store.ts";
 import { fixtureRequestsApi } from "../preview/fixtureApi.ts";
 import { RequestsMode } from "./RequestsMode.tsx";
+import { SendFixtureLayers } from "./send/fixture.tsx";
 
 const AT = { hostKey: HOST, sessionId: FIXTURE_SESSION };
 
@@ -79,7 +80,9 @@ const mount = (api: RequestsApi, state: AppState = fixtureAppState()) => {
     <AppProvider value={{ connection, navigation, commands }}>
       <TooltipProvider>
         <RequestsLayer api={api}>
-          <RequestsMode />
+          <SendFixtureLayers>
+            <RequestsMode />
+          </SendFixtureLayers>
         </RequestsLayer>
       </TooltipProvider>
     </AppProvider>
