@@ -169,14 +169,18 @@ export const applyWindowsLocal = (
   );
 };
 
-/** Start daemon: the installed `polaris.exe install`, which (re)registers and runs the task. */
+/**
+ * Start daemon: the installed `polaris.exe install`, which (re)registers and runs the task.
+ * `replaceTask` takes over a sign-in task another Polaris home holds (`TaskConflict`).
+ */
 export const startWindowsLocal = (
   home: string,
-  processes: ChildProcessApi = childProcesses
+  processes: ChildProcessApi = childProcesses,
+  replaceTask = false
 ): Effect.Effect<void, WindowsLocalFailed | TaskConflict> =>
   run(processes, {
     file: installedPaths(home, "win32").binary,
-    args: ["install", "--json"],
+    args: ["install", "--json", ...(replaceTask ? ["--replace-task"] : [])],
     step: "start",
     home,
   }).pipe(

@@ -11,12 +11,12 @@
  *   outcome says the upgrade happened.
  * - "Not now" parks the Host until the user checks again; background checks
  *   leave it parked.
- * - A Windows install that found its sign-in task held by another Polaris
- *   home keeps its work, so only the user's take-over reruns it, with
- *   `--replace-task`; nothing takes over on its own.
+ * - A Windows install, or Start daemon, that found its sign-in task held by
+ *   another Polaris home keeps its work, so only the user's take-over reruns
+ *   it, with `--replace-task`; nothing takes over on its own.
  */
 import type { InstallPlan, InstallTrigger } from "@polaris/client/install";
-import { Match } from "effect";
+import { Match, Predicate, Schema } from "effect";
 import { setup, types } from "xstate/fsm";
 
 /** What a first install will put on the Host, for the approval card. */
@@ -27,6 +27,18 @@ export interface InstallOffer {
 }
 
 export type InstallWork = Extract<InstallPlan, { _tag: "Install" | "Upgrade" }>;
+
+/** Start daemon: the installed build's `polaris install`, held for a take-over (ENG-327). */
+const StartWork = Schema.TaggedStruct("Start", {});
+
+export type StartWork = typeof StartWork.Type;
+
+export const START_WORK: StartWork = StartWork.make({});
+
+export const isStartWork = (work: HeldWork): work is StartWork => Predicate.isTagged(work, "Start");
+
+/** What a take-over reruns: an install or upgrade, or a start. */
+export type HeldWork = InstallWork | StartWork;
 
 export interface InstallOutcome {
   readonly kind: "current" | "newer" | "installed" | "upgraded";
@@ -66,7 +78,7 @@ export interface InstallProblem {
 export interface InstallContext {
   readonly trigger: InstallTrigger | null;
   readonly offer: InstallOffer | null;
-  readonly work: InstallWork | null;
+  readonly work: HeldWork | null;
   readonly outcome: InstallOutcome | null;
   readonly problem: InstallProblem | null;
 }
@@ -84,7 +96,11 @@ export type InstallEvent =
   /** The user confirmed taking over the sign-in task another Polaris home holds. */
   | { readonly type: "takeOver" }
   | { readonly type: "applied"; readonly outcome: InstallOutcome }
-  | { readonly type: "failed"; readonly problem: InstallProblem };
+  | { readonly type: "failed"; readonly problem: InstallProblem }
+  /** Start daemon met a sign-in task another Polaris home holds (`problem.conflict`). */
+  | { readonly type: "startConflict"; readonly problem: InstallProblem }
+  /** A taken-over start ran. */
+  | { readonly type: "started" };
 
 type Planned = Extract<InstallEvent, { type: "planned" }>;
 
@@ -133,6 +149,12 @@ const failedWork = ({
         context: { ...cleared, work: context.work, problem: event.problem },
       }
     : blocked(event.problem);
+
+/** A start stopped by a held sign-in task: blocked, holding the start for a take-over. */
+const startConflict = ({ event }: { event: { readonly problem: InstallProblem } }) => ({
+  target: "blocked" as const,
+  context: { ...cleared, work: START_WORK, problem: event.problem },
+});
 
 /** Reruns the held install, only from a task conflict that kept its work. */
 const takeOver = ({ context }: { context: InstallContext }) =>
@@ -204,6 +226,8 @@ export const installMachine = setup({
       takeOver: types<Record<never, never>>(),
       applied: types<{ readonly outcome: InstallOutcome }>(),
       failed: types<{ readonly problem: InstallProblem }>(),
+      startConflict: types<{ readonly problem: InstallProblem }>(),
+      started: types<Record<never, never>>(),
     },
   },
 }).createFSM({
@@ -211,7 +235,7 @@ export const installMachine = setup({
   initial: "idle",
   context: { trigger: null, ...cleared },
   states: {
-    idle: { on: { check: check(false) } },
+    idle: { on: { check: check(false), startConflict } },
     checking: {
       on: {
         planned,
@@ -224,17 +248,19 @@ export const installMachine = setup({
         approve: () => ({ target: "checking", context: { ...cleared, trigger: "user" } }),
         dismiss: ({ context }) => ({ target: "dismissed", context: { offer: context.offer } }),
         check: check(true),
+        startConflict,
       },
     },
-    dismissed: { on: { check: check(true) } },
+    dismissed: { on: { check: check(true), startConflict } },
     installing: {
       on: {
         applied: ({ event }) => ready(event.outcome),
         failed: failedWork,
+        started: () => ({ target: "idle" as const, context: { trigger: null, ...cleared } }),
       },
     },
-    ready: { on: { check: check(false) } },
-    blocked: { on: { check: check(false), takeOver } },
+    ready: { on: { check: check(false), startConflict } },
+    blocked: { on: { check: check(false), takeOver, startConflict } },
   },
 });
 
