@@ -351,6 +351,8 @@ export const SessionComposer = (props: SessionComposerProps) => {
         }
       : undefined;
 
+  const roster = subagentRoster(model.turns);
+
   const strip = (
     <NoticeStrip
       harness={harness}
@@ -363,6 +365,7 @@ export const SessionComposer = (props: SessionComposerProps) => {
         contextDismissedAt,
         limited: session.state === "limited",
         resetsAt: session.limitResetsAt ?? null,
+        subagents: roster.rows,
       })}
       working={working}
       onUnqueue={props.outbox.edit}
@@ -411,7 +414,7 @@ export const SessionComposer = (props: SessionComposerProps) => {
           hostKey={hostKey}
           harness={harness}
           session={session}
-          roster={subagentRoster(model.turns)}
+          roster={roster}
           onOpenSubagent={(id) =>
             openSubagent({ hostKey, workspaceId: session.workspaceId }, session.id, id)
           }

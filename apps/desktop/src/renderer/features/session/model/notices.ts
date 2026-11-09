@@ -9,7 +9,12 @@ import type { TodoList } from "./todoList.ts";
 import { dataWants } from "../../data/approval/model.ts";
 
 export type Notice =
-  | { readonly kind: "approval"; readonly request: ApprovalRequest }
+  | {
+      readonly kind: "approval";
+      readonly request: ApprovalRequest;
+      /** The asking Subagent's moon (its place in the roster); null for the lead's own. */
+      readonly moon: number | null;
+    }
   | { readonly kind: "working" }
   | { readonly kind: "todo"; readonly list: TodoList }
   | { readonly kind: "queued"; readonly entries: ReadonlyArray<Outgoing> }
@@ -28,7 +33,14 @@ export interface NoticeInput {
   readonly contextDismissedAt: number | null;
   readonly limited: boolean;
   readonly resetsAt: string | null;
+  /** The session's Subagents with their moons (`subagentRoster`), for a Subagent's request. */
+  readonly subagents?: ReadonlyArray<{ readonly id: string; readonly index: number }>;
 }
+
+const moonOf = (request: ApprovalRequest, input: NoticeInput) =>
+  request.subagentId === null
+    ? null
+    : (input.subagents?.find((s) => s.id === request.subagentId)?.index ?? null);
 
 const nearlyFull = (input: NoticeInput): number | null => {
   const share = input.contextShare;
@@ -45,7 +57,9 @@ export const notices = (input: NoticeInput): ReadonlyArray<Notice> => {
   const first = input.approvals[0];
 
   return [
-    first === undefined ? null : { kind: "approval" as const, request: first },
+    first === undefined
+      ? null
+      : { kind: "approval" as const, request: first, moon: moonOf(first, input) },
     input.working ? { kind: "working" as const } : null,
     input.todo === null ? null : { kind: "todo" as const, list: input.todo },
     queued.length === 0 ? null : { kind: "queued" as const, entries: queued },
@@ -84,6 +98,8 @@ const WANTS: Readonly<Record<ApprovalRequest["kind"], string>> = {
  */
 export const approvalNotice = (request: ApprovalRequest) => {
   return {
+    /** "A subagent" when a Subagent asks; null when the Harness does, by its name. */
+    asker: request.subagentId === null ? null : "A subagent",
     wants: dataWants(request) ?? WANTS[request.kind],
     shown: request.kind === "command" ? request.detail : null,
   };

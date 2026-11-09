@@ -1,5 +1,5 @@
 /**
- * User access (ENG-700, ADR 0099): which connections may make user-only requests
+ * User access (ENG-700, ADR 0100): which connections may make user-only requests
  * (`@polaris/protocol` `userAccess.ts`). The Host keeps only digests of enrolled user keys
  * in `~/.polaris/user-access.json`; the first key it sees is enrolled, later unknown ones are not.
  */

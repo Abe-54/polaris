@@ -1,19 +1,12 @@
 import "../../../../test/dom.testing.ts";
-import { TerminalOutput } from "@polaris/client";
-import {
-  type Capability,
-  type Command,
-  type HarnessKind,
-  SessionId,
-  TerminalId,
-} from "@polaris/protocol";
+import { type Capability, type Command, type HarnessKind, SessionId } from "@polaris/protocol";
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Predicate } from "effect";
 import { type FakeBridge, installFakeBridge } from "../../../../test/bridge.testing.ts";
 import { standInBridge } from "../../../bridge.ts";
 import type { HostModel } from "../../../../store/hostModel.ts";
-import { installCommand, SETUP_PROMPT } from "../../model/agentSetup.ts";
+import { SETUP_PROMPT } from "../../model/agentSetup.ts";
 import type { SetupState } from "../../model/setup.ts";
 import { mountApp } from "../../settings/app.testing.tsx";
 import { FRESH_SETTINGS, SIGHTLINE_SETTINGS } from "../../settings/fixtures.ts";
@@ -106,23 +99,14 @@ test("Not now puts the card off and leaves the generic one-line change", async (
   expect(screen.getByText("An exporter with its URL fixed in code")).toBeTruthy();
 });
 
-test("Set up tracing installs the skill globally in a terminal, then starts an agent session in the same checkout", async () => {
+test("Set up tracing installs the Daemon's bundled skill, no terminal or npx, then starts an agent session in the same checkout", async () => {
   fake.answerOk("traces.settings", FRESH_SETTINGS);
-  fake.answerOk("terminal.open", { terminalId: TerminalId.make("t1") });
+  fake.answerOk("traces.installSkill", { paths: ["/Users/me/.claude/skills/polaris-tracing"] });
   await mount();
   await click("Set up tracing");
 
-  const [open] = fake.sent("terminal.open");
-
-  expect(open?.cwd).toBe("/code/sightline");
-  expect(open?.argv?.at(-1)).toBe(installCommand("claude"));
-  expect(installCommand("claude")).toContain(" -g");
-  expect(commands()).toEqual([]);
-
-  await act(async () => {
-    for (const feed of fake.feeds("terminal"))
-      feed.listener.items([TerminalOutput.Exit({ code: 0 })]);
-  });
+  expect(fake.sent("traces.installSkill")).toEqual([{ hostKey: "mac", harness: "claude" }]);
+  expect(fake.sent("terminal.open")).toEqual([]);
 
   const [start] = commands();
 
@@ -180,37 +164,6 @@ test("while the shown agent session is starting, asking sends nothing and says t
   expect(screen.getByTestId("traces-fixed-asked").textContent).toContain("still starting");
 });
 
-const installThen = async (feedEnd: () => void) => {
-  fake.answerOk("traces.settings", FRESH_SETTINGS);
-  fake.answerOk("terminal.open", { terminalId: TerminalId.make("t1") });
-  await mount();
-  await click("Set up tracing");
-
-  expect(screen.getByTestId("traces-setup-progress").textContent).toContain("Installing");
-
-  await act(async () => {
-    feedEnd();
-  });
-};
-
-test.each([
-  ["with an error", { code: "Disconnected", message: "the host went away" }],
-  ["without one", null],
-] as const)(
-  "when the install's feed ends %s, setup stops and offers Try again",
-  async (_how, error) => {
-    await installThen(() => {
-      for (const feed of fake.feeds("terminal")) feed.listener.end?.(error);
-    });
-
-    expect(screen.getByTestId("traces-setup-progress").textContent).toBe(
-      "Lost the install’s terminal before it finished; try again"
-    );
-    expect(screen.getByRole("button", { name: "Try again" }).hasAttribute("disabled")).toBe(false);
-    expect(commands()).toEqual([]);
-  }
-);
-
 const onHarness =
   (harness: HarnessKind) =>
   (model: HostModel): HostModel => {
@@ -223,66 +176,44 @@ const onHarness =
     return { ...model, sessions };
   };
 
-test.each([
-  ["claude", "claude-code"],
-  ["codex", "codex"],
-  ["opencode", "opencode"],
-  ["gemini", "gemini-cli"],
-  ["copilot", "github-copilot"],
-] as const)(
-  "from a %s session the skill is installed for %s, the agent the new session runs",
-  async (harness, agent) => {
+test.each(["claude", "codex", "opencode", "gemini", "copilot"] as const)(
+  "from a %s session the skill is installed for that Harness, the one the new session runs",
+  async (harness) => {
     fake.answerOk("traces.settings", FRESH_SETTINGS);
-    fake.answerOk("terminal.open", { terminalId: TerminalId.make("t1") });
+    fake.answerOk("traces.installSkill", { paths: ["/Users/me/.claude/skills/polaris-tracing"] });
     await mount({ capabilities: WITH_SETTINGS, edit: onHarness(harness) });
     await click("Set up tracing");
-
-    const install = fake.sent("terminal.open")[0]?.argv?.at(-1) ?? "";
-
-    await act(async () => {
-      for (const feed of fake.feeds("terminal"))
-        feed.listener.items([TerminalOutput.Exit({ code: 0 })]);
-    });
 
     const started = commands().flatMap((c) =>
       Predicate.isTagged(c, "StartSession") ? [c.harness] : []
     );
 
-    expect({ agents: install.split(" -a ")[1]?.split(" -y")[0], started }).toEqual({
-      agents: agent,
+    expect({ installed: fake.sent("traces.installSkill").map((i) => i.harness), started }).toEqual({
+      installed: [harness],
       started: [harness],
     });
   }
 );
 
-test("an install that fails, as 'No matching skills found' does, shows its output and offers Try again", async () => {
+test("an install the Daemon refuses shows its message and fix, starts nothing, and offers Try again", async () => {
   fake.answerOk("traces.settings", FRESH_SETTINGS);
-  fake.answerOk("terminal.open", { terminalId: TerminalId.make("t1") });
+  fake.refuse("traces.installSkill", {
+    code: "E-TRACE-SKILL-INSTALL",
+    message: "Couldn't write the polaris-tracing skill to /Users/me/.claude/skills/polaris-tracing",
+    fix: "Check that /Users/me/.claude/skills is writable on this host, then try again.",
+  });
   await mount();
   await click("Set up tracing");
-
-  const printed = [
-    "\u001B[?25l◒  Cloning repository\r\u001B[2K◇  Repository cloned\n",
-    "\u001B[31m■  No matching skills found for: polaris-tracing\u001B[39m\r\n",
-  ];
-
-  await act(async () => {
-    for (const feed of fake.feeds("terminal"))
-      feed.listener.items([
-        ...printed.map((text) => TerminalOutput.Output({ data: new TextEncoder().encode(text) })),
-        TerminalOutput.Exit({ code: 1 }),
-      ]);
-  });
 
   expect({
     line: screen.getByTestId("traces-setup-progress").firstElementChild?.firstElementChild
       ?.textContent,
-    output: screen.getByTestId("traces-setup-output").textContent,
+    fix: screen.getByTestId("traces-setup-fix").textContent,
     started: commands(),
     retry: screen.getByRole("button", { name: "Try again" }).hasAttribute("disabled"),
   }).toEqual({
-    line: "The install exited with code 1; its output is in the terminal",
-    output: "◇  Repository cloned\n■  No matching skills found for: polaris-tracing",
+    line: "Couldn't write the polaris-tracing skill to /Users/me/.claude/skills/polaris-tracing",
+    fix: "Check that /Users/me/.claude/skills is writable on this host, then try again.",
     started: [],
     retry: false,
   });

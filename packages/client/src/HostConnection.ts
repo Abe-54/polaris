@@ -88,7 +88,7 @@ export interface ClientIdentity {
   /** A Pairing's token: the connection acts as that Extension, within its Grant (ENG-398). */
   readonly extensionToken?: Redacted.Redacted<string>;
   /**
-   * The Desktop App's user key (ADR 0099): an enrolled one lets this connection approve and
+   * The Desktop App's user key (ADR 0100): an enrolled one lets this connection approve and
    * make the other user-only requests. Held by the Client only, never in an agent's env.
    */
   readonly userKey?: Redacted.Redacted<string>;

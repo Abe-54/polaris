@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * Runs frame documents in real Chrome, in `<iframe sandbox="allow-scripts" srcdoc>` as the Desktop
- * App does: the CSP blocks egress, heights arrive, pv:theme applies live, the examples render.
+ * App does: the CSP blocks egress, heights arrive, pv:theme applies live, the examples render, and
+ * each frame's own guard empties its closed shadow roots (happy-dom shares one guard across frames).
  *
  *   bun scripts/browser-check.ts [--chrome <path>] [--shots <dir>]
  *
@@ -135,6 +136,27 @@ const THEMED = `<div id="c" style="height:120px"></div><script>
     chartColour: Chart.defaults.color, dataset: chart.data.datasets[0].backgroundColor, scheme: pv.scheme }, "*"));
 </script>`;
 
+/** Closed shadow roots the guard must empty; the script keeps each root, so it can count. */
+const SHADOW_SCRIPT = `<script>
+  const host = () => document.body.appendChild(document.createElement("div"));
+  const plain = host().attachShadow({ mode: "closed" });
+  plain.appendChild(document.createElement("iframe"));
+  const has = WeakSet.prototype.has;
+  WeakSet.prototype.has = () => true;
+  const poisoned = host().attachShadow({ mode: "closed" });
+  poisoned.appendChild(document.createElement("iframe"));
+  WeakSet.prototype.has = has;
+  const cloned = host();
+  cloned.attachShadow({ mode: "closed", clonable: true, serializable: true }).innerHTML = "<p>private</p>";
+  let fresh = false;
+  try { fresh = cloned.cloneNode(true).attachShadow({ mode: "closed" }).childNodes.length === 0; } catch (e) {}
+  setTimeout(() => parent.postMessage({ check: "shadow", shadow: {
+    plain: plain.querySelectorAll("iframe").length,
+    poisoned: poisoned.querySelectorAll("iframe").length,
+    fresh,
+  } }, "*"), 100);
+</script>`;
+
 const browser = await chromium.launch({ executablePath: chromePath, headless: true });
 
 const page = await browser.newPage({ viewport: { width: 900, height: 1300 } });
@@ -157,6 +179,9 @@ const Recorded = Schema.Array(
       background: Schema.optional(Schema.String),
       dataset: Schema.optional(Schema.String),
       scheme: Schema.optional(Schema.String),
+      shadow: Schema.optional(
+        Schema.Struct({ plain: Schema.Number, poisoned: Schema.Number, fresh: Schema.Boolean })
+      ),
     }),
   })
 );
@@ -169,6 +194,12 @@ await mount("egress", doc(EGRESS, { mode: "expanded" }));
 await mount("growing", doc(GROWING));
 
 await mount("themed", doc(THEMED, { scheme: "dark" }));
+
+// Two guarded frames, each checked against its own guard, and a bare one that shows the check bites.
+for (const id of ["shadow-1", "shadow-2"])
+  await mount(id, doc(SHADOW_SCRIPT, { mode: "expanded" }));
+
+await mount("shadow-bare", `<!doctype html><body>${SHADOW_SCRIPT}</body>`);
 
 for (const [name, example] of Object.entries(VISUALIZATION_EXAMPLES)) {
   for (const width of [360, 728])
@@ -229,6 +260,24 @@ check(
   "no STUN packet left the frame (WebRTC, also via a child frame)",
   stunPackets === 0,
   JSON.stringify({ stunPackets, egress })
+);
+
+const shadowOf = (id: string) => from(id).find((d) => d.check === "shadow")?.shadow;
+
+for (const id of ["shadow-1", "shadow-2"]) {
+  const seen = shadowOf(id);
+
+  check(
+    `${id}: its guard empties closed shadow roots (also with WeakSet.has poisoned), clones stay fresh`,
+    seen?.plain === 0 && seen.poisoned === 0 && seen.fresh,
+    JSON.stringify(seen)
+  );
+}
+
+check(
+  "without the bootstrap, the same closed shadow roots keep their frames",
+  shadowOf("shadow-bare")?.plain === 1,
+  JSON.stringify(shadowOf("shadow-bare"))
 );
 
 const growing = heights("growing");

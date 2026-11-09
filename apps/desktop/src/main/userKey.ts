@@ -1,9 +1,9 @@
 /**
- * The user key (ENG-700, ADR 0099): 32 random bytes this Desktop App presents in `hello`, so
+ * The user key (ENG-700, ADR 0100): 32 random bytes this Desktop App presents in `hello`, so
  * a Host lets it approve and make the other user-only requests. Kept in `SecureStorage` as
  * `user-access/key`, never in an environment the Desktop App or a Daemon hands a child.
  */
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { UserKey } from "@polaris/protocol";
 import { Effect, Option, Redacted, Schema } from "effect";
 import { loadLanguageCredential } from "./languages/credential.ts";
@@ -57,6 +57,20 @@ export const loadUserKey = Effect.fn("loadUserKey")(function* (input: UserKeyInp
 
   return redact(key);
 });
+
+/**
+ * The key one Host sees: HMAC of the master key and this app's own name for the Host (`local`,
+ * the SSH alias), so a key captured on one Host is useless on every other.
+ */
+export const userKeyForHost = (
+  master: Redacted.Redacted<string>,
+  hostKey: string
+): Redacted.Redacted<string> =>
+  redact(
+    createHmac("sha256", Redacted.value(master))
+      .update(`polaris-user-key-v1:${hostKey}`)
+      .digest("hex")
+  );
 
 /** Without a key the Desktop App still connects; Hosts refuse it approvals and secrets. */
 export const optionalUserKey = (input: UserKeyInput, warn: (message: string) => void) =>

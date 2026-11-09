@@ -40,6 +40,7 @@ The Desktop App's `no-restricted-globals` rule on `fetch` in `src/main/` (`apps/
 Existing violations are recorded in `tooling/lint/baseline.json` as counts per file and rule. `bun run lint` fails when a file's count for a rule goes above its baseline, which covers a new violation in an old file, any violation in a new file, and any rule a file wasn't breaking before.
 
 - `bun run lint` checks the whole repo. `bun tooling/lint/ratchet.ts <files…>` checks just those files; the git hooks use that.
+- `bun run quality <files…>` fixes before it checks: `oxlint --fix` from the repo root (every `.oxlintrc.json` and plugin applies; only safe fixes), then oxfmt, then the ratchet. The pre-commit hook only formats, so lint fixes never land in a commit unseen; `--check` changes nothing.
 - When you fix baselined violations, lint says so. `bun run lint:baseline` then lowers the counts (and drops fixed or deleted files). It never raises a count or adds an entry.
 - Commit the lowered baseline with the fix. Merge conflicts in `baseline.json` resolve by taking the lower count, or by running `bun run lint:baseline` after the merge.
 - Renaming or splitting a file drops its baseline entry, so the new file must be clean. That's deliberate: the split is the moment to fix it.
@@ -103,7 +104,15 @@ The generic rules that matter most day to day:
 - `no-object-parameters`: a function (including an `Effect.fn`) takes an owner-provided, named input type parsed at its boundary, not an inline object type.
 - `no-known-value-widening`: `const x: Record<string, T> = { … }` throws away the known keys; prefer inference or `satisfies`.
 - `no-module-mocking`: no `vi.mock`/`jest.mock`-style module mocking; replace dependencies through a real seam (a Layer).
-- `require-readable-spacing`: blank lines between statement groups. Autofixable with `oxlint --fix`; oxfmt keeps the blank lines it adds (it only collapses runs of blank lines to one), so the two never fight.
+- `require-readable-spacing`: blank lines between statement groups. Autofixable: `bun run quality <files…>` applies it; oxfmt keeps the blank lines it adds (it only collapses runs of blank lines to one), so the two never fight.
+
+## Caught errors
+
+A `catch` binds `unknown`, and the anti-slop rules (`no-unknown-parameters`, `no-known-value-widening`, SAFETY comments on assertions) reject the quick ways of narrowing it. Judgement, not a rule: decode it at the catch with Effect Schema instead.
+
+- To log it, use `errorInfo` in `apps/site/lib/log`: `Function.flow(Schema.decodeUnknownOption(Schema.instanceOf(Error)), Option.match({ onNone, onSome }))`, where `onSome` is a typed helper taking an `Error` and returning only safe fields (the type name and an HTTP status, never the message).
+- To branch on a known error, decode against its class: `const decodeTimeout = Schema.decodeUnknownOption(Schema.instanceOf(ValidationTimeout))`, then `if (Option.isSome(decodeTimeout(error)))` (as in `apps/site/app/api/email/_lib/validator.ts`).
+- No `catch (error: any)`, `error as Error` or `typeof`/`in` probing; a typed helper takes the decoded value, not `unknown`.
 
 ## Fixtures
 

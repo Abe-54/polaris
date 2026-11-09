@@ -38,6 +38,12 @@ export interface ResolvedApproval {
 /** How many resolutions a session keeps. */
 const RESOLVED_KEPT = 3;
 
+/** `SessionBackgroundCommandFailed`: the command named (null: every one) and the Harness's reason. */
+export interface BackgroundFailure {
+  readonly itemId: string | null;
+  readonly reason: string;
+}
+
 export interface SessionEntry {
   readonly session: SessionData;
   readonly pendingApprovals: ReadonlyArray<ApprovalRequest>;
@@ -50,6 +56,8 @@ export interface SessionEntry {
   readonly userTurn?: UserTurn | undefined;
   /** The latest notification an agent sent from this session (`notify`), seen live. */
   readonly lastNotification?: SessionNotification;
+  /** The latest Run in background the Harness couldn't carry out, seen live; a new object each time. */
+  readonly lastBackgroundFailure?: BackgroundFailure;
   /** Subagents still working in this session. */
   readonly subagents: ReadonlyArray<Subagent>;
 }
@@ -177,6 +185,8 @@ const onUserOrHarnessTurn = (turn: TurnFacts, ended: boolean) =>
       lastReplyPreview: ended
         ? (turn.replyPreview ?? null)
         : (entry.session.lastReplyPreview ?? null),
+      // A Turn starting is the Harness taking up any reports it had waiting.
+      backgroundReportsPending: ended ? entry.session.backgroundReportsPending : false,
     },
   }));
 
@@ -315,20 +325,31 @@ const fold = (event: DomainEvent): Fold =>
         onSession(sessionId, patch({ worktreeSetup: setup })),
       SessionContextUsed: ({ sessionId, usage }) =>
         onSession(sessionId, patch({ contextUsage: usage })),
-      SessionBackgroundTasksChanged: ({ sessionId, tasks }) =>
-        onSession(sessionId, patch({ backgroundTasks: tasks })),
+      SessionBackgroundTasksChanged: ({ sessionId, tasks, reportsPending }) =>
+        onSession(
+          sessionId,
+          patch({ backgroundTasks: tasks, backgroundReportsPending: reportsPending })
+        ),
       SessionCompacted: ({ sessionId, compaction }) =>
         onSession(sessionId, patch({ lastCompaction: compaction })),
       SessionNotified: ({ sessionId, notification }) =>
         onSession(sessionId, (entry) => ({ ...entry, lastNotification: notification })),
+      SessionBackgroundCommandFailed: ({ sessionId, itemId, reason }) =>
+        onSession(sessionId, (entry) => ({
+          ...entry,
+          lastBackgroundFailure: { itemId, reason },
+        })),
       TurnStarted: ({ turn }) => onTurn(turn, false),
       TurnEnded: ({ turn }) => onTurn(turn, true),
       TurnItemCompleted: () => unchanged,
       SubagentStarted: () => unchanged,
       SubagentEnded: () => unchanged,
       CheckpointRecorded: () => unchanged,
-      TurnsAccepted: ({ sessionId, throughIndex }) =>
-        onSession(sessionId, patch({ acceptedThroughIndex: throughIndex })),
+      TurnsAccepted: ({ sessionId, throughIndex, throughUserTurn }) =>
+        onSession(
+          sessionId,
+          patch({ acceptedThroughIndex: throughIndex, acceptedThroughUserTurn: throughUserTurn })
+        ),
       TurnsReverted: () => unchanged,
       SessionPullRequestLinked: ({ sessionId, pullRequest }) =>
         onSession(sessionId, patch({ pullRequest })),

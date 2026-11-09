@@ -14,6 +14,7 @@ import {
   type MenuEntryInput,
 } from "@polaris/ui";
 import { type MouseEvent, type ReactElement, useEffect, useRef } from "react";
+import { EDGE_FADE, useEdgeFade } from "../../../shell/edgeFade.ts";
 import type { TabView } from "../runtime/hooks.ts";
 
 export interface TabsProps {
@@ -86,6 +87,8 @@ const TrailingSlot = ({
 export const Tabs = ({ tabs, active, onSelect, onPin, onClose, menuFor }: TabsProps) => {
   const strip = useRef<HTMLDivElement>(null);
 
+  useEdgeFade(strip);
+
   // The active tab stays in view however many are open.
   useEffect(() => {
     strip.current
@@ -93,79 +96,85 @@ export const Tabs = ({ tabs, active, onSelect, onPin, onClose, menuFor }: TabsPr
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active, tabs.length]);
 
+  // The fade masks the tabs only, so the strip's hairline runs edge to edge.
   return (
-    <div
-      ref={strip}
-      role="tablist"
-      aria-label="Open files"
-      className="border-hairline flex h-[46px] shrink-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto border-b px-2"
-    >
-      {tabs.map((tab) => {
-        const selected = tab.id === active;
+    <div className="border-hairline flex h-[46px] shrink-0 border-b">
+      <div
+        ref={strip}
+        role="tablist"
+        aria-label="Open files"
+        className={cn(
+          "flex min-w-0 flex-1 [scrollbar-width:none] items-center gap-1 overflow-x-auto px-2",
+          EDGE_FADE
+        )}
+      >
+        {tabs.map((tab) => {
+          const selected = tab.id === active;
 
-        return (
-          <TabMenu key={tab.id} entries={menuFor?.(tab, selected) ?? null}>
-            <div
-              role="tab"
-              tabIndex={selected ? 0 : -1}
-              aria-selected={selected}
-              title={tab.path}
-              data-testid="editor-tab"
-              data-view={tab.view ?? "source"}
-              data-dirty={tab.dirty ? "" : undefined}
-              onMouseDown={(event) => {
-                if (event.button === 1) onClose(tab.id);
-              }}
-              onClick={() => onSelect(tab.id)}
-              onDoubleClick={() => {
-                if (tab.view === undefined || tab.view === "diff") onPin(tab.id);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(tab.id);
-                }
-
-                if (event.key === "Delete" || event.key === "Backspace") {
-                  event.preventDefault();
-                  onClose(tab.id);
-                }
-
-                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-                  event.preventDefault();
-                  const at = tabs.findIndex((t) => t.id === tab.id);
-
-                  let index =
-                    (at + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-
-                  if (event.key === "Home") index = 0;
-
-                  if (event.key === "End") index = tabs.length - 1;
-                  const next = tabs[index];
-
-                  if (next !== undefined) {
-                    onSelect(next.id);
-                    strip.current?.querySelectorAll<HTMLElement>('[role="tab"]')[index]?.focus();
+          return (
+            <TabMenu key={tab.id} entries={menuFor?.(tab, selected) ?? null}>
+              <div
+                role="tab"
+                tabIndex={selected ? 0 : -1}
+                aria-selected={selected}
+                title={tab.path}
+                data-testid="editor-tab"
+                data-view={tab.view ?? "source"}
+                data-dirty={tab.dirty ? "" : undefined}
+                onMouseDown={(event) => {
+                  if (event.button === 1) onClose(tab.id);
+                }}
+                onClick={() => onSelect(tab.id)}
+                onDoubleClick={() => {
+                  if (tab.view === undefined || tab.view === "diff") onPin(tab.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(tab.id);
                   }
-                }
-              }}
-              className={cn(
-                "group/tab flex h-[30px] max-w-[240px] shrink-0 cursor-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-starlight items-center gap-2 rounded-full pr-2.5 pl-3 text-label select-none",
-                selected
-                  ? "bg-fill-selected text-text-strong"
-                  : "text-text-subtle hover:bg-fill-hover hover:text-text-default"
-              )}
-            >
-              {tab.agent === null ? null : <Dither hue={tab.agent} size={12} moving />}
-              <span className={cn("truncate", tab.preview && "italic")}>{tab.label}</span>
-              {tab.detail === undefined ? null : (
-                <span className="text-caption text-text-subtle shrink-0">{tab.detail}</span>
-              )}
-              <TrailingSlot tab={tab} active={selected} onClose={() => onClose(tab.id)} />
-            </div>
-          </TabMenu>
-        );
-      })}
+
+                  if (event.key === "Delete" || event.key === "Backspace") {
+                    event.preventDefault();
+                    onClose(tab.id);
+                  }
+
+                  if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                    event.preventDefault();
+                    const at = tabs.findIndex((t) => t.id === tab.id);
+
+                    let index =
+                      (at + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+
+                    if (event.key === "Home") index = 0;
+
+                    if (event.key === "End") index = tabs.length - 1;
+                    const next = tabs[index];
+
+                    if (next !== undefined) {
+                      onSelect(next.id);
+                      strip.current?.querySelectorAll<HTMLElement>('[role="tab"]')[index]?.focus();
+                    }
+                  }
+                }}
+                className={cn(
+                  "group/tab flex h-[30px] max-w-[240px] shrink-0 cursor-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-starlight items-center gap-2 rounded-full pr-2.5 pl-3 text-label select-none",
+                  selected
+                    ? "bg-fill-selected text-text-strong"
+                    : "text-text-subtle hover:bg-fill-hover hover:text-text-default"
+                )}
+              >
+                {tab.agent === null ? null : <Dither hue={tab.agent} size={12} moving />}
+                <span className={cn("truncate", tab.preview && "italic")}>{tab.label}</span>
+                {tab.detail === undefined ? null : (
+                  <span className="text-caption text-text-subtle shrink-0">{tab.detail}</span>
+                )}
+                <TrailingSlot tab={tab} active={selected} onClose={() => onClose(tab.id)} />
+              </div>
+            </TabMenu>
+          );
+        })}
+      </div>
     </div>
   );
 };

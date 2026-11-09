@@ -33,6 +33,7 @@ import {
   planned,
   report,
   task,
+  WS,
 } from "./constellation.testing.ts";
 import { projectTask } from "../constellation/projections.ts";
 import { digestDelay, digestPrompt } from "../constellation/delivery/format.ts";
@@ -375,6 +376,31 @@ describe("Constellation decider", () => {
       ).rejection?.findings[0]?.code
     ).toBe("E-AUTHORITY");
   });
+});
+
+test("start records the Lead checkout's branch as the lead branch, and later Plans keep it", () => {
+  const started = apply(
+    undefined,
+    C.Plan.make({
+      constellationId: CID,
+      start: { name: "Build", workspaceId: WS, leadSessionId: LEAD },
+      operations: [PlanOperation.cases.Add.make({ task: task(A) })],
+    }),
+    ctx({ leadBranch: "integration" })
+  );
+
+  expect(started.graph.leadBranch).toBe("integration");
+
+  const later = apply(
+    started,
+    C.Plan.make({
+      constellationId: CID,
+      operations: [PlanOperation.cases.Add.make({ task: task(B) })],
+    }),
+    ctx({ leadBranch: "someone-else" })
+  );
+
+  expect(later.graph.leadBranch).toBe("integration");
 });
 
 import { TaskId } from "@polaris/protocol";

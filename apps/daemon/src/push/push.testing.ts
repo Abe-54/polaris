@@ -157,19 +157,5 @@ export const notified = (id: string, automatic: boolean) =>
     })
   );
 
-/** Polaris started Turn `turnId` on this session to deliver a Constellation digest. */
-export const leadNotified = (turnId: string) =>
-  event(
-    DomainEvent.cases.LeadNotified.make({
-      constellationId: ConstellationId.make("c1"),
-      revision: 1,
-      leadSessionId: SESSION_ID,
-      items: ["n1"],
-      turnId: TurnId.make(turnId),
-      steered: false,
-      audit: null,
-    })
-  );
-
 export const sessionCreated = (created: AgentSession) =>
   event(DomainEvent.cases.SessionCreated.make({ session: created, actor: null }));

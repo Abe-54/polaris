@@ -29,8 +29,10 @@ describe("HostInfo.libc on the wire", () => {
     expect(info.libc).toBeUndefined();
   });
 
-  test("an unknown libc is refused", () => {
-    expect(() => Schema.decodeUnknownSync(HostInfo)({ ...base, libc: "bionic" })).toThrow();
+  test("this Client decodes a C library newer than itself", () => {
+    const info = Schema.decodeUnknownSync(HostInfo)({ ...base, libc: "bionic" });
+
+    expect(info.libc).toBe("bionic");
   });
 });
 

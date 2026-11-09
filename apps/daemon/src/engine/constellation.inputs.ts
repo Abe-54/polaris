@@ -31,6 +31,8 @@ export interface ConstellationContext {
   readonly attempts: ReadonlyArray<Attempt>;
   readonly handoverDeferred?: boolean;
   readonly newLeadSessionId: SessionId | null;
+  /** The Lead checkout's branch, read when a Plan starts the graph. */
+  readonly leadBranch?: string | undefined;
   readonly claimProbe: ClaimProbe | null;
   readonly recordedChecks: ReadonlyArray<RecordedCheck>;
   readonly offlineSessionIds: ReadonlySet<SessionId>;

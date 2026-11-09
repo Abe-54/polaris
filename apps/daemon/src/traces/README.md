@@ -185,11 +185,14 @@ of its handlers and `traces.profiles`; see `profiles/README.md`.
 All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
 The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
 merged into `DaemonRpcs` alongside the unchanged phase 1 `TracesRpcs` group.
+`TracingSkillRpcs` (`skill/`) installs the polaris-tracing skill the Daemon was built with into
+the Harness's global skills folder (Claude and Codex when unknown); it fetches nothing.
 
 | Capability | RPC payload | Result | Owner |
 | --- | --- | --- | --- |
 | `traces.settings` | `traces.settings {workspaceId}` | `WorkspaceTracesSettings` | P1/P3 |
 | `traces.settings` | `traces.setSettings {workspaceId, settings}` | Complete settings after patch | P1/P3 |
+| `traces.skill` | `traces.installSkill {harness}` | `{paths}` the bundled skill was written to | ENG-694 |
 | `traces.profiles` | `profiles.watch {sessionId}` | Replacement `ProfilesSnapshot {profiles}` stream | P4 |
 | `traces.profiles` | `profiles.get {sessionId, profileId}` | `ProfileDetail` | P4 |
 | `traces.profiles` | `profiles.restartWithProfiling {sessionId, pid}` | New `Profile` | P4 |

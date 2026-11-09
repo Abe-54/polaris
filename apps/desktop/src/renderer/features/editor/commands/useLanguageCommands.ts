@@ -7,7 +7,7 @@ import * as P from "@polaris/protocol";
 import { Schema } from "effect";
 import { useEffect } from "react";
 import type { HostView } from "../../../../shared/api.ts";
-import { languageIpcError } from "../../../../shared/languageError.ts";
+import { languageErrorOf, languageIpcError } from "../../../../shared/languageError.ts";
 import type { CommandRegistry } from "../../../routes/commands.ts";
 import { hostInSentence } from "../../../shell/hostCopy.ts";
 import { useCommands, useConnection } from "../../../shell/hooks.ts";
@@ -58,9 +58,8 @@ interface Pane {
 const decodeWorkspaceId = Schema.decodeUnknownSync(P.WorkspaceId);
 
 const asLanguageError = (cause: unknown) =>
-  Schema.is(P.LanguageError)(cause)
-    ? cause
-    : new P.LanguageError({ reason: "not-ready", message: String(cause), retryable: true });
+  languageErrorOf(cause) ??
+  new P.LanguageError({ reason: "not-ready", message: String(cause), retryable: true });
 
 const languageCommands = (commands: CommandRegistry, connection: Connection, pane: Pane) => {
   const { hostKey, workspaceId, active } = pane;

@@ -23,9 +23,9 @@ export const TaskDef = Schema.Struct({
   id: opt(Str),
   title: opt(Str),
   kind: opt(Str),
-  deps: List(Str),
-  area: List(Str),
-  brief: opt(Str),
+  deps: opt(Schema.NullOr(Schema.Array(Str))),
+  area: opt(Schema.NullOr(Schema.Array(Str))),
+  brief: opt(Schema.NullOr(Str)),
 });
 
 const Operation = Schema.TaggedUnion({
@@ -88,6 +88,20 @@ export const SetStateInput = Schema.Struct({
 
 export const ReadWorkerInput = Schema.Struct({
   task: opt(Str),
+  turns: opt(Schema.Number),
+  since: opt(Schema.Number),
+});
+
+export const SessionsInput = Schema.Struct({ scope: opt(Str), query: opt(Str) });
+
+export const SearchHistoryInput = Schema.Struct({
+  query: opt(Str),
+  scope: opt(Str),
+  session: opt(Str),
+});
+
+export const ReadHistoryInput = Schema.Struct({
+  session: opt(Str),
   turns: opt(Schema.Number),
   since: opt(Schema.Number),
 });

@@ -88,7 +88,7 @@ export const Hello = Rpc.make("hello", {
      */
     protocolVersions: Schema.optionalKey(ProtocolRange),
     /**
-     * The Desktop App's user key (ADR 0099): an enrolled key gives the connection user access,
+     * The Desktop App's user key (ADR 0100): an enrolled key gives the connection user access,
      * which approvals and the other user-only RPCs need (`userAccess.ts`). Never in an agent's env.
      */
     userKey: Schema.optionalKey(Schema.RedactedFromValue(Schema.Unknown)),

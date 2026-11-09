@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { Command, ReviewerChoice } from "@polaris/protocol";
+import { Command, ReviewerChoice, ReviewSubject, SessionId } from "@polaris/protocol";
 import { Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { Engine } from "../engine/Engine.ts";
@@ -20,6 +20,12 @@ import { startReviewerSession, TURN_TIMEOUT } from "./session.ts";
 import { ReviewerSessions } from "./sessions.ts";
 
 const dirs: Array<string> = [];
+
+const subject = ReviewSubject.cases.SessionTurns.make({
+  sessionId: SessionId.make("ses_reviewed"),
+  firstTurnId: null,
+  lastTurnId: null,
+});
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { force: true, recursive: true });
@@ -53,6 +59,7 @@ test("an unfinished Reviewer times out, interrupts its Turn, and retains its no-
         checkoutId: null,
         choice: ReviewerChoice.make({ harness: "codex", model: "gpt-6.1-sol", effort: "high" }),
         title: "Reviewer",
+        subject,
         prompt: "<!-- polaris:reviewer -->\nreview",
       }).pipe(Effect.flip, Effect.forkChild);
 
@@ -71,6 +78,7 @@ test("an unfinished Reviewer times out, interrupts its Turn, and retains its no-
       expect(driver.sessions[0]?.interrupts).toBe(1);
       const id = driver.sessions[0]!.options.sessionId;
       expect((yield* store.model).sessions.get(id)?.session.origin).toBe("reviewer");
+      expect((yield* store.model).sessions.get(id)?.session.reviewSubject).toEqual(subject);
 
       return driver.sessions[0]!.options.sessionId;
     }).pipe(Effect.provide(engine), Effect.provide(TestClock.layer()))

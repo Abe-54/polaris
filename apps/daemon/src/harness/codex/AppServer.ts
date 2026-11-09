@@ -51,6 +51,8 @@ const windows = process.platform === "win32";
 
 export interface AppServerOptions {
   readonly codexPath: string | null;
+  /** Overrides `codexPath`: looked up each time the server is started or checked. */
+  readonly findCodex?: () => string | null;
   readonly socketPath: string;
   /** False: only connect to a server someone else runs (tests, externally managed servers). */
   readonly spawn: boolean;
@@ -396,8 +398,10 @@ export const acquireAppServer = (
       }
     };
 
+    const codexPathNow = options.findCodex ?? (() => options.codexPath);
+
     const spawn = Effect.gen(function* () {
-      const codexPath = options.codexPath;
+      const codexPath = codexPathNow();
 
       if (codexPath === null) return yield* codexNotInstalled();
       // A recorded server that is alive but not answering is hung: replace it.
@@ -464,11 +468,13 @@ export const acquireAppServer = (
 
     /** Replace outdated or legacy-environment servers only when nothing is live on them. */
     const replaceIfOutdated = Effect.gen(function* () {
-      if (!options.spawn || options.codexPath === null || connections > 0) return;
+      const codexPath = codexPathNow();
+
+      if (!options.spawn || codexPath === null || connections > 0) return;
       const state = readAppServerState(stateFile);
 
       if (state === null || state.socketPath !== options.socketPath) return;
-      const installed = yield* versionOf(options.codexPath);
+      const installed = yield* versionOf(codexPath);
       const reason = restartReason(state, installed);
 
       if (reason === null) return;

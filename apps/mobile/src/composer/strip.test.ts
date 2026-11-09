@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { RequestId } from "@polaris/protocol";
+import { RequestId, SessionId, Subagent, SubagentId, TurnId } from "@polaris/protocol";
 import { request } from "../thread/daemon.testing.ts";
 import { stripOf } from "./strip.ts";
+
+const helper = (id: string) =>
+  new Subagent({
+    id: SubagentId.make(id),
+    sessionId: SessionId.make("s-1"),
+    turnId: TurnId.make("t-1"),
+    parentItemId: null,
+    title: id,
+    agent: null,
+    model: null,
+    status: "working",
+    startedAt: "2026-10-29T12:00:00.000Z",
+    endedAt: null,
+  });
 
 const at = (minute: number) => `2026-10-29T12:0${minute}:00.000Z`;
 
@@ -29,6 +43,28 @@ describe("the composer's notice strip", () => {
       detail: "$ bun run build",
       compact: true,
     });
+  });
+
+  test("a Subagent's request says a subagent asks, with its moon", () => {
+    const strip = stripOf({
+      requests: [request({ kind: "command", detail: "ls", subagentId: SubagentId.make("b") })],
+      working: true,
+      harness: "Claude Code",
+      subagents: [helper("a"), helper("b")],
+    });
+
+    expect(strip?.notice).toMatchObject({ headline: "A subagent wants to run", moon: 1 });
+  });
+
+  test("the lead's own request names the Harness, with no moon", () => {
+    const strip = stripOf({
+      requests: [request({ kind: "file-change" })],
+      working: true,
+      harness: "Codex",
+      subagents: [helper("a")],
+    });
+
+    expect(strip?.notice).toMatchObject({ headline: "Codex wants to change files", moon: null });
   });
 
   test("the oldest request leads and the rest count behind it", () => {

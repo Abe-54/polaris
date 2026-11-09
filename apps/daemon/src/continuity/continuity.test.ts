@@ -66,7 +66,7 @@ const withDaemon = <A, E>(
     )
   );
 
-/** A Desktop App's connection: it presents the test user key, so it may send Turns (ADR 0099). */
+/** A Desktop App's connection: it presents the test user key, so it may send Turns (ADR 0100). */
 const client = (socketPath: string) =>
   Effect.flatMap(socketTransport(socketPath), (transport) =>
     connectRpcWith(DaemonRpcs, transport)

@@ -12,11 +12,11 @@ import {
   defaultRehypePlugins,
   Streamdown,
 } from "streamdown";
-import { FileLink } from "../../../editor-links/index.ts";
+import { FileLink, useEditorPlace } from "../../../editor-links/index.ts";
 import { COPY_CODE, COPY_TABLE } from "./copyControls.tsx";
 import { editorLinkOf, rehypeFileLinks } from "./fileLinks.ts";
 import { HostImage } from "./HostImage.tsx";
-import { hostImageOf, rehypeFileImages, rehypeHostImages } from "./hostImages.ts";
+import { type HostPaths, hostImageOf, rehypeFileImages, rehypeHostImages } from "./hostImages.ts";
 import { HostLink } from "./HostLink.tsx";
 import { hostLinkOf, rehypeFileHrefs, rehypeHostLinks } from "./hostLinks.ts";
 import { needsOf } from "./needs.ts";
@@ -34,17 +34,23 @@ const CONTROLS: ControlsConfig = {
 const { raw, sanitize, harden } = defaultRehypePlugins;
 
 // Host images and links are marked between sanitizing and hardening; `<wbr>` and editor links after.
-const REHYPE = [
-  raw,
-  rehypeFileImages,
-  rehypeFileHrefs,
-  sanitize,
-  rehypeHostImages,
-  rehypeHostLinks,
-  harden,
-  rehypeFileLinks,
-  rehypeSoftBreaks,
-].filter((plugin) => plugin !== undefined);
+const rehypeFor = (host: HostPaths) =>
+  [
+    raw,
+    [rehypeFileImages, host] satisfies [unknown, HostPaths],
+    [rehypeFileHrefs, host] satisfies [unknown, HostPaths],
+    sanitize,
+    [rehypeHostImages, host] satisfies [unknown, HostPaths],
+    [rehypeHostLinks, host] satisfies [unknown, HostPaths],
+    harden,
+    rehypeFileLinks,
+    rehypeSoftBreaks,
+  ].filter((plugin) => plugin !== undefined);
+
+/** Drive paths are paths only on a Windows Host; on any other they stay URLs, as written. */
+const REHYPE_POSIX = rehypeFor({ windows: false });
+
+const REHYPE_WINDOWS = rehypeFor({ windows: true });
 
 const COMPONENTS: Components = {
   ...COPY_CODE,
@@ -99,13 +105,14 @@ export interface StreamedProps {
 
 const Streamed = ({ text, live }: StreamedProps) => {
   const plugins = usePlugins(needsOf(text));
+  const windows = useEditorPlace()?.windows === true;
 
   return (
     <Streamdown
       className="polaris-md"
       isAnimating={live}
       plugins={plugins}
-      rehypePlugins={REHYPE}
+      rehypePlugins={windows ? REHYPE_WINDOWS : REHYPE_POSIX}
       components={COMPONENTS}
       controls={CONTROLS}
       shikiTheme={[POLARIS_SHIKI, POLARIS_SHIKI]}

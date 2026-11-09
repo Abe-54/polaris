@@ -17,6 +17,7 @@ import { HarnessError } from "../HarnessDriver.ts";
 import type { QueryFn } from "./ClaudeDriver.ts";
 import { Inbox } from "./inbox.ts";
 import { claudeExecutable } from "./executable.ts";
+import { claudeNotInstalled } from "./notInstalled.ts";
 
 const EFFORT_LEVELS: ReadonlyArray<EffortLevel> = ["low", "medium", "high", "xhigh", "max"];
 
@@ -49,7 +50,7 @@ export const listClaudeModels = (driver: {
     if (claudePath === null) {
       return yield* new HarnessError({
         harness: "claude",
-        message: "Claude Code is not installed: `claude` was not found on PATH",
+        message: claudeNotInstalled(),
       });
     }
 

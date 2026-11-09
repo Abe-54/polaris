@@ -203,7 +203,7 @@ describe("Claude driver", () => {
           command: "ls",
           cwd: "/work/repo",
           output: "a\nb",
-          exitCode: null,
+          exitCode: 0,
           status: "completed",
         }),
       }),

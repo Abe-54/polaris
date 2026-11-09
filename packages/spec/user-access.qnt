@@ -1,5 +1,5 @@
 /**
- * User access (ENG-700, ADR 0099): the user gate in front of user-only RPCs and Commands
+ * User access (ENG-700, ADR 0100): the user gate in front of user-only RPCs and Commands
  * for token-less connections. Keys are small integers; the Host keeps the set it enrolled.
  * The real code is `transport/userAccess.ts` and the protocol's `userAccess.ts`.
  */

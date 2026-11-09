@@ -303,6 +303,34 @@ test("a table's load is one Span from its describe to the first page, naming the
   ]);
 });
 
+test("the describe and a data.query first page carry the load's Span, so the Daemon's join its Trace", async () => {
+  const traces = await tracing();
+  const { queryStream: _, ...api } = fixtureDataApi();
+  const sent: Array<string | undefined> = [];
+
+  mount({
+    ...api,
+    describe: (at, input, options) => {
+      sent.push(options?.trace?.traceparent);
+
+      return api.describe(at, input);
+    },
+    query: (at, input, options) => {
+      sent.push(options?.trace?.traceparent);
+
+      return api.query(at, input);
+    },
+  });
+  await waitFor(() => expect(traces.spans().length).toBe(1));
+  const [span] = traces.spans();
+  traces.off();
+
+  expect(sent).toEqual([
+    `00-${span?.traceId}-${span?.id}-01`,
+    `00-${span?.traceId}-${span?.id}-01`,
+  ]);
+});
+
 const noDetail = async () => ({ ok: true as const, value: FIXTURE_SCHEMA });
 
 const describeFailed = async () => ({

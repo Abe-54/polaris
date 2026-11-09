@@ -46,9 +46,6 @@ const RECOVERED = "Recovered:";
 /** What a check reports when no runner acquired its job: no result, so neither red nor green. */
 export const NO_RUNNER = "no_runner";
 
-/** The one rolling issue for jobs left without a result, since runners run out together. */
-export const NO_RUNNER_CHECK = "no runner";
-
 /** Attempts a run gets: the first, and one re-run of jobs no runner acquired. */
 export const MAX_ATTEMPTS = 2;
 
@@ -158,47 +155,9 @@ export const macosResultOf = (checks: ReadonlyArray<Check>): MacosResult => {
   return ran && macos.every((check) => check.conclusion !== NO_RUNNER) ? "passed" : "no-result";
 };
 
-const whyNoResult = (decision: RerunDecision): string =>
-  decision.kind === "blocked"
-    ? `No re-run, since a re-run would also retry: ${decision.by.map((name) => `\`${name}\``).join(", ")}.`
-    : `Still none after ${MAX_ATTEMPTS} attempts.`;
-
-const noRunnerBody = (run: Run, decision: RerunDecision, jobs: ReadonlyArray<string>): string =>
-  [
-    `No result, not a failure: no runner acquired ${jobs.map((name) => `\`${name}\``).join(", ")} on \`${run.ref}\` at \`${run.sha.slice(0, 9)}\`. GitHub cancelled them before any step ran, so no test failed and none passed.`,
-    whyNoResult(decision),
-    "",
-    `Run: ${run.url}`,
-  ].join("\n");
-
-const noRunnerAction = (
-  run: Run,
-  checks: ReadonlyArray<Check>,
-  open: OpenIssue | undefined
-): Action | undefined => {
-  const decision = decideRerun(checks, run.attempt);
-
-  if (decision.kind === "rerun") return undefined;
-
-  if (decision.kind === "none")
-    return open && !open.lastComment?.startsWith(RECOVERED)
-      ? {
-          kind: "recovered",
-          issue: open,
-          body: `${RECOVERED} a runner acquired every job on \`${run.ref}\` at \`${run.sha.slice(0, 9)}\`: ${run.url}`,
-        }
-      : undefined;
-
-  const body = noRunnerBody(run, decision, decision.jobs);
-
-  return open
-    ? { kind: "red", issue: open, body }
-    : { kind: "create", title: titleOf(run.workflow, NO_RUNNER_CHECK), body };
-};
-
 /**
  * The comments and issues this run calls for; a recovery is said once, never repeated. Jobs no
- * runner acquired share one issue that names no test, and only once no re-run is coming.
+ * runner acquired have no result and file nothing: no test failed (ENG-789).
  */
 export const plan = (
   run: Run,
@@ -207,15 +166,11 @@ export const plan = (
 ): ReadonlyArray<Action> => {
   const byTitle = new Map(open.map((issue) => [issue.title, issue]));
 
-  const perJob = checks.flatMap((check) => {
+  return checks.flatMap((check) => {
     const action = actionFor(run, check, byTitle.get(titleOf(run.workflow, check.name)));
 
     return action ? [action] : [];
   });
-
-  const noRunner = noRunnerAction(run, checks, byTitle.get(titleOf(run.workflow, NO_RUNNER_CHECK)));
-
-  return noRunner ? [...perJob, noRunner] : perJob;
 };
 
 /** GitHub's timestamp, then turbo's `@pkg:task: ` prefix, both optional. */

@@ -1,5 +1,5 @@
 /**
- * What only the user may do on a Host (ENG-700, ADR 0099): every RPC and `dispatch`
+ * What only the user may do on a Host (ENG-700, ADR 0100): every RPC and `dispatch`
  * Command is `user` or `any`, exhaustive over `DaemonRpcs` and `Command` so a new one
  * fails typecheck until someone decides. A token-less connection gets `user` only after
  * its `hello` presented an enrolled user key; Extensions and Linked Devices keep their own
@@ -76,10 +76,11 @@ export const USER_COMMANDS = {
 } as const satisfies Record<Command["_tag"], UserAccessNeed>;
 
 /**
- * `user` RPCs, by reason (ADR 0099): Pairings and the Host's reach (Remote Access, the
+ * `user` RPCs, by reason (ADR 0100): Pairings and the Host's reach (Remote Access, the
  * Relay route, Linked Devices); secrets and credentials; approval-class decisions
  * (profiler attach, data writes, data source access); accepting work; language trust;
- * typing into terminals, where a Harness answers its own prompts; and a Constellation's
+ * typing into terminals, where a Harness answers its own prompts; installing a global skill;
+ * and a Constellation's
  * answers and reviews, which agents give through the Polaris MCP tools instead.
  */
 export const USER_RPCS = {
@@ -314,6 +315,8 @@ export const USER_RPCS = {
   "developerMode.lease": "any",
   "developerMode.watch": "any",
   "traces.ingestSelf": "any",
+  // Writes a skill into every Harness's global config: it steers all future agents.
+  "traces.installSkill": "user",
 } as const satisfies Record<DaemonRpcTag, UserAccessNeed>;
 
 const needOf = (table: Readonly<Record<string, UserAccessNeed>>, tag: string): UserAccessNeed =>

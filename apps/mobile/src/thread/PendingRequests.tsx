@@ -4,7 +4,13 @@
  * and opens to every line (and Always here) otherwise; questions show their options and Send;
  * a Secret Request its masked field (`SecretCard.tsx`).
  */
-import type { ApprovalDecision, ApprovalRequest, HarnessKind, RequestId } from "@polaris/protocol";
+import type {
+  ApprovalDecision,
+  ApprovalRequest,
+  HarnessKind,
+  RequestId,
+  Subagent,
+} from "@polaris/protocol";
 import { mobileType } from "@polaris/ui/tokens";
 import { Match } from "effect";
 import { useEffect, useRef, useState } from "react";
@@ -26,6 +32,7 @@ import {
   stripOf,
   type StripNotice,
 } from "../composer/strip.ts";
+import { Celestial, subagentMoon } from "../celestial";
 import { Dither } from "../dither/index.ts";
 import { decisionOf } from "../home/model/respond.ts";
 import { haptics } from "../motion";
@@ -58,6 +65,8 @@ export interface PendingRequestsProps {
 
 export interface NoticeStripProps extends PendingRequestsProps {
   readonly harness: HarnessKind;
+  /** The session's Subagents, so a Subagent's request shows its moon. */
+  readonly subagents?: ReadonlyArray<Subagent>;
   /** When the Turn in flight started; null when none is working. */
   readonly workingSince: string | null;
 }
@@ -121,11 +130,13 @@ const Answer = ({
 
 const Permission = ({
   notice,
+  harness,
   card,
   open,
   onToggle,
 }: {
   readonly notice: Extract<StripNotice, { kind: "approval" }>;
+  readonly harness: HarnessKind;
   readonly card: CardProps;
   readonly open: boolean;
   readonly onToggle: () => void;
@@ -168,7 +179,11 @@ const Permission = ({
   return (
     <View style={[styles.column, card.live ? null : styles.waiting]}>
       <View style={[styles.row, styles.tight]}>
-        <Spark colour={colours.needsYou} />
+        {notice.moon === null ? (
+          <Spark colour={colours.needsYou} />
+        ) : (
+          <Celestial body={subagentMoon(notice.moon)} harness={harness} size={12} working />
+        )}
         <Pressable
           style={styles.text}
           onPress={onToggle}
@@ -389,7 +404,13 @@ const Notice = ({
         />
       ),
       approval: (approval) => (
-        <Permission notice={approval} card={card} open={open} onToggle={() => setOpen(!open)} />
+        <Permission
+          notice={approval}
+          harness={props.harness}
+          card={card}
+          open={open}
+          onToggle={() => setOpen(!open)}
+        />
       ),
     })
   );
@@ -426,12 +447,13 @@ export const PendingRequests = (props: NoticeStripProps) => {
     requests: props.requests,
     working: props.workingSince !== null,
     harness,
+    subagents: props.subagents ?? [],
     settled: props.settled ?? null,
   });
 
   if (strip === null) return null;
   const opened = all && strip.more > 0;
-  const shown = opened ? noticesOf(props.requests, harness) : [strip.notice];
+  const shown = opened ? noticesOf(props.requests, harness, props.subagents ?? []) : [strip.notice];
 
   const notices = [
     strip.settled === null ? null : <SecretSettled key="settled" settled={strip.settled} />,

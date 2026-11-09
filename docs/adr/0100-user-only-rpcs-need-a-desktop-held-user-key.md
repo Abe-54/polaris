@@ -15,9 +15,13 @@ ever carries.
 
 ## Decision
 
-- **The user key.** Each Desktop App install makes 32 random bytes and keeps them in
-  `SecureStorage` as `user-access/key`. On Linux without a keyring, the key lives in a 0600 file
-  under `userData`. The Desktop App sends the key in `hello` (`userKey`). It never puts the key
+- **The user key.** Each Desktop App install makes a 32-byte master key and keeps it in
+  `SecureStorage` as `user-access/key`. On Linux without a keyring, it lives in a 0600 file under
+  `userData`. Each Host gets its own key, `HMAC(master, hostKey)`, where `hostKey` is the Desktop
+  App's own name for the Host (`local`, the SSH alias), never one the Daemon reports. A key
+  captured on one Host, for example by a replaced Daemon, opens no other Host. Renaming a Host's
+  alias changes its key, so that Host needs recovery (below). The Desktop App sends the Host's
+  key in `hello` (`userKey`). It never puts the key
   in an environment, and the Daemon never holds it in plaintext, so nothing in `childEnv` or a
   Harness, terminal or agent environment can leak it.
 - **Enrolment is trust on first use.** The Host stores SHA-256 digests (bound to its `hostId`)
@@ -44,6 +48,7 @@ ever carries.
 | Accepting work | `session.commitAccepted`, `session.pushAccepted` | They commit and push agent work under the user's name. |
 | Trust | `languages.trust.set`, `languages.trust.change` | Trusting a checkout lets its own code run. |
 | Terminals | `terminal.input` | A Harness in a terminal answers its own approval prompts from typed input. |
+| Agent instructions | `traces.installSkill` | It writes a skill into every Harness's global config, which steers all future agents. |
 | Constellations | `constellation.answer`, `constellation.review` | These are the user's answers and reviews. Leads and Workers act through the Polaris MCP tools in the Daemon, which never go through the socket. |
 
 Everything else stays `any`: reads, the Daemon's own CLIs (`polaris lease`, `polaris

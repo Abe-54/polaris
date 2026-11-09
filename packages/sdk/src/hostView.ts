@@ -6,6 +6,7 @@
 import {
   type AgentSession,
   type ApprovalRequest,
+  type Capability,
   type DomainEvent,
   type HostStreamItem,
   isWorkerSession,
@@ -41,6 +42,8 @@ export interface HostView {
   readonly connected: boolean;
   /** Why the Host can't be shown (`subscribeHosts` only); null otherwise. */
   readonly error: Error | null;
+  /** What the Host's Daemon announced in `hello`, e.g. `session.plan-mode`; empty until reached. */
+  readonly capabilities: ReadonlyArray<Capability>;
   readonly workspaces: ReadonlyArray<Workspace>;
   /**
    * Most recently updated first; archived sessions are left out, and so are Constellation
@@ -208,7 +211,8 @@ const needsYou = (entry: SessionEntry) =>
 export const hostView = (
   state: HostState,
   host: { readonly hostId: string; readonly hostName: string },
-  connected: boolean
+  connected: boolean,
+  capabilities: ReadonlyArray<Capability> = []
 ): HostView => {
   const newestFirst = [...state.sessions.values()].sort((a, b) =>
     b.session.updatedAt.localeCompare(a.session.updatedAt)
@@ -220,6 +224,7 @@ export const hostView = (
     ...host,
     connected,
     error: null,
+    capabilities,
     workspaces: [...state.workspaces.values()].filter((workspace) => !workspace.hidden),
     sessions: active.filter((entry) => !isWorkerSession(entry.session) || needsYou(entry)),
     archived: newestFirst.filter(

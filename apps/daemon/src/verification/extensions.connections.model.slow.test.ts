@@ -141,7 +141,7 @@ const exercise = (
           Effect.asVoid(
             client.client.dispatch({
               commandId: CommandId.make(`pbt-${index}`),
-              // Interrupt needs the turn Grant but not user access (ADR 0099), so this probes the Grant gate alone.
+              // Interrupt needs the turn Grant but not user access (ADR 0100), so this probes the Grant gate alone.
               command: Command.cases.Interrupt.make({ sessionId: SessionId.make("s") }),
             })
           )

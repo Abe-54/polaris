@@ -88,6 +88,7 @@ const withNotifier = (
                       Stream.make(snapshot(), synchronized()),
                       Stream.fromPubSub(events)
                     ),
+                  isDigestTurn: () => Effect.succeed(false),
                 }),
                 Layer.succeed(RelayRoute)(route),
                 Layer.succeed(HostPresence)(presence)

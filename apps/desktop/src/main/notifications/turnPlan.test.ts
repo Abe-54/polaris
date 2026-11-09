@@ -29,6 +29,7 @@ interface TurnPatch {
   readonly userTurnId?: string | null;
   readonly reply?: string | null;
   readonly review?: NeedsYouReview;
+  readonly reportsPending?: boolean;
 }
 
 const turn = (
@@ -40,6 +41,7 @@ const turn = (
     userTurnId = "t1",
     reply = REPLY,
     review,
+    reportsPending = false,
   }: TurnPatch = {}
 ): NeedsYouTurn => {
   const plain: NeedsYouTurn = {
@@ -51,6 +53,7 @@ const turn = (
     state,
     reply,
     backgroundTasks: tasks,
+    backgroundReportsPending: reportsPending,
     userTurn: userTurnId === null ? null : { id: userTurnId, startedAt: START },
     updatedAt: at(minutes),
   };
@@ -227,6 +230,19 @@ describe("planTurnNotifications", () => {
       ]);
 
       expect(shown(plans)).toEqual([0, 1]);
+    });
+
+    test("reports the Daemon says are pending hold the banner past the settle", () => {
+      const plans = timeline([
+        [0, of(turn("working"))],
+        [60_000, of(turn("idle", { reportsPending: true }))],
+        // The continuation starts well after a settle would have held.
+        [60_000 + 4 * SETTLE_MS, of(turn("working"))],
+        [120_000, of(turn("idle", { reply: "The build passed." }))],
+      ]);
+
+      expect(shown(plans)).toEqual([0, 0, 0, 1]);
+      expect(plans[3]?.show[0]?.body).toBe("The build passed.");
     });
 
     test("a continuation that starts after the settle held gets no second banner", () => {

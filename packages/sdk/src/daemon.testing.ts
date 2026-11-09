@@ -37,7 +37,7 @@ const identity = {
   clientVersion: "0.0.0",
   deviceLabel: "SDK tests",
   capabilities: [],
-  /** Acts as the Desktop App, which pairs: the fresh home enrols it (ADR 0099). */
+  /** Acts as the Desktop App, which pairs: the fresh home enrols it (ADR 0100). */
   userKey: Redacted.make("5".repeat(64)),
 };
 

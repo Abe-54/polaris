@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
 import { Profile, ProfileId, Timestamp } from "@polaris/protocol";
-import { Profiles } from "../../traces/profiles/index.ts";
+import { LATE_ATTACH_LIMIT, Profiles } from "../../traces/profiles/index.ts";
 import { cpuWork, withProfiles } from "../../traces/profiles/testing.ts";
 import { TEST_SESSION, TRACE_ID, traceFixture, spanFixture } from "../../traces/testing.ts";
 import { TraceSessions, TraceStore } from "../../traces/index.ts";
@@ -226,4 +226,30 @@ test("P4-5: MCP profile summaries bound UTF-8 JSON, retain top frames and leave 
     expect(result.structuredContent).not.toHaveProperty("nodes");
     expect(text(result)).toContain("Traces (⌘5)");
   }
+});
+
+test.each([
+  ["attach", true],
+  ["restart", false],
+  ["command", false],
+] as const)("an MCP profile made by %s names the late-attach limit: %p", (origin, noted) => {
+  const profile = Profile.make({
+    id: ProfileId.make("p1"),
+    command: "node server.js",
+    runtime: "node",
+    pid: 42,
+    turn: null,
+    startedAt: Timestamp.make(new Date().toISOString()),
+    durationMs: 5000,
+    path: "/profiles/p1.cpuprofile",
+    status: "completed",
+    origin,
+  });
+
+  const output = profileView(
+    { profile, hotFunctions: [], hotPath: [], nodes: [] },
+    { traces: [], total: 0 }
+  );
+
+  expect(output.includes(LATE_ATTACH_LIMIT)).toBe(noted);
 });

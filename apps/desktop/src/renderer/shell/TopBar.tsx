@@ -7,7 +7,8 @@
 import { Badge, Chip, cn, Kbd, PlusIcon } from "@polaris/ui";
 import { Fragment, type ReactNode, type RefObject, useLayoutEffect, useMemo, useRef } from "react";
 import type { HostView } from "../../shared/api.ts";
-import { type BarHost, barHosts, edgeFade, revealOffset, shortcutLabel } from "../routes/topBar.ts";
+import { type BarHost, barHosts, revealOffset, shortcutLabel } from "../routes/topBar.ts";
+import { EDGE_FADE, markFade } from "./edgeFade.ts";
 import {
   acknowledgeUpgrade,
   UpgradeHover,
@@ -60,15 +61,6 @@ const reveal = (nav: HTMLElement) => {
   );
 };
 
-/** Marks which edges have chips past them (`data-fade`), for the mask; set directly, no render. */
-const markFade = (nav: HTMLElement) => {
-  nav.dataset["fade"] = edgeFade({
-    offset: nav.scrollLeft,
-    view: nav.clientWidth,
-    content: nav.scrollWidth,
-  });
-};
-
 /**
  * Reveals the open chip when `key` changes and when the bar is resized (a narrower window),
  * and keeps the edge fade current on scroll, resize and every render (chips come and go).
@@ -101,10 +93,6 @@ const useBarScroll = (bar: RefObject<HTMLElement | null>, key: string) => {
     if (bar.current !== null) markFade(bar.current);
   });
 };
-
-/** A 24px fade on each side with chips past it; still, never animated (DESIGN.md, Chrome redesign). */
-const EDGE_FADE =
-  "data-[fade=start]:[mask-image:linear-gradient(to_right,transparent,black_24px)] data-[fade=end]:[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)] data-[fade=both]:[mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]";
 
 const SCROLLER =
   "flex h-full min-w-0 flex-1 [scrollbar-width:none] items-center overflow-x-auto px-4";

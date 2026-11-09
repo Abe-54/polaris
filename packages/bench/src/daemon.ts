@@ -199,7 +199,7 @@ export interface Client {
   readonly capabilities: ReadonlyArray<Capability>;
 }
 
-/** The bench acts as the Desktop App: its fresh home enrols this key on first hello (ADR 0099). */
+/** The bench acts as the Desktop App: its fresh home enrols this key on first hello (ADR 0100). */
 const BENCH_USER_KEY = Redacted.make("b".repeat(64));
 
 const identity = (label: string) => ({

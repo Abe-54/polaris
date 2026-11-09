@@ -454,7 +454,8 @@ const start = async () => {
         extras: local.supported ? extraHosts(env.POLARIS_DESKTOP_EXTRA_HOSTS) : [],
         localLabel: local.label,
       }),
-      identity: { ...clientIdentity(app.getVersion()), ...userKey },
+      identity: clientIdentity(app.getVersion()),
+      ...userKey,
       ssh: settings.sshBinary === undefined ? {} : { sshBinary: settings.sshBinary },
       ...languageCredential,
       languageEpoch: (hostKey, session) =>

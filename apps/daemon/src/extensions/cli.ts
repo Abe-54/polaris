@@ -119,7 +119,7 @@ export const formatPairings = (pairings: ReadonlyArray<Pairing>): string =>
         .map((p) => [p.id, p.name, grantLine(p), usedLine(p)].map(terminalText).join("  ·  "))
         .join("\n");
 
-/** `DaemonRpcs` with the user gate's refusal, which a terminal gets for pair and revoke (ADR 0099). */
+/** `DaemonRpcs` with the user gate's refusal, which a terminal gets for pair and revoke (ADR 0100). */
 const CliRpcs = DaemonRpcs.middleware(UserAccessGate);
 
 const connectCli = (transport: Parameters<typeof connectRpcWith>[1]) =>

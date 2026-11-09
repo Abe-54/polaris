@@ -4,6 +4,7 @@ import {
   Command,
   BackgroundTask,
   DomainEvent,
+  RequestId,
   SessionId,
   SessionPlacement,
   type SessionStreamItem,
@@ -217,6 +218,32 @@ describe("Subagents", () => {
         expect(snapshot.turns[0]!.items.map((i) => i.id)).not.toContain("sub-m1");
         expect(plainSnapshot.turns[0]!.subagents).toEqual([]);
         expect(plainSnapshot.turns[0]!.items.map((i) => i.id)).not.toContain("sub-m1");
+      })
+    );
+  });
+
+  test("a Subagent's approval request keeps the Subagent that asked", async () => {
+    const codex = makeFakeDriver("codex");
+    await run(
+      layerWith(codex),
+      Effect.gen(function* () {
+        const s = SessionId.make("s-sub-ask");
+        const turnId = yield* startWorking(codex, s);
+        codex.latest(s)!.emit(
+          spawn(turnId),
+          HarnessEvent.ApprovalRequested({
+            turnId,
+            subagentId: SUB,
+            requestId: RequestId.make("req-sub"),
+            kind: "command",
+            title: "Run ls",
+            detail: null,
+            options: [],
+          })
+        );
+        const asked = yield* waitFor((m) => m.sessions.get(s)?.pending.size === 1);
+        const [request] = asked.sessions.get(s)!.pending.values();
+        expect(request?.subagentId).toBe(SUB);
       })
     );
   });

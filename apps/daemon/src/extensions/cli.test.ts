@@ -116,7 +116,7 @@ test("the real CLI lists Pairings but leaves pairing and revoking to the Desktop
 
     reader.releaseLock();
 
-    // The Desktop App pairs; a terminal holds no user key (ADR 0099).
+    // The Desktop App pairs; a terminal holds no user key (ADR 0100).
     const desktopPair = (name: string) =>
       Effect.runPromise(
         Effect.scoped(

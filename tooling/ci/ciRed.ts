@@ -2,7 +2,7 @@
 /**
  * Rolling ci-red issues: after a workflow run, one Linear issue per failing job (created, or
  * commented on when already open), and a comment once it recovers. Issues are never closed here.
- * Jobs no runner acquired aren't failures: they share one issue, once no re-run is coming.
+ * Jobs no runner acquired aren't failures and file nothing; the job summary names them.
  *
  *   bun tooling/ci/ciRed.ts --workflow <name> [--ignore <job>]… [--dry-run] [--fake <fixture.json>]
  *

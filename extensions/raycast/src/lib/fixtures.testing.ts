@@ -72,6 +72,7 @@ export const hostView = (
   hostName: `Host ${hostId}`,
   connected: true,
   error: null,
+  capabilities: ["session.plan-mode"],
   workspaces,
   sessions: entries.filter((e) => e.session.state !== "archived"),
   archived: entries.filter((e) => e.session.state === "archived"),

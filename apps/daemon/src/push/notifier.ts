@@ -4,34 +4,62 @@
  * registered, so a Host without one pays nothing; a timer runs only while a Turn settles.
  * While the user is at a Desktop App (`HostPresence`) Needs You is held and the rest dropped (`hold.ts`).
  */
-import type { Capability, HostStreamItem } from "@polaris/protocol";
-import { Context, Effect, Fiber, Layer, Stream } from "effect";
+import type { Capability, HostStreamItem, TurnId } from "@polaris/protocol";
+import { Context, Effect, Fiber, Layer, Predicate, Stream } from "effect";
 import { Engine } from "../engine/Engine.ts";
+import { EventStore } from "../store/EventStore.ts";
+import type { ReadModel } from "../store/model.ts";
 import { RelayRoute } from "../linkedDevices/route.ts";
 import { HostPresence } from "../presence/index.ts";
 import { type Held, hold, settleItem } from "./hold.ts";
-import { emptyPlan, nextSettle, type PlanState, planItem, planSettled, type Push } from "./plan.ts";
+import {
+  emptyPlan,
+  markDigestTurn,
+  nextSettle,
+  type PlanState,
+  planItem,
+  planSettled,
+  type Push,
+} from "./plan.ts";
 
 /** What the plan reads beyond the base Host stream. */
 const PUSH_CAPABILITIES: ReadonlyArray<Capability> = ["session.notify", "constellation"];
 
-/** The Host stream the notifier follows: the Engine's, from now. */
+/** Whether Polaris started Turn `turnId` to deliver a digest; a steered digest starts none. */
+export const isDigestTurn = (model: ReadModel, turnId: TurnId): boolean =>
+  [...model.constellations.values()].some((record) =>
+    record.digests.some((d) => d.turnId === turnId && !d.steered)
+  );
+
+/** The Host stream the notifier follows (the Engine's, from now), and the digest Turns it can't carry. */
 export class PushHostEvents extends Context.Service<
   PushHostEvents,
-  { readonly subscribe: () => Stream.Stream<HostStreamItem> }
+  {
+    readonly subscribe: () => Stream.Stream<HostStreamItem>;
+    /** `LeadNotified` stays off the Host stream, so this reads the store model (ENG-587). */
+    readonly isDigestTurn: (turnId: TurnId) => Effect.Effect<boolean>;
+  }
 >()("polaris/daemon/push/PushHostEvents") {
   static readonly engine = Layer.effect(
     PushHostEvents,
     Effect.gen(function* () {
       const engine = yield* Engine;
+      const store = yield* EventStore;
 
       // Without these the Host stream leaves out `SessionNotified` and the Constellation events.
       return PushHostEvents.of({
         subscribe: () => engine.subscribeHost(null, { capabilities: PUSH_CAPABILITIES }),
+        isDigestTurn: (turnId) => Effect.map(store.model, (model) => isDigestTurn(model, turnId)),
       });
     })
   );
 }
+
+/** The Turn a Host stream item ends, if any. */
+const endedTurn = (item: HostStreamItem): TurnId | null =>
+  Predicate.isTagged(item, "Event") && Predicate.isTagged(item.envelope.event, "TurnEnded")
+    ? item.envelope.event.turn.id
+    : null;
 
 export const PushNotifier = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -92,7 +120,12 @@ export const PushNotifier = Layer.effectDiscard(
     };
 
     const onItem = (item: HostStreamItem) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        const ended = endedTurn(item);
+
+        // The digest is committed with its TurnStarted, so the model has it by the Turn's end.
+        if (ended !== null && (yield* events.isDigestTurn(ended)))
+          plan = markDigestTurn(plan, ended);
         held = settleItem(held, item);
         const planned = planItem(plan, item, contextNow());
         plan = planned.state;

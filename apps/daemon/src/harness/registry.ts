@@ -102,7 +102,6 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const planLimits = { report };
       // The app-server the Codex driver may start belongs to this layer, not to the first `open`.
       const scope = yield* Effect.scope;
-      const codexPath = binary("POLARIS_CODEX", "codex");
       const bench = options.bench ?? process.env.POLARIS_BENCH_HARNESS === "1";
 
       const benchDriver = (kind: HarnessKind) =>
@@ -121,7 +120,12 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
           DRIVER_CAPABILITIES.codex,
           Effect.promise(() => import("./codex/CodexDriver.ts")).pipe(
             Effect.flatMap(({ makeCodexDriver }) =>
-              makeCodexDriver({ codexPath, planLimits, browser })
+              // Looked up at each use, so a Codex installed after start is found (ENG-413).
+              makeCodexDriver({
+                findCodex: () => binary("POLARIS_CODEX", "codex"),
+                planLimits,
+                browser,
+              })
             ),
             Scope.provide(scope)
           )

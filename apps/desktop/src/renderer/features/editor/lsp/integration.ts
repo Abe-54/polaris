@@ -1,9 +1,10 @@
 import { respondResourceReceiptRequest } from "./resourceReceipts.ts";
+import { languageErrorOf } from "../../../../shared/languageError.ts";
 import { autocompletion } from "@codemirror/autocomplete";
 import { setDiagnostics } from "@codemirror/lint";
 import { Compartment, StateEffect } from "@codemirror/state";
 import * as P from "@polaris/protocol";
-import { Match, Predicate, Schema } from "effect";
+import { Match, Predicate } from "effect";
 import type { LanguageApi } from "../../../../shared/api.ts";
 import type { AppState } from "../../../store/store.ts";
 import { polaris } from "../../bridge.ts";
@@ -366,14 +367,12 @@ export class EditorLanguageCoordinator implements EditorLanguagePort {
       .settled(() => this.configure(entry, identity, document.checkout, stamp, signal, refresh))
       .catch((error: P.LanguageError | Error) => {
         if (entry.disposed || signal.aborted || stamp !== entry.stamp) return;
-        Status.statusFailed(key, {
-          reason: Schema.is(P.LanguageError)(error) ? error.reason : "unknown",
-          message: error.message,
-        });
+        const reason = languageErrorOf(error)?.reason;
+        Status.statusFailed(key, { reason: reason ?? "unknown", message: error.message });
         languagePatch(key, {
           status: "unavailable",
           fact:
-            Schema.is(P.LanguageError)(error) && error.reason === "awaiting-trust"
+            reason === "awaiting-trust"
               ? "Language tooling needs trust. Open Settings → Languages and select this checkout."
               : "Language tooling is unavailable. Check Settings → Languages for this Host.",
           providers: [],

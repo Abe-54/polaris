@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { makeBenchDriver } from "./bench/BenchDriver.ts";
@@ -134,6 +135,69 @@ describe("bench mode", () => {
       for (const [key, value] of Object.entries(saved))
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
+    }
+  });
+});
+
+describe("binaries found at each use (ENG-413)", () => {
+  test("a Codex installed on PATH after the registry is built is available without a restart", async () => {
+    const dir = newTempDir("polaris-registry-");
+    const bin = join(dir, "bin");
+
+    const vars = {
+      PATH: bin,
+      POLARIS_HOME: dir,
+      POLARIS_CODEX: undefined,
+      POLARIS_CLAUDE: undefined,
+    };
+
+    const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+
+    const restoreEnv = (values: Record<string, string | undefined>) => {
+      for (const [key, value] of Object.entries(values))
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    };
+
+    restoreEnv(vars);
+
+    try {
+      const [before, after, claude] = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const registry = yield* HarnessRegistry;
+            const codex = yield* registry.get("codex");
+
+            const missing = yield* codex.probe;
+            const claude = yield* (yield* registry.get("claude")).probe;
+
+            yield* Effect.sync(() => {
+              mkdirSync(bin);
+              writeFileSync(join(bin, "codex"), "#!/bin/sh\necho codex-cli 0.98.0\n");
+              chmodSync(join(bin, "codex"), 0o755);
+            });
+
+            return [missing, yield* codex.probe, claude] as const;
+          })
+        ).pipe(
+          Effect.provide(
+            harnessRegistryLayer({ bench: false }).pipe(
+              Layer.provide(Layer.mergeAll(PlanLimitReporter.none, BrowserMcp.none))
+            )
+          )
+        )
+      );
+
+      expect(before).toEqual({
+        available: false,
+        version: null,
+        detail: `codex was not found on the Daemon's PATH (${bin})`,
+      });
+      expect(after).toEqual({ available: true, version: "0.98.0", detail: join(bin, "codex") });
+      expect(claude.detail).toBe(`\`claude\` was not found on the Daemon's PATH (${bin})`);
+    } finally {
+      restoreEnv(saved);
+      removeTempDir(dir);
     }
   });
 });

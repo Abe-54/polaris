@@ -18,12 +18,38 @@ import {
 
 export const views: EditorView[] = [];
 
+let restoreSelectionChange: (() => void) | null = null;
+
+/** Queues `selectionchange` as a browser does; happy-dom fires it inside CodeMirror's update. */
+const deferSelectionChange = () => {
+  if (restoreSelectionChange !== null) return;
+
+  const dispatch = document.dispatchEvent.bind(document);
+  // happy-dom's propagation calls dispatchEvent again: a queued event passes straight through.
+  const queued = new WeakSet<Event>();
+
+  document.dispatchEvent = (event) => {
+    if (event.type !== "selectionchange" || queued.has(event)) return dispatch(event);
+
+    queued.add(event);
+    setTimeout(() => dispatch(event), 0);
+
+    return true;
+  };
+
+  restoreSelectionChange = () => {
+    Reflect.deleteProperty(document, "dispatchEvent");
+    restoreSelectionChange = null;
+  };
+};
+
 export const cleanup = () => {
   for (const view of views.splice(0)) {
     view.destroy();
     view.dom.remove();
   }
 
+  restoreSelectionChange?.();
   setClientPlatform(null);
 };
 
@@ -90,6 +116,7 @@ export const editor = (
   extensions: Extension = []
 ) => {
   setClientPlatform("darwin");
+  deferSelectionChange();
 
   const view = new EditorView({
     state: EditorState.create({

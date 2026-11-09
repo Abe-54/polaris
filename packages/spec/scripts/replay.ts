@@ -112,8 +112,8 @@ const DROPPED = new Set([
   "WorktreeRemoved",
 ]);
 
-/** Outside the spec even with a command id (an agent's `notify`): left out of the log. */
-const UNMODELLED = new Set(["SessionNotified"]);
+/** Outside the spec even with a command id (an agent's `notify`, a failed move): left out of the log. */
+const UNMODELLED = new Set(["SessionNotified", "SessionBackgroundCommandFailed"]);
 
 const SESSIONS = ["s1", "s2"];
 

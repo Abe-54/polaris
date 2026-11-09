@@ -1,16 +1,13 @@
 /**
- * Setup's side effects: install the polaris-tracing skill in a terminal on the Host, then start an
- * agent session in the same checkout; or hand the fixed-exporter change to an agent.
+ * Setup's side effects: install the polaris-tracing skill bundled with the Host's Daemon, then start
+ * an agent session in the same checkout; or hand the fixed-exporter change to an agent.
  */
 import type { AgentSession, SessionId, SessionPlacement } from "@polaris/protocol";
 import { Match } from "effect";
 import { Commands, newSessionId } from "../../../../commands.ts";
-import { followExit } from "../../../review/checkout/exit.ts";
-import { loginShellArgv } from "../../../review/checkout/model/run.ts";
+import { polaris } from "../../../bridge.ts";
 import { send } from "../../../session/dispatch.ts";
-import { runInTerminal } from "../../../terminal/index.ts";
-import { askRoute, installCommand, SETUP_PROMPT } from "../../model/agentSetup.ts";
-import { outputTail } from "../../model/installOutput.ts";
+import { askRoute, SETUP_PROMPT } from "../../model/agentSetup.ts";
 
 export interface SetupPlace {
   readonly hostKey: string;
@@ -26,34 +23,7 @@ export type SetupProgress =
   | { readonly kind: "installing" }
   | { readonly kind: "starting" }
   | { readonly kind: "started"; readonly sessionId: SessionId }
-  | {
-      readonly kind: "failed";
-      readonly message: string;
-      /** The last lines the install printed (stdout and stderr share the terminal). */
-      readonly output: ReadonlyArray<string>;
-    };
-
-/** Lines of a failed install's output shown with its failure. */
-const SHOWN_LINES = 6;
-
-type Ended = { readonly code: number | null | "lost"; readonly output: ReadonlyArray<string> };
-
-/** The install's exit code (null: the Host forgot the terminal; "lost": its feed ended) and output. */
-const exitOf = (hostKey: string, terminalId: string) =>
-  new Promise<Ended>((resolve) => {
-    const tail = outputTail();
-    const end = (code: Ended["code"]) => resolve({ code, output: tail.lines(SHOWN_LINES) });
-
-    followExit(hostKey, terminalId, end, { onLost: () => end("lost"), onOutput: tail.push });
-  });
-
-const installFailure = (code: Ended["code"]): string => {
-  if (code === "lost") return "Lost the install’s terminal before it finished; try again";
-
-  return code === null
-    ? "The install stopped before it finished"
-    : `The install exited with code ${code}; its output is in the terminal`;
-};
+  | { readonly kind: "failed"; readonly message: string; readonly fix: string | null };
 
 /** A new agent session beside the shown one with `prompt`; its id, or null after a refusal (toasted). */
 export const startAgent = async (place: SetupPlace, prompt: string): Promise<SessionId | null> => {
@@ -79,30 +49,24 @@ export const startAgent = async (place: SetupPlace, prompt: string): Promise<Ses
   return started ? sessionId : null;
 };
 
-/** Installs the skill (output in the Workspace's terminal drawer), then starts the agent session. */
+/** Installs the Daemon's bundled skill for the session's Harness, then starts the agent session. */
 export const setUpTracing = async (
   place: SetupPlace,
   report: (progress: SetupProgress) => void
 ): Promise<void> => {
   report({ kind: "installing" });
-  const install = installCommand(place.session.harness);
 
-  const terminalId = await runInTerminal(
-    { hostKey: place.hostKey, workspaceId: place.workspaceId },
-    {
-      key: `traces-setup:${place.session.id}`,
-      title: install,
-      cwd: place.session.cwd,
-      argv: loginShellArgv(install),
-    }
-  );
+  const installed = await polaris().request("traces.installSkill", {
+    hostKey: place.hostKey,
+    harness: place.session.harness,
+  });
 
-  if (terminalId === null)
-    return report({ kind: "failed", message: "Couldn't open a terminal on this host", output: [] });
-
-  const { code, output } = await exitOf(place.hostKey, terminalId);
-
-  if (code !== 0) return report({ kind: "failed", message: installFailure(code), output });
+  if (!installed.ok)
+    return report({
+      kind: "failed",
+      message: installed.error.message,
+      fix: installed.error.fix ?? null,
+    });
 
   report({ kind: "starting" });
   const sessionId = await startAgent(place, SETUP_PROMPT);
@@ -112,7 +76,7 @@ export const setUpTracing = async (
       ? {
           kind: "failed",
           message: "The skill is installed, but the agent session didn't start",
-          output: [],
+          fix: null,
         }
       : { kind: "started", sessionId }
   );

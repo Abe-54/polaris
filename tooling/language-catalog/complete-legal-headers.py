@@ -11,8 +11,20 @@ temporary_root = Path('/tmp').resolve()
 if not private_root.is_relative_to(temporary_root) or private_root == temporary_root:
     parser.error('Private temporary root required')
 import pathlib,io,tarfile,zipfile,re,json,hashlib
-from importlib.machinery import SourceFileLoader
-m=SourceFileLoader('legal','tooling/language-catalog/complete-notices.py').load_module();o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache'
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+m=load('legal','tooling/language-catalog/complete-notices.py');o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache'
 def header(stream):
  b=b'';block=False
  for _ in range(300):

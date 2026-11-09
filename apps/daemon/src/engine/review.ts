@@ -46,6 +46,7 @@ const acceptTurns = (d: Deciding, command: CommandOf<"AcceptTurns">): Decision =
       type: "turns.accept",
       turnId: turn.id,
       index: turn.index,
+      userTurnNumber: turn.userTurnNumber,
       status: turn.status,
       revertLaterTurns: command.revertLaterTurns,
       acceptedBy: d.ctx.deviceLabel,

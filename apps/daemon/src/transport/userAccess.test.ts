@@ -1,5 +1,5 @@
 /**
- * User access over a real socket (ENG-700, ADR 0099): the Desktop App's key is enrolled on
+ * User access over a real socket (ENG-700, ADR 0100): the Desktop App's key is enrolled on
  * first use, and a process with only socket access is refused approvals and secrets, with no
  * key or its own. Extensions keep their Grants; deleting the enrolment file re-enrols.
  */

@@ -241,6 +241,7 @@ const runOne = (
         choice,
         title: `Walkthrough · ${range.title}${delta ? " · new commits" : ""}`,
         origin: "walkthrough",
+        subject: summary.subject,
         prompt,
         onStarted: (sessionId) =>
           Effect.gen(function* () {
