@@ -37,7 +37,7 @@ test("an Origin Approval rides on the ApprovalRequest and survives the wire", ()
 
   const decoded = Schema.decodeUnknownSync(ApprovalRequest)({ ...approval, origin });
 
-  expect(Schema.encodeSync(ApprovalRequest)(decoded).origin).toEqual(origin);
+  expect<unknown>(Schema.encodeSync(ApprovalRequest)(decoded).origin).toEqual(origin);
 });
 
 test("an Allow without originScope, as Clients before Requests send it, still decodes", () => {
@@ -81,7 +81,7 @@ test.each([
   { kind: "user", sessionId: "s-1" },
   { kind: "user" },
 ])("a Send by %o decodes", (by) => {
-  expect(Schema.decodeUnknownSync(Send)({ ...send, by }).by).toEqual(by);
+  expect<unknown>(Schema.decodeUnknownSync(Send)({ ...send, by }).by).toEqual(by);
 });
 
 test("an agent Send without its Turn is refused", () => {
