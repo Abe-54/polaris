@@ -157,6 +157,21 @@ describe("commands", () => {
         expect(turn!.checkpointBefore).toEndWith("/before");
         expect(turn!.checkpointAfter).toEndWith("/after");
         expect(fakes.checkpoints.map((c) => c.label)).toEqual(["before", "after"]);
+
+        // The Host stream's TurnEnded carries the after-checkpoint's commit for Clients.
+        const ended = (yield* Effect.flatMap(Engine, (engine) =>
+          engine.subscribeHost(Sequence.make(0)).pipe(
+            Stream.takeUntil((item: HostStreamItem) => Predicate.isTagged(item, "Synchronized")),
+            Stream.runCollect
+          )
+        )).flatMap((item) =>
+          Predicate.isTagged(item, "Event") && Predicate.isTagged(item.envelope.event, "TurnEnded")
+            ? [item.envelope.event.turn]
+            : []
+        );
+
+        expect(turn!.checkpointAfterCommit).not.toBeNull();
+        expect(ended.map((t) => t.checkpointAfterCommit)).toEqual([turn!.checkpointAfterCommit]);
         expect(claude.latest(s)!.options.cwd).toBe(workspace.path);
         expect(claude.latest(s)!.options.resumeCursor).toBeNull();
       })

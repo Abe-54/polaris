@@ -163,8 +163,6 @@ const markContinuity = ContinuityItem.match<SequenceMark>({
 export interface DaemonThreadOptions {
   readonly live: LiveSource<ThreadClient>;
   readonly capabilities: ReadonlySet<string>;
-  /** The summary Review last opened for the session, when the head isn't known. */
-  readonly summaryOf?: (sessionId: SessionId) => RiskSummaryId | null;
 }
 
 /** The latest connection's client, waiting for one while the Host reconnects. */
@@ -190,22 +188,19 @@ const readWorkspaces = (client: ThreadClient) =>
     )
   );
 
-/** The summary already on the Host for the query's head, else the one Review recorded. */
+/** The summary already on the Host for the query's head. */
 const cachedSummary = (
   client: ThreadClient,
-  options: DaemonThreadOptions,
   query: FindingsQuery,
   repo: string | null
 ): Effect.Effect<RiskSummaryId | null, Failed> => {
-  const recorded = options.summaryOf?.(query.sessionId) ?? null;
-
-  if (query.head === null || repo === null) return Effect.succeed(recorded);
+  if (query.head === null || repo === null) return Effect.succeed(null);
 
   return Effect.map(
     client["review.riskSummary"]({
       ref: RiskSummaryRef.cases.LatestAt.make({ repo, head: query.head }),
     }),
-    (summary) => summary?.id ?? recorded
+    (summary) => summary?.id ?? null
   );
 };
 
@@ -284,14 +279,12 @@ export const daemonThreadSource = (options: DaemonThreadOptions): ThreadSource =
         ? Stream.unwrap(
             Effect.flatMap(workspace(query.workspaceId), (found) =>
               withClient(live, (client) =>
-                Effect.map(
-                  cachedSummary(client, options, query, found?.path ?? null),
-                  (summaryId) =>
-                    summaryId === null
-                      ? Stream.empty
-                      : client["review.watchRiskSummary"]({ summaryId }).pipe(
-                          Stream.map((summary) => summary.findings)
-                        )
+                Effect.map(cachedSummary(client, query, found?.path ?? null), (summaryId) =>
+                  summaryId === null
+                    ? Stream.empty
+                    : client["review.watchRiskSummary"]({ summaryId }).pipe(
+                        Stream.map((summary) => summary.findings)
+                      )
                 )
               )
             )

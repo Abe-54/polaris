@@ -104,6 +104,7 @@ export const turnsOf = ({
         reply: entry.session.lastReplyPreview ?? null,
         digestStarted: lead !== undefined && turnId !== null && digestStarted(lead, turnId),
         backgroundTasks: waitingOn(entry.session).length,
+        backgroundReportsPending: entry.session.backgroundReportsPending,
         userTurn,
         updatedAt: entry.session.updatedAt,
       };

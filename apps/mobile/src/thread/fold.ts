@@ -244,14 +244,16 @@ export const withOlder = (
 };
 
 /**
- * The commit a session Risk Summary of every ended Turn is keyed by: the last
- * ended Turn's after-checkpoint, when this feed saw it recorded.
+ * The commit a session Risk Summary of every ended Turn is keyed by: the last ended Turn's
+ * after-checkpoint, as the Turn carries it, or as this feed saw it recorded (older Daemons).
  */
 export const summaryHead = (state: SessionFold): string | null => {
   const ended = state.turns.findLast((entry) => entry.turn.status !== "working");
   const ref = ended?.turn.checkpointAfter ?? null;
 
-  return ref === null ? null : (state.checkpoints.get(ref) ?? null);
+  if (ref === null) return null;
+
+  return ended?.turn.checkpointAfterCommit ?? state.checkpoints.get(ref) ?? null;
 };
 
 /** The last Secret Request that ended in the session's latest Turn: the strip says how. */

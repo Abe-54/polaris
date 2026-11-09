@@ -178,6 +178,7 @@ describe("listModel", () => {
       state: "idle",
       turnCount: 24,
       acceptedThroughIndex: 20,
+      userTurns: null,
       updatedAt: "2026-10-01T11:48:00Z",
       workspaceName: "polaris",
       ...patch,
@@ -203,6 +204,17 @@ describe("listModel", () => {
     expect(rows[0]?.workspace).toEqual({ name: "polaris", where: "Mac Studio", away: false });
     expect(rows[1]?.meta).toBe("Claude Code · turn 24 · 1 since your last review");
     expect(rows[1]?.workspace?.where).toBe("Pi · reconnecting");
+
+    // The Daemon's user Turns name both ends: 24 Daemon Turns are 9 of the user's.
+    const numbered = listModel(
+      input({
+        sessions: [session("s6", { userTurns: { current: 9, acceptedThrough: 6 } })],
+      })
+    );
+
+    expect(numbered.groups[0]?.rows[0]?.meta).toBe(
+      "Claude Code · turns 7–9 · 3 since your last review"
+    );
     // Never accepted: no "since your last review"; changes once the Host says.
 
     const fresh = listModel(

@@ -73,6 +73,7 @@ const turnFields = {
   feedback: null,
   shellCommand: null,
   idleCompaction: null,
+  checkpointAfterCommit: null,
 } satisfies Turn;
 
 export const turn = new Turn(turnFields);

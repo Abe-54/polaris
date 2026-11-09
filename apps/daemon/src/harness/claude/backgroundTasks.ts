@@ -165,6 +165,6 @@ export class ClaudeBackgroundTasks {
       return [];
     this.live = tasks;
 
-    return [HarnessEvent.BackgroundTasksChanged({ tasks })];
+    return [HarnessEvent.BackgroundTasksChanged({ tasks, reportsPending: this.reports.size > 0 })];
   }
 }

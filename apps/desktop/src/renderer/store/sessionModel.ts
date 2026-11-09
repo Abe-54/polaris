@@ -323,9 +323,12 @@ const fold = (event: DomainEvent): Fold =>
       WorktreeDetected: () => same,
       WorktreeRemoved: () => same,
       TurnsAccepted:
-        ({ throughIndex }): Fold =>
+        ({ throughIndex, throughUserTurn }): Fold =>
         (m) =>
-          patchSession(m, { acceptedThroughIndex: throughIndex }),
+          patchSession(m, {
+            acceptedThroughIndex: throughIndex,
+            acceptedThroughUserTurn: throughUserTurn,
+          }),
       TurnsReverted: () => same,
       SessionPullRequestLinked:
         ({ pullRequest }): Fold =>
@@ -395,9 +398,9 @@ const fold = (event: DomainEvent): Fold =>
         (m) =>
           patchSession(m, { lastCompaction: compaction }),
       SessionBackgroundTasksChanged:
-        ({ tasks }): Fold =>
+        ({ tasks, reportsPending }): Fold =>
         (m) =>
-          patchSession(m, { backgroundTasks: tasks }),
+          patchSession(m, { backgroundTasks: tasks, backgroundReportsPending: reportsPending }),
       TurnStarted:
         ({ turn }): Fold =>
         (m) =>

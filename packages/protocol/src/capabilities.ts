@@ -109,6 +109,15 @@ export const Capability = Schema.Literals([
   "approval.secret",
   /** `PinSession`, `SessionPinned`, and `AgentSession.pinnedAt` and `origin`. */
   "session.pin",
+  /** `AgentSession.reviewSubject`: the Review a Reviewer's or walkthrough's session is for. */
+  "session.review-subject",
+  /**
+   * `AgentSession.backgroundReportsPending` and `SessionBackgroundTasksChanged.reportsPending`:
+   * the Harness will start a Turn for finished background tasks' reports.
+   */
+  "session.background-reports",
+  /** `Turn.checkpointAfterCommit`: the commit of a Turn's after-checkpoint. */
+  "session.checkpoint-commit",
   /**
    * The `plan` PermissionMode. A Daemon sends a Client without it `supervised` for a planning
    * session; a Client starts a session `supervised` on a Daemon without it.
@@ -117,8 +126,9 @@ export const Capability = Schema.Literals([
   /** The Limited Session State, `SetResumeAtReset` and `SessionResumeAtResetChanged`. */
   "session.limited",
   /**
-   * `Turn.userTurnNumber` and `replyPreview`, and `AgentSession.currentUserTurn` and
-   * `lastReplyPreview`: without it they are null, and a Client numbers and times Turns itself.
+   * `Turn.userTurnNumber` and `replyPreview`, `AgentSession.currentUserTurn`, `lastReplyPreview`
+   * and `acceptedThroughUserTurn`, and `TurnsAccepted.throughUserTurn`: without it they are
+   * null, and a Client numbers and times Turns itself.
    */
   "session.user-turns",
   /** `RunShellCommand`, `Turn.shellCommand`, `CommandExecution.origin` and `HarnessModels.runsShellCommands`. */

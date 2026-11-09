@@ -11,6 +11,7 @@ const session = (n: number, patch: Partial<SessionInfo> = {}): SessionInfo => ({
   state: "idle",
   turnCount: 24,
   acceptedThroughIndex: 20,
+  userTurns: null,
   updatedAt: `2026-10-01T00:00:${String(n).padStart(2, "0")}.000Z`,
   workspaceName: "polaris",
   ...patch,
@@ -49,6 +50,27 @@ describe("readySessions", () => {
     expect(ready.map((r) => [r.title, r.meta])).toEqual([
       ["Session 4", "Turn 1"],
       ["Session 1", "Turns 22–24 · polaris"],
+    ]);
+  });
+
+  test("with the Daemon's user Turns, the range is the user's: both ends, or neither", () => {
+    // 24 Daemon Turns are 9 user Turns; accepted through Daemon Turn 21, user Turn 6.
+    const user = (acceptedThrough: number | null) => ({ current: 9, acceptedThrough });
+
+    const ready = readySessions([
+      session(1, { userTurns: user(6) }),
+      // An older Daemon didn't name the accepted user Turn: the Daemon's Turns, not a mix.
+      session(2, { userTurns: user(null) }),
+      session(3, { acceptedThroughIndex: null, userTurns: user(null) }),
+      // Accepted through the user's Turn with a continuation still unaccepted.
+      session(4, { acceptedThroughIndex: 22, userTurns: user(9) }),
+    ]);
+
+    expect(ready.map((r) => [r.title, r.meta])).toEqual([
+      ["Session 4", "Turn 9 · polaris"],
+      ["Session 3", "Turns 1–9 · polaris"],
+      ["Session 2", "Turns 22–24 · polaris"],
+      ["Session 1", "Turns 7–9 · polaris"],
     ]);
   });
 

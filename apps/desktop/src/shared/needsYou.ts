@@ -43,6 +43,8 @@ export interface NeedsYouTurn {
   readonly digestStarted?: boolean;
   /** Live background tasks: an Idle session with any is waiting on them, not done. */
   readonly backgroundTasks: number;
+  /** The Harness will start a Turn for finished tasks' reports (`backgroundReportsPending`). */
+  readonly backgroundReportsPending?: boolean;
   /** The current user Turn: the Daemon's (`currentUserTurn`), else the latest seen live; or null. */
   readonly userTurn: Pick<UserTurn, "id" | "startedAt"> | null;
   /** When the session last changed, on its Host's clock: when it went Idle, at that summary. */
