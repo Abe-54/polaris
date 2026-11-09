@@ -1,1 +1,1 @@
-Bun.spawn(["/bin/true"]);
+export const launch = () => Bun.spawn(["/bin/true"]);
