@@ -18,9 +18,10 @@ import {
   SessionId,
   SessionPlacement,
   SessionStreamItem,
+  VoiceError,
   WorkspaceId,
 } from "@polaris/protocol";
-import { Effect, Option, Schedule, Stream } from "effect";
+import { Effect, Option, Redacted, Schedule, Stream } from "effect";
 import { RESTART_NOTE } from "../reviewer/recovery.ts";
 import { RULES_AFTER_TURN } from "../reviewer/run.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -73,7 +74,7 @@ const startDaemon = async (home = tempDir("polaris-lazy-home-")) => {
   return { daemon, socket };
 };
 
-test("the first Usage, Reviewer and accept requests after start load and answer", async () => {
+test("the first Usage, Reviewer, accept and voice requests after start load and answer", async () => {
   const { daemon, socket } = await startDaemon();
 
   try {
@@ -87,7 +88,7 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
             clientVersion: "0",
             deviceLabel: "test",
             ...TEST_USER_KEY,
-            capabilities: ["usage", "review.reviewer-settings", "session.accept"],
+            capabilities: ["usage", "review.reviewer-settings", "session.accept", "voice"],
           });
 
           const now = new Date().toISOString();
@@ -110,7 +111,13 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
             throughTurnId: null,
           }).pipe(Effect.flip);
 
-          return { usage, reviewer, accept };
+          // A malformed key is refused before the secrets store is read or written.
+          const voice = yield* client["voice.setKey"]({
+            provider: "deepgram",
+            key: Redacted.make("not a key"),
+          }).pipe(Effect.flip);
+
+          return { usage, reviewer, accept, voice };
         })
       )
     );
@@ -118,6 +125,8 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
     expect(result.usage.buckets).toEqual([]);
     expect(result.reviewer.settings.onSessions).toBe(false);
     expect(result.accept._tag).toBe("NotFound");
+    expect(result.voice).toBeInstanceOf(VoiceError);
+    expect(result.voice).toMatchObject({ reason: "invalid-key" });
   } finally {
     daemon.kill();
     await daemon.exited;

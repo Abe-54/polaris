@@ -55,9 +55,6 @@ import { TerminalRpcsLive } from "../terminal/TerminalRpcs.ts";
 import { TerminalsDaemonLive } from "../terminal/Terminals.ts";
 import { UsageRpcsLive } from "../usage/UsageRpcs.ts";
 import { UsageSessions } from "../usage/sessions.ts";
-import { DeepgramLive } from "../voice/deepgram.ts";
-import { HostSecrets } from "../secrets/index.ts";
-import { VoiceRpcsLive } from "../voice/VoiceRpcs.ts";
 import { ResourceRpcsLive } from "../resources/rpc.ts";
 import { HostStats, HostStatsRpcsLive } from "../hostStats/index.ts";
 import { TracingSkillRpcsLive } from "../traces/skill/index.ts";
@@ -87,6 +84,7 @@ import { lazyAcceptHandlers } from "./lazyAccept.ts";
 import { languagesAvailable, lazyLanguageHandlers } from "./lazyLanguages.ts";
 import { lazyReviewer } from "./lazyReviewer.ts";
 import { lazyUsage } from "./lazyUsage.ts";
+import { lazyVoiceHandlers } from "./lazyVoice.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
 
@@ -204,7 +202,7 @@ export const daemonHandlers = Layer.mergeAll(
   lazyAcceptHandlers,
   ReviewerRpcsLive,
   TerminalRpcsLive.pipe(Layer.provide(TerminalsDaemonLive)),
-  VoiceRpcsLive.pipe(Layer.provide(Layer.merge(DeepgramLive, HostSecrets.layer))),
+  lazyVoiceHandlers,
   byteStreamHandlers,
   selfTraceExport
 ).pipe(Layer.provide(daemonServices));
