@@ -1,6 +1,6 @@
 /** The Requests RPCs (ADR 0098, ENG-809): each acts on the checkout of its Agent Session. */
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, realpath, rename, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, posix, relative } from "node:path";
 import {
   RequestsError,
@@ -13,6 +13,7 @@ import {
   type SessionId,
 } from "@polaris/protocol";
 import { Duration, Effect, Layer, Queue, Result, Stream } from "effect";
+import { read } from "../data/read.ts";
 import { subscribeDirectoryChanges } from "../files/watch.ts";
 import { FileSearch } from "../files/FileSearch.ts";
 import { withFileMutation } from "../files/write.ts";
@@ -153,10 +154,19 @@ export const saveRequest = async (
 
     if (stat !== undefined && stat.size > REQUEST_FILE_LIMIT)
       return Result.fail(saveRefused(file, "it is too large to read (over 1 MiB)"));
-    const text = stat === undefined ? "" : await readFile(path, "utf8");
+
+    // The bounded reader never follows a symlink swapped in after the lstat above.
+    const text =
+      stat === undefined ? "" : await read(root, relative(root, path), REQUEST_FILE_LIMIT);
+
+    if (stat !== undefined && stat.size > 0 && text === "")
+      return Result.fail(saveRefused(file, "it changed while being read"));
     const edited = editRequest(text, file, request, previousName);
 
     if (Result.isFailure(edited)) return Result.fail(edited.failure);
+
+    if ((await realpath(dirname(path)).catch(() => "")) !== dir)
+      return Result.fail(saveRefused(file, "its folder moved while saving"));
     await writeAtomically(path, edited.success, stat === undefined ? 0o644 : stat.mode & 0o7777);
 
     return Result.succeed(parseDocument(edited.success, file).file);
@@ -320,6 +330,11 @@ export const requestsHandlers = (checkoutOf: CheckoutOf, options: RequestsRpcsOp
               ...(environment === undefined ? undefined : { environment }),
               by: { kind: "user", sessionId },
             })
+          ).pipe(
+            // Pre-send hooks, and so Origin Approvals, run only for agents' Sends.
+            Effect.catchTag("OriginApprovalRequired", (held) =>
+              Effect.die(`a user's Send was held on ${held.origin}`)
+            )
           ),
         "requests.variables": ({ sessionId, target, environment }) =>
           Effect.flatMap(checkoutOf(sessionId), (checkout) =>

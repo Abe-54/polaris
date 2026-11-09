@@ -1,6 +1,6 @@
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
-import { lazyRequestHandlers } from "./lazyRequests.ts";
+import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
 import { selfTraceExport } from "../traces/self/export.ts";
 import { selfTracer } from "../traces/self/tracer.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
@@ -155,6 +155,8 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   ),
   Layer.provideMerge(usageServices),
   Layer.provideMerge(dataServices),
+  // RequestSends and Origin Approvals: the Requests RPCs and MCP's send_request share them.
+  Layer.provideMerge(lazyRequests),
   Layer.provideMerge(traceServices),
   Layer.provideMerge(ReviewerSessions.layer),
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).

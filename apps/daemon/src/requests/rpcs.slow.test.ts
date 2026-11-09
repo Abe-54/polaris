@@ -12,7 +12,7 @@ import {
   SessionId,
   type RequestsSnapshot,
 } from "@polaris/protocol";
-import { Effect, Layer, Queue, Stream } from "effect";
+import { Effect, Layer, Queue, Schedule, Stream } from "effect";
 import { FileSearchLive } from "../files/FileSearch.ts";
 import { tempDir } from "../platform/tempDir.testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -107,7 +107,7 @@ const follow = <A, E>(stream: Stream.Stream<A, E>) =>
 const paths = (snapshot: RequestsSnapshot) =>
   snapshot.files.map((file) => [file.path, file.requests.map((request) => request.name)]);
 
-const run = (body: (fixture: TraceFixture) => Effect.Effect<void, unknown, never>) =>
+const run = (body: (fixture: TraceFixture) => Effect.Effect<void, unknown>) =>
   withTraceFixture((fixture) => Effect.runPromise(body(fixture)));
 
 test("the Desktop lists, saves, sends and pages the Send Log over RPC", () =>
@@ -230,14 +230,17 @@ test("the watch re-emits when a gitignored env file adds an environment", () =>
         const next = yield* follow(client["requests.watch"]({ sessionId: TEST_SESSION }));
         yield* next;
 
-        yield* Effect.promise(() =>
+        const write = Effect.promise(() =>
           writeFile(
             join(checkout, "http-client.private.env.json"),
             JSON.stringify({ qa: { token: "x" } })
           )
         );
 
-        expect((yield* next).environments).toContain("qa");
+        // A native watch arms asynchronously: under load the first write can precede it.
+        const writes = write.pipe(Effect.repeat(Schedule.spaced("200 millis")));
+
+        expect((yield* Effect.raceFirst(next, writes)).environments).toContain("qa");
       })
     )
   ));
