@@ -34,6 +34,7 @@ import { SelfTraceRpcs } from "./selfTraces.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
+import { RequestsRpcs } from "./requests.ts";
 import { ProfilesRpcs, TraceCompareRpcs, TracesRpcs, TracesSettingsRpcs } from "./traces.ts";
 import { HostStatsRpcs } from "./hostStats.ts";
 import { HostHarnesses } from "./availability.ts";
@@ -724,7 +725,8 @@ export const ClearAttachments = Rpc.make("attachments.clear", {
   error: Schema.Union([Unsupported, FileError]),
 });
 
-export class DaemonRpcs extends RpcGroup.make(
+// A const, not a class: as a class its type trips type-aware lint's instantiation limit (lint-config README).
+export const DaemonRpcs = RpcGroup.make(
   InlinePropose,
   Hello,
   Dispatch,
@@ -782,13 +784,29 @@ export class DaemonRpcs extends RpcGroup.make(
     ProfilesRpcs,
     TraceCompareRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs) {}
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs, RequestsRpcs);
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with
  * `NotGranted` (grants.ts). The SDK's Client is built on this group so the
  * refusal decodes; the Desktop App, never refused, stays on `DaemonRpcs`.
  */
-export class ExtensionDaemonRpcs extends DaemonRpcs.omit("dispatch")
+export const ExtensionDaemonRpcs = DaemonRpcs.omit("dispatch")
   .add(Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])))
-  .middleware(GrantGate) {}
+  .middleware(GrantGate);
+
+/**
+ * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests, which only the Desktop App
+ * may call (RPC_GRANTS: client); leaving it out keeps the client type within the checker's depth.
+ */
+export const ExtensionClientRpcs = ExtensionDaemonRpcs.omit(
+  "requests.watch",
+  "requests.save",
+  "requests.send",
+  "requests.variables",
+  "requests.sendLog.page",
+  "requests.sendLog.watch",
+  "requests.send.get",
+  "requests.curl.parse",
+  "requests.curl.format"
+);

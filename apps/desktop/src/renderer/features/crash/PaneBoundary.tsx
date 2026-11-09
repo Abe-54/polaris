@@ -16,6 +16,7 @@ export const PANE_TITLES = {
   edit: "The editor hit an error",
   data: "Data hit an error",
   traces: "Traces hit an error",
+  requests: "Requests hit an error",
   settings: "Settings hit an error",
 } as const;
 

@@ -2,13 +2,15 @@
  * The 34px trace bar (DESIGN.md, Traces → Trace bar; Paper T1), like Data's connection bar:
  * `TRACE`, the root span, service, duration, span and service counts and the trace id, then
  * "Add to agent session ⌘L", which puts a reference to the trace (and selected span) in the draft.
+ * A trace a Send started says "from Requests" and offers "Resend in Requests ⌘6" (Paper Q3).
  */
-import type { TraceDetail } from "@polaris/protocol";
+import { REQUESTS_CAPABILITY, type Send, SendLookup, type TraceDetail } from "@polaris/protocol";
 import { Kbd } from "@polaris/ui";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { commandShortcut } from "../../../../shared/keymap.ts";
-import { useApp, useCommands } from "../../../shell/hooks.ts";
+import { useApp, useCommands, useShellActions } from "../../../shell/hooks.ts";
 import { showBidi } from "../../data/grid/value.ts";
+import { loadSend, useRequestsApi } from "../../requests/index.ts";
 import { useOpenTrace } from "../model/openTrace.ts";
 import { useProfileFocused } from "../model/profile/store.ts";
 import { traceReference } from "../model/reference.ts";
@@ -38,9 +40,56 @@ const useAddTrace = (at: TracesSessionKey, detail: TraceDetail | null, spanId: s
   }, [add, detail, spanId, other]);
 };
 
+/** Sends' root spans are service `polaris`; Self-Traces never come from a Send. */
+const SEND_SERVICE = "polaris";
+
+/** The Send that started the trace, looked up only where one could have; null for any other. */
+const useStartingSend = (at: TracesSessionKey, detail: TraceDetail | null): Send | null => {
+  const api = useRequestsApi();
+  const { hostKey, sessionId, scope } = at;
+  const capabilities = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.status.capabilities);
+  const capable = capabilities?.includes(REQUESTS_CAPABILITY) === true;
+  const id = detail?.summary.id ?? null;
+  const candidate = capable && scope === undefined && detail?.summary.service === SEND_SERVICE;
+  const [found, setFound] = useState<{ traceId: string; send: Send } | null>(null);
+
+  useEffect(() => {
+    if (!candidate || id === null) return undefined;
+    let live = true;
+
+    void api
+      .getSend({ hostKey, sessionId }, SendLookup.cases.ByTrace.make({ traceId: id }))
+      .then((result) => {
+        if (live && result.ok) setFound({ traceId: id, send: result.value });
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [api, hostKey, sessionId, id, candidate]);
+
+  return candidate && found !== null && found.traceId === id ? found.send : null;
+};
+
+const useResend = (at: TracesSessionKey, send: Send | null) => {
+  const { setMode } = useShellActions();
+  const { hostKey, sessionId } = at;
+
+  return useCallback(() => {
+    if (send === null) return;
+    loadSend({ hostKey, sessionId }, send);
+    setMode("requests");
+  }, [send, hostKey, sessionId, setMode]);
+};
+
+const ACTION =
+  "text-caption text-text-subtle hover:text-text-default focus-visible:ring-starlight rounded-control flex shrink-0 cursor-default items-center gap-1.5 px-1 outline-none focus-visible:ring-2";
+
 export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
   const detail = useOpenTrace(at, traceId);
   const add = useAddTrace(at, detail, spanId);
+  const send = useStartingSend(at, detail);
+  const resend = useResend(at, send);
   const commands = useCommands();
   // The open Profile takes ⌘L while focus is in it, however often this re-registers.
   const profileFocused = useProfileFocused(at);
@@ -50,6 +99,11 @@ export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
       ? undefined
       : commands.register({ "traces.addToSession": { run: add } });
   }, [commands, detail, add, profileFocused]);
+
+  // ⌘6 still opens Requests; on a Send's trace it opens with that Send's request loaded.
+  useEffect(() => {
+    return send === null ? undefined : commands.register({ "view.requests": { run: resend } });
+  }, [commands, send, resend]);
 
   if (detail === null) return null;
   const { summary } = detail;
@@ -79,13 +133,15 @@ export const TraceBar = ({ at, traceId, spanId }: TracesSlotProps) => {
         {summary.partial ? (
           <span data-testid="trace-bar-partial"> · partial: some spans were removed</span>
         ) : null}
+        {send === null ? null : <span data-testid="trace-bar-from-requests"> · from Requests</span>}
       </span>
-      <button
-        type="button"
-        onClick={add}
-        data-testid="trace-add-to-session"
-        className="text-caption text-text-subtle hover:text-text-default focus-visible:ring-starlight rounded-control flex shrink-0 cursor-default items-center gap-1.5 px-1 outline-none focus-visible:ring-2"
-      >
+      {send === null ? null : (
+        <button type="button" onClick={resend} data-testid="trace-resend" className={ACTION}>
+          Resend in Requests
+          <Kbd variant="plain">{commandShortcut("view.requests")}</Kbd>
+        </button>
+      )}
+      <button type="button" onClick={add} data-testid="trace-add-to-session" className={ACTION}>
         Add to agent session
         <Kbd variant="plain">{commandShortcut("traces.addToSession")}</Kbd>
       </button>

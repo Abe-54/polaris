@@ -35,6 +35,10 @@ Five rules, each scoped by repo path, with its sanctioned call sites in `allowli
 
 The Desktop App's `no-restricted-globals` rule on `fetch` in `src/main/` (`apps/desktop/.oxlintrc.json`) is the fifth guard: Main's internet goes through `internetFetch` (ADR 0053). `tooling/security/` tests it, and that every external GitHub Action is pinned to a commit SHA.
 
+### Large RPC groups are `const`s, not classes
+
+tsgolint checks one file at a time, so a file that names a group (`RpcGroup.Rpcs<typeof DaemonRpcs>`, `RpcClient.make(DaemonRpcs)`) pays for resolving the whole group inside one statement. When the group is a `class X extends RpcGroup.make(…).merge(…) {}`, `typeof X` is a constructor type that TypeScript must match *structurally* against `RpcGroup<infer R>`, instantiating every method of `RpcGroup` (handlers, layers, clients) over the union of all its RPCs. With ~245 RPCs in `DaemonRpcs` that hit TypeScript's instantiation limit (TS2589, "excessively deep", seen with `oxlint --type-aware --type-check`): the group resolved to `error` and every caller lit up with `no-unsafe-*`. `bun check` over a whole project still passed, because it had already resolved the group while checking `rpc.ts`. A `const` group's type is the `RpcGroup<R>` reference itself, so inference just reads `R`. Keep `DaemonRpcs`, `ExtensionDaemonRpcs` and `ExtensionClientRpcs` (and any large group) as `export const`; the wire contract is the same either way.
+
 ## The ratchet
 
 Existing violations are recorded in `tooling/lint/baseline.json` as counts per file and rule. `bun run lint` fails when a file's count for a rule goes above its baseline, which covers a new violation in an old file, any violation in a new file, and any rule a file wasn't breaking before.

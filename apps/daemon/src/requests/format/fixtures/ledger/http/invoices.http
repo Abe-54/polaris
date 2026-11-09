@@ -1,0 +1,44 @@
+# Invoices API for the ledger app.
+@tenant = acme
+@currency = EUR
+@customer = cus_8f2a
+
+### List overdue
+GET {{base}}/invoices/overdue?tenant={{tenant}}
+Accept: application/json
+Authorization: Bearer {{$dotenv LEDGER_TOKEN}}
+
+### Recalculate overdue
+# Recomputes late fees for one customer; writes to invoices.
+// Safe to repeat: it is idempotent per customer and day.
+POST {{base}}/invoices/overdue?recalculate=true HTTP/1.1
+Content-Type: application/json
+Accept: application/json
+X-Tenant: {{tenant}}
+Authorization: Bearer {{$dotenv LEDGER_TOKEN}}
+
+{
+  "customerId": "cus_8f2a",
+  "asOf": "{{$isoTimestamp}}",
+  "currency": "EUR",
+  "includeDisputed": false
+}
+
+###
+# @name Mark paid
+PATCH {{base}}/invoices/inv_2041
+Content-Type: application/json
+Authorization: Bearer {{$dotenv LEDGER_TOKEN}}
+
+{ "status": "paid" }
+
+### Void invoice
+DELETE {{base}}/invoices/inv_2041
+Authorization: Bearer {{$dotenv LEDGER_TOKEN}}
+
+### Export overdue as CSV
+{{base}}/invoices/overdue.csv
+    ?tenant={{tenant}}
+    &from=2026-10-01
+Accept: text/csv
+Authorization: Basic {{admin}}:{{$dotenv LEDGER_ADMIN_PASSWORD}}

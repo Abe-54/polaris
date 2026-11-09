@@ -7,6 +7,7 @@
 import { TraceContext } from "@polaris/protocol";
 import { DataRequestInputs, DataSubscriptionInputs } from "./dataContract.ts";
 import { TracesRequestInputs, TracesSubscriptionInputs } from "./tracesContract.ts";
+import { RequestsRequestInputs, RequestsSubscriptionInputs } from "./requestsContract.ts";
 import { PredictionPlacementInputs } from "./predictionPlacement.ts";
 import { PredictionOutcomeInputs } from "./predictionOutcomes.ts";
 import {
@@ -611,6 +612,7 @@ export const RequestInputs = {
   ...DataRequestInputs,
   ...TracesRequestInputs,
   ...SimulatorRequestInputs,
+  ...RequestsRequestInputs,
 } as const;
 
 export type RequestMethod = keyof typeof RequestInputs;
@@ -676,6 +678,7 @@ export const SubscriptionInputs = {
   ...DataSubscriptionInputs,
   ...TracesSubscriptionInputs,
   ...SimulatorSubscriptionInputs,
+  ...RequestsSubscriptionInputs,
   /** One Constellation's stream (`constellation.subscribe`): Snapshot, Synchronized, then events. */
   constellation: Schema.Struct({
     hostKey: HostKey,

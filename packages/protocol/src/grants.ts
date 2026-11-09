@@ -295,6 +295,15 @@ export const RPC_GRANTS = {
   "developerMode.lease": "client",
   "developerMode.watch": "client",
   "traces.ingestSelf": "client",
+  "requests.watch": "client",
+  "requests.save": "client",
+  "requests.send": "client",
+  "requests.variables": "client",
+  "requests.sendLog.page": "client",
+  "requests.sendLog.watch": "client",
+  "requests.send.get": "client",
+  "requests.curl.parse": "client",
+  "requests.curl.format": "client",
 } as const satisfies Record<DaemonRpcTag, RpcAccess>;
 
 const commandAccess = (tag: string): CommandAccess =>

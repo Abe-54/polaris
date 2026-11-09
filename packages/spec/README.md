@@ -869,6 +869,8 @@ acknowledgment or recovery semantics change. Runtime trace replay includes Evict
 
 `data_approvals` in `polaris.qnt` refines the existing HRequest/Respond lifecycle with exact target and whole-server remembering, duplicate requests, bounded waits, revocation and restart. `engine/session.ts` decides `data.approvalRequested`; `data/approvals.ts` commits its events, and `data/approvalStore.ts` projects durable decisions into data.sqlite. Approvals remain pending only with a Turn in flight; waits leave the card in place. Target identity includes engine, host, port, database and user; source names are not permission keys. The existing commit/replay/first-response-wins properties still apply. `verification/dataApprovals.model.slow.test.ts` drives the real machine and persistence against an independent model.
 
+Origin Approvals (ENG-809, ADR 0098) are the same lifecycle with the target key `scheme://host:port`: `engine/session.approvals.ts` admits `data.approvalRequested` with an `origin` once per pending origin and refuses it from a Harness, `requests/approvals/layer.ts` commits it, and `requests/approvals/store.ts` projects decisions keyed by origin. The decision rules don't change, so the spec doesn't; the origin scope (`reads` denies a write Send) is decided per Send outside the machine and tested in `requests/approvals/approvals.test.ts`.
+
 ### Findings
 
 MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.

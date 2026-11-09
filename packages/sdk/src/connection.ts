@@ -1,6 +1,6 @@
 /**
  * One connection to a Host: a transport for one of its Pairings, the RPC
- * client on `ExtensionDaemonRpcs`, and `hello` with the Pairing's token and
+ * client on `ExtensionClientRpcs`, and `hello` with the Pairing's token and
  * this SDK's protocol range. A Host with several Pairings tries each in turn.
  */
 import { type ClientBlobs, connectRpcWith } from "@polaris/client/rpc";
@@ -9,7 +9,7 @@ import {
   type Capability,
   type ExtensionTokenRejected,
   decideProtocol,
-  ExtensionDaemonRpcs,
+  ExtensionClientRpcs,
   type HostInfo,
   type ProtocolMismatch,
 } from "@polaris/protocol";
@@ -20,7 +20,7 @@ import { HostUnreachable } from "./errors.ts";
 import type { ParsedPairing } from "./pairing.ts";
 import { SUPPORTED_PROTOCOL } from "./version.ts";
 
-export type ExtensionRpc = RpcGroup.Rpcs<typeof ExtensionDaemonRpcs>;
+export type ExtensionRpc = RpcGroup.Rpcs<typeof ExtensionClientRpcs>;
 
 export type ExtensionClient = RpcClient.RpcClient<ExtensionRpc, RpcClientError>;
 
@@ -71,7 +71,7 @@ const helloOn = Effect.fnUntraced(function* (
   scope: Scope.Scope
 ) {
   const transport = yield* Scope.provide(options.openTransport(pairing), scope);
-  const connection = yield* Scope.provide(connectRpcWith(ExtensionDaemonRpcs, transport), scope);
+  const connection = yield* Scope.provide(connectRpcWith(ExtensionClientRpcs, transport), scope);
 
   const hello = yield* connection.client
     .hello({

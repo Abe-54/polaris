@@ -2,7 +2,8 @@ import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative } from "node:path";
 
-const limit = 64 * 1024;
+/** The default cap on a file read from checkout content. */
+export const READ_LIMIT = 64 * 1024;
 
 const inside = (root: string, file: string) => {
   const path = relative(root, file);
@@ -15,7 +16,7 @@ const inside = (root: string, file: string) => {
 };
 
 /** No following file symlinks, device reads, or unbounded allocations from checkout content. */
-export const read = async (checkout: string, file: string): Promise<string> => {
+export const read = async (checkout: string, file: string, limit = READ_LIMIT): Promise<string> => {
   try {
     const root = await realpath(checkout);
     const path = join(root, file);

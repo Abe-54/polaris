@@ -6,6 +6,7 @@
  */
 import type { DataRequestOutputs, DataSubscriptionItems } from "./dataContract.ts";
 import type { TracesRequestOutputs, TracesSubscriptionItems } from "./tracesContract.ts";
+import type { RequestsRequestOutputs, RequestsSubscriptionItems } from "./requestsContract.ts";
 import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
 import type {
   PredictionOutcomeOutputs,
@@ -452,6 +453,7 @@ export interface RequestOutputs
     DataRequestOutputs,
     TracesRequestOutputs,
     SimulatorRequestOutputs,
+    RequestsRequestOutputs,
     PredictionPlacementOutputs,
     PredictionOutcomeOutputs {
   "constellation.stats": ConstellationStatsView;
@@ -595,7 +597,8 @@ export interface SubscriptionItems
     BrowserSubscriptionItems,
     DataSubscriptionItems,
     TracesSubscriptionItems,
-    SimulatorSubscriptionItems {
+    SimulatorSubscriptionItems,
+    RequestsSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
   "prediction.edit": EditPredictionFeedItem;
   "prediction.managed.watch": import("@polaris/protocol").ManagedServerStatus;
@@ -635,7 +638,7 @@ export interface SubscriptionListener<A> {
 
 // ── App events ──────────────────────────────────────────────────────────────
 
-export type Route = "orchestrate" | "review" | "edit" | "data" | "traces";
+export type Route = "orchestrate" | "review" | "edit" | "data" | "traces" | "requests";
 
 export type AppEvent =
   | {
