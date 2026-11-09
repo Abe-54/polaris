@@ -508,9 +508,9 @@ const make = (
 
           if (input.steerExisting === true)
             return yield* (entry.session.steerTurn?.(turnInput) ?? Effect.succeed(false)).pipe(
-              Effect.tapError(() =>
+              Effect.tapError((error) =>
                 Effect.sync(() => {
-                  refusalReported = entry.driver.kind === "claude";
+                  refusalReported = error.recorded === true;
                 })
               )
             );

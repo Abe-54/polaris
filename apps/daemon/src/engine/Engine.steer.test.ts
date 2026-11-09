@@ -1,9 +1,18 @@
 /** Steering a working Turn with attachments (ENG-662). */
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Attachment, AttachmentId, Command, SessionId, SessionPlacement } from "@polaris/protocol";
+import {
+  Attachment,
+  AttachmentId,
+  Command,
+  DomainEvent,
+  SessionId,
+  SessionPlacement,
+  type TurnItem,
+} from "@polaris/protocol";
 import { Effect, Predicate } from "effect";
-import type { EventStore } from "../store/EventStore.ts";
+import { HarnessError } from "../harness/HarnessDriver.ts";
+import { EventStore } from "../store/EventStore.ts";
 import { Engine } from "./Engine.ts";
 import {
   cid,
@@ -118,4 +127,49 @@ test.each<[string, () => FakeDriver, AttachmentId, string]>([
   const reason = await run(driver(), (sessionId) => refusal(sessionId, [attachment]));
 
   expect(reason).toBe(expected);
+});
+
+const recordedItems = (sessionId: SessionId) =>
+  Effect.gen(function* () {
+    const store = yield* EventStore;
+    const model = yield* store.model;
+
+    return (yield* store.readEvents({ after: 0, upTo: model.sequence, sessionId })).flatMap(
+      (envelope) =>
+        DomainEvent.guards.TurnItemCompleted(envelope.event) ? [envelope.event.item] : []
+    );
+  });
+
+// ENG-797: a refusal the driver recorded itself (Claude's input preparation) isn't recorded twice.
+test.each<[string, boolean, ReadonlyArray<TurnItem["_tag"]>]>([
+  ["records the steer and why", false, ["UserMessage", "Error"]],
+  ["leaves it to a driver that recorded it", true, []],
+])("a steer the Harness refuses %s", async (_, recorded, expected) => {
+  const driver = makeFakeDriver("claude", {
+    steer: true,
+    refuseSteer: new HarnessError({
+      harness: "claude",
+      message: "No Turn is in progress to steer",
+      recorded,
+    }),
+  });
+
+  const items = await run(driver, (sessionId) =>
+    Effect.gen(function* () {
+      yield* dispatch(Command.cases.Steer.make({ sessionId, text: "like this", attachments: [] }));
+      // The reaction runs after the ack; a later command's reaction queues behind it.
+      yield* dispatch(Command.cases.Interrupt.make({ sessionId }));
+      yield* waitUntil(() => driver.latest(sessionId)!.interrupts === 1, 5000);
+
+      return yield* recordedItems(sessionId);
+    })
+  );
+
+  expect(items.map((item) => item._tag)).toEqual([...expected]);
+
+  if (!recorded)
+    expect(items).toMatchObject([
+      { text: "like this" },
+      { message: "This message didn't reach the agent: No Turn is in progress to steer" },
+    ]);
 });

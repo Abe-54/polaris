@@ -100,7 +100,7 @@ module polaris {
     | HWithdraw(str)
     | HExpire(str) // the Daemon withdraws a Secret Request that timed out (ADR 0089)
     | HItem
-    | HInputRefused // a durable item for a deferred prompt the Session cannot take
+    | HInputRefused // a durable item for a deferred prompt or a steer the Session cannot take
     | HTurnStarted
     | HUserTurnStarted
     | HTurnEnded

@@ -50,6 +50,7 @@ import { polarisInstructions } from "../../constellation/skills/preamble.ts";
 import {
   type HarnessDriver,
   HarnessError,
+  recordedError,
   HarnessEvent,
   type HarnessProbe,
   type HarnessSession,
@@ -702,22 +703,21 @@ const openSession = Effect.fnUntraced(function* (
     if (!turn || turn.interrupting) return yield* harnessError("No Turn is in progress to steer");
 
     const { uuid, message } = yield* send(text, input, turn).pipe(
+      Effect.mapError(recordedError),
       Effect.onError((cause) =>
         Effect.sync(() => {
           const id = crypto.randomUUID();
           const reason = causeMessage(cause) ?? "Claude input preparation failed";
-          emit(
+          emitAll([
             HarnessEvent.ItemCompleted({
               turnId: turn.turnId,
               item: steerItem(`refused:${id}`, text, input?.attachments),
-            })
-          );
-          emit(
+            }),
             HarnessEvent.ItemCompleted({
               turnId: turn.turnId,
               item: TurnItem.cases.Error.make({ id: `refusal:${id}`, message: reason }),
-            })
-          );
+            }),
+          ]);
 
           if (active === turn && turn.resultArrived && turn.pending.size === 0)
             endTurn("failed", reason);

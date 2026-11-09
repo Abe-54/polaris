@@ -23,12 +23,13 @@ import { sessionRestartNote } from "../constellation/restartNote.ts";
 import type { HarnessError } from "../harness/HarnessDriver.ts";
 import type { ServiceError } from "../services.ts";
 import type { CommitResult } from "../store/EventStore.ts";
-import type { ReadModel } from "../store/model.ts";
+import { type ReadModel, workingTurn } from "../store/model.ts";
 import { CONTINUE_PROMPT } from "./decider.ts";
 import { CheckpointPruning } from "./pruning.ts";
 import { ReviewCheckouts } from "./reviewCheckouts.ts";
 import { EngineRuntime } from "./runtime.ts";
 import { SecretRequests } from "./secretRequests.ts";
+import { noHarness, recordRefusedSteer } from "./steerRefusal.ts";
 import { Supervisor } from "./supervisor.ts";
 import { TerminalHandoff } from "./terminal.ts";
 import { Worktrees } from "./worktrees.ts";
@@ -296,13 +297,24 @@ const make = Effect.gen(function* () {
 
           const attachments = committed.attachments ?? [];
 
-          if (shell === undefined)
-            return (
-              live.get(command.sessionId)?.session.steer(command.text, attachments) ?? Effect.void
-            );
-          shell.steers.push({ text: command.text, attachments });
+          if (shell !== undefined) {
+            shell.steers.push({ text: command.text, attachments });
 
-          return Effect.void;
+            return Effect.void;
+          }
+
+          const record = committed.before.sessions.get(command.sessionId);
+          const turn = record === undefined ? undefined : workingTurn(record);
+          const harness = live.get(command.sessionId)?.session;
+
+          return recordRefusedSteer(
+            rt,
+            turn === undefined
+              ? null
+              : { sessionId: command.sessionId, turnId: turn.id, text: command.text, attachments },
+            harness?.steer(command.text, attachments) ??
+              Effect.fail(noHarness(record?.session.harness ?? "harness"))
+          );
         }),
       Interrupt: (command) => interrupt(command.sessionId),
       StopBackgroundTasks: (command) => stopBackground(command.sessionId, command.taskIds),
