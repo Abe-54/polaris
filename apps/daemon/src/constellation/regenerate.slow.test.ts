@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { Attempt, Constellation, ConstellationSettings } from "@polaris/protocol";
 import { Effect, Struct } from "effect";
@@ -22,7 +22,11 @@ const manifest = (name: string) =>
   });
 
 /** A Lead repository and a worker branch, each side writing `ours` and `theirs` over the base. */
-const setup = async (theirs: Record<string, string>, ours: Record<string, string>) => {
+const setup = async (
+  theirs: Record<string, string>,
+  ours: Record<string, string>,
+  worker: (root: string) => void = () => {}
+) => {
   const root = await makeRepo({
     "package.json": manifest("base"),
     "pkg/package.json": JSON.stringify({ name: "fixture-pkg" }),
@@ -33,6 +37,7 @@ const setup = async (theirs: Record<string, string>, ours: Record<string, string
   await gitText(root, ["checkout", "-q", "-b", "polaris/A"]);
 
   for (const [path, content] of Object.entries(theirs)) write(root, path, content);
+  worker(root);
   const head = await commitAll(root, "worker");
   await gitText(root, ["checkout", "-q", "main"]);
 
@@ -87,7 +92,15 @@ test(
   WORK_MS
 );
 
-test.each([["bunfig.toml"], [".npmrc"], [".env"], [".env.local"]])(
+test.each([
+  ["bunfig.toml"],
+  [".npmrc"],
+  [".env"],
+  [".env.local"],
+  ["BUNFIG.toml"],
+  ["pkg/.npmrc"],
+  ["node_modules/x/index.js"],
+])(
   "Accept's merge installs nothing from a branch that changes %s and refuses the conflict",
   async (config) => {
     const s = await setup({ ...conflicting, [config]: "changed\n" }, leadSide);
@@ -124,6 +137,21 @@ test.each([
 
     expect(s.result).toMatchObject({ ok: { merged: true } });
     expect("ok" in s.result && s.result.ok.findings).toEqual(findings);
+  },
+  WORK_MS
+);
+
+test(
+  "Accept's merge installs nothing from a branch that adds a symlink",
+  async () => {
+    const s = await setup({ ...conflicting }, leadSide, (root) =>
+      symlinkSync("/tmp", join(root, "pkg/escape"))
+    );
+
+    expect("error" in s.result && s.result.error.message).toContain(
+      "the merged branch changes pkg/escape"
+    );
+    expect(existsSync(join(s.root, "node_modules"))).toBe(false);
   },
   WORK_MS
 );

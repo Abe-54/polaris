@@ -28,9 +28,36 @@ export const regenerable = (conflicts: ReadonlyArray<string>) =>
 const isDependencyFile = (path: string) =>
   path === LOCKFILE || path === "package.json" || path.endsWith("/package.json");
 
-/** Root files bun install reads on its own, which a merged branch must not change for it. */
-const isBunConfig = (path: string) =>
-  path === "bunfig.toml" || path === ".npmrc" || path === ".env" || path.startsWith(".env.");
+/** Files bun install reads on its own, in any directory and any case (macOS ignores it). */
+const isBunConfig = (path: string) => {
+  const name = (path.split("/").at(-1) ?? "").normalize("NFC").toLowerCase();
+
+  return name === "bunfig.toml" || name === ".npmrc" || name === ".env" || name.startsWith(".env.");
+};
+
+/**
+ * Why the merged branch can't be installed from; null when it can: it changes bun's config,
+ * adds a symlink, or writes under node_modules.
+ */
+const unsafeToInstall = async (root: string) => {
+  const raw = (
+    await gitText(root, [...HOOKS_OFF, "diff", "--raw", "--no-renames", "HEAD...MERGE_HEAD"])
+  )
+    .split("\n")
+    .filter((line) => line !== "");
+
+  const refused = raw.flatMap((line) => {
+    const [meta = "", path = ""] = line.split("\t");
+    const mode = meta.split(" ")[1] ?? "";
+    const lower = path.toLowerCase();
+
+    return mode === "120000" || isBunConfig(path) || lower.split("/").includes("node_modules")
+      ? [path]
+      : [];
+  });
+
+  return refused.length === 0 ? null : `the merged branch changes ${refused.join(", ")}`;
+};
 
 const changedFiles = async (root: string, range: string) =>
   (await gitText(root, [...HOOKS_OFF, "diff", "--name-only", range]))
@@ -89,9 +116,9 @@ export const regenerate = async (
   if (conflicts.includes(LOCKFILE) && bun === null)
     return before("bun is not on the Daemon's PATH");
 
-  const config = (await changedFiles(root, "HEAD...MERGE_HEAD")).filter(isBunConfig);
+  const unsafe = await unsafeToInstall(root);
 
-  if (config.length > 0) return before(`the merged branch changes ${config.join(", ")}`);
+  if (unsafe !== null) return before(unsafe);
   await gitText(root, [...HOOKS_OFF, "checkout", "--ours", "--", ...conflicts]);
 
   if (conflicts.includes(LOCKFILE) && bun !== null) {
