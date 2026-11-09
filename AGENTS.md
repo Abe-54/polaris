@@ -96,6 +96,7 @@ Performance is a product requirement: the Daemon must stay light on a Raspberry 
 - Before and after a change that could move memory, CPU or latency (engine, store, streams, transport, wire, files, git, terminals, Harness drivers, anything on a hot path or a timer), run the relevant scenarios against the committed baseline for your machine, e.g. `bun run bench sessions history --runs 3 --compare packages/bench/baselines/<machine>.json`. Use `--profile` to see where the time and memory go.
 - Never regress a baseline silently: fix the regression, or explain it in the commit and update the baseline (`--save-baseline`) in the same change.
 - Anything that wakes an idle Daemon (timers, polling, watchers) must justify itself in the `idle` scenario.
+- **Script leases.** `bun run bench` and the Desktop smoke take a Host lease (`tooling/leases.ts`): `bench` and `smoke`, which every Daemon declares at startup with capacity 1 (Settings → Hosts can change it). Outside Polaris they take `/tmp/polaris-<name>-lock`. A new script lease is added to `SCRIPT_RESOURCES` in `apps/daemon/src/resources/model.ts`.
 
 ## Verification
 

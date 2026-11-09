@@ -46,6 +46,8 @@ to worker commands. `tooling/leases.ts` makes the bench and Desktop smoke entry
 points re-enter through `polaris lease` under that environment. Outside Polaris,
 they take `/tmp/polaris-bench-lock` and `/tmp/polaris-smoke-lock`, respectively.
 `POLARIS_LEASE_HELD` prevents an entry point from recursively taking its own lease.
+Startup declares those script leases (`SCRIPT_RESOURCES`: `bench`, `smoke`) with capacity 1
+when the Host has no declaration for them; an edited capacity is kept across restarts.
 
 ## Process lifetime
 
