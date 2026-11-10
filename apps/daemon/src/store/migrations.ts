@@ -186,9 +186,10 @@ const continuity = Effect.gen(function* () {
  */
 const eventTypeIndexes = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`CREATE INDEX events_type ON events (event_type, sequence)`;
+  // IF NOT EXISTS: the tests that rewind the migrator run this on a database that has both.
+  yield* sql`CREATE INDEX IF NOT EXISTS events_type ON events (event_type, sequence)`;
   yield* sql`
-    CREATE INDEX events_graph ON events (sequence)
+    CREATE INDEX IF NOT EXISTS events_graph ON events (sequence)
     WHERE constellation_id IS NOT NULL OR event_type = 'WorkspaceRemoved'
   `;
 });
