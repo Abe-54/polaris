@@ -5,9 +5,12 @@ export const FLOAT_SURFACE =
 /** Popovers keep this clear of the window's edges when they flip, shift or shrink. */
 export const FLOAT_EDGE = 12;
 
-/** Small reveals fade in over 160ms, ease-out, and close at once (DESIGN.md, Motion). */
+/**
+ * Floating layers fade in over 160ms, ease-out, scaling from 96% at the side that faces their
+ * trigger (Radix Popper's origin), and close at once (DESIGN.md, Motion).
+ */
 export const FLOAT_MOTION =
-  "data-[state=open]:animate-in data-[state=open]:fade-in-0 duration-160 ease-out";
+  "origin-(--radix-popper-transform-origin) data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.96] duration-160 ease-out";
 
 /** A mount-only reveal: fades in over 160ms, ease-out. */
 export const REVEAL_MOTION = "animate-in fade-in-0 duration-160 ease-out";
