@@ -14,7 +14,7 @@ What a watching Client sees of the window an Agent Session works in (ENG-846, AD
 
 ## Who tells the preview what to show
 
-The `polaris_desktop` tools call `PreviewTargets.acted(sessionId, { app, window, screenshot })` after each action, and `forget` when a session is archived or removed. A call that names no window leaves the session's last window as its target. A window's id is its CGWindowID as text, `4242` or agent-desktop's `w-4242`. Screenshots are whole PNGs, so only the 8 sessions that acted last keep theirs.
+The `polaris_desktop` tools call `PreviewTargets.acted(sessionId, { app, window, screenshot })` after each call that acted on an app (`DesktopMcp.layerOn`'s second argument, wired in `transport/serve.ts`). `forget` is for a session that is archived or removed; nothing calls it yet (ENG-879). A call that names no window leaves the session's last window as its target. A window's id is its CGWindowID as text, `4242` or agent-desktop's `w-4242`. Screenshots are whole PNGs, so only the 8 sessions that acted last keep theirs.
 
 ## macOS: live capture
 
@@ -39,4 +39,9 @@ There is no live capture and `computer-use.preview` is not announced, so `previe
 
 - `bun test src/computerUse` (fast): scripted tools stand in for the helper app.
 - `swift test` in `src/service/computerUse/capture`: the tool's frame comparison, JPEG fitting and records.
-- `bun run bench computer-use-preview --binary <built polaris>`: the real tool on a TextEdit window. The helper beside that binary needs Screen Recording and Accessibility.
+- `bun run bench computer-use-preview --binary <built polaris>`: the real tool on a TextEdit window. The helper beside that binary needs Screen Recording.
+
+Two things only a granted helper shows, both found that way:
+
+- ScreenCaptureKit asserts (`CGS_REQUIRE_INIT`) in a tool that never connected to the window server, from a shell and under a `gui/<uid>` launchd job alike. The tool makes the connection through AppKit once the grant is known. It was not run in `user/<uid>`, where there is no window server to connect to.
+- An ad hoc grant covers the helper's seal: replacing `polaris-capture` inside a granted bundle makes it read `not-ready` again until the helper is granted anew.
