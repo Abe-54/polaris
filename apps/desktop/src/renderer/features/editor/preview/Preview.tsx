@@ -10,7 +10,7 @@ import { openSearchPanel } from "@codemirror/search";
 import type { EditorView } from "@codemirror/view";
 import { Horizon, Toaster, TooltipProvider } from "@polaris/ui";
 import { useEffect, useRef, useState } from "react";
-import { EditorColumn, TerminalChip } from "../../terminal/index.ts";
+import { EditorColumn, TerminalChip, useTerminalLeaving } from "../../terminal/index.ts";
 import { createRoot } from "react-dom/client";
 import { createStore } from "zustand/vanilla";
 import type { Density, PolarisApi } from "../../../../shared/api.ts";
@@ -260,6 +260,7 @@ const StandInTerminal = () => (
 /** X-I's Variant C: the stand-in explorer on the ground, the editor and terminal as panels. */
 const Frame = ({ terminal, hash }: { readonly terminal: boolean; readonly hash: string }) => {
   const [shown, setShown] = useState(terminal);
+  const leaving = useTerminalLeaving(shown);
   const dock = useRef<HTMLDivElement>(null);
 
   // The screenshot script toggles the terminal as fast as ⌃` would, mid-morph.
@@ -279,7 +280,8 @@ const Frame = ({ terminal, hash }: { readonly terminal: boolean; readonly hash: 
           dock={dock}
           hostKey={HOST}
           workspaceId={WORKSPACE}
-          terminal={shown ? <StandInTerminal /> : null}
+          leaving={leaving}
+          terminal={shown || leaving ? <StandInTerminal /> : null}
           chip={<TerminalChip onToggle={() => setShown(true)} count={1} />}
           status={
             <StatusBar

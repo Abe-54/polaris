@@ -10,6 +10,7 @@ export {
   TerminalChip,
   TerminalPanels,
   type TerminalPanelsProps,
+  useTerminalLeaving,
 } from "./ui/TerminalPanels.tsx";
 
 export {
