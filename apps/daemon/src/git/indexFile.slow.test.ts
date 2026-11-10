@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 import { holdsNoGitlinks } from "./indexFile.ts";
+import { HEAVY_GIT_MS } from "./testing.ts";
 
 const dirs: Array<string> = [];
 
@@ -88,35 +89,47 @@ const LAYOUTS: ReadonlyArray<readonly [string, number, (repo: string) => void]> 
 describe.each(["sha1", "sha256"] as const)("git's own index files (%s)", (format) => {
   const hashBytes = format === "sha1" ? 20 : 32;
 
-  test.each(LAYOUTS)("%s", (_, expected, prepare) => {
-    const repo = makeRepo(format);
-    prepare(repo);
-    expect(version(repo)).toBe(expected);
-    expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(true);
-
-    // Sorted last, so every entry before it has to be stepped over exactly.
-    addGitlink(repo, "zz/vendor");
-    expect(version(repo)).toBe(expected);
-    expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(false);
-  });
-
-  test("a gitlink sorted first and one between long names are found", () => {
-    for (const path of ["a-first", `linkedDevices/${"deeper/".repeat(30)}aa`]) {
+  test.each(LAYOUTS)(
+    "%s",
+    (_, expected, prepare) => {
       const repo = makeRepo(format);
-      git(repo, "update-index", "--index-version", "4");
-      addGitlink(repo, path);
+      prepare(repo);
+      expect(version(repo)).toBe(expected);
+      expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(true);
+
+      // Sorted last, so every entry before it has to be stepped over exactly.
+      addGitlink(repo, "zz/vendor");
+      expect(version(repo)).toBe(expected);
       expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(false);
-    }
-  });
+    },
+    HEAVY_GIT_MS
+  );
 
-  test("a split index may hold one: its entries, a gitlink too, are in the shared file", () => {
-    const repo = makeRepo(format);
-    addGitlink(repo, "zz/vendor");
-    git(repo, "config", "core.splitIndex", "true");
-    git(repo, "update-index", "--split-index");
+  test(
+    "a gitlink sorted first and one between long names are found",
+    () => {
+      for (const path of ["a-first", `linkedDevices/${"deeper/".repeat(30)}aa`]) {
+        const repo = makeRepo(format);
+        git(repo, "update-index", "--index-version", "4");
+        addGitlink(repo, path);
+        expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(false);
+      }
+    },
+    HEAVY_GIT_MS
+  );
 
-    // No entry of its own to read a mode from: only the `link` extension says there are more.
-    expect(indexOf(repo).readUInt32BE(8)).toBe(0);
-    expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(false);
-  });
+  test(
+    "a split index may hold one: its entries, a gitlink too, are in the shared file",
+    () => {
+      const repo = makeRepo(format);
+      addGitlink(repo, "zz/vendor");
+      git(repo, "config", "core.splitIndex", "true");
+      git(repo, "update-index", "--split-index");
+
+      // No entry of its own to read a mode from: only the `link` extension says there are more.
+      expect(indexOf(repo).readUInt32BE(8)).toBe(0);
+      expect(holdsNoGitlinks(indexOf(repo), hashBytes)).toBe(false);
+    },
+    HEAVY_GIT_MS
+  );
 });

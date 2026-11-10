@@ -11,6 +11,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { gitExecutable } from "./executable.ts";
 import { snapshotWorkingTree } from "./snapshot.ts";
+import { HEAVY_GIT_MS } from "./testing.ts";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
@@ -253,35 +254,45 @@ test.each([
   ["version 2", (): void => {}],
   ["version 4", (repo: string): void => void git(repo, "update-index", "--index-version", "4")],
   ["a split index", splitIndex],
-] as const)("a submodule keeps its recorded commit: %s", async (_, prepare) => {
-  const { repo, recorded } = withMovedGitlink(prepare);
-  const listings = countGits("ls-files");
-  writeFileSync(join(repo, "new.txt"), "n\n");
-  const first = await snapshotWorkingTree(repo);
-  const second = await snapshotWorkingTree(repo);
+] as const)(
+  "a submodule keeps its recorded commit: %s",
+  async (_, prepare) => {
+    const { repo, recorded } = withMovedGitlink(prepare);
+    const listings = countGits("ls-files");
+    writeFileSync(join(repo, "new.txt"), "n\n");
+    const first = await snapshotWorkingTree(repo);
+    const second = await snapshotWorkingTree(repo);
 
-  // `add -A` would stage the submodule's new HEAD (and run git inside it) unless it is excluded.
-  expect(gitlinkOf(repo, first!.tree)).toBe(recorded);
-  expect(gitlinkOf(repo, second!.tree)).toBe(recorded);
-  expect(filesOf(repo, second!.tree)).toContain("new.txt");
-  expect(listings()).toBe(2);
-});
+    // `add -A` would stage the submodule's new HEAD (and run git inside it) unless it is excluded.
+    expect(gitlinkOf(repo, first!.tree)).toBe(recorded);
+    expect(gitlinkOf(repo, second!.tree)).toBe(recorded);
+    expect(filesOf(repo, second!.tree)).toContain("new.txt");
+    expect(listings()).toBe(2);
+  },
+  HEAVY_GIT_MS
+);
 
-test("a tree gc pruned from under its own index is written again, not handed out", async () => {
-  const repo = makeRepo({ "a.txt": "a\n" });
-  const past = pastSecond();
-  writeFileSync(join(repo, "b.txt"), "b\n");
+test(
+  "a tree gc pruned from under its own index is written again, not handed out",
+  async () => {
+    const repo = makeRepo({ "a.txt": "a\n" });
+    const past = pastSecond();
+    writeFileSync(join(repo, "b.txt"), "b\n");
 
-  // Older than the index, so the next `add -A` trusts their stat and leaves the index alone.
-  for (const name of ["a.txt", "b.txt"]) utimesSync(join(repo, name), past, past);
-  const first = await snapshotWorkingTree(repo);
-  git(repo, "gc", "-q", "--prune=now");
-  expect(Bun.spawnSync(["git", "cat-file", "-e", first!.tree], { cwd: repo }).exitCode).not.toBe(0);
+    // Older than the index, so the next `add -A` trusts their stat and leaves the index alone.
+    for (const name of ["a.txt", "b.txt"]) utimesSync(join(repo, name), past, past);
+    const first = await snapshotWorkingTree(repo);
+    git(repo, "gc", "-q", "--prune=now");
+    expect(Bun.spawnSync(["git", "cat-file", "-e", first!.tree], { cwd: repo }).exitCode).not.toBe(
+      0
+    );
 
-  const second = await snapshotWorkingTree(repo);
-  expect(second!.tree).toBe(first!.tree);
-  expect(git(repo, "show", `${second!.tree}:b.txt`)).toBe("b");
-});
+    const second = await snapshotWorkingTree(repo);
+    expect(second!.tree).toBe(first!.tree);
+    expect(git(repo, "show", `${second!.tree}:b.txt`)).toBe("b");
+  },
+  HEAVY_GIT_MS
+);
 
 test("a snapshot of an edited working tree starts no git to check its tree", async () => {
   const repo = makeRepo({ "a.txt": "a\n" });
