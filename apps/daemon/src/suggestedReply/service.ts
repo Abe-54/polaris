@@ -126,6 +126,8 @@ const make = (options: SuggestedRepliesOptions) =>
       });
 
       backend ??= yield* defaultBackend();
+      const run = backend;
+      const harness = choice.harness;
 
       const job = {
         instructions,
@@ -138,7 +140,7 @@ const make = (options: SuggestedRepliesOptions) =>
 
       // A private empty directory (0700): nothing in the cwd for either Harness to load.
       const answer = yield* Effect.scoped(
-        Effect.flatMap(scratch, (dir) => backend(choice.harness, job, dir))
+        Effect.flatMap(scratch, (dir) => run(harness, job, dir))
       ).pipe(
         Effect.timeoutOrElse({
           duration: timeout,
