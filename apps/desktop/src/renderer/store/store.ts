@@ -158,7 +158,54 @@ export const toCached = (hostKey: string, model: HostModel): CachedHost | null =
 
 export type AppStore = StoreApi<AppState>;
 
-export const CACHE_WRITE_DELAY_MS = 2000;
+/** How long a changed Host waits before its put; leaving the window or quitting puts it sooner. */
+export const CACHE_WRITE_DELAY_MS = 30_000;
+
+export interface CacheWrites {
+  /** A Host's model changed: put it within the delay, unless one is already waiting. */
+  readonly changed: (hostKey: string) => void;
+  /** Puts every waiting Host now; resolves once main has them. */
+  readonly flush: () => Promise<void>;
+}
+
+/** At most one put per Host per delay, each with that Host's model at the time it is sent. */
+export const cacheWrites = ({
+  model,
+  put,
+  delayMs = CACHE_WRITE_DELAY_MS,
+}: {
+  readonly model: (hostKey: string) => HostModel;
+  readonly put: (host: CachedHost) => Promise<void>;
+  readonly delayMs?: number;
+}): CacheWrites => {
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const sending = new Set<Promise<void>>();
+
+  const write = (hostKey: string) => {
+    clearTimeout(timers.get(hostKey));
+    timers.delete(hostKey);
+    const host = toCached(hostKey, model(hostKey));
+
+    if (host === null) return;
+    const sent = put(host).finally(() => sending.delete(sent));
+
+    sending.add(sent);
+  };
+
+  return {
+    changed: (hostKey) => {
+      if (!timers.has(hostKey))
+        timers.set(
+          hostKey,
+          setTimeout(() => write(hostKey), delayMs)
+        );
+    },
+    flush: async () => {
+      for (const hostKey of timers.keys()) write(hostKey);
+      await Promise.allSettled(sending);
+    },
+  };
+};
 
 export interface Connection {
   readonly store: AppStore;
@@ -178,7 +225,13 @@ export const connect = (api: PolarisApi): Connection => {
 
   const hostFeeds = new Set<string>();
   const sessionFeeds = new Map<string, { refs: number; close: () => void }>();
-  const cacheTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const cache = cacheWrites({
+    model: (hostKey) => store.getState().hostModels[hostKey] ?? emptyHostModel,
+    put: async (host) => {
+      await api.request("cache.put", { host });
+    },
+  });
 
   void api.request("cache.get", {}).then((result) => {
     if (!result.ok) return;
@@ -223,18 +276,13 @@ export const connect = (api: PolarisApi): Connection => {
   );
 
   store.subscribe((state, previous) => {
-    for (const [hostKey, model] of Object.entries(state.hostModels)) {
-      if (model === previous.hostModels[hostKey] || cacheTimers.has(hostKey)) continue;
-      cacheTimers.set(
-        hostKey,
-        setTimeout(() => {
-          cacheTimers.delete(hostKey);
-          const host = toCached(hostKey, store.getState().hostModels[hostKey] ?? emptyHostModel);
+    for (const [hostKey, model] of Object.entries(state.hostModels))
+      if (model !== previous.hostModels[hostKey]) cache.changed(hostKey);
+  });
 
-          if (host !== null) void api.request("cache.put", { host });
-        }, CACHE_WRITE_DELAY_MS)
-      );
-    }
+  api.onAppEvent((event) => {
+    if (event.kind !== "cache-flush") return;
+    void cache.flush().then(() => api.request("cache.flushed", { id: event.id }));
   });
 
   const openSession = (hostKey: string, sessionId: SessionId) => {
