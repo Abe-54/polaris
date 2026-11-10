@@ -1,7 +1,8 @@
 /**
  * The shell's `NoSession` slot. A Workspace with no Agent Sessions is a stage
  * (scene, clearing, setup card: start a session, open a terminal); one whose
- * sessions just aren't selected is a pane: which sessions exist, K to jump.
+ * sessions just aren't selected is a pane: which sessions exist, K to jump. Either holds
+ * this Mac's computer use first-run card (Paper CU3) until it's skipped or done.
  */
 import type { Workspace, WorkspaceId } from "@polaris/protocol";
 import {
@@ -21,6 +22,7 @@ import { toggleTerminal } from "../../terminal/index.ts";
 import { useReadyLine } from "../hooks.ts";
 import { captionPath, noSelectionFact, stageKicker } from "../model.ts";
 import { Stage } from "./Stage.tsx";
+import { LocalMacOnboarding } from "../../computer-use/index.ts";
 import { shortcutLabel } from "../../../../shared/chord.ts";
 import { TERMINAL_TOGGLE, commandShortcut } from "../../../../shared/keymap.ts";
 
@@ -70,6 +72,9 @@ const EmptyWorkspace = ({ hostKey, workspaceId, host, workspace }: EmptyWorkspac
           }
         />
       </SetupCard>
+      <div className="pt-6">
+        <LocalMacOnboarding host={host} />
+      </div>
     </Stage>
   );
 };
@@ -95,7 +100,11 @@ export const WorkspaceStage = ({ hostKey, workspaceId }: WorkspaceStageProps) =>
   }
 
   return (
-    <div className="grid flex-1 place-items-center" data-testid="no-session">
+    <div
+      className="flex flex-1 flex-col items-center justify-center gap-8 overflow-y-auto p-4"
+      data-testid="no-session"
+    >
+      <LocalMacOnboarding host={host} />
       <EmptyState
         icon={<PixelSparkleIcon size={24} className="text-text-strong" />}
         title="No agent session open"

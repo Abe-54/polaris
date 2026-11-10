@@ -140,6 +140,9 @@ const tracesPreview = location.hash.startsWith("#traces/");
 // `#requests/<scene>`: Requests on fixtures (features/requests/preview).
 const requestsPreview = location.hash.startsWith("#requests/");
 
+// `#computer-use/<scene>`: computer use's cards on fixtures (features/computer-use/preview).
+const computerUsePreview = location.hash.startsWith("#computer-use/");
+
 // `#settings/<scene>`: Settings on worst-case fixtures (features/settings/preview).
 const settingsPreview = location.hash.startsWith("#settings/");
 
@@ -282,6 +285,10 @@ if (root !== null && preview) {
       location.hash,
       settingsStore.getState().appearance
     );
+  });
+} else if (root !== null && computerUsePreview) {
+  void import("./features/computer-use/preview/Preview.tsx").then((m) => {
+    setPreviewDensity = m.mountComputerUsePreview(root, location.hash);
   });
 } else if (root !== null && tabCompletionPreview) {
   void import("./features/settings/editor/preview/Preview.tsx").then((m) => {
