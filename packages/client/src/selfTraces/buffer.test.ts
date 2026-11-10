@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { SELF_TRACE_BATCH_SPANS } from "@polaris/protocol";
-import { SELF_TRACE_BUFFER_AGE_MS, SELF_TRACE_BUFFER_BYTES, SelfTraceBuffer } from "./buffer.ts";
+import {
+  SELF_TRACE_BUFFER_AGE_MS,
+  SELF_TRACE_BUFFER_BYTES,
+  SelfTraceBuffer,
+  spanBytes,
+} from "./buffer.ts";
 import { testSpan } from "./selfTraces.testing.ts";
 
 const names = (buffer: SelfTraceBuffer, now: number) =>
@@ -60,8 +65,8 @@ describe("SelfTraceBuffer", () => {
 
     if (inFlight !== null) buffer.ack(inFlight);
 
-    expect(buffer.bytes).toBeLessThanOrEqual(4096);
-    expect(buffer.bytes).toBeGreaterThan(0);
-    expect(names(buffer, 0)).not.toContain("span 1");
+    const held = buffer.next(0)?.spans ?? [];
+    expect(held.map((span) => span.name)).toEqual(["span 5", "span 6"]);
+    expect(buffer.bytes).toBe(held.reduce((sum, span) => sum + spanBytes(span), 0));
   });
 });

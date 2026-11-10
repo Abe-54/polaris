@@ -92,6 +92,7 @@ test("Review's queue lists workers' Claims, and no worker as a plain session", (
     state: "idle",
     turnCount: 3,
     acceptedThroughIndex: null,
+    userTurns: null,
     updatedAt: "2026-10-01T00:00:00.000Z",
     workspaceName: "polaris",
   }));

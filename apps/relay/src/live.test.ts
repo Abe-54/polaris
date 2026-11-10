@@ -9,6 +9,7 @@ import {
 } from "@polaris/protocol/relay";
 import { signLiveTicket, signPushTicket } from "@polaris/protocol/relay/party";
 import { Schema } from "effect";
+import type { RelayConfig } from "./config.ts";
 import { LiveActivities, type LivePut, mergeSlots } from "./live.ts";
 import { TestParty } from "./testing/party.ts";
 import { type Identified, identify, startTestRelay, type TestRelay } from "./testing/relay.ts";
@@ -47,6 +48,7 @@ const activities = (outcome: WakeOutcome = "sent", maxPerHost = 4) => {
     maxActivities: 10,
     maxPerHost,
     intervalMs: 60,
+    hostGoneMs: 40,
   });
 
   return { live, sent, gone, slices: () => sent.map((r) => r.live.state.slices) };
@@ -111,6 +113,23 @@ describe("dropping", () => {
     live.stop();
   });
 
+  test("a host whose socket stays gone leaves its activities; one that comes back keeps its slice", async () => {
+    const { live, slices } = activities();
+
+    live.put(put(1, "a1", { active: true }));
+    live.put(put(2, "b1", { active: true }));
+    live.hostGone(address(1));
+    live.hostGone(address(2));
+    live.hostBack(address(2));
+    await until(() => slices().length === 2);
+
+    expect(slices()).toEqual([["a1"], ["b1"]]);
+    live.hostGone(address(2));
+    await until(() => live.size === 0);
+    expect(live.size).toBe(0);
+    live.stop();
+  });
+
   test("an unregistered token ends the activity and tells every host in it", async () => {
     const { live, gone } = activities("unregistered");
 
@@ -151,6 +170,8 @@ const SECRET = "live-test-secret-0123456789abcdef0123";
 
 const SLICE = "c2VhbGVkLXNsaWNlLXRoZS1yZWxheS1jYW5ub3QtcmVhZA";
 
+const OTHER_SLICE = "YW5vdGhlci1ob3N0cy1zZWFsZWQtc2xpY2U";
+
 const decodeLive = Schema.decodeUnknownSync(Schema.fromJsonString(LivePushRequest));
 
 describe("through the relay", () => {
@@ -163,7 +184,7 @@ describe("through the relay", () => {
     await relay.stop();
   });
 
-  const withService = (outcome: WakeOutcome) => {
+  const withService = (outcome: WakeOutcome, config: Partial<RelayConfig> = {}) => {
     const received: Array<{ body: LivePushRequest; verified: boolean }> = [];
 
     service = Bun.serve({
@@ -193,12 +214,18 @@ describe("through the relay", () => {
 
     relay = startTestRelay({
       push: { url: `http://127.0.0.1:${service.port}/api/push`, secret: SECRET },
+      ...config,
     });
 
     return received;
   };
 
-  const frame = (device: Identified, host: TestParty, ticket = signLiveTicket) =>
+  const frame = (
+    device: Identified,
+    host: TestParty,
+    ticket = signLiveTicket,
+    more: { readonly slice?: string; readonly alert?: boolean } = {}
+  ) =>
     encodeControl({
       t: "live",
       peer: device.address,
@@ -208,6 +235,7 @@ describe("through the relay", () => {
       slice: SLICE,
       active: true,
       alert: false,
+      ...more,
     });
 
   test("a host's slice reaches the push service as a signed liveactivity request, and the logs nothing", async () => {
@@ -239,6 +267,25 @@ describe("through the relay", () => {
     const logged = JSON.stringify(relay.events);
 
     for (const secret of [TOKEN, SLICE, ...device.secrets]) expect(logged).not.toContain(secret);
+  });
+
+  test("a host that disconnects leaves the activity after the grace; the next update goes without it", async () => {
+    const received = withService("sent", { liveHostGoneMs: 0 });
+    const device = await identify();
+    const gone = await TestParty.connect(relay.url, "host", { peers: [device.address] });
+    const stays = await TestParty.connect(relay.url, "host", { peers: [device.address] });
+
+    gone.sendText(frame(device, gone));
+    await until(() => received.length > 0);
+    await gone.close();
+    // The relay logs the closed connection after it starts the host's (here 0 ms) grace.
+    await until(() => relay.events.some((e) => e.event === "relay.connection"));
+    await Bun.sleep(10);
+    stays.sendText(frame(device, stays, signLiveTicket, { slice: OTHER_SLICE, alert: true }));
+    await until(() => received.length > 1);
+
+    expect(received.map(({ body }) => body.live.state.slices)).toEqual([[SLICE], [OTHER_SLICE]]);
+    await stays.close();
   });
 
   test("a push ticket isn't a live ticket: the host hears live-gone and nothing is sent", async () => {

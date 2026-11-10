@@ -21,13 +21,15 @@ import {
   SessionPlacement,
   SessionStreamItem,
   TurnItem,
+  VoiceError,
   WorkspaceId,
 } from "@polaris/protocol";
-import { Effect, Option, Schedule, Stream } from "effect";
+import { Effect, Option, Redacted, Schedule, Stream } from "effect";
 import { RESTART_NOTE } from "../reviewer/recovery.ts";
 import { RULES_AFTER_TURN } from "../reviewer/run.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { makeRepo, removeTempDir, tempDir } from "../git/testing.ts";
+import { TEST_USER_KEY } from "./userAccess.testing.ts";
 
 const dirs: Array<string> = [];
 
@@ -75,7 +77,7 @@ const startDaemon = async (home = tempDir("polaris-lazy-home-")) => {
   return { daemon, socket };
 };
 
-test("the first Usage, Reviewer and accept requests after start load and answer", async () => {
+test("the first Usage, Reviewer, accept and voice requests after start load and answer", async () => {
   const { daemon, socket } = await startDaemon();
 
   try {
@@ -88,7 +90,8 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
-            capabilities: ["usage", "review.reviewer-settings", "session.accept"],
+            ...TEST_USER_KEY,
+            capabilities: ["usage", "review.reviewer-settings", "session.accept", "voice"],
           });
 
           // The lazy Requests handlers answer, not the Unsupported fallbacks.
@@ -116,7 +119,13 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
             throughTurnId: null,
           }).pipe(Effect.flip);
 
-          return { usage, reviewer, accept, requests, capabilities: hello.capabilities };
+          // A malformed key is refused before the secrets store is read or written.
+          const voice = yield* client["voice.setKey"]({
+            provider: "deepgram",
+            key: Redacted.make("not a key"),
+          }).pipe(Effect.flip);
+
+          return { usage, reviewer, accept, voice, requests, capabilities: hello.capabilities };
         })
       )
     );
@@ -124,6 +133,8 @@ test("the first Usage, Reviewer and accept requests after start load and answer"
     expect(result.usage.buckets).toEqual([]);
     expect(result.reviewer.settings.onSessions).toBe(false);
     expect(result.accept._tag).toBe("NotFound");
+    expect(result.voice).toBeInstanceOf(VoiceError);
+    expect(result.voice).toMatchObject({ reason: "invalid-key" });
     expect(result.capabilities).toContain("requests");
     expect(result.requests).toBeInstanceOf(RequestsError);
     expect(result.requests).toMatchObject({ code: "E-INPUT" });
@@ -150,6 +161,7 @@ test("a Turn that changes files starts its Rules-only Risk Summary, loading the 
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
+            ...TEST_USER_KEY,
             capabilities: ["review.risk-summary", "review.latest-summary"],
           });
 
@@ -266,6 +278,7 @@ test("a restart that left a Risk Summary running fails it on start, before any R
             clientName: "lazy-test",
             clientVersion: "0",
             deviceLabel: "test",
+            ...TEST_USER_KEY,
             capabilities: ["review.risk-summary"],
           });
 
@@ -309,6 +322,7 @@ test.skipIf(process.platform === "win32")(
               clientName: "lazy-test",
               clientVersion: "0",
               deviceLabel: "test",
+              ...TEST_USER_KEY,
               capabilities: [],
             });
 

@@ -1,6 +1,6 @@
 /**
  * Runs what a long-press menu chose: navigation, a reply through the Host's connection, the
- * pasteboard, or a reconnect. A refused reply is an alert in the Host's own words.
+ * pasteboard, a reconnect, or the New agent session sheet. A refused reply is an alert in the Host's own words.
  */
 import { Command, SessionId } from "@polaris/protocol";
 import { Effect, Match } from "effect";
@@ -66,6 +66,8 @@ export const useMenuActions = (): ((action: MenuAction) => void) => {
             navigation.push({ screen: "constellation", hostId, constellationId }),
           copy: ({ text }) => void copyText(text),
           "retry-host": ({ hostId }) => followed(hostId)?.connection.retryNow(),
+          "new-session": ({ hostId }) =>
+            navigation.push({ screen: "newSession", workspaceId: null, hostId }),
           // Offered disabled; the native menu never hands it back.
           fork: () => undefined,
           reply: (sending) =>

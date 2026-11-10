@@ -1,4 +1,4 @@
-/** `visualize` (ENG-597, ADR 0089): every binding shows the user a Visualization in its session. */
+/** `visualize` (ENG-597, ADR 0101): every binding shows the user a Visualization in its session. */
 import { ConstellationFinding, type SessionId } from "@polaris/protocol";
 import {
   type VisualizationProblem,

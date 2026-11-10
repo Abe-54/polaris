@@ -15,6 +15,7 @@ import {
   Command,
   CommandId,
   DaemonRpcs,
+  DomainEvent,
   type HostStreamItem,
   RequestId,
   type RelayRouteStatus,
@@ -38,14 +39,17 @@ import { startServer } from "../transport/server.ts";
 import { PushHostEvents, PushNotifier } from "./notifier.ts";
 import {
   approvalRequested,
+  event,
   notified,
   SESSION_ID,
   snapshot,
   synchronized,
   turnEnded,
+  waitUntil,
 } from "./push.testing.ts";
 import { openPush, pushSuite } from "./seal.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const decodeApnsBody = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Struct({ aps: Schema.Unknown, p: Schema.String }))
@@ -158,11 +162,33 @@ const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", cap
 
 const key = (text: string) => Option.getOrThrow(fromBase64Url(text));
 
+const requestOf = async (privateKey: CryptoKey, hit: ApnsHit) =>
+  Option.getOrThrow(decodePushMessage(await openPush(privateKey, decodeApnsBody(hit.body).p)));
+
 test("a Needs You reaches an offline linked device sealed, and its answer comes back through the relay", async () => {
   const answers: Array<{ readonly command: Command; readonly actor: Actor }> = [];
   // Like the Engine's: live events reach only current subscribers.
   const events = Effect.runSync(PubSub.unbounded<HostStreamItem>());
   const feed = (item: HostStreamItem) => Effect.runSync(PubSub.publish(events, item));
+  // The notifier's subscriptions to the Host stream, opened and closed.
+  const follows = { opened: 0, closed: 0 };
+
+  const following = Effect.gen(function* () {
+    const subscription = yield* PubSub.subscribe(events);
+    follows.opened++;
+    yield* Effect.addFinalizer(() => Effect.sync(() => follows.closed++));
+
+    return Stream.concat(
+      Stream.make(snapshot(), synchronized()),
+      Stream.fromSubscription(subscription)
+    );
+  });
+
+  const followed = (opened: number, closed: number) =>
+    waitUntil(
+      () => (follows.opened === opened && follows.closed === closed ? true : undefined),
+      `the notifier to have followed ${opened} and stopped ${closed} times`
+    );
 
   const handlers = Layer.mergeAll(
     ServerRpcs.toLayerHandler("dispatch", ({ command }, { client }) =>
@@ -176,8 +202,9 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
       Layer.provide(
         // Like the Engine's: every subscription starts with a Snapshot and Synchronized.
         Layer.succeed(PushHostEvents)({
-          subscribe: () =>
-            Stream.concat(Stream.make(snapshot(), synchronized()), Stream.fromPubSub(events)),
+          subscribe: () => Stream.unwrap(following),
+          isDigestTurn: () => Effect.succeed(false),
+          attemptFailure: () => Effect.succeed(null),
         })
       )
     )
@@ -206,7 +233,7 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
           yield* socketTransport(server.socketPath)
         )).client;
 
-        yield* desktop.hello(hello);
+        yield* desktop.hello({ ...hello, ...TEST_USER_KEY });
         yield* desktop["relayRoute.enable"]({ url: relay.url });
         let status: RelayRouteStatus = yield* desktop["relayRoute.status"]();
 
@@ -272,7 +299,7 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
 
         yield* phoneSide.client["devices.registerPush"](registration);
         // The notifier subscribes once a device registers.
-        yield* Effect.sleep("200 millis");
+        yield* followed(1, 0);
         // Offline from here: the phone is asleep.
         phoneSide.socket.close();
         feed(approvalRequested("r1"));
@@ -337,10 +364,20 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
         again.socket.close();
 
         // ENG-495: while the Desktop App reports the user present the push waits; away sends it.
+        // A request withdrawn while held is never sent, so a push sent at once would show up.
         expect((yield* desktop["presence.report"]({ presence: "present" })).leaseMs).toBe(120_000);
         feed(approvalRequested("r-held"));
-        yield* Effect.sleep("500 millis");
-        expect(apnsHits).toHaveLength(1);
+        feed(approvalRequested("r-gone"));
+        feed(
+          event(
+            DomainEvent.cases.ApprovalWithdrawn.make({
+              sessionId: SESSION_ID,
+              requestId: RequestId.make("r-gone"),
+              withdrawnBy: "harness",
+              reason: "ended",
+            })
+          )
+        );
         yield* desktop["presence.report"]({ presence: "away" });
 
         const releasedHit = yield* Effect.promise(() =>
@@ -375,7 +412,6 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
         // With automatic notifications off on this device, only the agent's own notify arrives.
         const quiet = yield* openDevice;
         yield* quiet.client["devices.registerPush"]({ ...registration, automatic: false });
-        yield* Effect.sleep("200 millis");
         quiet.socket.close();
         feed(notified("n-auto", true));
         feed(notified("n-agent", false));
@@ -393,41 +429,47 @@ test("a Needs You reaches an offline linked device sealed, and its answer comes 
           title: "Done",
           body: "All green",
         });
-        yield* Effect.sleep("500 millis");
-        expect(apnsHits).toHaveLength(4);
 
         const restored = yield* openDevice;
         yield* restored.client["devices.registerPush"](registration);
-        yield* Effect.sleep("200 millis");
         restored.socket.close();
 
         // APNs no longer knows the token: the Host drops it and sends nothing more.
         apnsStatus = 410;
         feed(approvalRequested("r2"));
-        yield* Effect.promise(() => waitFor(() => apnsHits[4], "the push APNs refuses"));
-        yield* Effect.promise(() =>
-          waitFor(
-            () => (relay.log().includes('"outcome":"unregistered"') ? true : undefined),
-            "the relay to answer unregistered"
-          )
+
+        const refused = yield* Effect.promise(() =>
+          waitFor(() => apnsHits[4], "the push APNs refuses")
         );
-        // The woken answer is on its way to the Daemon.
-        yield* Effect.sleep("300 millis");
+
+        // The next push after the agent's is r2, so the automatic notify was never sent.
+        expect(yield* Effect.promise(() => requestOf(keys.privateKey, refused))).toMatchObject({
+          kind: "needs-you",
+          requestId: "r2",
+        });
+        // With no registration left the notifier stops following the Host stream.
+        yield* followed(1, 1);
         feed(approvalRequested("r3"));
-        yield* Effect.sleep("1500 millis");
-        expect(apnsHits).toHaveLength(5);
 
         // Registered again, then unlinked: unlinking drops the registration too.
         apnsStatus = 200;
         const back = yield* openDevice;
         yield* back.client["devices.registerPush"](registration);
-        yield* Effect.sleep("200 millis");
+        yield* followed(2, 1);
         back.socket.close();
         feed(approvalRequested("r4"));
-        yield* Effect.promise(() => waitFor(() => apnsHits[5], "the push after registering again"));
+
+        const again4 = yield* Effect.promise(() =>
+          waitFor(() => apnsHits[5], "the push after registering again")
+        );
+
+        // r3 came while nothing was registered, so it never follows.
+        expect(yield* Effect.promise(() => requestOf(keys.privateKey, again4))).toMatchObject({
+          requestId: "r4",
+        });
         yield* desktop["devices.unlink"]({ id: device.id });
+        yield* followed(2, 2);
         feed(approvalRequested("r5"));
-        yield* Effect.sleep("1500 millis");
         expect(apnsHits).toHaveLength(6);
       })
     )

@@ -142,6 +142,49 @@ describe("an agent session's menu", () => {
   });
 });
 
+describe("a stopped turn's menu (ENG-494)", () => {
+  const sent = (menu: Menu) =>
+    menu
+      .flat()
+      .flatMap((item) =>
+        item.action.kind === "send" && ["retry", "continue"].includes(item.id)
+          ? [[item.title, item.disabled, item.subtitle, commandOf(item.action)]]
+          : []
+      );
+
+  const sessionId = SessionId.make("s1");
+
+  test.each([
+    [
+      "a failed turn retries",
+      { id: "s1", state: "failed" as const },
+      null,
+      [["Retry", false, null, Command.cases.Retry.make({ sessionId })]],
+    ],
+    [
+      "an interrupted turn continues",
+      { id: "s1", state: "needs-you" as const },
+      null,
+      [["Continue", false, null, Command.cases.Continue.make({ sessionId })]],
+    ],
+    [
+      "a pending approval is answered, not continued",
+      { id: "s1", state: "needs-you" as const },
+      wantsBuild,
+      [],
+    ],
+    ["a working session offers neither", { id: "s1", state: "working" as const }, null, []],
+  ])("%s", (_, input, approval, expected) => {
+    expect(sent(sessionMenu(row(input, approval)))).toEqual(expected);
+  });
+
+  test("an offline host's retry is shown disabled, saying why", () => {
+    expect(sent(sessionMenu(row({ id: "s1", state: "failed" }, null, true)))).toEqual([
+      ["Retry", true, "Host offline", Command.cases.Retry.make({ sessionId })],
+    ]);
+  });
+});
+
 describe("a constellation's menu", () => {
   test("opens the constellation, reviews and copies its lead", () => {
     const menu = constellationMenu(constellationRow(session({ id: "lead", turnCount: 2 })));
@@ -171,9 +214,16 @@ describe("a constellation's menu", () => {
 });
 
 describe("a host's menu", () => {
-  test("offers Retry now only while the host isn't connected", () => {
-    expect(hostMenu({ hostId: "mac", state: "connected" })).toEqual([]);
-    expect(titles(hostMenu({ hostId: "mac", state: "offline" }))).toEqual([["Retry now"]]);
+  // ENG-494: the sheet opens with this Host preselected.
+  test("starts a new agent session on a connected host, and retries one that isn't", () => {
+    const connected = hostMenu({ hostId: "mac", name: "Mac Studio", state: "connected" });
+
+    expect(connected.flat().map(({ title, action }) => [title, action])).toEqual([
+      ["New agent session on Mac Studio…", { kind: "new-session", hostId: "mac" }],
+    ]);
+    expect(titles(hostMenu({ hostId: "mac", name: "Mac Studio", state: "offline" }))).toEqual([
+      ["Retry now"],
+    ]);
   });
 });
 
@@ -181,7 +231,10 @@ describe("every menu", () => {
   const menus: ReadonlyArray<Menu> = [
     sessionMenu(row({ id: "s1", state: "needs-you", turnCount: 2 }, wantsBuild)),
     constellationMenu(constellationRow(session({ id: "lead", turnCount: 2 }))),
-    hostMenu({ hostId: "mac", state: "reconnecting" }),
+    sessionMenu(row({ id: "s2", state: "failed" })),
+    sessionMenu(row({ id: "s3", state: "needs-you" })),
+    hostMenu({ hostId: "mac", name: "Mac Studio", state: "reconnecting" }),
+    hostMenu({ hostId: "mac", name: "Mac Studio", state: "connected" }),
   ];
 
   test("names each item once, so the native menu's choice runs the right one", () => {

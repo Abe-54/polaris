@@ -7,8 +7,9 @@ import { counted, shortHostName } from "../home/model/format.ts";
 import { buildHome, type HomeHost, type SessionRow } from "../home/model/home.ts";
 
 export interface FooterHost {
-  readonly hostId: string;
-  /** "mac-studio", "lucas-rpi reconnecting". */
+  /** A Host's id, or "connected" for the folded connected Hosts. */
+  readonly key: string;
+  /** "2 connected", "lucas-rpi reconnecting". */
   readonly label: string;
   readonly connection: ConnectionState;
 }
@@ -19,6 +20,7 @@ export interface Inbox {
   readonly count: number;
   /** The empty state's second line ("4 sessions working on 2 hosts"); null when nothing works. */
   readonly working: string | null;
+  /** Connected Hosts fold into one item; away Hosts are named, so their state never truncates. */
   readonly hosts: ReadonlyArray<FooterHost>;
   /** A request waits on a Host that is away: it can't be answered until the Host is back. */
   readonly away: boolean;
@@ -36,6 +38,26 @@ const workingLine = (home: ReturnType<typeof buildHome>, hostCount: number) =>
     ? null
     : `${counted(home.working, "session")} working on ${counted(hostCount, "host")}`;
 
+const footerOf = (hosts: ReadonlyArray<HomeHost>): ReadonlyArray<FooterHost> => {
+  const named = (host: HomeHost): FooterHost => ({
+    key: host.hostId,
+    label: `${shortHostName(host.name)}${stateWord[host.connection]}`,
+    connection: host.connection,
+  });
+
+  const connected = hosts.filter((host) => host.connection === "connected");
+  const away = hosts.flatMap((host) => (host.connection === "connected" ? [] : [named(host)]));
+
+  if (connected.length === 1 && away.length === 0) return connected.map(named);
+
+  const fold: ReadonlyArray<FooterHost> =
+    connected.length === 0
+      ? []
+      : [{ key: "connected", label: `${connected.length} connected`, connection: "connected" }];
+
+  return [...fold, ...away];
+};
+
 export const inboxOf = (hosts: ReadonlyArray<HomeHost>): Inbox => {
   const home = buildHome(hosts, null);
   const items = home.sections.needsYou;
@@ -45,11 +67,7 @@ export const inboxOf = (hosts: ReadonlyArray<HomeHost>): Inbox => {
     items,
     count: items.length,
     working: workingLine(home, Math.max(busyHosts.size, 1)),
-    hosts: hosts.map((host) => ({
-      hostId: host.hostId,
-      label: `${shortHostName(host.name)}${stateWord[host.connection]}`,
-      connection: host.connection,
-    })),
+    hosts: footerOf(hosts),
     away: items.some((row) => row.stale),
   };
 };

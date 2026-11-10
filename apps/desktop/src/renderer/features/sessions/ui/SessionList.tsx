@@ -1,6 +1,7 @@
 /**
  * The Workspace's session list in the sidebar (the shell's `SessionList` slot): Pinned, then
- * the sessions (Active or Newest, ENG-609), then Reviews (Paper 12); Leads nest their workers (C1).
+ * the sessions (Active or Newest, ENG-609), Reviews (Paper 12), then Archived (ENG-679); Leads nest
+ * their workers (C1).
  */
 import { SectionHeader } from "@polaris/ui";
 import { useMemo } from "react";
@@ -17,6 +18,7 @@ import {
 import { sectionsOf } from "../model/sections.ts";
 import { byTier, groupTierOf, tierOf } from "../model/tiers.ts";
 import { useConstellations } from "../source.ts";
+import { ArchivedGroup } from "./Archived.tsx";
 import { LeadGroup } from "./LeadGroup.tsx";
 import { ReviewsGroup, reviewsKey } from "./Reviews.tsx";
 import { SortMenu, TieredItems } from "./SessionSort.tsx";
@@ -31,6 +33,8 @@ export interface SessionListProps {
   readonly scope: string;
   /** Under an empty Sessions header: "None in polaris". */
   readonly empty: string;
+  /** Shows the Workspace's archived sessions at the foot (ENG-679). */
+  readonly workspaceId?: string;
 }
 
 /** Finds a worker's session on whichever Host runs it (`Attempt.hostId`). */
@@ -84,7 +88,15 @@ const Items = ({
     )
   );
 
-export const SessionList = ({ hostKey, model, entries, now, scope, empty }: SessionListProps) => {
+export const SessionList = ({
+  hostKey,
+  model,
+  entries,
+  now,
+  scope,
+  empty,
+  workspaceId,
+}: SessionListProps) => {
   const views = useConstellations(hostKey);
   const lookup = useWorkerLookup();
   const setups = useSetupLookup();
@@ -123,6 +135,15 @@ export const SessionList = ({ hostKey, model, entries, now, scope, empty }: Sess
       <ReviewsGroup foldKey={reviewsKey(scope)} entries={reviews.map(entryOf)}>
         <Items hostKey={hostKey} model={model} items={reviews} now={now} />
       </ReviewsGroup>
+      {workspaceId === undefined ? null : (
+        <ArchivedGroup
+          hostKey={hostKey}
+          model={model}
+          workspaceId={workspaceId}
+          scope={scope}
+          now={now}
+        />
+      )}
     </>
   );
 };

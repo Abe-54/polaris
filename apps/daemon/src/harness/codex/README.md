@@ -20,7 +20,7 @@ Implements `HarnessDriver` (`../HarnessDriver.ts`) for Codex by driving the user
 
 ### Shared server and live co-attach
 
-The Daemon owns one app-server per Host on `~/.polaris/codex.sock` (keep it short: Unix socket paths are capped near 104 bytes; app-server itself symlinks long paths, but other clients may not). Each `open` makes its own connection, sends `initialize`/`initialized`, then `thread/start` (fresh) or `thread/resume` with `excludeTurns: true` (`resumeCursor`). The thread id is the cursor (`CursorAssigned`). Closing the session's scope sends `thread/unsubscribe` and closes the connection; the app-server unloads the thread after its own 30-minute idle grace.
+The Daemon owns one app-server per Host on `~/.polaris/codex.sock` (keep it short: Unix socket paths are capped near 104 bytes; app-server itself symlinks long paths, but other clients may not). Each `open` makes its own connection, sends `initialize`/`initialized`, then `thread/start` (fresh) or `thread/resume` with `excludeTurns: true` (`resumeCursor`). The thread id is the cursor (`CursorAssigned`). Closing the session's scope sends `thread/unsubscribe` and closes the connection; the app-server unloads the thread after its own 30-minute idle grace. Until then the thread's stdio MCP servers keep running, the Browser's `agent-browser mcp` among them (ENG-630, below).
 
 `terminalCommand` is `codex resume <threadId> --remote unix://<socket>`. The TUI attaches to the same server, and `thread/resume` on a loaded thread rejoins it, so Polaris and the TUI see the same live events and either can answer an approval. Polaris then gets `serverRequest/resolved` and emits `ApprovalWithdrawn`. Turns the TUI starts reach Polaris as notifications for an unknown Codex turn id. The driver mints a `TurnId` for them and emits `TurnStarted` when the Turn's `userMessage` item arrives, with its text as the `prompt` (app-server sends `turn/started`, then the user message). If anything else in the Turn comes first (Polaris rejoined a thread mid-Turn), `TurnStarted` goes out then, without a prompt. Turns Polaris starts carry the prompt it sent.
 
@@ -78,7 +78,7 @@ A Codex agent spawned from the Polaris thread runs in a thread of its own on the
 | `collabAgentToolCall` `spawnAgent` (v1) | one `SubagentStarted` per `receiverThreadIds` entry (title: the prompt's first line, `model`) |
 | `collabAgentToolCall` `agentsStates` | `SubagentEnded` for each agent `completed` / `errored` (→ failed) / `interrupted` / `shutdown` / `notFound` |
 
-Items, deltas and progress on a Subagent's thread are its own (`subagentId` = its thread), under the Polaris Turn that spawned it. Its own Codex turns map to that Turn too, and its `turn/completed` ends nothing. A server request (approval, question) carries its thread: one from a Subagent's thread goes to the Turn that spawned it, or to the Turn in flight when the parent hasn't reported the spawn yet (codex-cli 0.159 asks before it does). It never starts a Polaris Turn: one did, and left two empty Turns stuck working after a Reviewer's real one (`subagentTurns.test.ts`). The collab call itself stays a `ToolCall` of the Turn. `subagents.test.ts` replays `fixtures/subagent-turn.jsonl`, a real Turn that spawned one agent (scrubbed).
+Items, deltas and progress on a Subagent's thread are its own (`subagentId` = its thread), under the Polaris Turn that spawned it. Its own Codex turns map to that Turn too, and its `turn/completed` ends nothing. A server request (approval, question) carries its thread: one from a Subagent's thread goes to the Turn that spawned it, or to the Turn in flight when the parent hasn't reported the spawn yet (codex-cli 0.159 asks before it does). Either way the request carries the Subagent's `subagentId` (its thread, ENG-547). It never starts a Polaris Turn: one did, and left two empty Turns stuck working after a Reviewer's real one (`subagentTurns.test.ts`). The collab call itself stays a `ToolCall` of the Turn. `subagents.test.ts` replays `fixtures/subagent-turn.jsonl`, a real Turn that spawned one agent (scrubbed).
 
 ### Approvals
 
@@ -117,7 +117,7 @@ The table follows T3 Code's runtime modes. These values go on `thread/start`/`th
 
 ### Other commands
 
-- `sendTurn`: `turn/start` with a text input, plus a `localImage` input (staged Host path) per image attachment. Other attachments are listed by path at the end of the prompt. Fails if a Turn is already in flight.
+- `sendTurn`: `turn/start` with a text input, plus a `localImage` input (staged Host path) per image attachment. Markdown and plain-text attachments up to 8 KB go inline in the prompt (`../inlineText.ts`); other attachments are listed by path at the end of it. Fails if a Turn is already in flight.
 - `steer`: `turn/steer` with `expectedTurnId` set to the in-flight turn. Fails if none is in flight. Codex's answer records it as a `UserMessage` item; a Turn's later `userMessage` items (a steer from a co-attached TUI) do too, and `steers.ts` keeps one item when both report the same steer. The Turn's first user message is its prompt.
 - `interrupt`: `turn/interrupt`, or nothing when idle. The Turn then ends `interrupted`, and open approvals come back as `ApprovalWithdrawn`.
 
@@ -165,6 +165,7 @@ It runs `codex app-server generate-ts` (stable surface, no `--experimental`) int
 ## Known gaps / TODO
 
 - **MCP form elicitations** accept with empty content; there's no UI for `requestedSchema` yet. An elicitation with no Turn mints a Turn that never ends.
+- **A closed session's MCP servers outlive it by 30 minutes** (ENG-630). app-server has no request that unloads one thread: codex-cli 0.164.0's protocol, experimental methods included, has only `thread/unsubscribe`, plus `thread/archive` and `thread/delete`, which change the user's Codex history. An unsubscribed thread unloads 1800 s later (`thread/closed`), and its `agent-browser mcp` child exits then; until then that child sits idle at ~4 MiB RSS (11 MiB at start), blocked on stdin. Its session config is deleted on close, so a tool call from it fails with "config file not found". The config key `thread_unload_delay_secs` shortens the wait: set to 10 in `thread/start`'s `config`, the thread unloaded and the child exited ~10 s after unsubscribe. Polaris doesn't set it yet (a follow-up on ENG-630); measurements in `packages/bench/measurements/eng-630/`.
 - Nothing restarts a server that dies between `open`s until the next `open`.
 - An outdated server with a thread loaded is kept until a later `open` finds it idle; nothing checks again on a timer.
 - The `systemd-run --user --scope` path is covered by an argv unit test only; it has not been run on a systemd Host.

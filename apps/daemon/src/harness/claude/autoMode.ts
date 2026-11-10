@@ -4,6 +4,7 @@ import { HarnessError, type OpenOptions } from "../HarnessDriver.ts";
 import type { QueryFn } from "./ClaudeDriver.ts";
 import { Inbox } from "./inbox.ts";
 import { claudeExecutable } from "./executable.ts";
+import { claudeNotInstalled } from "./notInstalled.ts";
 
 const failure = (message: string, cause?: unknown) =>
   new HarnessError(
@@ -45,8 +46,7 @@ export const validateClaudePermissionMode = Effect.fn("Claude.validatePermission
   if (requested.permissionMode !== "auto") return;
   const path = driver.claudePath();
 
-  if (path === null)
-    return yield* failure("Claude Code is not installed: `claude` was not found on PATH");
+  if (path === null) return yield* failure(claudeNotInstalled());
 
   const options: Options = {
     cwd: requested.cwd,

@@ -107,4 +107,20 @@ describe("a composer's attachments", () => {
       ["c.txt", "staging"],
     ]);
   });
+
+  test("a steer that didn't land puts its staged files back as chips, never twice", async () => {
+    const host = deferredStage();
+    const store = attachmentStore(host.stage);
+
+    store.add([picked("notes.txt")]);
+    host.resolve("notes.txt");
+    await settled();
+    store.restore([attachment("notes.txt"), attachment("shot.jpg")]);
+
+    expect(stagedIds(store.chips())).toEqual([
+      AttachmentId.make("att-notes.txt"),
+      AttachmentId.make("att-shot.jpg"),
+    ]);
+    expect(attachCaption(store.chips())).toBeNull();
+  });
 });

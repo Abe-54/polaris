@@ -104,6 +104,8 @@ export interface AttachmentStore {
   /** Shows each pick as a chip at once and stages it. */
   readonly add: (picks: ReadonlyArray<Picked>) => void;
   readonly remove: (key: string) => void;
+  /** Puts files already staged on the Host back as chips: a steer that didn't land. */
+  readonly restore: (attachments: ReadonlyArray<Attachment>) => void;
   /** The staged chips now; chips added or replaced after this stay when it's done. */
   readonly submission: () => Submission;
   /** After Send or Start: the composer starts empty again. */
@@ -161,6 +163,23 @@ export const attachmentStore = (
     },
     add,
     remove: (key) => set(chips.filter((chip) => chip.key !== key)),
+    restore: (attachments) => {
+      const held = new Set(stagedIds(chips));
+
+      const back = attachments
+        .filter((attachment) => !held.has(attachment.id))
+        .map((attachment): Chip => ({
+          key: `${++next}`,
+          name: attachment.name,
+          size: attachment.size,
+          thumbnailUri: null,
+          status: "staged",
+          attachment,
+          failure: null,
+        }));
+
+      if (back.length > 0) set([...chips, ...back]);
+    },
     submission: () => {
       const sent = chips.filter((chip) => chip.attachment !== null);
       const keys = new Set(sent.map((chip) => chip.key));

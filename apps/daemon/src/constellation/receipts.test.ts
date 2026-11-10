@@ -51,13 +51,17 @@ const codex = (raw: Json) => toTurnItem(Schema.decodeUnknownSync(ThreadItem)(raw
 const opencode = (part: typeof ToolPart.Encoded) =>
   opencodeToolItem(Schema.decodeUnknownSync(ToolPart)(part), "/repo")!;
 
-const claude = (name: string, structured: ToolPayload) =>
+const claude = (
+  name: string,
+  structured: ToolPayload,
+  status: "completed" | "failed" = "completed"
+) =>
   claudeToolItem({
     id: "check",
     name,
     input: { command: "bun test" },
     cwd: "/repo",
-    status: "completed",
+    status,
     resultText: null,
     structured,
   });
@@ -162,7 +166,35 @@ describe("a Verified receipt", () => {
     expect(outcome(item)).toBe("accepted");
   });
 
-  test("refuses Claude's Bash, which reports no exit code", () => {
-    expect(outcome(claude("Bash", { stdout: "3 pass", stderr: "" }))).toBe("E-RECEIPT-UNKNOWN");
+  test("accepts Claude's Bash that succeeded, as exit 0", () => {
+    expect(outcome(claude("Bash", { stdout: "3 pass", stderr: "" }))).toBe("accepted");
+  });
+
+  test.each([
+    ["failed", "failed" as const, { stdout: "1 fail", stderr: "" }],
+    ["moved to the background", "completed" as const, { stdout: "", backgroundTaskId: "b1" }],
+    ["was interrupted", "completed" as const, { stdout: "1 pass", interrupted: true }],
+    [
+      "exited non-zero without an error",
+      "completed" as const,
+      { stdout: "", stderr: "", returnCodeInterpretation: "No matches found" },
+    ],
+    ["has no Bash result", "completed" as const, null],
+  ])("refuses Claude's Bash that %s, which carries no exit code", (_, status, structured) => {
+    expect(outcome(claude("Bash", structured, status))).toBe("E-RECEIPT-UNKNOWN");
+  });
+
+  test("refuses Claude's Bash started in the background", () => {
+    const item = claudeToolItem({
+      id: "check",
+      name: "Bash",
+      input: { command: "bun test", run_in_background: true },
+      cwd: "/repo",
+      status: "completed",
+      resultText: null,
+      structured: { stdout: "", stderr: "" },
+    });
+
+    expect(outcome(item)).toBe("E-RECEIPT-UNKNOWN");
   });
 });

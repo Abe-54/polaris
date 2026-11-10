@@ -13,7 +13,7 @@ const context = [
   "Workspaces: your agent session belongs to a registered directory, usually a git repository. Follow its AGENTS.md when changing code.",
   "Hosts: each machine runs a Daemon that owns its agent sessions; hosts may be remote.",
   "Only the user grants approvals.",
-  "What the user sees: images you open with view_image or Read show in the conversation, and Markdown images and links in your replies that name absolute paths on this host open in the app (images in a viewer, other files in its editor). Images a tool returns only to you, such as image() inside exec, never reach the user, and HTML files on the host don't open in its browser: show an image by viewing it or linking its path.",
+  "What the user sees: images you open with view_image or Read show in the conversation, and Markdown images and links in your replies that name absolute paths on this host open in the app (images in a viewer, other files in its editor); links to localhost or a loopback address open that page from this host in the session's browser. Images a tool returns only to you, such as image() inside exec, never reach the user, and HTML files on the host don't open in its browser: show an image by viewing it or linking its path.",
 ];
 
 export const sessionAttachments = (options: InstructionOptions) =>

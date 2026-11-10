@@ -1,14 +1,15 @@
 /**
  * Review's foot (Paper MX-N): Send back and Accept in one floating pill over a fade to the ground.
- * Accept keeps a ◆ count of open Criticals and goes through MX-T's confirmation (P3's accept);
+ * Accept keeps a ◆ count of open Criticals (at accessibility sizes it drops the turn number, so the
+ * count still fits) and goes through MX-T's confirmation (P3's accept);
  * Send back opens a one-line reply first, so the agent session gets the user's words as its next Turn.
  */
 import { mobileType } from "@polaris/ui/tokens";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { themedStyles, useTheme } from "../theme/index.ts";
-import { CONTROL_TEXT_SCALE } from "../theme/textScale.ts";
+import { ACCESSIBILITY_SCALE, CONTROL_TEXT_SCALE } from "../theme/textScale.ts";
 import { AcceptChip, canAccept } from "./accept/index.ts";
 import { acceptLabel } from "./copy.ts";
 import type { AcceptState } from "./model.ts";
@@ -84,6 +85,7 @@ export const ActionBar = (props: ActionBarProps) => {
   const { colours } = useTheme();
   const [replying, setReplying] = useState(false);
   const enabled = canAccept(props.accept);
+  const large = useWindowDimensions().fontScale >= ACCESSIBILITY_SCALE;
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(props.bottomInset, 12) }]}>
@@ -128,7 +130,7 @@ export const ActionBar = (props: ActionBarProps) => {
             numberOfLines={1}
             style={[styles.acceptText, enabled ? styles.acceptTextOn : styles.acceptTextOff]}
           >
-            {acceptLabel(props.accept, props.turnNumber)}
+            {acceptLabel(props.accept, props.turnNumber, !large)}
           </Text>
           {enabled ? <AcceptChip count={props.criticals} /> : null}
         </Pressable>

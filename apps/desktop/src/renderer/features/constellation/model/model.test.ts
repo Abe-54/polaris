@@ -8,11 +8,13 @@ import {
   TaskProjection,
   DomainEvent,
   EventEnvelope,
+  HarnessSelection,
   HostStreamItem,
   Sequence,
   NotificationItem,
   ConstellationNotification,
   SessionId,
+  Task,
   TaskId,
   TurnId,
   WorkerLiveness,
@@ -20,6 +22,7 @@ import {
 import {
   attempt,
   c1Record,
+  c1Tasks,
   constellationOf,
   handedUpAttempts,
   LEAD,
@@ -515,6 +518,21 @@ describe("rail", () => {
       expect(b1.line.glance.notDone).toBe(1);
       expect(b1.line.glance.questions).toBe(1);
     }
+  });
+
+  test.each([
+    ["priority", "codex · gpt-5.5 · fast mode"],
+    ["default", "codex · gpt-5.5"],
+  ] as const)("an unstarted Task suggested the %s tier reads it in its actor", (tier, actor) => {
+    const fast = new Task(
+      merged(task({ id: "Z1", title: "Security review" }), {
+        suggested: new HarnessSelection({ harness: "codex", model: "gpt-5.5", serviceTier: tier }),
+      })
+    );
+
+    const rows = buildRail(c1Record({ tasks: [...c1Tasks, fast] }), plainFacts()).rows;
+
+    expect(rowFor(rows, "Z1")?.actor).toBe(actor);
   });
 
   test("a gate waits on its inputs and lists receipts once accepted", () => {

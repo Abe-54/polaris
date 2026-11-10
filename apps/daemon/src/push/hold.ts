@@ -12,9 +12,11 @@ export const MAX_HELD = 200;
 
 export type Held = ReadonlyArray<Push>;
 
+const isNeed = ({ need }: Push) => need.requestId !== null || need.continues === true;
+
 /** Holds the Needs You among `pushes`; the rest the Desktop App showed, so they're dropped. */
 export const hold = (held: Held, pushes: ReadonlyArray<Push>): Held => {
-  const needsYou = pushes.filter(({ need }) => need.requestId !== null);
+  const needsYou = pushes.filter(isNeed);
 
   return needsYou.length === 0 ? held : [...held, ...needsYou].slice(-MAX_HELD);
 };
@@ -27,6 +29,11 @@ const settleEvent = (held: Held, event: DomainEvent): Held =>
     Match.tags({
       ApprovalResolved: ({ requestId }) => withoutRequest(held, requestId),
       ApprovalWithdrawn: ({ requestId }) => withoutRequest(held, requestId),
+      // A session waiting on Continue is handled once it leaves Needs You (a Turn, Archive).
+      SessionStateChanged: ({ sessionId, state }) =>
+        state === "needs-you"
+          ? held
+          : held.filter(({ need }) => need.continues !== true || need.sessionId !== sessionId),
     }),
     Match.orElse(() => held)
   );

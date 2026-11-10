@@ -1,6 +1,6 @@
 /**
  * The Mobile App's shell: the Hosts (one HostConnection each), the navigation stack, the tabs
- * (Sessions, Review, Settings) with New, and the screen on top, in the chosen theme.
+ * (Sessions, Review, Settings with Hosts) and New, and the screen on top, in the chosen theme.
  */
 import { Match } from "effect";
 import { StatusBar } from "expo-status-bar";
@@ -67,7 +67,7 @@ const Tabs = () => {
   const readyCount = useReadyToReview().rows.length;
   const noHosts = useHomeHosts().length === 0;
   const tabBarHeight = TAB_BAR + bottom;
-  const openHosts = () => navigation.push({ screen: "hosts" });
+  const { openHosts } = navigation;
 
   return (
     <View style={styles.fill}>
@@ -95,11 +95,16 @@ const Tabs = () => {
             onHosts={openHosts}
           />
         )),
-        Match.when("settings", () => (
-          <HorizonScreen>
-            <SettingsScreen tabBarHeight={tabBarHeight} onHosts={openHosts} />
-          </HorizonScreen>
-        )),
+        // Hosts is a Settings sub-route, so the tab pill stays on it (MX-AD, ENG-567).
+        Match.when("settings", () =>
+          navigation.settings === "hosts" ? (
+            <HostsScreen onBack={navigation.closeHosts} />
+          ) : (
+            <HorizonScreen>
+              <SettingsScreen tabBarHeight={tabBarHeight} onHosts={openHosts} />
+            </HorizonScreen>
+          )
+        ),
         Match.exhaustive
       )}
       <TabBar
@@ -133,12 +138,15 @@ const Screen = () => {
     Match.value(route).pipe(
       Match.discriminatorsExhaustive("screen")({
         tabs: () => <Tabs />,
-        hosts: () => <HostsScreen onBack={navigation.back} />,
         thread: ({ hostId, sessionId, rise }) => (
           <ThreadRoute hostId={hostId} sessionId={sessionId} rise={rise} onBack={navigation.back} />
         ),
-        newSession: ({ workspaceId }) => (
-          <NewSessionRoute workspaceId={workspaceId} onBack={navigation.back} />
+        newSession: ({ workspaceId, hostId }) => (
+          <NewSessionRoute
+            workspaceId={workspaceId}
+            {...(hostId === undefined ? {} : { hostId })}
+            onBack={navigation.back}
+          />
         ),
         constellation: ({ hostId, constellationId }) => (
           <ConstellationRoute

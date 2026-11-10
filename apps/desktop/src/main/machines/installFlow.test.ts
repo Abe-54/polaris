@@ -104,6 +104,50 @@ describe("a sign-in task another Polaris home holds", () => {
   });
 });
 
+describe("Start daemon meeting a sign-in task another home holds", () => {
+  const conflict = {
+    kind: "task-conflict" as const,
+    message: "the scheduled task dev.lux.polaris.lucas runs another home",
+    command: null,
+    conflict: { task: "dev.lux.polaris.lucas", otherHome: "C:\\dev\\.polaris" },
+  };
+
+  const upToDate = () =>
+    run({ type: "check", trigger: "user" }, { type: "planned", plan: plan("0.2.0", "user", []) });
+
+  test.each([
+    ["idle", () => initialInstall()],
+    ["ready", upToDate],
+  ] as const)("from %s, blocks with the start held; the take-over reruns it", (_from, start) => {
+    const blocked = stepInstall(start(), { type: "startConflict", problem: conflict });
+    const taking = stepInstall(blocked, { type: "takeOver" });
+
+    expect([blocked.value, blocked.context.problem, blocked.context.work?._tag]).toEqual([
+      "blocked",
+      conflict,
+      "Start",
+    ]);
+    expect([taking.value, taking.context.work?._tag]).toEqual(["installing", "Start"]);
+    expect(stepInstall(taking, { type: "started" }).value).toBe("idle");
+  });
+
+  test("a start's conflict while checking or installing changes nothing", () => {
+    const checking = run({ type: "check", trigger: "user" });
+
+    expect(stepInstall(checking, { type: "startConflict", problem: conflict })).toBe(checking);
+  });
+
+  test("the taken-over start conflicting again stays blocked with the start held", () => {
+    const again = run(
+      { type: "startConflict", problem: conflict },
+      { type: "takeOver" },
+      { type: "failed", problem: conflict }
+    );
+
+    expect([again.value, again.context.work?._tag]).toEqual(["blocked", "Start"]);
+  });
+});
+
 describe("install flow", () => {
   test("first install: ask, approve, re-check, install", () => {
     const asked = run(

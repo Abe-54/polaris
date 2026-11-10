@@ -5,10 +5,12 @@
 import {
   ApprovalDecision,
   type Attachment,
+  type AttachmentId,
   type PermissionMode,
   TurnItem,
 } from "@polaris/protocol";
 import { Match, Option, Schema } from "effect";
+import { inlineTextBlock } from "../inlineText.ts";
 import type * as Gen from "./generated/index.ts";
 import type * as P from "./protocol.ts";
 
@@ -82,20 +84,33 @@ export const sandboxPolicyFor = (mode: Gen.SandboxMode): Gen.SandboxPolicy => {
 // Turn input
 
 /**
- * Images go to Codex as `localImage` inputs pointing at the staged Host path.
- * Other files are mentioned by path in the prompt, which Codex can read itself.
+ * Images go to Codex as `localImage` inputs pointing at the staged Host path. Small text
+ * files read beforehand (`inlined`) go in the prompt; other files are mentioned by path.
  */
 export const turnInput = (
   prompt: string,
-  attachments: ReadonlyArray<Attachment>
+  attachments: ReadonlyArray<Attachment>,
+  inlined: ReadonlyMap<AttachmentId, string> = new Map()
 ): Array<Gen.UserInput> => {
   const images = attachments.filter((a) => a.mimeType.startsWith("image/"));
-  const files = attachments.filter((a) => !a.mimeType.startsWith("image/"));
 
-  const text =
-    files.length === 0
-      ? prompt
-      : `${prompt}\n\nAttached files:\n${files.map((f) => `- ${f.hostPath}`).join("\n")}`;
+  const texts = attachments.flatMap((a) => {
+    const text = inlined.get(a.id);
+
+    return text === undefined ? [] : [inlineTextBlock(a, text)];
+  });
+
+  const files = attachments.filter((a) => !a.mimeType.startsWith("image/") && !inlined.has(a.id));
+
+  const text = [
+    prompt,
+    ...texts,
+    ...(files.length === 0
+      ? []
+      : [`Attached files:\n${files.map((f) => `- ${f.hostPath}`).join("\n")}`]),
+  ]
+    .filter((part) => part !== "")
+    .join("\n\n");
 
   const pictures = images.map((image): Gen.UserInput => ({
     type: "localImage",

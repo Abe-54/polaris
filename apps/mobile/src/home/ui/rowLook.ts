@@ -45,7 +45,7 @@ const needsYouLine = (row: SessionRow, host: string | null): MetaLine => {
     Match.when("question", () => quickQuestion(approval)?.text ?? approval.title),
     // A Secret Request's title is the agent's label; its detail is the reason.
     Match.when("secret", () => approval.title),
-    Match.orElse(() => firstLine(approvalDetail(approval)?.text))
+    Match.orElse(() => firstLine(approvalDetail(approval, row.session.cwd)?.text))
   );
 
   return {

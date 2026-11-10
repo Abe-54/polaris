@@ -11,7 +11,7 @@ import { Effect, Ref, Stream } from "effect";
 import { awaitReady, connect } from "../daemon.ts";
 import { settle } from "../drive.ts";
 import { summarize } from "../stats.ts";
-import { latency, memory, type Metric, type Scenario, time } from "../types.ts";
+import { latency, memory, type Metric, rss, type Scenario, time } from "../types.ts";
 
 const PARALLEL = 6;
 
@@ -129,7 +129,11 @@ export const hostAddressReload: Scenario = {
       const during = summarize(rpc.flatMap((r) => (r.at >= start && r.at <= end ? [r.ms] : [])));
       const open = summarize(opens);
 
-      const metrics = {
+      const peakTolerance = { tolerance: { relative: 0.35, absolute: 16 } };
+
+      const metrics: Record<string, Metric> = {};
+
+      Object.assign(metrics, {
         reload_ms: time(end - start, { tolerance: { relative: 0.5, absolute: 200 } }),
         stream_open_p50_ms: latency(open.median, { tolerance: { relative: 0.5, absolute: 5 } }),
         stream_open_p99_ms: latency(open.p99, { tolerance: { relative: 0.5, absolute: 10 } }),
@@ -137,10 +141,15 @@ export const hostAddressReload: Scenario = {
         rpc_during_p50_ms: latency(during.median, { tolerance: { relative: 0.5, absolute: 5 } }),
         rpc_during_p99_ms: latency(during.p99, { tolerance: { relative: 0.5, absolute: 20 } }),
         rpc_during_max_ms: latency(during.max, { tolerance: { relative: 0.5, absolute: 50 } }),
-        rss_peak_over_base_mib: memory(report.rssBytes.max - base.rssBytes, {
-          tolerance: { relative: 0.35, absolute: 16 },
-        }),
-      } satisfies Record<string, Metric>;
+        rss_peak_over_base_mib: rss(memory(report.rssBytes.max - base.rssBytes, peakTolerance)),
+      } satisfies Record<string, Metric>);
+
+      if (report.footprintBytes && base.footprintBytes !== null) {
+        metrics.footprint_peak_over_base_mib = memory(
+          report.footprintBytes.max - base.footprintBytes,
+          peakTolerance
+        );
+      }
 
       return {
         metrics,

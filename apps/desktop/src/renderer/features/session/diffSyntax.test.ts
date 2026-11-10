@@ -26,7 +26,13 @@ beforeAll(async () => {
     langs: ["typescript", "python"],
     preferredHighlighter: "shiki-js",
   });
-});
+
+  // The first highlight per language compiles its grammar (~0.5 s, several under load).
+  const { highlight } = highlights();
+
+  await highlight("warm.ts", "const a = `${1}`; // x");
+  await highlight("warm.py", "def a():\n    return 1");
+}, 30_000);
 
 /** Pierre's highlight as the pool's workers run it, counting the texts it was asked for. */
 const highlights = () => {

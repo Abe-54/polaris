@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { SessionId, Subagent, SubagentId, TurnId, TurnItem } from "@polaris/protocol";
+import {
+  ApprovalRequest,
+  SessionId,
+  Subagent,
+  SubagentId,
+  TurnId,
+  TurnItem,
+} from "@polaris/protocol";
 import { approval, turnWith } from "../../../store/fixtures.testing.ts";
 import type { LiveItem, SubagentView, TurnView } from "../../../store/sessionModel.ts";
 import {
@@ -308,6 +315,62 @@ describe("conversation rows", () => {
     const rows = conversationRows({ turns: [asking], approvals: [approval] });
 
     expect(rows.map((r) => r.kind)).toEqual(["prompt", "approval"]);
+  });
+
+  test.each([
+    ["Saved. The secret is in /tmp/s, readable by your commands for 24 hours.", "provided"],
+    ["The user declined.\nCarry on without it.", "declined"],
+    ["No answer in 10 minutes; the request was withdrawn.", "ended"],
+    ["The request ended unanswered: Interrupted.\nNothing was saved.", "ended"],
+  ])("after a reload a Secret Request's card says how it ended (%#)", (output, outcome) => {
+    const asked = I.ToolCall.make({
+      id: "s1",
+      name: "mcp__polaris__request_secret",
+      input: { label: "Tailscale auth key", reason: "To join the tailnet" },
+      output,
+      status: "completed",
+    });
+
+    const rows = conversationRows({ turns: [view(0, [asked])], approvals: [] });
+
+    expect(rows.at(-1)).toMatchObject({
+      kind: "approval",
+      request: { kind: "secret", title: "Tailscale auth key" },
+      settled: outcome,
+    });
+  });
+
+  test("a Secret Request the feed saw end keeps one card, and a running one none", () => {
+    const asked = (status: "running" | "completed") =>
+      I.ToolCall.make({
+        id: "s1",
+        name: "mcp__polaris__request_secret",
+        input: { label: "Tailscale auth key", reason: "To join the tailnet" },
+        output: status === "running" ? null : "The user declined.",
+        status,
+      });
+
+    const request = new ApprovalRequest({
+      id: approval.id,
+      sessionId: approval.sessionId,
+      turnId: TurnId.make("t0"),
+      kind: "secret",
+      title: "Tailscale auth key",
+      detail: null,
+      options: [],
+      openedAt: approval.openedAt,
+    });
+
+    const seen = conversationRows({
+      turns: [view(0, [asked("completed")])],
+      approvals: [],
+      settledSecrets: [{ request, outcome: "declined" }],
+    });
+
+    expect(seen.filter((r) => r.kind === "approval").map((r) => r.key)).toEqual(["approval:r1"]);
+    expect(
+      conversationRows({ turns: [view(0, [asked("running")])], approvals: [] }).map((r) => r.kind)
+    ).not.toContain("approval");
   });
 
   test("an approval for a Turn not loaded closes the list", () => {

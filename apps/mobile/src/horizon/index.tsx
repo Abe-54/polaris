@@ -85,8 +85,11 @@ const Moon = ({ width }: { readonly width: number }) => (
   </G>
 );
 
-/** The scene alone, absolutely placed at its parent's foot; it takes no touches. */
-export const Horizon = () => {
+/**
+ * The scene alone, absolutely placed at its parent's foot; it takes no touches. `moon={false}`
+ * leaves Moonlit's moon out where it would draw over text.
+ */
+export const Horizon = ({ moon = true }: { readonly moon?: boolean }) => {
   const { width } = useWindowDimensions();
   const { name, colours } = useTheme();
   const palette = PALETTES[name];
@@ -110,7 +113,7 @@ export const Horizon = () => {
             />
           ))}
         </G>
-        {palette.moon ? <Moon width={width} /> : null}
+        {palette.moon && moon ? <Moon width={width} /> : null}
         <G transform={`translate(${-cropLeft(width)} ${RIDGE_TOP})`}>
           <Path d={RIDGES[0]} fill={palette.back} />
           <Path d={RIDGES[1]} fill={palette.front} />

@@ -33,6 +33,12 @@ describe("the severity pager", () => {
     expect(pageTo(findings, NO_POSITIONS, "low")).toBeNull();
   });
 
+  test("the Critical pill skips a dismissed Critical, which the tally leaves out", () => {
+    const dismissed = [finding("c0", "critical", { status: "dismissed" }), ...findings];
+
+    expect(pageTo(dismissed, NO_POSITIONS, "critical")?.finding.identity).toBe("c1");
+  });
+
   test("the pill shows its position once it has paged", () => {
     expect(pillCount(2, null)).toBe("2");
     expect(pillCount(2, visit("medium", 2).positions.medium)).toBe("2/2");

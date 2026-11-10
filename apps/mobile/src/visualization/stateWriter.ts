@@ -81,18 +81,44 @@ export const stateWriter = (
   };
 };
 
-const live = new Map<string, StateWriter>();
+const live = new Map<string, { readonly writer: StateWriter; holders: number }>();
 
-/** One writer per Visualization, shared by its inline frame and its sheet. */
-export const writerFor = (id: string, store: VisualizationStateStore): StateWriter => {
-  const held = live.get(id);
+export interface HeldWriter {
+  readonly writer: StateWriter;
+  /** The frame is gone: its state is written and, with no other holder, the writer is evicted. */
+  readonly release: () => void;
+}
 
-  if (held !== undefined) return held;
-  const made = stateWriter(id, store);
-  live.set(id, made);
+/** One writer per Visualization, shared by its inline frame and its sheet while either is mounted. */
+export const holdWriter = (
+  id: string,
+  store: VisualizationStateStore,
+  schedule?: (run: () => void, ms: number) => () => void
+): HeldWriter => {
+  const held = live.get(id) ?? {
+    writer: stateWriter(id, store, STATE_INTERVAL_MS, schedule),
+    holders: 0,
+  };
 
-  return made;
+  held.holders += 1;
+  live.set(id, held);
+  let released = false;
+
+  return {
+    writer: held.writer,
+    release: () => {
+      if (released) return;
+      released = true;
+      held.writer.flush();
+      held.holders -= 1;
+
+      if (held.holders === 0 && live.get(id) === held) live.delete(id);
+    },
+  };
 };
 
 /** Writes a Visualization's pending state now, before a frame reads it back. */
-export const flushState = (id: string) => live.get(id)?.flush();
+export const flushState = (id: string) => live.get(id)?.writer.flush();
+
+/** How many Visualizations have a writer held now. */
+export const heldWriters = () => live.size;

@@ -14,9 +14,7 @@ import type { SessionId } from "@polaris/protocol";
 import type { ReactElement } from "react";
 import { useApp, useSelection } from "../../../shell/hooks.ts";
 import { menuShortcut } from "../../../shell/menu/index.ts";
-import { send } from "../../session/dispatch.ts";
-import { archiveCommand } from "../../session/model/intent.ts";
-import { settingsStore } from "../../settings/store.ts";
+import { archiveSession } from "../../session/archive.ts";
 import { dismiss } from "../dismissed.ts";
 import type { Dismissible } from "../model/dismissed.ts";
 import { clientCopy } from "../../../../shared/clientCopy.ts";
@@ -43,14 +41,13 @@ export const CardMenu = ({ item, sessionId, onOpen, answers, children }: CardMen
     (s) => s.hosts.find((h) => h.key === item.hostKey)?.status.state === "connected"
   );
 
+  const title = useApp(
+    (s) => s.hostModels[item.hostKey]?.sessions.get(sessionId)?.session.title ?? ""
+  );
+
   const here = selection.pane === "session" && selection.sessionId === sessionId;
 
-  const archive = () =>
-    void send(
-      item.hostKey,
-      archiveCommand(sessionId, settingsStore.getState().sessions.deleteMergedBranch),
-      "Couldn't archive"
-    );
+  const archive = () => void archiveSession(item.hostKey, sessionId, title);
 
   // Offline, an answer can't reach the Host: dimmed, with why, so the card's menu still reads.
   const entries: ReadonlyArray<MenuEntryInput> = [

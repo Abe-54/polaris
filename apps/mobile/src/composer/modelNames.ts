@@ -23,3 +23,18 @@ export const modelsFor = (
   fetched: ReadonlyArray<Model>
 ): ReadonlyArray<Model> =>
   fetched.length > 0 ? fetched : (known.get(keyOf(hostId, harness)) ?? []);
+
+const steering = new Map<string, boolean>();
+
+/** What the Harness last said of `HarnessModels.steersAttachments` on this Host. */
+export const rememberSteersAttachments = (
+  hostId: string,
+  harness: HarnessKind,
+  steers: boolean
+): void => {
+  steering.set(keyOf(hostId, harness), steers);
+};
+
+/** The Harness takes files in a steer; false until the Host has said so. */
+export const steersAttachmentsFor = (hostId: string, harness: HarnessKind): boolean =>
+  steering.get(keyOf(hostId, harness)) ?? false;

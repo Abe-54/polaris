@@ -11,7 +11,7 @@ import type { NeedsYouSummary, NeedsYouTurn, ReviewTarget } from "../../shared/n
 import { notificationKey } from "./plan.ts";
 import { type TurnContent, turnContent } from "./turnContent.ts";
 
-/** Working, Idle with background tasks still live, or Idle with none: completed. */
+/** Working, Idle with background tasks live or their reports pending, or Idle with neither. */
 export type TurnPhase = "working" | "waiting" | "settled";
 
 /** How long a settle must hold before it counts (docs/adr/0073-turn-notifications-wait-out-a-settle.md). */
@@ -65,7 +65,7 @@ export const turnKey = (hostKey: string, sessionId: string) =>
 const phaseOf = (turn: NeedsYouTurn): TurnPhase => {
   if (turn.state === "working") return "working";
 
-  return turn.backgroundTasks > 0 ? "waiting" : "settled";
+  return turn.backgroundTasks > 0 || turn.backgroundReportsPending === true ? "waiting" : "settled";
 };
 
 /** The session's track after this summary: the same user Turn moves on, a new one starts over. */

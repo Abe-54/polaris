@@ -56,11 +56,9 @@ import { TerminalRpcsLive } from "../terminal/TerminalRpcs.ts";
 import { TerminalsDaemonLive } from "../terminal/Terminals.ts";
 import { UsageRpcsLive } from "../usage/UsageRpcs.ts";
 import { UsageSessions } from "../usage/sessions.ts";
-import { DeepgramLive } from "../voice/deepgram.ts";
-import { HostSecrets } from "../secrets/index.ts";
-import { VoiceRpcsLive } from "../voice/VoiceRpcs.ts";
 import { ResourceRpcsLive } from "../resources/rpc.ts";
 import { HostStats, HostStatsRpcsLive } from "../hostStats/index.ts";
+import { TracingSkillRpcsLive } from "../traces/skill/index.ts";
 import { paths } from "../paths.ts";
 import { startServer } from "./server.ts";
 import { ByteStreamRpcsLive } from "./byteStreams.ts";
@@ -87,6 +85,7 @@ import { lazyAcceptHandlers } from "./lazyAccept.ts";
 import { languagesAvailable, lazyLanguageHandlers } from "./lazyLanguages.ts";
 import { lazyReviewer } from "./lazyReviewer.ts";
 import { lazyUsage } from "./lazyUsage.ts";
+import { lazyVoiceHandlers } from "./lazyVoice.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
 
@@ -195,6 +194,7 @@ export const daemonHandlers = Layer.mergeAll(
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),
+  TracingSkillRpcsLive,
   PushNotifierLive,
   LiveNotifierLive,
   ResourceRpcsLive,
@@ -209,13 +209,13 @@ export const daemonHandlers = Layer.mergeAll(
   lazyAcceptHandlers,
   ReviewerRpcsLive,
   TerminalRpcsLive.pipe(Layer.provide(TerminalsDaemonLive)),
-  VoiceRpcsLive.pipe(Layer.provide(Layer.merge(DeepgramLive, HostSecrets.layer))),
+  lazyVoiceHandlers,
   byteStreamHandlers,
   selfTraceExport
 ).pipe(Layer.provide(daemonServices));
 
 /** What the lazy language handlers serve: unavailable where no language artifact runs. */
-const LANGUAGE_CAPABILITIES: ReadonlyArray<Capability> = [
+export const LANGUAGE_CAPABILITIES: ReadonlyArray<Capability> = [
   "prediction.context",
   "languages",
   "languages.trust",
@@ -242,10 +242,12 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data",
   "data.writes",
   "data.schemaDiff",
+  "data.schemaDiff.turns",
   "data.sqlite",
   "traces",
   "traces.settings",
   "traces.compare",
+  "traces.skill",
   "traces.profiles",
   "traces.profiles.attach",
   "traces.self",
@@ -278,9 +280,13 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "session.turn-paging",
   "session.stop-background",
   "session.background-command",
+  "session.background-command-failed",
   "session.compaction",
   "session.notify",
   "session.pin",
+  "session.review-subject",
+  "session.background-reports",
+  "session.checkpoint-commit",
   "session.limited",
   "session.plan-mode",
   "session.user-turns",
@@ -325,6 +331,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host.resources",
   "host.stats",
   "host-address",
+  "host-address.names",
   "browser.host",
 ];
 

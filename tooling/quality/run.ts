@@ -7,6 +7,7 @@
  *   bun tooling/quality/run.ts [--check] --dirty                  uncommitted and untracked files
  *   bun tooling/quality/run.ts --staged                           the pre-commit hook
  *
+ * Without `--check` it applies oxlint's safe fixes (`oxlint --fix`), then formats.
  * `--staged` formats fully staged files and restages them; a partially staged file
  * is only checked, so its unstaged hunks never sneak into the commit.
  */
@@ -37,7 +38,7 @@ const staged = async () => {
   const partial = files.filter((f) => unstaged.has(f));
 
   const failure =
-    (await runSteps(planChecks(whole, "fix"))) ?? (await runSteps(planChecks(partial, "check")));
+    (await runSteps(planChecks(whole, "format"))) ?? (await runSteps(planChecks(partial, "check")));
 
   if (whole.length > 0) git("add", "--", ...whole);
 

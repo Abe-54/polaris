@@ -6,7 +6,19 @@ import json
 import pathlib
 import urllib.request
 import zipfile
-from importlib.machinery import SourceFileLoader
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', required=True, type=pathlib.Path)
@@ -16,7 +28,7 @@ temporary = pathlib.Path('/tmp').resolve()
 if not args.root.resolve().is_relative_to(temporary) or args.root.resolve() == temporary:
     parser.error('Private temporary root required')
 source = pathlib.Path(__file__).resolve().parent
-legal = SourceFileLoader('legal', str(source / 'complete-notices.py')).load_module()
+legal = load('legal', str(source / 'complete-notices.py'))
 cache = args.root / 'maven-legal-cache'
 cache.mkdir(parents=True, exist_ok=True)
 (args.output / 'notices').mkdir(parents=True, exist_ok=True)

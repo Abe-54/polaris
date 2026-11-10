@@ -183,7 +183,9 @@ describe("Host resource leases", () => {
       shrinkBeforeGrant = true;
       const second = runtime.runFork(acquire("second"));
       await eventually(
-        async () => (await runtime.runPromise(resources.get)).resources[0]?.capacity === 1
+        async () =>
+          (await runtime.runPromise(resources.get)).resources.find((r) => r.name === "bench")
+            ?.capacity === 1
       );
       const snapshot = await runtime.runPromise(resources.get);
       expect(snapshot.resourceLeases.map((lease) => lease.id)).toEqual(["first"]);
@@ -248,7 +250,9 @@ describe("Host resource leases", () => {
       expect((await runtime.runPromise(Fiber.join(third))).id).toBe("third");
       await runtime.runPromise(resources.release(id("release-third"), "third"));
       await runtime.runPromise(resources.remove(id("remove"), "bench"));
-      expect((await runtime.runPromise(resources.get)).resources).toEqual([]);
+      expect((await runtime.runPromise(resources.get)).resources.map((r) => r.name)).toEqual([
+        "smoke",
+      ]);
       const store = await runtime.runPromise(EventStore);
       const cut = (await runtime.runPromise(store.model)).sequence;
 
@@ -501,6 +505,50 @@ describe("Host resource leases", () => {
       );
     } finally {
       await runtime.dispose();
+    }
+  });
+
+  test("a fresh Host declares the script leases, and a restart keeps their edited capacity", async () => {
+    const { home, runtime } = setup();
+    const identity = await processIdentity(process.pid);
+
+    try {
+      const resources = await runtime.runPromise(HostResources);
+      const fresh = await runtime.runPromise(resources.get);
+      expect(fresh.resources.map((r) => [r.name, r.capacity])).toEqual([
+        ["bench", 1],
+        ["smoke", 1],
+      ]);
+
+      const lease = await runtime.runPromise(
+        resources.acquire({
+          requestId: "smoke-run",
+          name: "smoke",
+          sessionId: null,
+          processId: process.pid,
+          processIdentity: identity!,
+          command: [],
+        })
+      );
+
+      expect(lease.resource).toBe("smoke");
+      await runtime.runPromise(resources.release(null, "smoke-run"));
+      await runtime.runPromise(resources.declare(id("wider-bench"), "bench", 3));
+    } finally {
+      await runtime.dispose();
+    }
+
+    const restarted = ManagedRuntime.make(HostResources.layer.pipe(LayerProvide(home)));
+
+    try {
+      const resources = await restarted.runPromise(HostResources);
+      const snapshot = await restarted.runPromise(resources.get);
+      expect(snapshot.resources.map((r) => [r.name, r.capacity])).toEqual([
+        ["bench", 3],
+        ["smoke", 1],
+      ]);
+    } finally {
+      await restarted.dispose();
     }
   });
 });

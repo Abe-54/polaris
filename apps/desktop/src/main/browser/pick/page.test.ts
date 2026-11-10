@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Option } from "effect";
 import type { PageElement, PageEvent, PageGlobals, PageNode } from "./dom.ts";
 import { decodePagePick, PICK_LIMITS } from "./index.ts";
-import { cancelScript, pickScript, selectorOf } from "./page.ts";
+import { cancelScript, pickScript, selectorOf, unmarkScript } from "./page.ts";
 
 interface EventInit {
   readonly bubbles?: boolean;
@@ -108,10 +108,12 @@ const evaluate = (script: string) => {
   (0, eval)(script);
 };
 
+const MARK = "6f1c2a1e-mark";
+
 /** Starts a pick as main does, settling with the answer as main decodes it. */
 const start = async (html = PICK_LIMITS.html) => {
   // oxlint-disable-next-line no-eval -- the test runs the serialised script as the page would.
-  const answer: unknown = await (0, eval)(pickScript({ ...PICK_LIMITS, html }));
+  const answer: unknown = await (0, eval)(pickScript({ ...PICK_LIMITS, html }, MARK));
 
   return Option.getOrNull(decodePagePick(answer));
 };
@@ -155,6 +157,22 @@ describe("pick mode in the page", () => {
       htmlLength: '<button id="add" class="primary">Add a todo</button>'.length,
     });
     expect(document.querySelector("polaris-pick")).toBeNull();
+  });
+
+  test("the picked element carries the mark for the React lookup until main takes it off", async () => {
+    document.body.innerHTML = `<button id="add">Add</button>`;
+
+    const pick = start();
+
+    pointAt(element("#add"));
+    click(overlay());
+
+    // The HTML is the page's own, read before the mark went on.
+    expect((await pick)?.html).toBe(`<button id="add">Add</button>`);
+    expect(element("#add").getAttribute("data-polaris-pick")).toBe(MARK);
+
+    evaluate(unmarkScript(MARK));
+    expect(element("#add").getAttribute("data-polaris-pick")).toBeNull();
   });
 
   test("a click the page dispatches itself never picks", async () => {

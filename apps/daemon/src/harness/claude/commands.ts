@@ -16,6 +16,7 @@ import { HarnessError } from "../HarnessDriver.ts";
 import type { QueryFn } from "./ClaudeDriver.ts";
 import { Inbox } from "./inbox.ts";
 import { claudeExecutable } from "./executable.ts";
+import { claudeNotInstalled } from "./notInstalled.ts";
 
 type Builtin =
   | { readonly run: "text" }
@@ -260,8 +261,7 @@ export const listClaudeCommands =
     Effect.gen(function* () {
       const claudePath = driver.claudePath();
 
-      if (claudePath === null)
-        return yield* unavailable("Claude Code is not installed: `claude` was not found on PATH");
+      if (claudePath === null) return yield* unavailable(claudeNotInstalled());
 
       const options: Options = {
         cwd,

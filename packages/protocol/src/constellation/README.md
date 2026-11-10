@@ -34,17 +34,24 @@ Desktop App authorization is checked by the Daemon, not asserted in a payload.
   placement carries `leadPermissionMode` so the worker Host applies the same ceiling.
 - `constellation.dispatch`: named `tasks` pair short Task IDs with placements;
   empty means every ready Task, using `defaultWorker` and graph defaults.
-  `New` carries Host, optional Harness/Model/effort, base and optional existing
+  `New` carries Host, optional Harness/Model/effort/serviceTier, base and optional existing
   worktree/branch; `Existing` names an idle session. Gates use the Lead's session.
+  `serviceTier` (`priority` is fast mode) applies only on Codex; elsewhere the result's
+  Next says it was ignored (ENG-475).
 - `constellation.review`: Attempt ID, the **Attempt revision** the reviewer saw, and Accept,
   SendBack, Stop, Approve or HandUp. Approve is user-only and HandUp is Lead-only;
   both record metadata while keeping Review. A review of a Claim in review stays current
   from the Claim's `claimRevision` up to the Attempt's revision: progress, approval and
   hand-up don't make it stale, an amended Claim does. Accept supplies the claimed head
-  (`mergedHead`) and receipts; before deciding, the owner merges that head into the Lead's
-  current branch (safe git config, no repository hooks) unless it already contains it, and
-  refuses with the exact fix on a conflict (`E-MERGE-CONFLICT`, merge aborted), a dirty,
-  detached or mid-merge Lead checkout (`E-LEAD-DIRTY`, `E-LEAD-DETACHED`, `E-LEAD-MERGING`),
+  (`mergedHead`) and receipts; before deciding, the owner merges that head into the
+  Constellation's `leadBranch`, recorded at start from the Lead's checkout, in the checkout
+  holding it or a Daemon-owned lead worktree (ADR 0099; graphs without one use the Lead's
+  current branch), with safe git config and no repository hooks, unless it already contains it,
+  and refuses with the exact fix on a conflict (`E-MERGE-CONFLICT`, merge aborted), a dirty,
+  detached or mid-merge lead checkout (`E-LEAD-DIRTY`, `E-LEAD-DETACHED`, `E-LEAD-MERGING`),
+  a deleted lead branch (`E-LEAD-BRANCH`), the lead branch checked out in another
+  session's checkout (`E-LEAD-BRANCH-BUSY`), an unknown directory at the lead worktree's path
+  (`E-LEAD-WORKTREE`),
   a merge commit `commit.gpgSign` asks to sign that can't be signed with the Host's own
   signing settings or whose signing failed (`E-MERGE-SIGN`, ADR 0068), or an unfetched head (`E-GIT`). The decider checks the head against the Claim and resolves
   every verified reference. SendBack

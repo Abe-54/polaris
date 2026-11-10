@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHmac, randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { RemoteAccess, RemoteAccessLive } from "../extensions/remoteAccess.ts";
@@ -224,6 +224,45 @@ describe.skipIf(windows)("Remote Access", () => {
       }
     }
   );
+
+  test("a Funnel turned on between the preflight and serve is cleared: the guard isn't atomic", async () => {
+    const port = startGateway();
+    const other = { "/": { Proxy: "http://127.0.0.1:3773" } };
+
+    writeFileSync(
+      join(dir, "serve.json"),
+      JSON.stringify({ Web: { [`${HOST}:443`]: { Handlers: other } } })
+    );
+    // Another CLI turns Funnel on after Polaris read `serve status`, before its `serve --bg` runs.
+    writeFileSync(
+      join(dir, "serve.race.json"),
+      JSON.stringify({
+        AllowFunnel: { [`${HOST}:443`]: true },
+        Web: { [`${HOST}:443`]: { Handlers: other } },
+      })
+    );
+
+    expect(await Effect.runPromise(remoteAccess().enable)).toMatchObject({
+      state: "on",
+      url: `wss://${HOST}/polaris/rpc`,
+      reason: null,
+    });
+    expect(calls().map((args) => args.slice(0, 2).join(" "))).toEqual([
+      "status --json",
+      "serve status",
+      "serve --bg",
+      "serve status",
+    ]);
+    expect(existsSync(join(dir, "serve.race.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(dir, "serve.json"), "utf8"))).toMatchObject({
+      AllowFunnel: {},
+      Web: {
+        [`${HOST}:443`]: {
+          Handlers: { ...other, "/polaris": { Proxy: `http://127.0.0.1:${port}/polaris` } },
+        },
+      },
+    });
+  });
 
   test.each(["foreground", "http"] as const)(
     "a %s listener on 443 is preserved, including when Polaris is already served",

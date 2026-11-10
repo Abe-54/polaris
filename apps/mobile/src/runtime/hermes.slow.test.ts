@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { runOnHermes } from "../../scripts/hermes.ts";
 import { hermesVersion, hermesVmPath } from "../../scripts/hermesPaths.ts";
+import listed from "./hermesMissing.json" with { type: "json" };
 import { runSelfCheck } from "./selfCheck.ts";
 
 const vmBuilt = await Bun.file(hermesVmPath(hermesVersion())).exists();
@@ -26,6 +27,17 @@ describe("the shared runtime on Hermes", () => {
 
       expect(results?.length, vmOutput).toBe(7);
       expect(failures(results ?? [])).toEqual([]);
+    },
+    120_000
+  );
+
+  // The test preload strips this list from Bun; a stale list hides a missing builtin.
+  test.skipIf(!vmBuilt)(
+    "hermesMissing.json lists every builtin Bun has and the hermes VM lacks",
+    async () => {
+      const { missing } = await run;
+
+      expect(missing).toEqual(listed);
     },
     120_000
   );

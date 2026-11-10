@@ -73,14 +73,30 @@ export const lastUsedTarget = (hosts: ReadonlyArray<SheetHost>): Target | null =
   return best === null ? null : { hostId: best.hostId, workspaceId: best.workspaceId };
 };
 
+/** The first visible Workspace of the first connected Host with one; null without any. */
+const firstTarget = (hosts: ReadonlyArray<SheetHost>): Target | null => {
+  const first = hosts.find((h) => h.connected && visible(h).length > 0);
+  const workspace = first === undefined ? undefined : visible(first)[0];
+
+  return first === undefined || workspace === undefined
+    ? null
+    : { hostId: first.hostId, workspaceId: workspace.id };
+};
+
 /**
  * Where a new session opens: the Workspace asked for, else the last used one (with its Host), else
- * the first Workspace of the first connected Host.
+ * the first Workspace of the first connected Host. `hostId` keeps it on that Host while connected.
  */
 export const defaultTarget = (
   hosts: ReadonlyArray<SheetHost>,
-  workspaceId?: string
+  workspaceId?: string,
+  hostId?: string
 ): Target | null => {
+  const preselected = hosts.filter((h) => h.hostId === hostId && h.connected);
+
+  if (preselected.length > 0 && workspaceId === undefined)
+    return lastUsedTarget(preselected) ?? firstTarget(preselected);
+
   const connected = hosts.filter((h) => h.connected);
 
   if (workspaceId !== undefined) {
@@ -91,13 +107,7 @@ export const defaultTarget = (
 
   const last = lastUsedTarget(hosts);
 
-  if (last !== null) return last;
-  const first = connected.find((h) => visible(h).length > 0);
-  const workspace = first === undefined ? undefined : visible(first)[0];
-
-  return first === undefined || workspace === undefined
-    ? null
-    : { hostId: first.hostId, workspaceId: workspace.id };
+  return last ?? firstTarget(hosts);
 };
 
 /** When each Harness last ran a session on the Host. */

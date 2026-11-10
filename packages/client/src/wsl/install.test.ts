@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { probeHost, shScript, Ssh } from "../install/index.ts";
 import { writeFakeWsl } from "./fakeWsl.testing.ts";
 import { wslInstallLayer } from "./install.ts";
@@ -88,10 +88,14 @@ describe("wslInstallLayer", () => {
   test("a WSL that isn't installed is a spawn failure", async () => {
     const stub = writeFakeWsl(join(dir, "wsl"), { distros: [], installed: false });
 
-    const exit = await Effect.runPromiseExit(
-      Ssh.use((ssh) => ssh.exec("Ubuntu", "true")).pipe(Effect.provide(wslInstallLayer(stub)))
+    const error = await Effect.runPromise(
+      Ssh.use((ssh) => ssh.exec("Ubuntu", "true")).pipe(
+        Effect.flip,
+        Effect.provide(wslInstallLayer(stub))
+      )
     );
 
-    expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain("not installed");
+    expect(error.failure).toBe("spawn");
+    expect(error.message).toContain("not installed");
   });
 });

@@ -104,6 +104,7 @@ export const LanguageFeatureMethod = Schema.Literals([
   "textDocument/hover",
   "textDocument/signatureHelp",
   "textDocument/definition",
+  "textDocument/declaration",
   "textDocument/typeDefinition",
   "textDocument/implementation",
   "textDocument/references",

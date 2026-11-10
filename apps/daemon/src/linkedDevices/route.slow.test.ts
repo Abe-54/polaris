@@ -50,6 +50,7 @@ import {
   type TestDevice,
 } from "./device.testing.ts";
 import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 /** `dispatch` answers with who asked: the label and the Actor the Engine would record. */
 const handlers = ServerRpcs.toLayerHandler("dispatch", ({ commandId }, { client }) =>
@@ -124,7 +125,7 @@ const daemon = (scope: Scope.Scope, relayLinks?: LinkTiming) =>
       yield* socketTransport(server.socketPath)
     ).pipe(Scope.provide(scope));
 
-    yield* desktop.client.hello(hello);
+    yield* desktop.client.hello({ ...hello, ...TEST_USER_KEY });
 
     return desktop.client;
   });
@@ -197,14 +198,16 @@ test("a linked device reaches the Daemon with Client power and is recorded as th
 
         // The route is off until turned on, and linking needs it on.
         expect((yield* desktop["relayRoute.status"]()).state).toBe("off");
-        expect((yield* Effect.flip(desktop["devices.link"]())).reason).toBe("route-off");
+        expect(yield* Effect.flip(desktop["devices.link"]())).toMatchObject({
+          reason: "route-off",
+        });
 
         // RX1-10: no ws:// to a relay off this machine.
         const insecure = yield* Effect.flip(
           desktop["relayRoute.enable"]({ url: "ws://relay.example/v1" })
         );
 
-        expect(insecure.reason).toBe("invalid-url");
+        expect(insecure).toMatchObject({ reason: "invalid-url" });
 
         yield* desktop["relayRoute.enable"]({ url: relay.url });
         const status = yield* waitConnected(desktop);

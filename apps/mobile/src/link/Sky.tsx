@@ -146,9 +146,12 @@ export interface SkyProps {
   readonly lift: number;
   /** Once linked, every host, the Mac first. */
   readonly hosts?: ReadonlyArray<string> | undefined;
+  /** Each gives way when room is short (`skyShows`). */
+  readonly star?: boolean;
+  readonly moon?: boolean;
 }
 
-export const Sky = ({ light, starTop, lift, hosts }: SkyProps) => {
+export const Sky = ({ light, starTop, lift, hosts, star = true, moon = true }: SkyProps) => {
   const { width } = useWindowDimensions();
   const { name } = useTheme();
   const palette = PALETTES[name];
@@ -170,12 +173,12 @@ export const Sky = ({ light, starTop, lift, hosts }: SkyProps) => {
         ))}
       </Svg>
       <Animated.View style={[fixed.horizon, { transform: [{ translateY }] }]}>
-        <Horizon />
+        <Horizon moon={moon} />
         {hosts === undefined || hosts.length === 0 ? null : (
           <Machines hosts={hosts} width={width} />
         )}
       </Animated.View>
-      <Star light={light} top={starTop} />
+      {star ? <Star light={light} top={starTop} /> : null}
     </View>
   );
 };

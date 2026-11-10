@@ -1,4 +1,4 @@
-/** Settings' commands (`shared/keymap.ts`): "Settings…" (⌘,) and one per section, for the K menu. */
+/** Settings' commands (`shared/keymapSettings.ts`): "Settings…" (⌘,) and one per section, for the K menu. */
 import type { CommandHandlers } from "../../routes/commands.ts";
 import { checkForUpdates, restartToUpdate, updatesStore } from "./updates/store.ts";
 import type { ShellActions } from "../../routes/navigation.ts";
@@ -25,5 +25,7 @@ export const settingsCommands = (shell: ShellActions): CommandHandlers => ({
   "settings.hosts": { run: () => shell.openSettings("hosts") },
   "settings.reviewer": { run: () => shell.openSettings("reviewer") },
   "settings.github": { run: () => shell.openSettings("github") },
+  "settings.voice": { run: () => shell.openSettings("voice") },
+  "settings.attachments": { run: () => shell.openSettings("attachments") },
   "github.addAccount": { run: () => shell.openSettings("github", { adding: true }) },
 });

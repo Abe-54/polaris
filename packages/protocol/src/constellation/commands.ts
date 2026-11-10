@@ -13,6 +13,7 @@ import {
   Revision,
   TaskDefinition,
   TaskId,
+  TaskPatch,
 } from "./domain.ts";
 
 /**
@@ -28,7 +29,7 @@ export type AttemptWaiting = typeof AttemptWaiting.Type;
 
 export const PlanOperation = Schema.TaggedUnion({
   Add: { task: TaskDefinition },
-  Edit: { taskId: TaskId, revision: Revision, task: TaskDefinition },
+  Edit: { taskId: TaskId, revision: Revision, task: TaskPatch },
   Cancel: { taskId: TaskId, revision: Revision },
 });
 

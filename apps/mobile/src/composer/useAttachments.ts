@@ -2,7 +2,7 @@
  * A composer's attachments in React: one store per Host, Workspace and session, so chips staged
  * for one place never ride along to another. Null where the Host can't stage them.
  */
-import type { AttachmentId } from "@polaris/protocol";
+import type { Attachment, AttachmentId } from "@polaris/protocol";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useLiveHost } from "../runtime/hosts.tsx";
 import {
@@ -27,6 +27,8 @@ export interface Attachments {
   /** What one Send or Queue carries, so its success removes only those chips. */
   readonly submission: () => Submission;
   readonly clear: () => void;
+  /** Puts files already staged back as chips. */
+  readonly restore: (attachments: ReadonlyArray<Attachment>) => void;
 }
 
 const NONE: ReadonlyArray<never> = [];
@@ -78,6 +80,7 @@ export const useAttachments = (target: StageTarget | null): Attachments => {
     staging: able && chips.some((chip) => chip.status === "staging"),
     submission: () => (able && store !== null ? store.submission() : NOTHING),
     clear: () => store?.clear(),
+    restore: (attachments) => store?.restore(attachments),
   };
 };
 

@@ -26,7 +26,7 @@ import {
 } from "../drive.ts";
 import { copyTree, git, sourceTree } from "../fixtures.ts";
 import { median } from "../stats.ts";
-import { cpu, type Metric, peakMemory, type Scenario, time } from "../types.ts";
+import { cpu, type Metric, peakMemory, rss, type Scenario, time } from "../types.ts";
 
 const DiffSpec = GitDiff.payloadSchema.fields.spec;
 
@@ -166,7 +166,7 @@ export const gitScenario: Scenario = {
         status_ignored_ms: time(ignoredStatus.ms),
         working_tree_diff_ms: time(workingDiff.ms),
         turns_cpu_avg_pct: cpu(turnReport.cpuAvgPct, { info: true }),
-        rss_peak_mib: peakMemory(all.rssBytes.max),
+        rss_peak_mib: rss(peakMemory(all.rssBytes.max)),
       } satisfies Record<string, Metric>);
 
       if (all.footprintBytes) metrics.footprint_peak_mib = peakMemory(all.footprintBytes.max);

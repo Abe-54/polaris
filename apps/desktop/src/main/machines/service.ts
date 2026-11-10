@@ -44,6 +44,7 @@ import {
   type InstallProblem,
   type InstallWork,
   initialInstall,
+  isStartWork,
   stepInstall,
 } from "./installFlow.ts";
 import { channelActivity, unmanagedLocal, unsupportedMessage } from "./channels.ts";
@@ -503,7 +504,7 @@ const makeMachines = Effect.fnUntraced(function* (input: MachinesInput) {
 
       const pending = planned.value === "installing" ? planned.context.work : null;
 
-      if (pending === null) {
+      if (pending === null || isStartWork(pending)) {
         yield* finishCheck(key, planned, installedVersion, bundledVersion, proposed !== plan);
 
         return;
@@ -681,7 +682,27 @@ const makeMachines = Effect.fnUntraced(function* (input: MachinesInput) {
 
       if (held === null) return yield* fail("Nothing is waiting on the sign-in task; check again.");
       yield* updateFacts(key, { progress: { stage: "checking", bytes: 0, total: 0 } });
-      yield* launch(key, applyStep(key, to, held, true).pipe(recover(key)));
+
+      const rerun: Effect.Effect<void, Failure> = isStartWork(held)
+        ? startStep(key, to, true)
+        : applyStep(key, to, held, true);
+
+      yield* launch(key, rerun.pipe(recover(key)));
+    });
+
+  /** Start daemon's run; a sign-in task another home holds goes to the take-over card. */
+  const startStep = (key: string, to: HostChannel, replaceTask: boolean) =>
+    Effect.gen(function* () {
+      const shell = remoteSetting(key)?.windowsShell ?? null;
+      const local = { platform: input.platform, processes: input.processes };
+
+      yield* startDaemon(to, local, shell, replaceTask);
+      yield* localListening(to.home).pipe(Effect.ensuring(retryConnection(key)));
+
+      if (replaceTask) {
+        yield* step(key, { type: "started" });
+        yield* updateFacts(key, { progress: null });
+      }
     });
 
   /** Start daemon: `polaris install` with the installed build; on this Mac with none, install it. */
@@ -696,12 +717,20 @@ const makeMachines = Effect.fnUntraced(function* (input: MachinesInput) {
         return yield* runCheck(key, to, "user");
       }
 
-      const shell = remoteSetting(key)?.windowsShell ?? null;
-
-      yield* startDaemon(to, { platform: input.platform, processes: input.processes }, shell).pipe(
-        Effect.mapError(asMachineError)
+      yield* startStep(key, to, false).pipe(
+        Effect.catchTag("TaskConflict", ({ message, task, otherHome }) =>
+          step(key, {
+            type: "startConflict",
+            problem: {
+              kind: "task-conflict",
+              message,
+              command: null,
+              conflict: { task, otherHome },
+            },
+          })
+        ),
+        Effect.mapError((error) => (error instanceof MachineError ? error : asMachineError(error)))
       );
-      yield* localListening(to.home).pipe(Effect.ensuring(retryConnection(key)));
     });
 
   const restartTarget = (key: string) =>

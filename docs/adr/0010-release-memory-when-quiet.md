@@ -1,6 +1,6 @@
 # The Daemon gives memory back once it goes quiet after work
 
-Two seconds after the last Turn in flight ends, or after a burst of file reads, with no Turn in flight, the Daemon runs one full collection and `Bun.shrink()` (`apps/daemon/src/memory/`). It never schedules this while idle: a Turn end, or a versioned file read once 4 MiB have been read since the last release, starts the timer, the next one restarts it, and one release follows each quiet spell.
+Two seconds after the last Turn in flight ends, or after a burst of file reads, with no Turn in flight, the Daemon runs one full collection and `Bun.shrink()` (`apps/daemon/src/memory/`). It never schedules this while idle: a Turn end, or a file read (`files.readVersioned` or `files.read`) once 4 MiB have been read since the last release, starts the timer, the next one restarts it, and one release follows each quiet spell.
 
 ## Why
 
@@ -15,5 +15,6 @@ Two seconds after the last Turn in flight ends, or after a burst of file reads, 
 - One full collection per quiet spell. `shrink` may also drop JavaScriptCore's compiled code, so the next Turn can recompile hot functions: a few milliseconds, once.
 - `bun-types` marks `Bun.shrink` deprecated, with no replacement. If a Bun upgrade removes it, typecheck fails there; `Bun.gc(true)` alone is the fallback, though it gives back only 5–10 MiB of the ~45.
 - Reads never wake an idle Daemon, since only a read starts the timer. `idle` on 24 CI runners per side: no-Client wakeups 25.5 vs 26.6/s (quartiles overlap; baseline 26.3), with a Client 36.05 vs 36.00/s, CPU unchanged. Right after a release wakeups run higher for some seconds: `editor.tabs20_wakeups_per_s` at `--quick` (5 s after the burst) goes from 32 to 41/s, while at full size (35 s after) it goes from 12.5 to 3.8/s and CPU from 0.10 to 0.03%, over 8 runners per side.
-- Only `readVersioned` counts, so `files.read`'s larger transfers (blobs, images) still wait for a Turn end or JavaScriptCore.
+- A watch no longer counts (ENG-788): `currentVersion` hashes through one reused 64 KiB buffer, so a watch snapshot or change leaves no garbage to release.
+- `files.read` counts, a streamed range once its stream ends (ENG-788). On an M2 Max, interleaved with the uncounted build, `blobs` throughput and peaks are unchanged at normal load (read 441 vs 430 MB/s, 4 runs each), retained footprint goes from 7.6 to 5.5 MiB, and under heavy load (load average 30–260) from 9.5 to 1.4 MiB, with RSS after the transfers from 182 to 162 MiB.
 - A Turn that ends while another runs doesn't release; a Daemon with a session always Working (a long agent) only releases between Turns.

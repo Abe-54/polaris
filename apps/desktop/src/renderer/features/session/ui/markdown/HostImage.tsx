@@ -72,7 +72,7 @@ export interface HostImageProps {
 /** The image in place; a click opens it whole in the image viewer. */
 export const HostImage = ({ path, alt, className }: HostImageProps) => {
   const place = useEditorPlace();
-  const full = place === null ? null : onHost(place.root, path);
+  const full = place === null ? null : onHost(place.root, path, place.windows === true);
   const view = useHostImage(place?.hostKey ?? null, full);
   const [broken, setBroken] = useState<string | null>(null);
   const [viewing, setViewing] = useState(false);

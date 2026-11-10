@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 import { LanguageHostState, LanguageInstallProgress } from "@polaris/protocol";
 import { Tool } from "../languages/catalog/index.ts";
 import { createHostToolStates } from "../languages/install/hostState.ts";
@@ -34,7 +34,7 @@ function projectedPhase(phase: LanguageInstallProgress["phase"]): Phase {
   }
 }
 
-function createModelRun(random: () => number): ModelRun {
+function createModelRun(random: () => number, reached: Set<string>): ModelRun {
   const tools = [0, 1].map((id) =>
     Schema.decodeUnknownSync(Tool)({ ...artifactFixture().tool, id: `tool-${id}` })
   );
@@ -86,6 +86,7 @@ function createModelRun(random: () => number): ModelRun {
         activeVersion: "1.0.0",
       });
 
+      reached.add(`${update.toolId}:${update.phase}`);
       latest.set(update.toolId, update);
       model[tool] = projectedPhase(update.phase);
 
@@ -127,15 +128,21 @@ test("Host snapshot model agrees with 2000 installer/feed steps, closes and coal
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
 
-    return seed;
+    // An LCG's low bits cycle with a short period; the high bits drive every choice.
+    return seed >>> 16;
   };
 
+  const reached = new Set<string>();
+
   for (let iteration = 0; iteration < 50; iteration++) {
-    const run = createModelRun(random);
+    const run = createModelRun(random, reached);
 
     for (let step = 0; step < 40; step++) await advance(run, random() % 5, step);
     run.close();
   }
+
+  // Both tools reach every installer phase (ENG-785: the low bits reached 4 of 8).
+  expect(reached.size).toBe(8);
 });
 
 posixTest(
@@ -193,7 +200,14 @@ posixTest(
       const trace = HostStateTrace.make({ version: 1, source: "host-installer-feed", steps });
       const receipt = await replayHostState(trace);
 
-      expect(receipt.steps).toBe(steps.length);
+      // The real installer's feed reached Installed, and Quint replayed that snapshot.
+      expect(steps).toContainEqual(
+        HostStateStep.cases.SetState.make({ tool: 0, phase: "Installed" })
+      );
+      expect(steps.findLast(Predicate.isTagged("Consume"))).toEqual(
+        HostStateStep.cases.Consume.make({ phases: ["Installed", "NotDownloaded"] })
+      );
+      expect(receipt.output).toContain("ok recordedHostFeedTest");
       expect(states.stats().subscribers).toBe(0);
 
       if (process.env.POLARIS_HOST_STATE_TRACE !== undefined)

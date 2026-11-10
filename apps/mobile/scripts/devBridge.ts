@@ -2,10 +2,13 @@
  * The development bridge: a WebSocket on 127.0.0.1 forwarding each connection's bytes to the
  * Daemon's Unix socket, so the simulator gets a Client's power over a dev Daemon. A random
  * token is required, and only the bridge's own Host and Origin pass, so no web page can reach it.
+ * It acts as a dev Desktop App: each `hello` gains the test Daemon's user key (ADR 0100).
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { encodeBlobFrame, encodeJsonFrame, type Frame, FrameDecoder } from "@polaris/protocol";
+import { TEST_USER_KEY } from "@polaris/sdk/testing";
 import type { Socket } from "bun";
-import { Predicate } from "effect";
+import { Predicate, Schema } from "effect";
 
 export interface DevBridgeServer {
   readonly port: number;
@@ -15,6 +18,8 @@ export interface DevBridgeServer {
 
 interface Pipe {
   socket: Socket<undefined> | null;
+  /** The phone's byte stream, cut into frames so `hello` can carry the user key. */
+  frames: FrameDecoder;
   /** Bytes from the phone not yet written to the Daemon (before connect, or under backpressure). */
   pending: Array<Uint8Array>;
   closed: boolean;
@@ -26,6 +31,42 @@ const sameToken = (given: string | null, token: string): boolean => {
   const b = Buffer.from(token);
 
   return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const Message = Schema.Record(Schema.String, Schema.Unknown);
+
+type Message = typeof Message.Type;
+
+const decodeMessages = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Union([Message, Schema.Array(Message)]))
+);
+
+const isBatch = Schema.is(Schema.Array(Message));
+
+const HelloRequest = Schema.Struct({
+  _tag: Schema.Literal("Request"),
+  tag: Schema.Literal("hello"),
+  payload: Message,
+});
+
+const isHelloRequest = Schema.is(HelloRequest);
+
+const withUserKey = (message: Message, userKey: string): Message =>
+  isHelloRequest(message) ? { ...message, payload: { ...message.payload, userKey } } : message;
+
+/** A frame as the Daemon gets it: a `hello` (alone or in a batch) gains `userKey`. */
+const forward = (frame: Frame, userKey: string): Uint8Array => {
+  if (frame.kind === "blob")
+    return encodeBlobFrame(frame.blobId, frame.bytes, frame.final, frame.aborted);
+
+  if (!frame.text.includes('"hello"')) return encodeJsonFrame(frame.text);
+  const messages = decodeMessages(frame.text);
+
+  const keyed = isBatch(messages)
+    ? messages.map((message) => withUserKey(message, userKey))
+    : withUserKey(messages, userKey);
+
+  return encodeJsonFrame(JSON.stringify(keyed));
 };
 
 const flush = (pipe: Pipe) => {
@@ -64,8 +105,15 @@ const admitted = (request: Request, port: number): boolean => {
   return origin === null || [...own].some((host) => origin === `http://${host}`);
 };
 
-/** Starts the bridge to `socketPath`; `port` 0 picks a free one. */
-export const startDevBridge = (socketPath: string, port = 0): DevBridgeServer => {
+/**
+ * Starts the bridge to `socketPath`; `port` 0 picks a free one. `userKey` is the one the
+ * Daemon enrolled, by default `launchDaemon`'s.
+ */
+export const startDevBridge = (
+  socketPath: string,
+  port = 0,
+  userKey: string = TEST_USER_KEY
+): DevBridgeServer => {
   const token = randomBytes(24).toString("base64url");
 
   const server = Bun.serve<Pipe>({
@@ -81,7 +129,9 @@ export const startDevBridge = (socketPath: string, port = 0): DevBridgeServer =>
       if (!sameToken(url.searchParams.get("token"), token))
         return new Response("wrong token", { status: 401 });
 
-      return srv.upgrade(request, { data: { socket: null, pending: [], closed: false } })
+      return srv.upgrade(request, {
+        data: { socket: null, frames: new FrameDecoder(), pending: [], closed: false },
+      })
         ? undefined
         : new Response("WebSocket only", { status: 426 });
     },
@@ -120,7 +170,15 @@ export const startDevBridge = (socketPath: string, port = 0): DevBridgeServer =>
           return;
         }
 
-        ws.data.pending.push(message);
+        try {
+          for (const frame of ws.data.frames.push(message))
+            ws.data.pending.push(forward(frame, userKey));
+        } catch {
+          ws.close(1007, "not Polaris frames");
+
+          return;
+        }
+
         flush(ws.data);
       },
       close: (ws) => {

@@ -8,7 +8,7 @@ import { Effect, Predicate } from "effect";
 import { awaitReady, cleanup, connect, createTempDir } from "../daemon.ts";
 import { registerWorkspace, settle } from "../drive.ts";
 import { randomFile } from "../fixtures.ts";
-import { type Metric, memory, type Scenario, throughput } from "../types.ts";
+import { type Metric, memory, rss, type Scenario, throughput } from "../types.ts";
 
 export const blobs: Scenario = {
   name: "blobs",
@@ -89,24 +89,29 @@ export const blobs: Scenario = {
 
       Object.assign(metrics, {
         read_mb_per_s: rate(mb / readSeconds),
-        read_rss_peak_over_base_mib: blobMemory(readReport.rssBytes.max - base.rssBytes),
+        read_rss_peak_over_base_mib: rss(blobMemory(readReport.rssBytes.max - base.rssBytes)),
         upload_mb_per_s: rate(mb / uploadSeconds),
-        upload_rss_peak_over_base_mib: blobMemory(uploadReport.rssBytes.max - base.rssBytes),
-        rss_after_mib: blobMemory(after.rssBytes),
+        upload_rss_peak_over_base_mib: rss(blobMemory(uploadReport.rssBytes.max - base.rssBytes)),
+        rss_after_mib: rss(blobMemory(after.rssBytes)),
       } satisfies Record<string, Metric>);
 
       if (
         base.footprintBytes !== null &&
         after.footprintBytes !== null &&
-        uploadReport.footprintBytes
+        uploadReport.footprintBytes &&
+        readReport.footprintBytes
       ) {
+        metrics.read_footprint_peak_over_base_mib = blobMemory(
+          readReport.footprintBytes.max - base.footprintBytes
+        );
         metrics.upload_footprint_peak_over_base_mib = blobMemory(
           uploadReport.footprintBytes.max - base.footprintBytes
         );
+        metrics.footprint_after_mib = blobMemory(after.footprintBytes);
         metrics.footprint_retained_mib = blobMemory(after.footprintBytes - base.footprintBytes);
       }
 
-      metrics.rss_retained_mib = blobMemory(after.rssBytes - base.rssBytes);
+      metrics.rss_retained_mib = rss(blobMemory(after.rssBytes - base.rssBytes));
 
       return {
         metrics,

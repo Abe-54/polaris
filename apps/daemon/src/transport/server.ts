@@ -8,13 +8,14 @@
  * socket's byte stream replaced by a Wire: each RPC message is one JSON frame
  * (serialized with `RpcSerialization.json`), and blobs travel beside them as
  * binary chunks. Handler layers are composed here, in one place: the defaults
- * from `handlers.ts` first, then whatever the caller passes, which wins.
+ * from `defaults/` first, then whatever the caller passes, which wins.
  */
 import {
   type BlobError,
   type ByteTransport,
   type Capability,
   GrantGate,
+  UserAccessGate,
   type HostInfo,
   type LinkedDevice,
   makeWire,
@@ -33,9 +34,9 @@ import {
   Scope,
   Stream,
 } from "effect";
-import { RpcSerialization, RpcServer, type Rpc } from "effect/rpc";
+import { RpcSchema, RpcSerialization, RpcServer, type Rpc } from "effect/rpc";
 import { type FromClientEncoded, ResponseDefectEncoded } from "effect/rpc/RpcMessage";
-import { withRequestTraceContext } from "./traceContext.ts";
+import { linkedTo, withRequestTraceContext } from "./traceContext.ts";
 import { join } from "node:path";
 import { ExtensionConnections, grantGateFor } from "../extensions/connection.ts";
 import { type RunningGateway, startGateway } from "../gateway/index.ts";
@@ -44,7 +45,7 @@ import { GATEWAY_WIRE_LIMITS } from "../gateway/limits.ts";
 import { connectionRejected, rejectConnection } from "../extensions/admission.ts";
 import { Pairings } from "../extensions/pairings.ts";
 import { RemoteAccessLive } from "../extensions/remoteAccess.ts";
-import { RemoteAccessControl } from "../remoteAccess/index.ts";
+import { RemoteAccessControl } from "../remoteAccess/service.ts";
 import { ConnectionDevice, deviceOf } from "../linkedDevices/connection.ts";
 import { DeviceConnections, type LinkTiming, RelayRoute } from "../linkedDevices/route.ts";
 import { HostPresence, type PresenceOptions } from "../presence/index.ts";
@@ -59,10 +60,11 @@ import { BlobChannel, ServiceError } from "../services.ts";
 import { ClientCapabilities } from "../engine/rpc.ts";
 import { logDefects } from "./defects.ts";
 import { rpcAdmissionBudget } from "./rpcAdmission.ts";
-import { defaultHandlers } from "./handlers.ts";
+import { defaultHandlers } from "./defaults/index.ts";
 import { loadHostInfo } from "./hostInfo.ts";
 import { acquireLock, type DaemonAlreadyRunning, LockError } from "./lock.ts";
 import { ConnectionBlobs, ServerRpcs } from "./rpcs.ts";
+import { userAccessFile, userAccessGateFor } from "./userAccess.ts";
 import { listen, prepareSocketPath } from "./socket.ts";
 import { languageIdentityFor, revokeLanguageIdentity } from "./languageIdentity.ts";
 import {
@@ -129,6 +131,15 @@ const blobError = (error: BlobError) =>
 const tokenHello = Schema.is(Schema.Struct({ extensionToken: Schema.String }));
 
 const requestId = Schema.is(Schema.Union([Schema.String, Schema.Number]));
+
+/** The tags of `ServerRpcs` that stream: their handler Spans link to the Client's (ENG-732). */
+const STREAM_TAGS: ReadonlySet<string> = new Set(
+  [...ServerRpcs.requests.values()].flatMap((rpc) =>
+    RpcSchema.isStreamSchema(rpc.successSchema) ? [rpc._tag] : []
+  )
+);
+
+const isStreamRpc = (tag: string) => STREAM_TAGS.has(tag);
 
 const blobChannelFor = (wire: Wire): BlobChannel["Service"] =>
   BlobChannel.of({
@@ -392,7 +403,9 @@ export const startServer = <ROut = never, E = never, RIn = never>(
 
     const handlers = yield* Layer.build(
       Layer.merge(
-        defaultHandlers({ hostInfo, capabilities }).pipe(Layer.provide(extensionServices)),
+        defaultHandlers({ hostInfo, capabilities, userAccessFile: userAccessFile(root) }).pipe(
+          Layer.provide(extensionServices)
+        ),
         // SAFETY: `handlers` is omitted only when ROut, E and RIn keep their `never` defaults.
         ((options.handlers ?? Layer.empty) as Layer.Layer<ROut, E, RIn>).pipe(
           Layer.provide(
@@ -415,6 +428,12 @@ export const startServer = <ROut = never, E = never, RIn = never>(
       )
     );
 
+    const transportFacts = {
+      tokenRequired: (client: Rpc.ServerClient) =>
+        connections.get(client.id)?.tokenRequired ?? options.extensionTokenRequired ?? false,
+      deviceOf: (client: Rpc.ServerClient) => connections.get(client.id)?.device ?? null,
+    };
+
     // A defect fails only its own request (ADR 0064).
     yield* RpcServer.make(ServerRpcs, {
       spanPrefix: "polaris.rpc",
@@ -422,14 +441,8 @@ export const startServer = <ROut = never, E = never, RIn = never>(
     }).pipe(
       Effect.provideService(RpcServer.Protocol, protocol),
       Effect.provideService(ConnectionBlobs, blobsMiddleware),
-      Effect.provideService(
-        GrantGate,
-        grantGateFor({
-          tokenRequired: (client) =>
-            connections.get(client.id)?.tokenRequired ?? options.extensionTokenRequired ?? false,
-          deviceOf: (client) => connections.get(client.id)?.device ?? null,
-        })
-      ),
+      Effect.provideService(GrantGate, grantGateFor(transportFacts)),
+      Effect.provideService(UserAccessGate, userAccessGateFor(transportFacts)),
       Effect.provideContext(handlers),
       Effect.forkScoped
     );
@@ -484,7 +497,9 @@ export const startServer = <ROut = never, E = never, RIn = never>(
                         }
                       }
 
-                      return writeRequest(clientId, withRequestTraceContext(message));
+                      const traced = withRequestTraceContext(message, isStreamRpc);
+
+                      return writeRequest(clientId, traced.message).pipe(linkedTo(traced.link));
                     }),
                   {
                     discard: true,

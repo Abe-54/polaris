@@ -610,7 +610,7 @@ export interface SubscriptionItems
   "harness.availability": Plain<HostHarnesses>;
   continuity: ContinuityItem;
   "plan-limits": Plain<PlanLimit>;
-  "host.stats": HostStatsItem;
+  "host.stats": typeof HostStatsItem.Encoded;
   "devices.watch": ReadonlyArray<LinkedDeviceView>;
   "review.watchRiskSummary": RiskSummary;
   "inline.propose": InlineStreamItem;

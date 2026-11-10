@@ -41,25 +41,30 @@ const snapshot = (heard: Heard, finished: boolean) =>
 
 /**
  * Folds results into snapshots, one per result, then a `finished` one. A guess
- * still pending when the provider ends is kept as final text.
+ * still pending when the provider ends is kept as final text; a provider failure
+ * ends the stream with no `finished` snapshot.
  */
 export const snapshots = <E>(
   results: Stream.Stream<ProviderResult, E>
 ): Stream.Stream<VoiceTranscript, E> =>
   results.pipe(
+    Stream.map((result): ProviderResult | null => result),
+    // The end marker follows only a clean end: concat never runs it after a failure.
+    Stream.concat(Stream.make(null)),
     Stream.mapAccum(
       (): Heard => ({ final: [], interim: "" }),
       (heard, result) => {
+        if (result === null)
+          return [
+            heard,
+            [snapshot({ final: [...heard.final, heard.interim], interim: "" }, true)],
+          ] as const;
+
         const next = result.isFinal
           ? { final: [...heard.final, result.text], interim: "" }
           : { final: heard.final, interim: result.text };
 
         return [next, [snapshot(next, false)]] as const;
-      },
-      {
-        onHalt: (heard) => [
-          snapshot({ final: [...heard.final, heard.interim], interim: "" }, true),
-        ],
       }
     )
   );

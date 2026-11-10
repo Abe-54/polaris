@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@polaris/protocol";
 import { Effect, Fiber, type Layer, Option, Predicate, Redacted, type Scope, Stream } from "effect";
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
+import { polarisHome } from "../paths.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { Engine, SecretOutcome } from "./Engine.ts";
 import {
@@ -146,6 +147,30 @@ describe("Secret Requests", () => {
     );
 
     expect(outcome).toEqual(SecretOutcome.Declined());
+  });
+
+  test("a declined request stores nothing, even when a value arrives after", async () => {
+    const { layer, filename } = setup();
+    const S = SessionId.make("secret-declined-empty");
+
+    const late = await run(
+      layer,
+      Effect.gen(function* () {
+        yield* startWorking(S);
+        const { fiber, requestId } = yield* ask(S);
+        yield* respond(S, requestId, ApprovalDecision.cases.Deny.make({ reason: null }));
+        yield* Fiber.join(fiber);
+
+        return yield* (yield* Engine)
+          .provideSecret(S, requestId, Redacted.make(VALUE), "Mac")
+          .pipe(Effect.flip);
+      })
+    );
+
+    const dir = join(polarisHome(), "secrets", "sessions", Buffer.from(S).toString("hex"));
+    expect(Predicate.isTagged(late, "SecretRejected") && late.reason).toBe("ended");
+    expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
+    expect(loggedPayloads(filename)).not.toContain(VALUE);
   });
 
   test("an unanswered request times out, is withdrawn, and the session goes back to work", async () => {

@@ -44,3 +44,13 @@ const waitWord = (row: SessionRow): string =>
 /** "asks · 18m": what the next row waits on, and for how long. */
 export const nextUpMeta = (row: SessionRow, now: number): string =>
   `${waitWord(row)} · ${age(row.since, now)}`;
+
+/** Each page's measured height in rows' order, or null until every page has one. */
+export const pageHeights = (
+  rows: ReadonlyArray<SessionRow>,
+  measured: ReadonlyMap<string, number>
+): ReadonlyArray<number> | null => {
+  const heights = rows.map((row) => measured.get(row.key));
+
+  return heights.every((height): height is number => height !== undefined) ? heights : null;
+};

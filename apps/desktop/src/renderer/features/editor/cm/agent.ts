@@ -87,9 +87,18 @@ export const agentField = StateField.define<AgentMarks | null>({
   },
 });
 
-/** The lines any of the agent's spans touch, by number. */
+const linesByState = new WeakMap<EditorState, ReadonlySet<number>>();
+
+const noLines: ReadonlySet<number> = new Set();
+
+/** Computed once per state, shared by decorations and every visible gutter line. */
 export const agentLines = (state: EditorState): ReadonlySet<number> => {
   const marks = state.field(agentField, false) ?? null;
+
+  if (marks === null) return noLines;
+  const cached = linesByState.get(state);
+
+  if (cached !== undefined) return cached;
   const lines = new Set<number>();
 
   for (const span of marks?.spans ?? []) {
@@ -100,6 +109,8 @@ export const agentLines = (state: EditorState): ReadonlySet<number> => {
     for (let n = state.doc.lineAt(Math.min(span.from, state.doc.length)).number; n <= last; n++)
       lines.add(n);
   }
+
+  linesByState.set(state, lines);
 
   return lines;
 };

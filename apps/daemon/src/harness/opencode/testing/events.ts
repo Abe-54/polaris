@@ -21,11 +21,46 @@ export const events = (sessionID: string) => ({
       part: { id: `prt_${messageID}`, sessionID, messageID, type: "text", text },
       time: 0,
     }),
-  assistant: (id: string) =>
+  assistant: (
+    id: string,
+    extra: {
+      readonly providerID?: string;
+      readonly modelID?: string;
+      readonly summary?: boolean;
+    } = {}
+  ) =>
     event("message.updated", {
       sessionID,
-      info: { id, sessionID, role: "assistant", time: { created: 0 } },
+      info: { id, sessionID, role: "assistant", time: { created: 0 }, ...extra },
     }),
+  /** A finished model call carrying `input` (fresh) and `cached` (read) tokens, writing `output`. */
+  stepFinish: (messageID: string, tokens: { input: number; cached: number; output: number }) =>
+    event("message.part.updated", {
+      sessionID,
+      part: {
+        id: `prt_step_${crypto.randomUUID()}`,
+        sessionID,
+        messageID,
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: {
+          input: tokens.input,
+          output: tokens.output,
+          reasoning: 0,
+          cache: { read: tokens.cached, write: 0 },
+        },
+      },
+      time: 0,
+    }),
+  /** The user message's part that asks for a compaction. */
+  compaction: (messageID: string, auto: boolean) =>
+    event("message.part.updated", {
+      sessionID,
+      part: { id: `prt_${messageID}`, sessionID, messageID, type: "compaction", auto },
+      time: 0,
+    }),
+  compacted: () => event("session.compacted", { sessionID }),
   text: (messageID: string, id: string, text: string, done = true) =>
     event("message.part.updated", {
       sessionID,

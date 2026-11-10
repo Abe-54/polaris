@@ -23,6 +23,7 @@ import { emptyTurnState, planTurnNotifications, type TurnNotification } from "./
 import {
   type AgentNotification,
   bannerOn,
+  clickAction,
   emptyNotifyState,
   planAgentNotifications,
 } from "./notifyPlan.ts";
@@ -106,7 +107,7 @@ export const createNeedsYouCenter = ({
   const focus = () => focusWindow(window());
 
   const act = (action: NeedsYouAction) => {
-    if (action.action === "open") focus();
+    if (action.action === "open" || action.action === "open-constellation") focus();
     send({ kind: "needs-you", ...action });
   };
 
@@ -236,7 +237,6 @@ export const createNeedsYouCenter = ({
     record(content.notification, shown ? "shown" : "off");
 
     if (!shown) return;
-    const { hostKey, sessionId } = content.notification;
 
     const notification = new Notification({
       title: content.title,
@@ -244,7 +244,7 @@ export const createNeedsYouCenter = ({
       body: content.body,
     });
 
-    notification.on("click", () => open(hostKey, sessionId));
+    notification.on("click", () => act(clickAction(content.notification)));
     notification.on("close", () => {
       if (live.get(content.key) === notification) live.delete(content.key);
     });

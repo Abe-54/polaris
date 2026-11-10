@@ -7,7 +7,7 @@ import { Effect, Option, Schema } from "effect";
 import { awaitReady, connect } from "../daemon.ts";
 import { settle } from "../drive.ts";
 import { summarize } from "../stats.ts";
-import { count, cpu, type Metric, memory, type Scenario, time } from "../types.ts";
+import { count, cpu, type Metric, memory, rss, type Scenario, time } from "../types.ts";
 
 /** The line `POLARIS_DEBUG_MODULES=1` makes the Daemon print once it listens (`debug.ts`). */
 const StartupModules = Schema.fromJsonString(
@@ -43,7 +43,7 @@ export const coldStart: Scenario = {
     Effect.gen(function* () {
       const spawns = ctx.quick ? 3 : 5;
       const hello: Array<number> = [];
-      const rss: Array<number> = [];
+      const rssSamples: Array<number> = [];
       const footprint: Array<number> = [];
       const bridge: Array<number> = [];
       const modules: Array<{ readonly all: number; readonly polaris: number }> = [];
@@ -58,7 +58,7 @@ export const coldStart: Scenario = {
             const ready = sampler.now();
             yield* settle(2000);
             const s = sampler.sample();
-            rss.push(s.rssBytes);
+            rssSamples.push(s.rssBytes);
 
             if (s.footprintBytes !== null) footprint.push(s.footprintBytes);
             const loaded = startupModules(daemon.logs());
@@ -79,7 +79,7 @@ export const coldStart: Scenario = {
       Object.assign(metrics, {
         hello_ms: time(summarize(hello).median),
         hello_max_ms: time(summarize(hello).max, { info: true }),
-        rss_settled_mib: memory(summarize(rss).median),
+        rss_settled_mib: rss(memory(summarize(rssSamples).median)),
       } satisfies Record<string, Metric>);
 
       if (footprint.length > 0) {

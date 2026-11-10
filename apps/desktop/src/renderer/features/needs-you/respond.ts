@@ -3,9 +3,12 @@
  * and Take back, dispatched like the conversation does, with the refusal shown as a toast.
  */
 import type { ApprovalDecision, ApprovalRequest, RequestId, SessionId } from "@polaris/protocol";
+import { PixelHandIcon, showToast } from "@polaris/ui";
+import { createElement } from "react";
 import { Commands, Decisions } from "../../commands.ts";
 import { allowFor, forgetDecision, noteDecision, noteGrant } from "../data/approval/decide.ts";
 import { askDenyReason } from "../data/write/deny.ts";
+import { type DataWrite, writeName } from "../data/write/model.ts";
 import { isApprovalOnScreen, revealApproval } from "../../shell/approvalInView.ts";
 import { send } from "../session/dispatch.ts";
 import { markAnswered } from "./answered.ts";
@@ -53,14 +56,27 @@ export const decide = async (
   return sent;
 };
 
+/** Approve found no card of the write to show and nowhere to open it, so it says where to go. */
+const toastWriteNotShown = (write: DataWrite) =>
+  showToast({
+    source: "starlight",
+    icon: createElement(PixelHandIcon, { size: 16 }),
+    title: `Review the ${writeName(write)} in its session`,
+    message: "A write runs only while its SQL and Run row are on screen.",
+  });
+
 /**
  * A Data Source Approval sends its card's scope, remembered, whatever `remember` says. A write
- * runs only while its card's SQL, dry run and Run row are in view; else `open` and the card show.
+ * runs only while its card's SQL, dry run and Run row are in view; else `open` and the card show,
+ * or, with neither, a toast says so.
  */
 export const approve = async (target: ApprovalTarget, remember = false, open?: () => void) => {
-  if (target.request.dataWrite !== undefined && !isApprovalOnScreen(target.request.id)) {
+  const write = target.request.dataWrite;
+
+  if (write !== undefined && !isApprovalOnScreen(target.request.id)) {
     open?.();
-    revealApproval(target.request.id);
+
+    if (!revealApproval(target.request.id) && open === undefined) toastWriteNotShown(write);
 
     return false;
   }

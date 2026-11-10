@@ -25,7 +25,7 @@ export class ConnectionBlobs extends RpcMiddleware.Service<
   { provides: BlobChannel | CurrentLanguageConnection | LanguageConnectionLifetime }
 >()("polaris/daemon/transport/ConnectionBlobs") {}
 
-/** Every RPC also passes the Grant gate (`extensions/connection.ts`) before its handler. */
+/** Every RPC also passes the Grant gate (`extensions/connection.ts`) and the user gate (`userAccess.ts`). */
 export const ServerRpcs = ExtensionDaemonRpcs.middleware(ConnectionBlobs);
 
 export type ServerRpcs = typeof ServerRpcs;

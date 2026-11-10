@@ -5,7 +5,8 @@
 import { Option } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { IpcError } from "../../../../../shared/api.ts";
-import type { DataApi } from "../../data/api.ts";
+import type { TraceContext } from "@polaris/protocol";
+import type { DataApi, TraceOf } from "../../data/api.ts";
 import { useDataApi } from "../../data/hooks.tsx";
 import type { GridColumn } from "../../grid/columns.ts";
 import { type DataRow, decodeRows } from "../../grid/value.ts";
@@ -64,13 +65,14 @@ const BAD_ROWS: IpcError = {
   message: "The result had a value Polaris can't show",
 };
 
-/** One page through whichever call the api has; returns its cancel. */
+/** One page through whichever call the api has; returns its cancel. Streams don't carry `trace` yet (ENG-732). */
 const fetchPage = (
   api: DataApi,
   at: DataSessionKey,
   request: PageRequest,
   offset: number,
-  on: PageHandlers
+  on: PageHandlers,
+  trace: TraceContext | undefined
 ): (() => void) => {
   if (api.queryStream !== undefined) {
     const limit = Math.min(STREAM_PAGE, ROW_CAP - offset);
@@ -91,7 +93,11 @@ const fetchPage = (
   const limit = Math.min(QUERY_PAGE, ROW_CAP - offset);
 
   void api
-    .query(at, { source: request.source, sql: request.sql(limit, offset), limit })
+    .query(
+      at,
+      { source: request.source, sql: request.sql(limit, offset), limit },
+      trace === undefined ? undefined : { trace }
+    )
     .then((result) => {
       if (!live) return;
 
@@ -110,8 +116,11 @@ const fetchPage = (
 
 const pageSize = (api: DataApi) => (api.queryStream === undefined ? QUERY_PAGE : STREAM_PAGE);
 
-export const usePages = (at: DataSessionKey, request: PageRequest | null) => {
+export const usePages = (at: DataSessionKey, request: PageRequest | null, trace?: TraceOf) => {
   const api = useDataApi();
+  const traceOf = useRef(trace);
+
+  traceOf.current = trace;
   const [pages, setPages] = useState<Pages>(INITIAL);
   const cancel = useRef<(() => void) | null>(null);
   const latest = useRef(request);
@@ -130,25 +139,34 @@ export const usePages = (at: DataSessionKey, request: PageRequest | null) => {
       const asked = Math.min(pageSize(api), ROW_CAP - offset);
 
       cancel.current?.();
-      cancel.current = fetchPage(api, { hostKey, sessionId }, current, offset, {
-        chunk: ({ columns, rows }) =>
-          setPages((p) => ({
-            ...p,
-            status: "ready",
-            columns: columns ?? p.columns,
-            rows: rows.length === 0 ? p.rows : [...p.rows, ...rows],
-          })),
-        end: (returned, elapsedMs) =>
-          setPages((p) => ({
-            ...p,
-            status: "ready",
-            fetching: false,
-            elapsedMs: p.elapsedMs + elapsedMs,
-            done: returned < asked || offset + returned >= ROW_CAP,
-          })),
-        failed: (error) =>
-          setPages((p) => ({ ...p, status: "failed", fetching: false, done: true, error })),
-      });
+      const context = traceOf.current?.();
+
+      cancel.current = fetchPage(
+        api,
+        { hostKey, sessionId },
+        current,
+        offset,
+        {
+          chunk: ({ columns, rows }) =>
+            setPages((p) => ({
+              ...p,
+              status: "ready",
+              columns: columns ?? p.columns,
+              rows: rows.length === 0 ? p.rows : [...p.rows, ...rows],
+            })),
+          end: (returned, elapsedMs) =>
+            setPages((p) => ({
+              ...p,
+              status: "ready",
+              fetching: false,
+              elapsedMs: p.elapsedMs + elapsedMs,
+              done: returned < asked || offset + returned >= ROW_CAP,
+            })),
+          failed: (error) =>
+            setPages((p) => ({ ...p, status: "failed", fetching: false, done: true, error })),
+        },
+        context
+      );
     },
     [api, hostKey, sessionId]
   );

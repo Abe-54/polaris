@@ -79,11 +79,17 @@ export interface ThreadController {
   readonly workspace: (workspaceId: WorkspaceId) => Promise<Workspace | null>;
   readonly subscribe: (listener: () => void) => () => void;
   readonly type: (text: string) => void;
-  /** Sends or holds the draft with `attachments`; true when it was taken, so the chips can go. */
-  readonly submit: (attachments?: ReadonlyArray<Attachment>) => Promise<boolean>;
+  /**
+   * Sends or holds the draft with `attachments`; true when it was taken, so the chips can go.
+   * `harnessSteersAttachments`: the session's Harness takes files in a steer (`HarnessModels`).
+   */
+  readonly submit: (
+    attachments?: ReadonlyArray<Attachment>,
+    harnessSteersAttachments?: boolean
+  ) => Promise<boolean>;
   readonly queue: (attachments?: ReadonlyArray<Attachment>) => boolean;
-  /** Takes a steer that didn't land back into the composer, to send again. */
-  readonly editSteer: (id: string) => void;
+  /** Takes a steer that didn't land back into the composer, to send again; returns its files. */
+  readonly editSteer: (id: string) => ReadonlyArray<Attachment>;
   /** Sends a failed Turn again; a retry of one whose answer was lost reuses its command id. */
   readonly sendAgain: (id: string) => void;
   readonly interrupt: () => Promise<void>;
@@ -330,11 +336,15 @@ export const openThread = (
   };
 
   /** Shows the steer in the thread at once; it stays there until it lands or fails. */
-  const steer = async (fold: SessionFold, command: Command) => {
+  const steer = async (
+    fold: SessionFold,
+    command: Command,
+    attachments: ReadonlyArray<Attachment>
+  ) => {
     const turnId = lastTurnOf(fold)?.id;
 
     if (turnId === undefined) return false;
-    const entry = outgoingSteer(fold.turns, turnId, state.text);
+    const entry = outgoingSteer(fold.turns, turnId, state.text, attachments);
     set({ steers: [...state.steers, entry] });
     clearSent();
     const error = await send(`steer:${entry.id}`, command);
@@ -391,13 +401,19 @@ export const openThread = (
   const editSteer = (id: string) => {
     const held = state.steers.find((entry) => entry.id === id);
 
-    if (held === undefined || held.status !== "failed") return;
+    if (held === undefined || held.status !== "failed") return [];
     set({ steers: state.steers.filter((entry) => entry !== held) });
     type(state.text.trim() === "" ? held.text : `${state.text.trimEnd()}\n${held.text}`);
+
+    return held.attachments;
   };
 
-  const submit = async (attachments: ReadonlyArray<Attachment> = []) => {
+  const submit = async (
+    attachments: ReadonlyArray<Attachment> = [],
+    harnessSteersAttachments = false
+  ) => {
     const ids = attachments.map((attachment) => attachment.id);
+    const steersAttachments = harnessSteersAttachments && source.canSteerAttachments === true;
     const fold = state.fold;
 
     if (fold === null) return false;
@@ -410,14 +426,17 @@ export const openThread = (
     });
 
     // A Turn still on its way: the next message waits for it, as a follow-up.
-    if (sendQueues(mode, ids) || (mode.kind === "send" && pendingSend(state.sends) !== null))
+    if (
+      sendQueues(mode, ids, steersAttachments) ||
+      (mode.kind === "send" && pendingSend(state.sends) !== null)
+    )
       return queue(attachments);
-    const command = submitCommand(mode, sessionId, state.text, ids);
+    const command = submitCommand(mode, sessionId, state.text, ids, steersAttachments);
 
     // A Send already on its way carries its own attachments, not chips added since.
     if (command === null || inFlight.has("composer")) return false;
 
-    if (mode.kind === "steer") return steer(fold, command);
+    if (mode.kind === "steer") return steer(fold, command, attachments);
 
     if (mode.kind === "send") {
       const entry = outgoingSend({

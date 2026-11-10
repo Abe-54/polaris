@@ -106,7 +106,7 @@ describe("the inbox", () => {
     expect(inbox.working).toBe("1 session working on 1 host");
   });
 
-  test("the footer names a Host that is away, and says its answers wait", () => {
+  test("the footer folds connected Hosts, names each away one, and says its answers wait", () => {
     const inbox = inboxOf([
       host("Mac Studio", studio),
       { ...host("lucas-rpi", vm), connection: "reconnecting" },
@@ -115,10 +115,9 @@ describe("the inbox", () => {
     ]);
 
     expect(inbox.hosts.map((footer) => footer.label)).toEqual([
-      "Mac Studio",
+      "2 connected",
       "lucas-rpi reconnecting",
       "mac-mini offline",
-      "192.168.1.20",
     ]);
     expect(inbox.away).toBe(true);
     expect(
@@ -126,5 +125,18 @@ describe("the inbox", () => {
         .away
     ).toBe(false);
     expect(inbox.items.find((row) => row.hostName === "lucas-rpi")?.stale).toBe(true);
+  });
+
+  test("a lone connected Host keeps its name, and with none connected nothing folds", () => {
+    const labels = (hosts: ReadonlyArray<HomeHost>) =>
+      inboxOf(hosts).hosts.map((footer) => footer.label);
+
+    expect(labels([host("Mac Studio", studio)])).toEqual(["Mac Studio"]);
+    expect(
+      labels([host("Mac Studio", studio), { ...host("lucas-rpi", []), connection: "offline" }])
+    ).toEqual(["1 connected", "lucas-rpi offline"]);
+    expect(labels([{ ...host("lucas-rpi", []), connection: "offline" }])).toEqual([
+      "lucas-rpi offline",
+    ]);
   });
 });

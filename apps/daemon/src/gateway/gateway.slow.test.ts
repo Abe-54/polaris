@@ -33,6 +33,7 @@ import { webSocketTransport } from "./client.testing.ts";
 import { readGatewayRecord } from "./config.ts";
 import { CLOSE_GOING_AWAY } from "./transport.ts";
 import { newTempDir, removeTempDirSettled, scopedTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const temporary = scopedTempDir("pl-gw-", { short: true });
 
@@ -116,7 +117,7 @@ const setup = Effect.gen(function* () {
     connectRpcWith(ExtensionDaemonRpcs, transport)
   );
 
-  yield* desktop.client.hello(hello(null));
+  yield* desktop.client.hello({ ...hello(null), ...TEST_USER_KEY });
 
   return { root, server, url, overWebSocket, desktop };
 });

@@ -65,6 +65,10 @@ export const motionLine = (motion: MotionPreference): string =>
     Match.exhaustive
   );
 
+/** The Notifications row: the constellation switch kept from the host sheet (ENG-561). */
+export const notificationsLine = (constellations: boolean): string =>
+  constellations ? "When a constellation needs you: on" : "When a constellation needs you: off";
+
 /** What each connected Host says of Developer Mode, for the read-only row. */
 export interface HostDeveloperMode {
   readonly stored: boolean;

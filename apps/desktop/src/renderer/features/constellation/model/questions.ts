@@ -32,3 +32,21 @@ export const userQuestions = (c: ConstellationData): ReadonlyArray<OpenQuestionD
   openQuestionsOf(c)
     .filter((q) => q.question.to === "user")
     .toSorted((a, b) => a.askedAt.localeCompare(b.askedAt));
+
+/** A user question as the Lead chat's card shows it: whose Task asks. */
+export interface AskedQuestion {
+  readonly attemptId: OpenQuestionData["attemptId"];
+  readonly question: OpenQuestionData["question"];
+  readonly taskId: string;
+}
+
+/**
+ * The questions the Lead chat pins above its composer (ENG-345): addressed to the user, open,
+ * on a live Attempt, each named by its Task.
+ */
+export const leadQuestions = (c: ConstellationData): ReadonlyArray<AskedQuestion> =>
+  userQuestions(c).flatMap((q) => {
+    const taskId = c.attempts.find((a) => a.id === q.attemptId)?.taskId;
+
+    return taskId === undefined ? [] : [{ attemptId: q.attemptId, question: q.question, taskId }];
+  });

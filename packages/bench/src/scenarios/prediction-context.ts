@@ -5,7 +5,7 @@ import { connectRpc, socketTransport, spawnTransport } from "@polaris/client";
 import { awaitReady, cleanup, createTempDir } from "../daemon.ts";
 import { registerWorkspace, settle } from "../drive.ts";
 import { summarize } from "../stats.ts";
-import { count, cpu, latency, memory, type Scenario } from "../types.ts";
+import { count, cpu, latency, memory, type Metric, rss, type Scenario } from "../types.ts";
 
 export const predictionContext: Scenario = {
   name: "prediction-context",
@@ -87,15 +87,21 @@ export const predictionContext: Scenario = {
       const idle = sampler.report(from - 1, sampler.sample().t);
       const summary = summarize(timings);
 
+      const metrics: Record<string, Metric> = {};
+
+      Object.assign(metrics, {
+        cold_ms: latency(coldMs),
+        warm_p50_ms: latency(summary.median),
+        warm_p95_ms: latency(summary.p95),
+        pieces: count(cold.length, "pieces"),
+        idle_cpu_pct: cpu(idle.cpuAvgPct),
+        idle_rss_mib: rss(memory(idle.rssBytes.median)),
+      } satisfies Record<string, Metric>);
+
+      if (idle.footprintBytes) metrics.idle_footprint_mib = memory(idle.footprintBytes.median);
+
       return {
-        metrics: {
-          cold_ms: latency(coldMs),
-          warm_p50_ms: latency(summary.median),
-          warm_p95_ms: latency(summary.p95),
-          pieces: count(cold.length, "pieces"),
-          idle_cpu_pct: cpu(idle.cpuAvgPct),
-          idle_rss_mib: memory(idle.rssBytes.median),
-        },
+        metrics,
         notes: [
           "Real context RPC, no Trust or language server; warm repeated buffer plus imported-file invalidation. Model server unused.",
           "Cold includes first lazy Host language graph and parser load. Shared machine; compare integration on a quiet Host.",

@@ -35,7 +35,13 @@ import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
 import { RequestsRpcs } from "./requests.ts";
-import { ProfilesRpcs, TraceCompareRpcs, TracesRpcs, TracesSettingsRpcs } from "./traces.ts";
+import {
+  ProfilesRpcs,
+  TraceCompareRpcs,
+  TracesRpcs,
+  TracesSettingsRpcs,
+  TracingSkillRpcs,
+} from "./traces.ts";
 import { HostStatsRpcs } from "./hostStats.ts";
 import { HostHarnesses } from "./availability.ts";
 import { PredictionRpcs } from "./predictionRpcs.ts";
@@ -54,6 +60,7 @@ import {
 } from "./domain.ts";
 import { EventEnvelope } from "./events.ts";
 import { ExtensionRpcs, GrantGate, NotGranted } from "./extensions.ts";
+import { gateUserRpcs, UserAccessGate } from "./userAccess.ts";
 import { RemoteAccessRpcs } from "./remoteAccess.ts";
 import { LinkedDeviceRpcs } from "./linkedDevices.ts";
 import { VoiceRpcs } from "./voice.ts";
@@ -724,7 +731,8 @@ export const ClearAttachments = Rpc.make("attachments.clear", {
   error: Schema.Union([Unsupported, FileError]),
 });
 
-export class DaemonRpcs extends RpcGroup.make(
+/** Every Daemon RPC before the user gate; `DaemonRpcTag` reads its tags. */
+export const DaemonRpcDefinitions = RpcGroup.make(
   InlinePropose,
   Hello,
   Dispatch,
@@ -780,17 +788,27 @@ export class DaemonRpcs extends RpcGroup.make(
     TracesRpcs,
     TracesSettingsRpcs,
     ProfilesRpcs,
-    TraceCompareRpcs
+    TraceCompareRpcs,
+    TracingSkillRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs) {}
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs);
+
+// A const, not a class: inferring `RpcGroup.Rpcs` from a class over the gated group is
+// too deep for the linter's single-program checker (TS2589), which types every Client as `any`.
+export const DaemonRpcs = gateUserRpcs(DaemonRpcDefinitions);
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with
  * `NotGranted` (grants.ts). The SDK's Client is built on this group so the
- * refusal decodes; the Desktop App, never refused, stays on `DaemonRpcs`.
+ * refusal decodes; the Desktop App stays on `DaemonRpcs`, which carries only the
+ * user gate's `UserAccessRequired` (ADR 0100).
  */
 export class ExtensionDaemonRpcs extends DaemonRpcs.omit("dispatch")
-  .add(Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])))
+  .add(
+    Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])).middleware(
+      UserAccessGate
+    )
+  )
   .middleware(GrantGate) {}
 
 /**

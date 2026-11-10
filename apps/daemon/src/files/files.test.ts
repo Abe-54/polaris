@@ -2,8 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FileError, ReadFile } from "@polaris/protocol";
-import { Effect } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import { removeTempDir, tempDir, write } from "../git/testing.ts";
+import { clearFileReads, fileReadBursts } from "../memory/fileReads.ts";
 import { handleListDir, handleReadFile, handleStat } from "./FilesRpcs.ts";
 import { INLINE_TEXT_MAX_BYTES, STREAM_MIN_BYTES } from "./fs.ts";
 import { detectMimeType } from "./mime.ts";
@@ -77,6 +78,30 @@ describe("files.read", () => {
     const got = blobs.blobs.get(blobIdOf(result.content))!;
     expect(got.byteLength).toBe(STREAM_MIN_BYTES + 2);
     expect(got[0]).toBe(5);
+  });
+
+  test.each([
+    ["sent whole", STREAM_MIN_BYTES],
+    ["streamed", STREAM_MIN_BYTES + 1],
+  ])("a large read %s counts toward the quiet release", async (_, size) => {
+    const root = dir();
+    writeFileSync(join(root, "big.bin"), new Uint8Array(size).fill(7));
+    clearFileReads();
+
+    const burst = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkScoped(Stream.runHead(fileReadBursts));
+
+          for (let tick = 0; tick < 5; tick++) yield* Effect.yieldNow;
+          yield* Effect.promise(() => read(join(root, "big.bin")));
+
+          return yield* Fiber.join(fiber).pipe(Effect.timeoutOption("1 second"));
+        })
+      )
+    );
+
+    expect(burst._tag).toBe("Some");
   });
 
   test("images and PDFs are detected by magic bytes and sent as blobs", async () => {

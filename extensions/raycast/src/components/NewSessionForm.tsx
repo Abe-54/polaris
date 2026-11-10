@@ -3,7 +3,7 @@ import { Action, ActionPanel, Form, open, popToRoot, showToast, Toast } from "@r
 import { HARNESS_CATALOGUE, type PermissionMode, type StartSessionInput } from "@polaris/sdk";
 import { useState } from "react";
 import { usePolaris } from "../polaris.tsx";
-import { PERMISSION_MODES } from "../lib/copy.ts";
+import { PERMISSION_MODES, permissionModesOn } from "../lib/copy.ts";
 import { sessionLink } from "../lib/links.ts";
 import { workspaceRows } from "../lib/rows.ts";
 import { attempt } from "./toast.ts";
@@ -27,6 +27,9 @@ export const NewSessionForm = (props: {
   const { client, views } = usePolaris();
   const rows = workspaceRows(views, null);
   const [promptError, setPromptError] = useState<string | undefined>();
+  const [workspaceKey, setWorkspaceKey] = useState(props.workspace);
+  const hostId = rows.find((r) => r.key === workspaceKey)?.hostId;
+  const modes = permissionModesOn(views.find((v) => v.hostId === hostId)?.capabilities ?? []);
 
   const submit = async (values: Values) => {
     const row = rows.find((r) => r.key === values.workspace);
@@ -87,6 +90,7 @@ export const NewSessionForm = (props: {
         title="Workspace"
         {...(props.workspace === undefined ? {} : { defaultValue: props.workspace })}
         storeValue={props.workspace === undefined}
+        onChange={setWorkspaceKey}
       >
         {views.map((view) => (
           <Form.Dropdown.Section key={view.hostId} title={view.hostName}>
@@ -119,9 +123,9 @@ export const NewSessionForm = (props: {
         id="permissionMode"
         title="Permission mode"
         defaultValue="supervised"
-        info="Anything but Supervised also needs the Approve grant."
+        info="Anything but Plan or Supervised also needs the Approve grant."
       >
-        {PERMISSION_MODES.map((m) => (
+        {modes.map((m) => (
           <Form.Dropdown.Item key={m.mode} title={`${m.label} · ${m.detail}`} value={m.mode} />
         ))}
       </Form.Dropdown>

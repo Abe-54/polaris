@@ -4,6 +4,7 @@ import {
   defaultChoice,
   effortFor,
   effortNote,
+  findModel,
   type ModelData,
   modelChange,
   modelLabel,
@@ -62,6 +63,28 @@ describe("Model picker", () => {
     expect(modelLabel(claude, null, null)).toBe("Default");
     expect(modelLabel(claude, "opus", "high")).toBe("Opus 5 · high");
     expect(modelLabel([], "gpt-9", null)).toBe("gpt-9");
+  });
+
+  test("a saved full id finds the alias row of its lineage", () => {
+    const listed = [
+      model("default", { name: "Default (recommended)", isDefault: true }),
+      model("opus", { name: "Opus 5.5" }),
+      model("claude-opus-4-8", { name: "Opus 4.8" }),
+      model("sonnet", { name: "Sonnet" }),
+    ];
+
+    expect(findModel(listed, "claude-opus-5-5")?.id).toBe("opus");
+    expect(findModel(listed, "claude-opus-4-8")?.id).toBe("claude-opus-4-8");
+    expect(findModel(listed, "claude-sonnet-5-5-20261001")?.id).toBe("sonnet");
+    expect(modelLabel(listed, "claude-opus-5-5", "high")).toBe("Opus 5.5 · high");
+  });
+
+  test("a lineage that isn't listed, or is ambiguous, keeps the raw id", () => {
+    const listed = [model("opus", { name: "Opus 5.5" }), model("opus-fast", { name: "Opus 5.5" })];
+
+    expect(modelLabel(listed, "claude-opus-6", null)).toBe("claude-opus-6");
+    expect(modelLabel(listed, "claude-opus-5-5", null)).toBe("claude-opus-5-5");
+    expect(modelLabel(listed, "claude-haiku-5-5", null)).toBe("claude-haiku-5-5");
   });
 
   test("a new session starts on the Harness's default; Claude sends null", () => {

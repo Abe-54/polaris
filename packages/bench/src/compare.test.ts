@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { compare, compareMetric, gatingKinds } from "./compare.ts";
-import { summarize } from "./stats.ts";
+import { MiB, summarize } from "./stats.ts";
 import {
   type AggregatedMetric,
   type BenchResult,
   type Environment,
   type Metric,
   type MetricKind,
+  memory,
   parseBenchResult,
+  rss,
 } from "./types.ts";
 
 const agg = (m: Metric): AggregatedMetric => ({
@@ -152,6 +154,22 @@ describe("compare", () => {
     const c = compare(base, current, new Set(["memory", "-s.peak"]));
     expect(c.regressions.map((r) => r.metric)).toEqual(["rss"]);
     expect(c.rows.find((r) => r.metric === "peak")?.status).toBe("regressed");
+  });
+
+  test("RSS only reports, even against a baseline saved when it gated; footprint gates", () => {
+    const base = result({
+      rss_mib: metric("memory", 100),
+      footprint_mib: metric("memory", 60),
+    });
+
+    const current = result({
+      rss_mib: agg(rss(memory(300 * MiB))),
+      footprint_mib: agg(memory(90 * MiB)),
+    });
+
+    const c = compare(base, current, new Set(["memory"]));
+    expect(c.regressions.map((r) => r.metric)).toEqual(["footprint_mib"]);
+    expect(c.rows.find((r) => r.metric === "rss_mib")?.status).toBe("regressed");
   });
 
   test("a Developer Mode run warns against an older baseline, which ran it off", () => {

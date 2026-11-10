@@ -11,8 +11,20 @@ temporary_root = Path('/tmp').resolve()
 if not private_root.is_relative_to(temporary_root) or private_root == temporary_root:
     parser.error('Private temporary root required')
 import pathlib,json,hashlib,re,zipfile
-from importlib.machinery import SourceFileLoader
-m=SourceFileLoader('legal','tooling/language-catalog/complete-notices.py').load_module();o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache';rows=[]
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+m=load('legal','tooling/language-catalog/complete-notices.py');o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache';rows=[]
 for family,repo,ref,paths in [('flexmark','vsch/flexmark-java','f63c7959601288efcfe6328252490da72fd81283',['LICENSE.txt','LICENSE','LICENSE.md']),('hamcrest','hamcrest/JavaHamcrest','68984b85e869df6a888fffcad87e4b676a8fc0ac',['LICENSE']),('logback','qos-ch/logback','v_1.5.32',['LICENSE.txt','LICENSE','LICENSE.md','LICENSES'])]:
  for p in paths:
   u='https://raw.githubusercontent.com/'+repo+'/'+ref+'/'+p

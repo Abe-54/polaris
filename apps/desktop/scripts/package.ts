@@ -36,6 +36,7 @@ import {
 } from "./packaging/archives.ts";
 import { run } from "./packaging/command.ts";
 import { installerDmg } from "./packaging/dmg.ts";
+import { checkSizeBudget } from "./packaging/size.ts";
 import { stageKoffi } from "./packaging/koffi.ts";
 import { packageTargets, targetOptions } from "./packaging/targets.ts";
 import { installerWindows, windowsPackageVersion } from "./packaging/windows.ts";
@@ -234,9 +235,19 @@ for (const target of targets) {
 
     verifyDaemonManifest(bundledDaemon, release ? pkg.version : undefined);
     console.log(`archived ${updateZip(bundle, pkg.version, join(OUT_DIR, "dist"), signing)}`);
-    console.log(
-      `installer ${installerDmg(bundle, pkg.version, join(OUT_DIR, "dist"), join(REPO_ROOT, "design/assets"), signing)}`
+
+    const dmg = installerDmg(
+      bundle,
+      pkg.version,
+      join(OUT_DIR, "dist"),
+      join(REPO_ROOT, "design/assets"),
+      signing
     );
+
+    console.log(`installer ${dmg}`);
+
+    // Dev packages bundle every platform's Daemon, so only a release is held to the budget.
+    if (release) console.log(checkSizeBudget({ app: bundle, dmg }));
   }
 
   console.log(`packaged ${path}`);

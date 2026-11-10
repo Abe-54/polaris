@@ -20,12 +20,19 @@ export const SEVERITIES: ReadonlyArray<Severity> = ["critical", "high", "medium"
 export const isListed = (finding: RiskFinding): boolean =>
   finding.status === "open" || (finding.status === "dismissed" && finding.severity === "critical");
 
-/** Ranked as the protocol's `rankFindings`, which uses `toSorted`: Hermes lacks it. */
+/** A dismissed Critical stays listed, folded with a "dismissed" note, out of every tally. */
+export const isDismissed = (finding: RiskFinding): boolean => finding.status === "dismissed";
+
+/**
+ * Ranked as the protocol's `rankFindings`, which uses `toSorted`: Hermes lacks it. Dismissed
+ * findings follow the open ones.
+ */
 export const listedFindings = (findings: ReadonlyArray<RiskFinding>): ReadonlyArray<RiskFinding> =>
   findings
     .filter(isListed)
     .sort(
       (a, b) =>
+        Number(isDismissed(a)) - Number(isDismissed(b)) ||
         SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
         b.confidence - a.confidence ||
         FindingSource.literals.indexOf(a.source) - FindingSource.literals.indexOf(b.source)
@@ -37,21 +44,22 @@ export const isDimmed = (finding: RiskFinding): boolean =>
 
 export type Tally = Readonly<Record<Severity, number>>;
 
+/** Open findings by severity: a dismissed one is listed but not counted. */
 export const tally = (findings: ReadonlyArray<RiskFinding>): Tally => {
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
 
-  for (const finding of findings) if (isListed(finding)) counts[finding.severity] += 1;
+  for (const finding of findings) if (finding.status === "open") counts[finding.severity] += 1;
 
   return counts;
 };
 
-/** A file's distinct severities among its listed findings, the most severe first. */
+/** A file's distinct severities among its open findings, the most severe first. */
 export const fileSeverities = (
   findings: ReadonlyArray<RiskFinding>,
   path: string
 ): ReadonlyArray<Severity> =>
   SEVERITIES.filter((severity) =>
-    findings.some((f) => f.path === path && f.severity === severity && isListed(f))
+    findings.some((f) => f.path === path && f.severity === severity && f.status === "open")
   );
 
 /** The most severe of `severities`, or null. */

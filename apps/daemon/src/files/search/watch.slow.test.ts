@@ -56,9 +56,7 @@ test("on Windows a tree watch whose root is deleted closes instead of reporting 
 
   stops.push(await watchRoot(root, () => reports++, { platform: "win32", open }));
   removeTempDir(root);
-  await Bun.sleep(100);
-
-  expect(closed).toBe(true);
+  await waitFor(() => closed);
   expect(reports).toBe(1);
 });
 
@@ -139,8 +137,11 @@ test("bounded git watches report nested changes and discover new directories", a
   });
   stop();
   const count = opened.length;
+  // A live watch on the same root shows when the stopped one would have discovered `src/after`.
+  const control = recorder();
+  stops.push(await watchRoot(root, () => undefined, { platform: "linux", open: control.open }));
   write(root, "src/after/a.ts", "");
-  await Bun.sleep(100);
+  await waitFor(() => control.opened.some((entry) => entry.path === join(root, "src/after")));
   expect(opened).toHaveLength(count);
 });
 

@@ -7,8 +7,9 @@ import {
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { hueVar } from "../../../lib/hue";
+
 import {
-  bodyHue,
   Celestial,
   CELESTIAL_FRAMES,
   celestialCells,
@@ -79,6 +80,16 @@ describe("the Celestial set", () => {
   });
 });
 
+/** A hex colour whose channels sit within 16 of each other: no hue to speak of. */
+const isGrey = (colour: string) => {
+  const channels = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
+    .exec(colour)
+    ?.slice(1)
+    .map((c) => Number.parseInt(c, 16));
+
+  return channels !== undefined && Math.max(...channels) - Math.min(...channels) <= 16;
+};
+
 describe("Celestial", () => {
   test("the Death Star wears grey whatever its Harness; planets wear their Harness's hue", () => {
     const { container, rerender } = render(
@@ -90,9 +101,12 @@ describe("Celestial", () => {
         .querySelector<HTMLElement>("[data-slot=celestial]")
         ?.style.getPropertyValue("--celestial-hue");
 
-    expect(hue()).toBe(bodyHue("death-star") ?? "none");
+    const deathStar = hue() ?? "";
+    expect(isGrey(deathStar)).toBe(true);
+    rerender(<Celestial body="death-star" harness="claude" size={16} />);
+    expect(hue()).toBe(deathStar);
     rerender(<Celestial body="ringed" harness="codex" size={16} />);
-    expect(hue()).not.toBe(bodyHue("death-star"));
+    expect(hue()).toBe(hueVar("codex"));
   });
 
   test("only a Working Celestial carries the 12 fps strip", () => {

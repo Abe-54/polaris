@@ -16,6 +16,7 @@ import {
   probeHost,
   shScript,
   startCommand,
+  taskConflictOf,
   type WindowsShell,
 } from "@polaris/client/install";
 import { Effect, Match, Option, Predicate, Schema } from "effect";
@@ -154,19 +155,23 @@ const decodeReport = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Jso
 export const startDaemon = Effect.fn("startDaemon")(function* (
   channel: HostChannel,
   local: LocalOptions = {},
-  windowsShell: WindowsShell | null = null
+  windowsShell: WindowsShell | null = null,
+  replaceTask: boolean = false
 ) {
   const home = windowsHome(channel, local.platform);
 
-  if (home !== null) return yield* startWindowsLocal(home, local.processes);
+  if (home !== null) return yield* startWindowsLocal(home, local.processes, replaceTask);
 
   const result = yield* channel.exec(
     windowsShell === null
       ? shScript('"$HOME/.polaris/bin/current/polaris" install --json')
-      : startCommand()
+      : startCommand(replaceTask)
   );
 
   const report = Option.getOrNull(decodeReport(result.stdout.trim().split("\n").at(-1) ?? ""));
+  const conflict = taskConflictOf(report, { alias: channel.alias, step: "start" });
+
+  if (conflict !== null) return yield* conflict;
 
   if (result.code === 0 && report?.ok === true) return;
 

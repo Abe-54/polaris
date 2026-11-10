@@ -3,7 +3,7 @@
  * screenshot as an image the Harness shows the model, and a note with the page, the selector
  * and the HTML that the Harness lists as a file to read.
  */
-import type { BrowserPickResult } from "../../../shared/browserContract.ts";
+import type { BrowserPickFrame, BrowserPickResult } from "../../../shared/browserContract.ts";
 import { keepThumbnail } from "../attachments/useUploads.ts";
 import { type StageTarget, stageFile, thumbnail } from "../attachments/stage.ts";
 import {
@@ -37,6 +37,37 @@ export const MAX_NOTE_CHARS = 12_000;
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, Math.max(0, limit - 1))}…` : text;
 
+/** Page text on one line, cut to `limit`: a line break can't start a line of its own. */
+const oneLine = (text: string, limit: number) => clip(text.replace(/\s+/g, " ").trim(), limit);
+
+/** `file:line:column`, as far as the page knew it. */
+const locationOf = (frame: BrowserPickFrame) =>
+  oneLine(
+    [frame.fileName ?? "(unknown file)", frame.lineNumber, frame.columnNumber]
+      .filter((part) => part !== null)
+      .join(":"),
+    1000
+  );
+
+const nameOf = (name: string | null) => oneLine(name ?? "", 200) || "(anonymous)";
+
+/** The React lines (ENG-619): the component, its JSX's source and the components around it. */
+const reactLines = (pick: BrowserPickResult) => {
+  if (pick.componentName === null && pick.stack.length === 0) return [];
+
+  const frames = pick.stack.map(
+    (frame) => `- ${nameOf(frame.functionName)} at ${locationOf(frame)}`
+  );
+
+  return [
+    `React component: ${nameOf(pick.componentName)}`,
+    ...(pick.source === null ? [] : [`Source: ${locationOf(pick.source)}`]),
+    ...(frames.length === 0
+      ? []
+      : ["Components (nearest first, each where its JSX is written):", ...frames]),
+  ];
+};
+
 /**
  * The note the agent reads. Everything the page supplied (URL, title, selector, HTML) sits in
  * one fenced block marked as untrusted data, so nothing in it reads as the note's own text.
@@ -56,6 +87,7 @@ export const pickNote = (pick: BrowserPickResult, screenshot: string | null) => 
     `URL: ${clip(pick.url, 2048)}`,
     `Title: ${clip(pick.title.replace(/\s+/g, " ").trim(), 300) || "(untitled)"}`,
     `Selector: ${clip(pick.selector, 1000)}`,
+    ...reactLines(pick),
     "",
     "HTML (outer, excerpt):",
     "",

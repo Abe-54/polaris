@@ -239,7 +239,7 @@ export const fixtureTracesApi = (scene: TracesScene = "traces"): TracesApi => ({
     return () => undefined;
   },
   get: (_at, traceId) => Promise.resolve(findTrace(scene, traceId)),
-  span: (_at, traceId, spanId) => {
+  span: (_at, traceId, spanId, before) => {
     const trace = findTrace(scene, traceId);
 
     if (!trace.ok) return Promise.resolve(trace);
@@ -250,10 +250,11 @@ export const fixtureTracesApi = (scene: TracesScene = "traces"): TracesApi => ({
         fail("E-TRACE-NOT-FOUND", `No span ${spanId} in trace ${traceId}`, "Open the trace again")
       );
     const logs = FIXTURE_LOGS.filter((l) => l.spanId === span.id).toReversed();
+    const from = before === undefined ? 0 : logs.findIndex((l) => l.id === before.id) + 1;
 
     return Promise.resolve({
       ok: true,
-      value: { span, logs: logs.slice(0, LOG_LIMIT), logCount: logs.length },
+      value: { span, logs: logs.slice(from, from + LOG_LIMIT), logCount: logs.length },
     });
   },
   compare: (_at, a, b) => Promise.resolve(fixtureComparison(scene, a, b)),

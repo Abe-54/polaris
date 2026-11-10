@@ -23,6 +23,7 @@ import { sources } from "./sources.ts";
 import { memorySecrets } from "../secrets/index.ts";
 import { DataSources, DataQueries, DataRpcsLive } from "./index.ts";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const sessionId = SessionId.make("data-session");
 
@@ -120,6 +121,7 @@ test("Data RPC serves discovered/manual metadata and never returns write-only cr
           clientVersion: "0",
           deviceLabel: "test",
           capabilities: [],
+          ...TEST_USER_KEY,
         });
 
         expect(capabilities).toContain("data");

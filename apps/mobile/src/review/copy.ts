@@ -25,7 +25,8 @@ export const VERDICT_REASONS: ReadonlyArray<{
   { reason: "out-of-scope", label: "Out of scope" },
 ];
 
-export const acceptLabel = (state: AcceptState, turnNumber: number): string => {
+/** `withTurn` false at accessibility sizes: Accept drops the number, which the header names. */
+export const acceptLabel = (state: AcceptState, turnNumber: number, withTurn = true): string => {
   switch (state.kind) {
     case "checking":
       return "Accept waits for the risk summary";
@@ -39,7 +40,7 @@ export const acceptLabel = (state: AcceptState, turnNumber: number): string => {
       return "Accepting…";
     case "ready":
     case "paused":
-      return `Accept turn ${turnNumber}`;
+      return withTurn ? `Accept turn ${turnNumber}` : "Accept";
   }
 };
 

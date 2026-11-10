@@ -41,9 +41,12 @@ export class OxlintFailed extends Schema.TaggedError<OxlintFailed>()("OxlintFail
 
 /**
  * Runs oxlint from the repo root (so every workspace's nested `.oxlintrc.json`
- * applies) over `files`, or the whole repo when `files` is empty.
+ * applies) over `files`, or the whole repo when `files` is empty. `--fix` applies safe fixes first.
  */
-export const runOxlint = (files: ReadonlyArray<string>): ReadonlyArray<Violation> => {
+export const runOxlint = (
+  files: ReadonlyArray<string>,
+  flags: ReadonlyArray<"--fix"> = []
+): ReadonlyArray<Violation> => {
   // The package's Node entry, not `.bin/oxlint`: Windows has only shims there.
   const bin = join(ROOT, "node_modules/oxlint/bin/oxlint");
 
@@ -52,7 +55,7 @@ export const runOxlint = (files: ReadonlyArray<string>): ReadonlyArray<Violation
   }
 
   const run = Bun.spawnSync(
-    ["node", bin, "--format", "json", "--no-error-on-unmatched-pattern", ...files],
+    ["node", bin, ...flags, "--format", "json", "--no-error-on-unmatched-pattern", ...files],
     {
       cwd: ROOT,
       env: { ...process.env, FORCE_COLOR: "0" },

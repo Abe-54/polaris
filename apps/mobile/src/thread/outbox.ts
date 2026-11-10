@@ -3,6 +3,7 @@
  * for its Harness to take them in (the Turn's `UserMessage` item). Each shows
  * in the thread while it waits, and stays with the reason when it doesn't land.
  */
+import type { Attachment } from "@polaris/protocol";
 import { Predicate } from "effect";
 import type { TurnEntry } from "./fold.ts";
 
@@ -16,6 +17,7 @@ export type SteerStatus =
 export interface OutgoingSteer {
   readonly id: string;
   readonly text: string;
+  readonly attachments: ReadonlyArray<Attachment>;
   readonly turnId: string;
   /** The Turn's user messages when it was sent: it lands past them. */
   readonly baseline: number;
@@ -40,13 +42,15 @@ let counter = 0;
 export const outgoingSteer = (
   turns: ReadonlyArray<TurnEntry>,
   turnId: string,
-  text: string
+  text: string,
+  attachments: ReadonlyArray<Attachment> = []
 ): OutgoingSteer => {
   counter += 1;
 
   return {
     id: `steer-${counter}`,
     text: text.trim(),
+    attachments,
     turnId,
     baseline: steersOf(turns.find((entry) => entry.turn.id === turnId)).length,
     status: "sending",

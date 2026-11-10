@@ -61,7 +61,8 @@ const AddWorkspace = ({
 export const AcceptingWorkCard = () => {
   const mode = useSettings((s) => s.sessions.acceptBranch);
   const overrides = useSettings((s) => s.sessions.workspaceAcceptBranch);
-  const options = useWorkspaceOptions().filter((o) => o.isGitRepo);
+  const workspaces = useWorkspaceOptions();
+  const options = workspaces.filter((o) => o.isGitRepo);
   const keys = Object.keys(overrides).toSorted();
 
   const setOverride = (key: string, next: AcceptBranchMode | null) =>
@@ -92,7 +93,8 @@ export const AcceptingWorkCard = () => {
           onChange={(next) => setSessionPrefs({ acceptBranch: next })}
         />
         {keys.map((key) => {
-          const option = options.find((o) => o.key === key);
+          // An override saved before its workspace stopped being a git repo still names it.
+          const option = workspaces.find((o) => o.key === key);
           const name = option?.name ?? key;
 
           return (

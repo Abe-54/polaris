@@ -1,37 +1,20 @@
 import { expect, test } from "bun:test";
 import {
-  fromBase64Url,
-  HostSlice,
-  LIVE_HPKE_INFO,
+  type HostSlice,
   liveActivityBody,
   MAX_LIVE_HOSTS,
   MAX_LIVE_SLICE_CHARS,
-  PUSH_ENC_BYTES,
   toBase64Url,
 } from "@polaris/protocol/relay";
-import { Option, Schema } from "effect";
 import { sealSlice } from "./live.ts";
+import { openSlice } from "./push.testing.ts";
 import { pushSuite } from "./seal.ts";
 
 const keys = await pushSuite.kem.generateKeyPair();
 
 const pushKey = toBase64Url(new Uint8Array(await pushSuite.kem.serializePublicKey(keys.publicKey)));
 
-const open = async (sealed: string) => {
-  const bytes = Option.getOrThrow(fromBase64Url(sealed));
-
-  const recipient = await pushSuite.createRecipientContext({
-    recipientKey: keys.privateKey,
-    enc: new Uint8Array(bytes.subarray(0, PUSH_ENC_BYTES)),
-    info: new TextEncoder().encode(LIVE_HPKE_INFO),
-  });
-
-  const plain = new TextDecoder().decode(
-    await recipient.open(new Uint8Array(bytes.subarray(PUSH_ENC_BYTES)))
-  );
-
-  return Schema.decodeUnknownSync(Schema.fromJsonString(HostSlice))(plain);
-};
+const open = (sealed: string) => openSlice(keys.privateKey, sealed);
 
 const CELESTIALS = ["claude/tilted-ring", "codex/twin-ring", "opencode/star-spark"];
 

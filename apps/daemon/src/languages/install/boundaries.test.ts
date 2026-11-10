@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { rejects } from "node:assert/strict";
 import { symlink, mkdir, writeFile, readFile, readdir, stat, chmod } from "node:fs/promises";
 import { join, dirname } from "node:path";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { HostId } from "@polaris/protocol";
 import { createInstaller } from "./index.ts";
 import { ManagedInstaller } from "./service.ts";
@@ -345,15 +345,18 @@ test("ManagedInstaller.layer without an approve adapter fails the install", asyn
       },
     });
 
-    const exit = await Effect.runPromiseExit(
+    const error = await Effect.runPromise(
       Effect.gen(function* () {
         const service = yield* ManagedInstaller;
 
         return yield* service.install(f.request);
-      }).pipe(Effect.provide(layer))
+      }).pipe(Effect.flip, Effect.provide(layer))
     );
 
-    expect(Exit.isFailure(exit)).toBe(true);
+    expect(error).toMatchObject({
+      reason: "audit-required",
+      message: "Exact artifact approval required",
+    });
   } finally {
     await f.close();
   }

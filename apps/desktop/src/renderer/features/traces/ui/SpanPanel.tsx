@@ -8,7 +8,7 @@ import { CloseIcon, CopyButton, cn, IconButton } from "@polaris/ui";
 import { type ReactNode, useMemo, useState } from "react";
 import { EditorPlaceProvider } from "../../editor-links/index.ts";
 import { useApp } from "../../../shell/hooks.ts";
-import { useSpan } from "../data/hooks.tsx";
+import { useOlderLogs, useSpan } from "../data/hooks.tsx";
 import { useOpenTrace } from "../model/openTrace.ts";
 import { durationVerdict } from "../model/usual.ts";
 import { formatDuration, shortId } from "../model/format.ts";
@@ -96,6 +96,7 @@ const Body = ({
   const checkout = span.polaris.checkout;
   const baseline = usual?.[span.id];
   const verdict = durationVerdict(span.durationMs, baseline);
+  const older = useOlderLogs(at, span.traceId, span.id);
 
   const openLink = (traceId: string, spanId: string) => {
     selectTrace(at, traceId);
@@ -154,7 +155,12 @@ const Body = ({
       <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto select-text">
         {tab === "fields" ? <Fields groups={spanFieldGroups(span, sessionTitle)} /> : null}
         {tab === "logs" ? (
-          <Logs logs={detail.logs} count={detail.logCount} start={span.startTimeUnixNano} />
+          <Logs
+            logs={detail.logs}
+            count={detail.logCount}
+            start={span.startTimeUnixNano}
+            older={older}
+          />
         ) : null}
         {tab === "events" ? <Events span={span} checkout={checkout} /> : null}
         {tab === "links" ? <Links span={span} onOpen={openLink} /> : null}

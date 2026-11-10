@@ -6,7 +6,7 @@
  */
 import { Match } from "effect";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSettledHosts } from "../../home/feed/settled.ts";
 import { homeHostsOf, useFollowedHosts } from "../../home/feed/useFollowedHosts.ts";
@@ -22,7 +22,14 @@ import { QueueHeader } from "./Header.tsx";
 import { paperQueueHosts, paperQueueTurns } from "./paperQueue.testing.ts";
 import { devQueues, type DevQueue } from "./worstQueue.testing.ts";
 import { type HeroActions, ReviewHero } from "./Hero.tsx";
-import { buildQueue, queueItem, turnKey } from "./queue.ts";
+import {
+  buildQueue,
+  type QueueItem,
+  type QueueLane,
+  queueItem,
+  queueLanes,
+  turnKey,
+} from "./queue.ts";
 import { useQueueTurns } from "./useQueueTurns.tsx";
 import { CleanWell, LaneHead, QueueWell } from "./Wells.tsx";
 
@@ -145,7 +152,7 @@ export const ReviewTab = ({ tabBarHeight, onOpen, onLink, onHosts }: ReviewTabPr
     onMenu,
   };
 
-  const waiting = queue.pages.slice(1);
+  const lanes = useMemo(() => queueLanes(queue), [queue]);
 
   return (
     <HorizonScreen foot={ready.empty === null}>
@@ -160,23 +167,34 @@ export const ReviewTab = ({ tabBarHeight, onOpen, onLink, onHosts }: ReviewTabPr
           onHosts={onHosts}
         />
         {ready.empty === null ? (
-          <ScrollView
+          // Virtualized: a clean well mounts its own Accept, and a queue can hold hundreds.
+          <SectionList<QueueItem, QueueLane>
             style={styles.list}
             contentContainerStyle={[
               styles.content,
               { paddingBottom: Math.max(HORIZON_INSET, tabBarHeight + 16) },
             ]}
-          >
-            <ReviewHero pages={queue.pages} actions={actions} />
-            {waiting.length === 0 ? null : <LaneHead label={`waiting · ${waiting.length}`} />}
-            {waiting.map((item) => (
-              <QueueWell key={item.row.key} item={item} actions={actions} />
-            ))}
-            {queue.clean.length === 0 ? null : <LaneHead label={`clean · ${queue.clean.length}`} />}
-            {queue.clean.map((item) => (
-              <CleanWell key={item.row.key} item={item} actions={actions} />
-            ))}
-          </ScrollView>
+            sections={lanes}
+            keyExtractor={keyOfItem}
+            ListHeaderComponent={<ReviewHero pages={queue.pages} actions={actions} />}
+            renderSectionHeader={({ section }) => (
+              <View style={laneStyle}>
+                <LaneHead label={section.label} />
+              </View>
+            )}
+            renderItem={({ item, section }) =>
+              section.kind === "clean" ? (
+                <CleanWell item={item} actions={actions} />
+              ) : (
+                <QueueWell item={item} actions={actions} />
+              )
+            }
+            ItemSeparatorComponent={Gap}
+            stickySectionHeadersEnabled={false}
+            initialNumToRender={12}
+            maxToRenderPerBatch={10}
+            windowSize={7}
+          />
         ) : (
           <ScrollView
             style={styles.list}
@@ -190,8 +208,17 @@ export const ReviewTab = ({ tabBarHeight, onOpen, onLink, onHosts }: ReviewTabPr
   );
 };
 
+const keyOfItem = (item: QueueItem) => item.row.key;
+
+const Gap = () => <View style={gapStyle} />;
+
+// The 6pt the wells keep apart; a lane head keeps it above and below too.
+const gapStyle = { height: 6 } as const;
+
+const laneStyle = { paddingVertical: 6 } as const;
+
 const useStyles = themedStyles(() => ({
   screen: { flex: 1 },
   list: { flex: 1 },
-  content: { paddingHorizontal: 10, gap: 6 },
+  content: { paddingHorizontal: 10 },
 }));

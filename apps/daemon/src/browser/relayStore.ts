@@ -2,7 +2,7 @@
  * What the CDP relay keeps per Agent Session (ENG-616): its tokens, hashed as `mcp/tokens.ts`
  * hashes MCP tokens, and the tabs its Browser last reported, so a Desktop App that takes the
  * Browser over reopens them. Raw tokens live only in memory, so the same URL is reissued
- * until the Daemon restarts; the hashes outlive it, so an agent's URL keeps working.
+ * until the Daemon restarts, which retires them (`CdpRelay` rotates at startup, ENG-638).
  */
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
@@ -54,6 +54,8 @@ export class CdpRelayStore extends Context.Service<
     ) => Effect.Effect<boolean, CdpRelayStoreError>;
     /** Revokes every token of the session, in memory and on disk. */
     readonly revoke: (sessionId: SessionId) => Effect.Effect<void, CdpRelayStoreError>;
+    /** Revokes the session's tokens but keeps its tabs: the next `issue` mints a new token. */
+    readonly retire: (sessionId: SessionId) => Effect.Effect<void, CdpRelayStoreError>;
     /** Every session with a live token on disk, for reconciling against Session State. */
     readonly sessions: Effect.Effect<ReadonlyArray<SessionId>, CdpRelayStoreError>;
     readonly remember: (
@@ -132,6 +134,11 @@ export class CdpRelayStore extends Context.Service<
               .all()
               .map((row) => decodeIdRow(row).id)
           ),
+          retire: (sessionId) =>
+            run(() => {
+              issued.delete(sessionId);
+              db.query("UPDATE cdp_tokens SET revoked = 1 WHERE session_id = ?").run(sessionId);
+            }),
           revoke: (sessionId) =>
             run(() => {
               issued.delete(sessionId);

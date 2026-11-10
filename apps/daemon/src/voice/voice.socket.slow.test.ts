@@ -23,6 +23,7 @@ import { makeVoiceRpcs } from "./VoiceRpcs.ts";
 import { NO_KEY_MESSAGE } from "./keys.ts";
 import { deepgramProvider } from "./deepgram.ts";
 import { scopedTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const KEY = "0123456789abcdef0123456789abcdef01234567";
 
@@ -89,7 +90,7 @@ const run = <A>(
           );
 
         const desktop = yield* connect();
-        yield* desktop.client.hello(identity);
+        yield* desktop.client.hello({ ...identity, ...TEST_USER_KEY });
 
         const extension = (grant: Grant) =>
           Effect.gen(function* () {

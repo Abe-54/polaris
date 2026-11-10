@@ -39,9 +39,13 @@ export const commandBackgroundRefusal = (
 
 export const backgroundTasksChanged = (
   record: SessionRecord,
-  tasks: ReadonlyArray<BackgroundTask>
+  { tasks, reportsPending }: { tasks: ReadonlyArray<BackgroundTask>; reportsPending: boolean }
 ) => [
-  DomainEvent.cases.SessionBackgroundTasksChanged.make({ sessionId: record.session.id, tasks }),
+  DomainEvent.cases.SessionBackgroundTasksChanged.make({
+    sessionId: record.session.id,
+    tasks,
+    reportsPending,
+  }),
 ];
 
 export const idleStopEffect = (record: SessionRecord): Emitted[] =>

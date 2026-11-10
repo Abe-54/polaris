@@ -14,6 +14,7 @@ import { Duration, Effect, Option, Schema, type Scope, Semaphore } from "effect"
 import { paths } from "../../paths.ts";
 import { HarnessError } from "../HarnessDriver.ts";
 import { commandLineOf, killTree, stopChild } from "../../platform/processes.ts";
+import { unsupportedOpenCode } from "./version.ts";
 
 export const opencodeError = (message: string, cause?: unknown) =>
   new HarnessError({ harness: "opencode", message, cause });
@@ -98,6 +99,24 @@ const readUrl = async (stdout: ReadableStream<Uint8Array>): Promise<string> => {
   }
 };
 
+const decodeInfo = Schema.decodeUnknownOption(Schema.Struct({ version: Schema.String }));
+
+/** OpenCode 2 answers `GET /api/info` with its version; OpenCode 1 serves no such route. */
+const unsupportedServer = async (url: string, password: string): Promise<string | null> => {
+  try {
+    const response = await fetch(`${url}/api/info`, {
+      headers: { authorization: `Basic ${btoa(`opencode:${password}`)}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    const info = response.ok ? decodeInfo(await response.json()) : Option.none();
+
+    return Option.isSome(info) ? unsupportedOpenCode(info.value.version) : null;
+  } catch {
+    return null;
+  }
+};
+
 interface Running {
   readonly proc: Bun.Subprocess<"ignore", "pipe", Bun.BunFile>;
   readonly handle: ServerHandle;
@@ -161,6 +180,13 @@ export const acquireServer = (
           duration: startTimeout,
           orElse: () => Effect.fail(opencodeError("opencode serve didn't start in time")),
         }),
+        Effect.tap((started) =>
+          Effect.promise(() => unsupportedServer(started, password)).pipe(
+            Effect.flatMap((reason) =>
+              reason === null ? Effect.void : Effect.fail(opencodeError(reason))
+            )
+          )
+        ),
         Effect.onError(() => Effect.andThen(stopProcess(proc), Effect.sync(forget)))
       );
 

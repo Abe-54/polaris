@@ -45,7 +45,8 @@ export const useDataLayout = () => {
 
   afterAll(() => {
     for (const [key, descriptor] of saved)
-      if (descriptor !== undefined) Object.defineProperty(HTMLElement.prototype, key, descriptor);
+      if (descriptor === undefined) Reflect.deleteProperty(HTMLElement.prototype, key);
+      else Object.defineProperty(HTMLElement.prototype, key, descriptor);
   });
 
   afterEach(() => {

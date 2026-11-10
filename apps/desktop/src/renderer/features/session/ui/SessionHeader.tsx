@@ -21,15 +21,14 @@ import {
   sessionCelestial,
 } from "@polaris/ui";
 import { useState } from "react";
-import { Commands } from "../../../commands.ts";
 import type { SessionData } from "../../../store/plain.ts";
 import { sessionStateLabel, usageLimitLine } from "../../../shell/copy.ts";
 import { keepTerminalFocus, OpenInTerminalItem } from "../../terminal/index.ts";
 import { send } from "../dispatch.ts";
-import { archiveCommand, renameCommand } from "../model/intent.ts";
+import { renameCommand } from "../model/intent.ts";
+import { archiveSession, unarchiveSession } from "../archive.ts";
 import { waitingOn, waitingPhrase } from "../model/background.ts";
 import { BackgroundTasksHover } from "./background.tsx";
-import { settingsStore } from "../../settings/index.ts";
 import { useLeadConstellation } from "../../constellation/hooks.ts";
 
 export interface SessionHeaderProps {
@@ -124,13 +123,9 @@ const SessionMenu = ({
         <DropdownMenuItem
           data-testid="archive-session"
           onSelect={() =>
-            void send(
-              hostKey,
-              archived
-                ? Commands.UnarchiveSession({ sessionId: session.id })
-                : archiveCommand(session.id, settingsStore.getState().sessions.deleteMergedBranch),
-              archived ? "Couldn't unarchive" : "Couldn't archive"
-            )
+            void (archived
+              ? unarchiveSession(hostKey, session.id)
+              : archiveSession(hostKey, session.id, session.title))
           }
         >
           {archived ? "Unarchive" : "Archive"}

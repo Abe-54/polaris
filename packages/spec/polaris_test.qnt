@@ -12,6 +12,7 @@ module polaris_test {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "fails",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -318,6 +319,30 @@ module polaris_test {
       // Without the gap check the host feed sees 1, 2, 4, 5: seq 3 is an ItemCompleted.
       .expect(feeds.get(("mac", HOST)).seen == [1, 2, 4, 5] and hostFeedCanProgress and safety)
 
+  /** ENG-492: a defect on a stream's upstream fails the feed visibly; it never resubscribes. */
+  run upstreamDefectFailsTheFeedTest =
+    init
+      .then(clientSends("mac", "k1", SendTurn("s1")))
+      .then(commitBatch)
+      .then(publishBatch)
+      .then(subscribe("phone", "s1"))
+      .then(readCut("phone", "s1"))
+      .then(2.reps(_ => deliver("phone", "s1")))
+      .then(upstreamDefect("phone", "s1"))
+      .expect(all {
+        feeds.get(("phone", "s1")).failed,
+        subs.get(("phone", "s1")).phase == "closed",
+        feedsFailVisibly,
+        safety,
+      })
+      .expect(not(canSubscribe("phone", "s1")))
+      .then(crash)
+      .then(restart)
+      .expect(not(canSubscribe("phone", "s1")))
+      // The device's other feeds carry on.
+      .then(subscribe("phone", "s2"))
+      .expect(subs.get(("phone", "s2")).phase == "registered" and safety)
+
   /** Finding 2: Archive waits for the Turn in flight (and its request) to end. */
   run archiveIsRefusedWithATurnInFlightTest =
     waitingOnApproval
@@ -563,6 +588,7 @@ module polaris_finding1_test {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -602,6 +628,45 @@ module polaris_finding1_test {
       })
 }
 
+/** Finding 5 (ENG-492): an upstream defect ended the pump and left the feed open and silent. */
+module polaris_finding5_test {
+  import polaris(
+    HOST_FEED_GAPLESS = false,
+    ARCHIVE_IGNORES_TURN = false,
+    RECORDS_LATE_REQUESTS = false,
+    CONTINUES_ACCEPTED = false,
+    REVIEW_COMMANDS = true,
+    USAGE_LIMITS = true,
+    WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "freezes",
+    CLIENTS = Set("mac", "phone"),
+    SESSION_LIST = ["s1", "s2"],
+    CMD_IDS = Set("k1", "k2", "k3", "k4"),
+    REQUESTS = Set("r1", "r2"),
+    REQUEST_SESSION = Map("r1" -> "s1", "r2" -> "s1"),
+    CAPACITY = 2,
+    MAX_LOG = 10,
+    MAX_CRASHES = 2,
+  ).* from "./polaris"
+
+  run upstreamDefectFreezesTheFeedTest =
+    init
+      .then(subscribe("phone", "s1"))
+      .then(readCut("phone", "s1"))
+      .then(upstreamDefect("phone", "s1"))
+      .then(clientSends("mac", "k1", SendTurn("s1")))
+      .then(commitBatch)
+      .then(publishBatch)
+      // Nothing more reaches the feed, and it neither fails nor reopens.
+      .expect(all {
+        subs.get(("phone", "s1")).phase == "frozen",
+        not(canSubscribe("phone", "s1")),
+        not(feeds.get(("phone", "s1")).failed),
+        not(feedsFailVisibly),
+        feedsAreCommittedPrefixes,
+      })
+}
+
 /** Finding 2: Archive accepted with a Turn in flight, as In Terminal and Starting did. */
 module polaris_finding2_test {
   import polaris(
@@ -612,6 +677,7 @@ module polaris_finding2_test {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -660,6 +726,7 @@ module polaris_finding3_test {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),
@@ -709,6 +776,7 @@ module polaris_finding4_test {
     REVIEW_COMMANDS = true,
     USAGE_LIMITS = true,
     WORKSPACE_REMOVAL = false,
+    FEED_DEFECT = "none",
     CLIENTS = Set("mac", "phone"),
     SESSION_LIST = ["s1", "s2"],
     CMD_IDS = Set("k1", "k2", "k3", "k4"),

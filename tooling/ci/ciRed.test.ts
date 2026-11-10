@@ -117,43 +117,23 @@ test("reads failing tests from a job log, through prefixes and timings, ignoring
 });
 
 describe("plan for jobs no runner acquired", () => {
-  const noRunner = check("Test Daemon 1/3 (macos-15)", NO_RUNNER);
-  const lastAttempt = { ...run, attempt: 2 };
+  const noRunner = check("Test Daemon (macos-15)", NO_RUNNER);
+  const other = check("Test other packages (macos-15)", NO_RUNNER);
 
-  test("files nothing while a re-run is coming, and never says it recovered", () => {
-    const open = [issue("Test Daemon 1/3 (macos-15)"), issue("no runner")];
-
-    expect(plan(run, [noRunner], open)).toEqual([]);
+  test.each([
+    ["while a re-run is coming", run],
+    ["once the re-run is spent", { ...run, attempt: 2 }],
+  ])("files and comments on nothing %s, even with the job's issue open", (_, attempt) => {
+    expect(plan(attempt, [noRunner, other], [issue("Test Daemon (macos-15)")])).toEqual([]);
   });
 
-  test("once the re-run is spent, files one issue that blames no test", () => {
-    const other = check("Test other packages (macos-15)", NO_RUNNER);
-    const actions = plan(lastAttempt, [noRunner, other], []);
-
-    expect(actions.map((a) => a.kind === "create" && a.title)).toEqual(["CI red: CI / no runner"]);
-    expect(actions[0]?.body).toContain("no test failed and none passed");
-    expect(actions[0]?.body).not.toContain("Failing tests");
-    expect(actions[0]?.body).toContain("Test other packages (macos-15)");
-  });
-
-  test("a real failure beside one keeps its own issue and names why nothing re-ran", () => {
+  test("a real failure beside one files only the failure", () => {
     const red = check("Test Daemon 1/3 (windows-latest)", "failure", ["a > b"]);
-    const actions = plan(run, [noRunner, red], []);
+    const actions = plan({ ...run, attempt: 2 }, [noRunner, red], []);
 
     expect(actions.map((a) => a.kind === "create" && a.title)).toEqual([
       "CI red: CI / Test Daemon 1/3 (windows-latest)",
-      "CI red: CI / no runner",
     ]);
-    expect(actions[0]?.body).toContain("- `a > b`");
-    expect(actions[1]?.body).toContain("would also retry: `Test Daemon 1/3 (windows-latest)`");
-  });
-
-  test("says the no-runner issue recovered once every job got a runner", () => {
-    const passed = check("Test Daemon 1/3 (macos-15)", "success");
-    const [recovered] = plan(run, [passed], [issue("no runner")]);
-
-    expect(recovered?.kind).toBe("recovered");
-    expect(plan(run, [passed], [issue("no runner", recovered?.body)])).toEqual([]);
   });
 });
 

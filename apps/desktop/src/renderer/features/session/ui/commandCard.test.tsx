@@ -26,12 +26,14 @@ beforeAll(() => {
   });
 });
 
+// happy-dom defines both on Element, so usually there is no own descriptor to put back: delete.
 afterAll(() => {
   for (const [key, descriptor] of [
     ["scrollWidth", saved.scroll],
     ["clientWidth", saved.client],
   ] as const) {
-    if (descriptor !== undefined) Object.defineProperty(HTMLElement.prototype, key, descriptor);
+    if (descriptor === undefined) Reflect.deleteProperty(HTMLElement.prototype, key);
+    else Object.defineProperty(HTMLElement.prototype, key, descriptor);
   }
 });
 

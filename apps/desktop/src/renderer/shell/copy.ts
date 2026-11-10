@@ -2,7 +2,12 @@
 import { writeWants } from "../features/data/write/model.ts";
 import type { ConnectionState, SessionState } from "@polaris/protocol";
 import { capacityReset } from "../features/constellation/model/failure.ts";
-import { waitingOn, waitingPhrase } from "../features/session/model/background.ts";
+import {
+  isWaiting,
+  type Waiting,
+  waitingLine,
+  waitingOn,
+} from "../features/session/model/background.ts";
 import { secretLine } from "../features/session/model/secret.ts";
 import type { SessionEntry } from "../store/hostModel.ts";
 import { tildePath } from "../../shared/hostPath.ts";
@@ -56,9 +61,13 @@ const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slic
  * A session row's second line: what the session is doing right now. A question is
  * the ask itself; an approval says what it wants to do; a Working session says
  * its current step (`activity`, from its open feed) when there is one; an Idle
- * one with background tasks says what it is waiting on.
+ * one with background tasks says what it is waiting on (`waiting`, the row's own count, if given).
  */
-export const sessionLine = (entry: SessionEntry, activity: string | null = null): string => {
+export const sessionLine = (
+  entry: SessionEntry,
+  activity: string | null = null,
+  waiting: Waiting | null = null
+): string => {
   const request = entry.pendingApprovals[0];
 
   if (request !== undefined) {
@@ -71,9 +80,9 @@ export const sessionLine = (entry: SessionEntry, activity: string | null = null)
 
   if (entry.session.state === "working" && activity !== null) return activity;
 
-  const waiting = waitingOn(entry.session);
+  const shown = waiting ?? { subagents: [], tasks: waitingOn(entry.session) };
 
-  if (waiting.length > 0) return waitingPhrase(waiting);
+  if (isWaiting(shown)) return waitingLine(shown);
 
   return STATE_LINES[entry.session.state](entry);
 };

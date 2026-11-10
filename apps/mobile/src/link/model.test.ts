@@ -9,6 +9,7 @@ import {
   type LinkEvent,
   type LinkStep,
   NOT_A_LINK,
+  skyShows,
   starLight,
   startsLink,
 } from "./model.ts";
@@ -130,5 +131,28 @@ describe("headingTop", () => {
     expect(headingTop(560, 120)).toBe(HEADING_TOP);
     expect(headingTop(300, 250)).toBe(38);
     expect(headingTop(300, 420)).toBe(HEADING_TOP_MIN);
+  });
+});
+
+describe("skyShows", () => {
+  test("keeps the star and moon while the sky has room for them (MX-AH on a 852pt iPhone)", () => {
+    expect(skyShows({ sheetTop: 422, headingBottom: 229, starBottom: 326 })).toEqual({
+      star: true,
+      moon: true,
+    });
+  });
+
+  test("hides the star behind a tall sheet and the moon that would draw over the lead", () => {
+    expect(skyShows({ sheetTop: 152, headingBottom: 340, starBottom: 408 })).toEqual({
+      star: false,
+      moon: false,
+    });
+  });
+
+  test("hides only the moon when the lead reaches down to it", () => {
+    expect(skyShows({ sheetTop: 422, headingBottom: 276, starBottom: 344 })).toEqual({
+      star: true,
+      moon: false,
+    });
   });
 });

@@ -6,7 +6,7 @@
 import type { FileDiffMetadata, Hunk } from "@pierre/diffs";
 import { type RiskFinding, SEVERITY_RANK, type Severity } from "@polaris/protocol";
 import { alignChange, type Row, type Span } from "../diff/align.ts";
-import { fileSeverities, highest, isListed, listedFindings, SEVERITIES } from "./model.ts";
+import { fileSeverities, highest, listedFindings, SEVERITIES } from "./model.ts";
 
 export type LineKind = "context" | "add" | "remove";
 
@@ -258,13 +258,13 @@ const fileRows = (
   return [header, ...unplaced, ...rows.slice(1)];
 };
 
-/** Which files open first: any with a listed Critical finding, else the first file. */
+/** Which files open first: any with an open Critical finding, else the first file. */
 export const defaultOpen = (
   files: ReadonlyArray<DiffFileInput>,
   findings: ReadonlyArray<RiskFinding>
 ): ReadonlySet<string> => {
   const critical = new Set(
-    findings.flatMap((f) => (f.severity === "critical" && isListed(f) ? [f.path] : []))
+    findings.flatMap((f) => (f.severity === "critical" && f.status === "open" ? [f.path] : []))
   );
 
   const open = files.flatMap((f) => (critical.has(f.diff.name) ? [f.diff.name] : []));

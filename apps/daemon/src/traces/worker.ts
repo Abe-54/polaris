@@ -225,7 +225,13 @@ const handle = Match.type<TraceWorkerRequest>().pipe(
     getTrace(prune(request.checkout), request.checkout, request.traceId)
   ),
   Match.tag("Span", (request) =>
-    getSpan(prune(request.checkout), request.checkout, request.traceId, request.spanId)
+    getSpan(
+      prune(request.checkout),
+      request.checkout,
+      request.traceId,
+      request.spanId,
+      request.before
+    )
   ),
   Match.tag("History", (request) =>
     traceHistory(prune(request.checkout), request.checkout, request.traceId, request.includeSpans)

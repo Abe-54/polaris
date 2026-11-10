@@ -1,3 +1,4 @@
+// Portions adapted from pingdotgg/t3code@fa4e4677 (MIT)
 /**
  * The Browser over IPC (ENG-615, ENG-618, ADR 0092): main owns each Agent Session's tabs as
  * WebContentsViews in the Workspace's partition; the renderer drives them and lays out the
@@ -73,6 +74,16 @@ export const BrowserTabEvent = Schema.TaggedUnion({
 
 export type BrowserTabEvent = typeof BrowserTabEvent.Type;
 
+/** A React element's component and where its JSX was written; any field may be unknown. */
+export const BrowserPickFrame = Schema.Struct({
+  functionName: Schema.NullOr(Schema.String),
+  fileName: Schema.NullOr(Schema.String),
+  lineNumber: Schema.NullOr(Schema.Number),
+  columnNumber: Schema.NullOr(Schema.Number),
+});
+
+export type BrowserPickFrame = typeof BrowserPickFrame.Type;
+
 /** What a pick captured, staged with `attachments.stage` as the composer's chip (ENG-618). */
 export class BrowserPickResult extends Schema.Class<BrowserPickResult>("BrowserPickResult")({
   url: Schema.String,
@@ -83,6 +94,12 @@ export class BrowserPickResult extends Schema.Class<BrowserPickResult>("BrowserP
   html: Schema.String,
   /** A PNG of the element's bounds. */
   screenshot: Schema.Uint8Array,
+  /** The React component that rendered the element, on a React page (ENG-619). */
+  componentName: Schema.NullOr(Schema.String),
+  /** Where the element's JSX was written; dev builds only. */
+  source: Schema.NullOr(BrowserPickFrame),
+  /** The components around the element, nearest first, each where its JSX was written. */
+  stack: Schema.Array(BrowserPickFrame),
 }) {}
 
 const OnTab = Schema.Struct({ hostKey: HostKey, sessionId: SessionId, tabId: BrowserTabId });

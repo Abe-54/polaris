@@ -28,7 +28,7 @@ import {
 } from "./models.ts";
 import { WorktreeSetup, WorktreeSetupRun } from "./worktreeSetup.ts";
 import { ConstellationId } from "./constellation/domain.ts";
-import { FeedbackBatch, PullRequestRef } from "./review.ts";
+import { FeedbackBatch, PullRequestRef, ReviewSubject } from "./review.ts";
 
 export { Timestamp } from "./ids.ts";
 
@@ -79,8 +79,11 @@ export const LEGACY_PLATFORMS = ["darwin-arm64", "linux-x64", "linux-arm64"] as 
  */
 export const HostPlatformName = Schema.String;
 
-/** A Linux Host's C library; `HostInfo.platform` leaves it out. */
-export const HostLibc = Schema.Literals(["glibc", "musl"]);
+/**
+ * A Linux Host's C library; `HostInfo.platform` leaves it out. Any name on the wire, like
+ * `HostPlatformName`, so a newer Host still decodes; code picking a build refuses names it doesn't know.
+ */
+export const HostLibc = Schema.String;
 
 export type HostLibc = typeof HostLibc.Type;
 
@@ -301,6 +304,14 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   backgroundTasks: optionalArray(BackgroundTask),
   /** When `backgroundTasks` last changed; null before it ever did, or from an older Daemon. */
   backgroundChangedAt: optionalNullable(Timestamp),
+  /**
+   * Finished background tasks whose reports the Harness hasn't yet started a Turn for
+   * (capability `session.background-reports`): a settle with it set isn't the Turn's end.
+   */
+  backgroundReportsPending: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false))
+  ),
   permissionMode: PermissionMode,
   /** The Model the next Turn runs on; null for the Harness's default. Changed by `SetModel`. */
   model: Schema.NullOr(ModelId),
@@ -327,10 +338,20 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   lastError: Schema.NullOr(Schema.String),
   /** The index of the last Turn the user accepted (`AcceptTurns`); null before any. */
   acceptedThroughIndex: optionalNullable(Schema.Int),
+  /**
+   * The user-Turn number (`Turn.userTurnNumber`) of the Turn at `acceptedThroughIndex`
+   * (capability `session.user-turns`); null before any, or when the Daemon didn't know it.
+   */
+  acceptedThroughUserTurn: optionalNullable(Schema.Int),
   /** The pull request the accepted work was opened as (`LinkPullRequest`). */
   pullRequest: optionalNullable(PullRequestRef),
   /** Set by the Daemon for a Reviewer's or walkthrough's own session; absent for the user's. */
   origin: optionalNullable(SessionOrigin),
+  /**
+   * What a Reviewer's or walkthrough's session reviews: the subject of the Review it was
+   * started for (capability `session.review-subject`); null for every other session.
+   */
+  reviewSubject: optionalNullable(ReviewSubject),
   /** Set by the Daemon on a Constellation worker's session (`SessionWorker`); null for the rest. */
   worker: optionalNullable(SessionWorker),
   /** When the user pinned it to the top of the list (`PinSession`); null when it isn't. */
@@ -406,6 +427,11 @@ export class Turn extends Schema.Class<Turn>("Turn")({
   /** `refs/polaris/checkpoints/<session>/<turn>` taken before and after the Turn. */
   checkpointBefore: Schema.NullOr(Schema.String),
   checkpointAfter: Schema.NullOr(Schema.String),
+  /**
+   * The commit `checkpointAfter` names (capability `session.checkpoint-commit`), the head a
+   * Risk Summary of the Turns through this one is kept under; null without a checkpoint.
+   */
+  checkpointAfterCommit: optionalNullable(Schema.String),
   startedAt: Timestamp,
   endedAt: Schema.NullOr(Timestamp),
 }) {}
@@ -642,6 +668,11 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   sessionId: SessionId,
   turnId: TurnId,
   kind: ApprovalKind,
+  /**
+   * The Subagent whose tool call asks (capability `session.subagents`); null for the Turn's own
+   * request, and from Daemons before ENG-547.
+   */
+  subagentId: optionalNullable(SubagentId),
   profileAttach: Schema.optionalKey(
     Schema.Struct({
       pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),

@@ -16,7 +16,25 @@ test("a command reads as a shell line", () => {
   expect(approvalDetail(commandApproval("s", "r", "cargo build --release"))).toEqual({
     text: "$ cargo build --release",
     tooLong: false,
+    preview: "$ cargo build --release",
   });
+});
+
+test("a command's cd into its own agent session's directory isn't shown; one elsewhere is", () => {
+  const own = commandApproval("s", "r", "cd /code/polaris/ && bun run backfill");
+  const other = commandApproval("s", "r", "cd /tmp && rm -rf build");
+
+  expect(approvalDetail(own, "/code/polaris")?.text).toBe("$ bun run backfill");
+  expect(approvalDetail(other, "/code/polaris")?.text).toBe("$ cd /tmp && rm -rf build");
+});
+
+test("a long command's preview keeps what it runs at both ends", () => {
+  const command = `bun run backfill ${"--table=orders ".repeat(30)}--dry-run=false`;
+  const preview = approvalDetail(commandApproval("s", "r", command))?.preview ?? "";
+
+  expect(preview).toStartWith("$ bun run backfill");
+  expect(preview).toEndWith("--dry-run=false");
+  expect(preview).toContain("…");
 });
 
 test.each([

@@ -4,6 +4,7 @@ import {
   ProfileError,
   TraceError,
   TraceSettingsError,
+  TraceSkillError,
   Unsupported,
 } from "@polaris/protocol";
 import { toTracesIpcError } from "./traces.ts";
@@ -36,6 +37,19 @@ test.each([
     },
   ],
   [
+    "TraceSkillError",
+    new TraceSkillError({
+      code: "E-TRACE-SKILL-INSTALL",
+      message: "Couldn't write the polaris-tracing skill to ~/.claude/skills/polaris-tracing",
+      fix: "Check that ~/.claude/skills is writable on this host, then try again.",
+    }),
+    {
+      code: "E-TRACE-SKILL-INSTALL",
+      message: "Couldn't write the polaris-tracing skill to ~/.claude/skills/polaris-tracing",
+      fix: "Check that ~/.claude/skills is writable on this host, then try again.",
+    },
+  ],
+  [
     "ProfileError",
     new ProfileError({
       code: "E-PROFILE-PROCESS-NOT-OWNED",
@@ -57,6 +71,7 @@ test.each([
   ["traces.compare", "Comparing traces needs a newer daemon on this host"],
   ["traces.settings", "Traces settings need a newer daemon on this host"],
   ["traces.profiles", "Profiles need a newer daemon on this host"],
+  ["traces.skill", "Setting up tracing needs a newer daemon on this host"],
 ])("an older Daemon lacking %s names the upgrade", (capability, message) => {
   expect(toTracesIpcError(new Unsupported({ capability }))).toEqual({
     code: "Unsupported",

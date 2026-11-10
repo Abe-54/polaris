@@ -2,6 +2,7 @@
 import {
   AgentSession,
   ApprovalRequest,
+  type PermissionMode,
   RequestId,
   SessionId,
   type SessionState,
@@ -19,6 +20,7 @@ export const session = (
     readonly title?: string;
     readonly updated?: number;
     readonly lastReplyPreview?: string;
+    readonly permissionMode?: PermissionMode;
   } = {}
 ) =>
   new AgentSession({
@@ -29,7 +31,7 @@ export const session = (
     cwd: "/repo",
     worktreeId: null,
     state,
-    permissionMode: "supervised",
+    permissionMode: options.permissionMode ?? "supervised",
     model: null,
     effort: null,
     parentSessionId: null,
@@ -78,6 +80,7 @@ export const host = (
   hostName,
   connected: true,
   error: null,
+  capabilities: ["session.plan-mode"],
   workspaces: [],
   sessions: entries.filter((e) => e.session.state !== "archived"),
   archived: entries.filter((e) => e.session.state === "archived"),

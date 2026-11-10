@@ -116,17 +116,27 @@ pinnedReadTest(
   }
 );
 
-test("file reads refuse symlink escape, large files and cancellation", async () => {
+pinnedReadTest(
+  "file reads refuse symlink escape and large files, and read a file in the root",
+  async () => {
+    const f = await fixture();
+    const other = await fixture();
+    await symlink(join(other.root, "dep.ts"), join(f.root, "escape.ts"));
+    expect(await readSource(f.root, join(f.root, "escape.ts"), f.signal)).toBeUndefined();
+    await writeFile(join(f.root, "large.ts"), "x".repeat(131073));
+    expect(await readSource(f.root, join(f.root, "large.ts"), f.signal)).toBeUndefined();
+    expect((await readSource(f.root, join(f.root, "dep.ts"), f.signal))?.text).toBeString();
+  }
+);
+
+test("a cancelled file read rejects with AbortError", async () => {
   const f = await fixture();
-  const other = await fixture();
-  await symlink(join(other.root, "dep.ts"), join(f.root, "escape.ts"));
-  expect(await readSource(f.root, join(f.root, "escape.ts"), f.signal)).toBeUndefined();
-  await writeFile(join(f.root, "large.ts"), "x".repeat(131073));
-  expect(await readSource(f.root, join(f.root, "large.ts"), f.signal)).toBeUndefined();
   const controller = new AbortController();
   controller.abort();
   await Promise.resolve(
-    expect(readSource(f.root, join(f.root, "dep.ts"), controller.signal)).rejects.toBeDefined()
+    expect(readSource(f.root, join(f.root, "dep.ts"), controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    })
   );
 });
 

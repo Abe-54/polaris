@@ -4,7 +4,7 @@ import type { GraphCommand } from "../engine/constellation.inputs.ts";
 import { questionKey } from "../store/constellation.ts";
 import { taskData } from "./data.ts";
 import { GraphDecision } from "./decision.ts";
-import { validateGraph } from "./plan.ts";
+import { validateGraph, validateTaskId } from "./plan.ts";
 
 export const message = (d: GraphDecision, command: GraphCommand<"Message">) => {
   if (
@@ -78,6 +78,12 @@ export const answer = (d: GraphDecision, command: GraphCommand<"Answer">) => {
     }
 
     const task = new Task({ ...taskData(proposal.task), revision: 0, canceled: false });
+
+    validateTaskId(
+      d,
+      task.id,
+      "Decline the proposal and propose a Task id of letters, digits, - and _."
+    );
 
     if (d.record.graph.tasks.some((t) => t.id === task.id))
       d.reject(

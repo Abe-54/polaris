@@ -65,6 +65,7 @@ export const launchInstrumentation = Effect.fnUntraced(function* (
   yield* owner.recordInstrumentation(context.workspaceId, {
     skipReason: result.skipReason,
     detectedExporters,
+    overriddenSdk: result.overriddenSdk ?? null,
   });
 
   return result.environment;
