@@ -3,9 +3,13 @@ import { lazySuggestedReplies } from "../suggestedReply/lazy.ts";
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
-import { lazyPreviewHandlers } from "./lazyPreview.ts";
+import {
+  ComputerUseLoads,
+  lazyComputerUse,
+  lazyComputerUseHandlers,
+  lazyPreviewHandlers,
+} from "./lazyComputerUse.ts";
 import { livePreview, PREVIEW_CAPABILITY } from "../computerUse/preview/group.ts";
-import { PreviewTargets } from "../computerUse/preview/targets.ts";
 import { selfTraceExport } from "../traces/self/export.ts";
 import { selfTracer } from "../traces/self/tracer.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
@@ -55,8 +59,7 @@ import { HarnessRpcsLive } from "../harness/HarnessRpcs.ts";
 import { latestRolloutLimits, PlanLimitReporter } from "../harness/limits/index.ts";
 import { HarnessRegistryLive } from "../harness/registry.ts";
 import { BrowserMcp } from "../harness/browser/index.ts";
-import { computerUseDesktopHost, DesktopMcp } from "../harness/desktop/index.ts";
-import { AgentDesktop } from "../install/agentDesktop/index.ts";
+import { DesktopMcp } from "../harness/desktop/service.ts";
 import { AgentBrowser } from "../install/agentBrowser/index.ts";
 import { releaseMemory, releaseWhenQuiet } from "../memory/index.ts";
 import { userPath } from "../service/userPath.ts";
@@ -98,8 +101,6 @@ import { lazyUsage } from "./lazyUsage.ts";
 import { lazyVoiceHandlers } from "./lazyVoice.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
-import { AppControl, ComputerUseHost, ComputerUseHostRpcHandlers } from "../computerUse/index.ts";
-import { ComputerUseHelper } from "../service/computerUse/index.ts";
 
 /** Exit status when another Daemon already holds the lock or answers on the socket. */
 export const SERVE_EXIT_ALREADY_RUNNING = 75;
@@ -127,26 +128,12 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
-/**
- * Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS. The tools
- * follow `ComputerUseHost`'s status and ask `AppControl` before each app. The Engine binds its
- * requests to it, so it is merged in beside harnesses.
- */
-const desktopMcp = Layer.unwrap(
-  Effect.gen(function* () {
-    // The preview follows what each call acted on (`PreviewTargets`, in `engineServices`).
-    const targets = yield* PreviewTargets;
-
-    return DesktopMcp.layerOn(computerUseDesktopHost, AppControl, targets.acted);
-  })
-).pipe(Layer.provide(Layer.mergeAll(ComputerUseHelper.layer, AgentDesktop.layer)));
-
-/** `AppControl` and `polaris_desktop` sit under the Engine they ask: bound once it is up. */
+/** Computer use's `AppControl` and `polaris_desktop` ask the Engine: bound once it is up, loaded or not. */
 const computerUseBindings = Layer.effectDiscard(
   Effect.gen(function* () {
     const engine = yield* Engine;
 
-    yield* (yield* AppControl).bind(engine.requestAppApproval);
+    yield* (yield* ComputerUseLoads).bindApprovals(engine.requestAppApproval);
     yield* (yield* DesktopMcp).bindRequests(engine.requestComputerUse);
   })
 );
@@ -164,7 +151,7 @@ const harnesses = HarnessRegistryLive.pipe(
       PlanLimitReporter.layer,
       browserMcp,
       lazySimulator,
-      desktopMcp,
+      lazyComputerUse,
       suggestedReplyPreference
     )
   )
@@ -197,7 +184,8 @@ export const engineServices = Layer.mergeAll(
       ConstellationLiveness.proxyLayer,
       lazyHostResources,
       harnesses,
-      desktopMcp,
+      // Computer use (ENG-846), loaded on first use; one instance with the Harnesses'.
+      lazyComputerUse,
       CheckpointsLive,
       WorktreeTrackerLive,
       ReviewCheckoutGitLive,
@@ -214,15 +202,10 @@ export const engineServices = Layer.mergeAll(
   Layer.provideMerge(dataServices),
   // RequestSends and Origin Approvals: the Requests RPCs and MCP's send_request share them.
   Layer.provideMerge(lazyRequests),
-  // What each session last did with computer use: its tools report it, the preview reads it.
-  Layer.provideMerge(PreviewTargets.layerDaemon),
   Layer.provideMerge(traceServices),
   Layer.provideMerge(ReviewerSessions.layer),
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).
   Layer.provideMerge(DeveloperModeLive),
-  // Computer use on this Host: its RPCs and the polaris_desktop tools read one status (ENG-846).
-  Layer.provideMerge(AppControl.layer),
-  Layer.provideMerge(ComputerUseHost.layer.pipe(Layer.provideMerge(ComputerUseHelper.layer))),
   // The Simulator's hub and MCP server (ENG-829), loaded on first use; one instance with the Harnesses'.
   Layer.provideMerge(lazySimulator),
   Layer.provideMerge(EventStore.layerLive)
@@ -257,7 +240,7 @@ export const daemonHandlers = Layer.mergeAll(
   EngineRpcHandlers,
   VisualsRpcHandlers,
   DeveloperModeRpcHandlers,
-  ComputerUseHostRpcHandlers,
+  lazyComputerUseHandlers,
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),

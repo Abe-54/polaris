@@ -3,23 +3,12 @@
  * ADR 0107): agent-desktop's commands as tools. Claude Code gets them in process, Codex over HTTP.
  */
 import type { ComputerUseState, SessionId } from "@polaris/protocol";
-import {
-  Duration,
-  Effect,
-  Layer,
-  Match,
-  Option,
-  Predicate,
-  Context,
-  type Scope,
-  Stream,
-} from "effect";
+import { Duration, Effect, Layer, Match, Option, Predicate, type Scope, Stream } from "effect";
 import { jsonSchema } from "../../mcp/tools/shared.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import type { Authorize } from "./authorize.ts";
 import { type DisplayAwake, hostAwake } from "./awake.ts";
-import { DESKTOP_TOOLS, type DesktopTool, type Json } from "./catalog.ts";
-import type { DesktopResult } from "./envelope.ts";
+import { DESKTOP_TOOLS, type DesktopTool } from "./catalog.ts";
 import type { DesktopHost } from "./host.ts";
 import { desktopHttp, type ListedTool } from "./http.ts";
 import {
@@ -29,11 +18,16 @@ import {
   requestDescription,
   requestInputSchema,
   requestInstructions,
-  type RequestComputerUse,
 } from "./request.ts";
 import { type DesktopRunner, directRunner, helperRunner } from "./runner.ts";
 import { type Acted, desktopSession } from "./session.ts";
 import { type Takeover, takeover } from "./takeover.ts";
+import {
+  type DesktopBoundTool,
+  DesktopMcp as DesktopMcpKey,
+  type DesktopServer,
+  type RequestComputerUse,
+} from "./service.ts";
 
 export { DESKTOP_MCP_NAME, computerUseCallOf } from "./metadata.ts";
 
@@ -45,12 +39,16 @@ export type { Acted, ActedOn } from "./session.ts";
 
 export type { DesktopResult, DesktopContent } from "./envelope.ts";
 
+export { REQUEST_TOOL } from "./request.ts";
+
 export {
   ComputerUseOutcome,
   type ComputerUseAsk,
-  REQUEST_TOOL,
+  type DesktopBoundTool,
+  type DesktopServer,
+  type DesktopSessionOpen,
   type RequestComputerUse,
-} from "./request.ts";
+} from "./service.ts";
 
 /** The most a session's open waits for the Host's check; then it opens without the tools. */
 const READY_TIMEOUT = Duration.seconds(10);
@@ -60,25 +58,6 @@ const TOOL_CALL_SECONDS = 120;
 
 /** Codex's per-call limit for the request tool: longer than the request waits. */
 const REQUEST_CALL_SECONDS = REQUEST_TIMEOUT_MS / 1000 + 60;
-
-export interface DesktopBoundTool extends ListedTool {
-  readonly call: (input: Json, signal?: AbortSignal) => Promise<DesktopResult>;
-}
-
-export interface DesktopServer {
-  readonly tools: ReadonlyArray<DesktopBoundTool>;
-  readonly instructions: string;
-  /** The longest one call may take, for Harnesses that time tool calls out. */
-  readonly callSeconds: number;
-  /** Codex's way in: a loopback URL that lasts as long as the scope. */
-  readonly url: Effect.Effect<string, never, Scope.Scope>;
-}
-
-export interface DesktopSessionOpen {
-  readonly sessionId: SessionId;
-  /** Read-only sessions and the Reviewer never get computer use. */
-  readonly readOnly?: boolean;
-}
 
 /** What the server reads about sessions: titles for the overlay, Turn ends to let the display sleep. */
 export interface DesktopSessions {
@@ -227,21 +206,8 @@ export const storeSessions = Effect.gen(function* () {
   } satisfies DesktopSessions;
 });
 
-export class DesktopMcp extends Context.Service<
-  DesktopMcp,
-  {
-    /**
-     * The session's server while the scope lasts: every tool when the Host is Ready, only
-     * `request_computer_use` when it's Off or NeedsSetup. Null for read-only sessions, a Host
-     * with no desktop, and on any failure, so the session opens without computer use.
-     */
-    readonly forSession: (
-      options: DesktopSessionOpen
-    ) => Effect.Effect<DesktopServer | null, never, Scope.Scope>;
-    /** The Engine's `ComputerUseRequests.request`, bound once the Engine is built. */
-    readonly bindRequests: (request: RequestComputerUse) => Effect.Effect<void>;
-  }
->()("polaris/daemon/harness/DesktopMcp") {
+/** The service key lives in `service.ts`, loaded at startup; this adds the server's layers. */
+export class DesktopMcp extends DesktopMcpKey {
   static readonly layerWith = (deps: DesktopMcpDeps) => Layer.sync(DesktopMcp, () => make(deps));
 
   /** agent-desktop inside the helper on macOS, the Host's own elsewhere; `host` says when it's ready. */
@@ -264,8 +230,4 @@ export class DesktopMcp extends Context.Service<
         });
       })
     );
-
-  static readonly none = Layer.succeed(DesktopMcp)(
-    DesktopMcp.of({ forSession: () => Effect.succeed(null), bindRequests: () => Effect.void })
-  );
 }

@@ -15,7 +15,7 @@ import {
   type ComputerUseAsk,
   ComputerUseOutcome,
   type RequestComputerUse,
-} from "../harness/desktop/index.ts";
+} from "../harness/desktop/service.ts";
 import { workingTurn } from "../store/model.ts";
 import { EngineRuntime } from "./runtime.ts";
 

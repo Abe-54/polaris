@@ -1,6 +1,6 @@
 /**
  * The preview's two RPCs as a group of their own and its capability: all the transport loads
- * at startup. The handlers load with the first call (`transport/lazyPreview.ts`).
+ * at startup. The handlers load with the first call (`transport/lazyComputerUse.ts`).
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";

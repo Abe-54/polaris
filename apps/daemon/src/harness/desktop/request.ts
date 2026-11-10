@@ -4,44 +4,18 @@
  * Not now; the Engine then reopens the Harness after the Turn, so the next Turn has the tools.
  */
 import type { ComputerUseState, SessionId } from "@polaris/protocol";
-import { Data, Effect, Match, Option, Schema } from "effect";
+import { Effect, Match, Option, Schema } from "effect";
 import { jsonSchema } from "../../mcp/tools/shared.ts";
 import type { Json } from "./catalog.ts";
 import { type DesktopResult, failure } from "./envelope.ts";
+import { type ComputerUseAsk, ComputerUseOutcome, type RequestComputerUse } from "./service.ts";
+
+export { type ComputerUseAsk, ComputerUseOutcome, type RequestComputerUse } from "./service.ts";
 
 export const REQUEST_TOOL = "request_computer_use";
 
 /** How long the request waits for the user before the Daemon withdraws it. */
 export const REQUEST_TIMEOUT_MS = 30 * 60 * 1000;
-
-export type ComputerUseOutcome = Data.TaggedEnum<{
-  /** The Host turned Ready: the Daemon withdrew the request. */
-  Ready: Record<never, never>;
-  /** The user picked Not now (`Deny`). */
-  NotNow: Record<never, never>;
-  TimedOut: Record<never, never>;
-  /** The request went away unanswered: the Turn ended or was stopped. */
-  Ended: { readonly reason: string };
-  NoTurn: Record<never, never>;
-  NotFound: Record<never, never>;
-}>;
-
-export const ComputerUseOutcome = Data.taggedEnum<ComputerUseOutcome>();
-
-export interface ComputerUseAsk {
-  readonly state: ComputerUseState;
-  readonly app: string;
-  readonly reason: string;
-  readonly timeoutMs: number;
-  /** Completes once the Host is Ready. */
-  readonly ready: Effect.Effect<void>;
-}
-
-/** The Engine's side: opens the approval on the Turn in flight and waits (`ComputerUseRequests`). */
-export type RequestComputerUse = (
-  sessionId: SessionId,
-  ask: ComputerUseAsk
-) => Effect.Effect<ComputerUseOutcome>;
 
 const RequestInput = Schema.Struct({
   app: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80)),

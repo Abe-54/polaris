@@ -80,7 +80,7 @@ export const previewHandlers = (sessionKnown: SessionKnown) =>
     })
   );
 
-/** What the Daemon mounts (lazily, `transport/lazyPreview.ts`): sessions from the event store. */
+/** What the Daemon mounts (lazily, `transport/lazyComputerUse.ts`): sessions from the event store. */
 export const PreviewHandlersLive = Layer.unwrap(
   Effect.gen(function* () {
     const store = yield* EventStore;

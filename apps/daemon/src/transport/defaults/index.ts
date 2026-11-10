@@ -7,7 +7,6 @@
  * TypeScript's instantiation depth (TS2589, ENG-719).
  */
 import { Layer } from "effect";
-import { computerUseDefaults } from "./computerUse.ts";
 import { coreDefaults } from "./core.ts";
 import { featureDefaults } from "./features.ts";
 import { hostDefaults } from "./host.ts";
@@ -21,6 +20,5 @@ export const defaultHandlers = (options: DefaultOptions) =>
     hostDefaults(options),
     workspaceDefaults,
     featureDefaults,
-    requestDefaults,
-    computerUseDefaults
+    requestDefaults
   );

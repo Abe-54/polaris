@@ -10,7 +10,7 @@ What a watching Client sees of the window an Agent Session works in (ENG-846, AD
 | `capture.ts` | The live source on macOS: `polaris-capture` processes. |
 | `records.ts` | The parser for what `polaris-capture` writes. |
 | `still.ts` | The source everywhere else: the last screenshot as a JPEG. |
-| `rpcs.ts` | The handlers. They load with the first call (`transport/lazyPreview.ts`). |
+| `rpcs.ts` | The handlers. They load with the first call (`transport/lazyComputerUse.ts`). |
 
 ## Who tells the preview what to show
 
