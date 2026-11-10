@@ -2,7 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gitText, resolveCommit, runGitRaw } from "../git.ts";
-import { commitAll, removeTempDir, tempDir, write } from "../testing.ts";
+import { commitAll, HEAVY_GIT_MS, removeTempDir, tempDir, write } from "../testing.ts";
 import { listWorktrees } from "../WorktreeTracker.ts";
 import { fetchPullRequest } from "./fetch.ts";
 import { lockReasonFor, reviewRef } from "./refs.ts";
@@ -23,8 +23,8 @@ import {
   removeCheckout,
 } from "./worktree.ts";
 
-// Each test runs tens of real gits: past bun's 5 s default on a loaded runner (as commit.slow.test.ts).
-setDefaultTimeout(15_000);
+// Each test runs tens of real gits: the heavy-git budget, which is longer on Windows.
+setDefaultTimeout(HEAVY_GIT_MS);
 
 const cleanup: Array<string> = [];
 
