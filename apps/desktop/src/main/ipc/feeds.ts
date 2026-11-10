@@ -24,6 +24,7 @@ import { tracesOpeners } from "./traces.ts";
 import { httpRequestsOpeners } from "./httpRequests.ts";
 import { githubOpeners } from "../github/ipc.ts";
 import { gitOpeners } from "./git.ts";
+import { computerUseOpeners } from "./computerUse.ts";
 import { constellationFeed } from "./constellation.ts";
 import { Machines } from "../machines/service.ts";
 import type { PredictionBridge } from "../prediction/bridge.ts";
@@ -87,6 +88,7 @@ const openers: Openers = {
   ...httpRequestsOpeners,
   ...githubOpeners,
   ...gitOpeners,
+  ...computerUseOpeners,
   ...simulatorOpeners,
   ...browserOpeners(undefined),
   hosts: () => Stream.unwrap(HostDirectory.useSync((dir) => SubscriptionRef.changes(dir.views))),

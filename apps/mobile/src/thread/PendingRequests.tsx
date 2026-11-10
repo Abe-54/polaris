@@ -33,6 +33,7 @@ import {
   type StripNotice,
 } from "../composer/strip.ts";
 import { Celestial, subagentMoon } from "../celestial";
+import { ComputerUseApproval, isComputerUse } from "../computerUse/index.ts";
 import { Dither } from "../dither/index.ts";
 import { decisionOf } from "../home/model/respond.ts";
 import { haptics } from "../motion";
@@ -61,6 +62,8 @@ export interface PendingRequestsProps {
   readonly onProvideSecret: (requestId: RequestId, typed: string) => void;
   /** How the latest Turn's Secret Request ended, if one did. */
   readonly settled?: SecretOutcome | null;
+  /** The Host the agent session runs on: a computer use approval names it and shows its last frame. */
+  readonly host: { readonly hostId: string; readonly name: string };
 }
 
 export interface NoticeStripProps extends PendingRequestsProps {
@@ -450,15 +453,25 @@ const Notice = ({
           onDecline={() => card.onRespond(decisionOf({ kind: "deny" }))}
         />
       ),
-      approval: (approval) => (
-        <Permission
-          notice={approval}
-          harness={props.harness}
-          card={card}
-          open={open}
-          onToggle={() => setOpen(!open)}
-        />
-      ),
+      approval: (approval) =>
+        isComputerUse(request) ? (
+          <ComputerUseApproval
+            request={request}
+            hostId={props.host.hostId}
+            host={props.host.name}
+            harness={harnessName(props.harness)}
+            live={card.live}
+            onReply={(reply) => card.onRespond(decisionOf(reply))}
+          />
+        ) : (
+          <Permission
+            notice={approval}
+            harness={props.harness}
+            card={card}
+            open={open}
+            onToggle={() => setOpen(!open)}
+          />
+        ),
     })
   );
 

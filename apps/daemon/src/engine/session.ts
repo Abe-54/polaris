@@ -423,7 +423,7 @@ export const sessionMachine = createMachine({
         return reject(enq, `request ${event.requestId} is already resolved`);
       }
 
-      const refusal = decisionRefusal(record, event.requestId, event.decision);
+      const refusal = decisionRefusal(record, event.requestId, event.decision, event.actor);
 
       if (refusal !== null) return reject(enq, refusal);
 
@@ -654,7 +654,7 @@ export const sessionMachine = createMachine({
               const record = need(context);
 
               if (!record.pending.has(event.requestId)) return undefined;
-              const refusal = decisionRefusal(record, event.requestId, event.decision);
+              const refusal = decisionRefusal(record, event.requestId, event.decision, event.actor);
 
               if (refusal !== null) return reject(enq, refusal);
 

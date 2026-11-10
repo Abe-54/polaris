@@ -70,7 +70,7 @@ import { type HarnessCall, harnessCallOf } from "./slash.ts";
 import { logStart } from "../startLog.ts";
 import { sessionTraceEnvironment } from "../../traces/environment.ts";
 import type { ToolServers } from "../toolServers.ts";
-import { codexToolServers } from "./simulator.ts";
+import { codexToolServers } from "./toolServers.ts";
 
 export interface SessionConfig extends ToolServers {
   readonly appServer: AppServer;

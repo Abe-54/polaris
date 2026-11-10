@@ -44,6 +44,8 @@ const developer = "developer-mode";
 
 const browser = "browser.host";
 
+const computerUse = "computer-use";
+
 export const RPC_CAPABILITIES = {
   hello: null,
   dispatch: null,
@@ -252,6 +254,17 @@ export const RPC_CAPABILITIES = {
   "simulator.restart": "simulator",
   "simulator.attach": "simulator",
   "simulator.sessionFeed": "simulator",
+  "computerUse.status": computerUse,
+  "computerUse.watch": computerUse,
+  "computerUse.enable": computerUse,
+  "computerUse.disable": computerUse,
+  "computerUse.openSetup": computerUse,
+  "computerUse.allowedApps": computerUse,
+  "computerUse.removeAllowedApp": computerUse,
+  "computerUse.allowedApps.add": computerUse,
+  "computerUse.app": computerUse,
+  "computerUse.preview.watch": "computer-use.preview",
+  "computerUse.preview.latest": "computer-use.preview",
 } as const satisfies Record<Exclude<DaemonRpcTag, LanguageRpcTag>, RpcRequirement>;
 
 const isLanguageRpc = (tag: DaemonRpcTag): tag is LanguageRpcTag =>

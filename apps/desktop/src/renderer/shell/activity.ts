@@ -4,10 +4,20 @@
  * Null when the feed isn't open or nothing is in progress.
  */
 import type { TurnItem } from "@polaris/protocol";
-import { Match } from "effect";
+import { Match, Predicate } from "effect";
 import { completedItemView } from "../features/session/model/items.ts";
 import { toolActivity } from "../features/session/model/runs.ts";
 import type { LiveItem, SessionModel } from "../store/sessionModel.ts";
+import { desktopCallOf } from "../features/session/model/computerUse/index.ts";
+
+type ToolCall = Extract<TurnItem, { readonly _tag: "ToolCall" }>;
+
+/** A computer use call's app (Paper CU5's row line, "Using Simulator"). */
+const desktopApp = (i: ToolCall): string => {
+  const passed = Predicate.hasProperty(i.input, "app") ? i.input.app : null;
+
+  return i.computerUse?.app?.name ?? (Predicate.isString(passed) ? passed : "an app");
+};
 
 const MAX = 80;
 
@@ -36,6 +46,8 @@ const itemActivity = (item: TurnItem): string | null =>
           : `Editing ${i.changes.length} files`;
       },
       ToolCall: (i) => {
+        if (desktopCallOf(i) !== null) return `Using ${desktopApp(i)}`;
+
         const view = completedItemView(i);
 
         return clip(view.kind === "tool" ? toolActivity(view) : `Using ${i.name}`);

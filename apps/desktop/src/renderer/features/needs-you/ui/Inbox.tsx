@@ -168,9 +168,10 @@ const Waiting = ({
 
   if (always) answering.onAlwaysAllow = () => void approve(target, true);
 
-  // A question is answered, a secret typed and a write's reason given only in the session's card.
+  // Questions, secrets, computer use setup and a write's reason are answered in the session's card.
   const write = request.dataWrite !== undefined;
-  const inCard = request.kind === "question" || request.kind === "secret" || write;
+  const inSession = ["question", "secret", "computer-use"].includes(request.kind);
+  const inCard = inSession || write;
 
   const answers: ReadonlyArray<CardAction> = inCard
     ? writeAnswers(target, open)

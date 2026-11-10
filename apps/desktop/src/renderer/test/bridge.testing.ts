@@ -27,6 +27,8 @@ export interface Feed<K extends SubscriptionKind> {
   readonly kind: K;
   readonly input: SubscriptionInput<K>;
   readonly listener: SubscriptionListener<SubscriptionItem<K>>;
+  /** The code under test closed it. */
+  readonly closed: () => boolean;
 }
 
 type AnyFeed = { readonly [K in SubscriptionKind]: Feed<K> }[SubscriptionKind];
@@ -65,10 +67,14 @@ export const installFakeBridge = (): FakeBridge => {
       return (await answers.get(method)?.(input)) ?? { ok: true, value: null };
     }) as PolarisApi["request"],
     subscribe: (kind, input, listener) => {
-      // SAFETY: the kind, input and listener arrive together from a typed `subscribe` call.
-      feeds.push({ kind, input, listener } as AnyFeed);
+      let closed = false;
 
-      return () => undefined;
+      // SAFETY: the kind, input and listener arrive together from a typed `subscribe` call.
+      feeds.push({ kind, input, listener, closed: () => closed } as AnyFeed);
+
+      return () => {
+        closed = true;
+      };
     },
     onAppEvent: () => () => undefined,
   });

@@ -4,8 +4,6 @@
  */
 import { Effect } from "effect";
 import type { OpenOptions } from "../HarnessDriver.ts";
-import type { ToolServers } from "../toolServers.ts";
-import { codexBrowserConfig } from "./browser.ts";
 import {
   SIMULATOR_MCP_NAME,
   SIMULATOR_TOOL_TIMEOUT_SECONDS,
@@ -28,15 +26,4 @@ export const codexSimulatorConfig = Effect.fnUntraced(function* (
       tool_timeout_sec: SIMULATOR_TOOL_TIMEOUT_SECONDS,
     },
   };
-});
-
-/** The Browser's and the Simulator's `mcp_servers` entries. */
-export const codexToolServers = Effect.fnUntraced(function* (
-  servers: ToolServers,
-  options: OpenOptions
-) {
-  const browser = yield* codexBrowserConfig(servers.browser, options);
-  const simulator = yield* codexSimulatorConfig(servers.simulator, options);
-
-  return { ...browser, ...simulator };
 });

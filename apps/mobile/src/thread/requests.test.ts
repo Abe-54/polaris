@@ -87,3 +87,8 @@ test("P9-10: attach approval has no remembered action, ordinary tool approvals k
   ).toBe(false);
   expect(offersAlwaysAllow(request({ kind: "tool" }))).toBe(true);
 });
+
+test("headed input is asked each time; an app approval can be always allowed", () => {
+  expect(offersAlwaysAllow(request({ kind: "headed-input" }))).toBe(false);
+  expect(offersAlwaysAllow(request({ kind: "app" }))).toBe(true);
+});

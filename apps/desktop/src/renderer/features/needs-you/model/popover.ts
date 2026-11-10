@@ -26,6 +26,9 @@ export const KIND_WANTS: Record<ApprovalRequest["kind"], string> = {
   tool: "wants to use a tool",
   question: "has a question",
   secret: "is asking for a secret",
+  app: "wants to use an app",
+  "headed-input": "wants headed input",
+  "computer-use": "wants computer use",
 };
 
 const titleOf = (title: string) => title || "Untitled session";

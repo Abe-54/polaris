@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PLATFORMS, loadBuilds } from "@polaris/client/install";
-import { DARWIN_PATHS, daemonDist, hash, removeDists } from "./dist.testing.ts";
+import { DARWIN_PATHS, daemonDist, dropDarwinFile, hash, removeDists } from "./dist.testing.ts";
 import { signDaemonBuilds, verifyDaemonManifest } from "./manifest.ts";
 import { signingCredentials, type Signing } from "./release.ts";
 
@@ -25,6 +25,13 @@ describe("shipped Daemon manifest", () => {
     const linuxBefore = readFileSync(join(dist, "linux-x64/polaris"));
     const commands: ReadonlyArray<string>[] = [];
     const bundle = join(dist, "darwin-arm64/PolarisDaemon.app");
+    const helper = join(dist, "darwin-arm64/Polaris Computer Use.app");
+
+    // What codesign rewrites when it signs a bundle: its executable and its sealed resources.
+    const sealed = new Map<string, ReadonlyArray<keyof typeof DARWIN_PATHS>>([
+      [bundle, ["polaris", "CodeResources"]],
+      [helper, ["polaris-computer-use", "computer-use-CodeResources"]],
+    ]);
 
     const append = (path: string) =>
       writeFileSync(path, Buffer.concat([readFileSync(path), Buffer.from("-signed")]));
@@ -32,14 +39,13 @@ describe("shipped Daemon manifest", () => {
     signDaemonBuilds(dist, signing, "/entitlements", (argv) => {
       commands.push(argv);
 
-      // Signing the bundle rewrites its executable and its sealed resources, as codesign does.
       if (argv[0] === "codesign" && argv.includes("--sign")) {
         const target = argv.at(-1)!;
 
-        if (target !== bundle) append(target);
-        else
-          for (const name of ["polaris", "CodeResources"] as const)
-            append(join(dist, "darwin-arm64", DARWIN_PATHS[name]));
+        const rewritten = sealed.get(target);
+
+        if (rewritten === undefined) append(target);
+        else for (const name of rewritten) append(join(dist, "darwin-arm64", DARWIN_PATHS[name]));
       }
 
       return argv[1] === "selftest" ? "polaris 0.1.0-rc.1 darwin-arm64\nfff ok" : "";
@@ -49,14 +55,34 @@ describe("shipped Daemon manifest", () => {
     const signed = commands.filter((argv) => argv.includes("--sign"));
     expect(signed.map((argv) => argv.at(-1))).toEqual([
       join(bundle, "Contents/MacOS/betterleaks"),
+      // The Daemon's libraries, before the signature that seals them (ENG-877).
+      join(bundle, "Contents/Frameworks/libfff_c.dylib"),
+      join(bundle, "Contents/Frameworks/sodium-native.node"),
       bundle,
+      // The helper app's tools are sealed by its own signature, after the Daemon's.
+      join(helper, "Contents/MacOS/agent-desktop"),
+      join(helper, "Contents/MacOS/agent-desktop-macos-helper"),
+      join(helper, "Contents/MacOS/polaris-capture"),
+      helper,
     ]);
-    expect(signed[1]).toContain("runtime");
-    expect(signed[1]).toContain("--timestamp");
-    expect(signed[1]).toContain("/fake/keychain");
-    expect(signed[1]).toContain("/entitlements/daemon.plist");
+
+    for (const argv of signed.slice(1, 3)) {
+      expect(argv).toContain("runtime");
+      expect(argv).not.toContain("--entitlements");
+    }
+
+    for (const argv of signed.slice(4)) {
+      expect(argv).toContain("/entitlements/computer-use.plist");
+      expect(argv).toContain("runtime");
+    }
+
+    expect(signed[3]).toContain("runtime");
+    expect(signed[3]).toContain("--timestamp");
+    expect(signed[3]).toContain("/fake/keychain");
+    expect(signed[3]).toContain("/entitlements/daemon.plist");
     expect(signed[0]).toContain("/entitlements/betterleaks.plist");
     expect(commands).toContainEqual(["codesign", "--verify", "--deep", "--strict", bundle]);
+    expect(commands).toContainEqual(["codesign", "--verify", "--deep", "--strict", helper]);
 
     const stage = join(dist, "staged");
     mkdirSync(stage);
@@ -74,14 +100,30 @@ describe("shipped Daemon manifest", () => {
 
     expect(resigned.map((file) => file.name).sort()).toEqual([
       "CodeResources",
+      "agent-desktop",
+      "agent-desktop-macos-helper",
       "betterleaks",
+      "computer-use-CodeResources",
+      "libfff_c.dylib",
       "polaris",
+      "polaris-capture",
+      "polaris-computer-use",
+      "sodium-native.node",
     ]);
     expect(mac.files.map((file) => file.path)).toContain(
       join(stage, "darwin-arm64", DARWIN_PATHS["Info.plist"])
     );
     expect(mac.sha256).toBe(mac.files[0]!.sha256);
     expect(mac.files.find((file) => file.name === "betterleaks")!.executable).toBe(true);
+  });
+
+  test("a release build without the computer use helper is refused", () => {
+    const dist = daemonDist("0.1.0-rc.1");
+    dropDarwinFile(dist, "agent-desktop");
+
+    expect(() => signDaemonBuilds(dist, signing, "/entitlements", () => "")).toThrow(
+      "missing darwin-arm64 computer use helper"
+    );
   });
 
   test("unsigned builds keep their manifest and never call signing tools", () => {

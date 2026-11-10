@@ -53,9 +53,18 @@ describe("release Daemon archives", () => {
         ["betterleaks", 0o755],
         ...(bundle
           ? [
+              ["libfff_c.dylib", 0o644],
+              ["sodium-native.node", 0o644],
               ["Info.plist", 0o644],
               ["Polaris.icns", 0o644],
               ["CodeResources", 0o644],
+              ["polaris-computer-use", 0o755],
+              ["agent-desktop", 0o755],
+              ["agent-desktop-macos-helper", 0o755],
+              ["polaris-capture", 0o755],
+              ["computer-use-Info.plist", 0o644],
+              ["computer-use-Polaris.icns", 0o644],
+              ["computer-use-CodeResources", 0o644],
             ]
           : []),
       ]);

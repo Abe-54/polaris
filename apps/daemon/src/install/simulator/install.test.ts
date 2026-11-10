@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { posixDescribe, posixTest } from "../../platform/testing.ts";
 import { tempDir } from "../../platform/tempDir.testing.ts";
-import { bunRuntime, installedOnDisk, installSimulatorTools } from "./install.ts";
+import { installedOnDisk, installSimulatorTools } from "./install.ts";
+import type { BunRuntime } from "./runtime.ts";
 
 const describe = posixDescribe("the Simulator never runs on Windows");
 
@@ -92,10 +93,8 @@ const setup = () => {
   };
 };
 
-const run = (script: string) => {
-  const runtime = bunRuntime();
-
-  const proc = Bun.spawnSync([...runtime.argv, script], {
+const run = (runtime: BunRuntime, script: string) => {
+  const proc = Bun.spawnSync([runtime.program, script], {
     env: { ...process.env, ...runtime.env },
   });
 
@@ -110,8 +109,8 @@ describe("installSimulatorTools", () => {
     expect(await installedOnDisk(t.options)).toBeNull();
     const installed = await installSimulatorTools(t.options);
 
-    expect(run(installed.hub)).toBe("hub ok");
-    expect(run(installed.agentDevice)).toBe("agent-device ok");
+    expect(run(installed.bun, installed.hub)).toBe("hub ok");
+    expect(run(installed.bun, installed.agentDevice)).toBe("agent-device ok");
     expect(readdirSync(t.root)).toEqual(["9.9.9"]);
     expect(await installedOnDisk(t.options)).toEqual(installed);
   });

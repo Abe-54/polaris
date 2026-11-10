@@ -10,6 +10,8 @@ It covers the event store's group commit, receipts and gapless sequence (`apps/d
 | `languages.qnt` | M3.1 contract-only model: isolated contexts, queue/version/generation fences, durable edit acknowledgment and guarded undo. Future T1/X1 runtime adapters must emit observed traces; P1 installs no runtime. |
 | `polaris.qnt` | The model, its properties, and its instances: `current` (the code as it is), `review` (the code as it is, with Clients also accepting Turns and recording Verdicts, in one session), `finding1` … `finding4` (the code before each finding's fix, kept as mutants that must still violate `safety`) and `small` (for Apalache). |
 | `polaris_test.qnt` | Scenario tests: interleavings written out by hand (group commit, retry after a crash, answer races, withdrawal races, a Secret Request timing out, restart, a usage limit waiting for Continue, a dropped subscriber, the host feed, Archive, late approval requests, accepting Turns, Verdicts off the host stream, an upstream defect failing a feed), and one per finding against its mutant. |
+| `computer-use.qnt` | Computer use (ENG-846, ADR 0107): app and headed-input approvals, the always-allowed and always-refused lists, and one session per app. Imported by `computer_use` and its three mutants in `polaris.qnt`. |
+| `computer-use-request.qnt` | A session asks for computer use while it's off (ENG-846): the `computer-use` approval, Not now, the Host turning Ready, and the Harness reopening after the Turn. Imported by `computer_use_request` and its two mutants in `polaris.qnt`. |
 | `scripts/check.ts` | Runs every check (`bun run spec`). |
 | `scripts/replay.ts` | Trace validation: replays logs the real Engine committed through the model (below). |
 | `extensions.qnt` | Pairings and Grants (ENG-398): connections scoped by `hello`, the Grant gate, revocation closing live connections. `scripts/replay-extensions.ts` replays a runtime trace through it. |
@@ -126,6 +128,8 @@ Each finding's instance (`finding1` … `finding4`) is the code before its fix; 
 - `store.model.slow.test.ts`: the real `EventStore` on a SQLite file. Bursts of concurrent commits (fresh ids, retries, duplicates within a batch, Daemon events; accepted, rejected, empty and defective decisions) whose start order and batching `fc.scheduler` picks; subscribers with a buffer of 1–4 that pause and resume and follow the store's contract (subscribe, cut, replay, resume from the last sequence when dropped); ephemeral output; crashes mid-burst and between bursts. A reference model replays the store's decisions in the order it took them and predicts every answer exactly.
 - `engine.model.slow.test.ts`: the real `Engine` with the fake Harness, two devices, and the Client's real `makeFeed` for the host stream and both session streams of each device (behind a detached "network" so a stalled Client backs up into the Daemon's hub buffer). Bursts of commands (including Archive, Unarchive and AcceptTurns) and Harness events (including late approval requests for a Turn that ended), answer races, stalls, disconnects, a feed whose chunks die (at most one per run; its subscriber must end with the defect, the feed must not resubscribe, and it is left out of the final catch-up) and crashes. A reference decider checks every command's recorded events against the log right before them, and every rejection against some state while it was in flight; approval, recovery and no-auto-continue checks as in the spec; each recorded request is for its session's Turn in flight, nothing is pending and no session Working without one, no Archived session holds one, and no accepted Turn is in flight; the read model against a fold of the log; each feed against its stream and each Snapshot against the log at its sequence; every feed catches up at the end. The reference fold and decider are in `engine.reference.testing.ts`, the Engine, fake Harness and Client feeds it drives in `engine.world.testing.ts`, and the per-step checks in `engine.invariants.testing.ts`.
 - `extensions.model.slow.test.ts`: the real `Pairings` store on a SQLite file and `decideAccess` (ENG-398), under random sequences of pair, revoke, authenticate and gated RPCs and Commands, against a reference of `extensions.qnt`: a token opens exactly its Pairing until revoked and nothing when never issued or malformed; a scoped connection is refused exactly what its Grant lacks, naming it, and everything kept for Clients; a token-less connection is never refused.
+- `computerUse.model.slow.test.ts`: the real session machine (`decideSession`, two sessions) and the real app policy (`@polaris/protocol`'s `computerUsePolicy.ts`), under random uses, answers, Turn ends, new Turns and always-allowed removals, against an independent model of `computer-use.qnt` (see "Computer use" below).
+- `computerUseRequest.model.slow.test.ts`: the real session machine (`decideSession`, two sessions) under random requests, Not now and Allow answers, the Host turning Ready, Turn ends and new Turns, against an independent model of the approval half of `computer-use-request.qnt` (see "Computer use requests" below).
 - `findings.slow.test.ts`: the bugs below, as regression tests (a new finding that cannot be fixed at once goes there as `test.todo`).
 
 `POLARIS_PBT_RUNS` sets the number of runs (CI: 25 for the store, 12 for the Engine), `POLARIS_PBT_SEED` replays a seed fast-check printed, and `POLARIS_PBT_STATS=1` prints what the runs reached.
@@ -884,6 +888,61 @@ Origin Approvals (ENG-809, ADR 0098) are the same lifecycle with the target key 
 
 MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but refused by query and data.query.stream with E-DATA-SQL: Bun buffers their results without a bound. Use describe or SELECT from information_schema. The Lead owns the follow-up for bounded metadata streaming. The lexical MySQL restrictions are complementary to read-only transactions, not a replacement.
 
+
+## Computer use (ENG-846)
+
+`computer_use` in `polaris.qnt` imports `computer-use.qnt`, which refines the HRequest/Respond lifecycle for the two new approval kinds, `app` and `headed-input` (ADR 0107). In `polaris` itself they are requests like any other: opened only for the Turn in flight, answered once, withdrawn when the Turn ends or the Daemon restarts. So `polaris`'s commands, commits, streams and recovery don't change. The refinement says what an answer grants, to whom and for how long. The contract is written up in `packages/protocol/computer-use.md`.
+
+| Spec | Code |
+|---|---|
+| `State` (`always`, `allowed`, `headed`, `controller`) | `AppPolicy` in `packages/protocol/src/computerUsePolicy.ts` (`always`, `allowed`, `headed`, `controllers`) |
+| `refused` | `AppPolicy.refused`: the built-in always-refused list, which the Daemon supplies |
+| `decision` | `decideAppUse`: `Refused`, `InUse`, `NeedsApproval` (`app`, then `headed-input`), `Allowed` |
+| `use` | A `polaris_desktop` tool call: `decideAppUse`, then `controlApp` when allowed, or an `ApprovalRequested` of that kind carrying the app |
+| `answer` | `RespondToApproval`, then `answerAppApproval` on the `ApprovalResolved`. "always" on a `headed-input` card is `appDecisionRefusal`: the command is rejected and the card stays |
+| `endTurn`, `restart` | The Turn's end and recovery withdraw its approvals (`polaris`: `withdrawAll`); `releaseSession` releases its apps |
+| `archive` | `forgetSession` |
+| `removeAlways` | `computerUse.removeAllowedApp`: `withoutAllowedApp` |
+| `cards` | The sessions' pending approvals of the two kinds |
+
+The model has no permission mode and no Harness, and neither has `AppPolicy`: that is how "required in every permission mode" is stated. A session's approvals survive a restart because they are folded from its `ApprovalRequested` and `ApprovalResolved` events; control of an app does not.
+
+`safety` counts actions the user never covered (`badActs`) from ghost records of what each answer said (`saidApp`, `saidHeaded`), rather than restating `decision`. It also holds that an app is controlled only by a session with a Turn in flight, that an approval is pending only for a Turn in flight and never for a refused app, and that a refused app is never controlled or always-allowed. The runner checks four witnesses (an action, a headed action, an app in use, an always-allowed app removed) and three mutants that must each violate `safety`:
+
+| Mutant | The bug | What breaks |
+|---|---|---|
+| `computer_use_headed_mutant` | A headed-input approval answered "always" is remembered for the Host | Another session uses headed input it was never allowed |
+| `computer_use_lock_mutant` | A Turn's end leaves its apps controlled | An app is controlled by a session with no Turn |
+| `computer_use_removed_mutant` | "Always allow" also grants the asking session | The session still acts after the app is removed from the list |
+
+`verification/computerUse.model.slow.test.ts` drives the real code against an independent model of this spec and fails under each of those bugs made in `computerUsePolicy.ts`, and under one that ignores `InUse`.
+
+**Left out, on purpose.** The preview, the status and its feed, and the always-allowed list's storage are outside the EventStore and are not modelled. Neither is the user taking control back in headed mode, nor who answers: `appDecisionRefusal` also refuses an Extension's "always", per command, from its Actor. The test plays the part of the Daemon's `AppControl` (`apps/daemon/src/computerUse/control.ts`): it opens the approval when the policy asks for one. Every answer goes to the machine, which rejects the ones `appDecisionRefusal` refuses (`decisionRefusal` in `engine/session.approvals.ts`), so the card stays. `engine/Engine.computerUse*.test.ts` run the same rules through the real Engine and `AppControl`.
+
+## Computer use requests (ENG-846)
+
+`computer_use_request` in `polaris.qnt` imports `computer-use-request.qnt`. On a Host where computer use is Off or NeedsSetup, a session's polaris_desktop has one tool, `request_computer_use`, and calling it opens a `computer-use` approval. In `polaris` it is a request like any other: opened only for the Turn in flight, answered once, withdrawn when the Turn ends or the Daemon restarts. The refinement says how it closes, and what the agent is promised.
+
+| Spec | Code |
+|---|---|
+| `tools` | The tools `DesktopMcp.forSession` gave the Harness when it opened: `request` on Off or NeedsSetup, `full` on Ready (`opened`), `none` when it isn't running |
+| `ask` | `request_computer_use`: `ComputerUseRequests.request` opens the approval (`ApprovalRequest.computerUse`), or clears at once on a Host already Ready |
+| `answer` | `RespondToApproval`: Deny (Not now) resolves it; anything else is refused by `decisionRefusal`, and the request stays |
+| `turnOn`, `told` | The Host's status turns Ready (`DesktopHost.untilReady`): the Daemon withdraws the request (`Computer use is on`), the tool tells the agent the tools come on its next Turn, and the session is marked to reopen |
+| `endTurn` | The Turn's end withdraws a pending request; a session marked to reopen has its Harness stopped (`rt.stopHarness`) |
+| `startTurn` | The next Turn opens the Harness again from its cursor, so `forSession` reads the Host again |
+| `restart` | Recovery: every Turn interrupted, every request withdrawn, no Harness running |
+
+`safety` reads ghosts of what the agent was told (`promised`): it is told computer use is on only while the Host is Ready, and once told, its next Turn on a Ready Host has the full tools. It also holds that a request is pending only for a Turn in flight, from the request tool, and never while the Host is Ready. The runner checks two witnesses (a promised session reopened with the tools, a Not now) and two mutants that must each violate `safety`:
+
+| Mutant | The bug | What breaks |
+|---|---|---|
+| `computer_use_request_reopen_mutant` | The Harness keeps running after the Turn the request cleared in | The next Turn still has only the request tool |
+| `computer_use_request_allow_mutant` | An Allow answer clears the request as though computer use were on | The agent is told it's on while the Host isn't Ready |
+
+`verification/computerUseRequest.model.slow.test.ts` drives the real session machine against the approval half (it fails without the refusal of Allow), and `engine/Engine.computerUse.test.ts` drives the real Engine with a fake Codex through the whole round, failing without the reopen.
+
+**Left out, on purpose.** The Host's status is a boolean here; Off and NeedsSetup are the same to the request. Turning computer use off again doesn't take the tools from a running Harness, as in D2. The 30-minute timeout is a withdrawal like the Turn's end.
 
 ## Data write approvals (ENG-645)
 

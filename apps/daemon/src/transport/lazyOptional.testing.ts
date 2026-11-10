@@ -4,7 +4,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema, Schedule, Stream } from "effect";
 import {
+  AllowedApp,
+  AppId,
   DataRpcs,
+  DesktopApp,
   DomainEvent,
   Workspace,
   AgentSession,
@@ -19,6 +22,7 @@ import { DataSources } from "../data/services.ts";
 import { TraceRuntime } from "../traces/runtimeService.ts";
 import { TraceStore } from "../traces/storeService.ts";
 import { ApprovalPolicy, WorkspaceTrust } from "../services.ts";
+import { ComputerUseHostRpcs } from "../computerUse/group.ts";
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTracesAt } from "./lazyTraces.ts";
 
@@ -54,6 +58,16 @@ const featureModules = () =>
     .map((path) => path.replaceAll("\\", "/"))
     .filter((path) =>
       /\/apps\/daemon\/src\/(?:reviewer\/(?:index|run|walkthrough)|usage\/(?:UsageIndex|db|indexer)|accept\/(?:AcceptRpcs|draft))\.ts$/.test(
+        path
+      )
+    );
+
+/** Computer use's services, server, helper and installer wait for its first use. */
+const computerUseModules = () =>
+  Object.keys(require.cache)
+    .map((path) => path.replaceAll("\\", "/"))
+    .filter((path) =>
+      /\/apps\/daemon\/src\/(?:computerUse\/(?:host|control|rpc|preview\/index)|harness\/desktop\/index|service\/computerUse\/index|install\/agentDesktop\/index|transport\/computerUseLive)\.ts$/.test(
         path
       )
     );
@@ -103,11 +117,13 @@ const empty = async () => {
   const { engineServices, daemonCapabilities } = await import("./serve.ts");
   assert.deepEqual(implementationModules(), []);
   assert.deepEqual(featureModules(), []);
+  assert.deepEqual(computerUseModules(), []);
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         yield* Layer.build(engineServices);
         assert.deepEqual(implementationModules(), []);
+        assert.deepEqual(computerUseModules(), []);
         assert.equal(existsSync(join(root, "data.sqlite")), false);
         assert.equal(existsSync(join(root, "trace-tokens.json.seed")), false);
         assert.equal(daemonCapabilities.includes("data.schemaDiff"), true);
@@ -159,6 +175,36 @@ const data = async () => {
           assert.deepEqual(pages[0]![0]!.label, label);
         }).pipe(Effect.provide(context));
         assert.equal(existsSync(join(root, "data.sqlite")), true);
+      })
+    )
+  );
+};
+
+/** What a Daemon saved before its restart is what the first `computerUse.*` request loads. */
+const computerUse = async () => {
+  const app = new DesktopApp({ id: AppId.make("com.example.notes"), name: "Notes", icon: null });
+  const allowed = [new AllowedApp({ app, allowedAt: "2026-01-01T00:00:00.000Z" })];
+  await writeFile(join(root, "computer-use.json"), JSON.stringify({ enabled: true, allowed }));
+  const { lazyComputerUse, lazyComputerUseHandlers } = await import("./lazyComputerUse.ts");
+
+  const layer = lazyComputerUseHandlers.pipe(
+    Layer.provideMerge(lazyComputerUse),
+    Layer.provideMerge(EventStore.layerSqlite(":memory:"))
+  );
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const context = yield* Layer.build(layer);
+        assert.deepEqual(computerUseModules(), []);
+
+        const list = yield* ComputerUseHostRpcs.accessHandler("computerUse.allowedApps").pipe(
+          Effect.provide(context)
+        );
+
+        const listed = list({}, options);
+        assert.deepEqual(Effect.isEffect(listed) ? yield* listed : listed, allowed);
+        assert.notDeepEqual(computerUseModules(), []);
       })
     )
   );
@@ -360,6 +406,9 @@ switch (process.argv[2]) {
     break;
   case "recovery":
     await recovery();
+    break;
+  case "computer-use":
+    await computerUse();
     break;
   case "migrations":
     await migrations();

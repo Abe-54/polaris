@@ -160,6 +160,29 @@ describe("the menu", () => {
   });
 });
 
+describe("computer use approvals (CU4)", () => {
+  test.each([
+    { kind: "app", line: "Use Simulator?" },
+    { kind: "headed-input", line: "Take mouse and keyboard? · Simulator" },
+  ] as const)("$kind asks '$line' and offers Allow once and Deny, never an always", (c) => {
+    const waiting = entry(session("s", "needs-you"), [
+      approval("r1", "s", { kind: c.kind, app: "Simulator" }),
+    ]);
+
+    const state = {
+      ...onHosts(initialState(true), [host("h1", [waiting])]),
+      screen: { kind: "session", key: { hostId: "h1", sessionId: "s" } },
+    } as const;
+
+    expect(layout(state).texts[0]?.content).toContain(c.line);
+    expect(menuFor(waiting, null).map((item) => [item.label, item.action])).toEqual([
+      ["Allow once", { kind: "allow", requestId: "r1" }],
+      ["Deny", { kind: "deny", requestId: "r1" }],
+      ["Interrupt", { kind: "interrupt" }],
+    ]);
+  });
+});
+
 describe("an approval arriving while the app is open", () => {
   const idle = entry(session("s", "idle"));
 

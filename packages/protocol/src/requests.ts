@@ -295,3 +295,16 @@ export class RequestsRpcs extends RpcGroup.make(
   ParseCurl,
   FormatCurl
 ) {}
+
+/** Every Requests RPC: the SDK's Client leaves them out, as none is open to Extensions. */
+export const REQUESTS_RPC_TAGS = [
+  "requests.watch",
+  "requests.save",
+  "requests.send",
+  "requests.variables",
+  "requests.sendLog.page",
+  "requests.sendLog.watch",
+  "requests.send.get",
+  "requests.curl.parse",
+  "requests.curl.format",
+] as const satisfies ReadonlyArray<RpcGroup.Rpcs<typeof RequestsRpcs>["_tag"]>;

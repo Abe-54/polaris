@@ -337,6 +337,20 @@ export const USER_RPCS = {
   // Its endpoint takes taps and keys on the Simulator, as `terminal.input` does on a terminal.
   "simulator.attach": "user",
   "simulator.sessionFeed": "any",
+  "computerUse.status": "any",
+  "computerUse.watch": "any",
+  // Turning computer use on, or always allowing an app, stands in for the user's approval (ENG-846).
+  "computerUse.enable": "user",
+  "computerUse.disable": "any",
+  // Puts System Settings and a Finder window on the user's screen.
+  "computerUse.openSetup": "user",
+  "computerUse.allowedApps": "any",
+  "computerUse.removeAllowedApp": "any",
+  "computerUse.allowedApps.add": "user",
+  "computerUse.app": "any",
+  // A view of the window a session drives: another agent's shell must not watch around app approvals.
+  "computerUse.preview.watch": "user",
+  "computerUse.preview.latest": "user",
 } as const satisfies Record<DaemonRpcTag, UserAccessNeed>;
 
 /** The RPCs the user gate decides: every `user` one, and `dispatch`, decided per Command. */

@@ -256,6 +256,12 @@ export interface Fakes {
   readonly attachments: Map<AttachmentId, Attachment>;
 }
 
+/** A fake Harness and the fakes around an Engine, for test helpers outside a test file. */
+export const fakeEngineParts = (kind: HarnessKind = "codex") => ({
+  driver: makeFakeDriver(kind),
+  fakes: makeFakes(),
+});
+
 export const makeFakes = (): Fakes => ({
   checkpoints: [],
   worktrees: new Map(),

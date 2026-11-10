@@ -30,6 +30,7 @@ import {
 } from "@polaris/ui";
 import { age } from "../../../shell/copy.ts";
 import { SentAttachments } from "../../attachments/index.ts";
+import { ComputerUseApproval } from "../../computer-use/index.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { Decisions } from "../../../commands.ts";
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
@@ -50,6 +51,7 @@ import { SentBody } from "./sentBody.tsx";
 import { SessionTargetContext } from "./polarisTool/target.ts";
 import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
+import { ComputerUseRequestCard } from "./ComputerUseRequestCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
 import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCard.tsx";
 import { sourceForTarget } from "../../data/approval/decide.ts";
@@ -380,11 +382,13 @@ const Agent = ({ row, ctx }: { row: Extract<Row, { kind: "item" }>; ctx: RowCont
   </TurnMenu>
 );
 
-const KIND_WANTS: Record<Exclude<ApprovalRequest["kind"], "secret">, string> = {
+const KIND_WANTS: Record<Exclude<ApprovalRequest["kind"], "secret" | "computer-use">, string> = {
   command: "wants to run a command",
   "file-change": "wants to change files",
   tool: "wants to use a tool",
   question: "has a question",
+  app: "wants to use an app",
+  "headed-input": "wants headed input",
 };
 
 /** DESIGN.md Needs You: the washed header strip and numbered rows; free text goes in the composer. */
@@ -545,6 +549,16 @@ const Approval = ({
 }) => {
   if (request.kind === "secret") return <Secret request={request} settled={settled} ctx={ctx} />;
 
+  if (request.kind === "computer-use")
+    return (
+      <ComputerUseRequestCard
+        request={request}
+        hostKey={ctx.diff.hostKey}
+        harness={ctx.harness}
+        onRespond={ctx.onRespond}
+      />
+    );
+
   if (request.dataWrite !== undefined)
     return (
       <DataWriteApproval request={request} write={request.dataWrite} wrote={wrote} ctx={ctx} />
@@ -557,6 +571,16 @@ const Approval = ({
 
   if (request.origin !== undefined)
     return <OriginApproval request={request} target={request.origin} ctx={ctx} />;
+
+  if (request.kind === "app" || request.kind === "headed-input")
+    return (
+      <ComputerUseApproval
+        request={request}
+        hostKey={ctx.diff.hostKey}
+        harness={ctx.harness}
+        onRespond={(decision) => ctx.onRespond(request, decision)}
+      />
+    );
   const who = ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name;
   const respond = (decision: ApprovalDecision) => ctx.onRespond(request, decision);
 

@@ -590,6 +590,7 @@ export const decide = (model: ReadModel, command: Command, ctx: DecideContext): 
             requestId: c.requestId,
             decision: c.decision,
             resolvedBy: ctx.deviceLabel,
+            actor: ctx.actor,
           }),
     RenameSession: (c) => renameSession(d, c),
     PinSession: (c) => pinSession(d, c),

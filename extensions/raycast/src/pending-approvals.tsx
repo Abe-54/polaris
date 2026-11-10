@@ -16,6 +16,10 @@ const KIND_LABEL = {
   question: "Question",
   // The SDK doesn't announce `approval.secret`, so a Daemon never sends one.
   secret: "Secret",
+  // The SDK doesn't announce `computer-use` either.
+  app: "App",
+  "headed-input": "Headed input",
+  "computer-use": "Computer use",
 } as const;
 
 const markdownOf = ({ approval, session }: ApprovalRow) =>

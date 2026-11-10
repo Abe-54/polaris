@@ -105,6 +105,8 @@ const entryKey = (entry: Entry) => {
       return entry.item.id;
     case "run":
       return `run:${entry.id}`;
+    case "desktop":
+      return `desktop:${entry.id}`;
     case "subagent":
       return `subagent:${entry.card.id}`;
     case "sources":

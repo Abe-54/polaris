@@ -37,6 +37,8 @@ import { githubHandlers } from "../github/ipc.ts";
 import { gitHandlers } from "./git.ts";
 import { constellationHandlers, resourceHandlers } from "./constellation.ts";
 import { remoteAccessHandlers } from "./remoteAccess.ts";
+import type { PickedApp } from "../../shared/computerUseContract.ts";
+import { computerUseHandlers } from "./computerUse.ts";
 import { linkedDevicesHandlers } from "./linkedDevices.ts";
 import { voiceHandlers } from "./voice.ts";
 import { browserHandlers } from "../browser/ipc.ts";
@@ -87,6 +89,8 @@ export interface RequestContext {
   readonly developmentBuild: boolean;
   /** The native folder picker on the focused window; null when cancelled. */
   readonly pickFolder: () => Promise<string | null>;
+  /** The native picker on /Applications, read for its bundle id; null when cancelled. */
+  readonly pickApp: () => Promise<PickedApp | null>;
   readonly writeClipboard: (text: string) => Promise<void>;
   /** Writes a secret that clears itself after a minute (`secretClipboard.ts`). */
   readonly writeSecretClipboard: (text: string) => Promise<void>;
@@ -266,6 +270,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...constellationHandlers,
   ...resourceHandlers,
   ...remoteAccessHandlers,
+  ...computerUseHandlers,
   ...linkedDevicesHandlers,
   ...voiceHandlers,
   ...browserHandlers(ctx.browser),
@@ -546,6 +551,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
     Effect.sync(() => ({ sshHosts: ctx.sshHosts(), version: ctx.appVersion })),
   "onboarding.welcomeSeen": () => Effect.sync(ctx.setWelcomeSeen).pipe(done),
   "dialog.pickFolder": () => Effect.promise(ctx.pickFolder).pipe(Effect.map((path) => ({ path }))),
+  "computerUse.pickApp": () => Effect.promise(ctx.pickApp),
   "editor.publishDirty": ({ files }) =>
     Effect.sync(() => publishDirty(0, files)).pipe(Effect.as(null)),
   "editor.savedAll": ({ ok }) => Effect.sync(() => savedAll(ok)).pipe(Effect.as(null)),

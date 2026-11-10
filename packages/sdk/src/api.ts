@@ -10,6 +10,8 @@ export {
   type SubscribeSessionOptions,
 } from "./client.ts";
 
+export { alwaysAllowable } from "./approvals.ts";
+
 export type { ConnectError, OpenTransport } from "./connection.ts";
 
 /** What an Extension announces in `hello`; never `approval.secret` (ADR 0089). */
@@ -59,6 +61,7 @@ export type {
   AgentSession,
   ApprovalRequest,
   Capability,
+  DesktopApp,
   GrantKind,
   HarnessKind,
   HostInfo,

@@ -76,6 +76,7 @@ export const NeedsYouPage = ({ item, now, onOpen, onReply, menu }: NeedsYouPageP
         ) : (
           <ApprovalActions
             approval={item.approval}
+            where={{ hostId: item.hostId, host: item.hostName, harness: item.session.harness }}
             cwd={item.session.cwd}
             enabled={!item.stale}
             onReply={onReply}

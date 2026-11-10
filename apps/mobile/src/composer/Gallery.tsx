@@ -169,6 +169,7 @@ export const ComposerGallery = () => {
             onRespond: () => undefined,
             onProvideSecret: () => undefined,
             settled: state === "secret-saved" ? SAVED : null,
+            host: { hostId: "gallery", name: "Mac Studio" },
           }}
           subagents={scene.subagents}
           contextUsage={scene.context}

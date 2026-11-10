@@ -6,8 +6,6 @@ import { createSdkMcpServer, type Options, tool } from "@anthropic-ai/claude-age
 import { Effect, Schema } from "effect";
 import { z } from "zod";
 import type { OpenOptions } from "../HarnessDriver.ts";
-import type { ToolServers } from "../toolServers.ts";
-import { claudeBrowserOptions } from "./browser.ts";
 import {
   SIMULATOR_MCP_NAME,
   type SimulatorMcp,
@@ -49,20 +47,4 @@ export const claudeSimulatorOptions = Effect.fnUntraced(function* (
   return {
     mcpServers: { ...sdkOptions.mcpServers, [SIMULATOR_MCP_NAME]: sdkServer(server) },
   } satisfies Partial<Options>;
-});
-
-/** The Browser's and the Simulator's servers, side by side. */
-export const claudeToolServers = Effect.fnUntraced(function* (
-  servers: ToolServers,
-  options: OpenOptions,
-  sdkOptions: Options
-) {
-  const browser = yield* claudeBrowserOptions(servers.browser, options, sdkOptions);
-
-  const simulator = yield* claudeSimulatorOptions(servers.simulator, options, {
-    ...sdkOptions,
-    ...browser,
-  });
-
-  return { ...browser, ...simulator };
 });

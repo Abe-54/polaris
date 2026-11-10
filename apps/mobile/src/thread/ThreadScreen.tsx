@@ -601,6 +601,7 @@ export const ThreadScreen = ({
               onProvideSecret: (requestId, typed) =>
                 void controller?.provideSecret(requestId, typed),
               settled: latestSecretOutcome(fold),
+              host: { hostId: connection.hostId, name: connection.name },
             }}
             subagents={fold.subagents}
             contextUsage={session.contextUsage}

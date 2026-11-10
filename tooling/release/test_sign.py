@@ -190,7 +190,15 @@ class Manifest(unittest.TestCase):
             sign.file_path(Path("/dist/darwin-arm64"), "CodeResources", {"path": bundled}),
             Path("/dist/darwin-arm64", bundled),
         )
-        for path in ("../../outside/polaris", "/etc/passwd", "PolarisDaemon.app/../../x", "a//b", 7):
+        helper = "Polaris Computer Use.app/Contents/MacOS/polaris-computer-use"
+        self.assertEqual(
+            sign.file_path(Path("/dist/darwin-arm64"), "polaris-computer-use", {"path": helper}),
+            Path("/dist/darwin-arm64", helper),
+        )
+        for path in (
+            "../../outside/polaris", "/etc/passwd", "PolarisDaemon.app/../../x", "a//b", 7,
+            " leading/polaris", "trailing /polaris", ". ./polaris",
+        ):
             with self.subTest(path=path), tempfile.TemporaryDirectory() as dist:
                 build = {"binary": "polaris", "files": {"polaris": {"path": path}}}
                 manifest = {"version": "1.0.0", "platforms": {sign.PLATFORM: build}}
@@ -198,6 +206,63 @@ class Manifest(unittest.TestCase):
                 with self.assertRaises(SystemExit) as raised:
                     sign.read_manifest(Path(dist), "1.0.0")
                 self.assertIn("is not a relative path inside its platform", str(raised.exception))
+
+
+class Helper(unittest.TestCase):
+    """Where the computer use helper app must be before anything is signed."""
+
+    DAEMON = Path("/dist/darwin-arm64/PolarisDaemon.app")
+
+    def paths(self, bundle: str = "Polaris Computer Use.app", **moved: str) -> dict:
+        macos = Path("/dist/darwin-arm64", bundle, "Contents/MacOS")
+        names = (sign.HELPER_LAUNCHER, *sign.HELPER_TOOLS)
+        return {name: Path(moved[name]) if name in moved else macos / name for name in names}
+
+    def refused(self, paths: dict) -> str:
+        with self.assertRaises(SystemExit) as raised:
+            sign.helper_of(paths, self.DAEMON)
+        return str(raised.exception)
+
+    def test_finds_the_helper_beside_the_daemon_s_bundle(self) -> None:
+        self.assertEqual(
+            sign.helper_of(self.paths(), self.DAEMON),
+            Path("/dist/darwin-arm64/Polaris Computer Use.app"),
+        )
+
+    def test_refuses_a_build_without_one_of_its_files(self) -> None:
+        for name in (sign.HELPER_LAUNCHER, *sign.HELPER_TOOLS):
+            with self.subTest(name=name):
+                paths = self.paths()
+                del paths[name]
+                self.assertIn("missing darwin-arm64 computer use helper", self.refused(paths))
+
+    def test_refuses_a_helper_under_another_name_or_place(self) -> None:
+        self.assertIn("is not Polaris Computer Use.app", self.refused(self.paths("Other.app")))
+        nested = self.paths("PolarisDaemon.app/Contents/Polaris Computer Use.app")
+        self.assertIn("beside the Daemon", self.refused(nested))
+
+    def test_refuses_a_tool_outside_the_helper(self) -> None:
+        outside = self.paths(**{"agent-desktop": "/dist/darwin-arm64/agent-desktop"})
+        self.assertIn("agent-desktop is not beside the helper's launcher", self.refused(outside))
+
+
+class Libraries(unittest.TestCase):
+    """Which of the Daemon's files are signed as its libraries, before its bundle."""
+
+    def test_takes_the_files_in_the_daemon_s_frameworks_and_nothing_else(self) -> None:
+        dist = Path("/dist/darwin-arm64")
+        daemon = dist / "PolarisDaemon.app"
+        paths = {
+            "polaris": daemon / "Contents/MacOS/polaris",
+            "sodium-native.node": daemon / "Contents/Frameworks/sodium-native.node",
+            "libfff_c.dylib": daemon / "Contents/Frameworks/libfff_c.dylib",
+            "Polaris.icns": daemon / "Contents/Resources/Polaris.icns",
+            "agent-desktop": dist / "Polaris Computer Use.app/Contents/Frameworks/agent-desktop",
+        }
+        self.assertEqual(
+            sign.bundle_libraries(paths, daemon),
+            [paths["libfff_c.dylib"], paths["sodium-native.node"]],
+        )
 
 
 if __name__ == "__main__":

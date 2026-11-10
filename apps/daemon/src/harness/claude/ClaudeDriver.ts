@@ -91,7 +91,7 @@ import { ClaudeTranslator } from "./translate.ts";
 import { readConfinement } from "../confinement.ts";
 import { readOnlyEnv, readOnlyOptions } from "./readOnly.ts";
 import type { ToolServers } from "../toolServers.ts";
-import { claudeToolServers } from "./simulator.ts";
+import { claudeToolServers } from "./toolServers.ts";
 import { withoutShadowedWarning } from "./sdkWarnings.ts";
 import { claudeStartLog } from "./startLog.ts";
 import { logStart } from "../startLog.ts";

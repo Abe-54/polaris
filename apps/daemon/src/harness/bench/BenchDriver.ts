@@ -68,6 +68,13 @@ const BenchTurnScriptSchema = Schema.Struct({
   approvalQuestion: Schema.NullOr(
     Schema.Struct({ question: Schema.String, choices: Schema.Array(Schema.String) })
   ),
+  /**
+   * Ask a computer use approval for this app instead (tests only). The Engine answers it, never
+   * the Harness, so the Turn waits on it until interrupted; a Harness can't carry `app`.
+   */
+  approvalApp: Schema.NullOr(
+    Schema.Struct({ kind: Schema.Literals(["app", "headed-input"]), name: Schema.String })
+  ),
   /** Files written under `<cwd>/polaris-bench/` during the Turn, so checkpoints see changes. */
   touchFiles: Schema.Number,
   /** Minimum text size of each completed message, reasoning and command item (padded). */
@@ -94,6 +101,7 @@ export const DEFAULT_SCRIPT: BenchTurnScript = {
   approvalEvery: 0,
   approvalCommand: "bun test --coverage",
   approvalQuestion: null,
+  approvalApp: null,
   touchFiles: 0,
   itemBytes: 0,
   startDelayMs: 0,
@@ -237,35 +245,45 @@ const openBenchSession = Effect.fn("BenchDriver.open")(function* (options: OpenO
     const requestId = RequestId.make(`${itemId}-approval`);
     const answer = yield* Deferred.make<ApprovalDecision>();
     const asked = script.approvalQuestion;
+    const app = script.approvalApp;
     approvals.set(requestId, answer);
     yield* emit(
-      asked === null
+      app !== null
         ? HarnessEvent.ApprovalRequested({
             turnId,
             requestId,
-            kind: "command",
-            title: `Run ${script.approvalCommand.split(" ")[0] ?? "a command"}`,
-            detail: script.approvalCommand,
+            kind: app.kind,
+            title: app.kind === "app" ? `Use ${app.name}` : `Headed input in ${app.name}`,
+            detail: null,
             options: [],
           })
-        : HarnessEvent.ApprovalRequested({
-            turnId,
-            requestId,
-            kind: "question",
-            title: asked.question,
-            detail: null,
-            options: asked.choices,
-            questions: [
-              new ApprovalQuestion({
-                header: "",
-                question: asked.question,
-                options: asked.choices.map(
-                  (label) => new QuestionOption({ label, description: null })
-                ),
-                multiSelect: false,
-              }),
-            ],
-          })
+        : asked === null
+          ? HarnessEvent.ApprovalRequested({
+              turnId,
+              requestId,
+              kind: "command",
+              title: `Run ${script.approvalCommand.split(" ")[0] ?? "a command"}`,
+              detail: script.approvalCommand,
+              options: [],
+            })
+          : HarnessEvent.ApprovalRequested({
+              turnId,
+              requestId,
+              kind: "question",
+              title: asked.question,
+              detail: null,
+              options: asked.choices,
+              questions: [
+                new ApprovalQuestion({
+                  header: "",
+                  question: asked.question,
+                  options: asked.choices.map(
+                    (label) => new QuestionOption({ label, description: null })
+                  ),
+                  multiSelect: false,
+                }),
+              ],
+            })
     );
     yield* Deferred.await(answer);
     approvals.delete(requestId);

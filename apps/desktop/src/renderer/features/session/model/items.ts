@@ -5,6 +5,7 @@
 import type { Attachment, ReplyStats, ToolKind, TurnItem } from "@polaris/protocol";
 import { Match, Predicate } from "effect";
 import type { LiveItem } from "../../../store/sessionModel.ts";
+import { type DesktopCall, desktopCallOf } from "./computerUse/index.ts";
 import { type NativeCall, nativeCall, nativeSummary } from "./nativeTools/index.ts";
 import {
   type PolarisToolView,
@@ -95,6 +96,8 @@ export type ItemView =
       readonly toolKind: ToolKind | null;
       /** The MCP server and tool, in words; null for any other tool. */
       readonly mcp: McpName | null;
+      /** A computer use call (`polaris_desktop`): its tool, app and window; null for any other. */
+      readonly desktop: DesktopCall | null;
       /** A Claude Code tool the registry phrases (`nativeTools`); null for any other. */
       readonly native: NativeCall | null;
       /** The Skill it loads, for a Skill call. */
@@ -259,6 +262,7 @@ const toolView = (i: ToolCallItem, live: boolean): ItemView => {
     visualization: visualizationView(i),
     toolKind: kindOf(i.kind, mcp),
     mcp,
+    desktop: desktopCallOf(i),
     native,
     skill: i.kind === "skill" ? skillName(i.input) : null,
     plumbing: isPlumbing(i.name),

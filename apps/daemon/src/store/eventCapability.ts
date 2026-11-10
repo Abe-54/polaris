@@ -2,8 +2,16 @@
  * Capability gating: the capability a Client must have announced to be sent an event, so an
  * older Client never receives a tag it can't decode (see the store README).
  */
-import { type Capability, DomainEvent } from "@polaris/protocol";
-import { Predicate } from "effect";
+import { type ApprovalKind, type Capability, DomainEvent } from "@polaris/protocol";
+import { Match, Predicate } from "effect";
+
+/** The capability a Client needs to decode an approval of `kind`, or null for the kinds all decode. */
+export const approvalCapability = (kind: ApprovalKind): Capability | null =>
+  Match.value(kind).pipe(
+    Match.when("secret", (): Capability => "approval.secret"),
+    Match.whenOr("app", "headed-input", "computer-use", (): Capability => "computer-use"),
+    Match.orElse(() => null)
+  );
 
 /** Every capability `eventCapability` can ask for. */
 export const gatingCapabilities: ReadonlyArray<Capability> = [
@@ -20,6 +28,7 @@ export const gatingCapabilities: ReadonlyArray<Capability> = [
   "session.pin",
   "session.limited",
   "approval.secret",
+  "computer-use",
 ];
 
 const needs = (capability: Capability) => (): Capability => capability;
@@ -85,7 +94,7 @@ export const eventCapability = (event: DomainEvent): Capability | null =>
       ReviewCheckoutOpened: needs("review.checkouts"),
       ReviewCheckoutChanged: needs("review.checkouts"),
       ReviewCheckoutRemoved: needs("review.checkouts"),
-      ApprovalRequested: ({ request }) => (request.kind === "secret" ? "approval.secret" : null),
+      ApprovalRequested: ({ request }) => approvalCapability(request.kind),
       ApprovalResolved: ({ decision }) =>
         Predicate.isTagged(decision, "Provided") ? "approval.secret" : null,
     },

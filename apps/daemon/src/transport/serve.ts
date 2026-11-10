@@ -3,6 +3,13 @@ import { lazySuggestedReplies } from "../suggestedReply/lazy.ts";
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
+import {
+  ComputerUseLoads,
+  lazyComputerUse,
+  lazyComputerUseHandlers,
+  lazyPreviewHandlers,
+} from "./lazyComputerUse.ts";
+import { livePreview, PREVIEW_CAPABILITY } from "../computerUse/preview/group.ts";
 import { selfTraceExport } from "../traces/self/export.ts";
 import { selfTracer } from "../traces/self/tracer.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
@@ -52,6 +59,7 @@ import { HarnessRpcsLive } from "../harness/HarnessRpcs.ts";
 import { latestRolloutLimits, PlanLimitReporter } from "../harness/limits/index.ts";
 import { HarnessRegistryLive } from "../harness/registry.ts";
 import { BrowserMcp } from "../harness/browser/index.ts";
+import { DesktopMcp } from "../harness/desktop/service.ts";
 import { AgentBrowser } from "../install/agentBrowser/index.ts";
 import { releaseMemory, releaseWhenQuiet } from "../memory/index.ts";
 import { userPath } from "../service/userPath.ts";
@@ -120,6 +128,16 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
+/** Computer use's `AppControl` and `polaris_desktop` ask the Engine: bound once it is up, loaded or not. */
+const computerUseBindings = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const engine = yield* Engine;
+
+    yield* (yield* ComputerUseLoads).bindApprovals(engine.requestAppApproval);
+    yield* (yield* DesktopMcp).bindRequests(engine.requestComputerUse);
+  })
+);
+
 /** One Harness availability report for the whole Daemon. */
 const availability = Availability.layer();
 
@@ -129,7 +147,13 @@ const suggestedReplyPreference = SuggestedReplyPreference.layer().pipe(Layer.pro
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
   Layer.provide(
-    Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator, suggestedReplyPreference)
+    Layer.mergeAll(
+      PlanLimitReporter.layer,
+      browserMcp,
+      lazySimulator,
+      lazyComputerUse,
+      suggestedReplyPreference
+    )
   )
 );
 
@@ -150,13 +174,18 @@ export const traceServices = lazyTraces.pipe(
 /** The Engine, and the Polaris fallback for Suggested Replies, loaded once they're on (ENG-886). */
 const engine = lazySuggestedReplies.pipe(Layer.provideMerge(Engine.layer));
 
-export const engineServices = Layer.mergeAll(engine, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(
+  computerUseBindings.pipe(Layer.provideMerge(engine)),
+  releaseWhenQuiet()
+).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,
       ConstellationLiveness.proxyLayer,
       lazyHostResources,
       harnesses,
+      // Computer use (ENG-846), loaded on first use; one instance with the Harnesses'.
+      lazyComputerUse,
       CheckpointsLive,
       WorktreeTrackerLive,
       ReviewCheckoutGitLive,
@@ -201,6 +230,7 @@ export const daemonHandlers = Layer.mergeAll(
   lazyDataHandlers,
   lazyTraceHandlers,
   lazyRequestHandlers.pipe(Layer.provide(fileSearch)),
+  lazyPreviewHandlers,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -210,6 +240,7 @@ export const daemonHandlers = Layer.mergeAll(
   EngineRpcHandlers,
   VisualsRpcHandlers,
   DeveloperModeRpcHandlers,
+  lazyComputerUseHandlers,
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),
@@ -272,6 +303,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "traces.profiles.attach",
   "traces.self",
   "requests",
+  ...(livePreview() ? [PREVIEW_CAPABILITY] : []),
   "constellation",
   "constellation.defaults",
   "extensions",
@@ -354,6 +386,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host-address",
   "host-address.names",
   "browser.host",
+  "computer-use",
   ...(simulatorCapable(hostPlatform()) ? ["simulator" as const] : []),
 ];
 

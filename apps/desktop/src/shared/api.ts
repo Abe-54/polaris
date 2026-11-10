@@ -7,6 +7,10 @@
 import type { DataRequestOutputs, DataSubscriptionItems } from "./dataContract.ts";
 import type { TracesRequestOutputs, TracesSubscriptionItems } from "./tracesContract.ts";
 import type { RequestsRequestOutputs, RequestsSubscriptionItems } from "./requestsContract.ts";
+import type {
+  ComputerUseRequestOutputs,
+  ComputerUseSubscriptionItems,
+} from "./computerUseContract.ts";
 import type { PredictionPlacementOutputs } from "./predictionPlacement.ts";
 import type {
   PredictionOutcomeOutputs,
@@ -455,6 +459,7 @@ export interface RequestOutputs
     TracesRequestOutputs,
     SimulatorRequestOutputs,
     RequestsRequestOutputs,
+    ComputerUseRequestOutputs,
     PredictionPlacementOutputs,
     PredictionOutcomeOutputs {
   "constellation.stats": ConstellationStatsView;
@@ -601,7 +606,8 @@ export interface SubscriptionItems
     DataSubscriptionItems,
     TracesSubscriptionItems,
     SimulatorSubscriptionItems,
-    RequestsSubscriptionItems {
+    RequestsSubscriptionItems,
+    ComputerUseSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
   "prediction.edit": EditPredictionFeedItem;
   "prediction.managed.watch": import("@polaris/protocol").ManagedServerStatus;

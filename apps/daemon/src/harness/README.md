@@ -31,7 +31,7 @@ Answers are cached per Harness and directory. **Nothing runs at idle**: no timer
 
 ## The Simulator's MCP server
 
-`simulator/` gives each Claude Code and Codex session that isn't read-only, on a Host that can run iOS Simulators or Android Emulators (a Mac, or x64 glibc Linux), the `polaris_simulator` tools (ENG-829): `simulator_list`, `_open`, `_snapshot`, `_tap`, `_press`, `_type`, `_swipe`, `_scroll`, `_screenshot`, `_launch`, `_openurl` and `_close`. They wrap agent-device (ADR 0099), run as `BUN_BE_BUN=1 <polaris>` from `install/simulator`, and run in the Daemon, so they work with no Desktop App open.
+`simulator/` gives each Claude Code and Codex session that isn't read-only, on a Host that can run iOS Simulators or Android Emulators (a Mac, or x64 glibc Linux), the `polaris_simulator` tools (ENG-829): `simulator_list`, `_open`, `_snapshot`, `_tap`, `_press`, `_type`, `_swipe`, `_scroll`, `_screenshot`, `_launch`, `_openurl` and `_close`. They wrap agent-device (ADR 0099), run with the Bun `install/simulator` installed them with (`BUN_BE_BUN=1 <polaris>`, or Oven's pinned Bun on a sealed macOS release), and run in the Daemon, so they work with no Desktop App open.
 
 - **In the Daemon, not a child.** An open marks the session's shown Simulator on `SimulatorHub` (`agentOpened`, which publishes `AgentOpened`; `agentBooted` when it booted one); every call holds `agentDriving` while it runs. All of it reaches `simulator.sessionFeed`.
 - **Codex** gets a loopback HTTP URL whose path is the session's random token (`http.ts`), with a 120 s tool timeout. **Claude** gets the same tools in-process (`createSdkMcpServer`), since the SDK puts `mcpServers` on `claude`'s argv, where `ps` would show a URL.

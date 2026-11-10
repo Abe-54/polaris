@@ -105,4 +105,6 @@ export const answersDecision = (approval: ApprovalRequest, picks: Picks): Approv
   return ApprovalDecision.cases.Answer.make({ text, answers });
 };
 
-export const offersAlwaysAllow = (request: ApprovalRequest) => request.profileAttach === undefined;
+/** Headed input is asked each time: the Daemon refuses remembering it from anyone. */
+export const offersAlwaysAllow = (request: ApprovalRequest) =>
+  request.profileAttach === undefined && request.kind !== "headed-input";

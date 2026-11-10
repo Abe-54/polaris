@@ -77,6 +77,9 @@ export const IMAGE_DECODE = {
     "apps/desktop/src/renderer/features/host-images/pool.ts": "admitted",
     // The preview pool: object URLs for media views Main admitted (media.ts, admitRaster).
     "apps/desktop/src/renderer/features/editor/markdown/media.ts": "admitted",
+    // Computer use preview frames, which Main admitted (main/ipc/computerUse.ts, admitRaster).
+    "apps/desktop/src/renderer/features/session/ui/computerUse/frames.ts": "admitted",
+    "apps/desktop/src/renderer/features/session/ui/computerUse/usePreview.ts": "admitted",
     // A Simulator hub's JPEG frames, each through admitRaster before createImageBitmap.
     "apps/desktop/src/renderer/features/simulator/video.ts": "admitted",
     // Loads Mermaid only to wrap it in guardedDiagrams (diagrams.ts).

@@ -131,6 +131,7 @@ export const makeCodexDriver = (
                   planLimits,
                   browser: options.browser,
                   simulator: options.simulator,
+                  desktop: options.desktop,
                 },
                 openOptions
               );

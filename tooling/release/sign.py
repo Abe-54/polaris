@@ -6,8 +6,9 @@ the standard library and Apple's tools: no dependencies, no repository build cod
 
   sign.py app --handoff release-bundle.tar --sha256 HEX --out DIR --entitlements DIR --version V
       checks the build's hand-off against the digest its job recorded, unpacks it into
-      DIR/tree, signs the darwin-arm64 Daemon, records its new bytes in the manifests
-      and its Release archive, signs the app from the inside out, notarises and staples
+      DIR/tree, signs the darwin-arm64 Daemon and its computer use helper app, records
+      their new bytes in the manifests
+      and the Release archive, signs the app from the inside out, notarises and staples
       it, and writes the signed hand-off to DIR/handoff and its digests to DIR/digests.
   sign.py dmg --dmg Polaris-V-arm64.dmg --sha256 HEX --out DIR
       checks, signs, notarises and staples a copy of the installer image in DIR/assets.
@@ -51,7 +52,14 @@ from pathlib import Path
 
 PLATFORM = "darwin-arm64"
 DAEMON_ENTITLEMENTS = {"polaris": "daemon.plist", "betterleaks": "betterleaks.plist"}
+# Where the Daemon's bundle holds the native libraries it loads.
+DAEMON_LIBRARIES = "Contents/Frameworks"
 APP_ENTITLEMENTS = "electron.plist"
+# "Polaris Computer Use.app" beside the Daemon's bundle: its launcher and the tools it runs (ENG-846).
+HELPER_APP = "Polaris Computer Use.app"
+HELPER_LAUNCHER = "polaris-computer-use"
+HELPER_TOOLS = ("agent-desktop", "agent-desktop-macos-helper", "polaris-capture")
+HELPER_ENTITLEMENTS = "computer-use.plist"
 # The hand-off's only roots, as the build job tars them.
 DAEMON_DIST = "apps/daemon/dist"
 APP = "apps/desktop/out/dist/Polaris-darwin-arm64/Polaris.app"
@@ -70,8 +78,9 @@ BLOCK = 512
 # packages/client/src/install/archive.ts: the same fixed mtime keeps archives reproducible.
 MTIME = 1_767_225_600
 PLAIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
-# One component of a manifest file's `path` in its platform directory (`_CodeSignature` too).
-PATH_PART = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._+-]*")
+# One component of a manifest file's `path` in its platform directory (`_CodeSignature` too);
+# spaces only inside it, as in the helper app's folder name.
+PATH_PART = re.compile(r"[A-Za-z0-9_](?:[A-Za-z0-9._+ -]*[A-Za-z0-9._+-])?")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -115,10 +124,10 @@ def file_path(root: Path, name: str, entry: dict) -> Path:
 
 
 def app_bundle_of(executable: Path) -> Path:
-    """The `.app` whose `Contents/MacOS` holds the Daemon's executable."""
+    """The `.app` whose `Contents/MacOS` holds `executable`."""
     bundle = executable.parent.parent.parent
     if executable.parent.name != "MacOS" or executable.parent.parent.name != "Contents" or bundle.suffix != ".app":
-        raise SystemExit(f"{PLATFORM}: the Daemon is not in an app bundle")
+        raise SystemExit(f"{PLATFORM}: {executable.name} is not in an app bundle")
     return bundle
 
 
@@ -434,6 +443,24 @@ def read_manifest(dist: Path, version: str) -> dict:
     return manifest
 
 
+def helper_of(paths: dict, daemon: Path) -> Path:
+    """The computer use helper app beside the Daemon's bundle, with its tools by its launcher."""
+    if any(name not in paths for name in (HELPER_LAUNCHER, *HELPER_TOOLS)):
+        raise SystemExit(f"missing {PLATFORM} computer use helper")
+    helper = app_bundle_of(paths[HELPER_LAUNCHER])
+    if helper != daemon.parent / HELPER_APP:
+        raise SystemExit(f"{PLATFORM}: the computer use helper is not {HELPER_APP} beside the Daemon")
+    for tool in HELPER_TOOLS:
+        if paths[tool].parent != paths[HELPER_LAUNCHER].parent:
+            raise SystemExit(f"{PLATFORM}: {tool} is not beside the helper's launcher")
+    return helper
+
+
+def bundle_libraries(paths: dict, bundle: Path) -> list:
+    """The Daemon's native libraries: the manifest's files in its bundle's Frameworks (ENG-877)."""
+    return sorted(path for path in paths.values() if path.parent == bundle / DAEMON_LIBRARIES)
+
+
 def sign_daemon(signer: Signer, dist: Path, entitlements: Path, version: str) -> dict:
     manifest = read_manifest(dist, version)
     build = manifest["platforms"][PLATFORM]
@@ -445,9 +472,18 @@ def sign_daemon(signer: Signer, dist: Path, entitlements: Path, version: str) ->
             raise SystemExit(f"{PLATFORM}/{name}: bytes differ from the Daemon manifest")
     # Nested code first, then the app bundle, which seals it and signs the Daemon (ENG-680).
     bundle = app_bundle_of(paths["polaris"])
+    helper = helper_of(paths, bundle)
     sign(signer, paths["betterleaks"], entitlements / DAEMON_ENTITLEMENTS["betterleaks"])
+    # The Daemon has library validation: it loads only libraries signed by this team (ADR 0108).
+    for library in bundle_libraries(paths, bundle):
+        sign(signer, library, None)
     sign(signer, bundle, entitlements / DAEMON_ENTITLEMENTS["polaris"])
     run(["codesign", "--verify", "--deep", "--strict", bundle])
+    # The helper's tools, then the bundle that seals them, under its own identity (ENG-846).
+    for tool in HELPER_TOOLS:
+        sign(signer, paths[tool], entitlements / HELPER_ENTITLEMENTS)
+    sign(signer, helper, entitlements / HELPER_ENTITLEMENTS)
+    run(["codesign", "--verify", "--deep", "--strict", helper])
     for name, entry in build["files"].items():
         entry.update(facts(paths[name]))
     build["sha256"] = build["files"]["polaris"]["sha256"]

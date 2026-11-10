@@ -37,6 +37,8 @@ export interface ConnectOptions {
   readonly clientVersion: string;
   readonly openTransport: OpenTransport;
   readonly helloTimeout?: Duration.Input;
+  /** Announces `computer-use`, so the Daemon sends `app` and `headed-input` approvals. */
+  readonly computerUse?: boolean;
 }
 
 /** A connected Host. Closing `scope` closes the connection. */
@@ -59,6 +61,10 @@ export const SDK_CAPABILITIES: ReadonlyArray<Capability> = [
   "session.user-turns",
 ];
 
+/** What `hello` announces: `SDK_CAPABILITIES`, and `computer-use` for an Extension that opted in. */
+export const helloCapabilities = (computerUse: boolean): ReadonlyArray<Capability> =>
+  computerUse ? [...SDK_CAPABILITIES, "computer-use"] : SDK_CAPABILITIES;
+
 const unreachable = (hostId: string) => (error: RpcClientError) =>
   new HostUnreachable({ hostId, detail: error.message });
 
@@ -79,7 +85,7 @@ const helloOn = Effect.fnUntraced(function* (
       clientName: options.clientName,
       clientVersion: options.clientVersion,
       deviceLabel: pairing.name,
-      capabilities: SDK_CAPABILITIES,
+      capabilities: helloCapabilities(options.computerUse ?? false),
       extensionToken: Redacted.make(pairing.token),
       protocolVersions: SUPPORTED_PROTOCOL,
     })

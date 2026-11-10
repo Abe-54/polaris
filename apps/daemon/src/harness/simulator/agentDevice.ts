@@ -1,10 +1,11 @@
 /**
- * Runs Callstack's agent-device CLI (ADR 0099) as `BUN_BE_BUN=1 <polaris> <script>`: its daemon
+ * Runs Callstack's agent-device CLI (ADR 0099) with the Bun its install came with: its daemon
  * inherits the same runtime, so no Node is needed. It never checks for updates.
  */
 import { delimiter, join } from "node:path";
 import { Option, Schema } from "effect";
-import { bunRuntime } from "../../install/simulator/index.ts";
+import type { BunRuntime } from "../../install/simulator/index.ts";
+import { executableOf } from "../../platform/executable.ts";
 import { childEnv } from "../../service/childEnv.ts";
 
 export interface RunResult {
@@ -41,15 +42,19 @@ export const androidEnv = (
       };
 
 export const liveAgentDevice =
-  (script: string, cwd: string, env: Readonly<Record<string, string>>): AgentDeviceRun =>
+  (
+    script: string,
+    cwd: string,
+    env: Readonly<Record<string, string>>,
+    bun: BunRuntime
+  ): AgentDeviceRun =>
   async (args, { timeoutMs }) => {
-    // The Daemon's own executable, run as Bun (`bunRuntime`).
-    const proc = Bun.spawn([process.execPath, script, ...args], {
+    const proc = Bun.spawn([executableOf(bun.program), script, ...args], {
       cwd,
       env: childEnv({
         ...process.env,
         ...env,
-        ...bunRuntime().env,
+        ...bun.env,
         AGENT_DEVICE_NO_UPDATE_NOTIFIER: "1",
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: DAEMON_IDLE_TIMEOUT_MS,
       }),

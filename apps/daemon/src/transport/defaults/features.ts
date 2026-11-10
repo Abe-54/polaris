@@ -1,5 +1,6 @@
 import {
   BrowserStackRpcs,
+  ComputerUseRpcs,
   DataRpcs,
   DeveloperModeRpcs,
   LanguageRpcs,
@@ -92,7 +93,25 @@ const simulatorDefaults = SimulatorRpcs.toLayer({
   "simulator.sessionFeed": unsupportedFeed("simulator"),
 });
 
-/** Languages, Prediction, the browser, Data, Traces, Developer Mode and the Simulator. */
+/**
+ * Computer use (ENG-846) where no real handler serves it: `Unsupported`. `serve.ts` layers the
+ * status, setup, on/off, allowed list and preview handlers over it.
+ */
+const computerUseDefaults = ComputerUseRpcs.toLayer({
+  "computerUse.status": unsupported("computer-use"),
+  "computerUse.watch": unsupportedFeed("computer-use"),
+  "computerUse.enable": unsupported("computer-use"),
+  "computerUse.disable": unsupported("computer-use"),
+  "computerUse.openSetup": unsupported("computer-use"),
+  "computerUse.allowedApps": unsupported("computer-use"),
+  "computerUse.removeAllowedApp": unsupported("computer-use"),
+  "computerUse.allowedApps.add": unsupported("computer-use"),
+  "computerUse.app": unsupported("computer-use"),
+  "computerUse.preview.watch": unsupportedFeed("computer-use.preview"),
+  "computerUse.preview.latest": unsupported("computer-use"),
+});
+
+/** Languages, Prediction, the browser, Data, Traces, Developer Mode, the Simulator, computer use. */
 export const featureDefaults = Layer.mergeAll(
   LanguageRpcs.toLayer(languageDefaults),
   predictionDefaults,
@@ -100,5 +119,6 @@ export const featureDefaults = Layer.mergeAll(
   dataDefaults,
   traceDefaults,
   developerModeDefaults,
-  simulatorDefaults
+  simulatorDefaults,
+  computerUseDefaults
 );

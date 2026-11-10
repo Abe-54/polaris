@@ -238,7 +238,7 @@ export const hostOmittedEventTypes: ReadonlyArray<DomainEvent["_tag"]> = [
 export const isHostStreamEvent = (event: DomainEvent): boolean =>
   !hostOmittedEventTypes.includes(event._tag);
 
-export { eventCapability, gatingCapabilities } from "./eventCapability.ts";
+export { approvalCapability, eventCapability, gatingCapabilities } from "./eventCapability.ts";
 
 /**
  * Events only Clients that announced `session.subagents` get: a Subagent's

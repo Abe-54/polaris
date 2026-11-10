@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Exit, Layer } from "effect";
 import { HostPlatform } from "../../platform/index.ts";
 import type { InstalledSimulatorTools } from "./install.ts";
-import { SimulatorTools, type SimulatorToolsInstaller } from "./index.ts";
+import { ownBun, SimulatorTools, type SimulatorToolsInstaller } from "./index.ts";
 
 const INSTALLED: InstalledSimulatorTools = {
   dir: "/tools/x",
   hub: "/tools/x/hub",
   agentDevice: "/tools/x/ad",
+  bun: ownBun(),
 };
 
 const counting = () => {

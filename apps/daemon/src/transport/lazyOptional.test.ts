@@ -28,7 +28,7 @@ const isolated = async (mode: string) => {
 };
 
 test(
-  "empty Daemon startup keeps Data, Traces, profiles, push encryption, decoders, the Reviewer, the Usage index and the accept handlers out of the implementation graph",
+  "empty Daemon startup keeps Data, Traces, profiles, push encryption, decoders, the Reviewer, the Usage index, the accept handlers and computer use out of the implementation graph",
   () => isolated("empty"),
   30000
 );
@@ -54,6 +54,12 @@ test(
 test(
   "existing Data storage recovers unfinished writes before any first-use request",
   () => isolated("recovery"),
+  30000
+);
+
+test(
+  "computer use loads with its first request after start, with the always-allowed apps saved before it",
+  () => isolated("computer-use"),
   30000
 );
 

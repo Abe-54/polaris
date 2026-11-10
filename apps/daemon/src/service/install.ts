@@ -34,6 +34,13 @@ import {
   bundleSources,
   DAEMON_BUNDLE,
 } from "./bundle.ts";
+import {
+  COMPUTER_USE_BUNDLE,
+  HELPER_EXECUTABLES,
+  HELPER_FILE_NAMES,
+  HELPER_FILES,
+  helperSources,
+} from "./computerUse/bundle.ts";
 import { binaryNameFor, currentLinkFor, pointCurrent, readCurrent } from "./current.ts";
 import { InstallError, TaskConflictError } from "./errors.ts";
 import { activateLaunchd, type LaunchdTiming, unloadEverywhere } from "./launchd.ts";
@@ -281,6 +288,27 @@ const linkTo = (link: string, target: string) =>
   });
 
 /**
+ * macOS: places the build's helper app, when it has one, in `bin/<version>` beside the
+ * Daemon's bundle (`computerUse/bundle.ts`), byte for byte so its signature holds.
+ */
+const stageHelper = Effect.fn("stageHelper")(function* (versionDir: string, source: string) {
+  const sources = helperSources(source);
+
+  if (sources === null) return false;
+  let changed = false;
+
+  for (const name of HELPER_FILE_NAMES) {
+    const hash = yield* fsStep(`hash ${name}`, () => sha256File(sources[name]));
+    const mode = HELPER_EXECUTABLES.has(name) ? 0o755 : 0o644;
+    const target = join(versionDir, COMPUTER_USE_BUNDLE, HELPER_FILES[name]);
+    const placed = yield* placeFile(sources[name], target, hash, mode);
+    changed = changed || placed;
+  }
+
+  return changed;
+});
+
+/**
  * macOS: places a bundled build's files in `bin/<version>/PolarisDaemon.app` (`bundle.ts`),
  * byte for byte so its signature holds, and links `bin/<version>/polaris` to its executable.
  */
@@ -310,10 +338,15 @@ const stageBundle = Effect.fn("stageBundle")(function* (
     changed = changed || placed;
   }
 
+  const helper = yield* stageHelper(versionDir, options.source);
   const link = join(versionDir, binaryNameFor(ctx.os));
   const linked = yield* linkTo(link, join(DAEMON_BUNDLE, BUNDLE_FILES.polaris));
 
-  return { path: join(bundle, BUNDLE_FILES.polaris), sha256, changed: changed || linked };
+  return {
+    path: join(bundle, BUNDLE_FILES.polaris),
+    sha256,
+    changed: changed || helper || linked,
+  };
 });
 
 /**

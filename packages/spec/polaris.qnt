@@ -1363,6 +1363,87 @@ module data_approvals_cards_mutant {
   run exposesDuplicateCardsTest = init.then(request(1,"s1/d1/u1")).then(request(2,"s1/d1/u1")).expect(not(safety))
 }
 
+/** Computer use (ENG-846): app and headed-input approvals, always-allow and one session per app. */
+module computer_use {
+  import computer_use_model(BUG_HEADED_ALWAYS=false,BUG_LOCK_SURVIVES_TURN=false,BUG_REMOVED_STILL_ALLOWED=false).* from "./computer-use"
+  run perSessionTest = init.then(use(1,"figma",false))
+    .expect(cu.cards == Set((1,"figma","app")) and cu.acts == 0 and safety)
+    .then(answer(1,"figma","app","session")).then(use(1,"figma",false))
+    .expect(cu.controller.get("figma") == 1 and cu.acts == 1 and safety)
+    .then(endTurn(1)).then(use(2,"figma",false))
+    .expect(cu.cards == Set((2,"figma","app")) and cu.acts == 1 and safety)
+  run inUseTest = init.then(use(1,"figma",false)).then(answer(1,"figma","app","always"))
+    .then(use(1,"figma",false)).then(use(2,"figma",false))
+    .expect(decision(2,"figma",false) == "in-use" and cu.controller.get("figma") == 1 and cu.acts == 1 and safety)
+    .then(endTurn(1)).then(use(2,"figma",false))
+    .expect(cu.controller.get("figma") == 2 and cu.acts == 2 and cu.cards.size() == 0 and safety)
+  run removeAlwaysTest = init.then(use(1,"figma",false)).then(answer(1,"figma","app","always"))
+    .then(use(1,"figma",false)).then(removeAlways("figma")).then(use(1,"figma",false))
+    .expect(cu.cards == Set((1,"figma","app")) and cu.acts == 1 and safety)
+  run headedPerSessionTest = init.then(use(1,"figma",true)).then(answer(1,"figma","app","always"))
+    .then(use(1,"figma",true)).expect(cu.cards == Set((1,"figma","headed-input")) and cu.acts == 0 and safety)
+    .then(answer(1,"figma","headed-input","always"))
+    .expect(cu.cards == Set((1,"figma","headed-input")) and cu.headed.size() == 0 and safety)
+    .then(answer(1,"figma","headed-input","session")).then(use(1,"figma",true)).then(endTurn(1))
+    .then(use(2,"figma",true))
+    .expect(cu.cards == Set((2,"figma","headed-input")) and cu.acts == 1 and safety)
+  run deniedAsksAgainTest = init.then(use(1,"notes",false)).then(answer(1,"notes","app","deny"))
+    .expect(cu.cards.size() == 0 and decision(1,"notes",false) == "app" and safety)
+  run refusedTest = init.then(use(1,"keychain",true))
+    .expect(cu.cards.size() == 0 and cu.acts == 0 and decision(1,"keychain",true) == "refused" and safety)
+  run turnEndWithdrawsTest = init.then(use(1,"figma",false)).then(endTurn(1))
+    .expect(cu.cards.size() == 0 and safety)
+  run restartKeepsApprovalsTest = init.then(use(1,"figma",false)).then(answer(1,"figma","app","session"))
+    .then(use(1,"figma",false)).then(use(2,"notes",false)).then(restart)
+    .expect(cu.controller.get("figma") == NOBODY and cu.cards.size() == 0 and safety)
+    .then(startTurn(1)).then(use(1,"figma",false)).expect(cu.acts == 2 and safety)
+  run archiveForgetsTest = init.then(use(1,"figma",false)).then(answer(1,"figma","app","session"))
+    .then(endTurn(1)).then(archive(1)).then(startTurn(1)).then(use(1,"figma",false))
+    .expect(cu.cards == Set((1,"figma","app")) and cu.acts == 0 and safety)
+}
+module computer_use_headed_mutant {
+  import computer_use_model(BUG_HEADED_ALWAYS=true,BUG_LOCK_SURVIVES_TURN=false,BUG_REMOVED_STILL_ALLOWED=false).* from "./computer-use"
+  run exposesHeadedAlwaysTest = init.then(use(1,"figma",true)).then(answer(1,"figma","app","always"))
+    .then(use(1,"figma",true)).then(answer(1,"figma","headed-input","always")).then(endTurn(1))
+    .then(use(2,"figma",true)).expect(not(safety))
+}
+module computer_use_lock_mutant {
+  import computer_use_model(BUG_HEADED_ALWAYS=false,BUG_LOCK_SURVIVES_TURN=true,BUG_REMOVED_STILL_ALLOWED=false).* from "./computer-use"
+  run exposesSurvivingLockTest = init.then(use(1,"figma",false)).then(answer(1,"figma","app","session"))
+    .then(use(1,"figma",false)).then(endTurn(1)).expect(not(safety))
+}
+module computer_use_removed_mutant {
+  import computer_use_model(BUG_HEADED_ALWAYS=false,BUG_LOCK_SURVIVES_TURN=false,BUG_REMOVED_STILL_ALLOWED=true).* from "./computer-use"
+  run exposesRemovedStillAllowedTest = init.then(use(1,"figma",false)).then(answer(1,"figma","app","always"))
+    .then(removeAlways("figma")).then(use(1,"figma",false)).expect(not(safety))
+}
+
+/** A session asks for computer use while it's off (ENG-846): `request_computer_use`. */
+module computer_use_request {
+  import computer_use_request_model(BUG_NO_REOPEN=false,BUG_ALLOW_CLEARS=false).* from "./computer-use-request"
+  run onClearsAndReopensTest = init.then(ask(1))
+    .expect(cr.asks == Set(1) and safety)
+    .then(answer(1,"allow")).expect(cr.asks == Set(1) and cr.promised.size() == 0 and safety)
+    .then(turnOn).expect(cr.asks.size() == 0 and cr.promised == Set(1) and safety)
+    .then(endTurn(1)).expect(cr.tools.get(1) == "none" and safety)
+    .then(startTurn(1)).expect(cr.tools.get(1) == "full" and cr.reopened == 1 and safety)
+  run notNowKeepsHarnessTest = init.then(ask(1)).then(answer(1,"not-now")).then(endTurn(1))
+    .expect(cr.asks.size() == 0 and cr.tools.get(1) == "request" and cr.promised.size() == 0 and safety)
+  run turnEndWithdrawsTest = init.then(ask(2)).then(endTurn(2))
+    .expect(cr.asks.size() == 0 and safety)
+  run alreadyOnTest = init.then(turnOn).then(ask(1))
+    .expect(cr.asks.size() == 0 and cr.promised == Set(1) and safety)
+}
+module computer_use_request_reopen_mutant {
+  import computer_use_request_model(BUG_NO_REOPEN=true,BUG_ALLOW_CLEARS=false).* from "./computer-use-request"
+  run exposesStaleToolsTest = init.then(ask(1)).then(turnOn).then(endTurn(1)).then(startTurn(1))
+    .expect(not(safety))
+}
+module computer_use_request_allow_mutant {
+  import computer_use_request_model(BUG_NO_REOPEN=false,BUG_ALLOW_CLEARS=true).* from "./computer-use-request"
+  run exposesAllowClearsTest = init.then(ask(1)).then(answer(1,"allow")).expect(not(safety))
+}
+
 /** Writes bind safe previews to identity; COMMIT confirmation can be unknown. */
 module data_writes {
   type WriteState = { turn: bool, phase: str, dryRuns: int, approval: str,

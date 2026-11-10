@@ -9,7 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, type Duration, Effect, Layer, Predicate, type Schema, Scope } from "effect";
-import { SimulatorTools } from "../../install/simulator/index.ts";
+import { type BunRuntime, SimulatorTools } from "../../install/simulator/index.ts";
 import { HostPlatform } from "../../platform/index.ts";
 import { SimulatorDetection, simulatorCapable } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
@@ -39,7 +39,8 @@ export interface SimulatorMcpOptions {
   readonly agentDevice?: (
     script: string,
     cwd: string,
-    env: Readonly<Record<string, string>>
+    env: Readonly<Record<string, string>>,
+    bun: BunRuntime
   ) => AgentDeviceRun;
   readonly softWaitMs?: number | undefined;
 }
@@ -99,7 +100,8 @@ export const SimulatorMcpLive = {
           return runAgentDevice(
             installed.agentDevice,
             scratch ?? tmpdir(),
-            androidEnv(androidSdk, process.env.PATH)
+            androidEnv(androidSdk, process.env.PATH),
+            installed.bun
           );
         };
 

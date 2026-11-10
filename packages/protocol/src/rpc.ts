@@ -35,7 +35,7 @@ import { SelfTraceRpcs } from "./selfTraces.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
-import { RequestsRpcs } from "./requests.ts";
+import { REQUESTS_RPC_TAGS, RequestsRpcs } from "./requests.ts";
 import {
   ProfilesRpcs,
   TraceCompareRpcs,
@@ -69,6 +69,7 @@ import { SecretRpcs } from "./secrets.ts";
 import { TerminalRpcs } from "./terminal.ts";
 import { RestartRpcs } from "./restart.ts";
 import { BrowserStackRpcs } from "./browser.ts";
+import { COMPUTER_USE_RPC_TAGS, ComputerUseRpcs } from "./computerUse.ts";
 import { SimulatorRpcs } from "./simulator.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { Hello } from "./hello.ts";
@@ -793,7 +794,8 @@ export const DaemonRpcDefinitions = RpcGroup.make(
     TraceCompareRpcs,
     TracingSkillRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs, RequestsRpcs);
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs, RequestsRpcs)
+  .merge(ComputerUseRpcs);
 
 // A const, not a class: inferring `RpcGroup.Rpcs` from a class over the gated group is
 // too deep for the linter's single-program checker (TS2589), which types every Client as `any`.
@@ -815,17 +817,11 @@ export const ExtensionDaemonRpcs = DaemonRpcs.omit("dispatch")
   .middleware(GrantGate);
 
 /**
- * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests, which only the Desktop App
- * may call (RPC_GRANTS: client); leaving it out keeps the client type within the checker's depth.
+ * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests and computer use, which only
+ * the Desktop App may call (RPC_GRANTS: client); leaving them out keeps the client type within
+ * the checker's depth.
  */
 export const ExtensionClientRpcs = ExtensionDaemonRpcs.omit(
-  "requests.watch",
-  "requests.save",
-  "requests.send",
-  "requests.variables",
-  "requests.sendLog.page",
-  "requests.sendLog.watch",
-  "requests.send.get",
-  "requests.curl.parse",
-  "requests.curl.format"
+  ...REQUESTS_RPC_TAGS,
+  ...COMPUTER_USE_RPC_TAGS
 );

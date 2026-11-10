@@ -46,3 +46,11 @@ export {
 export { bannerEntry, type BannerEntry, recordBanner } from "./banners.ts";
 
 export { updateDraft } from "./state.ts";
+
+export { LiveView, type LiveViewProps } from "./ui/computerUse/LiveView.tsx";
+
+export { currentDesktopRun } from "./model/computerUse/session.ts";
+
+export { controlledRun, type DesktopRun } from "./model/computerUse/index.ts";
+
+export { useControlledApp } from "./ui/computerUse/controlled.ts";

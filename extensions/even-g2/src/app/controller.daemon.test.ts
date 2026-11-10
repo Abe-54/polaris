@@ -23,7 +23,11 @@ let admin: PolarisClient;
 const cleanups: Array<() => Promise<void>> = [];
 
 const connect = async (pairings: ReadonlyArray<string>) => {
-  const polaris = await createPolaris({ pairings, clientName: "even-g2-tests" });
+  const polaris = await createPolaris({
+    pairings,
+    clientName: "even-g2-tests",
+    computerUse: true,
+  });
 
   cleanups.push(() => polaris.close());
 
@@ -54,8 +58,14 @@ const hostView = (done: (view: HostView) => boolean) =>
 let made = 0;
 
 /** A bench Turn; the tag makes each session's prompt, and so its title, its own. */
-const bench = (script: Record<string, number>) =>
-  `bench:${JSON.stringify({ ...script, tag: ++made })}`;
+interface BenchScript {
+  readonly items: number;
+  readonly deltaIntervalMs: number;
+  readonly approvalEvery?: number;
+  readonly approvalApp?: { readonly kind: "app" | "headed-input"; readonly name: string };
+}
+
+const bench = (script: BenchScript) => `bench:${JSON.stringify({ ...script, tag: ++made })}`;
 
 const startSession = async (prompt: string) => {
   const sessionId = await admin.startSession(daemon.hostId, {
@@ -145,6 +155,33 @@ test("lists the Host's sessions, jumps to a new approval and approves it from th
 
   expect(after.sessions.find((s) => s.session.id === idle)?.session.state).toBe("idle");
 }, 60_000);
+
+test.each([
+  { kind: "app", line: "Use Simulator?" },
+  { kind: "headed-input", line: "Take mouse and keyboard?" },
+] as const)(
+  "answers a $kind approval with Allow once, which the Daemon takes",
+  async (c) => {
+    const { glasses } = await launch(["read", "approve", "turn"]);
+
+    await glasses.until((g) => g.rows().length > 0, "the list");
+
+    const waiting = await startSession(
+      bench({ ...APPROVAL, approvalApp: { kind: c.kind, name: "Simulator" } })
+    );
+
+    const title = await titleOf(waiting);
+
+    await glasses.until((g) => g.text().startsWith(title) && g.text().includes(c.line), c.line);
+    glasses.send({ kind: "click", index: 0 });
+    await glasses.until((g) => g.rows()[0] === "Allow once", "the menu");
+    expect(glasses.rows().slice(0, 2)).toEqual(["Allow once", "Deny"]);
+    glasses.send({ kind: "click", index: 0 });
+    await glasses.until((g) => g.text().includes("\nApproved"), "the outcome");
+    await hostView((view) => !view.approvals.some((a) => a.sessionId === waiting));
+  },
+  60_000
+);
 
 test("a pairing without the approve Grant says which Grant to pair again with", async () => {
   const { glasses } = await launch(["read"]);

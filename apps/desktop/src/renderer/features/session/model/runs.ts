@@ -5,6 +5,7 @@
  * that expands to each call; thinking between them folds in. A Turn's fetches and web searches
  * gather into one sources pill. Anything running, failed or declined keeps its row.
  */
+import { type DesktopRun, foldDesktop } from "./computerUse/fold.ts";
 import { plural } from "./format.ts";
 import type { ItemView } from "./items.ts";
 import { nativeJoinsRuns, nativePhrases, nativeVerb } from "./nativeTools/index.ts";
@@ -42,6 +43,9 @@ type ToolItem = Extract<ItemView, { kind: "tool" }>;
 const toolRunKind = (item: ToolItem): RunKind | null => {
   // Polaris's own tools have purpose-built rows; a Visualization is never folded away.
   if (item.view !== null || item.polaris || item.visualization !== null) return null;
+
+  // Computer use folds into its own Tool Run, per app (`computerUse/`).
+  if (item.desktop !== null) return null;
 
   // An image the agent viewed or made shows in the conversation, so it keeps its own row.
   if (item.file?.image === true) return null;
@@ -171,6 +175,15 @@ export type Entry =
       readonly items: ReadonlyArray<ItemView>;
       readonly summary: string;
     }
+  /** Computer use calls on one app, as one line with its live view. */
+  | {
+      readonly kind: "desktop";
+      /** The first call's id. */
+      readonly id: string;
+      /** The calls and the thinking between them, for the open line. */
+      readonly items: ReadonlyArray<ItemView>;
+      readonly run: DesktopRun;
+    }
   /** A Subagent, where the Turn spawned it. */
   | { readonly kind: "subagent"; readonly card: SubagentCard }
   /** The pages it fetched and the searches it ran, where the first one was. */
@@ -198,11 +211,11 @@ export const groupItems = (items: ReadonlyArray<ItemView>): ReadonlyArray<Entry>
 
   const first = sources[0];
 
-  if (first === undefined) return groupFlow(items);
+  if (first === undefined) return foldDesktop(groupFlow(items));
   const taken = new Set(sources.map((s) => s.item));
   const at = items.indexOf(first.item);
   const position = new Map(items.map((item, n) => [item, n]));
-  const entries = groupFlow(items.filter((item) => !taken.has(item)));
+  const entries = foldDesktop(groupFlow(items.filter((item) => !taken.has(item))));
 
   const after = entries.findIndex((entry) => {
     const lead = firstItem(entry);
@@ -227,6 +240,7 @@ const firstItem = (entry: Entry): ItemView | undefined => {
     case "item":
       return entry.item;
     case "run":
+    case "desktop":
       return entry.items[0];
     default:
       return undefined;

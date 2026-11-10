@@ -12,6 +12,7 @@ import type { Entry } from "../model/runs.ts";
 import type { SubagentCard } from "../model/subagents.ts";
 import { useElapsed } from "../hooks.ts";
 import { type Hue, Item, LiveMark, WELL } from "./items.tsx";
+import { DesktopRunRow } from "./computerUse/DesktopRunRow.tsx";
 import { Markdown } from "./markdown/index.tsx";
 import { SourcesPill } from "./sources.tsx";
 
@@ -221,6 +222,8 @@ const entryId = (entry: Entry) => {
       return entry.item.id;
     case "run":
       return `run:${entry.id}`;
+    case "desktop":
+      return `desktop:${entry.id}`;
     case "subagent":
       return `subagent:${entry.card.id}`;
     case "sources":
@@ -234,6 +237,15 @@ export const EntryView = ({ entry, ctx }: { readonly entry: Entry; readonly ctx:
       return <Item item={entry.item} hue={ctx.hue} onOpenDiff={ctx.onOpenDiff} />;
     case "run":
       return <Run entry={entry} ctx={ctx} />;
+    case "desktop":
+      return (
+        <DesktopRunRow
+          id={entry.id}
+          run={entry.run}
+          items={entry.items}
+          renderItem={(item) => <Item item={item} hue={ctx.hue} onOpenDiff={ctx.onOpenDiff} />}
+        />
+      );
     case "subagent":
       return <Subagent card={entry.card} ctx={ctx} />;
     case "sources":

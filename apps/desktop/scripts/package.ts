@@ -36,6 +36,7 @@ import {
 } from "./packaging/archives.ts";
 import { run } from "./packaging/command.ts";
 import { installerDmg } from "./packaging/dmg.ts";
+import { assertAppFuses, fusedBinary, fusesHook } from "./packaging/fuses.ts";
 import { checkSizeBudget } from "./packaging/size.ts";
 import { stageKoffi } from "./packaging/koffi.ts";
 import { packageTargets, targetOptions } from "./packaging/targets.ts";
@@ -207,12 +208,16 @@ for (const target of targets) {
     // polaris:// deep links (src/shared/deepLink.ts); Windows registers at launch.
     protocols: [{ name: "Polaris", schemes: ["polaris"] }],
     asar: true,
+    // Fuses go in before the asar digest and signing (packaging/fuses.ts).
+    afterCopyExtraResources: [fusesHook],
     prune: false,
     quiet: true,
     ...macSigningOptions(target.platform === "darwin" ? signing : null, ENTITLEMENTS),
   });
 
   if (path === undefined) throw new Error(`packager returned no ${target.platform} output`);
+
+  await assertAppFuses(fusedBinary(path, target.platform));
 
   const bundledDaemon = join(
     path,

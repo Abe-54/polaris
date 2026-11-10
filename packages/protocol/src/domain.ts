@@ -6,6 +6,7 @@ import { ScrubbedDataValue, ScrubbedText } from "./dataValues.ts";
 import { DataWritePreviewFacts } from "./data.ts";
 import { HttpMethod } from "./requests.ts";
 import { CelestialBody } from "./celestial.ts";
+import { ComputerUseCall, ComputerUseRequest, DesktopApp } from "./computerUse.ts";
 import { HarnessKind } from "./harnesses.ts";
 import {
   AttachmentId,
@@ -566,6 +567,8 @@ export const TurnItem = Schema.TaggedUnion({
     /** Null on older items and drivers that don't classify. */
     kind: optionalNullable(ToolKind),
     mcp: optionalNullable(McpTool),
+    /** A computer use call's app and window (capability `computer-use`); null on any other. */
+    computerUse: optionalNullable(ComputerUseCall),
     /** A human title the Harness gave the call (ACP's `title`), when it gives one. */
     title: optionalNullable(Schema.String),
     input: Schema.Unknown,
@@ -614,13 +617,20 @@ export const placeItem = (items: ReadonlyArray<TurnItem>, item: TurnItem): Array
 export const inStartOrder = (items: ReadonlyArray<TurnItem>): Array<TurnItem> =>
   items.reduce<Array<TurnItem>>(placeItem, []);
 
-/** `secret`: a Secret Request (ADR 0089), sent only to Clients with `approval.secret`. */
+/**
+ * `secret`: a Secret Request (ADR 0089), sent only to Clients with `approval.secret`.
+ * `app` and `headed-input`: computer use (ADR 0107), sent only to Clients with `computer-use`.
+ */
 export const ApprovalKind = Schema.Literals([
   "command",
   "file-change",
   "tool",
   "question",
   "secret",
+  "app",
+  "headed-input",
+  /** A session asks for computer use while it's off (`ApprovalRequest.computerUse`). */
+  "computer-use",
 ]);
 
 export type ApprovalKind = typeof ApprovalKind.Type;
@@ -689,6 +699,10 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   ),
   dataSource: Schema.optionalKey(DataSourceApproval),
   origin: Schema.optionalKey(OriginApproval),
+  /** For `app` and `headed-input`: the app the session asks to use; always set for them. */
+  app: Schema.optionalKey(DesktopApp),
+  /** For `computer-use`: the Host's state, the app and the reason; always set for it. */
+  computerUse: Schema.optionalKey(ComputerUseRequest),
   dataWrite: Schema.optionalKey(
     Schema.Struct({
       target: DataSourceApproval,
@@ -732,6 +746,7 @@ export type OriginScope = typeof OriginScope.Type;
 
 export const ApprovalDecision = Schema.TaggedUnion({
   Allow: {
+    /** For an `app` approval: always allow it on this Host. Refused for `headed-input`. */
     remember: Schema.Boolean,
     dataScope: Schema.optionalKey(Schema.Literals(["target", "server"])),
     /** For an Origin Approval: absent means `reads`. */

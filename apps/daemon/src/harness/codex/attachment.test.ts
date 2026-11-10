@@ -15,7 +15,9 @@ afterEach(() => {
 
 const PolarisServerConfig = Schema.decodeUnknownSync(
   Schema.Struct({
-    config: Schema.Record(Schema.String, Schema.Struct({ tool_timeout_sec: Schema.Number })),
+    config: Schema.Struct({
+      "mcp_servers.polaris": Schema.Struct({ tool_timeout_sec: Schema.Number }),
+    }),
   })
 );
 
@@ -67,7 +69,7 @@ describe("Constellation attachment", () => {
       },
     });
   });
-  test("unattached thread start and resume receive common context without MCP config", async () => {
+  test("unattached thread start and resume receive common context without MCP servers", async () => {
     for (const resumeCursor of [undefined, "existing-thread"]) {
       const { server } = await withSession(
         scripted(() => {}),
@@ -78,7 +80,8 @@ describe("Constellation attachment", () => {
       const method = resumeCursor === undefined ? "thread/start" : "thread/resume";
       const params = server.requests(method)[0]?.params;
       expect(params).toHaveProperty("developerInstructions", polarisInstructions({}));
-      expect(params).not.toHaveProperty("config");
+      // Codex's own computer use is off on every thread; no MCP server is configured.
+      expect(params).toHaveProperty("config", { "features.computer_use": false });
     }
   });
   test("Gate start and resume retain both role servers and trusted worker environment", async () => {

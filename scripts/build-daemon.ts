@@ -9,6 +9,9 @@
  * On macOS both executables live in `darwin-arm64/PolarisDaemon.app` (ENG-680,
  * `apps/daemon/src/service/bundle.ts`), signed as one bundle, and the manifest gives each
  * file's `path` there. No links: the release signer refuses them in its hand-off.
+ * Beside it is `Polaris Computer Use.app` (ENG-846, `service/computerUse/`): a launcher
+ * compiled here with clang and the pinned agent-desktop, signed as a second bundle. A dev
+ * build's has its own bundle id, so dev and release never share a privacy grant.
  *
  * fff's native library (`@ff-labs/fff-bun`, MIT) is embedded by the compile
  * step: fff-bun imports `@ff-labs/fff-bin-<platform>/libfff_c.*` with
@@ -25,12 +28,24 @@
  * downloaded at its pinned version (`apps/daemon/src/rules/secrets/pin.ts`),
  * checked against its SHA-256, and listed in the manifest as an executable.
  *
- *   bun scripts/build-daemon.ts [--release] [darwin-arm64|linux-x64|linux-arm64|linux-x64-musl|linux-arm64-musl|windows-x64 ...]
+ *   bun scripts/build-daemon.ts [--release] [--out=<dir>] [darwin-arm64|linux-x64|linux-arm64|linux-x64-musl|linux-arm64-musl|windows-x64 ...]
+ *
+ * `--out` builds into `<dir>` instead of `apps/daemon/dist`.
  *
  * Without `--release` it is a dev build: its version names the commit
  * (`buildVersion.ts`), so a Client upgrades a Host from one dev build to the next.
  * The version is compiled in (`process.env.POLARIS_BUILD_VERSION`, read by `service/platform.ts`).
  * So is a sourcemap, which Bun applies to `Error.stack` (`daemonBundle.ts`, ENG-752).
+ *
+ * A darwin build embeds no native library (ENG-877, ADR 0108,
+ * `apps/daemon/src/service/bundleLibraries.ts`): Bun would write each to the temp directory
+ * and load whatever file has its name and size. fff's, ast-grep's addon and grammars and
+ * libsodium are files in `PolarisDaemon.app/Contents/Frameworks`, which the release signer
+ * signs, and the build fails when the Daemon loads a library from anywhere else.
+ *
+ * A darwin release build's Bun runtime is sealed (ENG-875, ADR 0108,
+ * `apps/daemon/src/service/sealedRuntime.ts`): `BUN_BE_BUN`, `BUN_OPTIONS` and `BUN_INSPECT*`
+ * no longer make the signed binary run foreign JavaScript. The build fails when they still do.
  */
 import { createHash } from "node:crypto";
 import {
@@ -45,7 +60,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Option, Schema } from "effect";
 import {
   BUNDLE_FILES,
@@ -54,6 +69,22 @@ import {
   DAEMON_ICON,
   infoPlist,
 } from "../apps/daemon/src/service/bundle.ts";
+import { installAgentDesktop } from "../apps/daemon/src/install/agentDesktop/install.ts";
+import { buildHelper } from "../apps/daemon/src/service/computerUse/build.ts";
+import {
+  COMPUTER_USE_BUNDLE,
+  HELPER_EXECUTABLES,
+  HELPER_FILES,
+} from "../apps/daemon/src/service/computerUse/bundle.ts";
+import {
+  bundleLibrariesPlugin,
+  embeddedLibraries,
+  foreignLibraries,
+  loadedLibraries,
+  placeBundleLibraries,
+} from "../apps/daemon/src/service/bundleLibraries.ts";
+import { AGENT_DESKTOP_VERSION } from "../apps/daemon/src/install/agentDesktop/pin.ts";
+import { openRoutes, sealRuntime } from "../apps/daemon/src/service/sealedRuntime.ts";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
 import { BETTERLEAKS_VERSION, betterleaksAsset } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { buildVersion } from "./buildVersion.ts";
@@ -64,7 +95,12 @@ const root = join(import.meta.dir, "..");
 
 const daemonDir = join(root, "apps", "daemon");
 
-const distDir = join(daemonDir, "dist");
+const OUT_FLAG = "--out=";
+
+const outFlag = process.argv.find((arg) => arg.startsWith(OUT_FLAG));
+
+const distDir =
+  outFlag === undefined ? join(daemonDir, "dist") : resolve(outFlag.slice(OUT_FLAG.length));
 
 const GNU = ['FFF_LIBC="gnu"', 'process.env.POLARIS_LIBC="gnu"'];
 
@@ -223,8 +259,12 @@ const astGrepInstalled = (platform: Platform): boolean => {
   return addons.every((addon) => findPackage(daemonDir, addon) !== null);
 };
 
+/** The bundler resolves every platform's ast-grep addon, whichever one it builds. */
+const everyAstGrepInstalled = () =>
+  Object.keys(PLATFORMS).filter(isPlatform).every(astGrepInstalled);
+
 const targetPackagesInstalled = (platform: Platform) =>
-  fffBinInstalled(platform) && astGrepInstalled(platform);
+  fffBinInstalled(platform) && everyAstGrepInstalled();
 
 /** Install the target platforms' optional packages (fff-bin-*, ast-grep's napi-*) from the lockfile. */
 const ensureTargetPackages = async (platforms: ReadonlyArray<Platform>) => {
@@ -299,13 +339,47 @@ const finishBundle = async (outDir: string, version: string) => {
   await signAdHoc(bundle);
 };
 
+/** The helper app beside the Daemon's bundle, holding the pinned agent-desktop for `platform`. */
+const bundleHelper = async (
+  platform: Platform,
+  outDir: string,
+  version: string,
+  release: boolean
+) => {
+  const { binary } = await installAgentDesktop({
+    root: join(root, "node_modules", ".cache", "polaris-agent-desktop", platform),
+    platform,
+  });
+
+  const helper = await buildHelper({
+    dir: outDir,
+    version,
+    release,
+    inputs: {
+      "agent-desktop": binary,
+      "agent-desktop-macos-helper": join(dirname(binary), "agent-desktop-macos-helper"),
+      "computer-use-Polaris.icns": join(root, "design", "assets", "app-icon", DAEMON_ICON),
+    },
+  });
+
+  if (platform !== hostPlatform) return;
+  // Run directly: the launcher serves only the Daemon (ENG-867), and a build is not one.
+  const output = await run([join(helper, HELPER_FILES["agent-desktop"]), "version"]);
+
+  if (!output.includes(`"version":"${AGENT_DESKTOP_VERSION}"`))
+    throw new Error(`the helper's agent-desktop printed "${output.trim()}"`);
+  console.log(`  computer use helper: ok (agent-desktop ${AGENT_DESKTOP_VERSION})`);
+};
+
 type FileEntry = typeof FileEntry.Type;
 
-/** A build's file: Betterleaks is marked executable, and a file not at its name gets its `path`. */
+const EXECUTABLES: ReadonlySet<string> = new Set(["betterleaks", ...HELPER_EXECUTABLES]);
+
+/** A build's file: executables beside `polaris` are marked, and a file not at its name gets its `path`. */
 const fileEntry = (outDir: string, name: string, path: string): FileEntry => {
   const full = join(outDir, path);
   const facts = { sha256: sha256(full), size: statSync(full).size };
-  const entry = name === "betterleaks" ? { ...facts, executable: true } : facts;
+  const entry = EXECUTABLES.has(name) ? { ...facts, executable: true } : facts;
 
   return path === name ? entry : { ...entry, path };
 };
@@ -318,13 +392,74 @@ const fileEntries = (outDir: string, paths: Record<string, string>) =>
 
 /** Where each file of a darwin build is inside the platform directory. */
 const bundlePaths = (betterleaks: boolean): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(BUNDLE_FILES)
+  Object.fromEntries<string>([
+    ...Object.entries(BUNDLE_FILES)
       .filter(([name]) => betterleaks || name !== "betterleaks")
-      .map(([name, path]) => [name, join(DAEMON_BUNDLE, path)])
-  );
+      .map(([name, path]): [string, string] => [name, join(DAEMON_BUNDLE, path)]),
+    ...Object.entries(HELPER_FILES).map(([name, path]): [string, string] => [
+      name,
+      join(COMPUTER_USE_BUNDLE, path),
+    ]),
+  ]);
 
-const build = async (platform: Platform, version: string): Promise<PlatformBuild> => {
+/** Fails the build when the darwin Daemon would load a library from outside its bundle and macOS. */
+const assertOwnLibraries = async (binary: string, expected: string) => {
+  const embedded = embeddedLibraries(binary);
+
+  if (embedded > 0) {
+    throw new Error(`${binary} embeds ${embedded} native libraries: see docs/adr/0108 (ENG-877)`);
+  }
+
+  if (expected === "") return;
+  const { stdout, images } = await loadedLibraries(binary, ["selftest"]);
+  const foreign = foreignLibraries(binary, images);
+
+  if (stdout.split("\n")[0] !== expected || foreign.length > 0) {
+    throw new Error(
+      `${binary} selftest printed "${stdout.trim()}" and loaded ${foreign.join(", ") || "no foreign library"} (ENG-877)`
+    );
+  }
+
+  console.log("  native libraries: ok (none embedded, all from the bundle or macOS)");
+};
+
+/** Fails the build when the built Daemon still runs a script its environment names. */
+const assertSealed = async (binary: string) => {
+  const open = await openRoutes(binary, { command: ["version"], names: "bun" });
+
+  if (open.length > 0) {
+    throw new Error(`${binary} runs foreign JavaScript through ${open.join(", ")} (ADR 0108)`);
+  }
+
+  console.log("  sealed runtime: ok (BUN_BE_BUN, BUN_OPTIONS, BUN_INSPECT)");
+};
+
+/** Runs the built Daemon where this machine can, and fails the build on what it must never do. */
+const checkBuild = async (platform: Platform, binary: string, version: string, sealed: boolean) => {
+  const expected = `polaris ${version} ${platform}`;
+  const runs = platform === hostPlatform;
+
+  if (runs) {
+    // `selftest` also proves fff's library, the Rules' addon and libsodium load.
+    const output = (await run([binary, "selftest"])).trim();
+
+    if (output.split("\n")[0] !== expected) {
+      throw new Error(`${binary} selftest printed "${output}", expected "${expected}" first`);
+    }
+
+    console.log(output.replaceAll(/^/gm, "  "));
+
+    if (sealed) await assertSealed(binary);
+  }
+
+  if (platform.startsWith("darwin")) await assertOwnLibraries(binary, runs ? expected : "");
+};
+
+const build = async (
+  platform: Platform,
+  version: string,
+  release: boolean
+): Promise<PlatformBuild> => {
   const { target, define } = PLATFORMS[platform];
   const outDir = join(distDir, platform);
   rmSync(outDir, { recursive: true, force: true });
@@ -335,6 +470,7 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
   const binary = join(binDir, name);
 
   const instrumentation = await instrumentationPlugin();
+  const libraries = darwin ? bundleLibrariesPlugin() : null;
 
   const result = await buildFromRoot(root, {
     ...DAEMON_BUILD_OPTIONS,
@@ -356,27 +492,27 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
       ),
       "process.env.POLARIS_BUILD_VERSION": JSON.stringify(version),
     },
-    plugins: [instrumentation],
+    plugins: libraries === null ? [instrumentation] : [instrumentation, libraries],
   });
 
   if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
   instrumentation.assertEmbedded();
 
+  // Before the bundle is signed: its signature seals them.
+  if (libraries !== null) placeBundleLibraries(join(outDir, DAEMON_BUNDLE), libraries.sources);
+  const sealed = darwin && release;
+
+  // Before the bundle is signed: the seal changes the executable's bytes.
+  if (sealed) sealRuntime(binary);
+
   const betterleaks = await bundleBetterleaks(platform, binDir);
 
-  if (darwin) await finishBundle(outDir, version);
-
-  if (platform === hostPlatform) {
-    // `selftest` also proves the embedded fff library loads and searches.
-    const output = (await run([binary, "selftest"])).trim();
-    const expected = `polaris ${version} ${platform}`;
-
-    if (output.split("\n")[0] !== expected) {
-      throw new Error(`${binary} selftest printed "${output}", expected "${expected}" first`);
-    }
-
-    console.log(output.replaceAll(/^/gm, "  "));
+  if (darwin) {
+    await finishBundle(outDir, version);
+    await bundleHelper(platform, outDir, version, release);
   }
+
+  await checkBuild(platform, binary, version, sealed);
 
   const flat =
     betterleaks === null ? { [name]: name } : { [name]: name, betterleaks: "betterleaks" };
@@ -392,7 +528,7 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
 const main = async () => {
   const args = process.argv.slice(2);
   const release = args.includes("--release");
-  const requested = args.filter((arg) => arg !== "--release");
+  const requested = args.filter((arg) => arg !== "--release" && !arg.startsWith(OUT_FLAG));
   const unknown = requested.filter((platform) => !isPlatform(platform));
 
   if (unknown.length > 0) throw new Error(`unknown platform(s): ${unknown.join(", ")}`);
@@ -425,7 +561,7 @@ const main = async () => {
 
   for (const platform of platforms) {
     const started = performance.now();
-    built[platform] = await build(platform, version);
+    built[platform] = await build(platform, version, release);
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     console.log(`built ${platform} in ${seconds}s`);
   }

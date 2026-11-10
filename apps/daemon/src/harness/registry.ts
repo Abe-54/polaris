@@ -14,7 +14,8 @@
  * `POLARIS_COPILOT` can point at the binaries explicitly.
  * Requires `PlanLimitReporter`, where the drivers report what their Harness exposes, and
  * `BrowserMcp`, which gives Claude Code and Codex sessions the Browser's MCP server; with
- * `SimulatorMcp` in context they get the Simulator's too.
+ * `SimulatorMcp` in context they get the Simulator's too, and with `DesktopMcp` computer use
+ * (`polaris_desktop`).
  */
 import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
 import { NATIVE_SUGGESTIONS } from "../suggestedReply/rules.ts";
@@ -27,6 +28,7 @@ import { ClaudeHookReceiver } from "./claude/hooks.ts";
 import { type HarnessDriver, HarnessError } from "./HarnessDriver.ts";
 import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
+import { DesktopMcp } from "./desktop/service.ts";
 import { SimulatorMcp } from "../simulator/service.ts";
 import { findExecutable } from "../platform/executable.ts";
 
@@ -109,6 +111,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const hookReceiver = yield* ClaudeHookReceiver;
       const { report } = yield* PlanLimitReporter;
       const browser = yield* BrowserMcp;
+      const desktop = Option.getOrUndefined(yield* Effect.serviceOption(DesktopMcp));
       const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
       const preference = yield* Effect.serviceOption(SuggestedReplyPreference);
 
@@ -147,6 +150,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 planLimits,
                 browser,
                 simulator,
+                desktop,
               })
             ),
             Scope.provide(scope)
@@ -163,6 +167,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 claudePath: () => binary("POLARIS_CLAUDE", "claude"),
                 planLimits,
                 browser,
+                desktop,
                 simulator,
                 ...suggestedReplies,
               })
