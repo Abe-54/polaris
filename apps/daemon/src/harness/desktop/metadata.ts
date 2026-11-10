@@ -56,26 +56,31 @@ export const offApp = (
   const windows = listed?.ok ? Option.getOrNull(decodePlaced(listed.data)) : null;
 
   if (windows === null) return `polaris_desktop couldn't check where ${app.name}'s windows are.`;
-  const own = windows.filter((window) => window.app_name.toLowerCase() === app.name.toLowerCase());
 
-  if (!own.some((window) => window.is_focused))
+  const mine = (window: typeof PlacedWindow.Type) =>
+    window.app_name.toLowerCase() === app.name.toLowerCase();
+
+  const covers = ({ visible, bounds }: typeof PlacedWindow.Type, { x, y }: ScreenPoint) =>
+    visible &&
+    x >= bounds.x &&
+    x < bounds.x + bounds.width &&
+    y >= bounds.y &&
+    y < bounds.y + bounds.height;
+
+  if (!windows.some((window) => mine(window) && window.is_focused))
     return `${app.name} isn't in front, so this input would go to another app. focus_window it first.`;
 
-  const outside = points.find(
-    ({ x, y }) =>
-      !own.some(
-        ({ visible, bounds }) =>
-          visible &&
-          x >= bounds.x &&
-          x < bounds.x + bounds.width &&
-          y >= bounds.y &&
-          y < bounds.y + bounds.height
-      )
-  );
+  // The list has no stacking order: outside the focused window, any other app's window may be on top.
+  const lands = (point: ScreenPoint) =>
+    windows.some((window) => mine(window) && window.is_focused && covers(window, point)) ||
+    (windows.some((window) => mine(window) && covers(window, point)) &&
+      !windows.some((window) => !mine(window) && covers(window, point)));
+
+  const outside = points.find((point) => !lands(point));
 
   return outside === undefined
     ? null
-    : `(${Math.round(outside.x)}, ${Math.round(outside.y)}) isn't inside a ${app.name} window, so this input would go to another app.`;
+    : `(${outside.x}, ${outside.y}) isn't in a ${app.name} window that is in front, so this input could go to another app.`;
 };
 
 const decodeApps = Schema.decodeUnknownOption(Schema.Struct({ apps: Schema.Array(ListedApp) }));

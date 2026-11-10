@@ -99,7 +99,11 @@ const tool = <I>(definition: Definition<I>): DesktopTool => {
       Option.map(decode(json), (input) => ({
         argv: definition.argv(input),
         target: definition.target(input),
-        points: definition.points?.(input) ?? [],
+        // Rounded as `point` rounds them, so the check and the click are the same point.
+        points: (definition.points?.(input) ?? []).map(({ x, y }) => ({
+          x: Math.round(x),
+          y: Math.round(y),
+        })),
         screen: Option.getOrNull(decodeScreenOf(json))?.screen ?? null,
       })),
   };

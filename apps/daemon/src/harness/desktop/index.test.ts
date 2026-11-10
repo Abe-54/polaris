@@ -28,6 +28,7 @@ import {
   fakeHost,
   fakeRunner,
   ok,
+  windowsOf,
 } from "./testing.ts";
 
 const sessionId = SessionId.make("ses-desktop");
@@ -414,9 +415,35 @@ describe("headed coordinates stay in the app the user allowed", () => {
 
   test("a point outside the app's windows is refused", async () => {
     expect(await click("Dia", 1600, 50)).toEqual({
-      text: "(1600, 50) isn't inside a Dia window, so this input would go to another app.",
+      text: "(1600, 50) isn't in a Dia window that is in front, so this input could go to another app.",
       sent: false,
     });
+  });
+
+  test("a point is checked as it is sent: rounded", async () => {
+    // Dia's window ends at x = 1000; 999.6 is sent as 1000.
+    expect((await click("Dia", 999.6, 50)).sent).toBe(false);
+    expect((await click("Dia", 999.4, 50)).sent).toBe(true);
+  });
+
+  test("outside its focused window, a point another app's window also covers is refused", async () => {
+    const windows = windowsOf(
+      { app: "Dia", at: [0, 0, 500, 500] },
+      { app: "Dia", at: [600, 0, 300, 300] },
+      { app: "Terminal", at: [800, 0, 300, 300] }
+    );
+
+    const at = async (x: number) => {
+      const { runner, calls } = fakeRunner({ "list-windows": windows });
+
+      await withServer(fakeDeps(runner), (server) =>
+        call(server, "mouse_click", { x, y: 10, app: "Dia" })
+      );
+
+      return calls.some((args) => args.includes("mouse-click"));
+    };
+
+    expect([await at(100), await at(700), await at(850)]).toEqual([true, true, false]);
   });
 
   test("an app that isn't in front is refused, even at a point in its own window", async () => {
