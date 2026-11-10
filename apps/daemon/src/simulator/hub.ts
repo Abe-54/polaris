@@ -185,8 +185,8 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
 
   /** Shuts down only the Simulators Polaris booted; never anyone else's. */
   const shutDownOurs = async (endpoint: HubEndpoint) => {
-    // A fresh list: nothing polls without a watch, and the last may predate a boot finishing.
-    await inventory.refresh();
+    // A fresh list, not one in flight: it, or the last, may predate a boot finishing.
+    await inventory.refreshFresh();
 
     for (const id of Array.from(booted.all)) {
       const simulator = inventory.find(id);

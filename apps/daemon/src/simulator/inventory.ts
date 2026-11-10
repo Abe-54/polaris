@@ -67,6 +67,13 @@ export class Inventory {
     return this.running;
   }
 
+  /** Lists again after any run in flight, which may have started before what the caller saw. */
+  async refreshFresh(): Promise<ReadonlyArray<Simulator>> {
+    await this.running?.catch(() => undefined);
+
+    return this.refresh();
+  }
+
   /** Shows `id` as `Booting` until `settle`. */
   markBooting(id: string): void {
     this.booting.add(id);
