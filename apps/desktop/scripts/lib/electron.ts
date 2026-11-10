@@ -1,7 +1,7 @@
 /** Paths shared by the build, dev, smoke and bench scripts; runs under Bun and Node. */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type { ElectronApplication } from "playwright-core";
-import { _electron } from "playwright-core";
+import { _electron, chromium } from "playwright-core";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -41,6 +41,16 @@ export const scriptedElectron = {
 
     return _electron.launch(guarded);
   },
+};
+
+/**
+ * A packaged app, whose fuses close the inspector `_electron` needs (ENG-878): spawned with the
+ * same opt-out, then driven over Chromium's remote debugging port.
+ */
+export const scriptedPackagedApp = {
+  spawn: (executable: string, args: string[], env: NodeJS.ProcessEnv) =>
+    spawn(executable, args, { env: { ...env, POLARIS_DESKTOP_SCRIPTED: "1" } }),
+  connect: (port: number) => chromium.connectOverCDP(`http://127.0.0.1:${port}`),
 };
 
 export const APP_DIR = join(dirname(fileURLToPath(import.meta.url)), "../..");

@@ -8,18 +8,17 @@
  *
  *   node scripts/packageCheck.ts [--app <Polaris.app>] [--screenshot <file.png>]
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium } from "playwright-core";
 import type { Browser, Page } from "playwright-core";
 import type { PolarisApi } from "../src/shared/api.ts";
 import { startDaemon } from "./lib/daemon.ts";
-import { APP_DIR } from "./lib/electron.ts";
+import { APP_DIR, scriptedPackagedApp } from "./lib/electron.ts";
 import { fuseMismatches } from "./packaging/fuses.ts";
 
 declare const window: { readonly polaris: PolarisApi };
@@ -90,10 +89,12 @@ interface Launched {
 }
 
 const launch = (extraArgs: string[], extraEnv: Record<string, string>): Launched => {
-  // Like every scripted launch, it opts out of the system Daemon (lib/electron.ts).
-  const env = { ...process.env, ...extraEnv, POLARIS_DESKTOP_SCRIPTED: "1" };
   // Node mode reads the first argument as a script and hands it the rest, our flags included.
-  const child = spawn(executable, [...extraArgs, "--use-mock-keychain"], { env });
+  const child = scriptedPackagedApp.spawn(executable, [...extraArgs, "--use-mock-keychain"], {
+    ...process.env,
+    ...extraEnv,
+  });
+
   let output = "";
 
   child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
@@ -128,7 +129,7 @@ const appWindow = async (
     if (launched.child.exitCode !== null) return null;
 
     if (await listening(port)) {
-      const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+      const browser = await scriptedPackagedApp.connect(port);
       const page = browser.contexts().flatMap((context) => context.pages())[0];
 
       if (page !== undefined) return { browser, page };
