@@ -246,7 +246,8 @@ export const computerUsePreview: Scenario = {
 
       yield* settle(2000);
       metrics.unwatched_capture_processes = count(captureProcesses(sampler), "", exact);
-      yield* startTyping(document.name, baseS + localS + remoteS + 6);
+      // Longer than the phases need: it is stopped by hand before the still phase.
+      const typing = yield* startTyping(document.name, baseS + localS + remoteS + 60);
       yield* settle(1000);
       const base = yield* measure(sampler, baseS * 1000, null);
 
@@ -282,8 +283,10 @@ export const computerUsePreview: Scenario = {
         })
       );
 
-      // The typing is over by now: the window shows the same picture from here on.
-      yield* settle(7000);
+      // The typing stops here: the window shows the same picture from now on.
+      typing.kill();
+      yield* Effect.promise(() => typing.exited);
+      yield* settle(2000);
 
       const still = yield* Effect.scoped(
         Effect.gen(function* () {
