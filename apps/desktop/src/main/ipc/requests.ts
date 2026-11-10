@@ -474,6 +474,10 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
     onLive(hostKey, (s) => s.client["sessions.idleCompaction"]({})),
   "sessions.setIdleCompaction": ({ hostKey, settings }) =>
     onLive(hostKey, (s) => s.client["sessions.setIdleCompaction"]({ settings })).pipe(done),
+  "sessions.suggestedReplies": ({ hostKey }) =>
+    onLive(hostKey, (s) => s.client["sessions.suggestedReplies"]({})),
+  "sessions.setSuggestedReplies": ({ hostKey, settings }) =>
+    onLive(hostKey, (s) => s.client["sessions.setSuggestedReplies"]({ settings })).pipe(done),
   "sessions.visuals": ({ hostKey }) => onLive(hostKey, (s) => s.client["sessions.visuals"]({})),
   "sessions.setVisuals": ({ hostKey, settings }) =>
     onLive(hostKey, (s) => s.client["sessions.setVisuals"]({ settings })).pipe(done),

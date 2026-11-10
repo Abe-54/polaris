@@ -27,6 +27,7 @@ export const DEFAULT_SESSION_PREFS: SessionPrefs = {
     ui: { harness: "claude", model: "claude-opus-5-5", effort: null },
   },
   idleCompaction: { enabled: true, minTokens: 200_000 },
+  suggestedReplies: { enabled: false, fallback: null },
   visuals: "rich",
   editorVim: false,
   editorAutosave: false,

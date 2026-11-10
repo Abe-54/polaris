@@ -6,6 +6,7 @@ import {
   ReviewCheckoutId,
   ReviewSubject,
   SessionSummary,
+  SuggestedReply,
   Turn,
   TurnId,
   TurnTrigger,
@@ -268,6 +269,33 @@ describe("host model", () => {
       currentUserTurn: { turnId: next.id, number: 2, startedAt: next.startedAt },
       lastReplyPreview: "B",
     });
+  });
+
+  test("a Suggested Reply folds into the session until a newer Turn starts (ENG-885)", () => {
+    const reply = SuggestedReply.make({ turnId: turn.id, text: "go with B", source: "polaris" });
+    const next = turnWith({ id: TurnId.make("t-next"), index: 1 });
+
+    const sessionAfter = (...events: ReadonlyArray<DomainEvent>) =>
+      applyHostItems(
+        emptyHostModel,
+        cloned([snapshot, ...events.map((e, i) => event(4 + i, e))])
+      ).sessions.get(sessionId)?.session;
+
+    const offered = [
+      E.TurnStarted.make({ turn }),
+      E.TurnEnded.make({ turn: turnWith({ status: "completed" }) }),
+      E.SessionReplySuggested.make({ sessionId, reply }),
+    ];
+
+    expect(sessionAfter(...offered)?.suggestedReply).toEqual(reply);
+    expect(sessionAfter(...offered, E.TurnStarted.make({ turn: next }))?.suggestedReply).toBeNull();
+    expect(
+      sessionAfter(
+        E.TurnStarted.make({ turn }),
+        E.TurnStarted.make({ turn: next }),
+        E.SessionReplySuggested.make({ sessionId, reply })
+      )?.suggestedReply ?? null
+    ).toBeNull();
   });
 
   test("an event at or below the model's sequence is ignored", () => {

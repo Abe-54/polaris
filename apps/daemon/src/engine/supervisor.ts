@@ -29,6 +29,7 @@ import {
 } from "../constellation/liveness.ts";
 import { LiveItem } from "../store/EventStore.ts";
 import { workingTurn } from "../store/model.ts";
+import { suggestReply } from "./suggestedReplies.ts";
 import { UsageIndex } from "../usage/service.ts";
 import { isWorker, usageLimitOf } from "./limits.ts";
 import { worktreeIdFor } from "./decider.ts";
@@ -340,6 +341,8 @@ const make = (
             ? []
             : [DomainEvent.cases.SessionRenamed.make({ sessionId, title: e.title })]
         ),
+      ReplySuggested: (e) =>
+        rt.recordFor(sessionId, (record) => suggestReply(record, e.turnId, e.text, "harness")),
       ContextUsed: (e) =>
         rt.recordFor(sessionId, (record) => {
           const usage = contextUsageOf(e, record.session.contextUsage);

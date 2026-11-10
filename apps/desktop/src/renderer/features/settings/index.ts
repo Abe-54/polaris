@@ -30,6 +30,8 @@ export { IdleCompactionPublisher } from "./idleCompactionSync.ts";
 
 export { VisualsPublisher } from "./visualsSync.ts";
 
+export { SuggestedRepliesPublisher } from "./suggestedRepliesSync.ts";
+
 export { DeveloperModePublisher } from "./developerModeSync.ts";
 
 export {

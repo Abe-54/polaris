@@ -41,7 +41,13 @@ import {
 import { patchSessionUi, questionProgress, setQuestionProgress, useSessionUi } from "../state.ts";
 import { typedStep } from "../model/question.ts";
 import type { OutboxActions } from "../outbox.ts";
-import { promptFor, sentMessages, shellDraft, useMentionSearch } from "../../composer/index.ts";
+import {
+  offeredReply,
+  promptFor,
+  sentMessages,
+  shellDraft,
+  useMentionSearch,
+} from "../../composer/index.ts";
 import { RotatingVerb, useWorkingVerbs } from "../verbs/index.ts";
 import { type ComposerCommands, DraftComposer } from "./DraftComposer.tsx";
 import { useComposerCommands } from "./useComposerCommands.ts";
@@ -407,6 +413,7 @@ export const SessionComposer = (props: SessionComposerProps) => {
       onQueue={canQueue(mode) ? queue : undefined}
       canSubmit={canSubmit({ chrome, shell, command, mode, draft: ui.draft })}
       placeholder={chrome.composer?.placeholder ?? placeholderFor(mode)}
+      suggestion={offeredReply(session.state, session.suggestedReply, lastTurn?.id ?? null)}
       working={working}
       strip={strip}
       status={

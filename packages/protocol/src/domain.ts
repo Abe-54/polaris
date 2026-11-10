@@ -27,6 +27,7 @@ import {
   ReasoningEffort,
 } from "./models.ts";
 import { WorktreeSetup, WorktreeSetupRun } from "./worktreeSetup.ts";
+import { SuggestedReply } from "./suggestedReply.ts";
 import { ConstellationId } from "./constellation/domain.ts";
 import { FeedbackBatch, PullRequestRef, ReviewSubject } from "./review.ts";
 
@@ -334,6 +335,11 @@ export class AgentSession extends Schema.Class<AgentSession>("AgentSession")({
   contextUsage: addedNullable(ContextUsage),
   /** The Harness's latest compaction, when it reported one (capability `session.compaction`). */
   lastCompaction: optionalNullable(Compaction),
+  /**
+   * The Suggested Reply after the latest Turn (capability `sessions.suggested-replies`);
+   * null once a newer Turn starts, or when none was offered.
+   */
+  suggestedReply: optionalNullable(SuggestedReply),
   worktreeSetup: optionalNullable(WorktreeSetupRun),
   lastError: Schema.NullOr(Schema.String),
   /** The index of the last Turn the user accepted (`AcceptTurns`); null before any. */

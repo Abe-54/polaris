@@ -311,6 +311,7 @@ export const runBenchTurn = Effect.fnUntraced(function* (
         ApprovalRequested: () => Effect.void,
         ApprovalWithdrawn: () => Effect.void,
         TitleSuggested: () => Effect.void,
+        ReplySuggested: () => Effect.void,
         WorktreeCreated: () => Effect.void,
         Exited: () => Effect.void,
       }).pipe(Effect.asVoid)

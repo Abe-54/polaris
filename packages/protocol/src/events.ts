@@ -36,6 +36,7 @@ import {
 } from "./ids.ts";
 import { Actor } from "./extensions.ts";
 import { WorktreeSetupRun } from "./worktreeSetup.ts";
+import { SuggestedReply } from "./suggestedReply.ts";
 import { notificationEventFields } from "./notification.ts";
 import {
   addedNullable,
@@ -98,6 +99,8 @@ export const DomainEvent = Schema.TaggedUnion({
   SessionContextUsed: { sessionId: SessionId, usage: ContextUsage },
   /** The Harness compacted the context window (see `AgentSession.lastCompaction`). */
   SessionCompacted: { sessionId: SessionId, compaction: Compaction },
+  /** A Suggested Reply for after `reply.turnId` (capability `sessions.suggested-replies`). */
+  SessionReplySuggested: { sessionId: SessionId, reply: SuggestedReply },
   SessionBackgroundTasksChanged: {
     sessionId: SessionId,
     tasks: Schema.Array(BackgroundTask),
