@@ -12,21 +12,25 @@ import { AppApprovalCard } from "./AppApprovalCard.tsx";
 
 afterEach(cleanup);
 
+const base = (kind: "app" | "headed-input") => ({
+  id: RequestId.make("r1"),
+  sessionId: SessionId.make("s1"),
+  turnId: TurnId.make("t1"),
+  kind,
+  title: "Use Simulator",
+  options: [],
+  openedAt: "2026-11-10T12:00:00.000Z",
+});
+
 const request = (kind: "app" | "headed-input") =>
   new ApprovalRequest({
-    id: RequestId.make("r1"),
-    sessionId: SessionId.make("s1"),
-    turnId: TurnId.make("t1"),
-    kind,
+    ...base(kind),
     app: new DesktopApp({
       id: AppId.make("com.apple.iphonesimulator"),
       name: "Simulator",
       icon: null,
     }),
-    title: "Use Simulator",
     detail: "To check the booking flow in Trips",
-    options: [],
-    openedAt: "2026-11-10T12:00:00.000Z",
   });
 
 const show = (kind: "app" | "headed-input") => {
@@ -66,4 +70,21 @@ describe("a computer use approval in the transcript (CU4)", () => {
     expect(page.getByText(/Touch the mouse or keyboard to take over/)).toBeTruthy();
     expect(page.getByText("Asked each time it's needed.")).toBeTruthy();
   });
+});
+
+test("without an app on the request, the card says 'an app' and shows the title", () => {
+  render(
+    <AppApprovalCard
+      request={new ApprovalRequest({ ...base("app"), detail: null })}
+      who="Codex"
+      host="lucas-rpi"
+      onAllow={() => undefined}
+      onAlwaysAllow={() => undefined}
+      onDeny={() => undefined}
+    />
+  );
+  const page = within(document.body);
+
+  expect(page.getByText("Codex wants to use an app")).toBeTruthy();
+  expect(page.getByText("Use Simulator")).toBeTruthy();
 });
