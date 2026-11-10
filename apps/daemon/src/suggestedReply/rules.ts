@@ -22,9 +22,12 @@ export type InlineHarness = "claude" | "codex";
 export const isInlineHarness = (harness: HarnessKind): harness is InlineHarness =>
   harness === "claude" || harness === "codex";
 
-/** A window of the Harness at or near its limit (the Harness reports `warning` near it). */
-export const nearPlanLimit = (harness: HarnessKind, limits: ReadonlyArray<PlanLimit>) =>
-  limits.some((limit) => limit.harness === harness && limit.status !== "ok");
+/**
+ * A window of the Harness that has reached its limit. Not `warning`, which Claude also sends
+ * for a fast pace at low use; and a suggestion is one small request.
+ */
+export const atPlanLimit = (harness: HarnessKind, limits: ReadonlyArray<PlanLimit>) =>
+  limits.some((limit) => limit.harness === harness && limit.status === "reached");
 
 const isFirstTurn = (turn: Turn) => (turn.userTurnNumber ?? turn.index + 1) <= 1;
 

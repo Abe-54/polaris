@@ -55,7 +55,8 @@ Tested with fake binaries on PATH (`probe.test.ts`), which assert which commands
 
 ## Cost
 
-- **No timers, no watchers.** The layer only makes a `SubscriptionRef`; nothing runs until a Client asks. The first `harness.availability` or `harness.watchAvailability` probes, and later ones answer from the cache until `refresh: true`. Concurrent asks share one probe (`Effect.cachedInvalidateWithTTL`, infinite TTL).
+- **No timers, no watchers.** The layer only makes a `SubscriptionRef`; nothing runs until something asks. The first `harness.availability` or `harness.watchAvailability` probes; later ones answer from the cache. Concurrent asks share one probe.
+- **Staleness.** A report older than `STALE_AFTER` (1 min) may miss a sign-in or an install made since, in a terminal Polaris didn't open. `get(false)` still answers it at once and starts a probe, whose report reaches `harness.watchAvailability`; `get("when-stale")` waits for that probe (the Suggested Reply fallback, which would otherwise stay off until a restart); `get(true)` always probes. So an idle Daemon probes no more than it did, and a busy one at most once a minute.
 - **No driver is loaded.** This module imports neither the Claude Agent SDK, the Codex bindings nor the OpenCode driver, and doesn't go through `HarnessDriver.probe` (which would load them through `lazyDriver`). `probe.test.ts` checks, in a fresh process, that probing leaves them unloaded.
 - A full probe of both Harnesses on an M-series Mac takes about 150 ms: four short-lived processes, run in parallel per Harness.
 - `POLARIS_BENCH_HARNESS=1` (benchmarks, the dev Desktop App) reports Claude Code and Codex `ready` at version `bench` without probing them: the bench Harness stands in for exactly those (`../bench/kinds.ts`). Every other Harness is probed as usual.
@@ -63,4 +64,4 @@ Tested with fake binaries on PATH (`probe.test.ts`), which assert which commands
 ## Gaps
 
 - The Codex driver still resolves `codex` once, when the registry is built, so a Codex installed after the Daemon started shows `ready` here but can't open a session until the Daemon restarts. Claude's path is looked up per session.
-- Nothing refreshes by itself when a sign-in terminal exits; the Client asks. A Daemon-side refresh on that terminal's exit would need the terminal module to know which terminals are sign-ins.
+- Nothing refreshes the moment a sign-in terminal exits; the Client asks, and otherwise the next ask after `STALE_AFTER` probes. A Daemon-side refresh on that terminal's exit would need the terminal module to know which terminals are sign-ins.

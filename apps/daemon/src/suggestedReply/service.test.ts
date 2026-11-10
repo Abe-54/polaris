@@ -42,17 +42,18 @@ const scripted = (answer: Effect.Effect<{ reply: string | null }, HarnessError>)
 
 const enabled = SuggestedReplySettings.make({ enabled: true, fallback: null });
 
-const warning = new PlanLimit({
-  harness: "codex",
-  kind: "five-hour",
-  scope: null,
-  windowMinutes: 300,
-  usedPercent: 92,
-  status: "warning",
-  resetsAt: null,
-  observedAt: at,
-  plan: null,
-});
+const limitOf = (harness: "claude" | "codex", status: "warning" | "reached") =>
+  new PlanLimit({
+    harness,
+    kind: "five-hour",
+    scope: null,
+    windowMinutes: 300,
+    usedPercent: 26,
+    status,
+    resetsAt: null,
+    observedAt: at,
+    plan: null,
+  });
 
 /** How often each check the service makes was read: the last one it reached shows it decided. */
 const reads = { settings: 0, availability: 0, limits: 0 };
@@ -75,9 +76,16 @@ const usageWith = (limits: ReadonlyArray<PlanLimit>) =>
     })
   );
 
-const availabilityOf = (ready: ReadonlyArray<"claude" | "codex">) =>
+type Ready = ReadonlyArray<"claude" | "codex">;
+
+/** `cached` is the report from before a sign-in; asking for a current one gets `ready`. */
+const availabilityOf = (ready: Ready, cached: Ready = ready) =>
   Layer.succeed(Availability)(
-    Availability.of({ get: () => counted("availability", report(...ready)), changes: Stream.empty })
+    Availability.of({
+      get: (refresh) =>
+        counted("availability", refresh === false ? report(...cached) : report(...ready)),
+      changes: Stream.empty,
+    })
   );
 
 const commitAll = (events: ReadonlyArray<DomainEvent>) =>
@@ -128,7 +136,8 @@ const run = <A, E>(
   options: {
     backend: ReplyBackend;
     settings?: SuggestedReplySettings;
-    ready?: ReadonlyArray<"claude" | "codex">;
+    ready?: Ready;
+    cached?: Ready;
     limits?: ReadonlyArray<PlanLimit>;
     timeout?: Duration.Input;
   },
@@ -164,7 +173,7 @@ const run = <A, E>(
 
   const layer = fallback.pipe(
     Layer.provideMerge(store),
-    Layer.provide(availabilityOf(options.ready ?? ["codex"])),
+    Layer.provide(availabilityOf(options.ready ?? ["codex"], options.cached)),
     Layer.provide(usageWith(options.limits ?? []))
   );
 
@@ -209,6 +218,36 @@ test("the Settings fallback's Model and effort are the ones asked", async () => 
   expect(calls.map((c) => [c.harness, c.job.model, c.job.effort])).toEqual([
     ["claude", "m-1", "low"],
   ]);
+});
+
+test("a Harness signed in after the Daemon's cached report still writes the suggestion", async () => {
+  const { calls, backend } = scripted(Effect.succeed({ reply: "Keep the repo style." }));
+
+  const reply = await run(
+    { backend, cached: [], ready: ["codex"] },
+    Effect.andThen(
+      commitAll([ended(turn(1))]),
+      eventually(suggestion, (s) => s != null)
+    )
+  );
+
+  expect(reply?.text).toBe("Keep the repo style.");
+  expect(calls.map((c) => c.harness)).toEqual(["codex"]);
+});
+
+test("a Plan Limit warning, as Claude sends for a fast pace at low use, still gets a suggestion", async () => {
+  const { calls, backend } = scripted(Effect.succeed({ reply: "Commit it." }));
+
+  const reply = await run(
+    { backend, limits: [limitOf("codex", "warning"), limitOf("claude", "warning")] },
+    Effect.andThen(
+      commitAll([ended(turn(1))]),
+      eventually(suggestion, (s) => s != null)
+    )
+  );
+
+  expect(reply?.text).toBe("Commit it.");
+  expect(calls).toHaveLength(1);
 });
 
 test("a 'nothing' answer commits nothing", async () => {
@@ -318,7 +357,11 @@ test("a failing Harness commits nothing and the service keeps following", async 
 
 test.each([
   ["the preference is off", "settings", { settings: SuggestedReplySettings.make({}) }],
-  ["the session's Harness is near a Plan Limit", "limits", { limits: [warning] }],
+  [
+    "the fallback's Harness has reached a Plan Limit",
+    "limits",
+    { limits: [limitOf("codex", "reached")] },
+  ],
   ["no fallback Harness is ready", "availability", { ready: [] }],
 ] as const)("nothing runs when %s", async (_, decided, options) => {
   const { calls, backend } = scripted(Effect.succeed({ reply: "never" }));

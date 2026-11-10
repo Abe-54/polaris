@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PlanLimit, SuggestedReplyFallback, SuggestedReplySettings } from "@polaris/protocol";
-import { nearPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
+import { atPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
 import { agentSession, at, record, report, turn } from "./testing.ts";
 
 describe("suggestionDue", () => {
@@ -46,10 +46,10 @@ const limit = (harness: "claude" | "codex", status: "ok" | "warning" | "reached"
     plan: null,
   });
 
-test("near a Plan Limit means a window of that Harness isn't ok", () => {
-  expect(nearPlanLimit("codex", [limit("codex", "warning")])).toBe(true);
-  expect(nearPlanLimit("codex", [limit("codex", "reached")])).toBe(true);
-  expect(nearPlanLimit("codex", [limit("codex", "ok"), limit("claude", "reached")])).toBe(false);
+test("at a Plan Limit means a window of that Harness has reached it, not only warned", () => {
+  expect(atPlanLimit("codex", [limit("codex", "reached")])).toBe(true);
+  expect(atPlanLimit("codex", [limit("codex", "warning")])).toBe(false);
+  expect(atPlanLimit("codex", [limit("codex", "ok"), limit("claude", "reached")])).toBe(false);
 });
 
 describe("runnableFallback", () => {
