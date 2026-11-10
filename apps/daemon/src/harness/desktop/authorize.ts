@@ -1,6 +1,6 @@
 /**
- * The one hook D3's app approvals plug into: every `polaris_desktop` call asks it first.
- * Until then, headless calls run and headed ones only behind `POLARIS_COMPUTER_USE_HEADED=1`.
+ * The one hook D3's app approvals plug into: every `polaris_desktop` call asks it first. Until
+ * then, headless calls run, headed ones only behind a flag, and shells and secrets never.
  */
 import type { SessionId } from "@polaris/protocol";
 import { Data, Effect } from "effect";
@@ -32,11 +32,47 @@ export const HEADED_REFUSED =
 export const headedFlag = (env: Readonly<Record<string, string | undefined>> = process.env) =>
   env.POLARIS_COMPUTER_USE_HEADED === "1";
 
+/** Apps that would hand the agent a shell or the user's secrets, past the Harness's approvals. */
+const NEVER = new Set(
+  [
+    "Terminal",
+    "iTerm2",
+    "iTerm",
+    "Ghostty",
+    "Warp",
+    "kitty",
+    "Alacritty",
+    "WezTerm",
+    "Script Editor",
+    "Automator",
+    "Shortcuts",
+    "System Settings",
+    "Keychain Access",
+    "Passwords",
+    "Polaris",
+    "Polaris Computer Use",
+  ].map((name) => name.toLowerCase())
+);
+
+export const neverRefused = (app: string) =>
+  `polaris_desktop doesn't drive ${app}: it would get around the approvals this session asks for. Ask the user to do this step.`;
+
+const refusedApp = (call: DesktopCall) =>
+  [call.target.appName, call.target.app].find(
+    (app): app is string => app !== null && NEVER.has(app.trim().toLowerCase())
+  );
+
 export const defaultAuthorize =
   (allowHeaded: () => boolean = headedFlag): Authorize =>
-  (call) =>
-    Effect.succeed(
+  (call) => {
+    const app = refusedApp(call);
+
+    if (app !== undefined)
+      return Effect.succeed(Authorization.Refuse({ message: neverRefused(app) }));
+
+    return Effect.succeed(
       !call.headed || allowHeaded()
         ? Authorization.Allow()
         : Authorization.Refuse({ message: HEADED_REFUSED })
     );
+  };

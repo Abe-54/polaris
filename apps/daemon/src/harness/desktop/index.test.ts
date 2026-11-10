@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Queue, Schema, Stream } from "effect";
-import { Authorization, defaultAuthorize, HEADED_REFUSED } from "./authorize.ts";
+import { Authorization, defaultAuthorize, HEADED_REFUSED, neverRefused } from "./authorize.ts";
 import { HEADED_HINT } from "./envelope.ts";
 import { lockedMessage } from "./host.ts";
 import {
@@ -95,6 +95,7 @@ describe("a call", () => {
       "--session",
       "run-7",
       "type",
+      "--",
       "@s1abc:e2",
       "hello",
     ]);
@@ -342,5 +343,39 @@ describe("Codex's way in", () => {
     );
 
     expect(refused).toBe(true);
+  });
+});
+
+describe("the default authorize", () => {
+  const deps = (runner: ReturnType<typeof fakeRunner>["runner"]) =>
+    fakeDeps(runner, { authorize: defaultAuthorize(() => true) });
+
+  test.each([["Terminal"], ["iterm2"], ["System Settings"]])("never launches %s", async (app) => {
+    const { runner, calls } = fakeRunner({});
+
+    const result = await withServer(deps(runner), (server) => call(server, "launch", { app }));
+
+    expect(textOf(result)).toBe(neverRefused(app));
+    expect(calls).toEqual([]);
+  });
+
+  test("refuses typing into a shell whose window an unscoped snapshot read", async () => {
+    const { runner, calls } = fakeRunner({
+      snapshot: ok("snapshot", {
+        app: "Terminal",
+        ref_count: 1,
+        snapshot_id: "s9",
+        window: { id: "w-1", title: "zsh" },
+      }),
+    });
+
+    const result = await withServer(deps(runner), async (server) => {
+      await call(server, "snapshot", {});
+
+      return call(server, "type", { ref: "@s9:e1", text: "rm -rf ~\n" });
+    });
+
+    expect(textOf(result)).toBe(neverRefused("Terminal"));
+    expect(calls.some((args) => args.includes("type"))).toBe(false);
   });
 });

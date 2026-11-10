@@ -41,6 +41,8 @@ const collect = (running: Running, signal: AbortSignal | undefined) =>
     try: async () => {
       const kill = () => running.kill("SIGKILL");
       signal?.addEventListener("abort", kill, { once: true });
+
+      if (signal?.aborted === true) kill();
       void running.stderr?.pipeTo(new WritableStream()).catch(() => {});
 
       try {

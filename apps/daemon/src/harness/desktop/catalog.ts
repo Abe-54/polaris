@@ -10,7 +10,9 @@ const number = (description: string) => Schema.Number.annotate({ description });
 
 const optional = <S extends Schema.Top>(schema: S) => Schema.optionalKey(schema);
 
-const Ref = text("A qualified ref from snapshot or find, such as @s8f3k2p9:e5.");
+const Ref = text("A qualified ref from snapshot or find, such as @s8f3k2p9:e5.").check(
+  Schema.isPattern(/^@[\w-]+:e\d+$/)
+);
 
 const App = text('The app\'s display name, as list_apps shows it ("TextEdit").');
 
@@ -85,8 +87,12 @@ const tool = <I>(definition: Definition<I>): DesktopTool => {
   };
 };
 
+/** `--name=value`, so a value starting with `-` can't pass for another flag. */
 const flag = (name: string, value: string | number | undefined): ReadonlyArray<string> =>
-  value === undefined ? [] : [`--${name}`, String(value)];
+  value === undefined ? [] : [`--${name}=${value}`];
+
+/** Positionals after `--`, so agent-desktop reads them as values even when they start with `-`. */
+const values = (...positionals: ReadonlyArray<string>) => ["--", ...positionals];
 
 /** `--xy=x,y`: the `=` form lets a negative coordinate through. */
 const point = (name: string, x: number, y: number) => `--${name}=${Math.round(x)},${Math.round(y)}`;
@@ -163,7 +169,7 @@ const click = tool({
   input: Schema.Struct({ ref: Ref }),
   headed: false,
   observes: false,
-  argv: (input) => ["click", input.ref],
+  argv: (input) => ["click", ...values(input.ref)],
   target: onRef,
 });
 
@@ -173,7 +179,7 @@ const type = tool({
   input: Schema.Struct({ ref: Ref, text: text("The text to insert.") }),
   headed: false,
   observes: false,
-  argv: (input) => ["type", input.ref, input.text],
+  argv: (input) => ["type", ...values(input.ref, input.text)],
   target: onRef,
 });
 
@@ -183,7 +189,7 @@ const setValue = tool({
   input: Schema.Struct({ ref: Ref, value: text("The new value.") }),
   headed: false,
   observes: false,
-  argv: (input) => ["set-value", input.ref, input.value],
+  argv: (input) => ["set-value", ...values(input.ref, input.value)],
   target: onRef,
 });
 
@@ -199,9 +205,9 @@ const scroll = tool({
   observes: false,
   argv: (input) => [
     "scroll",
-    input.ref,
     ...flag("direction", input.direction),
     ...flag("amount", input.amount),
+    ...values(input.ref),
   ],
   target: onRef,
 });
@@ -213,7 +219,7 @@ const press = tool({
   input: Schema.Struct({ combo: text("The key combo."), app: App }),
   headed: false,
   observes: false,
-  argv: (input) => ["press", input.combo, "--app", input.app],
+  argv: (input) => ["press", ...flag("app", input.app), ...values(input.combo)],
   target: onApp,
 });
 
@@ -262,7 +268,7 @@ const launch = tool({
   input: Schema.Struct({ app: text("The app's name or bundle id.") }),
   headed: false,
   observes: false,
-  argv: (input) => ["launch", input.app, "--activate"],
+  argv: (input) => ["launch", "--activate", ...values(input.app)],
   target: onApp,
 });
 
@@ -350,7 +356,7 @@ const physicalClick = tool({
   input: Schema.Struct({ ref: Ref }),
   headed: true,
   observes: false,
-  argv: (input) => ["click", input.ref],
+  argv: (input) => ["click", ...values(input.ref)],
   target: onRef,
 });
 
@@ -360,7 +366,7 @@ const physicalType = tool({
   input: Schema.Struct({ ref: Ref, text: text("The text to type.") }),
   headed: true,
   observes: false,
-  argv: (input) => ["type", input.ref, input.text],
+  argv: (input) => ["type", ...values(input.ref, input.text)],
   target: onRef,
 });
 
