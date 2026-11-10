@@ -15,6 +15,7 @@ import { gitExecutable } from "../../git/executable.ts";
 import { groupFor, startSignal, stopOnAbort, uninterrupted } from "../../git/interrupt.ts";
 import type { FileChange, GrepHit, GrepQuery, PathHit, SearchBackend } from "./types.ts";
 import { WALK_SKIP, watchRoot } from "./watch.ts";
+import { readLines } from "../../lines.ts";
 
 /** Cap on files considered by the walk outside git repositories. */
 const WALK_MAX_FILES = 200_000;
@@ -203,8 +204,6 @@ const runGitGrep = async (
   stopOnAbort(proc, signal);
 
   const hits: Array<GrepHit> = [];
-  const decoder = new TextDecoder();
-  let buffer = "";
 
   const parseLine = (line: string) => {
     const [path, lineNo, column, ...rest] = line.split("\0");
@@ -218,15 +217,8 @@ const runGitGrep = async (
     });
   };
 
-  for await (const chunk of proc.stdout) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let newline = buffer.indexOf("\n");
-
-    while (newline >= 0 && hits.length < query.limit) {
-      parseLine(buffer.slice(0, newline));
-      buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf("\n");
-    }
+  for await (const line of readLines(proc.stdout, { unterminated: true })) {
+    parseLine(line);
 
     if (hits.length >= query.limit) {
       proc.kill();
@@ -234,7 +226,6 @@ const runGitGrep = async (
     }
   }
 
-  if (hits.length < query.limit && buffer !== "") parseLine(buffer);
   const code = await proc.exited;
 
   // 0 = matches, 1 = none; anything else (bad regex, …) is an error unless we killed it.
