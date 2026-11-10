@@ -168,7 +168,7 @@ const Header = ({ id }: { readonly id: string }) => {
           data-collapsed={row.collapsed ? "" : undefined}
           onClick={() => actions?.toggle(id)}
           className={cn(
-            "border-hairline bg-surface-raised group/header flex h-10 cursor-default items-center gap-row-x border px-3",
+            "border-hairline bg-surface-raised group/header flex h-10 cursor-default items-center gap-row-x border px-3 transition-[border-radius] duration-120 ease-out",
             row.collapsed ? "rounded-row" : "rounded-t-row border-b-hairline"
           )}
         >

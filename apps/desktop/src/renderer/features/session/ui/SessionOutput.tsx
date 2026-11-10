@@ -98,7 +98,7 @@ const RowView = ({ row, path, syntax, wrap, onFold }: RowViewProps) => {
         <div
           className={cn(
             CARD,
-            "rounded-t-row group/file flex h-9 w-[calc(100%-2rem)] items-center border-t pr-1.5",
+            "rounded-t-row group/file flex h-9 w-[calc(100%-2rem)] items-center border-t pr-1.5 transition-[border-radius] duration-120 ease-out",
             row.folded ? "rounded-b-row border-b" : "border-hairline border-b"
           )}
         >
