@@ -8,7 +8,7 @@ import {
 } from "@polaris/protocol";
 import { Effect, Option, Schema } from "effect";
 import type { SessionTools } from "../sessions/index.ts";
-import type { Profiles } from "../../traces/profiles/index.ts";
+import { LATE_ATTACH_LIMIT, type Profiles } from "../../traces/profiles/index.ts";
 import { jsonSchema, type BoundTool, type McpToolResult } from "./shared.ts";
 import { duration, inline, TRACE_CAP } from "./traceFormat.ts";
 import { profileMetadata, profileSummary } from "./profileSummary.ts";
@@ -75,7 +75,7 @@ export const profileView = (
   overlap: { traces: ReadonlyArray<TraceSummary>; total: number }
 ): string => {
   const { profile, hotFunctions, hotPath } = detail;
-  const header = `${profile.status} · ${profile.runtime} · ${duration(profile.durationMs)} · profile ${profile.id}${profile.cwd === undefined ? "" : `\nDirectory: ${inline(profile.cwd)}`}\nArtifact: ${inline(profile.path ?? "none")}\nLabels over 256 characters are clipped; open the full recording in Traces (⌘5) for full details.`;
+  const header = `${profile.status} · ${profile.runtime} · ${duration(profile.durationMs)} · profile ${profile.id}${profile.cwd === undefined ? "" : `\nDirectory: ${inline(profile.cwd)}`}\nArtifact: ${inline(profile.path ?? "none")}\nLabels over 256 characters are clipped; open the full recording in Traces (⌘5) for full details.${profile.origin === "attach" ? `\n${LATE_ATTACH_LIMIT}` : ""}`;
 
   const location = (f: ProfileDetail["hotFunctions"][number]) =>
     `${inline(f.name).slice(0, 256)}${f.file === null ? "" : `  ${inline(f.file).slice(0, 256)}${f.line === null ? "" : `:${f.line}`}`}`;
@@ -161,7 +161,7 @@ const recordingFor = Effect.fnUntraced(function* (
 export const profileTool = (sessionId: SessionId, sessions: SessionTools): BoundTool => ({
   name: "profile",
   description:
-    "Profile a Node or Bun command (argv array), restart a process Polaris's Profiles service launched, or read a recording by id. Ask the user before restarting a process they started. Commands run in this checkout; waitSeconds defaults to 30 and does not stop long-running commands. Artifacts finalize on process exit. attach profiles a cooperatively registered Node pid for seconds (default 5, maximum 30), only after the user approves a Pending Approval. Capture uses a private in-process profiler without opening a network port. Unregistered processes are refused.",
+    "Profile a Node or Bun command (argv array), restart a process Polaris's Profiles service launched, or read a recording by id. Ask the user before restarting a process they started. Commands run in this checkout; waitSeconds defaults to 30 and does not stop long-running commands. Artifacts finalize on process exit. attach profiles a cooperatively registered Node pid for seconds (default 5, maximum 30), only after the user approves a Pending Approval; it can miss loops already optimised before the attach, so use process or command for those. Capture uses a private in-process profiler without opening a network port. Unregistered processes are refused.",
   inputSchema: jsonSchema(ProfileInput),
   annotations: { readOnlyHint: false },
   call: (input, signal) =>

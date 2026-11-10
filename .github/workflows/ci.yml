@@ -6,18 +6,24 @@ name: CI
 # tooling/**, .github/**) runs everything.
 #   scope             what changed: the flags every job below reads.
 #   check             lint (oxfmt, the ratchet), typecheck, licences, scripts, release signer; Linux, always.
-#   platform-checks   Windows: the remote-only Client's tests. -macos: scripts, release signer. Always.
-#   test              per package, the Daemon in 3 shards: ubuntu, Windows (Daemon only), and macOS
-#                     (test-macos); `turbo run test --affected` on a PR. An unaffected part passes in seconds.
+#   platform-checks   Windows: the remote-only Client's tests. Always.
+#   test              per package, the Daemon in 3 shards: ubuntu and Windows (Daemon only); macOS in two
+#                     jobs, the Daemon unsharded and the other packages with scripts and the release
+#                     signer (test-macos); `turbo run test --affected` on a PR. An unaffected part passes in seconds.
 #                     Both test tiers (fast and *.slow.test.ts, ADR 0096); fast files over 2 s are listed in
 #                     the job summary.
-#   spec, spec-traces the Quint spec and Engine trace replays: spec, engine, store, verification, resume.ts.
+#   spec, spec-simulate, spec-traces  the Quint spec (typecheck and scenario tests; the simulator,
+#                     in parallel to fit the budget) and Engine trace replays: spec, engine, store,
+#                     verification, resume.ts.
 #   build-daemon, smoke-*, service-windows: the binaries build, start and serve; Daemon or Client affected.
-#                     build-daemon cross-compiles on Linux what the smokes need; build-daemon-macos builds
-#                     and signs darwin-arm64.
+#                     build-daemon cross-compiles on Linux what the smokes need; the nightly builds and
+#                     signs darwin-arm64.
 #   bench             Daemon memory gates (bench-shards runs it 3 times in parallel): Daemon, Client,
 #                     protocol or SDK affected.
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
+#   relay             the relay's Rust (apps/relay, ADR 0105): fmt, clippy and its own tests; the relay
+#                     affected. Its contract suite runs in `test`, like every suite that starts a
+#                     relay, on the binary .github/actions/relay-binary builds or restores.
 #   macos-result      on a push to main, what the macOS jobs add up to (tooling/ci/macosResult.ts).
 #   ci-red            on a push to main, a Linear issue per red job (tooling/ci/ciRed.ts); not counted.
 #   ci                one result for branch protection: every job off macOS passed or was skipped. It
@@ -60,6 +66,7 @@ jobs:
       binaries: ${{ steps.scope.outputs.binaries }}
       bench: ${{ steps.scope.outputs.bench }}
       desktop: ${{ steps.scope.outputs.desktop }}
+      relay: ${{ steps.scope.outputs.relay }}
       macos: ${{ steps.macos.outputs.macos }}
     steps:
       # A PR's checkout is its merge commit: HEAD^1 is the base it merges into.
@@ -75,7 +82,7 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          flags=(daemon others spec-replays spec binaries bench desktop)
+          flags=(daemon others spec-replays spec binaries bench desktop relay)
           all() { for f in full "${flags[@]}"; do echo "$f=true" >> "$GITHUB_OUTPUT"; done; }
           if [ "$EVENT" != pull_request ]; then
             echo "A push to main runs everything." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -105,6 +112,7 @@ jobs:
           out binaries eval 'has @polaris/daemon @polaris/client || path "^scripts/build-daemon\.ts$"'
           out bench has @polaris/daemon @polaris/client @polaris/protocol @polaris/sdk
           out desktop has @polaris/desktop @polaris/daemon
+          out relay has @polaris/relay
 
           {
             echo "Affected packages (\`turbo query affected\`, HEAD^1..HEAD):"
@@ -153,7 +161,7 @@ jobs:
       matrix:
         os: [windows-latest]
     runs-on: ${{ matrix.os }}
-    steps: &platform-steps
+    steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -170,27 +178,8 @@ jobs:
           TMP: ${{ runner.temp }}
         # Windows ships a remote-only Client: tooling/ci/windows-client-tests.txt lists what runs there.
         run: bun test @(Get-Content tooling/ci/windows-client-tests.txt | Where-Object { $_ -and -not $_.StartsWith('#') })
-      - name: Typecheck and test scripts
-        if: runner.os != 'Windows'
-        run: bun check -p scripts && bun test ./scripts
-      - name: Release signer tests
-        if: runner.os != 'Windows'
-        run: python3 -I -m unittest discover -s tooling/release -p 'test_*.py'
-      - name: Typecheck scripts (Windows)
-        if: runner.os == 'Windows'
+      - name: Typecheck scripts
         run: bun check -p scripts
-
-  platform-checks-macos:
-    name: Platform checks (${{ matrix.os }})
-    # platform-checks' steps; reports on a PR without blocking it (see `ci-macos`).
-    needs: scope
-    if: needs.scope.outputs.macos == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15]
-    runs-on: ${{ matrix.os }}
-    steps: *platform-steps
 
   test:
     name: Test ${{ matrix.part.name }} (${{ matrix.os }})
@@ -201,7 +190,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        part: &test-parts
+        part:
           - name: Daemon 1/3
             scope: daemon
             run: bunx turbo run test {0} --filter=@polaris/daemon -- --shard=1/3 --parallel=2
@@ -264,6 +253,9 @@ jobs:
           node-version: 24
       - uses: ./.github/actions/bun-install
         if: env.RUN == 'true'
+      # The Daemon's, the Mobile App's and the relay's own suites start the relay's binary.
+      - uses: ./.github/actions/relay-binary
+        if: env.RUN == 'true'
       # Quint fetches its evaluator on first use through GitHub's unauthenticated API, which
       # shared runners exhaust; fetch it once, authenticated (tests replay traces through Quint).
       # It ships no Windows build, and no Daemon test runs Quint.
@@ -285,6 +277,12 @@ jobs:
       - name: Test
         if: env.RUN == 'true'
         run: ${{ format(matrix.part.run, env.AFFECTED) }}
+      # What `check` runs on Linux and platform-checks did on its own macOS runner (ENG-789).
+      - name: Typecheck and test scripts, release signer tests (macOS)
+        if: env.RUN == 'true' && runner.os == 'macOS' && matrix.part.scope == 'others'
+        run: |
+          bun check -p scripts && bun test ./scripts
+          python3 -I -m unittest discover -s tooling/release -p 'test_*.py'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always() && env.RUN == 'true' && runner.os == 'Windows'
         with:
@@ -294,14 +292,21 @@ jobs:
 
   test-macos:
     name: Test ${{ matrix.part.name }} (${{ matrix.os }})
-    # test's parts and steps on macOS; reports on a PR without blocking it (see `ci-macos`).
+    # test's steps on macOS in two jobs, not five, so a run needs fewer of the scarce macOS
+    # runners (ENG-789); reports on a PR without blocking it (see `ci-macos`).
     needs: scope
     if: needs.scope.outputs.macos == 'true'
     strategy:
       fail-fast: false
       matrix:
         os: [macos-15]
-        part: *test-parts
+        part:
+          - name: Daemon
+            scope: daemon
+            run: bunx turbo run test {0} --filter=@polaris/daemon -- --parallel=3
+          - name: other packages
+            scope: others
+            run: bunx turbo run test {0} --filter=!@polaris/daemon --filter=!@polaris/spec
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env: *test-env
@@ -324,12 +329,32 @@ jobs:
         run: bun packages/spec/scripts/fetch-evaluator.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Quint typecheck, scenario tests, simulation (fixed seed)
-        run: bun run spec
+      - name: Quint typecheck and scenario tests
+        run: bun run spec -- --part checks
+
+  spec-simulate:
+    name: Spec (Quint simulator)
+    # The simulator half of `bun run spec`, on its own runner so neither half sets the lane's time.
+    needs: scope
+    if: needs.scope.outputs.spec == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: ./.github/actions/bun-install
+      - name: Fetch the Quint evaluator
+        run: bun packages/spec/scripts/fetch-evaluator.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Quint simulation (fixed seed), witnesses and mutants
+        run: bun run spec -- --part simulate
 
   spec-traces:
     name: Spec trace validation, Apalache
-    # Apart from `spec`, whose Quint runs take 3-5 minutes on their own.
+    # Apart from `spec` and `spec-simulate`, whose Quint runs take minutes on their own.
     needs: scope
     if: needs.scope.outputs.spec == 'true'
     runs-on: ubuntu-latest
@@ -363,7 +388,7 @@ jobs:
 
   build-daemon:
     name: Build the Daemon
-    # Every target but darwin, which build-daemon-macos signs: on Linux, so the smokes never queue for macOS.
+    # Every target but darwin, which the nightly builds and signs: on Linux, so the smokes never queue for macOS.
     needs: scope
     if: needs.scope.outputs.binaries == 'true'
     runs-on: ubuntu-latest
@@ -381,21 +406,6 @@ jobs:
           name: polaris-daemon
           path: apps/daemon/dist/
           if-no-files-found: error
-
-  build-daemon-macos:
-    name: Build the Daemon (macos-15)
-    # darwin builds must be re-signed with macOS codesign, and run `polaris selftest` here.
-    needs: scope
-    if: needs.scope.outputs.binaries == 'true' && needs.scope.outputs.macos == 'true'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      # The bundler resolves every platform's ast-grep addon, whichever one it builds.
-      - run: bun install --frozen-lockfile --os=* --cpu=*
-      - run: bunx turbo run build --filter=@polaris/daemon -- darwin-arm64
 
   smoke-linux:
     name: Smoke-test ${{ matrix.platform }}
@@ -588,6 +598,37 @@ jobs:
           path: desktop-budgets.json
           if-no-files-found: warn
 
+  relay:
+    name: Relay (fmt, clippy, tests)
+    # The relay's Rust and the tests of what a WebSocket client library cannot send (ADR 0105).
+    needs: scope
+    if: needs.scope.outputs.relay == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/relay
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            apps/relay/target
+          key: relay-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/relay/rust-toolchain.toml', 'apps/relay/Cargo.lock') }}
+          restore-keys: relay-${{ runner.os }}-${{ runner.arch }}-
+      # The toolchain rust-toolchain.toml pins, with rustfmt and clippy.
+      - name: Rust toolchain
+        run: rustup toolchain install --no-self-update
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --locked -p polaris-relay
+
   ci:
     name: CI
     # The check branch protection requires. No macOS job in `needs`: they are in ci-macos.
@@ -598,6 +639,7 @@ jobs:
         platform-checks,
         test,
         spec,
+        spec-simulate,
         spec-traces,
         build-daemon,
         smoke-linux,
@@ -605,6 +647,7 @@ jobs:
         service-windows,
         bench,
         desktop-budgets,
+        relay,
       ]
     if: always()
     runs-on: ubuntu-latest
@@ -623,7 +666,7 @@ jobs:
   macos-result:
     name: macOS result
     # Failed if a macOS job did, no-result if no runner acquired one; if this fails, ci-macos runs and goes red.
-    needs: [platform-checks-macos, test-macos, build-daemon-macos]
+    needs: [test-macos]
     if: ${{ !cancelled() && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -649,7 +692,7 @@ jobs:
     name: CI (macOS)
     # On a push to main, what `ci` is to the jobs off macOS. Nothing requires this check.
     # `scope` is here so a failed one can't pass this by skipping every macOS job.
-    needs: [scope, platform-checks-macos, test-macos, build-daemon-macos, macos-result]
+    needs: [scope, test-macos, macos-result]
     if: ${{ always() && github.event_name == 'push' && needs.macos-result.outputs.result != 'no-result' }}
     runs-on: ubuntu-latest
     steps: *aggregate-steps

@@ -4,6 +4,7 @@
  * with its options, so anything Home sends here can be answered here.
  */
 import { ApprovalDecision, type ApprovalRequest } from "@polaris/protocol";
+import { Match } from "effect";
 import { approvalDetail, askLine } from "../home/model/lines.ts";
 
 export interface RequestQuestion {
@@ -20,7 +21,14 @@ export type RequestCard =
       /** Every line of what the Harness asked to run or change. */
       readonly detail: string | null;
     }
-  | { readonly kind: "questions"; readonly questions: ReadonlyArray<RequestQuestion> };
+  | { readonly kind: "questions"; readonly questions: ReadonlyArray<RequestQuestion> }
+  /** A Secret Request (ADR 0089): answered with a value or declined, never allowed. */
+  | {
+      readonly kind: "secret";
+      readonly label: string;
+      readonly reason: string | null;
+      readonly placeholder: string | null;
+    };
 
 /** A question from a Daemon before ENG-450 carries only its title and first choices. */
 const questionsOf = (approval: ApprovalRequest): ReadonlyArray<RequestQuestion> => {
@@ -39,13 +47,23 @@ const questionsOf = (approval: ApprovalRequest): ReadonlyArray<RequestQuestion> 
 };
 
 export const requestCard = (approval: ApprovalRequest): RequestCard =>
-  approval.kind === "question"
-    ? { kind: "questions", questions: questionsOf(approval) }
-    : {
-        kind: "permission",
-        ask: askLine(approval),
-        detail: approvalDetail(approval)?.text ?? null,
-      };
+  Match.value(approval.kind).pipe(
+    Match.when("question", (): RequestCard => ({
+      kind: "questions",
+      questions: questionsOf(approval),
+    })),
+    Match.when("secret", (): RequestCard => ({
+      kind: "secret",
+      label: approval.title,
+      reason: approval.detail,
+      placeholder: approval.placeholder ?? null,
+    })),
+    Match.orElse((): RequestCard => ({
+      kind: "permission",
+      ask: askLine(approval),
+      detail: approvalDetail(approval)?.text ?? null,
+    }))
+  );
 
 /** Picks per question, in order: chosen labels, or the typed answer as one entry. */
 export type Picks = ReadonlyArray<ReadonlyArray<string>>;

@@ -8,6 +8,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { childEnv } from "./childEnv.ts";
 
 /**
  * The variables' names and how often each stands in Bun 1.4.4's darwin-arm64 runtime.
@@ -142,7 +143,11 @@ export const openRoutes = async (
       const env = route.env(script);
 
       const proc = Bun.spawn([binary, ...(route.args?.(script) ?? command)], {
-        env: { HOME: dir, POLARIS_HOME: dir, ...(names === "sealed" ? sealedEnv(env) : env) },
+        env: childEnv({
+          HOME: dir,
+          POLARIS_HOME: dir,
+          ...(names === "sealed" ? sealedEnv(env) : env),
+        }),
         stdin: "ignore",
         stdout: "ignore",
         stderr: "ignore",

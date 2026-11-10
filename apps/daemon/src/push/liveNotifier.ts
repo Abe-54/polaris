@@ -3,6 +3,7 @@
  * follows the Host stream only while some device has an activity registered; a change is sent
  * after `LIVE_DEBOUNCE_MS`, a new Needs You at once with an alert, and every slice again
  * whenever the registrations change or the relay socket connects. Nothing runs while idle.
+ * A clean shutdown sends a last idle slice, so the activity stops saying "working" (ENG-585).
  */
 import type { Capability, HostStreamItem } from "@polaris/protocol";
 import { encodeHostSlice } from "@polaris/protocol/relay";
@@ -10,10 +11,20 @@ import { Context, Effect, Fiber, Layer, Stream } from "effect";
 import { Engine } from "../engine/Engine.ts";
 import { RelayRoute } from "../linkedDevices/route.ts";
 import { sealSlice } from "./live.ts";
-import { emptySlice, opensNeed, renderSlice, type SliceState, sliceItem } from "./slice.ts";
+import {
+  emptySlice,
+  opensNeed,
+  renderSlice,
+  type SliceContent,
+  type SliceState,
+  sliceItem,
+} from "./slice.ts";
 
 /** How long changes gather before a slice goes out; the relay coalesces further, to one per 5 s. */
 export const LIVE_DEBOUNCE_MS = 1_000;
+
+/** How long shutdown waits for the last idle slice to be sealed and sent. */
+const IDLE_SLICE_TIMEOUT = "2 seconds";
 
 const LIVE_CAPABILITIES: ReadonlyArray<Capability> = ["session.user-turns"];
 
@@ -53,21 +64,34 @@ export const LiveNotifier = Layer.effectDiscard(
       timer = null;
     };
 
+    const sendSlice = (content: SliceContent, alert: boolean) => {
+      const slice = { ...content, seq: ++seq };
+      const active = content.working > 0 || content.needs > 0;
+
+      return Effect.forEach(
+        route.liveTargets(),
+        (target) =>
+          Effect.promise(() => sealSlice(target.registration.pushKey, slice)).pipe(
+            Effect.map((sealed) => route.sendLive(target, { sealed, active, alert }))
+          ),
+        { concurrency: "unbounded", discard: true }
+      );
+    };
+
     const flush = (alert: boolean) => {
       cancel();
       const content = renderSlice(state, route.host);
-      const slice = { ...content, seq: ++seq };
       sent = encodeHostSlice({ ...content, seq: 0 });
       sentNeeds = new Set(state.needs.keys());
-      const active = content.working > 0 || content.needs > 0;
-
-      for (const target of route.liveTargets())
-        runFork(
-          Effect.promise(() => sealSlice(target.registration.pushKey, slice)).pipe(
-            Effect.map((sealed) => route.sendLive(target, { sealed, active, alert }))
-          )
-        );
+      runFork(sendSlice(content, alert));
     };
+
+    // Nothing working, nothing waiting: what the activity shows once this Daemon has stopped.
+    const sendIdle = () =>
+      sendSlice(renderSlice(emptySlice, route.host), false).pipe(
+        Effect.timeout(IDLE_SLICE_TIMEOUT),
+        Effect.ignore
+      );
 
     const changed = () => {
       if (!state.synchronized) return;
@@ -110,9 +134,12 @@ export const LiveNotifier = Layer.effectDiscard(
     const unwatch = route.watchLive(reconcile);
     reconcile();
     yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
+        const sentSome = state.synchronized;
         unwatch();
         stop();
+
+        return sentSome ? sendIdle() : Effect.void;
       })
     );
   })

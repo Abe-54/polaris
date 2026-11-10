@@ -11,7 +11,7 @@ Thanks for helping. This guide covers what you need to make a change that passes
 
 ## Setup
 
-You need [Bun](https://bun.sh) 1.4.4 or later (the exact version is pinned in `package.json`'s `packageManager`) and git.
+You need [Bun](https://bun.sh) 1.4.4 or later (the exact version is pinned in `package.json`'s `packageManager`) and git. The tests that start a relay (the relay's own, the daemon's linked device tests, the mobile app's relay tests) also need [rustup](https://rustup.rs): cargo builds `apps/relay` on their first run.
 
 ```sh
 git clone https://github.com/luxdotdev/polaris.git
@@ -115,9 +115,10 @@ On a pull request, CI selects by what the change affects (`turbo query affected`
 | Quint spec and trace validation | Ubuntu | `packages/spec/`, `apps/daemon/src/engine/`, `store/` or `verification/`, or `packages/client/src/resume.ts` changed |
 | Bench (memory and start-up modules gate; latency and CPU only report) | Ubuntu | the daemon, client, protocol or SDK is affected |
 | Desktop budgets | Ubuntu | the desktop app or the daemon is affected |
+| Relay: format, clippy and its Rust tests (its contract suite runs with the tests above) | Ubuntu | the relay is affected |
 | Daemon build (every target but darwin), smokes (Linux x64 and arm64, Windows with its pipe), Windows service end to end | Ubuntu for the build, then each platform | the daemon or client is affected, or `scripts/build-daemon.ts` changed |
 
-**macOS** runs its tests, platform checks and darwin daemon build on a pull request only when the change could behave differently there (`tooling/ci/macosScope.ts`): a non-test source file that mentions `darwin`, `launchd`, `codesign`, `macOS` or `process.platform`, or `ci.yml`, `.github/actions/`, `bun.lock`, `package.json`, `patches/`, `scripts/build-daemon*`, `tooling/test/` or `apps/daemon/scripts/`. There they only report, often after `CI` has. On a push to main they always run and the `CI (macOS)` job counts them; the nightly counts its macOS tests too. `CI` itself never includes them, on main or on a pull request, so read `CI` and `CI (macOS)` together for main's state:
+**macOS** runs its tests and scripts' checks, in two jobs, on a pull request only when the change could behave differently there (`tooling/ci/macosScope.ts`): a non-test source file that mentions `darwin`, `launchd`, `codesign`, `macOS` or `process.platform`, or `ci.yml`, `.github/actions/`, `bun.lock`, `package.json`, `patches/`, `scripts/build-daemon*`, `tooling/test/` or `apps/daemon/scripts/`. There they only report, often after `CI` has. On a push to main they always run and the `CI (macOS)` job counts them; the nightly counts its macOS tests too, and builds and signs the darwin Daemon. `CI` itself never includes them, on main or on a pull request, so read `CI` and `CI (macOS)` together for main's state:
 
 | `CI (macOS)` on a push to main | Means |
 |---|---|

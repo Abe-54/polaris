@@ -33,6 +33,7 @@
     "expo-haptics": "58.0.7",
     "expo-image-picker": "58.0.10",
     "expo-notifications": "58.1.6",
+    "expo-screen-orientation": "58.0.4",
     "expo-secure-store": "58.0.2",
     "expo-status-bar": "58.0.4",
     "marked": "18.0.14",
@@ -50,8 +51,10 @@
   },
   "devDependencies": {
     "@bacons/apple-targets": "5.0.0",
+    "@polaris/relay": "workspace:*",
     "@types/react": "19.3.0",
     "hermes-compiler": "260318099.0.4",
-    "sodium-native": "5.2.0"
+    "sodium-native": "5.2.0",
+    "typescript-js": "npm:typescript@6.0.3"
   }
 }

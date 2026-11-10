@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConnectionStatusView, MachineView } from "../../../../shared/api.ts";
 import { HostId } from "@polaris/protocol";
 import { clientCopy } from "../../../../shared/clientCopy.ts";
+import { setClientPlatform } from "../../../../shared/platform.ts";
 import { hostName, listLine, pageLine, pill } from "./state.ts";
 
 const NOW = 1_800_000_000_000;
@@ -88,12 +89,16 @@ test("the header's line has the alias, platform, workspaces and daemon version",
 });
 
 describe("the local Host's row (Paper HS-D2)", () => {
-  const local = (label: string): MachineView => ({
+  const local = (
+    label: string,
+    hostname = "lucas-mbp",
+    platform: "darwin-arm64" | "windows-x64" = "darwin-arm64"
+  ): MachineView => ({
     ...machine({
       host: {
         hostId: HostId.make("l"),
-        hostname: "lucas-mbp",
-        platform: "darwin-arm64",
+        hostname,
+        platform,
         daemonVersion: "0.5.0",
         homeDir: "/Users/lucas",
         startedAt: "2026-10-30T00:00:00.000Z",
@@ -112,8 +117,20 @@ describe("the local Host's row (Paper HS-D2)", () => {
     expect(listLine(local("MacBook Pro"))).toBe("MacBook Pro · macOS arm64");
   });
 
-  test("never repeats This Mac in its line when the user left the default name", () => {
-    expect(listLine(local(thisClient))).toBe("macOS arm64");
+  test("with the default name, the line names the machine by its hostname, never This Mac again", () => {
+    expect(listLine(local(thisClient))).toBe("lucas-mbp · macOS arm64");
+  });
+
+  test("on Windows, This PC over its hostname, not This PC twice", () => {
+    setClientPlatform("win32");
+
+    try {
+      const view = local("This PC", "LUCAS-DESKTOP", "windows-x64");
+
+      expect([hostName(view), listLine(view)]).toEqual(["This PC", "LUCAS-DESKTOP · Windows x64"]);
+    } finally {
+      setClientPlatform(null);
+    }
   });
 
   test("a remote host keeps its own name", () => {

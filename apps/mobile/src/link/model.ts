@@ -2,6 +2,7 @@
  * Linking as a pure model (DESIGN.md, Mobile chrome redesign · phase 3; Paper MX-AH to MX-AM):
  * each step of the scan sheet, how an event moves it, and the star's light in each.
  */
+import { HORIZON_HEIGHT, MOON_TOP, RIDGE_TOP } from "../horizon/scene.ts";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 
 /** What a scanned or pasted text named: the Host it came from, then every Host it shares. */
@@ -137,3 +138,33 @@ export const HEADING_TOP_MIN = 12;
  */
 export const headingTop = (room: number, heading: number): number =>
   Math.min(HEADING_TOP, Math.max(HEADING_TOP_MIN, room - heading - HEADING_TOP_MIN));
+
+/** The least gap between the lead's last line and Moonlit's moon. */
+const MOON_GAP = 8;
+
+/** Which of the pairing sky's star and moon have room to show. */
+export interface SkyShows {
+  readonly star: boolean;
+  readonly moon: boolean;
+}
+
+/** Where the pairing sky's parts fall on screen, in points from the top. */
+export interface SkyLayout {
+  /** The sheet's top: the horizon rests on it. */
+  readonly sheetTop: number;
+  readonly headingBottom: number;
+  readonly starBottom: number;
+}
+
+/**
+ * When room is short (a tall sheet, accessibility text sizes), the star and the moon give way
+ * rather than sit behind the sheet or draw over the lead.
+ */
+export const skyShows = ({ sheetTop, headingBottom, starBottom }: SkyLayout): SkyShows => {
+  const horizonTop = sheetTop - HORIZON_HEIGHT;
+
+  return {
+    star: starBottom <= horizonTop + RIDGE_TOP,
+    moon: headingBottom + MOON_GAP <= horizonTop + MOON_TOP,
+  };
+};

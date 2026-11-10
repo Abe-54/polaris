@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { paths } from "../../paths.ts";
 import { runtimePlatform } from "../../platform/index.ts";
-import { background, type Installer, type InstallPolicy, POLICY } from "../background.ts";
+import { DEFAULT_POLICY, type Installer, type InstallPolicy, onDemand } from "../onDemand.ts";
 import {
   type InstallOptions,
   type InstalledAgentDesktop,
@@ -26,12 +26,17 @@ export class AgentDesktopUnavailable extends Schema.TaggedError<AgentDesktopUnav
 
 export type AgentDesktopInstaller = Installer<InstallOptions, InstalledAgentDesktop>;
 
-const TOOL = {
-  name: "agent-desktop",
-  version: AGENT_DESKTOP_VERSION,
-  ready: "later sessions get desktop control",
-  unavailable: (message: string) => new AgentDesktopUnavailable({ message }),
-};
+const background = (
+  options: () => InstallOptions,
+  installer: AgentDesktopInstaller,
+  policy: InstallPolicy
+) =>
+  onDemand(options, installer, policy, {
+    unavailable: (message) => new AgentDesktopUnavailable({ message }),
+    unresolved: "can't tell which agent-desktop build this Host needs",
+    installing: `agent-desktop ${AGENT_DESKTOP_VERSION} is installing; later sessions get desktop control`,
+    failed: (reason) => `installing agent-desktop failed (${reason}); trying again`,
+  }).current;
 
 export class AgentDesktop extends Context.Service<
   AgentDesktop,
@@ -47,10 +52,10 @@ export class AgentDesktop extends Context.Service<
   static readonly layerWith = (
     options: () => InstallOptions,
     installer: AgentDesktopInstaller = { onDisk: installedOnDisk, install: installAgentDesktop },
-    policy: InstallPolicy = POLICY
+    policy: InstallPolicy = DEFAULT_POLICY
   ) =>
     Layer.sync(AgentDesktop, () =>
-      AgentDesktop.of({ current: background(TOOL, options, installer, policy) })
+      AgentDesktop.of({ current: background(options, installer, policy) })
     );
 
   static readonly layer = AgentDesktop.layerWith(() => ({

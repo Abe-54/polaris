@@ -1,11 +1,11 @@
 /**
  * The span panel's actions (Paper T1, T2): "Open profile range" when the open Profile recorded
- * part of the span, "Open in Data ⌘4" on a database span whose Data Source this checkout has,
- * and the code location ("overdue.ts:61 ⌘3"), which opens in the Editor.
+ * part of the span, "Open in Data" on a database span whose Data Source this checkout has, and
+ * the code location ("overdue.ts:61"), which opens in the Editor. ⌘4 and ⌘3 only switch mode,
+ * so neither pill shows them (ENG-687).
  */
 import type { Span } from "@polaris/protocol";
 import { useShellActions } from "../../../../shell/hooks.ts";
-import { menuShortcut } from "../../../../shell/menu/index.ts";
 import { useDataSources } from "../../../data/data/hooks.tsx";
 import { openSqlTab, openTable } from "../../../data/model/store.ts";
 import { defaultSchema } from "../../../data/output/model.ts";
@@ -43,12 +43,7 @@ const OpenInData = ({ at, span }: { readonly at: TracesSessionKey; readonly span
   };
 
   return (
-    <Pill
-      onClick={open}
-      hint={menuShortcut("view.data")}
-      title={`Open ${source.name} in Data`}
-      testId="span-open-data"
-    >
+    <Pill onClick={open} title={`Open ${source.name} in Data`} testId="span-open-data">
       Open in Data
     </Pill>
   );
@@ -116,7 +111,6 @@ export const SpanActions = ({
               column: location.column,
             })
           }
-          hint={menuShortcut("view.edit")}
           title={`Open ${location.path} in the editor`}
           testId="span-open-code"
         >

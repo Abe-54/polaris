@@ -5,6 +5,8 @@
  */
 export { NewSessionPage, type NewSessionPageProps } from "./ui/NewSessionPage.tsx";
 
+export { BackgroundFailureToasts } from "./ui/BackgroundFailureToasts.tsx";
+
 export { SessionIntent, type SessionViewProps } from "./ui/SessionIntent.tsx";
 
 export { SessionOutput, type SessionOutputProps } from "./ui/SessionOutput.tsx";
@@ -24,6 +26,8 @@ export {
 export { leaveBrowser, onAgentTab, pickBrowser } from "./output/browser.ts";
 
 export { BrowserOutputTab } from "./ui/BrowserOutput.tsx";
+
+export { leaveSimulator, onAgentSimulator, pickSimulator } from "./output/simulator.ts";
 
 export { clampWidth, defaultWidth, KEY_STEP, RAIL_WIDTH, widthCss } from "./output/layout.ts";
 

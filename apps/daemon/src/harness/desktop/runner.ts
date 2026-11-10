@@ -98,7 +98,7 @@ export const directRunner = Effect.gen(function* () {
         const running = yield* Effect.try({
           try: () =>
             Bun.spawn([binary, ...args], {
-              env: { ...childEnv(), ...env },
+              env: childEnv({ ...process.env, ...env }),
               stdin: "ignore",
               stdout: "pipe",
               stderr: "ignore",

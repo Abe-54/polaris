@@ -7,6 +7,7 @@ import type {
   TraceDetail,
   TraceError,
   TraceFilter,
+  LogCursor,
   SpanDetail,
 } from "@polaris/protocol";
 import type { IngestError, IngestContext } from "./ingest.ts";
@@ -80,7 +81,8 @@ export class TraceStore extends Context.Service<
     readonly span: (
       checkout: string,
       traceId: string,
-      spanId: string
+      spanId: string,
+      before?: LogCursor
     ) => Effect.Effect<SpanDetail, TraceError>;
     readonly history: (
       checkout: string,

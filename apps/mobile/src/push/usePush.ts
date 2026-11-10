@@ -13,6 +13,7 @@ import type { Route } from "../app/route.ts";
 import { answerOf, PUSH_CATEGORIES, routeOf } from "./answer.ts";
 import { answerHost, deliverAnswer, unsentNotice } from "./deliver.ts";
 import { useConstellationNotifications } from "./constellations.ts";
+import { hostNotifications, useHostNotificationsKey } from "./hostNotifications.ts";
 import { type PushDevice, registerPush } from "./registration.ts";
 
 /** A Host linked over the relay: where its registration's ticket points. */
@@ -125,7 +126,8 @@ const useRegistrations = (
   const hosts = useHosts();
   const [device, setDevice] = useState<PushDevice | null>(null);
   const automatic = useConstellationNotifications();
-  // Per Host, the connection epoch and switch it was registered with: a change registers again.
+  const switchedOff = useHostNotificationsKey();
+  // Per Host, the connection epoch and switches it was registered with: a change registers again.
   const registered = useRef(new Map<string, string>());
 
   const hadIdentity = useRef(false);
@@ -156,11 +158,12 @@ const useRegistrations = (
         const live = host?.live() ?? null;
 
         if (host === undefined || live === null) continue;
-        const key = `${live.epoch}:${automatic}`;
+        const notifications = hostNotifications.get(hostId);
+        const key = `${live.epoch}:${automatic}:${notifications}`;
 
         if (registered.current.get(hostId) === key) continue;
         registered.current.set(hostId, key);
-        void registerPush(host, device, hostAddress, automatic).catch(() =>
+        void registerPush(host, device, hostAddress, { automatic, notifications }).catch(() =>
           registered.current.delete(hostId)
         );
       }
@@ -172,7 +175,7 @@ const useRegistrations = (
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
     };
-  }, [device, hosts, linked, automatic]);
+  }, [device, hosts, linked, automatic, switchedOff]);
 };
 
 /**

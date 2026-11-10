@@ -302,6 +302,18 @@ describe("probeHarness", () => {
     expect(readdirSync(host.home)).toEqual([]);
   });
 
+  test("OpenCode 2 says plainly it isn't supported yet, with its version (ENG-571)", async () => {
+    const host = fakeHost();
+    fakeBinary(host, "opencode", { version: "echo 2.0.28; exit 0", status: "exit 0" });
+
+    expect(await probe("opencode", host.env)).toMatchObject({
+      status: "unknown",
+      version: "2.0.28",
+      detail:
+        "OpenCode 2.0.28 isn't supported yet: Polaris works with OpenCode 1 (1.18.33 or newer)",
+    });
+  });
+
   test("an ACP Harness never run on the Host needs sign-in; otherwise it can't say", async () => {
     const host = fakeHost();
     fakeBinary(host, "copilot", {
@@ -365,7 +377,7 @@ test("probing loads no driver, so the Agent SDK, Codex bindings, OpenCode and AC
       )
     );
     const loaded = Object.keys(require.cache).filter((k) =>
-      /claude-agent-sdk|harness\\/(claude|codex|opencode)\\/|harness\\/acp\\/(?!harnesses\\.ts)/.test(k)
+      /claude-agent-sdk|harness\\/(claude|codex)\\/|harness\\/opencode\\/(?!version\\.ts)|harness\\/acp\\/(?!harnesses\\.ts)/.test(k)
     );
     console.log(JSON.stringify(loaded));
   `;

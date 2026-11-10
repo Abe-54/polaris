@@ -10,8 +10,10 @@ import {
   TRACES_COMPARE_CAPABILITY,
   TRACES_PROFILES_CAPABILITY,
   TRACES_SETTINGS_CAPABILITY,
+  TRACES_SKILL_CAPABILITY,
   TraceError,
   TraceSettingsError,
+  TraceSkillError,
   Unsupported,
 } from "@polaris/protocol";
 import { Effect, Schema, Stream } from "effect";
@@ -25,6 +27,7 @@ const TRACES_UPGRADE = "Traces need a newer daemon on this host";
 
 const UPGRADE = new Map<string, string>([
   [TRACES_SETTINGS_CAPABILITY, "Traces settings need a newer daemon on this host"],
+  [TRACES_SKILL_CAPABILITY, "Setting up tracing needs a newer daemon on this host"],
   [TRACES_COMPARE_CAPABILITY, "Comparing traces needs a newer daemon on this host"],
   ["traces.profiles.attach", "Inspector profiling needs a newer daemon on this host"],
   [TRACES_PROFILES_CAPABILITY, "Profiles need a newer daemon on this host"],
@@ -35,6 +38,7 @@ export const toTracesIpcError = (error: Tagged): IpcError => {
   if (
     Schema.is(TraceError)(error) ||
     Schema.is(TraceSettingsError)(error) ||
+    Schema.is(TraceSkillError)(error) ||
     Schema.is(ProfileError)(error)
   )
     return { code: error.code, message: error.message, fix: error.fix };
@@ -93,6 +97,10 @@ export const tracesHandlers = {
   "traces.setSettings": ({ hostKey, ...input }: RequestInput<"traces.setSettings">) =>
     onHost(hostKey, TRACES_SETTINGS_CAPABILITY, (session) =>
       session.client["traces.setSettings"](input)
+    ),
+  "traces.installSkill": ({ hostKey, ...input }: RequestInput<"traces.installSkill">) =>
+    onHost(hostKey, TRACES_SKILL_CAPABILITY, (session) =>
+      session.client["traces.installSkill"](input)
     ),
   "traces.compare": ({ hostKey, ...input }: RequestInput<"traces.compare">) =>
     onHost(hostKey, TRACES_COMPARE_CAPABILITY, (session) =>

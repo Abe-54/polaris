@@ -45,7 +45,7 @@ import { promptFor, sentMessages, shellDraft, useMentionSearch } from "../../com
 import { RotatingVerb, useWorkingVerbs } from "../verbs/index.ts";
 import { type ComposerCommands, DraftComposer } from "./DraftComposer.tsx";
 import { useComposerCommands } from "./useComposerCommands.ts";
-import { ComposerStatus } from "./ComposerStatus.tsx";
+import { ComposerStatus, draftCaption } from "./ComposerStatus.tsx";
 import { useCompact } from "./ContextCard.tsx";
 import { NoticeStrip } from "./NoticeStrip.tsx";
 import { notices } from "../model/notices.ts";
@@ -351,6 +351,8 @@ export const SessionComposer = (props: SessionComposerProps) => {
         }
       : undefined;
 
+  const roster = subagentRoster(model.turns);
+
   const strip = (
     <NoticeStrip
       harness={harness}
@@ -363,6 +365,7 @@ export const SessionComposer = (props: SessionComposerProps) => {
         contextDismissedAt,
         limited: session.state === "limited",
         resetsAt: session.limitResetsAt ?? null,
+        subagents: roster.rows,
       })}
       working={working}
       onUnqueue={props.outbox.edit}
@@ -411,11 +414,12 @@ export const SessionComposer = (props: SessionComposerProps) => {
           hostKey={hostKey}
           harness={harness}
           session={session}
-          roster={subagentRoster(model.turns)}
+          roster={roster}
           onOpenSubagent={(id) =>
             openSubagent({ hostKey, workspaceId: session.workspaceId }, session.id, id)
           }
           turnNumber={lastTurn === null ? null : turnNumber(model.turns, lastTurn.id)}
+          draft={draftCaption(ui.draft, ui.draftStatus)}
         />
       }
       onEscape={isWorking ? stop : shell.escape}

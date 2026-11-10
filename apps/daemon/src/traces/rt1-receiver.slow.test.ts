@@ -1,5 +1,5 @@
 import { tempDir } from "../platform/tempDir.testing.ts";
-// RT1 repros (ENG-656) for the receiver and token lifetime. Expected to FAIL on 08798fa8f.
+// RT1 regressions (ENG-656) for the receiver and token lifetime.
 import { expect, test } from "bun:test";
 import { connect, type Socket } from "node:net";
 import { mkdir, rm } from "node:fs/promises";

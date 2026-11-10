@@ -19,6 +19,7 @@ import {
   firstWaiter,
   holders,
   type LeaseWaiter,
+  SCRIPT_RESOURCES,
   WORKERS_RESOURCE,
 } from "./model.ts";
 import { canGrantResource } from "./decide.ts";
@@ -353,7 +354,18 @@ export const resourcesLayer = Layer.effect(
               ]
         );
 
-        if (abandoned.length > 0) yield* write(null, abandoned);
+        const scripts = SCRIPT_RESOURCES.filter((name) => !model.resources.has(name)).map((name) =>
+          DomainEvent.cases.ResourceDeclared.make({
+            resource: HostResource.make({
+              hostId,
+              name,
+              capacity: 1,
+              holdLimitMs: DEFAULT_HOLD_LIMIT_MS,
+            }),
+          })
+        );
+
+        if (abandoned.length + scripts.length > 0) yield* write(null, [...abandoned, ...scripts]);
         yield* check();
       })
     ).pipe(Effect.orDie);

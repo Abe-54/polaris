@@ -480,7 +480,15 @@ export const CommitDataEdits = Rpc.make("data.edits.commit", {
 });
 
 export const GetDataSchemaDiff = Rpc.make("data.schemaDiff", {
-  payload: { sessionId: SessionId, turn: Schema.optionalKey(TurnId) },
+  payload: {
+    sessionId: SessionId,
+    turn: Schema.optionalKey(TurnId),
+    /**
+     * A Turn group (`data.schemaDiff.turns`): `turn` and the Turns the Harness started after it,
+     * compared from the first's before to the last's after.
+     */
+    turns: Schema.optionalKey(Schema.Array(TurnId).check(Schema.isMaxLength(1000))),
+  },
   success: DataSchemaDiff,
   error: Errors,
 });

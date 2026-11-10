@@ -1,18 +1,18 @@
 # The Polaris Relay. Build from the repository root:
 #   docker build -f apps/relay/Dockerfile -t polaris-relay .
-FROM oven/bun:1.4.4-slim AS install
-WORKDIR /repo
-COPY . .
-RUN bun install --frozen-lockfile --production --ignore-scripts --filter @polaris/relay
+# The image tag is the toolchain; keep it in step with rust-toolchain.toml.
+FROM rust:1.99.1-bookworm AS build
+WORKDIR /src
+COPY apps/relay .
+RUN cargo build --release --locked -p polaris-relay
 
-FROM oven/bun:1.4.4-slim
-WORKDIR /app
-COPY --from=install /repo/package.json ./package.json
-COPY --from=install /repo/node_modules ./node_modules
-COPY --from=install /repo/packages/protocol ./packages/protocol
-COPY --from=install /repo/apps/relay ./apps/relay
-ENV NODE_ENV=production PORT=8080
+FROM debian:bookworm-slim
+# The push service is reached over TLS, verified against the system's certificates.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=build /src/target/release/polaris-relay /usr/local/bin/polaris-relay
+ENV PORT=8080
 EXPOSE 8080
-USER bun
-HEALTHCHECK --interval=30s --timeout=3s CMD bun -e "fetch('http://127.0.0.1:' + process.env.PORT + '/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
-CMD ["bun", "apps/relay/src/main.ts"]
+USER nobody
+CMD ["polaris-relay"]

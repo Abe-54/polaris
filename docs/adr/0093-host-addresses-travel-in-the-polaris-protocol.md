@@ -41,5 +41,7 @@ certificate: its bytes travel only over Polaris's authenticated link and the Hos
   reload must be benchmarked for head-of-line delay before this ships.
 - The same stream carries over to the Polaris Relay when the Mobile App gets a Browser.
 - Non-Host URLs in a remote Host's partition skip the system proxy, as PAC `DIRECT` would.
-- Names a Host's `/etc/hosts` maps to loopback (Portless `.test`, custom domains) are not Host
-  addresses yet.
+- Names a Host's hosts file maps to loopback (Portless `.test`, custom domains) are Host
+  addresses too (ENG-621): the Daemon reads the file on each `hostAddress.names` and
+  `hostAddress.open`, and connects such a name to the address the file gives it. The Desktop
+  App asks at each partition setup and keeps those exact names out of the bypass rules.

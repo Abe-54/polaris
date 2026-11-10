@@ -18,6 +18,11 @@ import { dirname, join } from "node:path";
 import { Match, Schema } from "effect";
 import { BETTERLEAKS_VERSION } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { auditProblems, GoAudit, renderGoNotices } from "./goLicenses.ts";
+import {
+  readSimulatorAudit,
+  renderSimulatorNotices,
+  simulatorAuditStale,
+} from "./simulatorLicenses.ts";
 
 export const ALLOWED = new Set([
   "MIT",
@@ -463,6 +468,19 @@ export const renderNotices = (verdicts: ReadonlyArray<Verdict>): string => {
   return `${lines.join("\n").trimEnd()}\n`;
 };
 
+/** A Simulator tool package as `judge` sees it: installed by the Daemon, not by a workspace. */
+const simulatorDependency = (p: {
+  readonly name: string;
+  readonly version: string;
+  readonly license: string | null;
+}): Dependency => ({
+  ...p,
+  dir: "",
+  repository: null,
+  requiredBy: new Set(["the Simulator's tools"]),
+  platformBuilds: [],
+});
+
 const main = () => {
   const check = process.argv.includes("--check");
   const { deps, platformBuilds, missing } = collect();
@@ -505,7 +523,21 @@ const main = () => {
     failed = true;
   }
 
-  const notices = `${renderNotices(verdicts)}\n${renderGoNotices(goAudit)}`;
+  const simulatorAudit = readSimulatorAudit();
+
+  const simulatorProblems = [
+    ...simulatorAuditStale(simulatorAudit),
+    ...judge(simulatorAudit.packages.map(simulatorDependency), exceptions)
+      .filter((v) => v.status === "violation")
+      .map(({ dep }) => `${dep.name}@${dep.version}: ${dep.license ?? "no licence declared"}`),
+  ];
+
+  if (simulatorProblems.length > 0) {
+    console.error(`The Simulator's tools:\n  ${simulatorProblems.join("\n  ")}`);
+    failed = true;
+  }
+
+  const notices = `${renderNotices(verdicts)}\n${renderGoNotices(goAudit)}\n${renderSimulatorNotices(simulatorAudit)}`;
 
   if (check) {
     const current = existsSync(noticesPath) ? readFileSync(noticesPath, "utf8") : "";

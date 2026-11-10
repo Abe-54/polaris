@@ -14,14 +14,25 @@ export interface Owner {
 /** What the owner lookup needs: a TCP port on loopback, or a Unix socket path. */
 export type ListenerAddress = Pick<DataConnection, "hostname" | "port" | "path">;
 
-export const command = (file: string, args: string[]) =>
+/** Settles within `limit` ms even when the child never exits (lsof stuck in state U). */
+export const command = (file: string, args: string[], limit = 1000) =>
   new Promise<string>((resolve) => {
-    execFile(
+    const child = execFile(
       file,
       args,
-      { timeout: 1000, maxBuffer: 1024 * 1024, env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" } },
-      (error, stdout) => resolve(error ? "" : stdout)
+      { maxBuffer: 1024 * 1024, env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" } },
+      (error, stdout) => {
+        clearTimeout(timer);
+        resolve(error ? "" : stdout);
+      }
     );
+
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      resolve("");
+    }, limit);
   });
 
 const socketPath = (connection: ListenerAddress) =>

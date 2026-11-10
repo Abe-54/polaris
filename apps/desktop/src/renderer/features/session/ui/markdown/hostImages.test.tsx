@@ -24,8 +24,8 @@ const freshHost = () => {
   return `mac-studio-${hosts}`;
 };
 
-const message = (text: string, hostKey: string, root = "/work/repo") => (
-  <EditorPlaceProvider value={{ hostKey, root }}>
+const message = (text: string, hostKey: string, root = "/work/repo", windows = false) => (
+  <EditorPlaceProvider value={{ hostKey, root, windows }}>
     <Streamed text={text} live={false} />
   </EditorPlaceProvider>
 );
@@ -78,7 +78,7 @@ test("a tool's native Windows image path is absolute and labels its filename", a
   const path = "C:\\Users\\Developer\\.codex\\generated_images\\strip.png";
 
   const view = render(
-    <EditorPlaceProvider value={{ hostKey: freshHost(), root: "D:\\work\\repo" }}>
+    <EditorPlaceProvider value={{ hostKey: freshHost(), root: "D:\\work\\repo", windows: true }}>
       <HostImage path={path} alt="" />
     </EditorPlaceProvider>
   );
@@ -118,12 +118,30 @@ test.each([
   [".\\shots\\strip.png", "D:\\work\\repo\\", "D:/work/repo/shots/strip.png"],
 ])("a Windows image at %s under %s displays from %s on the Host", async (source, root, path) => {
   const bridge = hostWith(png(8, 8));
-  const view = render(message(`![strip](${source})`, freshHost(), root));
+  const view = render(message(`![strip](${source})`, freshHost(), root, true));
 
   await settle();
 
   expect(bridge.sent("files.read").map((input) => input.path)).toEqual([path]);
   expect(view.getByRole("img", { name: "strip" }).getAttribute("src")).toStartWith("blob:");
+});
+
+test("on a POSIX Host a path under a drive-letter folder is read as written", async () => {
+  const bridge = hostWith(png(8, 8));
+
+  render(message("![strip](/c:/shots/strip.png)", freshHost()));
+  await settle();
+
+  expect(bridge.sent("files.read").map((input) => input.path)).toEqual(["/c:/shots/strip.png"]);
+});
+
+test("on a POSIX Host a drive path is a URL, never read from under home", async () => {
+  const bridge = installFakeBridge();
+
+  render(message("![strip](C:/Users/Developer/strip.png)", freshHost()));
+  await settle();
+
+  expect(bridge.sent("files.read")).toEqual([]);
 });
 
 test.each(["file://server/share/strip.png", "javascript:alert(1)"])(

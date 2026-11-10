@@ -70,6 +70,7 @@ import { type Browsers, createBrowsers } from "./browser/index.ts";
 import { cdpTabsOf, electronCdpVersions, hostBrowsers } from "./browserCdp/index.ts";
 import { registerLanguageIpc } from "./ipc/languages.ts";
 import { optionalLanguageCredential } from "./languages/optionalCredential.ts";
+import { optionalUserKey } from "./userKey.ts";
 import { LanguageIdentityEpochs } from "./languages/identityEpochs.ts";
 import { createMainLanguageApi } from "./languages/runtime.ts";
 import { LanguagePreferences } from "./languages/settings.ts";
@@ -90,7 +91,12 @@ import {
 import { internetFetch } from "./net.ts";
 import { distrustInSession } from "./tls/distrust.ts";
 import { createHostAddresses, type HostAddresses } from "./hostAddress/index.ts";
-import { isLocalHost, openThroughHost, whenHostRemoved } from "./hostAddress/open.ts";
+import {
+  isLocalHost,
+  namesThroughHost,
+  openThroughHost,
+  whenHostRemoved,
+} from "./hostAddress/open.ts";
 import { openPrices } from "./prices.ts";
 import { openSnapshotCache } from "./snapshotCache.ts";
 import type { SessionPrefsPatch } from "../shared/contract.ts";
@@ -428,6 +434,16 @@ const start = async () => {
     )
   );
 
+  const userKey = await Effect.runPromise(
+    Effect.provide(
+      optionalUserKey(
+        { fileDirectory: join(userData, "user-access-private"), platform: process.platform },
+        (message) => console.warn(message)
+      ),
+      secureStorage
+    )
+  );
+
   // Hosts hold pushes to linked phones while the user is here (ENG-495).
   const presence = Effect.runSync(SubscriptionRef.make<UserPresence>("away"));
   presenceWatch = watchPresence({
@@ -465,6 +481,7 @@ const start = async () => {
         localLabel: local.label,
       }),
       identity: clientIdentity(app.getVersion()),
+      ...userKey,
       ssh: settings.sshBinary === undefined ? {} : { sshBinary: settings.sshBinary },
       ...languageCredential,
       languageEpoch: (hostKey, session) =>
@@ -498,6 +515,7 @@ const start = async () => {
   hostAddresses = createHostAddresses({
     isLocal: (hostKey) => clientRuntime.runSync(isLocalHost(hostKey)),
     open: openThroughHost,
+    names: (hostKey) => clientRuntime.runPromise(namesThroughHost(hostKey)),
     run: (effect) => clientRuntime.runFork(effect),
   });
   const removedHosts = hostAddresses;

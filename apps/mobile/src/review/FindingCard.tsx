@@ -1,7 +1,8 @@
 /**
  * A Risk Finding inline in the diff (Paper M5): the expanded card with a 2px rule in its
  * severity, its reason, "Ask {harness} to fix" and the verdict thumbs; other findings fold to one
- * line until tapped. A Critical card is always expanded and says Accept waits on it.
+ * line until tapped. An open Critical card is always expanded and says Accept waits on it; a
+ * dismissed one folds with a "dismissed" note.
  */
 import type { RiskFinding, VerdictReason } from "@polaris/protocol";
 import { mobileType } from "@polaris/ui/tokens";
@@ -72,7 +73,11 @@ const Folded = ({ finding, onOpen }: { finding: RiskFinding; onOpen: () => void 
       <Text style={styles.foldedTitle} numberOfLines={1}>
         {finding.title}
       </Text>
-      <Text style={styles.meta}>{findingMeta(finding)}</Text>
+      <Text style={styles.meta}>
+        {finding.status === "dismissed"
+          ? `dismissed · ${findingMeta(finding)}`
+          : findingMeta(finding)}
+      </Text>
     </Pressable>
   );
 };
@@ -91,16 +96,15 @@ const Card = ({ finding, actions }: { finding: RiskFinding; actions: FindingActi
         <Text style={styles.meta}>{findingMeta(finding)}</Text>
       </View>
       <Text style={styles.reason}>{finding.reason}</Text>
-      {critical ? (
+      {critical && finding.status === "open" ? (
         <View style={styles.pausedLine}>
           <SeverityGlyph severity="critical" size={8} />
           <Text style={[styles.meta, { color: severityText(colours, "critical") }]}>
-            {finding.status === "dismissed"
-              ? "Dismissed, and still listed: nothing hides a critical finding."
-              : "Accept is paused until this is fixed or dismissed."}
+            Accept is paused until this is fixed or dismissed.
           </Text>
         </View>
       ) : null}
+      {finding.status === "dismissed" ? <Text style={styles.meta}>Dismissed</Text> : null}
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
@@ -139,8 +143,8 @@ export const FindingRowView = memo(function FindingRowView({
   readonly onToggle: (id: string) => void;
   readonly actions: FindingActions;
 }) {
-  // A Critical card never folds (DESIGN.md: nothing hides or dims a critical finding).
-  if (!expanded && finding.severity !== "critical")
+  // An open Critical card never folds (DESIGN.md: nothing hides or dims a critical finding).
+  if (!expanded && (finding.severity !== "critical" || finding.status === "dismissed"))
     return <Folded finding={finding} onOpen={() => onToggle(finding.id)} />;
 
   return <Card finding={finding} actions={actions} />;

@@ -319,6 +319,7 @@ const askReviewer = Effect.fn("askReviewer")(function* (input: AgentInput) {
           checkoutId: range.checkoutId,
           choice,
           title: `Reviewer · ${range.title}`,
+          subject: summary.subject,
           prompt,
         })
       : {

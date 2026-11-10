@@ -11,7 +11,8 @@ import {
   task,
 } from "./fixtures.testing.ts";
 import { starChartOf } from "./stars.ts";
-import { chipReading, claimNotice } from "./wiring.ts";
+import { turn } from "../../thread/daemon.testing.ts";
+import { chipReading, claimNotice, reviewTurnOf } from "./wiring.ts";
 
 test("the stats chip leads with the reported cost once every token is priced", () => {
   expect(chipReading("1h 12m", stats(), reportedPrice)).toBe("$4.82 · 1h 12m");
@@ -55,4 +56,18 @@ test("a claim in review the lead hasn't handed up raises no notice", () => {
   );
 
   expect(claimNotice(reviewing, starChartOf(reviewing), NOW)).toBeNull();
+});
+
+test("ENG-575: the completion card reviews the lead's last turn by its user-turn number", () => {
+  expect(reviewTurnOf(turn(40, { userTurnNumber: 31 }))).toEqual({
+    label: "Review turn 31",
+    turnId: "t-40",
+  });
+  // An older Host without user-turn numbers counts every Turn.
+  expect(reviewTurnOf(turn(4))?.label).toBe("Review turn 5");
+});
+
+test("ENG-575: no Review button while the lead's last turn still works, or before any", () => {
+  expect(reviewTurnOf(turn(3, { status: "working" }))).toBeNull();
+  expect(reviewTurnOf(null)).toBeNull();
 });

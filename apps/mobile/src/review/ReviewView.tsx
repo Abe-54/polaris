@@ -9,7 +9,6 @@ import { mobileType } from "@polaris/ui/tokens";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
-  Pressable,
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
@@ -17,7 +16,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
 import { FileDiffScreen } from "../diff/index.ts";
 import { grouped } from "../home/model/format.ts";
 import { themedStyles, useTheme } from "../theme/index.ts";
@@ -30,6 +28,7 @@ import { type AcceptState, listedFindings, tally } from "./model.ts";
 import { diffPalette } from "./palette.ts";
 import type { AskEntry } from "./ReviewScreen/useAsks.ts";
 import { AskSheet } from "./ReviewView/AskSheet.tsx";
+import { BackButton } from "./ReviewView/Back.tsx";
 import { Files } from "./ReviewView/Files.tsx";
 import { Findings } from "./ReviewView/Findings.tsx";
 import { Hero } from "./ReviewView/Hero.tsx";
@@ -65,19 +64,6 @@ export interface ReviewViewProps {
   readonly onAskReviewer: (finding: RiskFinding, question: string) => void;
 }
 
-const Back = ({ colour }: { readonly colour: string }) => (
-  <Svg width={10} height={16} viewBox="0 0 10 16">
-    <Path
-      d="M7.5 2L2 8l5.5 6"
-      fill="none"
-      stroke={colour}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-);
-
 const Header = ({ props }: { readonly props: ReviewViewProps }) => {
   const styles = useStyles();
   const { colours } = useTheme();
@@ -88,16 +74,7 @@ const Header = ({ props }: { readonly props: ReviewViewProps }) => {
 
   return (
     <View style={styles.header}>
-      {props.onBack === undefined ? null : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={styles.back}
-          onPress={props.onBack}
-        >
-          <Back colour={colours.textStrong} />
-        </Pressable>
-      )}
+      {props.onBack === undefined ? null : <BackButton onPress={props.onBack} />}
       <View style={styles.titles}>
         <Text maxFontSizeMultiplier={CHROME_TEXT_SCALE} style={styles.title}>
           Turn {props.turnNumber}
@@ -300,16 +277,6 @@ const useStyles = themedStyles((colours) => ({
     paddingTop: 4,
     paddingBottom: 12,
     paddingHorizontal: 16,
-  },
-  back: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colours.panel,
-    borderWidth: 1,
-    borderColor: colours.hairline,
   },
   titles: { flex: 1, gap: 1, minWidth: 0 },
   title: { ...mobileType.title, fontWeight: "600", color: colours.textStrong },

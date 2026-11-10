@@ -8,9 +8,9 @@
 import type { RpcGroup } from "effect/rpc";
 import { Command } from "./commands.ts";
 import { type Grant, type GrantKind, NotGranted, type Pairing } from "./extensions.ts";
-import type { DaemonRpcs } from "./rpc.ts";
+import type { DaemonRpcDefinitions } from "./rpc.ts";
 
-export type DaemonRpcTag = RpcGroup.Rpcs<typeof DaemonRpcs>["_tag"];
+export type DaemonRpcTag = RpcGroup.Rpcs<typeof DaemonRpcDefinitions>["_tag"];
 
 /**
  * `open`: any connection, even before it is scoped. `client`: token-less Clients
@@ -114,6 +114,7 @@ export const RPC_GRANTS = {
   "traces.span": "client",
   "traces.settings": "client",
   "traces.setSettings": "client",
+  "traces.installSkill": "client",
   "profiles.watch": "client",
   "profiles.get": "client",
   "profiles.attach": "approve",
@@ -133,6 +134,7 @@ export const RPC_GRANTS = {
   "host.stats.watch": "client",
   "byteStream.credit": "client",
   "hostAddress.open": "client",
+  "hostAddress.names": "client",
   "browser.host": "client",
   "browser.claim": "client",
   "browser.release": "client",
@@ -149,6 +151,12 @@ export const RPC_GRANTS = {
   "computerUse.app": "client",
   "computerUse.preview.watch": "client",
   "computerUse.preview.latest": "client",
+  "simulator.watch": "client",
+  "simulator.boot": "client",
+  "simulator.shutdown": "client",
+  "simulator.restart": "client",
+  "simulator.attach": "client",
+  "simulator.sessionFeed": "client",
   "attachments.stage": "client",
   "attachments.read": "client",
   "attachments.settings": "client",

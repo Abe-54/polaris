@@ -150,12 +150,20 @@ const sessionBody = (row: SessionRow) => {
   return "No turns yet";
 };
 
+/** "Idle · Plan · Mac": a planning session says so, in the Desktop App's word. */
+const statusLine = (row: SessionRow) =>
+  [
+    STATE_LABEL[row.entry.session.state],
+    ...(row.entry.session.permissionMode === "plan" ? ["Plan"] : []),
+    row.hostName,
+  ].join(" · ");
+
 const SESSION_HINT = "Tap: actions · hold: speak · double-tap: back";
 
 const sessionPage = (state: AppState, row: SessionRow): Page => {
   const top = [
     clip(titleOf(row.entry), 200),
-    clip([STATE_LABEL[row.entry.session.state], row.hostName].join(" · "), 200),
+    clip(statusLine(row), 200),
     ...(state.notice === null ? [] : [clip(state.notice, 200)]),
   ].join("\n");
 

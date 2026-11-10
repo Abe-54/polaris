@@ -4,7 +4,7 @@ import { assignment } from "./testing.ts";
 import { Effect } from "effect";
 import { startWorker } from "./start.ts";
 import { constellationInstructions } from "./skills.ts";
-import { selectWorker, type WorkerStart } from "./worker.ts";
+import { ignoredServiceTier, selectWorker, type WorkerStart } from "./worker.ts";
 
 test("worker selection uses dispatch, Task, Constellation then user, without cross-Harness defaults", () => {
   const user = { harness: "claude", model: ModelId.make("Opus"), effort: "high" };
@@ -20,16 +20,90 @@ test("worker selection uses dispatch, Task, Constellation then user, without cro
     harness: "codex",
     model: "Luna",
     effort: "low",
+    serviceTier: null,
   });
   expect(selectWorker(null, null, defaults, user)).toEqual({
     harness: "codex",
     model: "Sol",
     effort: "high",
+    serviceTier: null,
   });
-  expect(selectWorker(null, null, null, user)).toEqual(user);
-  expect(selectWorker(new HarnessSelection({ harness: "claude" }), null, defaults, user)).toEqual(
-    user
-  );
+  expect(selectWorker(null, null, null, user)).toEqual({ ...user, serviceTier: null });
+  expect(selectWorker(new HarnessSelection({ harness: "claude" }), null, defaults, user)).toEqual({
+    ...user,
+    serviceTier: null,
+  });
+});
+
+const codexLead = { harness: "codex" as const, model: null, effort: null, serviceTier: null };
+
+test.each([
+  [
+    "dispatch's priority",
+    new HarnessSelection({ serviceTier: "priority" }),
+    null,
+    null,
+    codexLead,
+    "priority",
+    null,
+  ],
+  [
+    "dispatch's null over the Task's",
+    new HarnessSelection({ serviceTier: null }),
+    new HarnessSelection({ serviceTier: "priority" }),
+    null,
+    codexLead,
+    null,
+    null,
+  ],
+  [
+    "the Task's suggested tier",
+    null,
+    new HarnessSelection({ serviceTier: "priority" }),
+    null,
+    codexLead,
+    "priority",
+    null,
+  ],
+  [
+    "the defaults' tier",
+    null,
+    null,
+    new HarnessSelection({ serviceTier: "priority" }),
+    codexLead,
+    "priority",
+    null,
+  ],
+  [
+    "a fast Codex Lead's tier",
+    null,
+    null,
+    null,
+    { ...codexLead, serviceTier: "priority" as const },
+    "priority",
+    null,
+  ],
+  [
+    "priority on Claude, ignored",
+    new HarnessSelection({ harness: "claude", serviceTier: "priority" }),
+    null,
+    null,
+    codexLead,
+    null,
+    { harness: "claude", serviceTier: "priority" },
+  ],
+  [
+    "a Codex default's tier, not crossing to Claude",
+    new HarnessSelection({ harness: "claude" }),
+    null,
+    new HarnessSelection({ harness: "codex", serviceTier: "priority" }),
+    codexLead,
+    null,
+    null,
+  ],
+] as const)("service tier: %s", (_, dispatch, task, defaults, user, tier, ignored) => {
+  expect(selectWorker(dispatch, task, defaults, user).serviceTier).toBe(tier);
+  expect(ignoredServiceTier(dispatch, task, defaults, user)).toEqual(ignored);
 });
 
 test("worker startup sends the header, dependency Claims and brief as the first Turn, with user permissions", async () => {

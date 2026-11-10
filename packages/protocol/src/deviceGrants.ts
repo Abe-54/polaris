@@ -43,6 +43,7 @@ const DEVICE_START_SESSION = {
   prompt: Schema.String,
   attachments: Schema.Array(AttachmentId),
   origin: absentOrNull,
+  reviewSubject: absentOrNull,
 } satisfies Record<keyof typeof Command.cases.StartSession.fields, Schema.Top>;
 
 const isDeviceStartSession = Schema.is(Schema.Struct(DEVICE_START_SESSION));
@@ -114,6 +115,7 @@ export const DEVICE_RPCS = {
   "traces.span": "local",
   "traces.settings": "local",
   "traces.setSettings": "local",
+  "traces.installSkill": "local",
   "profiles.watch": "local",
   "profiles.get": "local",
   "profiles.attach": "device",
@@ -133,6 +135,7 @@ export const DEVICE_RPCS = {
   "host.stats.watch": "local",
   "byteStream.credit": "local",
   "hostAddress.open": "local",
+  "hostAddress.names": "local",
   "browser.host": "local",
   "browser.claim": "local",
   "browser.release": "local",
@@ -149,6 +152,12 @@ export const DEVICE_RPCS = {
   "computerUse.app": "device",
   "computerUse.preview.watch": "local",
   "computerUse.preview.latest": "device",
+  "simulator.watch": "local",
+  "simulator.boot": "local",
+  "simulator.shutdown": "local",
+  "simulator.restart": "local",
+  "simulator.attach": "local",
+  "simulator.sessionFeed": "local",
   "attachments.stage": "device",
   "attachments.read": "device",
   "attachments.settings": "local",
@@ -324,8 +333,9 @@ export const DEVICE_COMMANDS = {
   Interrupt: "device",
   StopBackgroundTasks: "local",
   BackgroundCommand: "local",
-  Continue: "local",
-  Retry: "local",
+  // ENG-494: the phone's Needs You menus pick up an Interrupted Turn or resend a Failed one.
+  Continue: "device",
+  Retry: "device",
   RespondToApproval: "device",
   RenameSession: "device",
   PinSession: "device",

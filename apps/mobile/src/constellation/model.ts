@@ -16,6 +16,7 @@ import type {
 import { liveQuestions } from "@polaris/protocol";
 import { Match } from "effect";
 import { elapsed, idRanges, shortSha } from "./copy.ts";
+import { arrange, type Placed } from "./forest.ts";
 
 /** What one task is, at a glance: its glyph, its segment in the bar and its colour. */
 export type Tone =
@@ -71,6 +72,10 @@ export interface TaskRow {
   readonly handed: HandedClaim | null;
   /** A gate's dependencies' tones, in order. */
   readonly deps: ReadonlyArray<Tone>;
+  /** How many siblings deep it hangs under the one it depends on (ENG-690): 0 at the top. */
+  readonly depth: number;
+  /** Its deps other than the row it hangs under: "← M, X", each id in its tone. */
+  readonly also: ReadonlyArray<{ readonly id: string; readonly tone: Tone }>;
 }
 
 export interface GroupRow {
@@ -292,8 +297,10 @@ export const taskRow = (
     worker: workerOf(task),
     second: handed === null ? secondLine(task, p, attempt, now) : null,
     handed,
-    // Filled in once every row has its tone (`withGateDeps`).
+    // Filled in once every row has its tone (`withGateDeps`, `nested`).
     deps: [],
+    depth: 0,
+    also: [],
   };
 };
 
@@ -315,21 +322,58 @@ const groupRow = (name: string, rows: ReadonlyArray<TaskRow>, open: boolean | un
   };
 };
 
-/** Tasks in declaration order; grouped ones gather under their group where it first appears. */
+/** Siblings as dagr draws them, one list per root: each hangs under its last sibling dep (ENG-690). */
+const nested = (
+  rows: ReadonlyArray<TaskRow>,
+  depsOf: ReadonlyMap<string, ReadonlyArray<string>>,
+  toneOf: ReadonlyMap<string, Tone>
+): ReadonlyArray<ReadonlyArray<TaskRow>> => {
+  const forest = arrange(rows, (r) => ({
+    id: r.id,
+    deps: depsOf.get(r.id) ?? [],
+    nests: !r.gate,
+    hosts: !r.gate,
+  }));
+
+  const walk = (p: Placed<TaskRow>, depth: number): ReadonlyArray<TaskRow> => {
+    const also = p.item.gate
+      ? []
+      : (depsOf.get(p.item.id) ?? [])
+          .filter((id) => id !== p.host)
+          .map((id) => ({ id, tone: toneOf.get(id) ?? "waiting" }));
+
+    return [{ ...p.item, depth, also }, ...p.under.flatMap((u) => walk(u, depth + 1))];
+  };
+
+  return forest.map((p) => walk(p, 0));
+};
+
+/** Tasks in declaration order, each group gathered where it first appears and nested within. */
 const railRows = (
   c: Constellation,
   rows: ReadonlyArray<TaskRow>,
   opened: ReadonlyMap<string, boolean>
 ): ReadonlyArray<RailRow> => {
   const groupOf = new Map<string, string | null>(c.tasks.map((t) => [t.id, t.group ?? null]));
+  const depsOf = new Map<string, ReadonlyArray<string>>(c.tasks.map((t) => [t.id, t.deps]));
+  const toneOf = new Map(rows.map((r) => [r.id, r.tone]));
+
+  const loose = nested(
+    rows.filter((r) => (groupOf.get(r.id) ?? null) === null),
+    depsOf,
+    toneOf
+  );
+
+  const looseTrees = new Map(loose.flatMap((tree) => (tree[0] ? [[tree[0].id, tree]] : [])));
   const out: Array<RailRow> = [];
   const placed = new Set<string>();
 
   for (const row of rows) {
     const name = groupOf.get(row.id) ?? null;
 
+    // An ungrouped root brings its dependents with it; they have no place of their own.
     if (name === null) {
-      out.push(row);
+      out.push(...(looseTrees.get(row.id) ?? []));
       continue;
     }
 
@@ -338,7 +382,7 @@ const railRows = (
     const members = rows.filter((r) => groupOf.get(r.id) === name);
     const group = groupRow(name, members, opened.get(name));
 
-    out.push(group, ...(group.open ? members : []));
+    out.push(group, ...(group.open ? nested(members, depsOf, toneOf).flat() : []));
   }
 
   return out;

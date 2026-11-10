@@ -20,6 +20,7 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
 | `packages/bench` | Benchmarks: the real Daemon under scripted load, a process-tree memory/CPU sampler, baselines and comparisons. |
 | `packages/spec` | The Quint spec of commits, streams, Client feeds and approvals, and its checks (see Verification). |
 | `apps/daemon` | The Daemon (`polaris` binary): event store, Harness drivers, transport, files, git, terminals, user service. |
+| `apps/relay` | The Polaris Relay, in Rust: a Cargo workspace (the relay, its load generator) and its TypeScript contract suite (`@polaris/relay`). Its README is the wire contract. Tests that start a relay build it with cargo (ADR 0105). |
 | `extensions/raycast` | The Raycast extension on `@polaris/sdk`: search Agent Sessions and Workspaces, Pending Approvals, New Agent Session, Hosts (see its README). A root workspace, like everything under `extensions/`. |
 | `apps/site` | The marketing site (Next.js on Vercel, root directory `apps/site`), built from the Paper "Marketing site" page on `@polaris/ui`'s tokens; the download and update-feed routes live under `app/` (see its README). |
 | `apps/desktop` | The Electron Desktop App: the Client runtime in the main process, a typed IPC bridge, a React renderer on `@polaris/ui` (see its README). |
@@ -96,6 +97,7 @@ Performance is a product requirement: the Daemon must stay light on a Raspberry 
 - Before and after a change that could move memory, CPU or latency (engine, store, streams, transport, wire, files, git, terminals, Harness drivers, anything on a hot path or a timer), run the relevant scenarios against the committed baseline for your machine, e.g. `bun run bench sessions history --runs 3 --compare packages/bench/baselines/<machine>.json`. Use `--profile` to see where the time and memory go.
 - Never regress a baseline silently: fix the regression, or explain it in the commit and update the baseline (`--save-baseline`) in the same change.
 - Anything that wakes an idle Daemon (timers, polling, watchers) must justify itself in the `idle` scenario.
+- **Script leases.** `bun run bench` and the Desktop smoke take a Host lease (`tooling/leases.ts`): `bench` and `smoke`, which every Daemon declares at startup with capacity 1 (Settings → Hosts can change it). Outside Polaris they take `/tmp/polaris-<name>-lock`. A new script lease is added to `SCRIPT_RESOURCES` in `apps/daemon/src/resources/model.ts`.
 
 ## Verification
 

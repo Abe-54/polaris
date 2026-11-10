@@ -67,7 +67,7 @@ const sendIn = (fake: FakeServer, prompt: string) =>
   );
 
 describe("OpenCode's commands", () => {
-  test("listed from GET /command in the directory: Skills first, hints as the argument hint", async () => {
+  test("listed from GET /command in the directory after /compact: Skills first, hints as the argument hint", async () => {
     const fake = fakeWithCommands();
 
     const listed = await Effect.runPromise(
@@ -85,6 +85,7 @@ describe("OpenCode's commands", () => {
 
     expect(fake.sent("GET /command")[0]?.directory).toBe(CWD);
     expect(listed.map((c) => [c.name, c.kind, c.argumentHint, c.run])).toEqual([
+      ["compact", "command", null, "harness"],
       ["tidy", "skill", null, "text"],
       ["docs", "command", "$ARGUMENTS", "text"],
       ["ship", "command", "$1", "text"],

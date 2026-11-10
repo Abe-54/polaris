@@ -1,14 +1,16 @@
 /**
- * For tests: the real Polaris Relay (`bun apps/relay/src/main.ts`) on a fixed port, so it
+ * For tests: the real Polaris Relay (apps/relay's binary) on a fixed port, so it
  * can stop and start again at the same URL, and a real Daemon whose secrets stay off the
  * Keychain with the Relay route on.
  */
 import { connectRpc, type DaemonClient } from "@polaris/client/rpc";
+import { relayBinary } from "@polaris/relay/testing/binary";
 import { socketTransport } from "@polaris/sdk";
-import { launchDaemon, type TestDaemon } from "@polaris/sdk/testing";
-import { Effect, Exit, Scope } from "effect";
+import { launchDaemon, TEST_USER_KEY, type TestDaemon } from "@polaris/sdk/testing";
+import { Effect, Exit, Redacted, Scope } from "effect";
 
-const RELAY_DIR = new URL("../../relay/", import.meta.url).pathname;
+// Built here, as the file loads, so no test's timeout pays for a cold build.
+const RELAY = relayBinary();
 
 const TEST_DAEMON_MAIN = new URL("../../daemon/src/main.testing.ts", import.meta.url).pathname;
 
@@ -31,8 +33,7 @@ export const relayProcess = (port = freePort()): TestRelay => {
   let child: Bun.Subprocess<"ignore", "pipe", "inherit"> | null = null;
 
   const start = async () => {
-    const spawned = Bun.spawn(["bun", "src/main.ts"], {
-      cwd: RELAY_DIR,
+    const spawned = Bun.spawn([RELAY], {
       env: {
         ...process.env,
         PORT: String(port),
@@ -108,6 +109,8 @@ export const launchRelayDaemon = async (relayUrl: string): Promise<RelayDaemon> 
           clientVersion: "0.0.0",
           deviceLabel: "Relay tests",
           capabilities: [],
+          // Acts as the Desktop App, which turns the relay route on (ADR 0100).
+          userKey: Redacted.make(TEST_USER_KEY),
         });
 
         return connection.client;

@@ -92,6 +92,7 @@ import type { LinkedDeviceView, LinkedDevicesRequestOutputs } from "./linkedDevi
 import type { GitHubRequestOutputs, GitHubSubscriptionItems } from "./githubContract.ts";
 import type { GitRequestOutputs, GitSubscriptionItems } from "./gitContract.ts";
 import type { BrowserRequestOutputs, BrowserSubscriptionItems } from "./browserContract.ts";
+import type { SimulatorRequestOutputs, SimulatorSubscriptionItems } from "./simulatorContract.ts";
 import type { NeedsYouAction, ReviewTarget } from "./needsYou.ts";
 import type {
   CachedHost,
@@ -455,6 +456,7 @@ export interface RequestOutputs
     SecretRequestOutputs,
     DataRequestOutputs,
     TracesRequestOutputs,
+    SimulatorRequestOutputs,
     RequestsRequestOutputs,
     ComputerUseRequestOutputs,
     PredictionPlacementOutputs,
@@ -600,6 +602,7 @@ export interface SubscriptionItems
     BrowserSubscriptionItems,
     DataSubscriptionItems,
     TracesSubscriptionItems,
+    SimulatorSubscriptionItems,
     RequestsSubscriptionItems,
     ComputerUseSubscriptionItems {
   "prediction.complete": PredictionFeedItem;
@@ -616,7 +619,7 @@ export interface SubscriptionItems
   "harness.availability": Plain<HostHarnesses>;
   continuity: ContinuityItem;
   "plan-limits": Plain<PlanLimit>;
-  "host.stats": HostStatsItem;
+  "host.stats": typeof HostStatsItem.Encoded;
   "devices.watch": ReadonlyArray<LinkedDeviceView>;
   "review.watchRiskSummary": RiskSummary;
   "inline.propose": InlineStreamItem;

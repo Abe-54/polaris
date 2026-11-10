@@ -23,6 +23,7 @@ import {
   TurnItem,
   TurnId,
   TurnTrigger,
+  type WorkspaceId,
 } from "@polaris/protocol";
 import {
   Cause,
@@ -84,7 +85,10 @@ export const reached = {
   interruptedByRestart: 0,
   feedSnapshots: 0,
   feedDrops: 0,
+  feedDefects: 0,
   disconnects: 0,
+  removed: 0,
+  feedsEnded: 0,
 };
 
 export type HarnessWhat =
@@ -122,6 +126,12 @@ export interface FeedState {
   /** What the feed's subscriber received, in order. */
   readonly seen: Array<Seen>;
   readonly errors: Array<string>;
+  /** The next chunk on this feed's stream fails to decode (a defect, ENG-492). */
+  corrupt: boolean;
+  /** Its subscriber ended with that defect: the feed failed visibly. */
+  failed: boolean;
+  /** It reopened after its session was removed, and the Daemon answered NotFound. */
+  ended: boolean;
   /** Snapshot contents: session → [state, pending request ids]. */
   readonly snapshots: Array<{
     readonly seq: number;
@@ -213,6 +223,12 @@ export interface Sent {
   answer: string | null;
 }
 
+const isNotFound = (cause: Cause.Cause<unknown>) => {
+  const error = Cause.findErrorOption(cause);
+
+  return Option.isSome(error) && Predicate.isTagged(error.value, "NotFound");
+};
+
 /** What a device heard back for a command, as `Sent.answer` records it (null: nothing). */
 const answerOf = (
   exit: Exit.Exit<{ readonly sequence: Sequence | null }, CommandRejected | NotFound | NotGranted>
@@ -224,6 +240,17 @@ const answerOf = (
     reached.rejected++;
 
     return `rejected:${error.value.reason}`;
+  }
+
+  // A removed Workspace's sessions are gone from the model: the reference decider rejects them.
+  if (
+    Option.isSome(error) &&
+    Predicate.isTagged(error.value, "NotFound") &&
+    ["session", "workspace"].includes(error.value.what)
+  ) {
+    reached.rejected++;
+
+    return `rejected:no ${error.value.what} ${error.value.id}`;
   }
 
   return Cause.hasInterruptsOnly(exit.cause) ? null : `failed:${Cause.pretty(exit.cause)}`;
@@ -255,6 +282,8 @@ export class World {
   /** Turns a fake Harness already reported ended. */
   readonly endedTurns = new Set<string>();
   itemCounter = 0;
+  /** The one Workspace every session is in, once setup registered it. */
+  workspaceId: WorkspaceId | null = null;
 
   constructor(
     readonly capacity: number,
@@ -305,6 +334,12 @@ export class World {
     reached.disconnects++;
     Deferred.doneUnsafe(conn.closed, Exit.void);
     this.conns.set(client, { ...conn, epoch: conn.epoch + 1, closed: Deferred.makeUnsafe<void>() });
+  }
+
+  /** One feed's stream starts sending chunks that fail to decode; at most one feed per run. */
+  corruptFeed(index: number) {
+    if (this.feeds.some((fs) => fs.corrupt)) return;
+    this.feeds[index % this.feeds.length]!.corrupt = true;
   }
 
   /** The Daemon goes away; every connection with it. */
@@ -363,6 +398,7 @@ export class World {
     const wire = <A, E>(conn: Conn, upstream: Stream.Stream<A, E>) =>
       Stream.unwrap(
         Effect.gen(function* () {
+          if (fs.failed || fs.ended) fs.errors.push("the feed resubscribed after it ended");
           const queue = yield* Queue.bounded<A, E | Cause.Done>(1);
 
           const server = Effect.runFork(
@@ -378,6 +414,9 @@ export class World {
 
           return Stream.fromQueue(queue).pipe(
             Stream.tap(() => fs.gate.await),
+            Stream.mapEffect((item) =>
+              fs.corrupt ? Effect.die(new Error("a chunk failed to decode")) : Effect.succeed(item)
+            ),
             Stream.interruptWhen(
               Deferred.await(conn.closed).pipe(Effect.andThen(Effect.fail(new Disconnected())))
             )
@@ -432,6 +471,9 @@ export class World {
           gate: Latch.makeUnsafe(true),
           seen: [],
           errors: [],
+          corrupt: false,
+          failed: false,
+          ended: false,
           snapshots: [],
           feed: null,
           consumer: null,
@@ -443,7 +485,15 @@ export class World {
           feed.stream.pipe(
             Stream.runForEach((item) => Effect.sync(() => onItem(fs, item))),
             Effect.catchCause((cause) =>
-              Effect.sync(() => void fs.errors.push(Cause.pretty(cause)))
+              Effect.sync(() => {
+                if (fs.corrupt && Cause.hasDies(cause)) {
+                  fs.failed = true;
+                  reached.feedDefects++;
+                } else if (isNotFound(cause)) {
+                  fs.ended = true;
+                  reached.feedsEnded++;
+                } else fs.errors.push(Cause.pretty(cause));
+              })
             )
           )
         );

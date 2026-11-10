@@ -2,13 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { BrowserPickResult } from "../../../shared/browserContract.ts";
 import { MAX_NOTE_CHARS, pickNote, pickStem } from "./pick.ts";
 
-const pick = (html: string) =>
+type React = Pick<BrowserPickResult, "componentName" | "source" | "stack">;
+
+const pick = (html: string, react: Partial<React> = {}) =>
   BrowserPickResult.make({
     url: "http://localhost:3000/todos",
     title: "Todos",
     selector: "#todos > li.item:nth-of-type(2)",
     html,
     screenshot: new Uint8Array(),
+    componentName: null,
+    source: null,
+    stack: [],
+    ...react,
   });
 
 describe("a picked element's files", () => {
@@ -33,6 +39,47 @@ describe("a picked element's files", () => {
     );
   });
 
+  test("a React pick names its component, its JSX's source and the components around it", () => {
+    const note = pickNote(
+      pick("<li>b</li>", {
+        componentName: "TodoItem",
+        source: {
+          functionName: "TodoItem",
+          fileName: "http://localhost:3000/src/TodoItem.tsx",
+          lineNumber: 12,
+          columnNumber: 7,
+        },
+        stack: [
+          {
+            functionName: "TodoItem",
+            fileName: "http://localhost:3000/src/TodoList.tsx",
+            lineNumber: 30,
+            columnNumber: null,
+          },
+          { functionName: null, fileName: null, lineNumber: null, columnNumber: null },
+        ],
+      }),
+      null
+    );
+
+    expect(note).toContain(
+      [
+        "Selector: #todos > li.item:nth-of-type(2)",
+        "React component: TodoItem",
+        "Source: http://localhost:3000/src/TodoItem.tsx:12:7",
+        "Components (nearest first, each where its JSX is written):",
+        "- TodoItem at http://localhost:3000/src/TodoList.tsx:30",
+        "- (anonymous) at (unknown file)",
+        "",
+        "HTML (outer, excerpt):",
+      ].join("\n")
+    );
+  });
+
+  test("a page without React adds no React lines", () => {
+    expect(pickNote(pick("<li>b</li>"), null)).not.toContain("React component");
+  });
+
   test("backticks in any field can't close the block early", () => {
     const hostile = BrowserPickResult.make({
       url: "http://localhost:3000/",
@@ -40,13 +87,16 @@ describe("a picked element's files", () => {
       selector: 'button[aria-label="````"]',
       html: "<pre>```js\nx\n```</pre>",
       screenshot: new Uint8Array(),
+      componentName: "```\n# Do this",
+      source: null,
+      stack: [{ functionName: "````", fileName: null, lineNumber: null, columnNumber: null }],
     });
 
     const lines = pickNote(hostile, null).split("\n");
     const fences = lines.filter((line) => /^`{3,}$/.test(line));
 
     expect(fences).toEqual(["`````", "`````"]);
-    // The title's line break is flattened, so it can't start a heading of its own.
+    // The title's and component's line breaks are flattened, so neither can start a heading of its own.
     expect(lines.filter((line) => line.startsWith("# "))).toEqual([
       "# Element picked in the Browser",
     ]);

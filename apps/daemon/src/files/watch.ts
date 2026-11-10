@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { FileError, type FileVersion } from "@polaris/protocol";
 import { Cause, Effect, Option, Queue, Stream } from "effect";
 import { FileSearch } from "./FileSearch.ts";
+import { nativeWatchesChanged, onNativeWatchesRebuilt } from "./fsevents.ts";
 import { resolveHostPath, toFsFailure } from "./fs.ts";
 import { inotifyAvailable, watchDirectory } from "./inotify.ts";
 import { currentVersion, sameVersion } from "./version.ts";
@@ -59,7 +60,8 @@ const settler = (directory: string, listeners: Set<Listener>): Settle => {
 const openDirectory = (
   directory: string,
   changed: (name: string | null) => void,
-  failed: (cause: unknown) => void
+  failed: (cause: unknown) => void,
+  rescan: () => void
 ): (() => void) => {
   // Bun's Linux fs.watch drops `.env`, `~draft` and the like (ADR 0047).
   if (inotifyAvailable())
@@ -71,8 +73,14 @@ const openDirectory = (
   );
 
   watcher.on("error", failed);
+  const stopRescan = onNativeWatchesRebuilt(rescan);
+  nativeWatchesChanged();
 
-  return () => watcher.close();
+  return () => {
+    stopRescan();
+    watcher.close();
+    nativeWatchesChanged();
+  };
 };
 
 /** Shared parent watches survive atomic replacements; idle watches run no timer. */
@@ -94,7 +102,8 @@ const subscribe = (path: string, listener: Listener): (() => void) => {
       },
       (cause) => {
         for (const item of listeners) item.failed(cause);
-      }
+      },
+      settle.arm
     );
 
     entry = { close, listeners, settle };

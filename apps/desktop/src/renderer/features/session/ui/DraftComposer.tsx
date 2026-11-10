@@ -6,7 +6,7 @@
  */
 import type { PolarisAction } from "@polaris/protocol";
 import { Composer, type Harness, harnessHue } from "@polaris/ui";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useRef, useState } from "react";
 import {
   AttachmentDrop,
   AttachmentTray,
@@ -23,6 +23,7 @@ import {
 import type { StagedAttachment } from "../state.ts";
 import { ComposerMenu } from "./ComposerMenu.tsx";
 import { useToastsClear } from "./toastClearance.ts";
+import { useMenuPlacement } from "./useMenuPlacement.ts";
 
 /** The `/` menu's list, and what to do for a command Polaris runs itself. */
 export interface ComposerCommands {
@@ -168,6 +169,7 @@ export const DraftComposer = ({
   const composerBox = useRef<HTMLDivElement>(null);
 
   useToastsClear(composerBox);
+  const placement = useMenuPlacement(composerBox, menuSlot);
 
   const submit = (queue: boolean) => {
     if (queue && onQueue !== undefined) onQueue();
@@ -184,7 +186,17 @@ export const DraftComposer = ({
     <div className={className}>
       {notice}
       <div ref={composerBox} className="relative">
-        <div ref={setMenuSlot} className="absolute inset-x-0 bottom-full z-20" />
+        <div
+          ref={setMenuSlot}
+          data-side={placement.side}
+          className={
+            placement.side === "above"
+              ? "absolute inset-x-0 bottom-full z-20 pb-2"
+              : "absolute inset-x-0 top-full z-20 pt-2"
+          }
+          // SAFETY: React passes custom properties through `style`; its type only lacks the name.
+          style={{ "--menu-room": `${placement.room}px` } as CSSProperties}
+        />
         <AttachmentDrop onFiles={onFiles} copyTo={copyTo}>
           <Composer
             harness={harness}

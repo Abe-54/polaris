@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { SessionId, Unsupported } from "@polaris/protocol";
+import { SessionId, TurnId, Unsupported } from "@polaris/protocol";
 import { Effect, Stream } from "effect";
 import {
   type DataSession,
@@ -61,6 +61,40 @@ test("Schema Diff separately gates older Data-capable Daemons", async () => {
       )
     )
   ).toEqual(new Unsupported({ capability: "data.schemaDiff" }));
+});
+
+test.each([
+  [["data", "data.schemaDiff"], [{ sessionId: "s", turn: "t1" }]],
+  [
+    ["data", "data.schemaDiff", "data.schemaDiff.turns"],
+    [{ sessionId: "s", turn: "t1", turns: ["t1", "t2"] }],
+  ],
+] as const)("a Turn group's Schema Diff asks %p for: %p", async (capabilities, expected) => {
+  const asked: Array<unknown> = [];
+
+  // The answer doesn't matter here, only what was asked.
+  await Effect.runPromiseExit(
+    getDataSchemaDiff(
+      {
+        ...session,
+        capabilities,
+        client: {
+          ...session.client,
+          "data.schemaDiff": (input) => {
+            asked.push(input);
+
+            return Effect.die("answered");
+          },
+        },
+      },
+      {
+        sessionId: SessionId.make("s"),
+        turn: TurnId.make("t1"),
+        turns: [TurnId.make("t1"), TurnId.make("t2")],
+      }
+    )
+  );
+  expect(asked).toEqual([...expected]);
 });
 
 test("a Data-capable Daemon without SQLite is never asked to save a file source", async () => {

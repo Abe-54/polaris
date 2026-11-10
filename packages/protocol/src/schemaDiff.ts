@@ -4,6 +4,9 @@ import { SessionId, TurnId, Timestamp } from "./ids.ts";
 
 export const SCHEMA_DIFF_CAPABILITY = "data.schemaDiff";
 
+/** `turns` on `data.schemaDiff`: one diff across a Turn group. */
+export const SCHEMA_DIFF_TURNS_CAPABILITY = "data.schemaDiff.turns";
+
 const Identity = Schema.Struct({ schema: Schema.String, name: Schema.String });
 
 const Column = Schema.Struct({

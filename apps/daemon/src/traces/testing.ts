@@ -2,6 +2,7 @@ import { newTempDir, removeTempDirSettled } from "../platform/tempDir.testing.ts
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { SessionId, WorkspaceId, TraceError, type TraceTurn } from "@polaris/protocol";
+import { ApprovalPolicy } from "../services.ts";
 import { traceReceiver } from "./receiver.ts";
 import { TraceRuntime } from "./runtime.ts";
 import { TraceSessions } from "./sessions.ts";
@@ -115,6 +116,8 @@ export interface FixtureOptions extends TraceWorkerOptions {
   readonly port?: number;
   readonly beforeIngest?: () => Promise<void>;
   readonly owner?: (port: number) => Promise<string | null>;
+  /** The Engine's read-only sessions (a Reviewer's); none when omitted. */
+  readonly readOnly?: (sessionId: SessionId) => boolean;
 }
 
 export const withTraceFixture = async (
@@ -165,6 +168,15 @@ export const withTraceFixture = async (
     Layer.provideMerge(sessions),
     Layer.provideMerge(
       TraceSettings.layerAt(join(root, "settings.json"), () => Effect.succeed(root))
+    ),
+    Layer.provideMerge(
+      Layer.succeed(
+        ApprovalPolicy,
+        ApprovalPolicy.of({
+          decide: () => Effect.succeed(null),
+          readOnly: options.readOnly ?? (() => false),
+        })
+      )
     )
   );
 

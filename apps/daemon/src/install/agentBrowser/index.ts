@@ -5,7 +5,6 @@
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { paths } from "../../paths.ts";
-import { background, type Installer, type InstallPolicy, POLICY } from "../background.ts";
 import { runtimePlatform } from "../../platform/index.ts";
 import {
   type InstallOptions,
@@ -14,6 +13,7 @@ import {
   installedOnDisk,
 } from "./install.ts";
 import { AGENT_BROWSER_VERSION } from "./pin.ts";
+import { DEFAULT_POLICY, type Installer, type InstallPolicy, onDemand } from "../onDemand.ts";
 
 export { AGENT_BROWSER_VERSION } from "./pin.ts";
 
@@ -26,14 +26,19 @@ export class AgentBrowserUnavailable extends Schema.TaggedError<AgentBrowserUnav
 
 export type AgentBrowserInstaller = Installer<InstallOptions, InstalledAgentBrowser>;
 
-export type { InstallPolicy } from "../background.ts";
+export type { InstallPolicy } from "../onDemand.ts";
 
-const TOOL = {
-  name: "agent-browser",
-  version: AGENT_BROWSER_VERSION,
-  ready: "later sessions get the Browser",
-  unavailable: (message: string) => new AgentBrowserUnavailable({ message }),
-};
+const background = (
+  options: () => InstallOptions,
+  installer: AgentBrowserInstaller,
+  policy: InstallPolicy
+) =>
+  onDemand(options, installer, policy, {
+    unavailable: (message) => new AgentBrowserUnavailable({ message }),
+    unresolved: "can't tell which agent-browser build this Host needs",
+    installing: `agent-browser ${AGENT_BROWSER_VERSION} is installing; later sessions get the Browser`,
+    failed: (reason) => `installing agent-browser failed (${reason}); trying again`,
+  }).current;
 
 export class AgentBrowser extends Context.Service<
   AgentBrowser,
@@ -49,10 +54,10 @@ export class AgentBrowser extends Context.Service<
   static readonly layerWith = (
     options: () => InstallOptions,
     installer: AgentBrowserInstaller = { onDisk: installedOnDisk, install: installAgentBrowser },
-    policy: InstallPolicy = POLICY
+    policy: InstallPolicy = DEFAULT_POLICY
   ) =>
     Layer.sync(AgentBrowser, () =>
-      AgentBrowser.of({ current: background(TOOL, options, installer, policy) })
+      AgentBrowser.of({ current: background(options, installer, policy) })
     );
 
   static readonly layer = AgentBrowser.layerWith(() => ({

@@ -54,6 +54,12 @@
     },
     "railroad-diagrams": {
       "reason": "CC0-1.0 (a public-domain dedication), a dependency of nearley that only its nearley-railroad CLI loads; sql-formatter (the Desktop App's SQL tab Format) pulls nearley in, and the runtime never imports it."
+    },
+    "node-datachannel": {
+      "reason": "MPL-2.0 (declared as the non-SPDX \"MPL 2.0\"; its LICENSE is the MPL 2.0 text). A dependency of expo-device-hub, the Simulator's hub, which the Daemon installs on demand (scripts/simulatorLicenses.ts); loaded only for WebRTC streaming, unmodified, never copied into Polaris."
+    },
+    "@node-datachannel/*": {
+      "reason": "Per-platform prebuilt addons of node-datachannel, under its MPL 2.0 (declared as \"MPL 2.0\"); same exception as node-datachannel."
     }
   }
 }

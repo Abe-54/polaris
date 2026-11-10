@@ -3,6 +3,7 @@
  * under the agent. One holder per session; the Turn's end releases it.
  */
 import { Effect } from "effect";
+import { childEnv } from "../../service/childEnv.ts";
 
 export interface DisplayAwake {
   /** Starts holding the display awake; the answer stops. */
@@ -13,6 +14,7 @@ export interface DisplayAwake {
 export const caffeinate: DisplayAwake = {
   hold: Effect.sync(() => {
     const proc = Bun.spawn(["/usr/bin/caffeinate", "-d", "-w", String(process.pid)], {
+      env: childEnv(),
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",

@@ -5,6 +5,7 @@
  */
 import { chmodSync, copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { childEnv } from "../childEnv.ts";
 import {
   COMPUTER_USE_BUNDLE,
   COMPUTER_USE_CAPTURE,
@@ -16,7 +17,7 @@ import {
 } from "./bundle.ts";
 
 const run = async (argv: ReadonlyArray<string>) => {
-  const proc = Bun.spawn([...argv], { stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn([...argv], { env: childEnv(), stdout: "pipe", stderr: "pipe" });
 
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),

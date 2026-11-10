@@ -19,7 +19,22 @@ export const DAEMON_SERVICE = "polaris-daemon";
 /** Spans waiting for the store; past this, new Spans are dropped until the next flush. */
 export const MAX_BUFFERED_SPANS = 1024;
 
-export const FLUSH_MS = 250;
+/**
+ * A batch worth starting the store's worker for (ENG-721). Fewer wait in memory, with no timer,
+ * until a read of the Self-Trace scope, a Developer Mode switch or shutdown flushes them.
+ */
+export const BATCH_SPANS = 64;
+
+/**
+ * Connection upkeep an idle Host repeats (ENG-721): never exported, nor their children, so a
+ * Client's hello and lease renewals don't keep the trace store's worker alive.
+ */
+export const QUIET_SPANS: ReadonlySet<string> = new Set([
+  "polaris.rpc.hello",
+  "authenticateConnection",
+  "polaris.rpc.presence.report",
+  "polaris.rpc.developerMode.lease",
+]);
 
 const decodeJson = Schema.decodeUnknownOption(Schema.Json);
 
@@ -97,13 +112,12 @@ class ExportedSpan extends Tracer.NativeSpan {
 }
 
 /**
- * Off, `span` is the native tracer's: no exportable Span, buffer or timer. The switch is a
+ * Off, `span` is the native tracer's: no exportable Span or buffer. The switch is a
  * plain field so every process-wide Span creation reads it live.
  */
 export class SelfTracer implements Tracer.Tracer {
   private sink: SelfTraceSink | null = null;
   private buffer: SelfSpan[] = [];
-  private timer: ReturnType<typeof setTimeout> | undefined;
   private unhook: (() => void) | null = null;
 
   dropped = 0;
@@ -125,6 +139,9 @@ export class SelfTracer implements Tracer.Tracer {
   }
 
   span(options: Parameters<Tracer.Tracer["span"]>[0]): Tracer.Span {
+    // Unsampled, so the Spans under it are unsampled too.
+    if (QUIET_SPANS.has(options.name)) return new Tracer.NativeSpan({ ...options, sampled: false });
+
     return this.sink === null || !options.sampled
       ? new Tracer.NativeSpan(options)
       : new ExportedSpan(options, this);
@@ -155,12 +172,11 @@ export class SelfTracer implements Tracer.Tracer {
     }
 
     this.buffer.push(self);
-    this.timer ??= setTimeout(() => this.flush(), FLUSH_MS);
+
+    if (this.buffer.length >= BATCH_SPANS) this.flush();
   }
 
   flush(): void {
-    clearTimeout(this.timer);
-    this.timer = undefined;
     const spans = this.buffer;
     this.buffer = [];
 

@@ -322,6 +322,7 @@ const startSession = (d: Deciding, command: CommandOf<"StartSession">): Decision
     contextUsage: null,
     lastError: null,
     origin: command.origin ?? null,
+    reviewSubject: command.reviewSubject ?? null,
     createdAt: d.ctx.now,
     updatedAt: d.ctx.now,
   });

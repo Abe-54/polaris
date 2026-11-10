@@ -7,6 +7,7 @@ import {
   type ModelId,
   type PermissionMode,
   type ReasoningEffort,
+  type ServiceTier,
   type TaskDefinition,
   type WorkspaceId,
 } from "@polaris/protocol";
@@ -19,13 +20,19 @@ export interface WorkerSelection {
   readonly harness: HarnessKind;
   readonly model: ModelId | null;
   readonly effort: ReasoningEffort | null;
+  /** Null for the Harness default; always null on a Harness without tiers. */
+  readonly serviceTier?: ServiceTier | null;
 }
+
+/** Only Codex has service tiers; the engine's decider clears them elsewhere too. */
+export const hasServiceTier = (harness: HarnessKind) => harness === "codex";
 
 /** A model or effort from another Harness's defaults cannot cross a Harness override. */
 interface SelectionFields {
   harness: HarnessKind;
   model?: ModelId;
   effort?: ReasoningEffort;
+  serviceTier?: ServiceTier | null;
 }
 
 export const selectWorker = (
@@ -33,7 +40,7 @@ export const selectWorker = (
   task: HarnessSelection | null,
   defaults: HarnessSelection | null,
   user: WorkerSelection
-): WorkerSelection => {
+): WorkerSelection & { readonly serviceTier: ServiceTier | null } => {
   const fallback: SelectionFields = {
     harness: user.harness,
   };
@@ -41,6 +48,8 @@ export const selectWorker = (
   if (user.model !== null) fallback.model = user.model;
 
   if (user.effort !== null) fallback.effort = user.effort;
+
+  if (user.serviceTier != null) fallback.serviceTier = user.serviceTier;
   const choices = [dispatch, task, defaults, new HarnessSelection(fallback)];
   const harness = choices.find((choice) => choice?.harness !== undefined)?.harness ?? user.harness;
 
@@ -48,11 +57,36 @@ export const selectWorker = (
     (choice) => choice !== null && (choice.harness === undefined || choice.harness === harness)
   );
 
+  const serviceTier =
+    compatible.find((choice) => choice?.serviceTier !== undefined)?.serviceTier ?? null;
+
   return {
     harness,
     model: compatible.find((choice) => choice?.model !== undefined)?.model ?? null,
     effort: compatible.find((choice) => choice?.effort !== undefined)?.effort ?? null,
+    serviceTier: hasServiceTier(harness) ? serviceTier : null,
   };
+};
+
+/** The tier the Lead asked for that the chosen Harness can't run: the dispatch result names it. */
+export const ignoredServiceTier = (
+  dispatch: HarnessSelection | null,
+  task: HarnessSelection | null,
+  defaults: HarnessSelection | null,
+  user: WorkerSelection
+): { readonly harness: HarnessKind; readonly serviceTier: ServiceTier } | null => {
+  const { harness } = selectWorker(dispatch, task, defaults, user);
+
+  if (hasServiceTier(harness)) return null;
+
+  const serviceTier = [dispatch, task, defaults].find(
+    (choice) =>
+      choice != null &&
+      choice.serviceTier != null &&
+      (choice.harness === undefined || choice.harness === harness)
+  )?.serviceTier;
+
+  return serviceTier == null ? null : { harness, serviceTier };
 };
 
 export interface WorkerAssignment {

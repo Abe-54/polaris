@@ -18,6 +18,7 @@ import {
   bundleOf,
 } from "./bundle.ts";
 import { embeddedProgram } from "./sealedRuntime.ts";
+import { childEnv } from "./childEnv.ts";
 
 /** Each library's file in `node_modules`, as the Daemon's code and its packages import it. */
 export const BUNDLE_LIBRARY_SOURCES: Record<BundleLibrary, string> = {
@@ -143,7 +144,13 @@ export const loadedLibraries = async (
 
   try {
     const proc = Bun.spawn([binary, ...args], {
-      env: { HOME: home, TMPDIR: home, PATH: "/usr/bin:/bin", ...env, DYLD_PRINT_LIBRARIES: "1" },
+      env: childEnv({
+        HOME: home,
+        TMPDIR: home,
+        PATH: "/usr/bin:/bin",
+        ...env,
+        DYLD_PRINT_LIBRARIES: "1",
+      }),
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",

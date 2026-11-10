@@ -9,10 +9,11 @@ import { Commands } from "../commands.ts";
 import { harnessBackgroundsCommands } from "../features/harness/index.ts";
 import { tracesUnavailable } from "../features/traces/index.ts";
 import { approve, deny } from "../features/needs-you/respond.ts";
+import { archiveSession } from "../features/session/archive.ts";
 import { runInBackground, send } from "../features/session/dispatch.ts";
 import { foregroundCommands } from "../features/session/model/running.ts";
 import { toggleOutput } from "../features/session/index.ts";
-import { archiveCommand, interruptCommand } from "../features/session/model/intent.ts";
+import { interruptCommand } from "../features/session/model/intent.ts";
 import type { ContextKey, ContextValue } from "../../shared/keymap.ts";
 import type { CommandHandlers, ContextPart } from "../routes/commands.ts";
 import type { Navigation } from "../routes/navigation.ts";
@@ -239,15 +240,7 @@ export const shellCommands = ({
       run: () => {
         const s = selected();
 
-        if (s !== null)
-          void send(
-            s.hostKey,
-            archiveCommand(
-              s.entry.session.id,
-              settingsStore.getState().sessions.deleteMergedBranch
-            ),
-            "Couldn't archive"
-          );
+        if (s !== null) void archiveSession(s.hostKey, s.entry.session.id, s.entry.session.title);
       },
       enabled: () => selected() !== null,
     },

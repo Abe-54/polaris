@@ -284,9 +284,10 @@ const PLATFORMS = new Map([
   ["darwin", "macOS"],
   ["linux", "Linux"],
   ["win32", "Windows"],
+  ["windows", "Windows"],
 ]);
 
-/** "darwin-arm64" → "macOS arm64", "linux-x64" → "Linux x64". */
+/** "darwin-arm64" → "macOS arm64", "linux-x64" → "Linux x64", "windows-x64" → "Windows x64". */
 export const platformLabel = (platform: string): string => {
   const [os = platform, ...arch] = platform.split("-");
 

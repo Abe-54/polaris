@@ -4,14 +4,15 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "exports": {
+    "./testing/binary": "./contract/testing/binary.ts"
+  },
   "scripts": {
-    "start": "bun src/main.ts",
-    "dev": "bun --watch src/main.ts",
+    "start": "cargo run --release --locked -p polaris-relay",
     "typecheck": "bun check -p .",
     "test": "bun ../../tooling/test/watchdog.ts"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.0-rc.118",
     "@polaris/protocol": "workspace:*",
     "effect": "4.0.0-rc.118"
   }

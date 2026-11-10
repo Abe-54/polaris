@@ -124,6 +124,7 @@ const Rendered = ({
           table: false,
           mermaid: { copy: false, download: false, fullscreen: false, panZoom: false },
         }}
+        tableMaxHeight={0}
         shikiTheme={[POLARIS_SHIKI, POLARIS_SHIKI]}
         mermaid={{ config: MERMAID_CONFIG }}
         linkSafety={{ enabled: false }}

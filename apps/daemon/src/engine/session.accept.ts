@@ -40,6 +40,7 @@ export const acceptTurns = (
       sessionId: record.session.id,
       throughTurnId: event.turnId,
       throughIndex: event.index,
+      throughUserTurn: event.userTurnNumber ?? null,
       revertLaterTurns: event.revertLaterTurns,
       acceptedBy: event.acceptedBy,
     }),

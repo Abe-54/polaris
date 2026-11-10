@@ -29,6 +29,7 @@ import { quietOpening } from "./idleCompaction.ts";
 import type { ShellView } from "./items.ts";
 import type { Outgoing } from "./outbox.ts";
 import type { Entry } from "./runs.ts";
+import { secretCards } from "./secret.ts";
 import type { Source } from "./sources/index.ts";
 import { groupTurns, lastView, openingView, shownItems, type TurnGroup } from "./turnGroups.ts";
 import { noTitles, type SubagentTitles, subagentTitles } from "./subagentTitles.ts";
@@ -306,7 +307,8 @@ export const latestTurnOpen = (turns: ReadonlyArray<TurnView>, folds: Folds): bo
 export interface ConversationInput {
   readonly turns: ReadonlyArray<TurnView>;
   readonly approvals: ReadonlyArray<ApprovalRequest>;
-  /** Secret Requests settled while this feed was open; their cards stay where they asked. */
+  /** Secret Requests settled while this feed was open; their cards stay where they asked. Those a
+   * reload forgot come back from their `request_secret` call's reply. */
   readonly settledSecrets?: ReadonlyArray<SettledSecret>;
   /** Write approvals settled while this feed was open; their cards stay, one line each. */
   readonly settledWrites?: ReadonlyArray<SettledWrite>;
@@ -349,12 +351,13 @@ export const conversationRows = ({
   const lastTurnId = turns.at(-1)?.turn.id ?? null;
   const open = openTurns(groups, folds);
   const titles = subagentTitles(turns);
+  const secrets = secretCards(turns, settledSecrets);
 
   groups.forEach((group, n) => {
     rows.push(...groupRows(group, open[n] ?? true, n === lastGroup, lastTurnId, titles));
     const ids = new Set(group.views.map((v) => v.turn.id));
 
-    for (const { request, outcome } of settledSecrets)
+    for (const { request, outcome } of secrets)
       if (ids.has(request.turnId)) rows.push(approvalRow(request, outcome));
 
     for (const { request, outcome } of settledWrites)

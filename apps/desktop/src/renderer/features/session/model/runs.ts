@@ -356,3 +356,7 @@ export const toolLabel = (item: ToolItem): string => {
 
   return toolVerb(item.name, running);
 };
+
+/** A tool call as a line on what an agent is doing now: "Messaging Fix tests · rebase". */
+export const toolActivity = (item: ToolItem): string =>
+  `${toolLabel({ ...item, status: "running" })} ${item.summary}`.trim();

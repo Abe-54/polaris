@@ -5,7 +5,8 @@
 import { Option, Schema } from "effect";
 import type { WebContents } from "electron";
 import { BrowserPickResult } from "../../../shared/browserContract.ts";
-import { cancelScript, type PickLimits, pickScript } from "./page.ts";
+import { cancelScript, type PickLimits, pickScript, unmarkScript } from "./page.ts";
+import { decodePageReact, type PageReact, REACT_LIMITS, reactScript } from "./react.ts";
 
 /** Isolated worlds 1–999 are Electron's and extensions'; this one is pick mode's alone. */
 const PICK_WORLD = 1618;
@@ -75,6 +76,23 @@ const screenshotOf = async (contents: WebContents, rect: Electron.Rectangle | nu
   return png.byteLength <= MAX_SCREENSHOT_BYTES ? new Uint8Array(png) : new Uint8Array();
 };
 
+/** Past this the pick goes without its React component: a page could stall the lookup. */
+const REACT_TIMEOUT_MS = 500;
+
+/** The marked element's React tree, read in the page's main world; null when it has none. */
+const reactOf = async (contents: WebContents, mark: string): Promise<PageReact | null> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const answer: unknown = await Promise.race([
+    contents.executeJavaScript(reactScript(mark, REACT_LIMITS)).catch(() => null),
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), REACT_TIMEOUT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+
+  return Option.getOrNull(decodePageReact(answer));
+};
+
 /**
  * Runs pick mode in the page until the user clicks an element (the pick), presses Escape, or
  * `abort` settles (null). A navigation or a crashed page ends it with null too.
@@ -85,6 +103,8 @@ export const pickIn = async (
 ): Promise<BrowserPickResult | null> => {
   let ended = false;
   let stop = () => {};
+
+  const mark = crypto.randomUUID();
 
   const stopped = new Promise<null>((resolve) => {
     stop = () => {
@@ -115,7 +135,11 @@ export const pickIn = async (
 
     const answer: unknown = await Promise.race([
       contents
-        .executeJavaScriptInIsolatedWorld(PICK_WORLD, [{ code: pickScript(PICK_LIMITS) }], true)
+        .executeJavaScriptInIsolatedWorld(
+          PICK_WORLD,
+          [{ code: pickScript(PICK_LIMITS, mark) }],
+          true
+        )
         .catch(() => null),
       stopped,
     ]);
@@ -129,7 +153,11 @@ export const pickIn = async (
     }
 
     const rect = captureRect(page.rect, contents.getZoomFactor());
-    const screenshot = await Promise.race([screenshotOf(contents, rect), stopped]);
+
+    const [screenshot, react] = await Promise.race([
+      Promise.all([screenshotOf(contents, rect), reactOf(contents, mark)]),
+      stopped.then(() => [null, null] as const),
+    ]);
 
     if (screenshot === null || ended || contents.isDestroyed()) return null;
 
@@ -139,9 +167,17 @@ export const pickIn = async (
       selector: page.selector,
       html: htmlExcerpt(page.html, page.htmlLength),
       screenshot,
+      componentName: react?.componentName ?? null,
+      source: react?.source ?? null,
+      stack: react?.stack ?? [],
     });
   } finally {
-    if (!contents.isDestroyed()) listen(false);
+    if (!contents.isDestroyed()) {
+      listen(false);
+      void contents
+        .executeJavaScriptInIsolatedWorld(PICK_WORLD, [{ code: unmarkScript(mark) }])
+        .catch(() => {});
+    }
   }
 };
 

@@ -41,9 +41,11 @@ const DATA = launched("polarisDevData", Schema.Literals(["worst", "visuals"]));
 
 const WORST = DATA === "worst";
 
-setVisualsScene(
-  launched("polarisDevVisuals", Schema.Literals(["loan", "revised", "probe"])) ?? "all"
-);
+// A release bundle resolves gallery.testing.ts to an empty module (ENG-555).
+if (__DEV__)
+  setVisualsScene(
+    launched("polarisDevVisuals", Schema.Literals(["loan", "revised", "probe"])) ?? "all"
+  );
 
 const MOONLIT = THEME === "moonlit" || launched("polarisDevTheme", ThemeName) === "moonlit";
 

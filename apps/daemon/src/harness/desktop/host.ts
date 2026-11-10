@@ -6,6 +6,7 @@ import { dlopen, FFIType } from "bun:ffi";
 import { AppId, AppRef, type ComputerUseState } from "@polaris/protocol";
 import { Effect, Predicate, Stream } from "effect";
 import { ComputerUseHost } from "../../computerUse/host.ts";
+import { childEnv } from "../../service/childEnv.ts";
 import { shortHostName } from "../../service/hostName.ts";
 import type { Env } from "./runner.ts";
 
@@ -33,6 +34,7 @@ export const consoleLocked = (ioreg: string): boolean =>
 
 const macLocked = Effect.tryPromise(async () => {
   const proc = Bun.spawn(["/usr/sbin/ioreg", "-n", "Root", "-d1", "-a"], {
+    env: childEnv(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
@@ -92,6 +94,7 @@ const macIdentify = (app: string) =>
     const script = BUNDLE_ID_SCRIPT.flatMap((line) => ["-e", line]);
 
     const proc = Bun.spawn(["/usr/bin/osascript", ...script, "--", app], {
+      env: childEnv(),
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",

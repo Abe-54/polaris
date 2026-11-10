@@ -11,8 +11,20 @@ temporary_root = Path('/tmp').resolve()
 if not private_root.is_relative_to(temporary_root) or private_root == temporary_root:
     parser.error('Private temporary root required')
 import json,pathlib,hashlib
-from importlib.machinery import SourceFileLoader
-m=SourceFileLoader('legal','tooling/language-catalog/complete-notices.py').load_module();o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache'
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+m=load('legal','tooling/language-catalog/complete-notices.py');o=pathlib.Path(args.output);c=pathlib.Path(args.root)/'legal-cache'
 s=json.loads((o/'notice-supplements.json').read_text());records=[]
 for name,repo,ref,p in [('@vscode/l10n@0.0.18','microsoft/vscode-l10n','fc7e3d79ddb91a2cc24a9730aad912026a43dbf2','LICENSE'),('boolbase@1.0.0','fb55/boolbase','be0bcd8a4e917a0a5895e95b523fbbed05a64871','LICENSE')]:
  u='https://raw.githubusercontent.com/'+repo+'/'+ref+'/'+p;b=m.download(u,c);print(name,b.decode()[:200]);n=m.save_notice('upstream/'+p,b,o)

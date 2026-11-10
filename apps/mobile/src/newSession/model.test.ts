@@ -77,6 +77,25 @@ describe("defaultTarget", () => {
     expect(defaultTarget([studio, vm], "dcai")).toEqual({ hostId: "studio", workspaceId: "dcai" });
   });
 
+  // ENG-494: "New agent session on {host}" from the host's long-press menu.
+  test("keeps to the host it was opened for: its last used workspace, else its first", () => {
+    expect(defaultTarget([studio, vm], undefined, "studio")).toEqual({
+      hostId: "studio",
+      workspaceId: "polaris",
+    });
+    expect(defaultTarget([{ ...studio, sessions: [] }, vm], undefined, "studio")).toEqual({
+      hostId: "studio",
+      workspaceId: "polaris",
+    });
+  });
+
+  test("falls back to the last used workspace when the host it was opened for drops", () => {
+    expect(defaultTarget([{ ...studio, connected: false }, vm], undefined, "studio")).toEqual({
+      hostId: "vm",
+      workspaceId: "homes",
+    });
+  });
+
   test("never lands on a hidden workspace", () => {
     const hidden = {
       ...vm,

@@ -3,10 +3,11 @@ import {
   MessageTarget,
   PlanOperation,
   Task,
+  taskIdPattern,
   type TaskId,
 } from "@polaris/protocol";
 import type { GraphCommand } from "../engine/constellation.inputs.ts";
-import { taskData } from "./data.ts";
+import { patchedTaskData, taskData } from "./data.ts";
 import { GraphDecision } from "./decision.ts";
 import { cancelBlockTarget } from "./blocked.ts";
 import { latestAttempt } from "./projections.ts";
@@ -39,6 +40,12 @@ const validateWaitCycles = (d: GraphDecision, tasks: ReadonlyArray<Task>) => {
   }
 };
 
+/** A new Task id names worktree and branch path components, so dispatch could not use any other (ENG-741). */
+export const validateTaskId = (d: GraphDecision, id: string, fix: string) => {
+  if (!taskIdPattern.test(id))
+    d.reject("E-TASK-ID", `Task id ${id} may contain only letters, digits, - and _`, fix);
+};
+
 /** Validate the resulting graph, so forward references and removing a dependency in the same batch work. */
 export const validateGraph = (d: GraphDecision, tasks: ReadonlyArray<Task>) => {
   validateParents(d, tasks);
@@ -66,6 +73,8 @@ export const validateGraph = (d: GraphDecision, tasks: ReadonlyArray<Task>) => {
   validateWaitCycles(d, tasks);
 };
 
+const suggestedId = (id: string) => id.replace(/[^A-Za-z0-9_-]+/g, "-");
+
 export const plan = (d: GraphDecision, command: GraphCommand<"Plan">) => {
   const candidate = new Map(d.record.graph.tasks.map((task) => [task.id, task]));
   const changed = new Set<TaskId>();
@@ -91,6 +100,8 @@ export const plan = (d: GraphDecision, command: GraphCommand<"Plan">) => {
     const current = candidate.get(id);
     PlanOperation.match(op, {
       Add: ({ task }) => {
+        validateTaskId(d, id, `Declare ${id} with an id such as ${suggestedId(id)}.`);
+
         if (current !== undefined)
           d.reject(
             "E-TASK-EXISTS",
@@ -108,7 +119,7 @@ export const plan = (d: GraphDecision, command: GraphCommand<"Plan">) => {
             `Task ${id} is at revision ${current.revision}`,
             "Read status and retry with the current Task revision."
           );
-        else if (task.id !== id || current.canceled)
+        else if ((task.id !== undefined && task.id !== id) || current.canceled)
           d.reject(
             "E-TASK-EDIT",
             `Task ${id} cannot be renamed or revived`,
@@ -117,7 +128,7 @@ export const plan = (d: GraphDecision, command: GraphCommand<"Plan">) => {
         else
           candidate.set(
             id,
-            new Task({ ...taskData(task), revision: revision + 1, canceled: false })
+            new Task({ ...patchedTaskData(current, task), revision: revision + 1, canceled: false })
           );
       },
       Cancel: ({ revision }) => {

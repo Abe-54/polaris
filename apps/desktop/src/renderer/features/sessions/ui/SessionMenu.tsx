@@ -1,6 +1,7 @@
 /**
  * A session row's right-click menu (C9, Paper X-F 06): Open, Open in Review, Open in terminal,
- * Rename…, Fork…, Pin or Unpin · MOVE: Archive · Copy session ID. Rename edits in place.
+ * Rename… (F2 on the focused row too), Fork…, Pin or Unpin · MOVE: Archive · Copy session ID.
+ * Rename edits in place.
  */
 import {
   ContextMenu,
@@ -11,7 +12,14 @@ import {
   MENU_SEPARATOR_ENTRY,
   type MenuEntryInput,
 } from "@polaris/ui";
-import { type ComponentProps, type ReactElement, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type KeyboardEvent,
+  type ReactElement,
+  useRef,
+  useState,
+} from "react";
+import { acceleratorLabel } from "../../../../shared/chord.ts";
 import { Commands } from "../../../commands.ts";
 import { openSessionReview } from "../../../routes/review.ts";
 import { useShellActions } from "../../../shell/hooks.ts";
@@ -20,8 +28,8 @@ import type { SessionEntry } from "../../../store/hostModel.ts";
 import { send } from "../../session/dispatch.ts";
 import { requestFork } from "../../session/forkRequest.ts";
 import { hasCapability, useHost } from "../../session/hooks.ts";
-import { archiveCommand, renameCommand } from "../../session/model/intent.ts";
-import { settingsStore } from "../../settings/index.ts";
+import { renameCommand } from "../../session/model/intent.ts";
+import { archiveSession, unarchiveSession } from "../../session/archive.ts";
 import { openInTerminalEntry } from "../../terminal/index.ts";
 import { isReviewSession } from "../model/sections.ts";
 
@@ -39,6 +47,17 @@ export interface SessionMenuProps extends Omit<
 /** Whether the menu offers Open in Review: the session has Turns of its own to review. */
 const reviewable = (entry: SessionEntry) =>
   entry.session.turnCount > 0 && !isReviewSession(entry.session);
+
+/** A focused session row's own keys, as the explorer's tree has (`TREE_CHORDS`). */
+const SESSION_CHORDS = { rename: "F2" } as const;
+
+/** F2 alone, as in Finder and Explorer; the rename field keeps its own keys. */
+const isRenameKey = (event: KeyboardEvent) =>
+  event.key === SESSION_CHORDS.rename &&
+  !event.metaKey &&
+  !event.ctrlKey &&
+  !event.altKey &&
+  !event.shiftKey;
 
 export const SessionMenu = ({ hostKey, entry, onRename, children, ...slot }: SessionMenuProps) => {
   const actions = useShellActions();
@@ -58,13 +77,9 @@ export const SessionMenu = ({ hostKey, entry, onRename, children, ...slot }: Ses
     );
 
   const archive = () =>
-    void send(
-      hostKey,
-      archived
-        ? Commands.UnarchiveSession({ sessionId: session.id })
-        : archiveCommand(session.id, settingsStore.getState().sessions.deleteMergedBranch),
-      archived ? "Couldn't unarchive" : "Couldn't archive"
-    );
+    void (archived
+      ? unarchiveSession(hostKey, session.id)
+      : archiveSession(hostKey, session.id, session.title));
 
   const entries: ReadonlyArray<MenuEntryInput> = [
     // ↵ on the focused row opens it too.
@@ -87,6 +102,7 @@ export const SessionMenu = ({ hostKey, entry, onRename, children, ...slot }: Ses
     {
       kind: "item",
       label: "Rename…",
+      shortcut: acceleratorLabel(SESSION_CHORDS.rename),
       needsInput: true,
       onSelect: () => {
         renamingNext.current = true;
@@ -116,9 +132,17 @@ export const SessionMenu = ({ hostKey, entry, onRename, children, ...slot }: Ses
     copyEntry("Copy session ID", session.id),
   ];
 
+  const keyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    slot.onKeyDown?.(event);
+
+    if (event.defaultPrevented || !isRenameKey(event)) return;
+    event.preventDefault();
+    onRename();
+  };
+
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild {...slot}>
+      <ContextMenuTrigger asChild {...slot} onKeyDown={keyDown}>
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent

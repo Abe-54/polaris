@@ -3,6 +3,7 @@ import type { NeedsYouNotification, NeedsYouSummary } from "../../shared/needsYo
 import {
   agentKey,
   bannerOn,
+  clickAction,
   emptyNotifyState,
   type NotifyState,
   planAgentNotifications,
@@ -107,5 +108,20 @@ describe("bannerOn", () => {
     [true, false, false],
   ])("automatic %p with the constellation setting %p shows: %p", (automatic, on, shown) => {
     expect(bannerOn({ ...note("n1"), automatic }, on)).toBe(shown);
+  });
+});
+
+describe("clickAction", () => {
+  test("a notification about a Constellation opens its view; any other opens the session", () => {
+    expect(clickAction({ ...note("n1"), automatic: true, constellationId: "graph" })).toEqual({
+      action: "open-constellation",
+      hostKey: "local",
+      sessionId: "s1",
+    });
+    expect(clickAction({ ...note("n2"), constellationId: null })).toEqual({
+      action: "open",
+      hostKey: "local",
+      sessionId: "s1",
+    });
   });
 });

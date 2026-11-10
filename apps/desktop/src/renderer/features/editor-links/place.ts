@@ -1,5 +1,5 @@
 /** Where paths inside a view live: its Host and the folder they are relative to. */
-import type { WorkspaceId } from "@polaris/protocol";
+import type { SessionId, WorkspaceId } from "@polaris/protocol";
 import { createContext, useContext, useEffect } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
@@ -9,6 +9,10 @@ export interface EditorPlace {
   /** A session's cwd, a Review Checkout, a Worktree; relative paths resolve against it. */
   readonly root: string | null;
   readonly workspaceId?: WorkspaceId | null;
+  /** The Agent Session whose conversation this is: localhost links open in its Browser. */
+  readonly sessionId?: SessionId | null;
+  /** The Host runs Windows: a drive path (`C:\…`) is absolute there; elsewhere it is a URL. */
+  readonly windows?: boolean;
 }
 
 export const EditorPlaceContext = createContext<EditorPlace | null>(null);

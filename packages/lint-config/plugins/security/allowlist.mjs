@@ -80,6 +80,8 @@ export const IMAGE_DECODE = {
     // Computer use preview frames, which Main admitted (main/ipc/computerUse.ts, admitRaster).
     "apps/desktop/src/renderer/features/session/ui/computerUse/frames.ts": "admitted",
     "apps/desktop/src/renderer/features/session/ui/computerUse/usePreview.ts": "admitted",
+    // A Simulator hub's JPEG frames, each through admitRaster before createImageBitmap.
+    "apps/desktop/src/renderer/features/simulator/video.ts": "admitted",
     // Loads Mermaid only to wrap it in guardedDiagrams (diagrams.ts).
     "apps/desktop/src/renderer/features/session/ui/markdown/plugins.ts": "guarded",
     // Dev evidence pages on a fake Host: they count object URLs, never ship.

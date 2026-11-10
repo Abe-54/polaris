@@ -1,0 +1,4 @@
+# The toolchain CI and local builds use. The Dockerfile's image tag names the same version.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]

@@ -11,9 +11,7 @@ import type { TurnView } from "../../../store/sessionModel.ts";
 import { sessionKey } from "../../../store/store.ts";
 import {
   BrowserOutputTab,
-  closeSubagent,
   hideOutput,
-  leaveBrowser,
   offerOutput,
   OutputTab,
   type SessionChrome,
@@ -23,7 +21,7 @@ import {
   useShownSubagent,
 } from "../../session/index.ts";
 import { browserKey, useBrowserUi } from "../../browser/index.ts";
-import { setDataOutputShown, useDataOutputShown } from "../../data/output/index.ts";
+import { useDataOutputShown } from "../../data/output/index.ts";
 import { uiKey as sessionUiKey } from "../../session/state.ts";
 import { useFacts, useLeadConstellation, useWorkerAttempt, type WorkerAttempt } from "../hooks.ts";
 import {
@@ -32,10 +30,12 @@ import {
   digestFold,
   steeredDigest,
 } from "../model/index.ts";
+import { showLeadTab } from "../leadTab.ts";
 import { leadKey, patchLeadUi, useLeadUi } from "../state.ts";
 import { DigestCard } from "./cards.tsx";
 import { ConstellationTab } from "./ConstellationTab.tsx";
 import { HandoverFocus, useWorkerChrome, WorkerFocus } from "./focus.tsx";
+import { LeadQuestions } from "./questions.tsx";
 
 export interface SessionSlot {
   readonly hostKey: string;
@@ -122,6 +122,7 @@ const LeadIntent = ({
         />
       );
     },
+    dock: <LeadQuestions hostKey={hostKey} record={record} />,
   };
 
   return (
@@ -185,12 +186,7 @@ export const ConstellationOutput = ({ hostKey, sessionId }: SessionSlot) => {
 
   if (record === null) return <SessionOutput hostKey={hostKey} sessionId={sessionId} />;
 
-  const pick = (tab: "constellation" | "changes") => {
-    closeSubagent(hostKey, sessionId);
-    leaveBrowser(hostKey, sessionId);
-    setDataOutputShown(sessionUiKey(hostKey, sessionId), false);
-    patchLeadUi(key, () => ({ tab }));
-  };
+  const pick = (tab: "constellation" | "changes") => showLeadTab(hostKey, sessionId, tab);
 
   const tabs = (
     <>

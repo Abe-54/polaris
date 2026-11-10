@@ -4,7 +4,19 @@ import hashlib
 import json
 import pathlib
 import tarfile
-from importlib.machinery import SourceFileLoader
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--cache', required=True, type=pathlib.Path)
@@ -16,7 +28,7 @@ for path in [args.cache, args.root]:
     if not path.resolve().is_relative_to(temporary) or path.resolve() == temporary:
         parser.error('Private temporary roots required')
 source = pathlib.Path(__file__).resolve().parent
-legal = SourceFileLoader('legal', str(source / 'complete-notices.py')).load_module()
+legal = load('legal', str(source / 'complete-notices.py'))
 parent = next(row for row in json.loads((source / 'jdt-source-closure.json').read_text())
               if row['name'].startswith('org.eclipse.jdt.launching_'))
 record = parent['source']

@@ -10,7 +10,7 @@ import {
   type SnapshotInput,
   summary,
 } from "../fixtures.testing.ts";
-import { heroKicker, nextUpIndex, nextUpMeta, pageIndex } from "./hero.ts";
+import { heroKicker, nextUpIndex, nextUpMeta, pageHeights, pageIndex } from "./hero.ts";
 import { buildHome, type HomeHost } from "./home.ts";
 
 const hostWith = (sessions: NonNullable<SnapshotInput["sessions"]>): HomeHost => ({
@@ -52,6 +52,25 @@ describe("the pager's page", () => {
 
   test("steps back when the last row is answered", () => {
     expect(pageIndex(needing(spike, plan), on(2))).toBe(1);
+  });
+});
+
+describe("the pager's heights", () => {
+  // Oldest first: plan, spike; form is never measured.
+  const [planKey, spikeKey] = needing(spike, plan).map((row) => row.key);
+
+  const measured = new Map([
+    [planKey ?? "", 120],
+    [spikeKey ?? "", 380],
+  ]);
+
+  test("wait until every page is measured", () => {
+    expect(pageHeights(needing(spike, form, plan), measured)).toBeNull();
+  });
+
+  test("follow the rows' order, dropping an answered row's page", () => {
+    expect(pageHeights(needing(spike, plan), measured)).toEqual([120, 380]);
+    expect(pageHeights(needing(spike), measured)).toEqual([380]);
   });
 });
 

@@ -21,6 +21,8 @@ export interface PageElement {
   readonly isConnected: boolean;
   readonly outerHTML: string;
   getAttribute: (name: string) => string | null;
+  setAttribute: (name: string, value: string) => void;
+  removeAttribute: (name: string) => void;
   matches: (selector: string) => boolean;
   getBoundingClientRect: () => PageRectLike;
 }

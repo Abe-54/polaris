@@ -3,6 +3,7 @@ import { Effect, Predicate } from "effect";
 import { samePath } from "../../git/WorktreeTracker.ts";
 import { EventStore } from "../../store/EventStore.ts";
 import { ConstellationWorktrees } from "../worktrees.ts";
+import { leadRef } from "../leadCheckout.ts";
 import { TransferStorage } from "./storage.ts";
 
 export const cleanupEligible = (graph: Constellation) =>
@@ -17,7 +18,7 @@ export const cleanupEligible = (graph: Constellation) =>
 export const cleanupConstellationWorktrees = Effect.fnUntraced(function* (
   graph: Constellation,
   leadPath: string,
-  mergedRef: string = "HEAD"
+  mergedRef: string = leadRef(graph)
 ) {
   if (!cleanupEligible(graph)) return;
   const storage = yield* TransferStorage;

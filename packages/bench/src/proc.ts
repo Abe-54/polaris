@@ -19,7 +19,7 @@
  * Only processes of the same user can be read, which is all a benchmark needs.
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
 
 export interface ProcCounters {
   readonly pid: number;
@@ -57,20 +57,19 @@ const darwinReader = (): ProcReader | null => {
     });
 
     const timebase = new Uint32Array(2);
-    lib.symbols.mach_timebase_info(ptr(timebase));
+    lib.symbols.mach_timebase_info(timebase);
     const toNs = (timebase[0] ?? 1) / (timebase[1] ?? 1);
     const usage = new BigUint64Array(RUSAGE_V2_SIZE / 8);
     const nameBuf = new Uint8Array(256);
     const pidBuf = new Int32Array(4096);
-    // ptr() is taken per call: JSC may move a small typed array's storage.
     const n = (i: number) => Number(usage[i] ?? 0n);
 
     return {
       backend: "darwin-libproc",
       read: (pid) => {
-        if (lib.symbols.proc_pid_rusage(pid, RUSAGE_INFO_V2, ptr(usage)) !== 0) return null;
+        if (lib.symbols.proc_pid_rusage(pid, RUSAGE_INFO_V2, usage) !== 0) return null;
         nameBuf.fill(0);
-        const len = Math.max(0, lib.symbols.proc_name(pid, ptr(nameBuf), nameBuf.byteLength));
+        const len = Math.max(0, lib.symbols.proc_name(pid, nameBuf, nameBuf.byteLength));
         const nul = nameBuf.indexOf(0);
 
         // Offsets (u64 words) in struct rusage_info_v2, after the 16-byte uuid.
@@ -85,7 +84,7 @@ const darwinReader = (): ProcReader | null => {
         };
       },
       children: (pid) => {
-        const count = lib.symbols.proc_listchildpids(pid, ptr(pidBuf), pidBuf.byteLength);
+        const count = lib.symbols.proc_listchildpids(pid, pidBuf, pidBuf.byteLength);
 
         return count > 0 ? [...pidBuf.subarray(0, count)] : [];
       },

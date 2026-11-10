@@ -1,0 +1,28 @@
+name: The relay binary (cached)
+description: >-
+  apps/relay's release binary for the suites that start a relay, named in POLARIS_RELAY_BIN:
+  restored from the Actions cache, keyed on the OS, architecture and the relay's sources, or
+  built with the toolchain rust-toolchain.toml pins.
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/polaris-relay-bin
+        key: relay-bin-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/relay/src/**', 'apps/relay/Cargo.toml', 'apps/relay/Cargo.lock', 'apps/relay/rust-toolchain.toml') }}
+    - name: Build the relay
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: apps/relay
+      env:
+        BINARY: polaris-relay${{ runner.os == 'Windows' && '.exe' || '' }}
+      run: |
+        rustup toolchain install --no-self-update
+        cargo build --release --locked -p polaris-relay
+        mkdir -p "$RUNNER_TEMP/polaris-relay-bin"
+        cp "target/release/$BINARY" "$RUNNER_TEMP/polaris-relay-bin/$BINARY"
+    - shell: bash
+      env:
+        BINARY: polaris-relay${{ runner.os == 'Windows' && '.exe' || '' }}
+      run: echo "POLARIS_RELAY_BIN=$RUNNER_TEMP/polaris-relay-bin/$BINARY" >> "$GITHUB_ENV"

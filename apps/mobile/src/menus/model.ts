@@ -7,6 +7,7 @@ import {
   Command,
   type ConnectionState,
   ConstellationId,
+  SessionId,
   SetConstellationStateAction,
 } from "@polaris/protocol";
 import type { Session } from "../home/feed/fold.ts";
@@ -53,6 +54,8 @@ export type MenuAction =
       readonly failure: string;
     }
   | { readonly kind: "retry-host"; readonly hostId: string }
+  /** The New agent session sheet, opened on this Host. */
+  | { readonly kind: "new-session"; readonly hostId: string }
   /** Fork the session from a Turn: the Desktop App's; a Linked Device can't send ForkSession yet. */
   | {
       readonly kind: "fork";
@@ -137,6 +140,42 @@ const answers = (row: SessionRow): ReadonlyArray<MenuItem> => {
   }));
 };
 
+/** Needs You with nothing pending: a Turn the Daemon's restart interrupted, waiting on Continue. */
+const interrupted = (row: SessionRow) => row.session.state === "needs-you" && row.approval === null;
+
+/** What brings a stopped Turn back: Retry a Failed one, Continue an Interrupted one, or nothing. */
+const recovery = (row: SessionRow): readonly [string, string, Command] | null => {
+  const sessionId = SessionId.make(row.session.id);
+
+  if (row.session.state === "failed")
+    return ["retry", "Retry", Command.cases.Retry.make({ sessionId })];
+
+  return interrupted(row)
+    ? ["continue", "Continue", Command.cases.Continue.make({ sessionId })]
+    : null;
+};
+
+/** The Desktop App's Retry and Continue (ENG-494), disabled while the Host is offline. */
+const recovers = (row: SessionRow): ReadonlyArray<MenuItem> => {
+  const offer = recovery(row);
+
+  if (offer === null) return [];
+  const [id, title, command] = offer;
+
+  return [
+    {
+      ...item(id, title, {
+        kind: "send",
+        hostId: row.hostId,
+        command,
+        failure: `Couldn't ${title.toLowerCase()}`,
+      }),
+      subtitle: row.stale ? "Host offline" : null,
+      disabled: row.stale,
+    },
+  ];
+};
+
 /**
  * The Desktop App's Pin, Rename and Archive. A phone's Archive keeps the branch
  * (`DEVICE_COMMANDS`), so Unarchive always undoes it.
@@ -170,6 +209,7 @@ export const sessionMenu = (row: SessionRow): Menu =>
   [
     opens(row.hostId, row.session),
     answers(row),
+    recovers(row),
     manages(row.hostId, row.session),
     [copyId(row.session)],
   ].filter((group) => group.length > 0);
@@ -239,13 +279,21 @@ export const constellationMenu = (row: ConstellationRow): Menu => {
   ].filter((group) => group.length > 0);
 };
 
-/** A Host's row: Retry now while it isn't connected; nothing to offer otherwise. */
+/** A Host's row: a new agent session there while it's connected, Retry now while it isn't. */
 export const hostMenu = (host: {
   readonly hostId: string;
+  readonly name: string;
   readonly state: ConnectionState;
 }): Menu =>
   host.state === "connected"
-    ? []
+    ? [
+        [
+          item("new-session", `New agent session on ${host.name}…`, {
+            kind: "new-session",
+            hostId: host.hostId,
+          }),
+        ],
+      ]
     : [[item("retry", "Retry now", { kind: "retry-host", hostId: host.hostId })]];
 
 /** The Daemon command an action sends, or null for one that stays on the phone. */

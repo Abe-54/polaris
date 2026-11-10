@@ -16,6 +16,9 @@ import { PredictionServerLive } from "../prediction/server.ts";
  */
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
+import { hostPlatform } from "../platform/index.ts";
+import { simulatorCapable } from "../simulator/service.ts";
+import { lazySimulator, SimulatorRpcHandlers } from "./lazySimulator.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
 import { selfTraceLoggers } from "@polaris/client/selfTraces/logger";
 import { Deferred, Effect, Layer, Logger } from "effect";
@@ -61,11 +64,9 @@ import { TerminalRpcsLive } from "../terminal/TerminalRpcs.ts";
 import { TerminalsDaemonLive } from "../terminal/Terminals.ts";
 import { UsageRpcsLive } from "../usage/UsageRpcs.ts";
 import { UsageSessions } from "../usage/sessions.ts";
-import { DeepgramLive } from "../voice/deepgram.ts";
-import { HostSecrets } from "../secrets/index.ts";
-import { VoiceRpcsLive } from "../voice/VoiceRpcs.ts";
 import { ResourceRpcsLive } from "../resources/rpc.ts";
 import { HostStats, HostStatsRpcsLive } from "../hostStats/index.ts";
+import { TracingSkillRpcsLive } from "../traces/skill/index.ts";
 import { paths } from "../paths.ts";
 import { startServer } from "./server.ts";
 import { ByteStreamRpcsLive } from "./byteStreams.ts";
@@ -92,6 +93,7 @@ import { lazyAcceptHandlers } from "./lazyAccept.ts";
 import { languagesAvailable, lazyLanguageHandlers } from "./lazyLanguages.ts";
 import { lazyReviewer } from "./lazyReviewer.ts";
 import { lazyUsage } from "./lazyUsage.ts";
+import { lazyVoiceHandlers } from "./lazyVoice.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
 import { AppControl, ComputerUseHost, ComputerUseHostRpcHandlers } from "../computerUse/index.ts";
@@ -149,7 +151,7 @@ const computerUseBindings = Layer.effectDiscard(
 
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
-  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, desktopMcp))
+  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator, desktopMcp))
 );
 
 /**
@@ -201,6 +203,8 @@ export const engineServices = Layer.mergeAll(
   // Computer use on this Host: its RPCs and the polaris_desktop tools read one status (ENG-846).
   Layer.provideMerge(AppControl.layer),
   Layer.provideMerge(ComputerUseHost.layer.pipe(Layer.provideMerge(ComputerUseHelper.layer))),
+  // The Simulator's hub and MCP server (ENG-829), loaded on first use; one instance with the Harnesses'.
+  Layer.provideMerge(lazySimulator),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -237,6 +241,7 @@ export const daemonHandlers = Layer.mergeAll(
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),
+  TracingSkillRpcsLive,
   PushNotifierLive,
   LiveNotifierLive,
   ResourceRpcsLive,
@@ -251,13 +256,14 @@ export const daemonHandlers = Layer.mergeAll(
   lazyAcceptHandlers,
   ReviewerRpcsLive,
   TerminalRpcsLive.pipe(Layer.provide(TerminalsDaemonLive)),
-  VoiceRpcsLive.pipe(Layer.provide(Layer.merge(DeepgramLive, HostSecrets.layer))),
+  lazyVoiceHandlers,
   byteStreamHandlers,
+  SimulatorRpcHandlers,
   selfTraceExport
 ).pipe(Layer.provide(daemonServices));
 
 /** What the lazy language handlers serve: unavailable where no language artifact runs. */
-const LANGUAGE_CAPABILITIES: ReadonlyArray<Capability> = [
+export const LANGUAGE_CAPABILITIES: ReadonlyArray<Capability> = [
   "prediction.context",
   "languages",
   "languages.trust",
@@ -284,10 +290,12 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "data",
   "data.writes",
   "data.schemaDiff",
+  "data.schemaDiff.turns",
   "data.sqlite",
   "traces",
   "traces.settings",
   "traces.compare",
+  "traces.skill",
   "traces.profiles",
   "traces.profiles.attach",
   "traces.self",
@@ -321,9 +329,13 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "session.turn-paging",
   "session.stop-background",
   "session.background-command",
+  "session.background-command-failed",
   "session.compaction",
   "session.notify",
   "session.pin",
+  "session.review-subject",
+  "session.background-reports",
+  "session.checkpoint-commit",
   "session.limited",
   "session.plan-mode",
   "session.user-turns",
@@ -368,8 +380,10 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host.resources",
   "host.stats",
   "host-address",
+  "host-address.names",
   "browser.host",
   "computer-use",
+  ...(simulatorCapable(hostPlatform()) ? ["simulator" as const] : []),
 ];
 
 /**

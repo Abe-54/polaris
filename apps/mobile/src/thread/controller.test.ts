@@ -200,37 +200,72 @@ describe("send, steer, queue", () => {
       })
     ));
 
-  test("Send with attachments during a steerable Turn waits for it, since a steer is text only", () =>
-    withThread((host, thread) =>
-      Effect.gen(function* () {
-        const shot = new Attachment({
-          id: AttachmentId.make("att-1"),
-          name: "shot.png",
-          mimeType: "image/png",
-          size: 10,
-          hostPath: "/staging/att-1/shot.png",
-          width: 4,
-          height: 3,
-        });
+  const shot = new Attachment({
+    id: AttachmentId.make("att-1"),
+    name: "shot.png",
+    mimeType: "image/png",
+    size: 10,
+    hostPath: "/staging/att-1/shot.png",
+    width: 4,
+    height: 3,
+  });
 
-        yield* host.push(snapshot([{ turn: working }], { state: "working" }));
-        yield* until(thread, (s) => s.fold !== null);
-        thread.type("use this screenshot");
-        expect(yield* Effect.promise(() => thread.submit([shot]))).toBe(true);
-        yield* settle;
-        expect(host.commands).toEqual([]);
+  test.each([
+    ["the Host lacks session.steer-attachments", ALL, true],
+    [
+      "the Harness doesn't take files in a steer",
+      new Set([...ALL, "session.steer-attachments"]),
+      false,
+    ],
+  ])("Send with attachments waits for the Turn in flight when %s", (_, capabilities, harness) =>
+    withThread(
+      (host, thread) =>
+        Effect.gen(function* () {
+          yield* host.push(snapshot([{ turn: working }], { state: "working" }));
+          yield* until(thread, (s) => s.fold !== null);
+          thread.type("use this screenshot");
+          expect(yield* Effect.promise(() => thread.submit([shot], harness))).toBe(true);
+          yield* settle;
+          expect(host.commands).toEqual([]);
 
-        yield* host.push(ended(2, turn(1)));
-        yield* host.push(stateChanged(3, "idle"));
-        yield* until(thread, (s) => s.queued.length === 0);
-        expect(host.commands[0]).toEqual(
-          Command.cases.SendTurn.make({
-            sessionId,
-            prompt: "use this screenshot",
-            attachments: [shot.id],
-          })
-        );
-      })
+          yield* host.push(ended(2, turn(1)));
+          yield* host.push(stateChanged(3, "idle"));
+          yield* until(thread, (s) => s.queued.length === 0);
+          expect(host.commands[0]).toEqual(
+            Command.cases.SendTurn.make({
+              sessionId,
+              prompt: "use this screenshot",
+              attachments: [shot.id],
+            })
+          );
+        }),
+      { capabilities }
+    )
+  );
+
+  test("Send with attachments steers with them where the Host and Harness take them", () =>
+    withThread(
+      (host, thread) =>
+        Effect.gen(function* () {
+          yield* host.push(snapshot([{ turn: working }], { state: "working" }));
+          yield* until(thread, (s) => s.fold !== null);
+          thread.type("use this screenshot");
+          expect(yield* Effect.promise(() => thread.submit([shot], true))).toBe(true);
+          expect(host.commands).toEqual([
+            Command.cases.Steer.make({
+              sessionId,
+              text: "use this screenshot",
+              attachments: [shot.id],
+            }),
+          ]);
+          expect(thread.get().queued).toEqual([]);
+
+          // One that doesn't land gives its files back with its text, to send again.
+          yield* host.push(ended(2, turn(1)));
+          const failed = yield* until(thread, (s) => s.steers[0]?.status === "failed");
+          expect(thread.editSteer(failed.steers[0]?.id ?? "")).toEqual([shot]);
+        }),
+      { capabilities: new Set([...ALL, "session.steer-attachments"]) }
     ));
 });
 
@@ -348,6 +383,19 @@ describe("the Critical finding", () => {
           const state = yield* until(thread, (s) => s.findings.length > 0);
           expect(state.findings.map((f) => f.title)).toEqual(["Secret-like value committed"]);
           expect(host.summariesAsked).toContain(head);
+        }),
+      { summaries: new Map([[head, summaryAt(head, [finding()])]]) }
+    ));
+
+  test("a Snapshot's Turn names its commit, with no checkpoint on this feed", () =>
+    withThread(
+      (host, thread) =>
+        Effect.gen(function* () {
+          yield* host.push(
+            snapshot([{ turn: turn(1, { checkpointAfter: ref, checkpointAfterCommit: head }) }])
+          );
+          const state = yield* until(thread, (s) => s.findings.length > 0);
+          expect(state.findings.map((f) => f.title)).toEqual(["Secret-like value committed"]);
         }),
       { summaries: new Map([[head, summaryAt(head, [finding()])]]) }
     ));

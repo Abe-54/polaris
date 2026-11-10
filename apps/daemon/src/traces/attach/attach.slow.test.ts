@@ -523,7 +523,7 @@ native.each(["pending", "recording", "turn ended"])(
 );
 
 native(
-  "bootstrap injection follows trace availability and skips user exports, plan and reviewer sessions",
+  "bootstrap injection is independent of trace availability and skips user exports, plan and reviewer sessions",
   () =>
     withProfiles(async ({ runtime, addSession }) => {
       const plan = await addSession("readonly", { mode: "plan" });
@@ -531,7 +531,19 @@ native(
       await runtime.runPromise(
         Effect.gen(function* () {
           const traces = yield* TraceRuntime;
-          expect((yield* traces.environment(TEST_SESSION, {})).NODE_OPTIONS).toBeUndefined();
+
+          // ENG-702: another process holding the receiver's port must not cost attach its bootstrap.
+          yield* traces.setAvailability(
+            TraceAvailability.cases.Unavailable.make({
+              code: "EADDRINUSE",
+              message: "Traces is unavailable: port 4319 is in use.",
+              owner: null,
+            })
+          );
+          const unavailable = yield* traces.environment(TEST_SESSION, {});
+          expect(unavailable.NODE_OPTIONS).toContain("--import");
+          expect(unavailable.POLARIS_PROFILE_TOKEN?.length).toBe(64);
+          expect(unavailable.OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
           yield* traces.setAvailability(TraceAvailability.cases.Listening.make({}));
 
           for (const id of [plan, reviewer])

@@ -7,15 +7,14 @@
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { makeFeed, type SequenceMark } from "@polaris/client";
+import { type DaemonClient, openHostFeed } from "@polaris/client";
 import {
   ApprovalDecision,
   Command,
   CommandRejected,
-  HostStreamItem,
   RequestId,
-  Sequence,
   SessionId,
+  Sequence,
   SessionPlacement,
   TurnId,
 } from "@polaris/protocol";
@@ -65,13 +64,6 @@ const startSession = (sessionId: SessionId) =>
     yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "idle");
   });
 
-const markHost = (item: HostStreamItem): SequenceMark =>
-  HostStreamItem.match<SequenceMark>(item, {
-    Event: (event) => ({ kind: "event", sequence: event.envelope.sequence }),
-    Snapshot: (snapshot) => ({ kind: "snapshot", sequence: snapshot.sequence }),
-    Synchronized: (synced) => ({ kind: "synchronized", sequence: synced.sequence }),
-  });
-
 /**
  * Finding 1. `HostConnection` opens the host feed with `gapless: true`, but the
  * Daemon's host stream leaves out session-only events (`TurnItemCompleted`,
@@ -82,7 +74,7 @@ const markHost = (item: HostStreamItem): SequenceMark =>
  * of times in a fraction of a second here). Spec: `hostFeedCanProgress` in
  * packages/spec/polaris.qnt (violated in `current`, holds in `fixed`).
  *
- * Fixed: `HostConnection.ts` opens the host feed with `gapless: false` (the
+ * Fixed: `openHostFeed` (`resume.ts`) opens the host feed with `gapless: false` (the
  * dedupe by sequence is enough: a dropped subscriber's stream ends, it is never
  * skipped), and a feed's reopens that make no progress back off.
  */
@@ -101,16 +93,18 @@ test("the host feed follows a Turn that records items and checkpoints", async ()
       const engine = yield* Engine;
       const opens: Array<number | null> = [];
 
-      const feed = yield* makeFeed<Engine["Service"], HostStreamItem, never>({
-        source: { next: () => Effect.succeed({ epoch: 1, client: engine }) },
-        open: (client, after) => {
-          opens.push(after);
+      // The Engine's host stream behind the Client's own feed, so `openHostFeed`'s options are under test.
+      // SAFETY: `openHostFeed` calls only `subscribeHost` on its client.
+      const client = Object.assign(Object.create(null) as DaemonClient, {
+        subscribeHost: ({ afterSequence }: { readonly afterSequence: Sequence | null }) => {
+          opens.push(afterSequence);
 
-          return client.subscribeHost(after === null ? null : Sequence.make(after));
+          return engine.subscribeHost(afterSequence);
         },
-        mark: markHost,
-        isDisconnect: () => false,
-        gapless: false, // as HostConnection.ts opens it
+      });
+
+      const feed = yield* openHostFeed({
+        next: () => Effect.succeed({ epoch: 1, client }),
       });
 
       yield* Effect.forkScoped(Stream.runDrain(feed.stream));

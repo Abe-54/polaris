@@ -48,8 +48,14 @@ export const RelayRole = Schema.Literals(["host", "device"]);
 
 export type RelayRole = typeof RelayRole.Type;
 
+/** Characters in a relay address: 16 bytes as base64url without padding. */
+export const RELAY_ADDRESS_LENGTH = 22;
+
+/** What a relay address matches; `RelayAddress` is this check and a brand. */
+export const RELAY_ADDRESS_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+
 /** A party's relay address: base64url of the first 16 bytes of SHA-256 over its Ed25519 public key. */
-export const RelayAddress = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{22}$/)).pipe(
+export const RelayAddress = Schema.String.check(Schema.isPattern(RELAY_ADDRESS_PATTERN)).pipe(
   Schema.brand("RelayAddress")
 );
 

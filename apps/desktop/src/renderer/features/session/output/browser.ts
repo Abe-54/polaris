@@ -6,15 +6,17 @@ import {
   setBrowserShown,
 } from "../../browser/index.ts";
 import { setDataOutputShown } from "../../data/output/state.ts";
+import { setSimulatorShown } from "../../simulator/index.ts";
 import { isTerminalShown, type TerminalPlace } from "../../terminal/index.ts";
 import { showSubagent, uiKey } from "../state.ts";
 import { offerOutput } from "./actions.ts";
 import { isOutputHeldClosed, isOutputOpen } from "./open.ts";
 
-/** The user picks the Browser tab: it replaces a shown Subagent. */
+/** The user picks the Browser tab: it replaces a shown Subagent and the Simulator. */
 export const pickBrowser = (hostKey: string, sessionId: string) => {
   showSubagent(uiKey(hostKey, sessionId), null);
   setDataOutputShown(uiKey(hostKey, sessionId), false);
+  setSimulatorShown(uiKey(hostKey, sessionId), false);
   setBrowserShown(uiKey(hostKey, sessionId), true);
 };
 

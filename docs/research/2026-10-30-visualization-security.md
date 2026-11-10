@@ -183,3 +183,35 @@ a committed machine baseline. An earlier fixed run was 746→940 MB; W1 reported
 534→516 MB. The variation does not establish a preload regression, but the latest
 original and fixed runs both exceed the product's memory target. ENG-636 records the
 budget discrepancy and the need for controlled release-build measurements.
+
+### Physical footprint on a built app (ENG-636, 2026-11-09)
+
+`apps/desktop/scripts/visualizationScreens.ts` now samples the peak physical footprint
+(`scripts/lib/sampleTree.ts`, 3 s at 200 ms) of the Electron tree and of the throwaway
+Daemon, as `budgets.ts` does, beside the old summed working set. Three runs on a Mac14,13
+(32 GB), on `out/` from `bun scripts/build.ts --no-app` (Vite production renderer) at
+`a4a35cea6`, Electron launched with `--use-mock-keychain` against a `/tmp` Daemon on the
+bench Harness. All 14 checks passed in every run.
+
+| Run | App, `polaris` scene | Daemon | Total | App, after scrolling 30 | Daemon | Total | Working set, before → after |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 857 MiB | 74 MiB | 931 MiB | 745 MiB | 74 MiB | 819 MiB | 966 → 1,028 MB |
+| 2 | 860 MiB | 77 MiB | 937 MiB | 766 MiB | 74 MiB | 840 MiB | 917 → 959 MB |
+| 3 | 900 MiB | 64 MiB | 964 MiB | 857 MiB | 75 MiB | 932 MiB | 982 → 1,120 MB |
+
+Frames: p95 6.1 ms in every run, at most 0.56% over 8.33 ms; two live frames at rest,
+three while scrolling; five processes.
+
+**Reconciled.** By physical footprint, the measure the Desktop budget (`budgets.ts`,
+`< 1024 MiB`, app tree plus Daemon) is checked against, the app plus Daemon stays under
+1 GB with and after 30 Visualizations: 819–932 MiB after the scroll, 931–964 MiB on
+the busier `polaris` preview scene. The summed working sets above 1 GB counted shared
+pages once per process, so they overstate the total and aren't the budget's measure.
+The headroom is thin: run 3 came within 60 MiB of the line.
+
+Limits: the "before" figure is the `polaris` preview scene, not the same 30-card scene
+without its frames, so it isn't a Visualization-free baseline of that scene. The runs used
+the dev bundle's Electron binary (`out/dev/Polaris Dev.app`) loading the production build,
+not a signed, packaged `Polaris.app`. The Host was under heavy load from other agents
+(load average 72–146); footprint is less sensitive to load than timing is. No committed
+machine baseline is gated on these numbers.

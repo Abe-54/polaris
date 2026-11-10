@@ -12,6 +12,7 @@ import { join, relative } from "node:path";
 import { baseEnv, findRepoRoot, runGit } from "../../git/git.ts";
 import { safeConfigEnv } from "../../git/safeConfig/index.ts";
 import { gitExecutable } from "../../git/executable.ts";
+import { groupFor, startSignal, stopOnAbort, uninterrupted } from "../../git/interrupt.ts";
 import type { FileChange, GrepHit, GrepQuery, PathHit, SearchBackend } from "./types.ts";
 import { WALK_SKIP, watchRoot } from "./watch.ts";
 
@@ -185,13 +186,21 @@ const runGitGrep = async (
   flavour: GrepFlavour,
   query: GrepQuery
 ): Promise<Array<GrepHit>> => {
-  const proc = Bun.spawn([gitExecutable(), ...gitGrepArgs(inRepo, flavour, query)], {
+  const args = gitGrepArgs(inRepo, flavour, query);
+  const env = childEnv({ ...baseEnv(), ...(await safeConfigEnv(root, baseEnv())) });
+  // An interrupted search ends its git grep, and whatever git started, with it.
+  const signal = startSignal(args);
+
+  const proc = Bun.spawn([gitExecutable(), ...args], {
+    ...groupFor(signal),
     cwd: root,
-    env: childEnv({ ...baseEnv(), ...(await safeConfigEnv(root, baseEnv())) }),
+    env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
+
+  stopOnAbort(proc, signal);
 
   const hits: Array<GrepHit> = [];
   const decoder = new TextDecoder();
@@ -245,7 +254,11 @@ export const openFallbackBackend = (root: string): SearchBackend => {
 
   const inRepo = () => {
     if (repo === null || Date.now() - repo.at > LIST_TTL_MS) {
-      repo = { at: Date.now(), inRepo: findRepoRoot(root).then((r) => r !== null) };
+      // Shared by every caller, so no one caller's interrupt may end it.
+      repo = {
+        at: Date.now(),
+        inRepo: uninterrupted(() => findRepoRoot(root).then((r) => r !== null)),
+      };
     }
 
     return repo.inRepo;
@@ -255,7 +268,10 @@ export const openFallbackBackend = (root: string): SearchBackend => {
 
   const files = () => {
     if (cached === null || Date.now() - cached.at > LIST_TTL_MS) {
-      cached = { at: Date.now(), files: inRepo().then((r) => listFiles(root, r)) };
+      cached = {
+        at: Date.now(),
+        files: uninterrupted(() => inRepo().then((r) => listFiles(root, r))),
+      };
       cached.files.catch(() => {
         cached = null;
       });

@@ -113,12 +113,33 @@ export class LanguageFeatures {
   navigation(
     method:
       | "textDocument/definition"
+      | "textDocument/declaration"
       | "textDocument/typeDefinition"
       | "textDocument/implementation",
     offset: number,
     signal?: AbortSignal
   ) {
     return this.decoded(method, Payload.Locations, this.point(offset), signal);
+  }
+  /** Each server's declarations; one without `declarationProvider` answers with its definitions. */
+  async declaration(offset: number, signal?: AbortSignal) {
+    const declares = (provider: LanguageProvider) =>
+      provider.capabilities.methods.includes("textDocument/declaration");
+
+    const [declared, defined] = await Promise.all([
+      this.navigation("textDocument/declaration", offset, signal),
+      this.options.providers().every(declares)
+        ? []
+        : this.decoded(
+            "textDocument/definition",
+            Payload.Locations,
+            this.point(offset),
+            signal,
+            "textDocument/declaration:definition"
+          ),
+    ]);
+
+    return [...declared, ...defined.filter((answer) => !declares(answer.provider))];
   }
   references(offset: number, includeDeclaration = true, signal?: AbortSignal) {
     return this.decoded(

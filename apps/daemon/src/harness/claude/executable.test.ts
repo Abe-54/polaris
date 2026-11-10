@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, linkSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, linkSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { PassThrough } from "node:stream";
+import { Schema } from "effect";
 import { claudeExecutable, type Start, spawnWith } from "./executable.ts";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 
@@ -58,7 +59,8 @@ test("npm's cli.js runs under the shim's own node, never a bare one", async () =
     command: "node",
     args: [script, "--print"],
     cwd: seen,
-    env: { ...process.env },
+    // No PATH: a bare `node` can't be found, so only the shim's absolute node can run.
+    env: { ...process.env, PATH: "", Path: "" },
     signal: new AbortController().signal,
   });
 
@@ -67,7 +69,16 @@ test("npm's cli.js runs under the shim's own node, never a bare one", async () =
 
   // Windows can't remove the copied node while it still runs.
   await exited;
-  expect(JSON.parse(out)).toEqual([realpathSync(node), "--print"]);
+
+  // A hard link has two names and macOS may report either: compare the file, not the path.
+  const [ran = "", ...argv] = Schema.decodeUnknownSync(Schema.Array(Schema.String))(
+    JSON.parse(out)
+  );
+
+  const identity = (path: string) => ({ dev: statSync(path).dev, ino: statSync(path).ino });
+
+  expect(identity(ran)).toEqual(identity(node));
+  expect(argv).toEqual(["--print"]);
   removeTempDir(seen);
 });
 

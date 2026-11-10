@@ -14,6 +14,7 @@ import { LinkedPullsPublisher } from "../features/accept/index.ts";
 import { ConstellationFeeds } from "../features/constellation/feeds.tsx";
 import { BrowserForget, BrowserWorking } from "../features/browser/index.ts";
 import { NeedsYouPublisher } from "../features/needs-you/index.ts";
+import { BackgroundFailureToasts } from "../features/session/index.ts";
 import {
   ConstellationDefaultsPublisher,
   IdleCompactionPublisher,
@@ -44,6 +45,7 @@ export const App = ({ value, onboarding = settled }: AppProps) => (
             <TooltipProvider>
               <Shell />
               <NeedsYouPublisher />
+              <BackgroundFailureToasts />
               <ConstellationDefaultsPublisher />
               <IdleCompactionPublisher />
               <VisualsPublisher />

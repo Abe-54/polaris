@@ -429,3 +429,42 @@ test("tokens of sessions archived while the Daemon was down die when it starts",
   });
   await removeTempDirSettled(home);
 }, 15_000);
+
+test("a restart rotates a live session's token and keeps its remembered tabs", async () => {
+  const home = newTempDir("polaris-cdp-rotate-", { short: true });
+  const s5 = SessionId.make("session-five");
+  const tabs = [{ targetId: "t1", url: "https://example.com/", title: "Example" }];
+
+  const withRelay = <A>(body: (relay: CdpRelay["Service"]) => Promise<A>) =>
+    Effect.runPromise(
+      Effect.scoped(
+        Layer.build(CdpRelay.layer({ home, version: "0.0.0-test", sessions })).pipe(
+          Effect.flatMap((context) => Effect.promise(() => body(Context.get(context, CdpRelay)))),
+          Effect.provide(fakeHosting)
+        )
+      )
+    );
+
+  const withStore = <A>(body: (store: CdpRelayStore["Service"]) => Effect.Effect<A, unknown>) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* body(yield* CdpRelayStore);
+      }).pipe(Effect.provide(CdpRelayStore.layer(join(home, "browser-cdp.sqlite"))))
+    );
+
+  const url = await withRelay(async (first) => (await Effect.runPromise(first.issue(s5))).url);
+  await withStore((store) => store.remember(s5, tabs));
+  const token = url.slice(url.lastIndexOf("/") + 1);
+
+  const next = await withRelay(async (second) => {
+    expect(await withStore((store) => store.authenticate(s5, token))).toBe(false);
+
+    return (await Effect.runPromise(second.issue(s5))).url;
+  });
+
+  expect(next).not.toBe(url);
+  const rotated = next.slice(next.lastIndexOf("/") + 1);
+  expect(await withStore((store) => store.authenticate(s5, rotated))).toBe(true);
+  expect(await withStore((store) => store.remembered(s5))).toEqual(tabs);
+  await removeTempDirSettled(home);
+}, 15_000);

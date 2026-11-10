@@ -27,6 +27,7 @@ const linking = (initial: string | null) => {
 const warm: NavigationState = {
   stack: [{ screen: "tabs" }, { screen: "newSession", workspaceId: "ws1" }],
   tab: "review",
+  settings: "settings",
 };
 
 const thread = { screen: "thread", hostId: "mac/studio 1", sessionId: "s1" } as const;

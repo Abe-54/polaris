@@ -3,7 +3,7 @@
  * `wss://<machine>.<tailnet>.ts.net/polaris/rpc` while Remote Access is on, else none.
  */
 import { Context, Effect, Layer, Option } from "effect";
-import { RemoteAccessControl } from "../remoteAccess/index.ts";
+import { RemoteAccessControl } from "../remoteAccess/service.ts";
 
 export class RemoteAccess extends Context.Service<
   RemoteAccess,

@@ -4,7 +4,8 @@
  * (in-memory files, no Daemon; the Daemon's read cost is M3-FILES' `editor`
  * bench scenario):
  *  - opening a 1 MB file: renderer time from openFile to the first painted lines;
- *  - typing: key-to-paint latency in a small and the 1 MB file, with and without vim;
+ *  - typing: each key paints on the display's next frame, with about 1 ms of work per key,
+ *    in a small and the 1 MB file, with and without vim (key-to-paint ms is a diagnostic);
  *  - 20 open tabs: the app's memory against an empty editor;
  *  - ⌘S and vim's :w save, and ⌘S still saves from vim's insert mode.
  *
@@ -16,6 +17,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ElectronApplication, type Page } from "playwright-core";
 import { scriptedElectron as electron, APP_DIR, electronBinary } from "./lib/electron.ts";
+import { takeScriptLease } from "../../../tooling/leases.ts";
+
+await takeScriptLease("bench");
 
 const args = process.argv.slice(2);
 
@@ -35,14 +39,43 @@ const SMALL = `${ROOT}/daemon/src/hosts/reconnect.ts`;
 
 const BIG = `${ROOT}/bench/big.ts`;
 
-const KEY_LATENCY = `(() => {
-  const lat = [];
-  const onKey = (e) => {
-    const t = e.timeStamp;
-    requestAnimationFrame(() => setTimeout(() => lat.push(performance.now() - t), 0));
+/**
+ * Per key: key-to-paint ms; its work, from keydown until the last of its handlers (and their
+ * microtasks) ends; and how many frames it painted late after the frame that followed that work.
+ */
+const KEY_PROBE = `(() => {
+  const keys = [];
+  let vsync = 0;
+  let live = true;
+  let current = null;
+  const loop = (now) => { vsync = now; if (live) requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+  const after = () => {
+    const key = current;
+    if (key !== null) queueMicrotask(() => { key.end = performance.now(); key.frameBefore = vsync; });
   };
-  document.addEventListener("keydown", onKey, { capture: true });
-  window.__keys = { stop: () => { document.removeEventListener("keydown", onKey, { capture: true }); return lat; } };
+  const content = document.querySelector(".cm-content");
+  const targets = [[window, ["keydown", "keypress", "beforeinput", "input"]], [content?.editContext ?? null, ["textupdate"]]];
+  for (const [target, types] of targets) for (const type of types) target?.addEventListener(type, after);
+  const onKey = (e) => {
+    const t0 = performance.now();
+    const key = { latency: 0, work: 0, late: 0, end: t0, frameBefore: vsync };
+    current = key;
+    after();
+    requestAnimationFrame((now) => {
+      current = null;
+      key.work = key.end - t0;
+      key.late = Math.max(0, Math.round((now - key.frameBefore) / window.__frame) - 1);
+      setTimeout(() => { key.latency = performance.now() - e.timeStamp; keys.push(key); }, 0);
+    });
+  };
+  window.addEventListener("keydown", onKey, { capture: true });
+  window.__keys = { stop: () => {
+    live = false;
+    window.removeEventListener("keydown", onKey, { capture: true });
+    for (const [target, types] of targets) for (const type of types) target?.removeEventListener(type, after);
+    return keys;
+  } };
 })()`;
 
 /** The display's frame interval: the median rAF gap while idle. */
@@ -112,17 +145,36 @@ const openTimed = (page: Page, path: string) =>
     return performance.now() - start;
   })()`);
 
+/** Per-key work the typing budget allows (spec §7). */
+const KEY_WORK_MS = 1;
+
+interface Key {
+  readonly latency: number;
+  readonly work: number;
+  readonly late: number;
+}
+
 const typing = async (page: Page, label: string, frame: number) => {
   await page.locator(".cm-content").click();
   await page.keyboard.press("End");
-  await page.evaluate(KEY_LATENCY);
+  await page.evaluate(`window.__frame = ${frame}`);
+  await page.evaluate(KEY_PROBE);
   await page.keyboard.type(TYPED, { delay: 25 });
   await page.waitForTimeout(300);
-  const lat = await page.evaluate<ReadonlyArray<number>>("window.__keys.stop()");
+  const keys = await page.evaluate<ReadonlyArray<Key>>("window.__keys.stop()");
+  const latency = keys.map((k) => k.latency);
+  const late = keys.map((k) => k.late);
+  const work = keys.map((k) => k.work);
+  const onNext = late.filter((l) => l === 0).length;
 
-  record(`${label} key-to-paint p50`, quantile(lat, 0.5), "ms", null);
-  record(`${label} key-to-paint p95`, quantile(lat, 0.95), "ms", frame * 2);
-  record(`${label} key-to-paint max`, quantile(lat, 1), "ms", null);
+  record(`${label} frames late p95`, quantile(late, 0.95), "frames", 0);
+  record(`${label} keys on the next frame`, (100 * onNext) / keys.length, "%", null);
+  record(`${label} work per key p50`, quantile(work, 0.5), "ms", null);
+  record(`${label} work per key p95`, quantile(work, 0.95), "ms", KEY_WORK_MS);
+  record(`${label} key-to-paint p50`, quantile(latency, 0.5), "ms", null);
+  record(`${label} key-to-paint p95`, quantile(latency, 0.95), "ms", null);
+  record(`${label} key-to-paint p95 in frames`, quantile(latency, 0.95) / frame, "frames", null);
+  record(`${label} key-to-paint max`, quantile(latency, 1), "ms", null);
 };
 
 const memory = (app: ElectronApplication): number => {
@@ -502,8 +554,8 @@ writeFileSync(
 
 const app = await electron.launch({
   executablePath: electronBinary(),
-  args: [APP_DIR],
-  env: { ...process.env, POLARIS_DESKTOP_USER_DATA: userData },
+  args: [APP_DIR, "--use-mock-keychain"],
+  env: { ...process.env, HOME: home, POLARIS_DESKTOP_USER_DATA: userData },
 });
 
 let failed = false;

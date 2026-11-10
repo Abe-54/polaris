@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { Effect, Predicate, Stream } from "effect";
 import { awaitReady, cleanup, connect, createTempDir } from "../daemon.ts";
 import { settle, waitUntil } from "../drive.ts";
-import { type Metric, memory, peakMemory, type Scenario, throughput, time } from "../types.ts";
+import { type Metric, memory, peakMemory, rss, type Scenario, throughput, time } from "../types.ts";
 import { usageLogs } from "../usage-logs.ts";
 
 const ALL_TIME = {
@@ -120,10 +120,10 @@ export const usage: Scenario = {
         build_mb_per_s: throughput(logs.bytes / 1e6 / (buildMs / 1000), "MB/s", {
           tolerance: { relative: 0.25, absolute: 0 },
         }),
-        build_rss_peak_over_base_mib: peakMemory(buildReport.rssBytes.max - base.rssBytes),
+        build_rss_peak_over_base_mib: rss(peakMemory(buildReport.rssBytes.max - base.rssBytes)),
         noop_refresh_ms: time(noopMs, { tolerance: { relative: 0.5, absolute: 20 } }),
         append_refresh_ms: time(appendMs, { tolerance: { relative: 0.5, absolute: 20 } }),
-        rss_settled_mib: peakMemory(settled.rssBytes),
+        rss_settled_mib: rss(peakMemory(settled.rssBytes)),
         index_mib: memory(indexBytes, { tolerance: { relative: 0.1, absolute: 1 } }),
       } satisfies Record<string, Metric>);
 
@@ -131,6 +131,9 @@ export const usage: Scenario = {
         metrics.build_footprint_peak_over_base_mib = peakMemory(
           buildReport.footprintBytes.max - base.footprintBytes
         );
+
+      if (settled.footprintBytes !== null)
+        metrics.footprint_settled_mib = peakMemory(settled.footprintBytes);
 
       return {
         metrics,

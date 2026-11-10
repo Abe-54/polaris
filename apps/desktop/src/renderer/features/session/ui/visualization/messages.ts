@@ -1,9 +1,15 @@
 /**
- * What a Visualization frame may ask of the app (ADR 0089): its height, a link to open after
+ * What a Visualization frame may ask of the app (ADR 0101): its height, a link to open after
  * the user confirms, and its `pv.state`. Anything else, or anything from another window, is dropped.
  */
-import { FRAME_HEIGHT_MAX, FRAME_HEIGHT_MIN, FrameMessage } from "@polaris/visualization";
+import {
+  boundedJson,
+  FRAME_HEIGHT_MAX,
+  FRAME_HEIGHT_MIN,
+  FrameMessage,
+} from "@polaris/visualization";
 import { Match, Option, Schema } from "effect";
+import { STATE_MAX_BYTES } from "./state.ts";
 
 export type FrameRequest =
   | { readonly kind: "height"; readonly height: number }
@@ -24,13 +30,9 @@ export const httpsLink = (url: string): string | null => {
   return parsed.protocol === "https:" ? parsed.href : null;
 };
 
-const stateJson = (message: Extract<FrameMessage, { readonly type: "pv:state" }>) => {
-  try {
-    return JSON.stringify(message.state) ?? null;
-  } catch {
-    return null;
-  }
-};
+// Serialising stops at the cap, so a huge posted object costs about the cap, not its own size.
+const stateJson = (message: Extract<FrameMessage, { readonly type: "pv:state" }>) =>
+  boundedJson(message.state, STATE_MAX_BYTES);
 
 const request = (message: FrameMessage): FrameRequest | null =>
   Match.value(message).pipe(
@@ -50,12 +52,22 @@ const request = (message: FrameMessage): FrameRequest | null =>
     })
   );
 
+/** True only for a message from `frame`, the frame's own window. */
+export const fromFrame = (event: Pick<MessageEvent<unknown>, "source">, frame: Window | null) =>
+  frame !== null && event.source === frame;
+
+/** A message's request, once `fromFrame` has said where it came from. */
+export const requestOf = (event: Pick<MessageEvent<unknown>, "data">): FrameRequest | null =>
+  Option.getOrNull(Option.flatMapNullishOr(decode(event.data), request));
+
+const decodeType = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String }));
+
+/** The message's `type`, read without decoding the rest. */
+export const typeOf = (event: Pick<MessageEvent<unknown>, "data">): string | undefined =>
+  Option.getOrUndefined(Option.map(decodeType(event.data), ({ type }) => type));
+
 /** A message event's request, only when it came from `frame`, the frame's own window. */
 export const frameRequest = (
   event: Pick<MessageEvent<unknown>, "source" | "data">,
   frame: Window | null
-): FrameRequest | null => {
-  if (frame === null || event.source !== frame) return null;
-
-  return Option.getOrNull(Option.flatMapNullishOr(decode(event.data), request));
-};
+): FrameRequest | null => (fromFrame(event, frame) ? requestOf(event) : null);

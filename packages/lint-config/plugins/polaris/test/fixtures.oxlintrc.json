@@ -1,9 +1,25 @@
 {
-  "jsPlugins": [{ "name": "polaris", "specifier": "../index.mjs" }],
+  "jsPlugins": [
+    {
+      "name": "polaris",
+      "specifier": "../index.mjs"
+    }
+  ],
   "rules": {
     "polaris/no-long-comment": "error",
     "polaris/no-fixed-sleep": "error",
     "polaris/await-expect-promise": "error",
-    "polaris/effect-cleanup-return": "error"
+    "polaris/effect-cleanup-return": "error",
+    "polaris/no-ptr-argument": "error",
+    "polaris/child-env": [
+      "error",
+      {
+        "scope": ["packages/lint-config/plugins/polaris/test/fixtures/daemon/"],
+        "allow": {
+          "packages/lint-config/plugins/polaris/test/fixtures/daemon/allowed/": "repository-env"
+        },
+        "builders": ["childEnv", "harnessEnv"]
+      }
+    ]
   }
 }

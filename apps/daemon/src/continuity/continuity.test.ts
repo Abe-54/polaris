@@ -27,6 +27,7 @@ import {
 import { EventStore } from "../store/EventStore.ts";
 import { startServer } from "../transport/server.ts";
 import { Continuity, ContinuityRpcsLive } from "./index.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const handlers = Layer.mergeAll(
   EngineRpcHandlers,
@@ -65,8 +66,21 @@ const withDaemon = <A, E>(
     )
   );
 
+/** A Desktop App's connection: it presents the test user key, so it may send Turns (ADR 0100). */
 const client = (socketPath: string) =>
-  Effect.flatMap(socketTransport(socketPath), (transport) => connectRpcWith(DaemonRpcs, transport));
+  Effect.flatMap(socketTransport(socketPath), (transport) =>
+    connectRpcWith(DaemonRpcs, transport)
+  ).pipe(
+    Effect.tap(({ client }) =>
+      client.hello({
+        clientName: "test",
+        clientVersion: "0",
+        deviceLabel: "test",
+        capabilities: [],
+        ...TEST_USER_KEY,
+      })
+    )
+  );
 
 const twoTurns = (desktop: Effect.Success<ReturnType<typeof client>>) =>
   Effect.gen(function* () {
@@ -239,7 +253,7 @@ test("upgrading reads every session through its last ended Turn, so nothing turn
   const db = new Database(join(root, "state.sqlite"));
   db.run("DROP TABLE session_reads");
   db.run("DROP TABLE session_drafts");
-  db.run("DELETE FROM effect_sql_migrations WHERE migration_id = 6");
+  db.run("DELETE FROM effect_sql_migrations WHERE migration_id >= 6");
   db.run("UPDATE turns SET status = 'working' WHERE turn_index = 1");
   db.close();
 

@@ -47,7 +47,7 @@ import { SetupCard } from "./SetupCard.tsx";
 import { Command } from "./command.tsx";
 import { EntryView } from "./entries.tsx";
 import { OutgoingMessage, Steered } from "./outgoing.tsx";
-import { softWrap } from "./softWrap.tsx";
+import { SentBody } from "./sentBody.tsx";
 import { SessionTargetContext } from "./polarisTool/target.ts";
 import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
@@ -262,6 +262,13 @@ const FoldButton = ({ row, ctx }: { row: { turnId: string; number: number }; ctx
   </button>
 );
 
+/** Where the session's messages were sent, for their chips. */
+const sentWhere = (ctx: RowContext) => ({
+  hostKey: ctx.diff.hostKey,
+  harness: ctx.harness,
+  cwd: ctx.diff.cwd,
+});
+
 const Prompt = ({ row, ctx }: { row: Extract<Row, { kind: "prompt" }>; ctx: RowContext }) => (
   <PromptMenu text={row.text} onFold={() => ctx.onSetTurnOpen(row.turnId, false)}>
     <div className="group/turn flex flex-col items-end gap-1.5" data-testid="prompt">
@@ -272,7 +279,7 @@ const Prompt = ({ row, ctx }: { row: Extract<Row, { kind: "prompt" }>; ctx: RowC
         </div>
       ) : row.text === "" ? null : (
         <p className="rounded-card bg-fill-selected text-body text-text-strong py-row-x max-w-[340px] px-3.5 break-words whitespace-pre-wrap">
-          {softWrap(row.text)}
+          <SentBody text={row.text} where={sentWhere(ctx)} />
         </p>
       )}
       <div className="text-caption text-text-subtle flex max-w-[340px] min-w-0 items-center gap-1.5">
@@ -709,6 +716,7 @@ export const ConversationRow = ({ row, ctx }: { row: Row; ctx: RowContext }) => 
         }) ?? (
           <Steered
             text={row.entry.item.text}
+            where={sentWhere(ctx)}
             above={
               <SentAttachments
                 hostKey={ctx.diff.hostKey}
@@ -725,7 +733,7 @@ export const ConversationRow = ({ row, ctx }: { row: Row; ctx: RowContext }) => 
       return (
         <OutgoingMessage
           entry={row.entry}
-          hostKey={ctx.diff.hostKey}
+          where={sentWhere(ctx)}
           canSteer={ctx.canSteer}
           onRetry={() => ctx.outbox.retry(row.entry.id)}
           onEdit={() => ctx.outbox.edit(row.entry.id)}

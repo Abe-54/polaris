@@ -132,7 +132,10 @@ export const upgradeCommand = (
   );
 
 /** `polaris.exe install --json` with the installed build: (re)starts the Daemon's task. */
-export const startCommand = (): string => encodedCommand(runExe(currentExe, ["install", "--json"]));
+export const startCommand = (replaceTask = false): string =>
+  encodedCommand(
+    runExe(currentExe, ["install", "--json", ...(replaceTask ? ["--replace-task"] : [])])
+  );
 
 /** `polaris.exe install --restart --json`: stops the Daemon on its control pipe, then `schtasks /Run`. */
 export const restartCommand = (): string =>

@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
+import { childEnv } from "../../service/childEnv.ts";
 import type { ScreenshotData } from "./envelope.ts";
 
 const Display = Schema.Struct({
@@ -48,7 +49,7 @@ const sipsShrink = (png: string, width: number): Promise<Image> =>
           "--out",
           output,
         ],
-        { stdin: "ignore", stdout: "ignore", stderr: "ignore" }
+        { env: childEnv(), stdin: "ignore", stdout: "ignore", stderr: "ignore" }
       );
 
       if ((await proc.exited) !== 0) throw new Error("sips failed");

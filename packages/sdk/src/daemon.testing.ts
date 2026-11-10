@@ -17,7 +17,7 @@ import {
   Sequence,
   SessionId,
 } from "@polaris/protocol";
-import { Effect, Exit, Match, Option, Predicate, Scope, Stream } from "effect";
+import { Effect, Exit, Match, Option, Predicate, Redacted, Scope, Stream } from "effect";
 import { encodePairing } from "./pairing.ts";
 
 const DAEMON_MAIN = resolve(import.meta.dir, "..", "..", "..", "apps", "daemon", "src", "main.ts");
@@ -50,12 +50,17 @@ export interface TestDaemon {
   readonly stop: () => Promise<void>;
 }
 
+/** The user key a test Daemon's fresh home enrols first; a dev Client acting as the Desktop App presents it. */
+export const TEST_USER_KEY = "5".repeat(64);
+
 const identity = {
   clientName: "sdk-tests",
   clientVersion: "0.0.0",
   deviceLabel: "SDK tests",
   // Sees computer use approvals, as the Desktop App does.
   capabilities: ["computer-use" as const],
+  /** Acts as the Desktop App, which pairs: the fresh home enrols it (ADR 0100). */
+  userKey: Redacted.make(TEST_USER_KEY),
 };
 
 /** A port nothing listens on now, so a restarted Daemon's gateway keeps its URL. */

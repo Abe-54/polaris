@@ -27,7 +27,7 @@ export interface HostLinkProps {
 export const HostLink = ({ path, children }: HostLinkProps) => {
   const place = useEditorPlace();
   const [viewing, setViewing] = useState(false);
-  const full = onHost(place?.root ?? null, path) ?? path;
+  const full = onHost(place?.root ?? null, path, place?.windows === true) ?? path;
 
   if (!viewable(full))
     return (

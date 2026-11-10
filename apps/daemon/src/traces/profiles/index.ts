@@ -2,6 +2,10 @@ import { Profiles } from "./service.ts";
 
 export { Profiles } from "./service.ts";
 
+/** ENG-704: V8 hides code it optimised before an inspector attached (mostly upstream behaviour). */
+export const LATE_ATTACH_LIMIT =
+  "Attached profiles can miss code V8 optimised before the attach, such as a hot setInterval loop that shows only as listOnTimeout. To record such a loop, use Restart with profiling (profile process) or profile the command from the start.";
+
 import { InspectorTargets } from "../attach/registry.ts";
 import { captureAttached } from "../attach/capture.ts";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
@@ -66,6 +70,8 @@ export interface ProfileOptions {
   readonly maxAgeMs?: number;
   /** Worker boundary for deterministic startup/shutdown tests. */
   readonly worker?: typeof profileJob;
+  /** Test seam: a completion waits for queue space, or shutdown has begun. */
+  readonly observe?: (moment: "completion-waiting" | "closing") => void;
 }
 
 export interface ProfileRecording {
@@ -137,8 +143,11 @@ export const profilesLayerAt = (root: string, options: ProfileOptions = {}) =>
       ): Promise<ProfileReply> => {
         const completion = operation === "discard" || operation === "complete";
 
-        if (completion && queued >= 32)
+        if (completion && queued >= 32) {
+          options.observe?.("completion-waiting");
+
           return tail.catch(() => {}).then(() => job(checkout, operation, id, profile));
+        }
 
         if (queued >= 32 || (closed && !completion)) return Promise.reject(unavailable());
         queued++;
@@ -521,6 +530,7 @@ export const profilesLayerAt = (root: string, options: ProfileOptions = {}) =>
       yield* Effect.addFinalizer(() =>
         Effect.promise(async () => {
           closed = true;
+          options.observe?.("closing");
 
           const stopping = [...launches.values()];
           await Promise.allSettled(

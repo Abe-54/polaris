@@ -20,6 +20,7 @@ import { TraceSessions } from "../traces/sessionsService.ts";
 import { TraceStore } from "../traces/storeService.ts";
 import { TEST_SESSION, withTraceFixture, type TraceFixture } from "../traces/testing.ts";
 import { startServer } from "../transport/server.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 import { MASK } from "./format/index.ts";
 import { NEW_REQUEST_FILE, requestsHandlers } from "./rpcs.ts";
 import { closedPort, withServer } from "./sends.testing.ts";
@@ -89,6 +90,8 @@ const connect = (fixture: TraceFixture, checkout: string) =>
       clientName: "requests-test",
       clientVersion: "0",
       deviceLabel: "test",
+      // Acts as the Desktop App, which saves and sends (ADR 0100).
+      ...TEST_USER_KEY,
       capabilities: [],
     });
 

@@ -1,4 +1,7 @@
-/** Which capability a Client must announce to be sent an event (older Clients can't decode newer tags). */
+/**
+ * Capability gating: the capability a Client must have announced to be sent an event, so an
+ * older Client never receives a tag it can't decode (see the store README).
+ */
 import { type ApprovalKind, type Capability, DomainEvent } from "@polaris/protocol";
 import { Match, Predicate } from "effect";
 
@@ -18,6 +21,7 @@ export const gatingCapabilities: ReadonlyArray<Capability> = [
   "constellation",
   "host.resources",
   "session.background-tasks",
+  "session.background-command-failed",
   "session.compaction",
   "session.notify",
   "session.pin",
@@ -76,6 +80,7 @@ export const eventCapability = (event: DomainEvent): Capability | null =>
       ResourceLeased: needs("host.resources"),
       ResourceReleased: needs("host.resources"),
       SessionBackgroundTasksChanged: needs("session.background-tasks"),
+      SessionBackgroundCommandFailed: needs("session.background-command-failed"),
       SessionCompacted: needs("session.compaction"),
       SessionNotified: needs("session.notify"),
       SessionPinned: needs("session.pin"),

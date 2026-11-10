@@ -88,11 +88,25 @@ const titleOf = async (sessionId: string) =>
   (await hostView(() => true)).sessions.find((s) => s.session.id === sessionId)?.session.title ??
   "";
 
-/** Opens a session from the list by its title. */
+/**
+ * Opens a session from the list by its title. A tap while the list redraws is dropped, as on
+ * the glasses, so it looks the row up and taps again until the session opens.
+ */
 const open = async (glasses: FakeGlasses, title: string) => {
-  await glasses.until((g) => g.rows().some((row) => row.includes(title)), `${title} in the list`);
-  glasses.send({ kind: "click", index: glasses.rows().findIndex((row) => row.includes(title)) });
-  await glasses.until((g) => g.text().startsWith(title), title);
+  let nextTap = 0;
+
+  await glasses.until((g) => {
+    if (g.text().startsWith(title)) return true;
+
+    const index = g.rows().findIndex((row) => row.includes(title));
+
+    if (index >= 0 && Date.now() >= nextTap) {
+      g.send({ kind: "click", index });
+      nextTap = Date.now() + 250;
+    }
+
+    return false;
+  }, title);
 };
 
 const launch = async (

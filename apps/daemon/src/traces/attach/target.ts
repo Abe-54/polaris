@@ -2,7 +2,7 @@ import type { Socket } from "node:net";
 import { Schema } from "effect";
 import { readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { basename } from "node:path";
-import { dlopen, ptr } from "bun:ffi";
+import { dlopen } from "bun:ffi";
 import { ProfileError } from "@polaris/protocol";
 import { findExecutable } from "../../platform/executable.ts";
 import { libcPath } from "../../platform/index.ts";
@@ -67,9 +67,9 @@ const onDarwin = (pid: number) => {
   const mib = new Int32Array([1, 49, pid]);
 
   if (
-    native.symbols.proc_pidpath(pid, ptr(path), path.length) <= 0 ||
-    native.symbols.proc_pidinfo(pid, 3, 0, ptr(info), info.length) !== info.length ||
-    native.symbols.sysctl(ptr(mib), mib.length, ptr(args), ptr(size), null, 0) !== 0
+    native.symbols.proc_pidpath(pid, path, path.length) <= 0 ||
+    native.symbols.proc_pidinfo(pid, 3, 0, info, info.length) !== info.length ||
+    native.symbols.sysctl(mib, mib.length, args, size, null, 0) !== 0
   )
     throw attachError("The process identity or launch options could not be verified.");
 
@@ -163,7 +163,7 @@ export const peerPid = (socket: Socket) => {
   const level = process.platform === "darwin" ? 0 : 1;
   const option = process.platform === "darwin" ? 2 : 17;
 
-  if (peerNative.symbols.getsockopt(fd, level, option, ptr(bytes), ptr(length)) !== 0)
+  if (peerNative.symbols.getsockopt(fd, level, option, bytes, length) !== 0)
     throw attachError("The registering process could not be verified.");
 
   return bytes.readInt32LE(0);

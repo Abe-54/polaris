@@ -42,6 +42,12 @@ GET and OPTIONS return 405. The challenge must be canonical, unpadded base64url 
 - Gateway Wire limits: 16 MiB per blob, 32 MiB buffered blob bytes, 1 MiB outgoing JSON queue, ten-second blob inactivity and unclaimed TTL. These accommodate the 9,600,000-byte voice limit. Local socket Wire defaults stay unchanged.
 - The HTTP listener has a ten-second idle timeout; WebSocket pings stay off. Before any HTTP request reaches `fetch`, Bun owns raw socket/header buffering. The application does not impose a global raw TCP connection cap. Authenticated RPC concurrency and zero-byte blob metadata also retain the shared Wire/RPC implementation's limits; see the review report.
 
+## Exposure before HTTP
+
+Every limit above starts once Bun hands the gateway a request. Before that, `Bun.serve` (1.4.4) has no maximum connection count and no total deadline for request headers; only the idle timeout applies, which a peer trickling one byte at a time resets. A peer that reaches the listener can therefore hold many unfinished connections, up to the process's descriptor limit (`rawHeaders.probe.ts` held 32 at once while the WebSocket cap is 16; trickling a byte a second, each closed after about 12 s).
+
+What keeps such a peer out is who can reach the listener at all: it binds `127.0.0.1` only, so locally it is a process already running on the Host, and remotely it is a tailnet member that Tailscale's ACLs let reach this Host through `tailscale serve`. Keep those ACLs narrow. Polaris adds no proxy or polling of its own; the request to Bun for raw connection admission is tracked on ENG-421.
+
 ## Settings
 
 `~/.polaris/daemon.json` is the Daemon's settings file; `{ "gateway": { "port": 7477 } }` is all it holds for now. `POLARIS_GATEWAY_PORT` overrides it (dev Daemons side by side; `0` asks for an ephemeral port, what tests and the benches use). A port that cannot be bound after three retries leaves the Daemon running without a gateway and a `no gateway:` warning in its log; `gateway.json` is then absent.

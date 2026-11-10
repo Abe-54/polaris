@@ -84,8 +84,11 @@ this records why.
   green PR runs of 2026-11-02 to 2026-11-06, the build waited for a macOS runner 5.8 min at the
   median, 17.8 at p90 and 25.6 at most, to run for 2.4. The jobs that count finished at a
   median of 12.2 min and a p90 of 23.6 with it, against 10.4 and 16.4 without it and the
-  smokes. Keeping it would have left the queue in the lane. darwin needs `codesign`, so it reports
-  on the PR with the other macOS jobs.
+  smokes. Keeping it would have left the queue in the lane. darwin needs `codesign`; it runs in the
+  nightly, not on PRs or main (ENG-789).
+- **A run asks for two macOS runners, not six** (ENG-789). The Daemon's three shards fold into one
+  job and Platform checks into the other packages' job, so a run queues for fewer of the scarce
+  runners and loses fewer jobs to the queue's cancel; the darwin build moved to the nightly.
 - **The slow tier runs only in CI** (ADR 0096). pre-push stays under 90 s by running the fast tier
   of the changed packages, so a behaviour only a slow file covers is first checked on the PR.
 - **Merge commits, not squash.** Linear's release scan reads the subject of every commit pushed to
@@ -109,12 +112,12 @@ this records why.
   and failed on a failed counted job. The Linux build took 1.5 min.
 - `CI` on main doesn't include macOS: a green `CI` beside a red `CI (macOS)` means main is red,
   and the run says so. Nothing reads `CI` on main; branch protection reads it on the PR.
-- A darwin build break, like a Mac-only test failure, lands on main. CI's smokes also run binaries
+- A darwin build break first shows in the nightly, a Mac-only test failure on main. CI's smokes also run binaries
   cross-compiled on Linux, while a release builds on macOS, so a fault only that build has first
   shows at release.
-- A macOS job cancelled after a runner took it files a `ci-red` issue. One no runner acquired doesn't:
-  main's run 41862561967 (six such jobs beside a real Windows failure) now files the Windows failure
-  and one `no runner` issue naming no test. Cancelling a whole run still files nothing.
+- A macOS job cancelled after a runner took it files a `ci-red` issue. One no runner acquired files
+  nothing (ENG-789): main's run 41862561967 (six such jobs beside a real Windows failure) now files
+  only the Windows failure, and the job summary names the rest. Cancelling a whole run still files nothing.
 - GitHub marks a run with a job no runner acquired as failed, whatever `CI (macOS)` says, so a count
   of main's runs reads `CI` and `CI (macOS)`, where skipped on a push means no result.
 - Runner capacity stays GitHub's: the gate shortens main's queue, but 2026-11-04 lost all 11 macOS

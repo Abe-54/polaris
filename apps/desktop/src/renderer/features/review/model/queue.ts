@@ -59,6 +59,11 @@ export interface SessionInfo {
   readonly state: string;
   readonly turnCount: number;
   readonly acceptedThroughIndex: number | null;
+  /**
+   * The user's Turn numbers (capability `session.user-turns`): the current one and the accepted
+   * one's. Null when the Daemon can't give both, and Turns go by its own.
+   */
+  readonly userTurns: { readonly current: number; readonly acceptedThrough: number | null } | null;
   readonly updatedAt: string;
   readonly workspaceName: string | null;
 }
@@ -85,7 +90,39 @@ const pullRow = (row: PullRowView, since: ViewerReview | null = null): QueuePull
   };
 };
 
-const turnsCaption = (first: number, last: number) =>
+/** The Turns not yet accepted, `first` to `last`, and how many since the last accept, if any. */
+export interface TurnRange {
+  readonly first: number;
+  readonly last: number;
+  readonly since: number | null;
+}
+
+/**
+ * A ready session's unaccepted Turns, numbered as the user's Turns when the Daemon names both
+ * ends, else as its own; never one end of each. A continuation keeps its user Turn's number.
+ */
+export const unacceptedTurns = (s: SessionInfo): TurnRange => {
+  const user = s.userTurns;
+  const accepted = s.acceptedThroughIndex;
+
+  if (user !== null && (accepted === null || user.acceptedThrough !== null)) {
+    const through = user.acceptedThrough ?? 0;
+
+    return {
+      first: Math.min(through + 1, user.current),
+      last: user.current,
+      since: accepted === null ? null : Math.max(user.current - through, 1),
+    };
+  }
+
+  return {
+    first: Math.min((accepted ?? -1) + 2, s.turnCount),
+    last: s.turnCount,
+    since: accepted === null ? null : s.turnCount - accepted - 1,
+  };
+};
+
+const turnsCaption = ({ first, last }: TurnRange) =>
   first === last ? `Turn ${last}` : `Turns ${first}–${last}`;
 
 export const readySessions = (sessions: ReadonlyArray<SessionInfo>): ReadonlyArray<QueueSession> =>
@@ -100,7 +137,7 @@ export const readySessions = (sessions: ReadonlyArray<SessionInfo>): ReadonlyArr
       sessionId: s.id,
       harness: s.harness,
       title: s.title,
-      meta: [turnsCaption((s.acceptedThroughIndex ?? -1) + 2, s.turnCount), s.workspaceName]
+      meta: [turnsCaption(unacceptedTurns(s)), s.workspaceName]
         .filter((part) => part !== null)
         .join(" · "),
     }));

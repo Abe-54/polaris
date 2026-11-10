@@ -23,8 +23,11 @@ interface FakeSetup {
 }
 
 /** Host addresses whose partition setup fails while `failing` holds, recording each route. */
-const setup = (local = false) => {
+const setup = (local = false, names: ReadonlyArray<string> = []) => {
   const routes: Array<PartitionRoute> = [];
+  /** The hostnames the proxy relayed to the Host. */
+  const opened: Array<string> = [];
+  const hostNameChecks: Array<(hostname: string) => boolean> = [];
   const retired: Array<Session> = [];
   /** What each partition last had applied: the Host's rules ("configured") or none ("retired"). */
   const applied = new Map<Session, Array<string>>();
@@ -36,10 +39,16 @@ const setup = (local = false) => {
 
   hostAddresses = createHostAddresses<never>({
     isLocal: () => local,
-    open: () => () => Effect.fail(502),
+    open: () => (target) => {
+      opened.push(target.hostname);
+
+      return Effect.fail(502);
+    },
+    names: async () => names,
     run: (effect) => Effect.runFork(effect),
-    configure: async (session, route) => {
+    configure: async (session, route, isHostAddress) => {
       routes.push(route);
+      hostNameChecks.push(isHostAddress);
 
       if (state.hold !== null) await state.hold;
 
@@ -52,7 +61,7 @@ const setup = (local = false) => {
     },
   });
 
-  return { hostAddresses, routes, retired, applied, state };
+  return { hostAddresses, routes, retired, applied, state, opened, hostNameChecks };
 };
 
 /** The realm the proxy on `port` challenges with, as Chromium reads it; "" if none. */
@@ -87,13 +96,13 @@ const canBind = (port: number) =>
   });
 
 /** An authenticated CONNECT to a Host address on `port`, and whatever comes back. */
-const connectTo = (port: number, secret: string) =>
+const connectTo = (port: number, secret: string, authority = "localhost:3000") =>
   new Promise<string>((resolve) => {
     const credential = Buffer.from(`polaris:${secret}`).toString("base64");
 
     const socket = connect(port, "127.0.0.1", () =>
       socket.write(
-        `CONNECT localhost:3000 HTTP/1.1\r\nProxy-Authorization: Basic ${credential}\r\n\r\n`
+        `CONNECT ${authority} HTTP/1.1\r\nProxy-Authorization: Basic ${credential}\r\n\r\n`
       )
     );
 
@@ -216,6 +225,28 @@ describe("a Host removed while its partition sets up", () => {
     expect(ops.at(-1)).toMatch(/^configured \d+$/);
     expect(ops.at(-1)).not.toBe(`configured ${port}`);
     expect([heldWhileOneRemains, await canBind(port)]).toEqual([true, true]);
+  });
+});
+
+describe("a remote Host's hosts-file loopback names", () => {
+  test("ride the route, pass the certificate check, and the proxy relays them to the Host", async () => {
+    const { hostAddresses, routes, opened, hostNameChecks } = setup(false, ["app.test"]);
+    const session = fakeSession();
+
+    await hostAddresses.configureBrowserSession("rpi", session);
+    const port = portOf(routes[0]);
+    const secret = hostAddresses.proxyLogin(session, await login(port))?.password ?? "";
+
+    await connectTo(port, secret, "app.test:443");
+    const isHostAddress = hostNameChecks[0]!;
+
+    expect(routes[0]).toMatchObject({ kind: "remote", names: ["app.test"] });
+    expect(opened).toEqual(["app.test"]);
+    expect(["App.Test.", "other.test", "x.app.test"].map(isHostAddress)).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 });
 

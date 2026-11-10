@@ -35,6 +35,24 @@ describe("pending requests in the thread", () => {
     });
   });
 
+  test("a Secret Request is its own card, never a permission to allow", () => {
+    const card = requestCard(
+      request({
+        kind: "secret",
+        title: "Tailscale auth key",
+        detail: "To join the tailnet",
+        placeholder: "tskey-auth-…",
+      })
+    );
+
+    expect(card).toEqual({
+      kind: "secret",
+      label: "Tailscale auth key",
+      reason: "To join the tailnet",
+      placeholder: "tskey-auth-…",
+    });
+  });
+
   test("several questions are all asked, and answered per question", () => {
     const card = requestCard(twoQuestions);
     expect(card.kind === "questions" && card.questions.map((q) => q.question)).toEqual([

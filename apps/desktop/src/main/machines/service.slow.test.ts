@@ -5,9 +5,10 @@
  * play reconnects.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { installedPaths } from "@polaris/client";
 import { HostAccess } from "@polaris/client/access";
 import { Ssh, SshError } from "@polaris/client/install";
 import {
@@ -640,6 +641,33 @@ describe("this PC's own Daemon on Windows", () => {
       );
 
       expect(again.message).toBe("Nothing is waiting on the sign-in task; check again.");
+    } finally {
+      await s.runtime.dispose();
+    }
+  });
+
+  test("Start daemon shows the take-over card, not an error; confirming reruns the start with --replace-task", async () => {
+    const binary = installedPaths(home, "win32").binary;
+    const { spawned, processes } = heldTask();
+    const s = setup(false, home, {}, undefined, "win32", undefined, processes);
+
+    mkdirSync(dirname(binary), { recursive: true });
+    writeFileSync(binary, "");
+
+    try {
+      await s.call((m) => m.startDaemon("local"));
+      const row = await s.local((v) => v.install?.step === "blocked");
+
+      expect(row?.install?.problem?.conflict).toEqual({
+        task: "dev.lux.polaris.lucas",
+        otherHome: OTHER_HOME,
+      });
+      await s.call((m) => m.takeOverTask("local"));
+      await s.local((v) => v.install?.step === "idle");
+      expect(spawned.map((r) => [r.file, ...r.args])).toEqual([
+        [binary, "install", "--json"],
+        [binary, "install", "--json", "--replace-task"],
+      ]);
     } finally {
       await s.runtime.dispose();
     }

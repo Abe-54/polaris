@@ -1,8 +1,8 @@
 /**
  * An assistant message as Markdown (Streamdown): incomplete syntax mid-stream
  * renders as it will end, code in the code font with a copy action, Mermaid
- * and KaTeX once their plugins load, links open in the browser, images and links naming a path
- * open from the session's Host.
+ * and KaTeX once their plugins load, links open in the user's browser (a Host address in the
+ * session's Browser), images and links naming a path open from the session's Host.
  */
 import "./markdown.css";
 import {
@@ -12,11 +12,13 @@ import {
   defaultRehypePlugins,
   Streamdown,
 } from "streamdown";
-import { FileLink } from "../../../editor-links/index.ts";
+import { browserLinkOf } from "../../../browser/index.ts";
+import { FileLink, useEditorPlace } from "../../../editor-links/index.ts";
+import { BrowserLink } from "./BrowserLink.tsx";
 import { COPY_CODE, COPY_TABLE } from "./copyControls.tsx";
 import { editorLinkOf, rehypeFileLinks } from "./fileLinks.ts";
 import { HostImage } from "./HostImage.tsx";
-import { hostImageOf, rehypeFileImages, rehypeHostImages } from "./hostImages.ts";
+import { type HostPaths, hostImageOf, rehypeFileImages, rehypeHostImages } from "./hostImages.ts";
 import { HostLink } from "./HostLink.tsx";
 import { hostLinkOf, rehypeFileHrefs, rehypeHostLinks } from "./hostLinks.ts";
 import { needsOf } from "./needs.ts";
@@ -34,17 +36,23 @@ const CONTROLS: ControlsConfig = {
 const { raw, sanitize, harden } = defaultRehypePlugins;
 
 // Host images and links are marked between sanitizing and hardening; `<wbr>` and editor links after.
-const REHYPE = [
-  raw,
-  rehypeFileImages,
-  rehypeFileHrefs,
-  sanitize,
-  rehypeHostImages,
-  rehypeHostLinks,
-  harden,
-  rehypeFileLinks,
-  rehypeSoftBreaks,
-].filter((plugin) => plugin !== undefined);
+const rehypeFor = (host: HostPaths) =>
+  [
+    raw,
+    [rehypeFileImages, host] satisfies [unknown, HostPaths],
+    [rehypeFileHrefs, host] satisfies [unknown, HostPaths],
+    sanitize,
+    [rehypeHostImages, host] satisfies [unknown, HostPaths],
+    [rehypeHostLinks, host] satisfies [unknown, HostPaths],
+    harden,
+    rehypeFileLinks,
+    rehypeSoftBreaks,
+  ].filter((plugin) => plugin !== undefined);
+
+/** Drive paths are paths only on a Windows Host; on any other they stay URLs, as written. */
+const REHYPE_POSIX = rehypeFor({ windows: false });
+
+const REHYPE_WINDOWS = rehypeFor({ windows: true });
 
 const COMPONENTS: Components = {
   ...COPY_CODE,
@@ -59,13 +67,17 @@ const COMPONENTS: Components = {
       <HostImage path={path} alt={props.alt ?? ""} />
     );
   },
-  // `path:line` (rehypeFileLinks) opens in the editor, a Host path as `HostLink` says, other
-  // web links in the user's browser (HTTP or HTTPS, including localhost).
+  // `path:line` (rehypeFileLinks) opens in the editor, a Host path as `HostLink` says, a Host
+  // address (localhost) in the session's Browser, other web links in the user's browser.
   a: ({ href, children, node }) => {
     const target = editorLinkOf(node?.properties);
     const hostPath = hostLinkOf(node?.properties);
 
     if (hostPath !== null) return <HostLink path={hostPath}>{children}</HostLink>;
+
+    const local = browserLinkOf(href);
+
+    if (local !== null) return <BrowserLink url={local}>{children}</BrowserLink>;
 
     if (target !== null)
       return (
@@ -99,15 +111,17 @@ export interface StreamedProps {
 
 const Streamed = ({ text, live }: StreamedProps) => {
   const plugins = usePlugins(needsOf(text));
+  const windows = useEditorPlace()?.windows === true;
 
   return (
     <Streamdown
       className="polaris-md"
       isAnimating={live}
       plugins={plugins}
-      rehypePlugins={REHYPE}
+      rehypePlugins={windows ? REHYPE_WINDOWS : REHYPE_POSIX}
       components={COMPONENTS}
       controls={CONTROLS}
+      tableMaxHeight={0}
       shikiTheme={[POLARIS_SHIKI, POLARIS_SHIKI]}
       linkSafety={{ enabled: false }}
       lineNumbers={false}

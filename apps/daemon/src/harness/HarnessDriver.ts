@@ -108,7 +108,11 @@ export type HarnessEvent = Data.TaggedEnum<{
    * The Harness spawned a Subagent in `turnId`. Its own items then carry its
    * `subagentId`. It may outlive the Turn (a background agent).
    */
-  BackgroundTasksChanged: { readonly tasks: ReadonlyArray<BackgroundTask> };
+  BackgroundTasksChanged: {
+    readonly tasks: ReadonlyArray<BackgroundTask>;
+    /** Finished tasks' reports the Harness will start a Turn for; absent means none. */
+    readonly reportsPending?: boolean;
+  };
   SubagentStarted: {
     readonly turnId: TurnId;
     readonly subagentId: SubagentId;
@@ -133,6 +137,8 @@ export type HarnessEvent = Data.TaggedEnum<{
     readonly options: ReadonlyArray<string>;
     /** For questions: every question asked; absent or empty for one bare prompt. */
     readonly questions?: ReadonlyArray<ApprovalQuestion>;
+    /** The Subagent whose tool call asks; absent for the Turn's own. */
+    readonly subagentId?: SubagentId;
   };
   /** The Harness withdrew or resolved a request itself (e.g. the Turn was interrupted). */
   ApprovalWithdrawn: { readonly requestId: RequestId };

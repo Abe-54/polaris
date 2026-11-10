@@ -54,9 +54,13 @@ export { SDK_VERSION, SUPPORTED_PROTOCOL } from "./version.ts";
 /** The Harnesses Polaris can drive, by kind and product name. */
 export { HARNESS_CATALOGUE, type HarnessEntry, harnessEntry } from "@polaris/protocol";
 
+/** The mode a Daemon with these capabilities gets: `plan` becomes `supervised` without `session.plan-mode`. */
+export { permissionModeFor } from "@polaris/protocol";
+
 export type {
   AgentSession,
   ApprovalRequest,
+  Capability,
   DesktopApp,
   GrantKind,
   HarnessKind,

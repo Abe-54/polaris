@@ -63,10 +63,10 @@ export const TracesRpcsLive = TracesRpcs.toLayer(
 
           return { ...detail, usual };
         }),
-      "traces.span": ({ sessionId, traceId, spanId, scope }) =>
+      "traces.span": ({ sessionId, traceId, spanId, scope, before }) =>
         Effect.flatMap(scopesFor(sessionId, scope), (scopes) =>
           Effect.map(
-            firstScope(scopes, (at) => store.span(at, traceId, spanId)),
+            firstScope(scopes, (at) => store.span(at, traceId, spanId, before)),
             ([detail]) => detail
           )
         ),

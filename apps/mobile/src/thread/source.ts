@@ -32,6 +32,7 @@ import {
   type TurnPage,
   type WorkspaceId,
   RiskSummaryRef,
+  gateUserRpcs,
 } from "@polaris/protocol";
 import { type LiveSource, makeFeed, type SequenceMark } from "@polaris/client/resume";
 import { Data, Effect, Option, Predicate, type Redacted, Stream } from "effect";
@@ -78,6 +79,8 @@ export interface ThreadSource {
   readonly workspace: (workspaceId: WorkspaceId) => Effect.Effect<Workspace | null, ThreadFailure>;
   /** The Daemon has `session.steer`. */
   readonly canSteer: boolean;
+  /** The Daemon has `session.steer-attachments`: a steer may carry files its Harness takes. */
+  readonly canSteerAttachments?: boolean;
   /** Up to `limit` Turns before `beforeIndex`; null on a Host that can't page them to a phone. */
   readonly olderTurns: (
     sessionId: SessionId,
@@ -129,18 +132,20 @@ export const newCommandId = (): CommandId => {
   );
 };
 
-/** The RPCs the thread calls; a full `DaemonClient` is one of these. */
-export const ThreadRpcs = RpcGroup.make(
-  SubscribeHost,
-  SubscribeSession,
-  Dispatch,
-  WatchContinuity,
-  MarkRead,
-  SaveDraft,
-  GetRiskSummary,
-  WatchRiskSummary,
-  ReadTurns,
-  ProvideSecret
+/** The RPCs the thread calls, behind the user gate as on `DaemonRpcs`; a full `DaemonClient` is one of these. */
+export const ThreadRpcs = gateUserRpcs(
+  RpcGroup.make(
+    SubscribeHost,
+    SubscribeSession,
+    Dispatch,
+    WatchContinuity,
+    MarkRead,
+    SaveDraft,
+    GetRiskSummary,
+    WatchRiskSummary,
+    ReadTurns,
+    ProvideSecret
+  )
 );
 
 export type ThreadClient = RpcClient.RpcClient<RpcGroup.Rpcs<typeof ThreadRpcs>, RpcClientError>;
@@ -163,8 +168,6 @@ const markContinuity = ContinuityItem.match<SequenceMark>({
 export interface DaemonThreadOptions {
   readonly live: LiveSource<ThreadClient>;
   readonly capabilities: ReadonlySet<string>;
-  /** The summary Review last opened for the session, when the head isn't known. */
-  readonly summaryOf?: (sessionId: SessionId) => RiskSummaryId | null;
 }
 
 /** The latest connection's client, waiting for one while the Host reconnects. */
@@ -190,22 +193,19 @@ const readWorkspaces = (client: ThreadClient) =>
     )
   );
 
-/** The summary already on the Host for the query's head, else the one Review recorded. */
+/** The summary already on the Host for the query's head. */
 const cachedSummary = (
   client: ThreadClient,
-  options: DaemonThreadOptions,
   query: FindingsQuery,
   repo: string | null
 ): Effect.Effect<RiskSummaryId | null, Failed> => {
-  const recorded = options.summaryOf?.(query.sessionId) ?? null;
-
-  if (query.head === null || repo === null) return Effect.succeed(recorded);
+  if (query.head === null || repo === null) return Effect.succeed(null);
 
   return Effect.map(
     client["review.riskSummary"]({
       ref: RiskSummaryRef.cases.LatestAt.make({ repo, head: query.head }),
     }),
-    (summary) => summary?.id ?? recorded
+    (summary) => summary?.id ?? null
   );
 };
 
@@ -232,6 +232,7 @@ export const daemonThreadSource = (options: DaemonThreadOptions): ThreadSource =
   return {
     workspace,
     canSteer: has("session.steer"),
+    canSteerAttachments: has("session.steer-attachments"),
     olderTurns: (sessionId, beforeIndex, limit) =>
       has("session.turn-paging")
         ? withClient(live, (client) => client["session.turns"]({ sessionId, beforeIndex, limit }))
@@ -284,14 +285,12 @@ export const daemonThreadSource = (options: DaemonThreadOptions): ThreadSource =
         ? Stream.unwrap(
             Effect.flatMap(workspace(query.workspaceId), (found) =>
               withClient(live, (client) =>
-                Effect.map(
-                  cachedSummary(client, options, query, found?.path ?? null),
-                  (summaryId) =>
-                    summaryId === null
-                      ? Stream.empty
-                      : client["review.watchRiskSummary"]({ summaryId }).pipe(
-                          Stream.map((summary) => summary.findings)
-                        )
+                Effect.map(cachedSummary(client, query, found?.path ?? null), (summaryId) =>
+                  summaryId === null
+                    ? Stream.empty
+                    : client["review.watchRiskSummary"]({ summaryId }).pipe(
+                        Stream.map((summary) => summary.findings)
+                      )
                 )
               )
             )

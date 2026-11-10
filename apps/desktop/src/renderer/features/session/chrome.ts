@@ -30,6 +30,8 @@ export interface SessionChrome {
   readonly steerCard?: (args: SteerCardArgs) => ReactNode | null;
   /** Replaces the conversation (a handover summary); the composer stays. */
   readonly body?: ReactNode;
+  /** Pinned above the composer: a Lead's open questions to the user (ENG-345). */
+  readonly dock?: ReactNode;
   /** Closes the conversation, after the last row. */
   readonly trailer?: ReactNode;
   /** Opens a Task's worker where the Lead reads it: a Polaris tool row's "Open B2". */

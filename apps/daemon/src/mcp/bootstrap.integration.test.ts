@@ -15,6 +15,7 @@ import {
   SessionStreamItem,
 } from "@polaris/protocol";
 import { Effect, Fiber, Option, Stream } from "effect";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 test("a real idle Daemon lazily binds plain Codex and Claude Sessions and starts their Constellations", async () => {
   const home = newTempDir("polaris-bootstrap-", { short: true });
@@ -60,6 +61,7 @@ test("a real idle Daemon lazily binds plain Codex and Claude Sessions and starts
             clientVersion: "0",
             deviceLabel: "test",
             capabilities: ["constellation"],
+            ...TEST_USER_KEY,
           });
 
           const dispatch = (command: Command) =>

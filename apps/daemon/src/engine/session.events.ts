@@ -22,10 +22,20 @@ export const endTurn = (
   turn: Turn,
   status: "completed" | "interrupted" | "failed",
   endedAt: string,
-  checkpointAfter: string | null = turn.checkpointAfter
+  checkpoint: { readonly ref: string; readonly commit: string } | null = null
 ): DomainEvent =>
   DomainEvent.cases.TurnEnded.make({
-    turn: patchTurn(turn, { status, endedAt, checkpointAfter }),
+    turn: patchTurn(
+      turn,
+      checkpoint === null
+        ? { status, endedAt }
+        : {
+            status,
+            endedAt,
+            checkpointAfter: checkpoint.ref,
+            checkpointAfterCommit: checkpoint.commit,
+          }
+    ),
   });
 
 export const withdrawPending = (

@@ -41,7 +41,7 @@ const activity = (id: string, kind: string) => ({
 });
 
 describe("Codex Subagents in a supervised Turn", () => {
-  test("a Subagent's approval belongs to the Turn that spawned it; its card sits where it was spawned", async () => {
+  test("a Subagent's approval names it and belongs to the Turn that spawned it; its card sits where it was spawned", async () => {
     const handler = scripted((request, conn) => {
       if (request.method !== "turn/start") return;
       conn.reply({ turn: turn("t1") });
@@ -92,7 +92,7 @@ describe("Codex Subagents in a supervised Turn", () => {
     // One Turn: the one Polaris sent.
     expect(ofTag(events, "TurnStarted").map((e) => e.turnId)).toEqual([T1]);
     expect(ofTag(events, "TurnEnded").map((e) => e.turnId)).toEqual([T1]);
-    expect(ofTag(events, "ApprovalRequested").map((e) => e.turnId)).toEqual([T1]);
+    expect(ofTag(events, "ApprovalRequested")).toMatchObject([{ turnId: T1, subagentId: CHILD }]);
 
     // The spawn is an item of the Turn, and the Subagent's card hangs from it.
     const started = ofTag(events, "SubagentStarted")[0];

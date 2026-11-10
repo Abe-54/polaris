@@ -57,6 +57,7 @@ export interface Live {
 export const SDK_CAPABILITIES: ReadonlyArray<Capability> = [
   "host.any-platform",
   "session.limited",
+  "session.plan-mode",
   "session.user-turns",
 ];
 

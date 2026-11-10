@@ -20,7 +20,8 @@
  * default; this script installs them from the lockfile when missing), and
  * Linux builds need `--define FFF_LIBC="gnu"` (or `"musl"`) to pick the library.
  * ast-grep's addon and grammars (the Rules, `apps/daemon/src/rules/`) are
- * embedded the same way, from `@ast-grep/napi-<platform>` and `@ast-grep/lang-*`.
+ * embedded the same way, from `@ast-grep/napi-<platform>` and `@ast-grep/lang-*`; every
+ * `napi-*` that `native.ts` requires must be installed, since the bundler resolves them all.
  * libsodium (sodium-native, the Relay route's crypto) is embedded the same way:
  * `patches/sodium-native@5.2.0.patch` gives it literal per-platform requires.
  * Betterleaks is a Go binary that can't run from inside `polaris`: it is
@@ -232,9 +233,31 @@ const fffBinInstalled = (platform: Platform): boolean => {
   return bin !== null && readVersion(bin) === readVersion(fffBun);
 };
 
-/** ast-grep's addon for `platform`: `@ast-grep/napi-<fffBin>`, an optional dependency of the Daemon. */
-const astGrepInstalled = (platform: Platform): boolean =>
-  findPackage(daemonDir, `@ast-grep/napi-${PLATFORMS[platform].astGrep}`) !== null;
+/**
+ * Every `@ast-grep/napi-*` addon `native.ts` requires: the bundler resolves the branches
+ * the target's defines can't remove, so a darwin build still needs Linux's (ENG-681).
+ */
+const astGrepAddons = (): ReadonlyArray<string> => {
+  const source = readFileSync(join(daemonDir, "src", "rules", "patterns", "native.ts"), "utf8");
+
+  const names = Array.from(
+    source.matchAll(/require\("(@ast-grep\/napi-[^/"]+)\//g),
+    ([, name]) => name
+  );
+
+  return [...new Set(names.filter((name) => name !== undefined))];
+};
+
+/** ast-grep's addons, optional dependencies of the Daemon; `platform`'s own is among them. */
+const astGrepInstalled = (platform: Platform): boolean => {
+  const addons = astGrepAddons();
+
+  if (!addons.includes(`@ast-grep/napi-${PLATFORMS[platform].astGrep}`)) {
+    throw new Error(`native.ts no longer requires @ast-grep/napi-${PLATFORMS[platform].astGrep}`);
+  }
+
+  return addons.every((addon) => findPackage(daemonDir, addon) !== null);
+};
 
 /** The bundler resolves every platform's ast-grep addon, whichever one it builds. */
 const everyAstGrepInstalled = () =>

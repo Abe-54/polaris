@@ -19,6 +19,8 @@ import { CONTENT_TEXT_SCALE } from "../../theme/textScale.ts";
 
 export interface ApprovalActionsProps {
   readonly approval: ApprovalRequest;
+  /** The agent session's working directory: a command's `cd` into it isn't shown. */
+  readonly cwd?: string | undefined;
   /** False while the Host isn't connected: shown, not answerable. */
   readonly enabled: boolean;
   readonly onReply: (reply: Reply) => Promise<void>;
@@ -94,10 +96,10 @@ const Button = ({
   );
 };
 
-const Permission = ({ approval, enabled, onReply, onOpen }: ApprovalActionsProps) => {
+const Permission = ({ approval, cwd, enabled, onReply, onOpen }: ApprovalActionsProps) => {
   const styles = useStyles();
   const { sending, send } = useSend(onReply);
-  const detail = approvalDetail(approval);
+  const detail = approvalDetail(approval, cwd);
   const live = enabled && sending.kind !== "sending";
 
   return (
@@ -111,8 +113,9 @@ const Permission = ({ approval, enabled, onReply, onOpen }: ApprovalActionsProps
             maxFontSizeMultiplier={CONTENT_TEXT_SCALE}
             style={styles.commandText}
             numberOfLines={detail.tooLong ? 4 : undefined}
+            ellipsizeMode="middle"
           >
-            {detail.text}
+            {detail.preview}
           </Text>
         </View>
       )}

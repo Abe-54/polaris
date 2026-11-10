@@ -80,8 +80,9 @@ there is no idle sweep. SQLite allocation and indexes add overhead to accounting
 ## Consumers
 
 `TraceStore.list(checkout, filter?)` returns `{traces,total}`; `get(checkout,prefix)`
-returns all retained Spans; `span(checkout,tracePrefix,spanPrefix)` returns the Span,
-newest 20 correlated logs, and total log count. Prefixes fail on ambiguity and all
+returns all retained Spans; `span(checkout,tracePrefix,spanPrefix,before?)` returns the Span,
+newest 20 correlated logs (or, with a `before` cursor naming the oldest record read, the 20
+older than it, ties ordered by id), and total log count. Prefixes fail on ambiguity and all
 queries stay checkout-scoped. `link(checkout,tracePrefix)` pins explicitly; reads
 never pin. `watch` emits an initial page then at most four updates per second.
 The `traces.watch/get/span` RPCs resolve checkout from the selected Agent Session.
@@ -185,11 +186,14 @@ of its handlers and `traces.profiles`; see `profiles/README.md`.
 All six RPCs are local-Client-only, matching the phase 1 Traces access policy.
 The new groups are `TracesSettingsRpcs`, `ProfilesRpcs` and `TraceCompareRpcs`,
 merged into `DaemonRpcs` alongside the unchanged phase 1 `TracesRpcs` group.
+`TracingSkillRpcs` (`skill/`) installs the polaris-tracing skill the Daemon was built with into
+the Harness's global skills folder (Claude and Codex when unknown); it fetches nothing.
 
 | Capability | RPC payload | Result | Owner |
 | --- | --- | --- | --- |
 | `traces.settings` | `traces.settings {workspaceId}` | `WorkspaceTracesSettings` | P1/P3 |
 | `traces.settings` | `traces.setSettings {workspaceId, settings}` | Complete settings after patch | P1/P3 |
+| `traces.skill` | `traces.installSkill {harness}` | `{paths}` the bundled skill was written to | ENG-694 |
 | `traces.profiles` | `profiles.watch {sessionId}` | Replacement `ProfilesSnapshot {profiles}` stream | P4 |
 | `traces.profiles` | `profiles.get {sessionId, profileId}` | `ProfileDetail` | P4 |
 | `traces.profiles` | `profiles.restartWithProfiling {sessionId, pid}` | New `Profile` | P4 |
@@ -345,10 +349,13 @@ the same receiver/store and baseline metrics. The idle scenario leaves the queue
 
 `self/` holds Polaris's own Spans. `serve` installs `selfTracer` as the root Tracer. While
 `DeveloperModeState` (from `developerMode/service.ts`) is not effective, its `span` is the native
-tracer's, so there is no exportable Span, buffer, timer or store worker wake-up. `selfTraceExport`
-follows the state's `changes`. While it is effective, ended sampled Spans are buffered (at most
-1,024; extra are counted and dropped) and flushed every 250 ms as `polaris-daemon`. On a switch,
-Spans already buffered go to the old sink.
+tracer's, so there is no exportable Span, buffer or store worker wake-up. `selfTraceExport`
+follows the state's `changes`. While it is effective, ended sampled Spans wait in memory and go
+to the store as `polaris-daemon` once 64 are waiting, when a read includes the Self-Trace scope,
+on a switch (to the old sink) or at shutdown. There is no timer, so a lone Span never wakes the
+store's worker. Connection upkeep (`QUIET_SPANS`: hello, `authenticateConnection`,
+`presence.report`, `developerMode.lease`) and the Spans under it are never exported, so an idle
+Host's Clients don't keep that worker alive (ENG-721).
 
 Self-Spans become OTLP JSON and go through `TraceStore.ingest`: the same decoder, redaction and
 bounds as the receiver. They are stored under the reserved checkout key `polaris:self`, which is
@@ -364,6 +371,9 @@ still authorizes the read, and the first page carries no endpoint.
 
 `transport/traceContext.ts` rebuilds Effect's request `traceId`/`spanId`/`sampled` from the
 `traceparent` header alone, so a handler Span is the child of the Client Span that sent it.
+A stream's handler Span links to that Client Span instead and starts its own trace (ENG-732):
+Effect's RPC client ends a stream's Span only when the stream closes, so a long-lived feed
+(`*.watch`, `subscribeSession`) never exports it and every child showed "parent not kept".
 Effect's own client fields are never trusted. No trace context leaves the Daemon:
 `harnessEnv` is unchanged and still strips `POLARIS_OTEL_*`.
 

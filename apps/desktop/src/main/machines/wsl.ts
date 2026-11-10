@@ -3,7 +3,7 @@
  * the "Add a host" card shows and the copy the install flow uses for a
  * distro. Pure; `Machines` runs the discovery. See docs/adr/0036-wsl-hosts.md.
  */
-import { type WslDiscovery, type WslDistro, wslShellArgv } from "@polaris/client/wsl";
+import type { WslDiscovery, WslDistro } from "@polaris/client/wsl";
 import { Match } from "effect";
 import type { WslDistrosView, WslDistroView } from "../../shared/api.ts";
 
@@ -45,6 +45,3 @@ export const wslDistrosView = (discovery: WslDiscovery): WslDistrosView =>
       Failed: ({ detail }) => empty("failed", detail),
     })
   );
-
-/** The terminal command for a distro Host: an interactive shell in it. */
-export const wslTerminalArgv = (distro: string): ReadonlyArray<string> => wslShellArgv(distro);

@@ -14,6 +14,7 @@ import {
   type HarnessKind,
   type HostInfo,
   type PermissionMode,
+  permissionModeFor,
   RequestId,
   SessionId,
   SessionPlacement,
@@ -23,7 +24,14 @@ import { Duration, Effect, Match, Predicate, type Scope, Stream } from "effect";
 import type { ConnectError, OpenTransport } from "./connection.ts";
 import { UnknownHost } from "./errors.ts";
 import { applyHostItem, emptyHostState, hostView, type HostView } from "./hostView.ts";
-import { type HostEntry, type HostLink, openLink, type Reconnect, resilientFeed } from "./link.ts";
+import {
+  delayFor,
+  type HostEntry,
+  type HostLink,
+  openLink,
+  type Reconnect,
+  resilientFeed,
+} from "./link.ts";
 import { decodePairing, type InvalidPairing, type ParsedPairing } from "./pairing.ts";
 import { applySessionItem, sessionView, type SessionView } from "./sessionView.ts";
 import { SDK_VERSION } from "./version.ts";
@@ -56,7 +64,10 @@ export interface StartSessionInput {
   readonly workspaceId: string;
   readonly harness: HarnessKind;
   readonly prompt: string;
-  /** Default `supervised`: anything else also needs the `approve` Grant. */
+  /**
+   * Default `supervised`: anything but `plan` also needs the `approve` Grant. `plan` becomes `supervised`
+   * on a Daemon without `session.plan-mode` (`HostView.capabilities`).
+   */
   readonly permissionMode?: PermissionMode;
   /** Work in a new Worktree on this branch instead of the Workspace itself. */
   readonly worktree?: { readonly branch: string; readonly baseRef?: string };
@@ -84,7 +95,8 @@ export interface Polaris {
   readonly subscribeHost: (hostId: string) => Stream.Stream<HostView, DispatchError>;
   /**
    * Every Host at once: the latest view of each, re-emitted when any changes.
-   * A Host that can't be reached shows as disconnected with `error` set.
+   * A Host that can't be reached shows as disconnected with `error` set; one that was never
+   * reached is retried with backoff, unlike `subscribeHost`, which fails at once.
    */
   readonly subscribeHosts: () => Stream.Stream<ReadonlyArray<HostView>>;
   /** One session's Turns, items, approvals and streaming text. */
@@ -160,6 +172,7 @@ const disconnected = (entry: HostEntry, error: Error): HostView => ({
   hostName: entry.hostName,
   connected: false,
   error,
+  capabilities: [],
   workspaces: [],
   sessions: [],
   archived: [],
@@ -207,6 +220,8 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
       return link
         .call((client) => client.dispatch({ commandId, command }))
         .pipe(
+          // A Pairing's token keeps an Extension out of the user gate (ADR 0100): never refused.
+          Effect.catchTag("UserAccessRequired", (refused) => Effect.die(refused)),
           Effect.retry({
             times: 1,
             while: (error) => Predicate.isTagged(error, "HostUnreachable"),
@@ -229,13 +244,36 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
                 afterSequence: state.synchronized ? state.sequence : null,
               }),
             apply: applyHostItem,
-            view: (state, connected) =>
-              state.synchronized ? hostView(state, link.entry, connected) : null,
+            view: (state, connected, capabilities) =>
+              state.synchronized ? hostView(state, link.entry, connected, capabilities) : null,
           },
           reconnect
         )
       )
     );
+
+  /** `subscribeHost` for `subscribeHosts`: a Host not reached yet shows disconnected and is retried. */
+  const watchHost = (entry: HostEntry): Stream.Stream<HostView> => {
+    let attempt = 0;
+
+    const loop = (): Stream.Stream<HostView> =>
+      subscribeHost(entry.hostId).pipe(
+        Stream.catchTag("HostUnreachable", (error) => {
+          const view = Stream.make(disconnected(entry, error));
+
+          if (!reconnect.enabled) return view;
+          const wait = delayFor(attempt++, reconnect);
+
+          return Stream.concat(
+            view,
+            Stream.unwrap(Effect.as(Effect.sleep(wait), Stream.suspend(loop)))
+          );
+        }),
+        Stream.catch((error) => Stream.make(disconnected(entry, error)))
+      );
+
+    return Stream.suspend(loop);
+  };
 
   return {
     hosts,
@@ -245,10 +283,7 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
     subscribeHosts: () =>
       Stream.mergeAll(
         hosts.map((entry, index) =>
-          subscribeHost(entry.hostId).pipe(
-            Stream.catch((error) => Stream.make(disconnected(entry, error))),
-            Stream.map((view) => [index, view] as const)
-          )
+          watchHost(entry).pipe(Stream.map((view) => [index, view] as const))
         ),
         { concurrency: "unbounded" }
       ).pipe(
@@ -299,8 +334,7 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
     startSession: (hostId, input) => {
       const sessionId = SessionId.make(randomId());
 
-      return dispatch(
-        hostId,
+      const start = (permissionMode: PermissionMode) =>
         Command.cases.StartSession.make({
           sessionId,
           workspaceId: WorkspaceId.make(input.workspaceId),
@@ -312,13 +346,23 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
                   branch: input.worktree.branch,
                   baseRef: input.worktree.baseRef ?? null,
                 }),
-          permissionMode: input.permissionMode ?? "supervised",
+          permissionMode,
           model: input.model === undefined ? null : ModelId.make(input.model),
           effort: null,
           prompt: input.prompt,
           attachments: [],
-        })
-      ).pipe(Effect.as(sessionId));
+        });
+
+      return linkOf(hostId).pipe(
+        Effect.flatMap((link) => link.live),
+        Effect.flatMap((live) =>
+          dispatch(
+            hostId,
+            start(permissionModeFor(input.permissionMode ?? "supervised", live.capabilities))
+          )
+        ),
+        Effect.as(sessionId)
+      );
     },
     transcribe: (hostId, audio) =>
       Stream.unwrap(Effect.map(linkOf(hostId), (link) => transcribeOn(link, audio))),

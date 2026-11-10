@@ -342,6 +342,19 @@ describe("the glasses' limits, which count UTF-8 bytes", () => {
     expect(content).toEndWith("Tap: actions · hold: speak · double-tap: back");
   });
 
+  test("a planning session's page says Plan beside its state; a supervised one doesn't", () => {
+    const status = (permissionMode: "plan" | "supervised") =>
+      layout({
+        ...onHosts(initialState(true), [
+          host("h1", [entry(session("s", "idle", { permissionMode }))], "Mac"),
+        ]),
+        screen: { kind: "session", key: { hostId: "h1", sessionId: "s" } },
+      }).texts[0]?.content.split("\n")[1];
+
+    expect(status("plan")).toBe("Idle · Plan · Mac");
+    expect(status("supervised")).toBe("Idle · Mac");
+  });
+
   test("every screen has exactly one container taking input", () => {
     const hosts = [host("h1", [entry(session("s", "needs-you"), [approval("r1", "s")])])];
     const key = { hostId: "h1", sessionId: "s" };

@@ -26,3 +26,9 @@ export type { FrecencyTable } from "./model/frecency.ts";
 export { type FrecencyScope, loadFrecency, recordFrecency, scopeKey } from "./frecencyStore.ts";
 
 export { frecencyKey } from "./model/commands.ts";
+
+export { SentText } from "./ui/SentText.tsx";
+
+export { mayNameCommand } from "./model/sent.ts";
+
+export { ensureCommands, useKnownCommands } from "./live.ts";

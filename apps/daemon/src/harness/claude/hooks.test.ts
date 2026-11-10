@@ -132,7 +132,7 @@ describe("HookTranslator", () => {
           command: "bun test",
           cwd: "/work/repo",
           output: "17 pass",
-          exitCode: null,
+          exitCode: 0,
           status: "completed",
         }),
       }),

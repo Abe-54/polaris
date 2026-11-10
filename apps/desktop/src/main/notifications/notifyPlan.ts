@@ -2,7 +2,11 @@
  * Which agent notifications (MCP `notify`) to show: a session's latest, once per id, never for
  * the session the focused window shows, and none from before this app saw its first summary.
  */
-import type { NeedsYouNotification, NeedsYouSummary } from "../../shared/needsYou.ts";
+import type {
+  NeedsYouAction,
+  NeedsYouNotification,
+  NeedsYouSummary,
+} from "../../shared/needsYou.ts";
 import { notificationKey } from "./plan.ts";
 
 /** Owner decision: agent banners always show, with no setting of their own. */
@@ -13,6 +17,16 @@ export const bannerOn = (
   notification: Pick<NeedsYouNotification, "automatic">,
   constellationsOn: boolean
 ) => (notification.automatic === true ? constellationsOn : agentBannersOn());
+
+/** What a click on the banner opens: the Constellation view when it is about one (ENG-473). */
+export const clickAction = ({
+  hostKey,
+  sessionId,
+  constellationId,
+}: NeedsYouNotification): NeedsYouAction =>
+  (constellationId ?? null) === null
+    ? { action: "open", hostKey, sessionId }
+    : { action: "open-constellation", hostKey, sessionId };
 
 export interface NotifyState {
   /** Session key → the last notification id seen; null until the first summary (history). */

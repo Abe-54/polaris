@@ -34,8 +34,14 @@ import { SelfTraceRpcs } from "./selfTraces.ts";
 import { ContinuityRpcs } from "./continuity.ts";
 import { PresenceRpcs } from "./presence.ts";
 import { DataRpcs } from "./data.ts";
-import { RequestsRpcs } from "./requests.ts";
-import { ProfilesRpcs, TraceCompareRpcs, TracesRpcs, TracesSettingsRpcs } from "./traces.ts";
+import { REQUESTS_RPC_TAGS, RequestsRpcs } from "./requests.ts";
+import {
+  ProfilesRpcs,
+  TraceCompareRpcs,
+  TracesRpcs,
+  TracesSettingsRpcs,
+  TracingSkillRpcs,
+} from "./traces.ts";
 import { HostStatsRpcs } from "./hostStats.ts";
 import { HostHarnesses } from "./availability.ts";
 import { PredictionRpcs } from "./predictionRpcs.ts";
@@ -54,6 +60,7 @@ import {
 } from "./domain.ts";
 import { EventEnvelope } from "./events.ts";
 import { ExtensionRpcs, GrantGate, NotGranted } from "./extensions.ts";
+import { gateUserRpcs, UserAccessGate } from "./userAccess.ts";
 import { RemoteAccessRpcs } from "./remoteAccess.ts";
 import { LinkedDeviceRpcs } from "./linkedDevices.ts";
 import { VoiceRpcs } from "./voice.ts";
@@ -62,6 +69,7 @@ import { TerminalRpcs } from "./terminal.ts";
 import { RestartRpcs } from "./restart.ts";
 import { BrowserStackRpcs } from "./browser.ts";
 import { COMPUTER_USE_RPC_TAGS, ComputerUseRpcs } from "./computerUse.ts";
+import { SimulatorRpcs } from "./simulator.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { Hello } from "./hello.ts";
 import {
@@ -725,11 +733,8 @@ export const ClearAttachments = Rpc.make("attachments.clear", {
   error: Schema.Union([Unsupported, FileError]),
 });
 
-/**
- * A const, not a class: `RpcGroup.Rpcs<typeof X>` reads a group's RPCs directly, but infers
- * them member by member from a class, which no longer fits the checker's instantiation budget.
- */
-export const DaemonRpcs = RpcGroup.make(
+/** Every Daemon RPC before the user gate; `DaemonRpcTag` reads its tags. */
+export const DaemonRpcDefinitions = RpcGroup.make(
   InlinePropose,
   Hello,
   Dispatch,
@@ -785,18 +790,29 @@ export const DaemonRpcs = RpcGroup.make(
     TracesRpcs,
     TracesSettingsRpcs,
     ProfilesRpcs,
-    TraceCompareRpcs
+    TraceCompareRpcs,
+    TracingSkillRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs)
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs, RequestsRpcs)
   .merge(ComputerUseRpcs);
+
+// A const, not a class: inferring `RpcGroup.Rpcs` from a class over the gated group is
+// too deep for the linter's single-program checker (TS2589), which types every Client as `any`.
+export const DaemonRpcs = gateUserRpcs(DaemonRpcDefinitions);
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with
  * `NotGranted` (grants.ts). The SDK's Client is built on this group so the
- * refusal decodes; the Desktop App, never refused, stays on `DaemonRpcs`.
+ * refusal decodes; the Desktop App stays on `DaemonRpcs`, which carries only the
+ * user gate's `UserAccessRequired` (ADR 0100).
  */
+// A const, not a class: as a class its type trips type-aware lint's instantiation limit (lint-config README).
 export const ExtensionDaemonRpcs = DaemonRpcs.omit("dispatch")
-  .add(Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])))
+  .add(
+    Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])).middleware(
+      UserAccessGate
+    )
+  )
   .middleware(GrantGate);
 
 /**
@@ -805,14 +821,6 @@ export const ExtensionDaemonRpcs = DaemonRpcs.omit("dispatch")
  * the checker's depth.
  */
 export const ExtensionClientRpcs = ExtensionDaemonRpcs.omit(
-  "requests.watch",
-  "requests.save",
-  "requests.send",
-  "requests.variables",
-  "requests.sendLog.page",
-  "requests.sendLog.watch",
-  "requests.send.get",
-  "requests.curl.parse",
-  "requests.curl.format",
+  ...REQUESTS_RPC_TAGS,
   ...COMPUTER_USE_RPC_TAGS
 );

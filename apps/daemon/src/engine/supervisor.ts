@@ -290,6 +290,7 @@ const make = (
                     sessionId,
                     turnId: e.turnId,
                     kind: e.kind,
+                    subagentId: e.subagentId ?? null,
                     title: redactText(e.title),
                     detail: redactNullable(e.detail),
                     options: [...e.options],
@@ -303,7 +304,11 @@ const make = (
         rt.signal(sessionId, { type: "harness.approvalWithdrawn", requestId: e.requestId }),
       TurnEnded: (e) => onTurnEnded(sessionId, e, at),
       BackgroundTasksChanged: (e) =>
-        rt.signal(sessionId, { type: "harness.backgroundTasksChanged", tasks: e.tasks }),
+        rt.signal(sessionId, {
+          type: "harness.backgroundTasksChanged",
+          tasks: e.tasks,
+          reportsPending: e.reportsPending ?? false,
+        }),
       SubagentStarted: (e) =>
         rt.signal(sessionId, {
           type: "harness.subagentStarted",

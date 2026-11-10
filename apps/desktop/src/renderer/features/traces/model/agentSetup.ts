@@ -1,40 +1,16 @@
 /**
  * What "Set up tracing" and "Ask an agent to make this change" send (DESIGN.md, Traces → Setup;
- * Paper T4): the polaris-tracing install command, the prompts, and where the agent works.
+ * Paper T4): the prompts, and where the agent works.
  */
-import {
-  type AgentSession,
-  type DetectedTraceExporter,
-  type HarnessKind,
-  isKnownHarness,
-  type KnownHarnessKind,
-  type ReviewCheckout,
-  type SessionPlacement,
+import type {
+  AgentSession,
+  DetectedTraceExporter,
+  ReviewCheckout,
+  SessionPlacement,
 } from "@polaris/protocol";
 import { Placement } from "../../../commands.ts";
 import { exporterLocation } from "../settings/model.ts";
 import { FIXED_EXPORTER_CHANGE } from "./setup.ts";
-
-/** The `skills` CLI's agent id for each Harness Polaris drives (skills@1.7.4, its agent table). */
-const SKILLS_AGENT = {
-  claude: "claude-code",
-  codex: "codex",
-  opencode: "opencode",
-  gemini: "gemini-cli",
-  copilot: "github-copilot",
-} as const satisfies Readonly<Record<KnownHarnessKind, string>>;
-
-const INSTALL = "npx skills add luxdotdev/polaris --skill polaris-tracing -a";
-
-/** The P7 install before the session is known, global so the repository gains no files. */
-export const INSTALL_COMMAND = `${INSTALL} claude-code codex -y -g`;
-
-/** The install for the Harness the setup agent runs on; an unknown one gets the default pair. */
-export const installCommand = (harness: HarnessKind | null): string => {
-  if (harness === null || !isKnownHarness(harness)) return INSTALL_COMMAND;
-
-  return `${INSTALL} ${SKILLS_AGENT[harness]} -y -g`;
-};
 
 export const SETUP_PROMPT = [
   "Use the polaris-tracing skill to set up OpenTelemetry tracing in this checkout,",

@@ -157,6 +157,7 @@ describe("notificationsOf", () => {
       body: "Ready",
       at: "2026-10-12T00:00:00Z",
       automatic: true,
+      constellationId: "graph",
     });
 
     const models = {
@@ -175,6 +176,7 @@ describe("notificationsOf", () => {
         title: "Tests pass",
         body: "Ready",
         automatic: true,
+        constellationId: "graph",
       },
     ]);
   });

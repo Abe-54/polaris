@@ -125,7 +125,9 @@ const revokeOp = (world: World, op: Extract<Op, { op: "revoke" }>) =>
     if (target === null) return;
     const revoked = yield* world.pairings.revoke(target.pairing.id);
     target.revoked = true;
-    expect(revoked?.revokedAt).not.toBeNull();
+    // A null from `revoke` (no such Pairing) must fail here, so check the id and the timestamp.
+    expect(revoked?.id).toBe(target.pairing.id);
+    expect(revoked?.revokedAt ?? null).not.toBeNull();
   });
 
 const authenticateOp = (world: World, op: Extract<Op, { op: "authenticate" }>) =>

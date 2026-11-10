@@ -1,6 +1,9 @@
-**/node_modules
-**/.turbo
-**/dist
-**/.next
-.git
-apps/desktop/release
+# Only the relay's Cargo workspace goes into the build; rust-toolchain.toml would fetch rustfmt and clippy.
+*
+!apps/relay
+apps/relay/target
+apps/relay/results
+apps/relay/node_modules
+apps/relay/.turbo
+apps/relay/contract
+apps/relay/rust-toolchain.toml

@@ -199,24 +199,27 @@ const WALKTHROUGH = new Walkthrough({
   evidence: null,
 });
 
-const base = testSummary("completed", FINDINGS);
+// Built on first render: a release bundle resolves review.testing.ts to an empty module (ENG-555).
+const previewSummary = (): RiskSummary => {
+  const base = testSummary("completed", FINDINGS);
 
-const SUMMARY = new RiskSummary({
-  walkthrough: WALKTHROUGH,
-  id: base.id,
-  key: base.key,
-  workspaceId: base.workspaceId,
-  subject: base.subject,
-  checkoutId: base.checkoutId,
-  status: base.status,
-  layers: base.layers,
-  reviewer: base.reviewer,
-  cost: base.cost,
-  note: base.note,
-  findings: base.findings,
-  startedAt: base.startedAt,
-  endedAt: base.endedAt,
-});
+  return new RiskSummary({
+    walkthrough: WALKTHROUGH,
+    id: base.id,
+    key: base.key,
+    workspaceId: base.workspaceId,
+    subject: base.subject,
+    checkoutId: base.checkoutId,
+    status: base.status,
+    layers: base.layers,
+    reviewer: base.reviewer,
+    cost: base.cost,
+    note: base.note,
+    findings: base.findings,
+    startedAt: base.startedAt,
+    endedAt: base.endedAt,
+  });
+};
 
 const ANSWER =
   "Yes. `upload()` reads the **whole body** with `arrayBuffer()` before it compares the size, so the limit only decides the response; stream the body and stop at `limit` instead.";
@@ -235,6 +238,7 @@ const Preview = () => {
   const { setTheme } = useTheme();
   const [sent, setSent] = useState<ReadonlySet<string>>(new Set());
   const [asks, setAsks] = useState<ReadonlyArray<AskEntry>>([]);
+  const [summary] = useState(previewSummary);
 
   useEffect(() => {
     const theme = launchTheme();
@@ -256,7 +260,7 @@ const Preview = () => {
       harnessName="Claude Code"
       files={FILES}
       diffProblem={null}
-      summary={SUMMARY}
+      summary={summary}
       accept={{ kind: "paused", critical: 2 }}
       colourblind={false}
       notice={null}

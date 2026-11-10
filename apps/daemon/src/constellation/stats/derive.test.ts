@@ -2,7 +2,14 @@ import { expect, test } from "bun:test";
 import { deriveStats } from "./derive.ts";
 import { pricedStats } from "./cli.ts";
 import { time, statsFixture } from "./stats.testing.ts";
-import { DomainEvent, HostId, Constellation, Attempt, AttemptCause } from "@polaris/protocol";
+import {
+  DomainEvent,
+  HostId,
+  Constellation,
+  Attempt,
+  AttemptCause,
+  AttemptId,
+} from "@polaris/protocol";
 import { CID } from "../../engine/constellation.testing.ts";
 import { graphData, attemptData } from "../data.ts";
 
@@ -147,9 +154,15 @@ test("send-backs are grouped by retry cause rather than counting recovery or ini
     }),
   });
 
+  const recovered = Attempt.make({
+    ...attemptData(second),
+    id: AttemptId.make("b2"),
+    cause: AttemptCause.cases.Recover.make({ ref: sentBack.id }),
+  });
+
   const graph = Constellation.make({
     ...graphData(history.graph),
-    attempts: [history.graph.attempts[0]!, sentBack],
+    attempts: [history.graph.attempts[0]!, sentBack, recovered],
   });
 
   expect(

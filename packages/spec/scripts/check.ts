@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 /**
- * Runs every check of the Quint spec (what CI's `spec` job runs).
+ * Runs every check of the Quint spec (CI's `spec` and `spec-simulate` jobs split it with --part).
  *
  *   bun run spec                      typecheck, scenario tests, simulator
  *   bun run spec -- --samples 20000   a longer simulation
  *   bun run spec -- --verify          also Apalache (`quint verify`, needs Java 17+)
  *   bun run spec -- --verify --steps 5
+ *   bun run spec -- --part checks     typecheck and scenario tests only (CI's `spec` job)
+ *   bun run spec -- --part simulate   simulator runs only (CI's `spec-simulate` job)
  *
  * The simulator runs with a fixed seed, so a run is reproducible and the
  * witness counts below are stable; change `--seed` to explore elsewhere.
@@ -28,6 +30,18 @@ const seed = option("seed", "0x5eed");
 
 const verify = args.includes("--verify");
 
+const part = option("part", "all");
+
+if (!["all", "checks", "simulate"].includes(part)) {
+  console.log(`--part must be all, checks or simulate, not ${part}`);
+  process.exit(2);
+}
+
+/** Simulator and Apalache runs belong to `simulate`; typecheck and `quint test` to `checks`. */
+
+const inPart = (command: string | undefined) =>
+  part === "all" || (part === "simulate") === (command === "run" || command === "verify");
+
 const dir = join(import.meta.dir, "..");
 
 const quint = join(dir, "node_modules", ".bin", "quint");
@@ -36,6 +50,7 @@ const quint = join(dir, "node_modules", ".bin", "quint");
 
 const WITNESSES = [
   "witnessDropped",
+  "witnessFeedFailed",
   "witnessResumedAfterDrop",
   "witnessDuplicateAnswered",
   "witnessRetryAfterCrash",
@@ -71,11 +86,18 @@ const FINDINGS = [
     invariant: "acceptedNeverInFlight",
     what: "Continue reopens an accepted Turn",
   },
+  {
+    main: "finding5",
+    invariant: "feedsFailVisibly",
+    what: "an upstream defect leaves the feed silent",
+  },
 ];
 
 let failed = false;
 
 const run = (label: string, argv: ReadonlyArray<string>, expectFailure = false) => {
+  if (!inPart(argv[0])) return "";
+
   const started = performance.now();
 
   const result = Bun.spawnSync([quint, ...argv], { cwd: dir, stdout: "pipe", stderr: "pipe" });
@@ -274,6 +296,20 @@ run("Worker admission safety", [
   "--invariant=safety",
   `--max-samples=${samples}`,
   "--max-steps=60",
+  `--seed=${seed}`,
+]);
+
+run("typecheck user-access.qnt", ["typecheck", "user-access.qnt"]);
+
+run("User access scenarios", ["test", "user-access.qnt", "--main=user_access_test"]);
+
+run("User access safety", [
+  "run",
+  "user-access.qnt",
+  "--main=user_access",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=30",
   `--seed=${seed}`,
 ]);
 
@@ -516,7 +552,7 @@ run("Constellation property probes", [
 
 run("scenario tests", ["test", "polaris_test.qnt", "--main=polaris_test"]);
 
-for (const n of [1, 2, 3, 4]) {
+for (const n of [1, 2, 3, 4, 5]) {
   run(`scenario tests (finding ${n}, before its fix)`, [
     "test",
     "polaris_test.qnt",
@@ -528,11 +564,13 @@ const simulate = (
   main: string,
   invariants: ReadonlyArray<string>,
   witnesses: ReadonlyArray<string> = [],
-  file = "polaris.qnt"
+  file = "polaris.qnt",
+  step = "step"
 ) => [
   "run",
   file,
   `--main=${main}`,
+  `--step=${step}`,
   "--invariants",
   ...invariants,
   `--max-samples=${samples}`,
@@ -547,11 +585,14 @@ const simulate = (
 const simulateWitnessed = (
   main: string,
   witnesses: ReadonlyArray<string>,
-  file = "polaris.qnt"
+  file = "polaris.qnt",
+  step = "step"
 ) => {
+  const label = step === "step" ? main : `${main} (${step})`;
+
   const simulated = run(
-    `simulate ${main}: safety, ${samples} traces of up to 60 steps`,
-    simulate(main, ["safety"], witnesses, file)
+    `simulate ${label}: safety, ${samples} traces of up to 60 steps`,
+    simulate(main, ["safety"], witnesses, file, step)
   );
 
   for (const witness of witnesses) {
@@ -581,10 +622,17 @@ simulateWitnessed(
     "witnessAudit",
     "witnessSlotAudit",
     "witnessRelay",
-    "witnessRecovery",
     "witnessLease",
   ],
   "constellations.qnt"
+);
+
+// `step` reached recovery in 1 of 3000 traces; its own step keeps it covered (ENG-352).
+simulateWitnessed(
+  "current_constellations",
+  ["witnessRecovery"],
+  "constellations.qnt",
+  "recoveryStep"
 );
 
 simulateWitnessed(

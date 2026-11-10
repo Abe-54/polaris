@@ -5,6 +5,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { connect } from "node:net";
 import { findExecutable } from "../platform/executable.ts";
+import { childEnv } from "../service/childEnv.ts";
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -103,7 +104,7 @@ export const hostProbe = (options: ProbeOptions = {}): HostProbe => {
       if (resolved === null) return { code: 127, stdout: "" };
 
       const proc = Bun.spawn([resolved, ...args], {
-        env: defined({ ...env, ...extra }),
+        env: childEnv(defined({ ...env, ...extra })),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "ignore",

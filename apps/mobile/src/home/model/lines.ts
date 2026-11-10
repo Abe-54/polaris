@@ -3,6 +3,7 @@
  * glossary words lowercase.
  */
 import type { ApprovalRequest } from "@polaris/protocol";
+import { middleCut, withoutOwnCd } from "@polaris/protocol/relay";
 import { Match } from "effect";
 import type { Session } from "../feed/fold.ts";
 
@@ -30,6 +31,8 @@ export interface ApprovalDetail {
   readonly text: string;
   /** Too long to read in a row: approve it from the agent session, where it is shown in full. */
   readonly tooLong: boolean;
+  /** What the row shows of a long one: cut in the middle, so its start and end both show. */
+  readonly preview: string;
 }
 
 /** More than this, in lines or characters, is answered in the agent session. */
@@ -37,16 +40,32 @@ export const INLINE_LINES = 4;
 
 export const INLINE_CHARACTERS = 280;
 
-export const approvalDetail = (approval: ApprovalRequest): ApprovalDetail | null => {
+/** About four lines of the row's mono well. */
+export const PREVIEW_CHARACTERS = 140;
+
+const previewOf = (text: string): string => {
+  const lines = text.split("\n");
+
+  const kept =
+    lines.length > INLINE_LINES ? [...lines.slice(0, 2), "…", ...lines.slice(-1)] : lines;
+
+  return middleCut(kept.join("\n"), PREVIEW_CHARACTERS);
+};
+
+/** `cwd` is the agent session's: a command's leading `cd` into it is dropped (ENG-590). */
+export const approvalDetail = (
+  approval: ApprovalRequest,
+  cwd: string | null = null
+): ApprovalDetail | null => {
   const raw = (approval.detail ?? approval.title).trim();
 
   if (raw === "") return null;
-  const text = approval.kind === "command" && !raw.startsWith("$ ") ? `$ ${raw}` : raw;
+  const command = approval.kind === "command";
+  const shown = command && cwd !== null ? withoutOwnCd(raw, [cwd]) : raw;
+  const text = command && !shown.startsWith("$ ") ? `$ ${shown}` : shown;
+  const tooLong = text.split("\n").length > INLINE_LINES || text.length > INLINE_CHARACTERS;
 
-  return {
-    text,
-    tooLong: text.split("\n").length > INLINE_LINES || text.length > INLINE_CHARACTERS,
-  };
+  return { text, tooLong, preview: tooLong ? previewOf(text) : text };
 };
 
 /** A question with one single-choice question and its choices, answered by a chip. */

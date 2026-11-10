@@ -1,11 +1,11 @@
 /** `BackgroundCommand`: refused unless the Turn in flight runs the command; then the live Harness moves it. */
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { Command, SessionId, SessionPlacement, TurnItem } from "@polaris/protocol";
+import { Command, DomainEvent, SessionId, SessionPlacement, TurnItem } from "@polaris/protocol";
 import { Effect, Exit } from "effect";
 import { makeRepo } from "../git/testing.ts";
-import { HarnessEvent } from "../harness/HarnessDriver.ts";
-import type { EventStore } from "../store/EventStore.ts";
+import { HarnessError, HarnessEvent } from "../harness/HarnessDriver.ts";
+import { EventStore } from "../store/EventStore.ts";
 import { Engine } from "./Engine.ts";
 import {
   cid,
@@ -127,3 +127,66 @@ test("a Harness that can't run commands in the background is refused, and never 
   expect(refusal(result.after)).toContain("claude cannot run a command in the background");
   expect(claude.latest(sessionId)!.backgrounded).toEqual([]);
 }, 30_000);
+
+/** The `SessionBackgroundCommandFailed` events committed, once `count` have arrived. */
+const failures = (count: number) =>
+  Effect.gen(function* () {
+    const store = yield* EventStore;
+
+    for (;;) {
+      const model = yield* store.model;
+      const events = yield* store.readEvents({ after: 0, upTo: model.sequence, sessionId });
+
+      const found = events.flatMap(({ event }) =>
+        DomainEvent.guards.SessionBackgroundCommandFailed(event) ? [event] : []
+      );
+
+      if (found.length >= count) return found.map(({ itemId, reason }) => ({ itemId, reason }));
+      yield* Effect.sleep("2 millis");
+    }
+  });
+
+// ENG-389: the Client hears when the Harness finds nothing to move, or refuses.
+test.each<[string, () => Effect.Effect<boolean, HarnessError>, string, string]>([
+  [
+    "finds nothing to move",
+    () => Effect.succeed(false),
+    "the command already finished",
+    "every command had already finished",
+  ],
+  [
+    "refuses",
+    () =>
+      Effect.fail(
+        new HarnessError({
+          harness: "claude",
+          message: "Could not move the command to the background",
+          cause: new Error("background tasks are disabled"),
+        })
+      ),
+    "background tasks are disabled",
+    "background tasks are disabled",
+  ],
+])(
+  "an accepted move the Harness %s is recorded for the Client",
+  async (_, reply, byId, all) => {
+    const claude = makeFakeDriver("claude", { backgroundReply: reply });
+
+    const result = await Effect.runPromise(
+      withRunningCommand(claude, () =>
+        Effect.gen(function* () {
+          yield* background("c1");
+          yield* background(null);
+
+          return yield* failures(2);
+        })
+      )
+    );
+
+    expect(result.after).toEqual([
+      { itemId: "c1", reason: byId },
+      { itemId: null, reason: all },
+    ]);
+  },
+  30_000
+);

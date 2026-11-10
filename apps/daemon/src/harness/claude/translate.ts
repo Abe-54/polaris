@@ -34,6 +34,7 @@ import {
   decodeToolResults,
   present,
   type ToolPayload,
+  type ToolFields,
   type ToolResult,
   toolFields,
 } from "./payloads.ts";
@@ -154,6 +155,16 @@ export interface ToolCall {
 
 const FILE_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
+/** Claude Code reports a non-zero exit only as an error result, without the code, so only a
+ *  foreground Bash result that finished cleanly reads as exit 0; anything else has none. */
+const commandExitCode = (call: ToolCall, result: ToolFields): number | null => {
+  const foreground = result.backgroundTaskId === null && !toolFields(call.input).run_in_background;
+  const bashResult = result.stdout !== null || result.stderr !== null;
+  const clean = !result.interrupted && result.returnCodeInterpretation === null;
+
+  return call.status === "completed" && bashResult && foreground && clean ? 0 : null;
+};
+
 const commandItem = (call: ToolCall): TurnItem => {
   const result = toolFields(call.structured);
   const streams = [result.stdout, result.stderr];
@@ -168,8 +179,7 @@ const commandItem = (call: ToolCall): TurnItem => {
     command: toolFields(call.input).command ?? "",
     cwd: call.cwd,
     output,
-    // Claude Code reports a non-zero exit only as an error result, without the code.
-    exitCode: null,
+    exitCode: commandExitCode(call, result),
     status: call.status,
     backgroundTaskId: result.backgroundTaskId,
   });
@@ -307,6 +317,11 @@ export class ClaudeTranslator {
 
     // A background Subagent may still be delivering blocks.
     if (this.subagents.size === 0) this.delivered.clear();
+  }
+
+  /** A permission request's Turn, and the Subagent whose call it is once its `tool_use` was seen. */
+  approvalScope(turnId: TurnId, toolUseId: string) {
+    return scoped({ turnId, subagentId: this.tools.get(toolUseId)?.scope.subagentId ?? null });
   }
 
   /** The user (or an interrupt) declined this tool call; its result reads as `declined`. */

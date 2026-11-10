@@ -30,6 +30,25 @@ test("Daemon startup does not import the language runtime, catalog, installer or
   ]);
 });
 
+test("Daemon startup does not import voice or the Tailscale side of Remote Access", async () => {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `await import(${JSON.stringify(join(import.meta.dir, "serve.ts"))});
+     console.log(JSON.stringify(Object.keys(require.cache).map(path => path.replaceAll("\\\\", "/")).filter(path => /\\/apps\\/daemon\\/src\\/(voice|remoteAccess)\\//.test(path))));`,
+    ],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+
+  const output = await new Response(child.stdout).text();
+  expect(await child.exited).toBe(0);
+  const imported = Schema.decodeUnknownSync(Schema.Array(Schema.String))(JSON.parse(output));
+  expect(imported.map((path) => path.split("/apps/daemon/src/")[1])).toEqual([
+    "remoteAccess/service.ts",
+  ]);
+});
+
 const rpcs = RpcGroup.make(
   Rpc.make("test.read", { success: Schema.String }),
   Rpc.make("test.watch", { success: Schema.String, stream: true })

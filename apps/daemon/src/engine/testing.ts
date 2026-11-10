@@ -79,6 +79,8 @@ export const makeFakeDriver = (
     readonly switchModel?: boolean;
     /** Offer `backgroundCommand` (default true). */
     readonly backgroundCommand?: boolean;
+    /** What `backgroundCommand` answers (default: it moved the command). */
+    readonly backgroundReply?: () => Effect.Effect<boolean, HarnessError>;
     /** Reads the user's shell commands (`RunShellCommand`), like Claude. */
     readonly shellCommand?: boolean;
     /** Compacts on a `/compact` Turn (`CompactSession`), like Claude and Codex. */
@@ -196,7 +198,10 @@ export const makeFakeDriver = (
             session.emit(...(options.onInterrupt?.(session) ?? []));
           }),
           stopBackground: (taskIds) => Effect.sync(() => void session.stopped.push(...taskIds)),
-          backgroundCommand: (itemId) => Effect.sync(() => session.backgrounded.push(itemId) > 0),
+          backgroundCommand: (itemId) =>
+            Effect.sync(() => session.backgrounded.push(itemId)).pipe(
+              Effect.andThen(options.backgroundReply?.() ?? Effect.succeed(true))
+            ),
           respond: (requestId, decision) =>
             Effect.sync(() => void session.responses.push({ requestId, decision })),
           setPermissionMode: () => Effect.void,

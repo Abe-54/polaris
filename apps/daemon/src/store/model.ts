@@ -10,7 +10,7 @@
  * them with `EventStore.readTurns`.
  */
 import {
-  AgentSession,
+  type AgentSession,
   type ConstellationId,
   type ApprovalRequest,
   DomainEvent,
@@ -21,7 +21,7 @@ import {
   type SessionId,
   type Subagent,
   type SubagentId,
-  Turn,
+  type Turn,
   type TurnId,
   type Workspace,
   type WorkspaceId,
@@ -36,6 +36,9 @@ import { foldConstellation, graphEvent, type ConstellationRecord } from "./const
 import { purgeWorkspace } from "./removal.ts";
 import { replyPreview } from "./replyPreview.ts";
 import { replyText, userTurnAfter } from "./userTurns.ts";
+import { patchSession, patchTurn, type SessionPatch } from "./patch.ts";
+
+export { patchSession, patchTurn, type SessionPatch, type TurnPatch } from "./patch.ts";
 
 export interface SessionRecord {
   readonly session: AgentSession;
@@ -145,6 +148,7 @@ export const sessionOf: (event: DomainEvent) => SessionId | null =
     SessionCompacted: bySessionId,
     SessionNotified: bySessionId,
     SessionBackgroundTasksChanged: bySessionId,
+    SessionBackgroundCommandFailed: bySessionId,
     TurnStarted: byTurn,
     TurnItemCompleted: bySessionId,
     TurnEnded: byTurn,
@@ -264,74 +268,6 @@ export const checkpointLabel = (ref: string): "before" | "after" | null => {
   return ref.endsWith("/after") ? "after" : null;
 };
 
-export type SessionPatch = Partial<typeof AgentSession.Type>;
-
-/** A copy of `session` with `patch` applied. */
-export const patchSession = (session: AgentSession, patch: SessionPatch): AgentSession =>
-  new AgentSession({
-    id: session.id,
-    workspaceId: session.workspaceId,
-    harness: session.harness,
-    title: session.title,
-    cwd: session.cwd,
-    worktreeId: session.worktreeId,
-    state: session.state,
-    permissionMode: session.permissionMode,
-    model: session.model,
-    effort: session.effort,
-    serviceTier: session.serviceTier,
-    celestial: session.celestial,
-    parentSessionId: session.parentSessionId,
-    forkedFromTurnId: session.forkedFromTurnId,
-    harnessCursor: session.harnessCursor,
-    turnCount: session.turnCount,
-    currentUserTurn: session.currentUserTurn,
-    lastReplyPreview: session.lastReplyPreview,
-    contextUsage: session.contextUsage,
-    lastCompaction: session.lastCompaction,
-    backgroundTasks: session.backgroundTasks,
-    backgroundChangedAt: session.backgroundChangedAt,
-    worktreeSetup: session.worktreeSetup,
-    lastError: session.lastError,
-    acceptedThroughIndex: session.acceptedThroughIndex,
-    pullRequest: session.pullRequest,
-    origin: session.origin,
-    worker: session.worker,
-    pinnedAt: session.pinnedAt,
-    limitResetsAt: session.limitResetsAt,
-    resumeAtReset: session.resumeAtReset,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    ...patch,
-  });
-
-export type TurnPatch = Partial<typeof Turn.Type>;
-
-/** A copy of `turn` with `patch` applied. */
-export const patchTurn = (turn: Turn, patch: TurnPatch): Turn =>
-  new Turn({
-    id: turn.id,
-    sessionId: turn.sessionId,
-    index: turn.index,
-    prompt: turn.prompt,
-    trigger: turn.trigger,
-    userTurnNumber: turn.userTurnNumber,
-    replyPreview: turn.replyPreview,
-    attachments: turn.attachments,
-    model: turn.model,
-    effort: turn.effort,
-    serviceTier: turn.serviceTier,
-    status: turn.status,
-    feedback: turn.feedback,
-    shellCommand: turn.shellCommand,
-    idleCompaction: turn.idleCompaction,
-    checkpointBefore: turn.checkpointBefore,
-    checkpointAfter: turn.checkpointAfter,
-    startedAt: turn.startedAt,
-    endedAt: turn.endedAt,
-    ...patch,
-  });
-
 const withMap = <K, V>(map: ReadonlyMap<K, V>, key: K, value: V | undefined): Map<K, V> => {
   const next = new Map(map);
 
@@ -450,6 +386,13 @@ const resourceProjection =
     return { ...model, hostResources };
   };
 
+/** A logged `TurnEnded` without the commit keeps the one its `CheckpointRecorded` folded in. */
+const checkpointCommit = (turn: Turn, known: Turn | undefined): string | null =>
+  turn.checkpointAfterCommit ??
+  (known !== undefined && known.checkpointAfter === turn.checkpointAfter
+    ? known.checkpointAfterCommit
+    : null);
+
 /** A Turn's start or end; its user-Turn number and reply preview come from the fold, not the event. */
 const recordTurn =
   (started: boolean) =>
@@ -470,6 +413,7 @@ const recordTurn =
       const kept = patchTurn(turn, {
         userTurnNumber: known?.userTurnNumber ?? opened?.number ?? turn.userTurnNumber,
         replyPreview: known?.replyPreview ?? turn.replyPreview,
+        checkpointAfterCommit: checkpointCommit(turn, known),
       });
 
       // Idle compaction's Turn leaves the reply the user last read.
@@ -481,6 +425,8 @@ const recordTurn =
           turnCount: Math.max(r.session.turnCount, turn.index + 1),
           currentUserTurn: opened ?? r.session.currentUserTurn,
           lastReplyPreview: quiet ? r.session.lastReplyPreview : kept.replyPreview,
+          // A Turn starting is the Harness taking up any reports it had waiting.
+          backgroundReportsPending: started ? false : r.session.backgroundReportsPending,
         },
         turns: upsertTurn(r.turns, kept),
       };
@@ -507,6 +453,7 @@ const recordCheckpoint =
     readonly sessionId: SessionId;
     readonly turnId: TurnId;
     readonly ref: string;
+    readonly commit: string;
   }): Reducer =>
   (fold) => {
     const label = checkpointLabel(event.ref);
@@ -520,7 +467,9 @@ const recordCheckpoint =
 
       const updated = patchTurn(
         turn,
-        label === "before" ? { checkpointBefore: event.ref } : { checkpointAfter: event.ref }
+        label === "before"
+          ? { checkpointBefore: event.ref }
+          : { checkpointAfter: event.ref, checkpointAfterCommit: event.commit }
       );
 
       return { turns: upsertTurn(r.turns, updated) };
@@ -637,11 +586,19 @@ const apply: (event: DomainEvent) => Reducer = DomainEvent.match<Reducer>({
     updateSession(fold, event.sessionId, () => ({ session: { contextUsage: event.usage } })),
   SessionBackgroundTasksChanged: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({
-      session: { backgroundTasks: event.tasks, backgroundChangedAt: fold.at },
+      session: {
+        backgroundTasks: event.tasks,
+        backgroundChangedAt: fold.at,
+        backgroundReportsPending: event.reportsPending,
+      },
     })),
   SessionCompacted: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({ session: { lastCompaction: event.compaction } })),
-  /** Only Clients act on it; the read model keeps nothing. */
+  /** Only Clients act on these; the read model keeps nothing. */
+  SessionBackgroundCommandFailed:
+    () =>
+    ({ model }) =>
+      model,
   SessionNotified:
     () =>
     ({ model }) =>
@@ -671,8 +628,14 @@ const apply: (event: DomainEvent) => Reducer = DomainEvent.match<Reducer>({
         subagents: withMap(r.subagents, subagent.id, undefined),
       })),
   TurnsAccepted: (event) => (fold) =>
-    updateSession(fold, event.sessionId, () => ({
-      session: { acceptedThroughIndex: event.throughIndex },
+    updateSession(fold, event.sessionId, (r) => ({
+      session: {
+        acceptedThroughIndex: event.throughIndex,
+        acceptedThroughUserTurn:
+          event.throughUserTurn ??
+          r.turns.find((t) => t.id === event.throughTurnId)?.userTurnNumber ??
+          null,
+      },
     })),
   TurnsReverted: (event) => (fold) => updateSession(fold, event.sessionId, () => ({})),
   SessionPullRequestLinked: (event) => (fold) =>

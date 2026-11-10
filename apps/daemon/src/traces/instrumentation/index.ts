@@ -20,6 +20,8 @@ export interface AutoInstrumentationOptions {
 export interface AutoInstrumentationResult {
   readonly environment: Record<string, string>;
   readonly skipReason: string | null;
+  /** The app's own SDK that the override instruments alongside. */
+  readonly overriddenSdk?: string | null;
 }
 
 /** Called only for a trusted launch, after endpoint injection; never scans or loads an SDK while idle. */
@@ -68,6 +70,7 @@ export const prepareAutoInstrumentation = async (
         POLARIS_OTEL_SERVICE_NAME: packages.find((info) => info.name)?.name ?? "node-app",
       },
       skipReason: null,
+      overriddenSdk: sdk ?? null,
     };
   } catch {
     return {

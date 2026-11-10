@@ -184,6 +184,35 @@ describe("custom oxlint plugins", () => {
   );
 
   test(
+    "polaris/no-ptr-argument reports bun:ffi ptr() passed straight to a call, however imported",
+    () => {
+      const lines = lintFixtures("polaris")
+        .filter((d) => d.code === "polaris(no-ptr-argument)")
+        .map((d) => `${d.filename}:${d.labels?.[0]?.span.line ?? 0}`);
+
+      // Typed arrays, a stored BigInt(ptr()) and an offset ptr() kept in a const stay silent.
+      expect(lines).toEqual([7, 8, 9, 10].map((line) => `fixtures/ptr-argument.ts:${line}`));
+    },
+    SPAWN_TIMEOUT_MS
+  );
+
+  test(
+    "polaris/child-env reports Daemon launches without a built env, outside tests and the allowlist",
+    () => {
+      const lines = lintFixtures("polaris")
+        .filter((d) => d.code === "polaris(child-env)")
+        .map((d) => `${d.filename}:${d.labels?.[0]?.span.line ?? 0}`)
+        .sort();
+
+      // Built envs (direct, a const, a spread const, a choice, a literal) and regex.exec stay silent.
+      expect(lines).toEqual(
+        [9, 10, 11, 12, 13, 14, 15].map((line) => `fixtures/daemon/launches.ts:${line}`).sort()
+      );
+    },
+    SPAWN_TIMEOUT_MS
+  );
+
+  test(
     "sonarjs/cognitive-complexity reports only the tangled function",
     () => {
       const diagnostics = lintFixtures("sonarjs");

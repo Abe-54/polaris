@@ -14,6 +14,7 @@ import {
   CheckReceipt,
   Claim,
   Constellation,
+  ConstellationFinding,
   ConstellationId,
   ConstellationNotification,
   ConstellationState,
@@ -105,6 +106,8 @@ export const constellationEventFields = {
     mergedHead: Schema.String,
     receipts: Schema.Array(Schema.suspend(() => CheckReceipt)),
     evidence: EvidenceTier,
+    /** Absent on events written before Accept recorded its merge's findings. */
+    findings: Schema.optionalKey(Schema.Array(ConstellationFinding)),
   },
   /** `by` is null on events written before it was recorded. */
   AttemptRejected: {

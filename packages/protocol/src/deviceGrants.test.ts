@@ -17,6 +17,11 @@ test.each(["SetPermissionMode", "SetModel"])("a Linked Device may send %s", (tag
   expect(outcome("dispatch", tag)).toBe("allowed");
 });
 
+// ENG-494: the long-press menus continue an Interrupted Turn and retry a Failed one.
+test.each(["Continue", "Retry"])("a Linked Device may send %s", (tag) => {
+  expect(outcome("dispatch", tag)).toBe("allowed");
+});
+
 // ENG-559: Ask the reviewer (MX-S) runs on the phone; the walkthrough still runs from the Mac.
 test("a Linked Device may ask the reviewer, but not start a walkthrough", () => {
   expect(outcome("review.askFinding", null)).toBe("allowed");

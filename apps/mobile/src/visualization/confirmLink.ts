@@ -1,12 +1,14 @@
 /** "Open this link?" (DESIGN.md, Visualizations V5) as the native action sheet; https only. */
+import type { LinkConfirms } from "@polaris/visualization";
 import { ActionSheetIOS, Linking } from "react-native";
 import { openableLink } from "./model.ts";
 
-export const confirmLink = (title: string, url: string) => {
+/** Asks only when `confirms` allows one more (ENG-634): a frame can't stack or repeat sheets. */
+export const confirmLink = (title: string, url: string, confirms: LinkConfirms) => {
   const link = openableLink(url);
 
   // Anything but https is dropped without asking.
-  if (link === null) return;
+  if (link === null || !confirms.request()) return;
 
   ActionSheetIOS.showActionSheetWithOptions(
     {
@@ -16,6 +18,8 @@ export const confirmLink = (title: string, url: string) => {
       cancelButtonIndex: 1,
     },
     (index) => {
+      confirms.settled(index === 0);
+
       if (index === 0) void Linking.openURL(link.href).catch(() => undefined);
     }
   );

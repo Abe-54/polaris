@@ -4,7 +4,19 @@ import hashlib
 import json
 import pathlib
 import tarfile
-from importlib.machinery import SourceFileLoader
+import importlib.util
+import sys
+
+
+def load(name, path):
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--cache', required=True, type=pathlib.Path)
@@ -14,7 +26,7 @@ temporary = pathlib.Path('/tmp').resolve()
 if not args.cache.resolve().is_relative_to(temporary) or args.cache.resolve() == temporary:
     parser.error('Private cached source root required')
 root = pathlib.Path(__file__).resolve().parent
-legal = SourceFileLoader('legal', str(root / 'complete-notices.py')).load_module()
+legal = load('legal', str(root / 'complete-notices.py'))
 source = json.loads((root / 'native-source-closure.json').read_text())['lua-language-server']
 sources = [("core", source)] + [(row['path'], row['source']) for row in source['submodules']
                               if not row['path'].startswith('meta/3rd/')]

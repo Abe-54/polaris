@@ -4,6 +4,7 @@ import type { ConstellationBinding } from "../engine/constellation.inputs.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { finding, refusal } from "./decision.ts";
 import { ConstellationRuntime } from "./runtime.ts";
+import { RemoteWorkers } from "./transfers/assignments.ts";
 
 /** `constellation.worker.start`: only the user restarts a stalled worker's startup on its Host. */
 export const startWorker = Effect.fnUntraced(function* (
@@ -20,10 +21,13 @@ export const startWorker = Effect.fnUntraced(function* (
       finding("E-AUTHORITY", "Only the user starts a worker this way", "Message the worker."),
     ]);
 
-  const restart = (yield* ConstellationRuntime).restartStartup;
+  const local = (yield* ConstellationRuntime).restartStartup;
+  const remote = (yield* RemoteWorkers).restartStartup;
 
+  // A worker on a remote worker Host is in this Host's assignments, not its graphs.
   const started =
-    attempt !== undefined && restart !== undefined ? yield* restart(attempt.id) : false;
+    (attempt !== undefined && local !== undefined && (yield* local(attempt.id))) ||
+    (remote !== undefined && (yield* remote(attemptId)));
 
   if (!started)
     return yield* refusal(record, [

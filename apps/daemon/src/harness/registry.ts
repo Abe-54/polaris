@@ -13,8 +13,9 @@
  * `POLARIS_CODEX`, `POLARIS_CLAUDE`, `POLARIS_OPENCODE`, `POLARIS_GEMINI` and
  * `POLARIS_COPILOT` can point at the binaries explicitly.
  * Requires `PlanLimitReporter`, where the drivers report what their Harness exposes, and
- * `BrowserMcp`, which gives Claude Code and Codex sessions the Browser's MCP server, and
- * optionally `DesktopMcp`, which gives them computer use (`polaris_desktop`).
+ * `BrowserMcp`, which gives Claude Code and Codex sessions the Browser's MCP server; with
+ * `SimulatorMcp` in context they get the Simulator's too, and with `DesktopMcp` computer use
+ * (`polaris_desktop`).
  */
 import type { HarnessKind, KnownHarnessKind } from "@polaris/protocol";
 import { Effect, Layer, Option, Scope } from "effect";
@@ -26,6 +27,7 @@ import { type HarnessDriver, HarnessError } from "./HarnessDriver.ts";
 import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
 import { DesktopMcp } from "./desktop/index.ts";
+import { SimulatorMcp } from "../simulator/service.ts";
 import { findExecutable } from "../platform/executable.ts";
 
 const binary = (env: string, name: string): string | null =>
@@ -51,7 +53,13 @@ export const DRIVER_CAPABILITIES = {
     shellCommand: true,
     compact: true,
   },
-  opencode: { steer: true, steerAttachments: true, liveCoAttach: true, switchModel: true },
+  opencode: {
+    steer: true,
+    steerAttachments: true,
+    liveCoAttach: true,
+    switchModel: true,
+    compact: true,
+  },
   gemini: { steer: false, liveCoAttach: false, switchModel: true },
   copilot: { steer: false, liveCoAttach: false, switchModel: true },
   bench: { steer: true, steerAttachments: true, liveCoAttach: true, switchModel: true },
@@ -102,10 +110,10 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const { report } = yield* PlanLimitReporter;
       const browser = yield* BrowserMcp;
       const desktop = Option.getOrUndefined(yield* Effect.serviceOption(DesktopMcp));
+      const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
       const planLimits = { report };
       // The app-server the Codex driver may start belongs to this layer, not to the first `open`.
       const scope = yield* Effect.scope;
-      const codexPath = binary("POLARIS_CODEX", "codex");
       const bench = options.bench ?? process.env.POLARIS_BENCH_HARNESS === "1";
 
       const benchDriver = (kind: HarnessKind) =>
@@ -124,7 +132,14 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
           DRIVER_CAPABILITIES.codex,
           Effect.promise(() => import("./codex/CodexDriver.ts")).pipe(
             Effect.flatMap(({ makeCodexDriver }) =>
-              makeCodexDriver({ codexPath, planLimits, browser, desktop })
+              // Looked up at each use, so a Codex installed after start is found (ENG-413).
+              makeCodexDriver({
+                findCodex: () => binary("POLARIS_CODEX", "codex"),
+                planLimits,
+                browser,
+                simulator,
+                desktop,
+              })
             ),
             Scope.provide(scope)
           )
@@ -141,6 +156,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 planLimits,
                 browser,
                 desktop,
+                simulator,
               })
             )
           ),

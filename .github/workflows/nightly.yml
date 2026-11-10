@@ -6,6 +6,8 @@ name: Nightly
 #   quarantined  only the tests in tooling/test/quarantine.json, on each OS; report only.
 #   pbt          the Daemon's property and model-based tests at 500 runs, on a random seed it prints.
 #   apalache     the spec's bounded Apalache check, which only reports in CI.
+#   build-darwin the Daemon's darwin-arm64 build, re-signed with codesign and selftested; off CI's
+#                PR and main runs so they queue for fewer macOS runners (ENG-789).
 #   bypass       merges to main in the last day whose message has `ci-bypass:`, in the summary.
 #   ci-red       a Linear issue per red job (tooling/ci/ciRed.ts); a dry run off main. A job no runner
 #                acquired has no result and gets a re-run (ci-rerun.yml), not an issue naming a test.
@@ -75,6 +77,8 @@ jobs:
         with:
           node-version: 24
       - uses: ./.github/actions/bun-install
+      # The Daemon's, the Mobile App's and the relay's own suites start the relay's binary.
+      - uses: ./.github/actions/relay-binary
       - name: Fetch the Quint evaluator
         if: runner.os != 'Windows'
         run: bun packages/spec/scripts/fetch-evaluator.ts
@@ -170,6 +174,20 @@ jobs:
         working-directory: packages/spec
         run: ./node_modules/.bin/quint verify polaris.qnt --main=small --invariant=safety --max-steps=3 --verbosity=1
 
+  build-darwin:
+    name: Build the Daemon (macos-15)
+    # darwin builds must be re-signed with macOS codesign, and run `polaris selftest` here.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      # The bundler resolves every platform's ast-grep addon, whichever one it builds.
+      - run: bun install --frozen-lockfile --os=* --cpu=*
+      - run: bunx turbo run build --filter=@polaris/daemon -- darwin-arm64
+
   bypass:
     name: CI bypasses in the last day
     runs-on: ubuntu-latest
@@ -194,7 +212,7 @@ jobs:
 
   ci-red:
     name: ci-red
-    needs: [test, quarantined, pbt, apalache, bypass]
+    needs: [test, quarantined, pbt, apalache, build-darwin, bypass]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

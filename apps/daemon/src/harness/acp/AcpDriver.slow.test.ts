@@ -415,6 +415,72 @@ describe("ACP driver", () => {
     expect(agent.methods()).toContain("session/cancel");
   });
 
+  test("interrupting withdraws the Turn's open approval and answers it cancelled", async () => {
+    const agent = await start({
+      prompts: [
+        { steps: [{ permission: { toolCall: shellCall, options } }], stopReason: "cancelled" },
+      ],
+    });
+
+    const open = await agent.open();
+    await run(open.session.sendTurn(turn("t-1")));
+    const asked = await open.waitFor("ApprovalRequested");
+
+    if (!HarnessEvent.$is("ApprovalRequested")(asked)) throw new Error("unreachable");
+    await run(open.session.interrupt);
+    await open.waitFor("TurnEnded");
+
+    expect(open.events.filter(HarnessEvent.$is("ApprovalWithdrawn"))).toEqual([
+      HarnessEvent.ApprovalWithdrawn({ requestId: asked.requestId }),
+    ]);
+    expect(agent.received().find((m) => m.id === 1000)?.result).toEqual({
+      outcome: { outcome: "cancelled" },
+    });
+    expect(
+      (
+        await failure(
+          open.session.respond(
+            asked.requestId,
+            ApprovalDecision.cases.Allow.make({ remember: false })
+          )
+        )
+      ).message
+    ).toMatch(/No open/);
+  });
+
+  test("supervised lets reads through and asks for commands", async () => {
+    const read = { toolCallId: "r", title: "Read a file", kind: "read" };
+
+    const agent = await start({
+      prompts: [
+        {
+          steps: [
+            { permission: { toolCall: read, options } },
+            { permission: { toolCall: shellCall, options } },
+          ],
+        },
+      ],
+    });
+
+    const open = await agent.open({ permissionMode: "supervised" });
+    await run(open.session.sendTurn(turn("t-1")));
+    const asked = await open.waitFor("ApprovalRequested");
+
+    if (!HarnessEvent.$is("ApprovalRequested")(asked)) throw new Error("unreachable");
+    await run(
+      open.session.respond(asked.requestId, ApprovalDecision.cases.Deny.make({ reason: null }))
+    );
+    await open.waitFor("TurnEnded");
+
+    expect(open.events.filter(HarnessEvent.$is("ApprovalRequested"))).toMatchObject([
+      { title: "Run tests", kind: "command" },
+    ]);
+    expect(agent.received().flatMap((m) => (m.result === undefined ? [] : [m.result]))).toEqual([
+      { outcome: { outcome: "selected", optionId: "yes" } },
+      { outcome: { outcome: "selected", optionId: "no" } },
+    ]);
+  });
+
   test("a second Turn while one runs is refused; steering isn't offered", async () => {
     const agent = await start({ prompts: [{ steps: [{ waitForCancel: true }] }] });
     const open = await agent.open();

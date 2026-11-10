@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  hostsClosed,
+  hostsOpened,
   initialNavigation,
   layersOf,
   opened,
@@ -11,21 +13,32 @@ import {
 } from "./navigationState.ts";
 
 describe("Settings → Hosts", () => {
-  test("Hosts pushes over Settings and back returns to the Settings tab", () => {
-    const onSettings = selected(initialNavigation, "settings");
-    const onHosts = pushed(onSettings, { screen: "hosts" });
+  test("Hosts stays on the Settings tab, so the pill stays, and back returns to Settings", () => {
+    const onHosts = hostsOpened(selected(initialNavigation, "settings"));
 
-    expect(topOf(onHosts)).toEqual({ screen: "hosts" });
-
-    const back = wentBack(onHosts);
-
-    expect(topOf(back)).toEqual({ screen: "tabs" });
-    expect(back.tab).toBe("settings");
+    expect(topOf(onHosts)).toEqual({ screen: "tabs" });
+    expect(onHosts).toMatchObject({ tab: "settings", settings: "hosts" });
+    expect(hostsClosed(onHosts)).toMatchObject({ tab: "settings", settings: "settings" });
   });
 
-  test("a widget link from Settings lands on Sessions", () => {
-    const onHosts = pushed(selected(initialNavigation, "settings"), { screen: "hosts" });
-    const linked = opened(onHosts, { screen: "thread", hostId: "h", sessionId: "s" });
+  test("Hosts from another tab's empty state switches to the Settings tab", () => {
+    expect(hostsOpened(initialNavigation)).toMatchObject({ tab: "settings", settings: "hosts" });
+  });
+
+  test("Hosts is kept across tabs; tapping Settings again returns to Settings", () => {
+    const onHosts = hostsOpened(initialNavigation);
+    const away = selected(onHosts, "sessions");
+
+    expect(selected(away, "settings").settings).toBe("hosts");
+    expect(selected(onHosts, "settings").settings).toBe("settings");
+  });
+
+  test("a widget link from Hosts lands on Sessions", () => {
+    const linked = opened(hostsOpened(initialNavigation), {
+      screen: "thread",
+      hostId: "h",
+      sessionId: "s",
+    });
 
     expect(linked.tab).toBe("sessions");
     expect(linked.stack).toEqual([

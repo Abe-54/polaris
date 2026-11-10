@@ -5,6 +5,8 @@
  */
 import type { TurnItem } from "@polaris/protocol";
 import { Match, Predicate } from "effect";
+import { completedItemView } from "../features/session/model/items.ts";
+import { toolActivity } from "../features/session/model/runs.ts";
 import type { LiveItem, SessionModel } from "../store/sessionModel.ts";
 import { desktopCallOf } from "../features/session/model/computerUse/index.ts";
 
@@ -43,7 +45,13 @@ const itemActivity = (item: TurnItem): string | null =>
           ? `Editing ${basename(first.path)}`
           : `Editing ${i.changes.length} files`;
       },
-      ToolCall: (i) => (desktopCallOf(i) === null ? `Using ${i.name}` : `Using ${desktopApp(i)}`),
+      ToolCall: (i) => {
+        if (desktopCallOf(i) !== null) return `Using ${desktopApp(i)}`;
+
+        const view = completedItemView(i);
+
+        return clip(view.kind === "tool" ? toolActivity(view) : `Using ${i.name}`);
+      },
       Plan: (i) => {
         const step = i.steps.find((s) => s.status === "in-progress");
 

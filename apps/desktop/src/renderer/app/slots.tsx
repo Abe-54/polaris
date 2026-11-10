@@ -91,20 +91,49 @@ export interface ShellSlots {
   readonly openTerminal: (place: TerminalPlace, cwd: string, title: string) => void;
 }
 
+// Getters, read at render: features import this module back, so at load a filler may not exist yet.
 export const slots: ShellSlots = {
-  SessionIntent: ConstellationIntent,
-  SessionOutput: ConstellationOutput,
-  OutputRail,
-  NewSession: NewSessionPage,
-  NoSession: WorkspaceStage,
-  SessionList,
-  NeedsYouInbox,
-  JumpMenu,
-  OpenFolder: OpenFolderDialog,
-  NeedsYouHover,
-  SettingsHosts: HostsSettingsPage,
-  HarnessTerminal,
-  PullRequests: PullList,
-  ReviewSubject: ReviewView,
+  get SessionIntent() {
+    return ConstellationIntent;
+  },
+  get SessionOutput() {
+    return ConstellationOutput;
+  },
+  get OutputRail() {
+    return OutputRail;
+  },
+  get NewSession() {
+    return NewSessionPage;
+  },
+  get NoSession() {
+    return WorkspaceStage;
+  },
+  get SessionList() {
+    return SessionList;
+  },
+  get NeedsYouInbox() {
+    return NeedsYouInbox;
+  },
+  get JumpMenu() {
+    return JumpMenu;
+  },
+  get OpenFolder() {
+    return OpenFolderDialog;
+  },
+  get NeedsYouHover() {
+    return NeedsYouHover;
+  },
+  get SettingsHosts() {
+    return HostsSettingsPage;
+  },
+  get HarnessTerminal() {
+    return HarnessTerminal;
+  },
+  get PullRequests() {
+    return PullList;
+  },
+  get ReviewSubject() {
+    return ReviewView;
+  },
   openTerminal: (place, cwd, title) => void openShell(place, cwd, title),
 };

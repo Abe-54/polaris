@@ -4,7 +4,7 @@
  * kernel stamps that message with this process's audit token, which is what the launcher
  * checks; nothing a caller could say about itself is trusted. macOS only.
  */
-import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
 
 /** Values from the macOS headers; `HAND_OFF_ID` is the one in `launcher.c`. */
 const C = {
@@ -76,7 +76,7 @@ export const openChannels = (): Channels => {
   for (let i = 0; i < 3; i++) {
     const pair = new Int32Array(2);
 
-    if (lib().socketpair(C.AF_UNIX, C.SOCK_STREAM, 0, ptr(pair)) !== 0) {
+    if (lib().socketpair(C.AF_UNIX, C.SOCK_STREAM, 0, pair) !== 0) {
       closeAll([...mine, ...theirs]);
       throw new Error("socketpair failed");
     }
@@ -96,9 +96,9 @@ const task = () => lib().task_self_trap();
 export const lookUp = (name: string): number | null => {
   const out = new Uint32Array(1);
 
-  if (lib().task_get_special_port(task(), C.TASK_BOOTSTRAP_PORT, ptr(out)) !== 0) return null;
+  if (lib().task_get_special_port(task(), C.TASK_BOOTSTRAP_PORT, out) !== 0) return null;
   const bootstrap = out[0]!;
-  const found = lib().bootstrap_look_up(bootstrap, ptr(Buffer.from(`${name}\0`)), ptr(out));
+  const found = lib().bootstrap_look_up(bootstrap, Buffer.from(`${name}\0`), out);
   lib().mach_port_deallocate(task(), bootstrap);
 
   return found === 0 ? out[0]! : null;
@@ -123,7 +123,7 @@ export const sendFiles = (port: number, fds: ReadonlyArray<number>): void => {
     fds.forEach((fd, index) => {
       const out = new Uint32Array(1);
 
-      if (lib().fileport_makeport(fd, ptr(out)) !== 0) throw new Error("fileport_makeport failed");
+      if (lib().fileport_makeport(fd, out) !== 0) throw new Error("fileport_makeport failed");
       rights.push(out[0]!);
       message.setUint32(28 + index * 12, out[0]!, true);
       message.setUint8(28 + index * 12 + 10, C.MACH_MSG_TYPE_COPY_SEND);
@@ -131,7 +131,7 @@ export const sendFiles = (port: number, fds: ReadonlyArray<number>): void => {
     });
 
     const sent = lib().mach_msg(
-      ptr(message.buffer),
+      new Uint8Array(message.buffer),
       C.MACH_SEND_MSG | C.MACH_SEND_TIMEOUT,
       size,
       0,

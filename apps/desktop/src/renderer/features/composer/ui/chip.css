@@ -1,0 +1,30 @@
+/*
+ * A Skill or Slash Command chip in the prompt (DESIGN.md, Skills and Slash
+ * Commands): the name on a neutral fill, its kind's icon standing in for the
+ * sigil. The icon is a mask on ::before, so the DOM text stays the name and
+ * the caret never lands inside a glyph. Inline, so the line never grows.
+ */
+.composer-chip {
+  border-radius: var(--radius-control);
+  background: var(--color-fill-selected);
+  color: var(--color-text-strong);
+  font-weight: 500;
+  padding: 1px 5px 1px 4px;
+  white-space: nowrap;
+}
+
+.composer-chip::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 3px;
+  vertical-align: -2px;
+  background-color: var(--color-text-subtle);
+  mask: var(--chip-icon) center / contain no-repeat;
+}
+
+/* In a sent message's bubble, already on the chip's fill: the chip sits a step apart. */
+.composer-chip[data-sent] {
+  background: var(--color-surface-raised);
+}

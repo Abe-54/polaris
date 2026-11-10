@@ -37,7 +37,7 @@ export const useExtensions = (hostKey: string, enabled: boolean) => {
     const result = await polaris().request("extensions.pair", { hostKey, name, grant });
 
     if (!result.ok) {
-      showRefusal("Couldn't pair the extension", result.error);
+      showRefusal("Couldn't pair the extension", result.error, hostKey);
 
       return null;
     }
@@ -55,7 +55,7 @@ export const useExtensions = (hostKey: string, enabled: boolean) => {
     const result = await polaris().request("extensions.revoke", { hostKey, id });
 
     if (!result.ok) {
-      showRefusal("Couldn't revoke the pairing", result.error);
+      showRefusal("Couldn't revoke the pairing", result.error, hostKey);
 
       return false;
     }
