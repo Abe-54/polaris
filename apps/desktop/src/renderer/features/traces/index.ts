@@ -2,7 +2,7 @@
  * Traces (⌘5; DESIGN.md, Traces; ADR 0094): the layout and its slots, the hooks over the Traces
  * IPC contract (traces and Profiles), and the fixture layer. The interface for the shell and other features.
  */
-export { TracesMode } from "./ui/LazyTracesMode.tsx";
+export { TracesMode, tracesChunk } from "./ui/LazyTracesMode.tsx";
 
 export { tracesUnavailable, useTracesUnavailable } from "./model/availability.ts";
 

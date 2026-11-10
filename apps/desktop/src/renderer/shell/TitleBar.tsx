@@ -7,8 +7,14 @@ import { useTracesUnavailable } from "../features/traces/index.ts";
 import { jumpCopy } from "../features/jump/copy.ts";
 import { useSelection, useShellActions } from "./hooks.ts";
 import { preloadEditor } from "../features/editor/preload.ts";
+import { modeWarmup } from "../app/warmModes.ts";
 import { OfflineIndicator } from "./HostState.tsx";
 import { AppMenuButton, CaptionSpace } from "./windowsChrome.tsx";
+
+const reachForModes = () => {
+  preloadEditor();
+  modeWarmup.now();
+};
 
 /**
  * The title bar (DESIGN.md, Titlebar; Chrome redesign): on the ground with no fill. On macOS
@@ -86,8 +92,8 @@ export const TitleBar = () => {
           <Wordmark />
         </>
       )}
-      {/* Reaching for the switch warms Edit mode, so its first open is quick. */}
-      <div className="app-no-drag flex" onPointerEnter={preloadEditor} onFocus={preloadEditor}>
+      {/* Reaching for the switch warms every mode's chunk and Edit's grammars (ENG-905). */}
+      <div className="app-no-drag flex" onPointerEnter={reachForModes} onFocus={reachForModes}>
         <SegmentedControl
           aria-label="Mode"
           pill

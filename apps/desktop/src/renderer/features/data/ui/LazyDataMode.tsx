@@ -1,17 +1,48 @@
-/** Data mode is its own chunk, fetched the first time ⌘4 opens, so other modes never carry it. */
-import { lazy, Suspense } from "react";
+/**
+ * Data mode is its own chunk, so other modes never carry it. The app warms it after first paint
+ * (ENG-905); until it has loaded, Data's frames show empty in its place.
+ */
+import { type ComponentType, Suspense } from "react";
+import { useSelection } from "../../../shell/hooks.ts";
+import { ModeShell, SidebarFrame, WorkbenchPanel } from "../../../shell/ModeFrame.tsx";
+import { type ModeChunk, modeChunk, useModeChunk } from "../../../shell/modeChunk.ts";
 
-// Staged grid edits outlive a reload or quit; the shelf is read when Data first opens.
-const View = lazy(() =>
-  import("./DataMode.tsx").then((m) => {
-    m.openEditsShelf();
+/** What the wrapper takes from the chunk. */
+export interface DataChunk {
+  readonly DataMode: ComponentType;
+  readonly openEditsShelf: () => void;
+}
 
-    return { default: m.DataMode };
-  })
-);
+export const dataChunk = modeChunk<DataChunk>(() => import("./DataMode.tsx"));
 
-export const DataMode = () => (
-  <Suspense fallback={<div className="bg-ground flex-1" />}>
-    <View />
+const View = ({ chunk }: { chunk: ModeChunk<DataChunk> }) => {
+  const loaded = useModeChunk(chunk);
+
+  // Staged grid edits outlive a reload or quit: read once, when Data first opens, not warms.
+  loaded.openEditsShelf();
+
+  return <loaded.DataMode />;
+};
+
+const DataShell = () => {
+  const { sessionId } = useSelection();
+
+  return (
+    <ModeShell mode="data">
+      {sessionId === null ? null : (
+        <SidebarFrame label="Data">
+          <WorkbenchPanel label="Data panel" status="h-tree-row" />
+        </SidebarFrame>
+      )}
+    </ModeShell>
+  );
+};
+
+/** Data mode over `chunk`; tests pass one whose import they control. */
+export const dataModeOver = (chunk: ModeChunk<DataChunk>) => () => (
+  <Suspense fallback={<DataShell />}>
+    <View chunk={chunk} />
   </Suspense>
 );
+
+export const DataMode = dataModeOver(dataChunk);
