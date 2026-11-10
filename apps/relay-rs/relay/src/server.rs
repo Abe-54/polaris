@@ -37,6 +37,12 @@ const STOP_GRACE: Duration = Duration::from_secs(2);
 
 const LISTEN_BACKLOG: i32 = 1024;
 
+/// Plain requests one connection may make before it is closed.
+const MAX_PLAIN_REQUESTS: usize = 32;
+
+/// Sockets that may be mid-handshake at once, however small the relay's own limit.
+const MIN_HANDSHAKES: usize = 64;
+
 /// When a quiet socket is pinged, and when it is given up on.
 #[derive(Clone, Copy, Debug)]
 pub struct Idle {
@@ -71,6 +77,8 @@ pub struct Relay {
     live: Mutex<Activities>,
     push: Option<PushClient>,
     wakes_in_flight: AtomicUsize,
+    /// Sockets accepted and not yet upgraded, which the gate does not count.
+    handshakes: AtomicUsize,
     started: Instant,
     /// The challenge after its nonce: the limits and whether wakes are forwarded.
     challenge_rest: String,
@@ -112,6 +120,7 @@ impl Relay {
             })),
             push,
             wakes_in_flight: AtomicUsize::new(0),
+            handshakes: AtomicUsize::new(0),
             started: Instant::now(),
             challenge_rest,
             config,
@@ -447,11 +456,44 @@ async fn connection(
     // Frames are written whole and should leave at once.
     let _ = stream.set_nodelay(true);
 
-    if let Some(upgrade) = upgrade(relay, &mut stream, peer).await {
+    let upgraded = match Handshake::begin(relay) {
+        Some(_counted) => upgrade(relay, &mut stream, peer).await,
+        None => {
+            relay.events.emit(&Event::Refused { reason: Refusal::RelayFull.as_str() });
+
+            None
+        }
+    };
+
+    if let Some(upgrade) = upgraded {
         Session::new(relay, stream, upgrade).run().await;
     }
 
     drop(alive);
+}
+
+/// A socket between accept and upgrade, counted until this is dropped.
+struct Handshake(&'static Relay);
+
+impl Handshake {
+    /// None when as many sockets are mid-handshake as the relay may hold connected.
+    fn begin(relay: &'static Relay) -> Option<Self> {
+        let room = relay.config.gate.max_connections.max(MIN_HANDSHAKES);
+
+        if relay.handshakes.fetch_add(1, Ordering::AcqRel) >= room {
+            relay.handshakes.fetch_sub(1, Ordering::AcqRel);
+
+            return None;
+        }
+
+        Some(Self(relay))
+    }
+}
+
+impl Drop for Handshake {
+    fn drop(&mut self) {
+        self.0.handshakes.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 /// A socket the relay agreed to make a WebSocket.
@@ -517,6 +559,7 @@ async fn read_head(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<http::He
 /// Answers plain requests until one is a WebSocket upgrade the gate admits.
 async fn upgrade(relay: &'static Relay, stream: &mut TcpStream, peer: IpAddr) -> Option<Upgrade> {
     let mut buf = Vec::with_capacity(1024);
+    let mut answered = 0;
 
     loop {
         let head = match tokio::time::timeout(HEAD_TIMEOUT, read_head(stream, &mut buf)).await {
@@ -536,9 +579,11 @@ async fn upgrade(relay: &'static Relay, stream: &mut TcpStream, peer: IpAddr) ->
                 return Some(Upgrade { ip, reply: http::switching(&accept), early });
             }
             Answer::Reply { status, body } => {
-                let reply = http::response(status, body, head.keep_alive);
+                answered += 1;
+                let keep = head.keep_alive && answered < MAX_PLAIN_REQUESTS;
+                let reply = http::response(status, body, keep);
 
-                if stream.write_all(&reply).await.is_err() || !head.keep_alive {
+                if stream.write_all(&reply).await.is_err() || !keep {
                     return None;
                 }
 
