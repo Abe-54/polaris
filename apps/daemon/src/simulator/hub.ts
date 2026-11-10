@@ -242,7 +242,7 @@ const makeHub = Effect.fnUntraced(function* (config: SimulatorHubConfig) {
   });
 
   const hubCall = <A>(run: (endpoint: HubEndpoint) => Promise<A>) =>
-    tryHub(async () => run(await supervisor.ensure()));
+    tryHub(() => supervisor.using(run));
 
   const boot = Effect.fnUntraced(function* (id: string) {
     yield* prepare;

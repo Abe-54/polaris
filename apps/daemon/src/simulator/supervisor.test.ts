@@ -46,3 +46,48 @@ describe("HubSupervisor's idle stop with no hub running", () => {
     expect(spawned).toBe(0);
   });
 });
+
+describe("HubSupervisor's idle stop with a call in flight", () => {
+  test("a call slower than the idle time keeps the hub until it returns, then the hub idles out", async () => {
+    const events: Array<string> = [];
+    let exit: (code: number | null) => void = () => undefined;
+
+    const supervisor = new HubSupervisor({
+      spawn: () =>
+        Promise.resolve({
+          endpoint: { port: 1, token: "t" },
+          pid: 1,
+          exited: new Promise<number | null>((resolve) => {
+            exit = resolve;
+          }),
+          stop: async () => {
+            events.push("stop");
+            exit(0);
+          },
+        }),
+      probe: () => Promise.resolve(true),
+      beforeIdleStop: () => Promise.resolve(),
+      ownsBooted: () => false,
+      log: () => undefined,
+      timing: { ...DEFAULT_HUB_TIMING, idleMs: 20 },
+    });
+
+    let release: () => void = () => undefined;
+    const call = supervisor.using(() => new Promise<void>((resolve) => (release = resolve)));
+
+    // Many idle times pass while the call runs: the hub must not stop under it.
+    const stoppedEarly = await until(() => events.includes("stop"), 300).then(
+      () => true,
+      () => false
+    );
+
+    events.push("call returned");
+    release();
+    await call;
+    await until(() => events.includes("stop"));
+    await supervisor.close();
+
+    expect(stoppedEarly).toBe(false);
+    expect(events).toEqual(["call returned", "stop"]);
+  });
+});

@@ -67,6 +67,8 @@ export class HubSupervisor {
   /** Start, stop and restart run one at a time, in order. */
   private chain: Promise<unknown> = Promise.resolve();
   private holds = 0;
+  /** Calls in flight on the hub (`using`): they keep it up but arm no wedge check. */
+  private busy = 0;
   private lastActivity = 0;
   private attempt = 0;
   private closed = false;
@@ -120,12 +122,30 @@ export class HubSupervisor {
     }
   }
 
+  /** Keeps the hub up while `run` uses it, so an idle stop can't end a slow call. */
+  async using<A>(run: (endpoint: HubEndpoint) => Promise<A>): Promise<A> {
+    this.busy += 1;
+    this.clearIdle();
+
+    try {
+      return await run(await this.ensure());
+    } finally {
+      this.busy -= 1;
+      this.touch();
+    }
+  }
+
+  /** Whether a hold or a call keeps the hub from idling out. */
+  private get kept(): boolean {
+    return this.holds > 0 || this.busy > 0;
+  }
+
   /** An agent call: the idle clock restarts from now. */
   touch(): void {
     this.lastActivity = Date.now();
 
     // With no hub too: an agent may have booted a Simulator nothing else will shut down.
-    if (this.holds === 0) this.armIdle();
+    if (!this.kept) this.armIdle();
   }
 
   /** Called with the new endpoint after every start or restart. */
@@ -162,9 +182,7 @@ export class HubSupervisor {
   }
 
   private get wanted(): boolean {
-    return (
-      !this.closed && (this.holds > 0 || Date.now() - this.lastActivity < this.deps.timing.idleMs)
-    );
+    return !this.closed && (this.kept || Date.now() - this.lastActivity < this.deps.timing.idleMs);
   }
 
   private async startNow(): Promise<HubProcess> {
@@ -242,7 +260,7 @@ export class HubSupervisor {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
 
-      if (this.holds > 0) return;
+      if (this.kept) return;
 
       if (Date.now() - this.lastActivity < this.deps.timing.idleMs) {
         this.armIdle();
@@ -256,7 +274,7 @@ export class HubSupervisor {
 
   private idleStop(): Promise<void> {
     return this.serial(async () => {
-      if (this.holds > 0 || this.closed) return;
+      if (this.kept || this.closed) return;
 
       if (this.hub === null && !this.deps.ownsBooted()) return;
 
@@ -273,7 +291,7 @@ export class HubSupervisor {
         this.deps.log(`shutting down Polaris's Simulators failed: ${String(error)}`);
       });
 
-      if (this.holds > 0) return;
+      if (this.kept) return;
       await this.stopNow();
       this.attempt = 0;
     });
