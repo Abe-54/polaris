@@ -1,7 +1,6 @@
 /**
  * The transcript's inline prompt (Paper CU3): a Turn needs computer use while its Host is off
  * or needs setup, so the session needs you. One fix and "Not now"; it goes once it's ready.
- * The session-side trigger (a needs-computer-use notice) is wired in by D9.
  */
 import type { ComputerUseState } from "@polaris/protocol";
 import { Kicker, SettingsButton } from "@polaris/ui";

@@ -1,4 +1,4 @@
-/** Approval rules the Session machine applies: Secret Requests' decisions, and withdrawals. */
+/** Approval rules the Session machine applies: Secret and computer use requests' decisions, and withdrawals. */
 import {
   type Actor,
   appDecisionRefusal,
@@ -7,6 +7,7 @@ import {
   type ApprovalRequest,
   type RequestId,
 } from "@polaris/protocol";
+import { Predicate } from "effect";
 import type { SessionRecord } from "../store/model.ts";
 import { workingTurn } from "../store/model.ts";
 
@@ -31,6 +32,11 @@ export const decisionRefusal = (
   actor: Actor | null = null
 ): string | null => {
   const request = record.pending.get(requestId);
+
+  // Only Not now answers it; turning computer use on clears it (the Daemon withdraws it).
+  if (request?.kind === "computer-use" && !Predicate.isTagged(decision, "Deny"))
+    return "a computer use request takes Not now, or clears once computer use is on";
+
   // Computer use (ADR 0104): never always for headed input, nor from an Extension.
   const app = request === undefined ? null : appDecisionRefusal(request.kind, decision, actor);
 
@@ -54,9 +60,9 @@ export const decisionRefusal = (
   });
 };
 
-/** The two kinds computer use opens: Polaris answers its own waiting tool call, never the Harness. */
-export const isAppApproval = (request: Pick<ApprovalRequest, "kind">) =>
-  request.kind === "app" || request.kind === "headed-input";
+/** The kinds computer use opens: Polaris answers its own waiting tool call, never the Harness. */
+export const isComputerUseApproval = (request: Pick<ApprovalRequest, "kind">) =>
+  request.kind === "app" || request.kind === "headed-input" || request.kind === "computer-use";
 
 /** Back to Working once nothing is pending, but only with a Turn to work on. */
 export const backToWork = (record: SessionRecord, closing: RequestId) =>

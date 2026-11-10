@@ -20,6 +20,7 @@ export const askLine = (approval: ApprovalRequest): string =>
     Match.when("secret", () => "Asks for a secret"),
     Match.when("app", () => "Wants to use an app"),
     Match.when("headed-input", () => "Wants headed input"),
+    Match.when("computer-use", () => "Wants computer use"),
     Match.exhaustive
   );
 

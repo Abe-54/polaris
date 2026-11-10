@@ -19,6 +19,7 @@ const KIND_LABEL = {
   // The SDK doesn't announce `computer-use` either.
   app: "App",
   "headed-input": "Headed input",
+  "computer-use": "Computer use",
 } as const;
 
 const markdownOf = ({ approval, session }: ApprovalRow) =>
