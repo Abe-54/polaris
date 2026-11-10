@@ -147,7 +147,7 @@ export const DEVICE_RPCS = {
   "computerUse.removeAllowedApp": "local",
   "computerUse.app": "device",
   "computerUse.preview.watch": "local",
-  "computerUse.preview.latest": "local",
+  "computerUse.preview.latest": "device",
   "attachments.stage": "device",
   "attachments.read": "device",
   "attachments.settings": "local",

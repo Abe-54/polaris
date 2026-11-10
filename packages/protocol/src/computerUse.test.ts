@@ -259,9 +259,10 @@ describe("computer use access", () => {
     expect(rpcs.filter((rpc) => decideAccess(pairing, rpc, null) === null)).toEqual([]);
   });
 
-  test("a Linked Device reads the status and an app, and changes nothing", () => {
+  test("a Linked Device reads the status, an app and the latest screenshot, and changes nothing", () => {
     expect(rpcs.filter((rpc) => decideDeviceAccess(rpc, null) === null).sort()).toEqual([
       "computerUse.app",
+      "computerUse.preview.latest",
       "computerUse.status",
       "computerUse.watch",
     ]);

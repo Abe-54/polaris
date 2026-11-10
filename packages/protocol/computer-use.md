@@ -124,11 +124,13 @@ Every preview image is a JPEG that travels as a blob (binary side-chunks), never
 
 | | Desktop App | Linked Device | Extension |
 |---|---|---|---|
-| `computerUse.status`, `watch`, `app` | yes | yes | no |
-| `enable`, `disable`, `openSetup`, `allowedApps`, `removeAllowedApp`, `preview.*` | yes | no | no |
+| `computerUse.status`, `watch`, `app`, `preview.latest` | yes | yes | no |
+| `enable`, `disable`, `openSetup`, `allowedApps`, `removeAllowedApp`, `preview.watch` | yes | no | no |
 | Answering an `app` or `headed-input` approval (`RespondToApproval`) | yes | yes | with the `approve` Grant |
 | "Always allow on this Host" (`Allow { remember: true }` on `app`) | yes | yes | no |
 
 **Who may always-allow.** The Desktop App, and the Mobile App answering as a Linked Device. No Extension may: Even G2 and Raycast offer "allow" (for this session) and "deny" only, and the Daemon refuses `Allow { remember: true }` on `app` from an Extension whatever its Grants. Nobody may always-allow headed input.
+
+A Linked Device fetches `preview.latest` on demand, to show what the agent sees next to an approval. The live stream (`preview.watch`) stays on the Desktop App.
 
 A Linked Device or an Extension sees the approvals only once it announces `computer-use`.
