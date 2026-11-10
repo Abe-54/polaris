@@ -329,6 +329,14 @@ _Avoid_: API client, Postman, HTTP tab
 An Agent Session's web browser in its Output, holding that session's own tabs, which the user and the session's agents (Subagents included) both use; its logins and cookies are shared across the Workspace.
 _Avoid_: Preview (that is the Markdown or diff preview), webview, web tab
 
+**Computer use**:
+An Agent Session operating the desktop apps of its Host (seeing their windows, clicking, typing) on the user's behalf, once the user has turned it on for that Host.
+_Avoid_: Desktop control, desktop automation, screen control
+
+**Controlled app**:
+A desktop app that an Agent Session may operate through computer use, because the user approved it for that session or always allows it on that Host.
+_Avoid_: Granted app, target app
+
 **Host address**:
 A loopback URL opened in a Browser (`localhost`, any `*.localhost` name such as a Portless app, or a loopback IP), which always means the Agent Session's Host, never the machine the Client runs on; any other URL loads from the Client's own network.
 _Avoid_: Forwarded port, tunnel, local URL
