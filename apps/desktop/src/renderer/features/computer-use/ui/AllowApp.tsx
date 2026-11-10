@@ -63,7 +63,7 @@ const Confirm = ({
       data-testid="computer-use-allow-app"
       data-refused={warning !== null}
       className={cn(
-        "bg-bg flex flex-col gap-3 rounded-[12px] border px-4 py-3.5",
+        "bg-well flex flex-col gap-3 rounded-[12px] border px-4 py-3.5",
         warning === null ? "border-hairline" : "border-severity-high/40"
       )}
     >
@@ -105,7 +105,7 @@ const Typing = ({
   const problem = appIdProblem(host.platform, draft);
 
   return (
-    <div className="bg-bg border-hairline flex flex-col gap-2 rounded-[12px] border px-4 py-3.5">
+    <div className="bg-well border-hairline flex flex-col gap-2 rounded-[12px] border px-4 py-3.5">
       <div className="flex items-center gap-2">
         <Input
           autoFocus

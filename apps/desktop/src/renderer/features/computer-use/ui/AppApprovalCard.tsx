@@ -46,7 +46,7 @@ export const AppApprovalCard = ({
       data-kind={request.kind}
       className="bg-raised border-hairline flex flex-col gap-3 rounded-[14px] border p-3.5"
     >
-      <div className="bg-bg border-hairline flex flex-col gap-2 rounded-[10px] border p-3">
+      <div className="bg-well border-hairline flex flex-col gap-2 rounded-[10px] border p-3">
         <div className="flex items-center gap-3">
           {request.kind === "headed-input" ? <Pointer /> : <AppIcon app={app} size={40} />}
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
