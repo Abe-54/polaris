@@ -26,6 +26,7 @@ node scripts/reviewQueueScreens.ts --out <dir> [--build]  # the Review queue's R
 node scripts/reviewBench.ts [--quick] [--json <path>] # Review under load on a real Daemon (2k / 5k / 12k files, a 100k-line file); also `bun run bench review`
 node scripts/emptyScreens.ts --out <dir> [--build]      # the empty states and the terminal drawer from a fresh Daemon, every theme and density
 node scripts/tabCompletionScreens.ts --out <dir> [--build]   # Settings → Editor → Tab completion on fixtures (#tab-completion/hosts, /empty), every theme and density
+node scripts/computerUseScreens.ts --out <dir> [--build]   # computer use's cards on fixtures (#computer-use/states, /onboarding) against Paper CU1–CU3: every kind of Host, both themes, every density; the first-run card walked from blank to ready
 node scripts/completionCardScreens.ts --out <dir> [--build]   # the status bar's tab completion card (#completion-card/states, /bar), every theme and density, focus and Reduce Motion
 node scripts/diagnosticsScreens.ts --out <dir>             # editor diagnostics on TypeScript and Prisma (build first): the hover's width, the Problems panel, inline messages (off, held under completion), both themes
 node scripts/deepLinkSmoke.ts       # polaris:// links (build first): at launch, from a second instance, and an unknown one ignored
