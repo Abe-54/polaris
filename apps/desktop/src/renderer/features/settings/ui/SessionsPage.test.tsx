@@ -155,7 +155,7 @@ test("suggested replies state the cost once, on the fallback's model", () => {
 
   expect(
     suggestedReplies().getByText(
-      "Claude Code suggests its own. Other harnesses use one small request on Haiku 5.5 after each turn."
+      "Claude Code suggests its own in sessions started after you turn this on. Other harnesses use one small request on Haiku 5.5 after each turn."
     )
   ).toBeTruthy();
 });
