@@ -245,8 +245,8 @@ const GlanceCard = ({
       heroMaxHeight={HERO_MAX}
       wells={
         view === "chart"
-          ? [<ForYouWell rows={tasks} />]
-          : [<ForYouWell rows={tasks} />, <ListWell rows={tasks} />]
+          ? [<ForYouWell key="for-you" rows={tasks} />]
+          : [<ForYouWell key="for-you" rows={tasks} />, <ListWell key="list" rows={tasks} />]
       }
       footer={{
         status: statusOf(harness, c.createdAt, now),

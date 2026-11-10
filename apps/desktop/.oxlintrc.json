@@ -13,6 +13,18 @@
           }
         ]
       }
+    },
+    {
+      "files": ["src/renderer/**"],
+      "plugins": ["typescript", "oxc", "react", "jsx-a11y"],
+      "rules": {
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error",
+        "react/jsx-key": "error",
+        "react/no-danger": "error",
+        "jsx-a11y/prefer-tag-over-role": "off",
+        "jsx-a11y/no-autofocus": "off"
+      }
     }
   ]
 }

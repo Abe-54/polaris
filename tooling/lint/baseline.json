@@ -25,9 +25,6 @@
     "apps/daemon/src/git/watch.slow.test.ts": {
       "polaris/no-fixed-sleep": 2
     },
-    "apps/daemon/src/harness/availability/AvailabilityRpcs.slow.test.ts": {
-      "polaris/no-fixed-sleep": 3
-    },
     "apps/daemon/src/harness/claude/autoMode.ts": {
       "polaris/child-env": 1
     },
@@ -160,8 +157,171 @@
     "apps/desktop/src/main/hostAddress/server.test.ts": {
       "polaris/no-fixed-sleep": 2
     },
+    "apps/desktop/src/renderer/features/accept/ui/AcceptPanel.tsx": {
+      "jsx-a11y/label-has-associated-control": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/accept/ui/LinkedPullsPublisher.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/arcade/ui/Arcade.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/arcade/ui/loop.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/attachments/useCleanup.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/browser/feed.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/comments/ui/SubmitReview.tsx": {
+      "jsx-a11y/control-has-associated-label": 1
+    },
+    "apps/desktop/src/renderer/features/composer/ui/CommandMenu.tsx": {
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "apps/desktop/src/renderer/features/composer/ui/MentionMenu.tsx": {
+      "jsx-a11y/interactive-supports-focus": 1,
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/composer/ui/PromptEditor.tsx": {
+      "jsx-a11y/control-has-associated-label": 1,
+      "jsx-a11y/role-supports-aria-props": 1,
+      "react/immutability": 1
+    },
+    "apps/desktop/src/renderer/features/computer-use/hooks.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/computer-use/ui/OnboardingCard.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/constellation/hooks.ts": {
+      "react/immutability": 2
+    },
+    "apps/desktop/src/renderer/features/constellation/ui/ConstellationTab.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-noninteractive-element-interactions": 2,
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/constellation/ui/statsCharts.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1,
+      "jsx-a11y/no-noninteractive-tabindex": 1
+    },
+    "apps/desktop/src/renderer/features/constellation/ui/statsPixels.tsx": {
+      "react/immutability": 1
+    },
+    "apps/desktop/src/renderer/features/constellation/ui/waves.tsx": {
+      "react/immutability": 1
+    },
+    "apps/desktop/src/renderer/features/constellation/useStats.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/crash/PaneBoundary.test.tsx": {
+      "react/globals": 1
+    },
+    "apps/desktop/src/renderer/features/data/data/hooks.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/data/grid/CellEditor.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/data/grid/CellInspector.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1,
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/desktop/src/renderer/features/data/grid/DataGrid.test.tsx": {
+      "react/globals": 1
+    },
+    "apps/desktop/src/renderer/features/data/grid/DataGrid.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/incompatible-library": 1
+    },
     "apps/desktop/src/renderer/features/data/sql/useCatalog.test.tsx": {
       "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/connection/ConnectionCard.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/connectionBar.test.tsx": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/daemonSources.test.tsx": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/data.testing.tsx": {
+      "react/immutability": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/sidebar.test.tsx": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/sidebar/QueryLogView.tsx": {
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/sidebar/SourceForm.tsx": {
+      "react/immutability": 2
+    },
+    "apps/desktop/src/renderer/features/data/ui/sidebar/SourcesView.tsx": {
+      "jsx-a11y/interactive-supports-focus": 1,
+      "jsx-a11y/label-has-associated-control": 1,
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/sidebar/useSchemaTrees.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/sourceForm.test.tsx": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/sql/SqlEditor.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/SqlTab.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/table/FilterWell.tsx": {
+      "jsx-a11y/interactive-supports-focus": 1,
+      "jsx-a11y/role-supports-aria-props": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/table/TableData.tsx": {
+      "react-hooks/exhaustive-deps": 2,
+      "react/refs": 1,
+      "react/use-memo": 1
+    },
+    "apps/desktop/src/renderer/features/data/ui/table/useLoadTrace.ts": {
+      "react/immutability": 2
+    },
+    "apps/desktop/src/renderer/features/data/ui/table/usePages.ts": {
+      "react/refs": 3,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/data/write/BeforeAfter.tsx": {
+      "jsx-a11y/control-has-associated-label": 1
+    },
+    "apps/desktop/src/renderer/features/data/write/WriteApprovalCard.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/devices/ReachMap.tsx": {
+      "react/preserve-manual-memoization": 2
+    },
+    "apps/desktop/src/renderer/features/devices/useDevices.ts": {
+      "react/refs": 2
+    },
+    "apps/desktop/src/renderer/features/editor-inline/ui/Card.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/editor-inline/ui/SelectionBar.tsx": {
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "apps/desktop/src/renderer/features/editor/diff/ui/DiffTab.tsx": {
+      "react/set-state-in-effect": 2
+    },
+    "apps/desktop/src/renderer/features/editor/explorer/ui/Tree.tsx": {
+      "jsx-a11y/interactive-supports-focus": 1,
+      "react/incompatible-library": 1
     },
     "apps/desktop/src/renderer/features/editor/lsp/adapters.test.ts": {
       "polaris/no-fixed-sleep": 1
@@ -169,17 +329,327 @@
     "apps/desktop/src/renderer/features/editor/lsp/completionResolve.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
+    "apps/desktop/src/renderer/features/editor/markdown/Image.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/editor/markdown/index.tsx": {
+      "react/set-state-in-effect": 2
+    },
+    "apps/desktop/src/renderer/features/editor/markdown/Rendered.tsx": {
+      "jsx-a11y/anchor-is-valid": 1,
+      "react-hooks/exhaustive-deps": 3
+    },
+    "apps/desktop/src/renderer/features/editor/menu/EditorMenu.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/editor/navigation/SymbolSearch.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/editor/prediction/card/hooks.ts": {
+      "react-hooks/exhaustive-deps": 1
+    },
     "apps/desktop/src/renderer/features/editor/refactors/evidence.testing.tsx": {
       "polaris/no-fixed-sleep": 1
+    },
+    "apps/desktop/src/renderer/features/editor/status/hooks.ts": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/editor/status/LogTab.tsx": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/editor/status/LogView.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/editor/trust/TrustCard.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/editor/ui/EditorPane.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/editor/ui/FileNotice.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/editor/ui/LanguagePanel.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/editor/ui/MarkdownHost.tsx": {
+      "jsx-a11y/no-noninteractive-tabindex": 1
+    },
+    "apps/desktop/src/renderer/features/extensions/useExtensions.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/harness/ui/ModelCard.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/machines/AddMachine.tsx": {
+      "jsx-a11y/label-has-associated-control": 2
+    },
+    "apps/desktop/src/renderer/features/machines/hooks.tsx": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/machines/HostsSettingsPage.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/machines/page/escape.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/machines/page/HostPage.tsx": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/machines/PredictionPlacement.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/machines/RelayRoute.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/machines/RemoteAccess.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/machines/stats/hooks.ts": {
+      "react/refs": 3
+    },
+    "apps/desktop/src/renderer/features/needs-you/ui/InboxPopover.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/palette/ui/parts.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/interactive-supports-focus": 1
+    },
+    "apps/desktop/src/renderer/features/requests/data/hooks.tsx": {
+      "react/refs": 2
+    },
+    "apps/desktop/src/renderer/features/requests/data/sendLog.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/requests/ui/pane/BodyEditor.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/requests/ui/SendLog.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/requests/ui/sidebar/RequestList.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/requests/ui/states/NothingOpen.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/requests/ui/useRequestActions.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/review/checkout/run.ts": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/review/checkout/ui/menuSections.tsx": {
+      "react/purity": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/review/checkout/useCheckout.ts": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/review/data/advance.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/review/data/useReviewDiff.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/review/merge/data/reviewers.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/review/merge/ui/MergePanel.tsx": {
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/review/merge/ui/parts.tsx": {
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "apps/desktop/src/renderer/features/review/schema/SchemaDiffBody.tsx": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/review/traces/useReviewTraces.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/review/ui/FileHeader.tsx": {
+      "jsx-a11y/click-events-have-key-events": 2,
+      "jsx-a11y/no-noninteractive-element-interactions": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/review/ui/FileList.tsx": {
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/review/ui/GroupList.tsx": {
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/review/ui/SessionReview.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/review/ui/useReviewModel.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/session/hooks.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/session/older.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/session/output/OutputRail.tsx": {
+      "react/refs": 3
+    },
+    "apps/desktop/src/renderer/features/session/ui/command.tsx": {
+      "react/refs": 1
     },
     "apps/desktop/src/renderer/features/session/ui/commandCard.test.tsx": {
       "polaris/no-fixed-sleep": 1
     },
+    "apps/desktop/src/renderer/features/session/ui/ComposerMenu.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/computerUse/usePreview.ts": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/Conversation.tsx": {
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/markdown/HostImage.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/overlayScrollbar.tsx": {
+      "react/immutability": 3
+    },
+    "apps/desktop/src/renderer/features/session/ui/rows.tsx": {
+      "react/purity": 2
+    },
+    "apps/desktop/src/renderer/features/session/ui/SessionHeader.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/SessionOutput.tsx": {
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/SubagentOutput.tsx": {
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "jsx-a11y/no-static-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/Transcript.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/TranscriptSearch.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/TurnRail.tsx": {
+      "react/purity": 1
+    },
+    "apps/desktop/src/renderer/features/session/ui/visualization/Frame.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/sessions/ui/SessionSort.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/settings/editor/hooks.ts": {
+      "react/set-state-in-effect": 2
+    },
+    "apps/desktop/src/renderer/features/settings/editor/ManagedModel.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/settings/editor/TabCompletion.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/settings/ui/AutoArchive.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/settings/ui/GitHubEnterprise.tsx": {
+      "jsx-a11y/label-has-associated-control": 2
+    },
+    "apps/desktop/src/renderer/features/settings/ui/UsageChart.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1,
+      "jsx-a11y/no-noninteractive-tabindex": 1
+    },
+    "apps/desktop/src/renderer/features/settings/ui/UsageTokens.tsx": {
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "apps/desktop/src/renderer/features/settings/ui/Visuals.tsx": {
+      "jsx-a11y/label-has-associated-control": 1
+    },
+    "apps/desktop/src/renderer/features/simulator/feed.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/simulator/SimulatorStream.tsx": {
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "react/refs": 2
+    },
+    "apps/desktop/src/renderer/features/simulator/ui/LiveSimulator.tsx": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
     "apps/desktop/src/renderer/features/terminal/runtime.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
+    "apps/desktop/src/renderer/features/terminal/toggleKey.ts": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/terminal/ui/HarnessTerminal.tsx": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/traces/data/hooks.tsx": {
+      "react/refs": 3
+    },
+    "apps/desktop/src/renderer/features/traces/data/profiles.tsx": {
+      "react/refs": 1
+    },
+    "apps/desktop/src/renderer/features/traces/settings/hooks.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/map/ServiceMap.tsx": {
+      "jsx-a11y/no-noninteractive-tabindex": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/profile/FlameChart.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1,
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "react/immutability": 1,
+      "react/refs": 2,
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/profile/ProfilePanel.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/profiles/ProfileList.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/Sidebar.tsx": {
+      "jsx-a11y/label-has-associated-control": 1,
+      "react/refs": 13
+    },
+    "apps/desktop/src/renderer/features/traces/ui/sidebar/TraceList.tsx": {
+      "jsx-a11y/no-noninteractive-element-interactions": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/TracesMode.test.tsx": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/waterfall/SpanRow.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/waterfall/TableView.tsx": {
+      "jsx-a11y/click-events-have-key-events": 1,
+      "jsx-a11y/no-noninteractive-tabindex": 1,
+      "jsx-a11y/no-static-element-interactions": 1,
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/waterfall/Waterfall.tsx": {
+      "react/incompatible-library": 1
+    },
+    "apps/desktop/src/renderer/features/traces/ui/WorkingStrip.test.tsx": {
+      "react-hooks/rules-of-hooks": 1
+    },
     "apps/desktop/src/renderer/routes/navigation.test.ts": {
       "polaris/no-fixed-sleep": 3
+    },
+    "apps/desktop/src/renderer/shell/HostState.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/desktop/src/renderer/shell/OutputLane.tsx": {
+      "react/refs": 6
     },
     "apps/mobile/scripts/composer.test.ts": {
       "polaris/no-fixed-sleep": 1
@@ -187,8 +657,185 @@
     "apps/mobile/scripts/relay.e2e.slow.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
+    "apps/mobile/src/App.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/app/SwipeBack.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/refs": 8
+    },
+    "apps/mobile/src/composer/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/composer/useAttachments.ts": {
+      "react-hooks/exhaustive-deps": 2
+    },
+    "apps/mobile/src/composer/usePastedImages.ts": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/composer/useVoiceInput.ts": {
+      "react/refs": 3
+    },
+    "apps/mobile/src/constellation/ConstellationScreen/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/purity": 2,
+      "react/refs": 1
+    },
+    "apps/mobile/src/constellation/ConstellationScreen/index.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/diff/dev.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/diff/FilePage.tsx": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/dither/Dither.tsx": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/duo/ConstellationSpan.tsx": {
+      "react/purity": 2
+    },
+    "apps/mobile/src/duo/ContextGallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/duo/ContextPane.tsx": {
+      "react-hooks/exhaustive-deps": 3
+    },
+    "apps/mobile/src/duo/Monitor.tsx": {
+      "react/static-components": 1
+    },
+    "apps/mobile/src/duo/useSessionContext.ts": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/home/feed/settled.ts": {
+      "react/purity": 1,
+      "react/refs": 7
+    },
+    "apps/mobile/src/home/ui/constellationProgress.ts": {
+      "react/purity": 1
+    },
+    "apps/mobile/src/home/ui/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/inbox/InboxProvider.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/inbox/InboxSheet.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/link/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/link/ScanSheet.tsx": {
+      "react/refs": 2
+    },
+    "apps/mobile/src/link/Sky.tsx": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/link/Star.tsx": {
+      "react/refs": 11
+    },
+    "apps/mobile/src/live/useLiveActivity.ts": {
+      "react/refs": 3,
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/newSession/draft.ts": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
     "apps/mobile/src/newSession/draftWriter.test.ts": {
       "polaris/no-fixed-sleep": 2
+    },
+    "apps/mobile/src/newSession/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/newSession/useHarnessChoice.ts": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/newSession/useNewSession.ts": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/push/usePush.ts": {
+      "react/refs": 1,
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/relay/RelayProvider.tsx": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/review/gallery/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/review/ReviewScreen.tsx": {
+      "react-hooks/exhaustive-deps": 2
+    },
+    "apps/mobile/src/review/ReviewTab/useQueueTurns.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/review/ReviewView/dev.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/review/ReviewView/Hero.tsx": {
+      "react/purity": 1
+    },
+    "apps/mobile/src/review/useReview.ts": {
+      "react-hooks/exhaustive-deps": 2,
+      "react/set-state-in-effect": 2
+    },
+    "apps/mobile/src/runtime/hostConnection.ts": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/mobile/src/runtime/hosts.tsx": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/runtime/useAfter.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/selfTraces/selfTraces.test.ts": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/mobile/src/settings/useDeveloperMode.ts": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/sheet/demo.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/sheet/frame.tsx": {
+      "react/refs": 1
+    },
+    "apps/mobile/src/sheet/motion.ts": {
+      "react/refs": 3
+    },
+    "apps/mobile/src/sheet/useKeyboard.ts": {
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/starChart/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/states/Gallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/thread/galleryHost.testing.ts": {
+      "react-hooks/rules-of-hooks": 1
+    },
+    "apps/mobile/src/thread/Rise.tsx": {
+      "react/immutability": 2
+    },
+    "apps/mobile/src/thread/ThreadGallery.tsx": {
+      "react-hooks/exhaustive-deps": 1
+    },
+    "apps/mobile/src/thread/ThreadScreen.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/refs": 5,
+      "react/set-state-in-effect": 1
+    },
+    "apps/mobile/src/visualization/VisualizationFrame.tsx": {
+      "react-hooks/exhaustive-deps": 1,
+      "react/refs": 2
     },
     "packages/bench/src/proc.test.ts": {
       "polaris/no-fixed-sleep": 1
