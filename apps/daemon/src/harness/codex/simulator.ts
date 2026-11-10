@@ -10,7 +10,7 @@ import {
   SIMULATOR_MCP_NAME,
   SIMULATOR_TOOL_TIMEOUT_SECONDS,
   type SimulatorMcp,
-} from "../simulator/index.ts";
+} from "../simulator/service.ts";
 
 /** No `approval_mode` override: each tool call asks as the thread's approval policy says. */
 export const codexSimulatorConfig = Effect.fnUntraced(function* (

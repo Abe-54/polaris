@@ -8,47 +8,30 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  Cause,
-  Context,
-  type Duration,
-  Effect,
-  Layer,
-  Predicate,
-  type Schema,
-  Scope,
-} from "effect";
+import { Cause, type Duration, Effect, Layer, Predicate, type Schema, Scope } from "effect";
 import { SimulatorTools } from "../../install/simulator/index.ts";
 import { HostPlatform } from "../../platform/index.ts";
 import { SimulatorDetection, simulatorCapable } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
 import { type AgentDeviceRun, androidEnv, liveAgentDevice } from "./agentDevice.ts";
 import { sessionPath, simulatorMcpHttp } from "./http.ts";
-import { failure, type SimulatorSession, simulatorSession, type ToolResult } from "./session.ts";
+import { failure, type SimulatorSession, simulatorSession } from "./session.ts";
 import type { Platform } from "./platforms.ts";
 import { possiblePlatforms, setupBlocker } from "./setup.ts";
-import { type SimulatorTool, simulatorTools } from "./tools.ts";
+import { SimulatorMcp } from "./service.ts";
+import { simulatorTools } from "./tools.ts";
+
+export {
+  SIMULATOR_MCP_NAME,
+  SIMULATOR_TOOL_TIMEOUT_SECONDS,
+  SimulatorMcp,
+  type SimulatorMcpServer,
+} from "./service.ts";
 
 const CLOSED = "This session's Simulator tools have closed.";
 
-/** Not `simulator`: a user's own server of that name would shadow or be shadowed by it. */
-export const SIMULATOR_MCP_NAME = "polaris_simulator";
-
 /** The most a session's open waits for the server; then it opens without one. */
 const SETUP_TIMEOUT: Duration.Input = "10 seconds";
-
-/** Codex's per-call limit: past the 45 s a call waits before saying it carries on. */
-export const SIMULATOR_TOOL_TIMEOUT_SECONDS = 120;
-
-/**
- * The session's tools two ways: `url` (its token in the path) for a Harness that takes the
- * config off argv, and `call` in-process for one whose config `ps` would show.
- */
-export interface SimulatorMcpServer {
-  readonly url: string;
-  readonly tools: ReadonlyArray<SimulatorTool>;
-  readonly call: (name: string, input: typeof Schema.Json.Type) => Promise<ToolResult>;
-}
 
 export interface SimulatorMcpOptions {
   readonly setupTimeout?: Duration.Input;
@@ -66,20 +49,10 @@ interface Entry {
   holders: number;
 }
 
-export class SimulatorMcp extends Context.Service<
-  SimulatorMcp,
-  {
-    /**
-     * The session's server while the scope lasts, or null on a Host that can't run Simulators
-     * or when setup fails: never a failure, so the session opens without Simulator tools.
-     */
-    readonly forSession: (
-      sessionId: SessionId
-    ) => Effect.Effect<SimulatorMcpServer | null, never, Scope.Scope>;
-  }
->()("polaris/daemon/harness/SimulatorMcp") {
+/** How `SimulatorMcp` is built; `transport/lazySimulator.ts` loads it on first use. */
+export const SimulatorMcpLive = {
   /** `activityOf` gives the hub's session marks: `SimulatorHub` in the Daemon (serve.ts). */
-  static readonly layerWith = <R>(
+  layerWith: <R>(
     activityOf: Effect.Effect<SimulatorActivity, never, R>,
     options: SimulatorMcpOptions = {}
   ) =>
@@ -233,9 +206,5 @@ export class SimulatorMcp extends Context.Service<
             ),
         });
       })
-    );
-
-  static readonly none = Layer.succeed(SimulatorMcp)(
-    SimulatorMcp.of({ forSession: () => Effect.succeed(null) })
-  );
-}
+    ),
+};

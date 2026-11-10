@@ -6,7 +6,7 @@ import { HostPlatform } from "../../platform/index.ts";
 import { SimulatorHub } from "../../simulator/hub.ts";
 import { fakeHost, OURS, until } from "../../simulator/hub.testing.ts";
 import { SimulatorDetection } from "../../simulator/index.ts";
-import { SimulatorMcp } from "./index.ts";
+import { SimulatorMcp, SimulatorMcpLive } from "./index.ts";
 import { callTool } from "./mcp.testing.ts";
 
 const SESSION = SessionId.make("feed-session");
@@ -30,7 +30,7 @@ describe("the Simulator tools on the Daemon's hub", () => {
   test("an agent's open and its driving reach the session's feed", async () => {
     const hub = fakeHost().layer();
 
-    const mcp = SimulatorMcp.layerWith(
+    const mcp = SimulatorMcpLive.layerWith(
       Effect.gen(function* () {
         return yield* SimulatorHub;
       }),

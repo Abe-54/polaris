@@ -16,17 +16,7 @@ import {
   SimulatorWatchItem,
   Unsupported,
 } from "@polaris/protocol";
-import {
-  type Cause,
-  Context,
-  Effect,
-  Layer,
-  Option,
-  Predicate,
-  Queue,
-  type Scope,
-  Stream,
-} from "effect";
+import { type Cause, Effect, Layer, Option, Predicate, Queue, type Scope, Stream } from "effect";
 import { type SessionLookup, sessionsFromStore } from "../browser/relaySessions.ts";
 import { bunRuntime, SimulatorTools } from "../install/simulator/index.ts";
 import { paths } from "../paths.ts";
@@ -39,6 +29,7 @@ import { liveProbe, SimulatorDetection } from "./index.ts";
 import { listLocalIos } from "./localDevices.ts";
 import { Inventory, WATCH_POLL_MS } from "./inventory.ts";
 import { SessionFeeds } from "./sessionFeeds.ts";
+import { SimulatorHub } from "./service.ts";
 import { simulatorCapable } from "./support.ts";
 import type { HubDevices } from "./hubDevices.ts";
 import {
@@ -47,6 +38,8 @@ import {
   type HubTiming,
   hubTimingFromEnv,
 } from "./supervisor.ts";
+
+export { SimulatorHub } from "./service.ts";
 
 /** A hub that hasn't answered `/healthz` this long after spawning failed to start. */
 const HUB_START_TIMEOUT_MS = 60_000;
@@ -65,44 +58,20 @@ export interface SimulatorHubConfig {
   readonly startTimeoutMs?: number;
 }
 
-export class SimulatorHub extends Context.Service<
-  SimulatorHub,
-  {
-    readonly watch: Stream.Stream<SimulatorWatchItem, Unsupported>;
-    readonly boot: (id: string) => Effect.Effect<void, SimulatorError>;
-    readonly shutdown: (
-      id: string,
-      force: boolean
-    ) => Effect.Effect<void, SimulatorError | SimulatorNotBootedByPolaris>;
-    readonly restart: Effect.Effect<void, SimulatorUnavailable | HubFailed | Unsupported>;
-    readonly attach: (
-      sessionId: SessionId,
-      id: string
-    ) => Stream.Stream<SimulatorAttachItem, SimulatorError | NotFound>;
-    readonly sessionFeed: (
-      sessionId: SessionId
-    ) => Stream.Stream<SimulatorSessionItem, NotFound | Unsupported>;
-    /** An agent opened `id`: the session shows it. Doesn't start the hub; restarts its idle clock. */
-    readonly agentOpened: (sessionId: SessionId, id: string) => Effect.Effect<void>;
-    /** An agent drives the shown Simulator for the scope: `AgentDriving` on 0→1 and 1→0. */
-    readonly agentDriving: (sessionId: SessionId) => Effect.Effect<void, never, Scope.Scope>;
-    /** The Simulator the session shows, or null. */
-    readonly shown: (sessionId: SessionId) => Effect.Effect<string | null>;
-    /** An agent booted `id` itself (agent-device `open`): Polaris shuts it down on idle. */
-    readonly agentBooted: (id: string) => Effect.Effect<void>;
-  }
->()("polaris/daemon/simulator/SimulatorHub") {
-  static readonly layerWith = (config: SimulatorHubConfig) =>
-    Layer.effect(SimulatorHub, makeHub(config));
+/** How `SimulatorHub` is built; `transport/lazySimulator.ts` loads it on first use. */
+const layerWith = (config: SimulatorHubConfig) => Layer.effect(SimulatorHub, makeHub(config));
+
+export const SimulatorHubLive = {
+  layerWith,
 
   /** The Daemon's: `~/.polaris/simulator`, the installed tools, the event store's sessions. */
-  static readonly layer = Layer.unwrap(
+  layer: Layer.unwrap(
     Effect.gen(function* () {
       const store = yield* EventStore;
       const tools = yield* SimulatorTools;
       const runtime = bunRuntime();
 
-      return SimulatorHub.layerWith({
+      return layerWith({
         dir: join(paths().root, "simulator"),
         command: Effect.map(tools.ensure, (installed) => ({
           argv: [...runtime.argv, installed.hub],
@@ -113,13 +82,13 @@ export class SimulatorHub extends Context.Service<
         timing: hubTimingFromEnv(process.env),
       });
     })
-  ).pipe(Layer.provideMerge(Layer.merge(SimulatorTools.layer, SimulatorDetection.layer)));
+  ).pipe(Layer.provideMerge(Layer.merge(SimulatorTools.layer, SimulatorDetection.layer))),
 
   /** The service's supervisor, for tests that read the hub's pid. */
-  static readonly testing = {
+  testing: {
     supervisorOf: (hub: SimulatorHub["Service"]) => supervisors.get(hub),
-  };
-}
+  },
+};
 
 const supervisors = new WeakMap<object, HubSupervisor>();
 

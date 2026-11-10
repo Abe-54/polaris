@@ -1,11 +1,12 @@
 /** A `SimulatorHub` over the fake hub process (`fakeHub.testing.ts`), with fast timing. */
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SimulatorSupport } from "@polaris/protocol";
 import { Effect, Layer, Stream } from "effect";
 import { everySessionLive, type SessionLookup } from "../browser/relaySessions.ts";
 import { HostPlatform } from "../platform/index.ts";
-import { SimulatorHub } from "./hub.ts";
+import { newTempDir } from "../platform/tempDir.testing.ts";
+import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
 import { SimulatorDetection } from "./index.ts";
 
 export const OURS = "AAAAAAAA-0000-0000-0000-000000000001";
@@ -55,7 +56,7 @@ export interface FakeHost {
  * Android is ready too and the hub lists one shut-down emulator.
  */
 export const fakeHost = (idleMs = 300, { android = false } = {}): FakeHost => {
-  const dir = mkdtempSync("/tmp/simhub-");
+  const dir = newTempDir("simhub-", { short: true });
   const devices = join(dir, "devices.json");
   const logPath = join(dir, "hub-events.log");
   const wedgePath = join(dir, "wedged");
@@ -106,7 +107,7 @@ export const fakeHost = (idleMs = 300, { android = false } = {}): FakeHost => {
       frozen = on ? read() : null;
     },
     layer: (sessions = everySessionLive) =>
-      SimulatorHub.layerWith({
+      SimulatorHubLive.layerWith({
         dir: join(dir, "home"),
         command: Effect.succeed({
           argv: [process.execPath, FAKE_HUB],

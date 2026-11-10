@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { SessionId, SimulatorSessionItem, type SimulatorWatchItem } from "@polaris/protocol";
 import { Effect, Exit, Fiber, Option, Predicate, type Scope, Stream } from "effect";
-import { SimulatorHub } from "./hub.ts";
+import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
 import { fakeHost, OURS, until, USERS } from "./hub.testing.ts";
 
 const SESSION = SessionId.make("ses_simulator_test");
@@ -32,7 +32,7 @@ describe("SimulatorHub", () => {
     const first = await run(host, (hub) =>
       Effect.gen(function* () {
         const head = yield* Stream.runHead(hub.watch);
-        expect(SimulatorHub.testing.supervisorOf(hub)?.pid).toBeNull();
+        expect(SimulatorHubLive.testing.supervisorOf(hub)?.pid).toBeNull();
 
         return head;
       })

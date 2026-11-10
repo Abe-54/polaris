@@ -10,7 +10,7 @@ import { everySessionLive } from "../browser/relaySessions.ts";
 import { bunRuntime, installSimulatorTools } from "../install/simulator/install.ts";
 import { HostPlatform } from "../platform/index.ts";
 import { tempDir } from "../platform/tempDir.testing.ts";
-import { SimulatorHub } from "./hub.ts";
+import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
 import { inputBarrier } from "./hubClient.ts";
 import { iosReadyDetection, until } from "./hub.testing.ts";
 import { liveProbe } from "./index.ts";
@@ -78,7 +78,7 @@ const realHub = async () => {
   const installed = await installSimulatorTools({ root: tempDir("sim-tools-") });
   const runtimeCommand = bunRuntime();
 
-  return SimulatorHub.layerWith({
+  return SimulatorHubLive.layerWith({
     dir: join(tempDir("simhub-", { short: true }), "home"),
     command: Effect.succeed({
       argv: [...runtimeCommand.argv, installed.hub],
@@ -138,7 +138,7 @@ describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
 
             // Detached and idle: the hub stops and shuts down the Simulator Polaris booted.
             yield* Fiber.interrupt(attach);
-            const supervisor = SimulatorHub.testing.supervisorOf(hub)!;
+            const supervisor = SimulatorHubLive.testing.supervisorOf(hub)!;
             yield* Effect.promise(() => until(() => supervisor.pid === null, 180_000));
             expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(false);
 
@@ -174,7 +174,7 @@ describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
           yield* Effect.promise(() =>
             until(() => simctl("list", "devices").out.includes(`${id}) (Shutdown)`), 300_000)
           );
-          const supervisor = SimulatorHub.testing.supervisorOf(hub)!;
+          const supervisor = SimulatorHubLive.testing.supervisorOf(hub)!;
           yield* Effect.promise(() => until(() => supervisor.pid === null, 120_000));
         }).pipe(Effect.provide(layer))
       );

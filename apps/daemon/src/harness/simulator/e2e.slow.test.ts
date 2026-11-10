@@ -12,7 +12,7 @@ import { HostPlatform } from "../../platform/index.ts";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { SimulatorDetection } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
-import { SimulatorMcp } from "./index.ts";
+import { SimulatorMcp, SimulatorMcpLive } from "./index.ts";
 import { callTool, textOf } from "./mcp.testing.ts";
 
 const simctl = (...args: ReadonlyArray<string>) =>
@@ -87,7 +87,7 @@ describe.skipIf(!xcode)("the Simulator's MCP server on a real Simulator", () => 
     state.root = newTempDir("simulator-e2e-");
 
     const runtime = ManagedRuntime.make(
-      SimulatorMcp.layerWith(Effect.succeed(activity), { softWaitMs: 600_000 }).pipe(
+      SimulatorMcpLive.layerWith(Effect.succeed(activity), { softWaitMs: 600_000 }).pipe(
         Layer.provide(
           Layer.mergeAll(
             SimulatorDetection.layer,

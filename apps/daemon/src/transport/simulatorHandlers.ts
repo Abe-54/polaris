@@ -1,7 +1,7 @@
 /** The `simulator.*` RPCs over `SimulatorHub` (ENG-829); `developerModeDefaults` stubs them elsewhere. */
 import { SimulatorRpcs } from "@polaris/protocol";
 import { Effect } from "effect";
-import { SimulatorHub } from "../simulator/hub.ts";
+import { SimulatorHub } from "../simulator/service.ts";
 
 export const SimulatorRpcHandlers = SimulatorRpcs.toLayer(
   Effect.gen(function* () {

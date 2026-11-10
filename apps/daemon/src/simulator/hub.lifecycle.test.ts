@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { SimulatorAttachItem } from "@polaris/protocol";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Fiber, Stream } from "effect";
-import { SimulatorHub } from "./hub.ts";
+import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
 import { alive, fakeHost, OURS, until, USERS } from "./hub.testing.ts";
 
 const SESSION = SessionId.make("ses_simulator_test");
@@ -33,7 +33,8 @@ const withAttach = (
     ).pipe(Effect.provide(host.layer()))
   );
 
-const pidOf = (hub: SimulatorHub["Service"]) => SimulatorHub.testing.supervisorOf(hub)?.pid ?? null;
+const pidOf = (hub: SimulatorHub["Service"]) =>
+  SimulatorHubLive.testing.supervisorOf(hub)?.pid ?? null;
 
 describe("SimulatorHub lifecycle", () => {
   test("idles out once detached, shutting down only the Simulators Polaris booted", async () => {

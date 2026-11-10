@@ -6,7 +6,7 @@ import { HostPlatform, type PlatformFacts } from "../../platform/index.ts";
 import { SimulatorDetection } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
 import type { AgentDeviceRun, RunResult } from "./agentDevice.ts";
-import { SimulatorMcp } from "./index.ts";
+import { SimulatorMcp, SimulatorMcpLive } from "./index.ts";
 
 export const S1 = SessionId.make("s1");
 
@@ -77,7 +77,7 @@ export const setup = (
 
   const envs: Array<Readonly<Record<string, string>>> = [];
 
-  const layer = SimulatorMcp.layerWith(Effect.succeed(activity), {
+  const layer = SimulatorMcpLive.layerWith(Effect.succeed(activity), {
     agentDevice: (_script, _cwd, env) => {
       envs.push(env);
 

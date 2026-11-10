@@ -13,10 +13,10 @@ import { PredictionServerLive } from "../prediction/server.ts";
  */
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
-import { HostPlatform, hostPlatform } from "../platform/index.ts";
-import { SimulatorHub } from "../simulator/hub.ts";
+import { hostPlatform } from "../platform/index.ts";
 import { simulatorCapable } from "../simulator/support.ts";
 import { SimulatorRpcHandlers } from "./simulatorHandlers.ts";
+import { lazySimulator } from "./lazySimulator.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
 import { selfTraceLoggers } from "@polaris/client/selfTraces/logger";
 import { Deferred, Effect, Layer, Logger } from "effect";
@@ -51,7 +51,6 @@ import { HarnessRpcsLive } from "../harness/HarnessRpcs.ts";
 import { latestRolloutLimits, PlanLimitReporter } from "../harness/limits/index.ts";
 import { HarnessRegistryLive } from "../harness/registry.ts";
 import { BrowserMcp } from "../harness/browser/index.ts";
-import { SimulatorMcp } from "../harness/simulator/index.ts";
 import { AgentBrowser } from "../install/agentBrowser/index.ts";
 import { releaseMemory, releaseWhenQuiet } from "../memory/index.ts";
 import { userPath } from "../service/userPath.ts";
@@ -121,16 +120,9 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
-/** `polaris_simulator`, marking sessions on the hub `engineServices` provides (ENG-829). */
-const simulatorMcp = SimulatorMcp.layerWith(
-  Effect.gen(function* () {
-    return yield* SimulatorHub;
-  })
-).pipe(Layer.provide(HostPlatform.live));
-
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
-  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, simulatorMcp))
+  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator))
 );
 
 /**
@@ -173,8 +165,8 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   Layer.provideMerge(ReviewerSessions.layer),
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).
   Layer.provideMerge(DeveloperModeLive),
-  // The Simulator's hub (ENG-829): under the Engine so the Harnesses' MCP servers reach it.
-  Layer.provideMerge(SimulatorHub.layer),
+  // The Simulator's hub and MCP server (ENG-829), loaded on first use; one instance with the Harnesses'.
+  Layer.provideMerge(lazySimulator),
   Layer.provideMerge(EventStore.layerLive)
 );
 
