@@ -17,7 +17,9 @@ The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use 
   `ok` in the Usage index).
 - **Which** (`runnableFallback`): the preference's resolution (`resolveFallback`: the Settings
   choice, or when unset the first ready entry of `AUTO_SUGGESTED_REPLY_FALLBACKS`), kept only
-  when its Harness is ready and has an inline runner (Claude Code, Codex).
+  when its Harness is ready and has an inline runner (Claude Code, Codex). Readiness comes from
+  `Availability.get("when-stale")`, so a sign-in or install after the Daemon started counts
+  within a minute.
 - **What**: the last 3 ended Turns' user messages (prompt and steers) and final agent text,
   newest kept within ~6k tokens (`PROMPT_BUDGET_CHARS`). Tools are off and the Harness runs in
   a fresh private directory (`mkdtemp`, removed afterwards), so no project instructions or
@@ -25,6 +27,8 @@ The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use 
   `{reply: string | null}`; null or blank commits nothing.
 - **Cancellation**: a new Turn, or another ended one, interrupts the request in flight, which
   kills the process. `SUGGEST_TIMEOUT` (15 s) drops a slow one. Every failure is logged only.
+- **Traces**: each run's `suggestedReply.suggest` span carries `suggestedReply.outcome`:
+  `not-due`, `no-ready-fallback`, `near-plan-limit`, `no-reply` or `offered`.
 - **Usage**: Claude Code runs with `--no-session-persistence` and Codex on an ephemeral thread,
   so nothing is written to the logs the Usage index reads, and no session's Usage counts it.
 - **Idle cost**: one log subscription and nothing else. With the preference off, an ended Turn

@@ -80,6 +80,11 @@ const turnEvent = (event: DomainEvent) =>
     Match.orElse(() => null)
   );
 
+/** Why a run offered nothing, or that it offered: on the span, since none of these is logged. */
+type Outcome = "not-due" | "no-ready-fallback" | "near-plan-limit" | "no-reply" | "offered";
+
+const outcome = (value: Outcome) => Effect.annotateCurrentSpan("suggestedReply.outcome", value);
+
 const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
   Effect.gen(function* () {
     const store = yield* EventStore;
@@ -96,15 +101,22 @@ const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
       const model = yield* store.model;
       const record = model.sessions.get(sessionId);
 
-      if (record === undefined || suggestionDue(record)?.id !== turnId) return;
+      if (record === undefined || suggestionDue(record)?.id !== turnId)
+        return yield* outcome("not-due");
 
-      const choice = runnableFallback(yield* options.settings, yield* availability.get(false));
+      // A report from before a sign-in or install would leave the fallback off until a restart.
+      const harnesses = yield* availability.get("when-stale");
+      const choice = runnableFallback(yield* options.settings, harnesses);
 
-      if (choice === null) return;
+      if (choice === null) return yield* outcome("no-ready-fallback");
+      yield* Effect.annotateCurrentSpan({
+        "suggestedReply.harness": choice.harness,
+        "suggestedReply.model": choice.model,
+      });
       const limits = Option.isSome(usage) ? yield* usage.value.planLimits : [];
 
       if (nearPlanLimit(record.session.harness, limits) || nearPlanLimit(choice.harness, limits))
-        return;
+        return yield* outcome("near-plan-limit");
 
       const turns = record.turns.filter((turn) => turn.status !== "working").slice(-PROMPT_TURNS);
 
@@ -139,9 +151,10 @@ const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
 
       const text = replyText(answer);
 
-      if (text === null) return;
+      if (text === null) return yield* outcome("no-reply");
       // The Engine commits it only if this Turn is still the latest and has ended.
       yield* options.offer(sessionId, turnId, text, "polaris");
+      yield* outcome("offered");
     });
 
     /** Every failure is the user's to never see: logged, and the composer stays empty. */

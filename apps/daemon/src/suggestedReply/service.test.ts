@@ -75,9 +75,16 @@ const usageWith = (limits: ReadonlyArray<PlanLimit>) =>
     })
   );
 
-const availabilityOf = (ready: ReadonlyArray<"claude" | "codex">) =>
+type Ready = ReadonlyArray<"claude" | "codex">;
+
+/** `cached` is the report from before a sign-in; asking for a current one gets `ready`. */
+const availabilityOf = (ready: Ready, cached: Ready = ready) =>
   Layer.succeed(Availability)(
-    Availability.of({ get: () => counted("availability", report(...ready)), changes: Stream.empty })
+    Availability.of({
+      get: (refresh) =>
+        counted("availability", refresh === false ? report(...cached) : report(...ready)),
+      changes: Stream.empty,
+    })
   );
 
 const commitAll = (events: ReadonlyArray<DomainEvent>) =>
@@ -128,7 +135,8 @@ const run = <A, E>(
   options: {
     backend: ReplyBackend;
     settings?: SuggestedReplySettings;
-    ready?: ReadonlyArray<"claude" | "codex">;
+    ready?: Ready;
+    cached?: Ready;
     limits?: ReadonlyArray<PlanLimit>;
     timeout?: Duration.Input;
   },
@@ -164,7 +172,7 @@ const run = <A, E>(
 
   const layer = fallback.pipe(
     Layer.provideMerge(store),
-    Layer.provide(availabilityOf(options.ready ?? ["codex"])),
+    Layer.provide(availabilityOf(options.ready ?? ["codex"], options.cached)),
     Layer.provide(usageWith(options.limits ?? []))
   );
 
@@ -209,6 +217,21 @@ test("the Settings fallback's Model and effort are the ones asked", async () => 
   expect(calls.map((c) => [c.harness, c.job.model, c.job.effort])).toEqual([
     ["claude", "m-1", "low"],
   ]);
+});
+
+test("a Harness signed in after the Daemon's cached report still writes the suggestion", async () => {
+  const { calls, backend } = scripted(Effect.succeed({ reply: "Keep the repo style." }));
+
+  const reply = await run(
+    { backend, cached: [], ready: ["codex"] },
+    Effect.andThen(
+      commitAll([ended(turn(1))]),
+      eventually(suggestion, (s) => s != null)
+    )
+  );
+
+  expect(reply?.text).toBe("Keep the repo style.");
+  expect(calls.map((c) => c.harness)).toEqual(["codex"]);
 });
 
 test("a 'nothing' answer commits nothing", async () => {
