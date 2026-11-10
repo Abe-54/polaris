@@ -20,6 +20,7 @@ import {
   onDarwinArm64,
   runIn,
   signHardened,
+  sipEnabled,
 } from "./daemonBuild.testing.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "polaris-libraries-test-"));
@@ -161,22 +162,26 @@ describe.skipIf(!onDarwinArm64)("a darwin Daemon loads only its bundle's librari
       expect(images).toContain(join(realpathSync(release), BUNDLE_FILES[name]));
   }, 60_000);
 
-  test("signed as a release is, it refuses a foreign library put in its bundle", async () => {
-    const swap = async (name: string, harden: boolean) => {
-      const copy = join(dir, name, DAEMON_BUNDLE);
-      cpSync(release, copy, { recursive: true });
+  test.skipIf(!sipEnabled)(
+    "signed as a release is, it refuses a foreign library put in its bundle",
+    async () => {
+      const swap = async (name: string, harden: boolean) => {
+        const copy = join(dir, name, DAEMON_BUNDLE);
+        cpSync(release, copy, { recursive: true });
 
-      if (harden) expect((await signHardened(dir, copy)).code).toBe(0);
+        if (harden) expect((await signHardened(dir, copy)).code).toBe(0);
 
-      // What a program of the same user can do: copy the signed Daemon and change a library.
-      writeFileSync(join(copy, BUNDLE_FILES["libfff_c.dylib"]), plant);
-      await selftest(binaryOf(copy), dir);
+        // What a program of the same user can do: copy the signed Daemon and change a library.
+        writeFileSync(join(copy, BUNDLE_FILES["libfff_c.dylib"]), plant);
+        await selftest(binaryOf(copy), dir);
 
-      return ran();
-    };
+        return ran();
+      };
 
-    expect(await swap("hardened", true)).toBe(false);
-    // Without the hardened runtime macOS validates no library: the plant runs.
-    expect(await swap("unhardened", false)).toBe(true);
-  }, 120_000);
+      expect(await swap("hardened", true)).toBe(false);
+      // Without the hardened runtime macOS validates no library: the plant runs.
+      expect(await swap("unhardened", false)).toBe(true);
+    },
+    120_000
+  );
 });

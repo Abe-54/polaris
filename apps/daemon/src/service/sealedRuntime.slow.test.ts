@@ -18,6 +18,7 @@ import {
   onDarwinArm64,
   runIn,
   signHardened,
+  sipEnabled,
 } from "./daemonBuild.testing.ts";
 import { openRoutes, sealRuntime } from "./sealedRuntime.ts";
 
@@ -67,21 +68,25 @@ describe.skipIf(!onDarwinArm64)("a darwin release Daemon's Bun runtime is sealed
     expect(ran.code).toBe(2);
   }, 60_000);
 
-  test("signed as a release is, the renamed variables cannot be set either", async () => {
-    const options = { command: ["version"], names: "sealed" } as const;
-    const hardened = join(dir, "hardened", DAEMON_BUNDLE);
-    cpSync(release, hardened, { recursive: true });
+  test.skipIf(!sipEnabled)(
+    "signed as a release is, the renamed variables cannot be set either",
+    async () => {
+      const options = { command: ["version"], names: "sealed" } as const;
+      const hardened = join(dir, "hardened", DAEMON_BUNDLE);
+      cpSync(release, hardened, { recursive: true });
 
-    // The release signer's own entitlements: dyld keeps DYLD_ variables if one ever allows them.
-    const signed = await signHardened(dir, hardened);
+      // The release signer's own entitlements: dyld keeps DYLD_ variables if one ever allows them.
+      const signed = await signHardened(dir, hardened);
 
-    expect(signed.code).toBe(0);
-    expect(await openRoutes(binaryOf(hardened), options)).toEqual([]);
-    // Without the hardened runtime they can: the seal protects a release, not this build.
-    expect(await openRoutes(binaryOf(release), { ...options, timeoutMs: 3000 })).toEqual(
-      EVERY_ROUTE
-    );
-  }, 120_000);
+      expect(signed.code).toBe(0);
+      expect(await openRoutes(binaryOf(hardened), options)).toEqual([]);
+      // Without the hardened runtime they can: the seal protects a release, not this build.
+      expect(await openRoutes(binaryOf(release), { ...options, timeoutMs: 3000 })).toEqual(
+        EVERY_ROUTE
+      );
+    },
+    120_000
+  );
 
   // Real network: Oven's pinned Bun from GitHub, then the pinned tools from npm (ENG-829).
   test("the Simulator's tools install and run through Oven's Bun, which the sealed Daemon is not", async () => {

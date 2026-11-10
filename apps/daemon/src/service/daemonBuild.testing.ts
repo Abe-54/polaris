@@ -10,6 +10,14 @@ export const DARWIN_PLATFORM = "darwin-arm64";
 /** Whether this machine can build and run that platform's Daemon. */
 export const onDarwinArm64 = process.platform === "darwin" && process.arch === "arm64";
 
+/**
+ * Whether System Integrity Protection is on. dyld's hardened-runtime checks need it, and
+ * GitHub's macOS runners turn it off, so tests of those checks can't run there.
+ */
+export const sipEnabled =
+  process.platform === "darwin" &&
+  /status: enabled/.test(Bun.spawnSync(["csrutil", "status"]).stdout.toString());
+
 export type RunResult = { readonly stdout: string; readonly stderr: string; readonly code: number };
 
 export const runIn = async (
