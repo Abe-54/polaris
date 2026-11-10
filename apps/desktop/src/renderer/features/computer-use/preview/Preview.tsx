@@ -2,12 +2,15 @@
  * `#computer-use/states`: the host page's card on every kind of Host (Paper CU1, CU2), the
  * first-run card and the inline prompts (CU3), on fixtures. `#computer-use/onboarding`: this
  * Mac from blank to ready through the first-run card, each step granted after a moment.
+ * `#computer-use/live`: the transcript's Tool Runs and the live view's states (CU5).
  */
 import { ComputerUseState } from "@polaris/protocol";
+import { Match } from "effect";
 import { Kicker } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { standInBridge } from "../../bridge.ts";
+import { LiveViewGallery } from "../../session/preview/computerUseGallery.tsx";
 import { ComputerUsePrompt, HostComputerUseCard } from "../ui/connected.tsx";
 import { InlinePrompt } from "../ui/InlinePrompt.tsx";
 import { OnboardingCard } from "../ui/OnboardingCard.tsx";
@@ -96,7 +99,13 @@ export const mountComputerUsePreview = (root: HTMLElement, hash: string) => {
   localStorage.removeItem("polaris.computerUse.onboarding");
   standInBridge(fixtureBridge([...HOSTS, BLANK]));
   createRoot(root).render(
-    <div className="bg-bg min-h-screen">{scene === "onboarding" ? <Onboarding /> : <States />}</div>
+    <div className="bg-bg min-h-screen">
+      {Match.value(scene).pipe(
+        Match.when("onboarding", () => <Onboarding />),
+        Match.when("live", () => <LiveViewGallery />),
+        Match.orElse(() => <States />)
+      )}
+    </div>
   );
 
   return () => undefined;

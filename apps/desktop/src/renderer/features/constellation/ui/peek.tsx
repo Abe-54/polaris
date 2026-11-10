@@ -1,6 +1,7 @@
 /**
  * The Space preview of a Constellation (K4; Paper X-H Variant 1): Space on a hovered or focused
- * Lead row opens an instrument card beside it, the graph drawn as a star chart.
+ * Lead row opens an instrument card beside it, the graph drawn as a star chart. A session using
+ * an app previews its live view instead (Paper CU5).
  */
 import { harnessEntry, SessionId } from "@polaris/protocol";
 import {
@@ -10,17 +11,32 @@ import {
   Kicker,
   Popover,
   PopoverAnchor,
-  type PopoverContent,
+  PopoverContent,
   SegmentedControl,
 } from "@polaris/ui";
-import { type ComponentProps, type ReactElement, useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { peekCounts, peekRows } from "../../sessions/model/peek.ts";
 import { clock } from "../model/copy.ts";
 import { forYou } from "../model/glance.ts";
 import { LANE_MAX, laneWidth, tallyOf, type TaskRow } from "../model/index.ts";
-import { closeSubagent } from "../../session/index.ts";
+import {
+  closeSubagent,
+  controlledRun,
+  currentDesktopRun,
+  type DesktopRun,
+  LiveView,
+  useControlledApp,
+} from "../../session/index.ts";
+import { sessionKey } from "../../../store/store.ts";
 import { leadKey, patchLeadUi } from "../state.ts";
 import { StarChartHero } from "./chart.tsx";
 import { TaskGlyph } from "./glyphs.tsx";
@@ -291,6 +307,86 @@ export const ConstellationPeek = ({
             }));
           }}
         />
+      ) : null}
+    </Popover>
+  );
+};
+
+/**
+ * The app a session is using now: its working Turn's run when its feed is open, else the app the
+ * Host feed says it controls; null for a session using none.
+ */
+export const useLiveRun = (hostKey: string, sessionId: string): DesktopRun | null => {
+  const id = SessionId.make(sessionId);
+  const model = useApp((s) => s.sessions[sessionKey(hostKey, id)]);
+  const controlled = useControlledApp(hostKey, id);
+
+  return useMemo(
+    () => currentDesktopRun(model) ?? (controlled === null ? null : controlledRun(controlled)),
+    [model, controlled]
+  );
+};
+
+export interface LivePeekProps extends Omit<
+  ComponentProps<typeof PopoverAnchor>,
+  "asChild" | "children"
+> {
+  readonly hostKey: string;
+  readonly sessionId: string;
+  /** From `useLiveRun`; the row previews nothing without one. */
+  readonly run: DesktopRun;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly children: ReactElement;
+}
+
+const peekFooter = (run: DesktopRun, turn: number | null) =>
+  [run.appName, run.items.length === 0 ? null : run.doing, turn === null ? null : `turn ${turn}`]
+    .filter((part) => part !== null)
+    .join(" · ");
+
+/**
+ * Space on a session row whose Turn is using an app: the same live view as the transcript's
+ * popover, titled with the session. Its content mounts only while open, so only then does the
+ * Host capture.
+ */
+export const LivePeek = ({
+  hostKey,
+  sessionId,
+  run,
+  open,
+  onOpenChange,
+  children,
+  ...slot
+}: LivePeekProps) => {
+  const id = SessionId.make(sessionId);
+  const session = useApp((s) => s.hostModels[hostKey]?.sessions.get(id)?.session ?? null);
+  const turn = session?.currentUserTurn?.number ?? session?.turnCount ?? null;
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverAnchor asChild {...slot}>
+        {children}
+      </PopoverAnchor>
+      {open ? (
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={10}
+          data-surface="raised"
+          data-testid="live-peek"
+          className="bg-raised rounded-card w-[300px] p-0"
+          // The row keeps focus, so Space still reaches it.
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <LiveView
+            hostKey={hostKey}
+            sessionId={id}
+            run={run}
+            title={session?.title || "Untitled session"}
+            liveFooter={peekFooter(run, turn)}
+          />
+        </PopoverContent>
       ) : null}
     </Popover>
   );

@@ -4,7 +4,12 @@ import type { KeyboardEvent, ReactElement } from "react";
 import { slots } from "../../app/slots.tsx";
 import { waitingOn } from "../../features/session/model/background.ts";
 import { useLeadConstellation } from "../../features/constellation/hooks.ts";
-import { ConstellationPeek, useSpacePeek } from "../../features/constellation/ui/peek.tsx";
+import {
+  ConstellationPeek,
+  LivePeek,
+  useLiveRun,
+  useSpacePeek,
+} from "../../features/constellation/ui/peek.tsx";
 import { BackgroundTasksHover } from "../../features/session/ui/background.tsx";
 import { RenameField, SessionMenu, useRenaming } from "../../features/sessions/ui/SessionMenu.tsx";
 import type { SessionEntry } from "../../store/hostModel.ts";
@@ -84,6 +89,35 @@ export const WithHover = ({
   );
 };
 
+/**
+ * A row whose session is using an app previews its live view on Space (Paper CU5); a Lead's
+ * Space stays the Constellation's.
+ */
+const useLivePeekRow = (hostKey: string, entry: SessionEntry, lead: boolean) => {
+  const peek = useSpacePeek();
+  const run = useLiveRun(hostKey, entry.session.id);
+  const on = !lead && run !== null;
+
+  return {
+    rowProps: (onKeyDown: (event: KeyboardEvent<HTMLElement>) => void) =>
+      on ? { ...peek.rowProps, onKeyDown: peek.keyDown(onKeyDown) } : {},
+    wrap: (row: ReactElement) =>
+      on ? (
+        <LivePeek
+          hostKey={hostKey}
+          sessionId={entry.session.id}
+          run={run}
+          open={peek.open}
+          onOpenChange={peek.setOpen}
+        >
+          {row}
+        </LivePeek>
+      ) : (
+        row
+      ),
+  };
+};
+
 const useSelectedSession = (hostKey: string, entry: SessionEntry) => {
   const selection = useSelection();
 
@@ -110,45 +144,50 @@ export const SessionRow = ({ hostKey, entry, now }: SessionRowProps) => {
 
   const rename = useRenaming();
   const lead = useLeadConstellation(hostKey, session.id) !== null;
+  const livePeek = useLivePeekRow(hostKey, entry, lead);
+  const button = buttonProps(() => selectSession({ hostKey, sessionId: session.id }));
 
   return (
     <WithHover hostKey={hostKey} entry={entry}>
       <SessionMenu hostKey={hostKey} entry={entry} onRename={rename.start}>
-        <Row
-          {...buttonProps(() => selectSession({ hostKey, sessionId: session.id }))}
-          aria-current={selected}
-          data-state={state}
-          variant="session"
-          selected={selected}
-          tone={needsYou(entry) ? "needs-you" : session.state === "dormant" ? "quiet" : "default"}
-          leading={
-            <SessionTile
-              state={state}
-              harness={session.harness}
-              density={density}
-              celestial={session.celestial}
-              lead={lead}
-            />
-          }
-          title={
-            rename.renaming ? (
-              <RenameField hostKey={hostKey} entry={entry} onDone={rename.stop} />
-            ) : (
-              session.title || "Untitled session"
-            )
-          }
-          description={sessionLine(entry, activity)}
-          meta={
-            <span
-              data-testid="row-state"
-              data-state={state}
-              aria-label={waiting ? "waiting" : sessionStateLabel[state]}
-            >
-              {/* Compact drops the second line, so the wait takes the age's place. */}
-              {waiting && density === "compact" ? "waiting" : age(session.createdAt, now)}
-            </span>
-          }
-        />
+        {livePeek.wrap(
+          <Row
+            {...button}
+            {...livePeek.rowProps(button.onKeyDown)}
+            aria-current={selected}
+            data-state={state}
+            variant="session"
+            selected={selected}
+            tone={needsYou(entry) ? "needs-you" : session.state === "dormant" ? "quiet" : "default"}
+            leading={
+              <SessionTile
+                state={state}
+                harness={session.harness}
+                density={density}
+                celestial={session.celestial}
+                lead={lead}
+              />
+            }
+            title={
+              rename.renaming ? (
+                <RenameField hostKey={hostKey} entry={entry} onDone={rename.stop} />
+              ) : (
+                session.title || "Untitled session"
+              )
+            }
+            description={sessionLine(entry, activity)}
+            meta={
+              <span
+                data-testid="row-state"
+                data-state={state}
+                aria-label={waiting ? "waiting" : sessionStateLabel[state]}
+              >
+                {/* Compact drops the second line, so the wait takes the age's place. */}
+                {waiting && density === "compact" ? "waiting" : age(session.createdAt, now)}
+              </span>
+            }
+          />
+        )}
       </SessionMenu>
     </WithHover>
   );
@@ -167,11 +206,13 @@ export const CompactSessionRow = ({
   // A Lead outside its group (machine groups, Pinned, Needs you elsewhere) still previews on Space.
   const lead = useLeadConstellation(hostKey, entry.session.id) !== null;
   const peek = useSpacePeek();
+  const livePeek = useLivePeekRow(hostKey, entry, lead);
   const button = buttonProps(() => selectSession({ hostKey, sessionId: entry.session.id }));
 
   const row = (
     <Row
       {...button}
+      {...livePeek.rowProps(button.onKeyDown)}
       {...(lead ? { ...peek.rowProps, onKeyDown: peek.keyDown(button.onKeyDown) } : {})}
       aria-current={selected}
       data-state={state}
@@ -208,7 +249,7 @@ export const CompactSessionRow = ({
             {row}
           </ConstellationPeek>
         ) : (
-          row
+          livePeek.wrap(row)
         )}
       </SessionMenu>
     </WithHover>
