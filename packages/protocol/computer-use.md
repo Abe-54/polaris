@@ -129,4 +129,6 @@ Every preview image is a JPEG that travels as a blob (binary side-chunks), never
 | Answering an `app` or `headed-input` approval (`RespondToApproval`) | yes | yes | with the `approve` Grant |
 | "Always allow on this Host" (`Allow { remember: true }` on `app`) | yes | yes | no |
 
+**Who may always-allow.** The Desktop App, and the Mobile App answering as a Linked Device. No Extension may: Even G2 and Raycast offer "allow" (for this session) and "deny" only, and the Daemon refuses `Allow { remember: true }` on `app` from an Extension whatever its Grants. Nobody may always-allow headed input.
+
 A Linked Device or an Extension sees the approvals only once it announces `computer-use`.
