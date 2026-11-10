@@ -58,7 +58,7 @@ export type AskForApp = (
 
 export const appMessages = {
   refused: (app: string) =>
-    `polaris_desktop doesn't drive ${app}: it would get around the approvals this session asks for. Ask the user to do this step.`,
+    `polaris_desktop doesn't drive ${app}: it would get around the approvals this session asks for. Only the user can allow it, in the computer use settings for this host. Until then, ask them to do this step.`,
   inUse: (app: string, title: string | null) =>
     `${app} is in use by ${title ?? "another session"}. Try again when that session's Turn ends.`,
   denied: (app: string) => `The user didn't allow ${app} for this session.`,

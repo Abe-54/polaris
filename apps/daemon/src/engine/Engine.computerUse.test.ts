@@ -243,13 +243,18 @@ describe("the always-refused apps", () => {
       Effect.gen(function* () {
         const server = yield* open(S, "full-access");
         const refused = yield* Effect.promise(() => call(server, "launch", { app: asked }));
+        const click = { x: 1, y: 2, app: asked };
+        const headed = yield* Effect.promise(() => call(server, "mouse_click", click));
+        expect(textOf(headed)).toBe(textOf(refused));
+        // No card ever opens, so no "Always allow" can put it on the Host's list.
+        expect(yield* (yield* ComputerUseHost).allowedApps).toEqual([]);
 
         return [refused, yield* pendingOf(S)] as const;
       })
     );
 
     expect(textOf(result)).toBe(
-      `polaris_desktop doesn't drive ${name}: it would get around the approvals this session asks for. Ask the user to do this step.`
+      `polaris_desktop doesn't drive ${name}: it would get around the approvals this session asks for. Only the user can allow it, in the computer use settings for this host. Until then, ask them to do this step.`
     );
     expect(pending).toEqual([]);
     expect(ranCommand(ran, "launch")).toBe(0);
