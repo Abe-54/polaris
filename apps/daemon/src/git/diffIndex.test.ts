@@ -66,19 +66,29 @@ describe("the diff index", () => {
     expect(at).toBe(diff.bytes.length);
   });
 
-  test("a line that reads like a file's header inside a hunk isn't one", async () => {
-    const root = await makeRepo({ "notes.md": "intro\n" });
-    cleanup.push(root);
-    const base = await gitText(root, ["rev-parse", "HEAD"]);
-    write(root, "notes.md", "intro\ndiff --git a/fake b/fake\n");
-    write(root, "other.md", "diff --git a/x b/x\n");
-    const head = await commitAll(root, "headers as content");
-    const diff = await computeDiff(root, DiffSpec.cases.Range.make({ base, head }));
+  test("a line that reads like a file's header inside a hunk isn't one", () => {
+    const patch = [
+      "diff --git a/notes.md b/notes.md",
+      "--- a/notes.md",
+      "+++ b/notes.md",
+      "@@ -1,2 +1,2 @@",
+      " intro",
+      "-diff --git a/old b/old",
+      "+diff --git a/fake b/fake",
+      "diff --git a/other.md b/other.md",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/other.md",
+      "@@ -0,0 +1 @@",
+      "+diff --git a/x b/x",
+      "",
+    ].join("\n");
 
-    expect(diff.files).toBe(2);
-    expect(diff.index.map((file) => [file.path, file.additions])).toEqual([
-      ["notes.md", 1],
-      ["other.md", 1],
+    const index = indexDiff(new TextEncoder().encode(patch));
+
+    expect(index.map((file) => [file.path, file.status, file.additions, file.deletions])).toEqual([
+      ["notes.md", "modified", 1, 1],
+      ["other.md", "added", 1, 0],
     ]);
   });
 

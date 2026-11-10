@@ -293,3 +293,25 @@ test("a snapshot of an edited working tree starts no git to check its tree", asy
   expect(git(repo, "show", `${snapshot!.tree}:a.txt`)).toBe("edited");
   expect(checks()).toBe(0);
 });
+
+test("a submodule at a path that isn't UTF-8 is excluded like any other", async () => {
+  const repo = makeRepo({ "a.txt": "a\n" });
+  const head = git(repo, "rev-parse", "HEAD");
+  // One byte per character: "café" as UTF-8, then as Latin-1, which is not UTF-8.
+  const paths = ["caf\u00c3\u00a9", "caf\u00e9", "plain"];
+
+  // Gitlinks in the index alone, no directory behind them: `add -A` drops one it isn't told to skip.
+  const staged = Bun.spawnSync(["git", "update-index", "-z", "--index-info"], {
+    cwd: repo,
+    stdin: Buffer.from(paths.map((path) => `160000 ${head}\t${path}\0`).join(""), "latin1"),
+  });
+
+  expect(staged.exitCode).toBe(0);
+  const snapshot = await snapshotWorkingTree(repo);
+
+  const tree = Bun.spawnSync(["git", "ls-tree", "-z", "--name-only", snapshot!.tree], {
+    cwd: repo,
+  });
+
+  expect(tree.stdout.toString("latin1").split("\0").filter(Boolean)).toEqual(["a.txt", ...paths]);
+});

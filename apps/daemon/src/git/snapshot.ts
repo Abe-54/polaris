@@ -135,18 +135,40 @@ const mayHoldGitlinks = async (index: string, hashBytes: number | null) => {
   return bytes === null || !holdsNoGitlinks(bytes, hashBytes);
 };
 
+const GITLINK_ENTRY = Buffer.from("160000 ");
+
+const EXCLUDE = Buffer.from(":(exclude,literal)");
+
+const NUL = Buffer.from([0]);
+
+/** One pathspec per gitlink of an `ls-files -s -z` listing, each ending in NUL. Paths stay bytes: one needn't be UTF-8. */
+const exclusionsOf = (listing: Uint8Array): Array<Uint8Array> => {
+  const entries = Buffer.from(listing.buffer, listing.byteOffset, listing.byteLength);
+  const excluded: Array<Uint8Array> = [];
+  let start = 0;
+
+  while (start < entries.length) {
+    const nul = entries.indexOf(0, start);
+    const end = nul === -1 ? entries.length : nul;
+    // `<mode> <object> <stage>\t<path>`
+    const path = entries.indexOf(0x09, start) + 1;
+
+    if (entries.subarray(start, end).indexOf(GITLINK_ENTRY) === 0 && path > start && path < end) {
+      excluded.push(EXCLUDE, entries.subarray(path, end), NUL);
+    }
+
+    start = end + 1;
+  }
+
+  return excluded;
+};
+
 /** The index's submodules (gitlinks), as `add -A` excludes: it would run git inside each one. */
 const gitlinkExclusions = async (repo: Repo, env: { readonly GIT_INDEX_FILE: string }) => {
   if (!(await mayHoldGitlinks(env.GIT_INDEX_FILE, repo.hashBytes))) return [];
   const listed = await runGitRaw(repo.root, ["ls-files", "-s", "-z"], { env });
 
-  if (listed.code !== 0) return [];
-
-  return decoder
-    .decode(listed.stdout)
-    .split("\0")
-    .filter((entry) => entry.startsWith("160000 "))
-    .map((entry) => `:(exclude,literal)${entry.slice(entry.indexOf("\t") + 1)}`);
+  return listed.code === 0 ? exclusionsOf(listed.stdout) : [];
 };
 
 /** `add -A` into `index`, then its tree, and whether `write-tree` rewrote the index to get it. */
@@ -156,7 +178,7 @@ const addAndWriteTree = async (repo: Repo, index: string, config: ReadonlyArray<
   const add = [...config, "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"];
 
   // A submodule's recorded commit stays as the index has it.
-  await gitText(repo.root, add, { env, stdin: [".", ...excluded].join("\0") });
+  await gitText(repo.root, add, { env, stdin: Buffer.concat([Buffer.from(".\0"), ...excluded]) });
   const added = await signature(index);
   const tree = await gitText(repo.root, [...config, "write-tree"], { env });
 

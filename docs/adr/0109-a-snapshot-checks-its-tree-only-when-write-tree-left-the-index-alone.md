@@ -49,4 +49,5 @@ only costs the check.
   survived is not noticed by either version of this code.
 - `snapshot.slow.test.ts` holds both sides: a tree pruned from under an index that `add -A`
   doesn't touch is written again, and a snapshot of an edited working tree starts no `cat-file`.
-- If git fixes `cache_tree_fully_valid`, the check runs more often and stays correct.
+- git's master (2.56 in development) has the `!` back. With that git the check runs after every
+  snapshot of an unchanged working tree, as before 2.50, and stays correct.
