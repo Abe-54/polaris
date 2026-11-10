@@ -43,6 +43,49 @@ test("logs correlate by trace and Span, remain redacted and are capped to newest
     expect(detail.logs[0]?.body).toEqual({ token: "[redacted]" });
   }));
 
+test("a before cursor pages a Span's older logs without skipping or repeating tied records", () =>
+  withTraceFixture(async (f) => {
+    expect((await postTraces(f.endpoint!)).status).toBe(200);
+    const start = BigInt(Date.now()) * 1000000n;
+    // Three records share each time, so a page boundary lands inside a tie.
+
+    const records = Array.from({ length: 45 }, (_, i) => ({
+      traceId: TRACE_ID,
+      spanId: SPAN_ID,
+      timeUnixNano: (start + BigInt(Math.floor(i / 3))).toString(),
+      body: { stringValue: `log ${i}` },
+      attributes: [{ key: "index", value: { intValue: String(i) } }],
+    }));
+
+    const response = await fetch(`${f.endpoint}/v1/logs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceLogs: [{ scopeLogs: [{ logRecords: records }] }] }),
+    });
+
+    expect(response.status).toBe(200);
+
+    const pages: Array<ReadonlyArray<string>> = [];
+    let before: { timeUnixNano: string; id: string } | undefined;
+
+    for (let read = 0; read < 5; read += 1) {
+      const detail = await Effect.runPromise(f.store.span(f.root, TRACE_ID, SPAN_ID, before));
+      expect(detail.logCount).toBe(45);
+
+      if (detail.logs.length === 0) break;
+      pages.push(detail.logs.map((log) => JSON.stringify(log.body)));
+      const last = detail.logs.at(-1)!;
+      before = { timeUnixNano: last.timeUnixNano, id: last.id };
+    }
+
+    expect(pages.map((page) => page.length)).toEqual([20, 20, 5]);
+    const read = pages.flat().map((body) => Number(/\d+/.exec(body)?.[0]));
+    expect(new Set(read).size).toBe(45);
+    // Newest first across pages: each record's time group never rises.
+    const groups = read.map((i) => Math.floor(i / 3));
+    expect(groups).toEqual(groups.toSorted((a, b) => b - a));
+  }));
+
 test("pressure keeps error Spans, removes ordinary Spans first and marks partial traces", () =>
   withTraceFixture(
     async (f) => {

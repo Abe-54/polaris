@@ -1,7 +1,8 @@
 import { Predicate, Effect } from "effect";
 import type { ConstellationPreparation, ConstellationRuntimeService } from "../runtime.ts";
 import { ConstellationOwner } from "../runtime.ts";
-import { ConstellationWorktrees, transferError } from "../worktrees.ts";
+import { ConstellationWorktrees, gitOperation, transferError } from "../worktrees.ts";
+import { currentBranch } from "../leadCheckout.ts";
 import { acceptFindings } from "../attempts.ts";
 import { finding, refusal } from "../decision.ts";
 import { RelayFacts } from "./outbox.ts";
@@ -42,6 +43,13 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
       const prepared = yield* runtime.prepare(binding, command, model, commandId);
       const record = model.constellations.get(command.constellationId);
 
+      if (
+        Predicate.isTagged(command, "Plan") &&
+        command.start !== undefined &&
+        record === undefined
+      )
+        return { ...prepared, leadBranch: yield* startBranch(model, command.start.leadSessionId) };
+
       if (record === undefined || !("attemptId" in command)) return prepared;
       const attempt = record.graph.attempts.find((a) => a.id === command.attemptId);
 
@@ -49,6 +57,7 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
       const relay = (yield* RelayFacts).packet;
       let probe = prepared.claimProbe;
       const checks = [...prepared.recordedChecks];
+      let mergeFindings: ReadonlyArray<import("@polaris/protocol").ConstellationFinding> = [];
 
       const mapError = (e: import("@polaris/protocol").ConstellationTransferError) =>
         refusal(record, [
@@ -86,25 +95,44 @@ export const withWorktreePreparation = Effect.fnUntraced(function* (
         const findings = acceptFindings(record, command);
 
         if (findings.length > 0) return yield* refusal(record, findings);
-        checks.push(
-          ...(yield* acceptedChecks(
-            record,
-            attempt,
-            model,
-            command.action.mergedHead,
-            worktrees,
-            storage
-          ).pipe(Effect.mapError(mapError)))
-        );
+
+        const accepted = yield* acceptedChecks(
+          record,
+          attempt,
+          model,
+          command.action.mergedHead,
+          worktrees,
+          storage
+        ).pipe(Effect.mapError(mapError));
+
+        checks.push(...accepted.checks);
+        mergeFindings = accepted.findings;
       }
 
       return {
         ...prepared,
         claimProbe: probe,
         recordedChecks: checks,
+        mergeFindings,
       };
     }) satisfies ConstellationRuntimeService["prepare"],
   } satisfies ConstellationRuntimeService;
+});
+
+/** The Lead checkout's branch, recorded as the graph's lead branch; none when it can't be read. */
+const startBranch = Effect.fnUntraced(function* (
+  model: import("../../store/model.ts").ReadModel,
+  leadSessionId: import("@polaris/protocol").SessionId
+) {
+  const cwd = model.sessions.get(leadSessionId)?.session.cwd;
+
+  if (cwd === undefined) return undefined;
+
+  const branch = yield* gitOperation(() => currentBranch(cwd)).pipe(
+    Effect.catchTag("ConstellationTransferError", () => Effect.succeed(null))
+  );
+
+  return branch ?? undefined;
 });
 
 const acceptedChecks = Effect.fnUntraced(function* (
@@ -119,7 +147,7 @@ const acceptedChecks = Effect.fnUntraced(function* (
 
   if (leadPath === undefined)
     return yield* transferError("E-LEAD", "The Lead checkout is unavailable");
-  yield* worktrees.mergeClaim(record.graph, attempt, leadPath, head);
+  const merged = yield* worktrees.mergeClaim(record.graph, attempt, leadPath, head);
   const checks: Array<import("../../engine/constellation.inputs.ts").RecordedCheck> = [];
 
   for (const stored of yield* storage.receipts) {
@@ -133,5 +161,5 @@ const acceptedChecks = Effect.fnUntraced(function* (
       checks.push(...packet.recordedChecks);
   }
 
-  return checks;
+  return { checks, findings: merged.findings };
 });

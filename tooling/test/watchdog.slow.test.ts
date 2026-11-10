@@ -232,4 +232,19 @@ describe("the test watchdog", () => {
     expect(listed).not.toContain("exempt.slow.test.ts");
     expect(readFileSync(summary, "utf8")).toMatch(/\| `[^`]*over\.test\.ts` \| 2\.\d s \|/);
   }, 20_000);
+
+  test("a package without the preload in its bunfig still gets a temp POLARIS_HOME, not the caller's", async () => {
+    const dir = suite({
+      "home.test.ts": `import { test } from "bun:test";\nimport { writeFileSync } from "node:fs";\ntest("home", () => writeFileSync("home.txt", process.env.POLARIS_HOME ?? ""));\n`,
+    });
+
+    const callerHome = join(dir, "real-home");
+
+    const { code } = await watch(dir, 30, false, [], "1", { POLARIS_HOME: callerHome });
+    const home = readFileSync(join(dir, "home.txt"), "utf8");
+
+    expect(code).toBe(0);
+    expect(home).not.toBe(callerHome);
+    expect(home).toMatch(/polaris-test-run-[^/\\]+[/\\]polaris-home$/);
+  }, 20_000);
 });

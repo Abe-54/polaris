@@ -4,7 +4,8 @@
  * (`serve --bg` persists), so status is always read back from it.
  */
 import { RemoteAccessError, type RemoteAccessReason, RemoteAccessStatus } from "@polaris/protocol";
-import { Context, Effect, Layer, Match } from "effect";
+import { Effect, Match } from "effect";
+import type { RemoteAccessOptions } from "./service.ts";
 import { GATEWAY_PREFIX, GATEWAY_RPC_PATH, runningGateway, serveTarget } from "./gateway.ts";
 import {
   findTailscale,
@@ -70,14 +71,6 @@ export const reasonOfError = (
 interface NotReady {
   readonly reason: RemoteAccessReason;
   readonly host: string | null;
-}
-
-export interface RemoteAccessOptions {
-  /** The Polaris home holding `gateway.json`. */
-  readonly root: string;
-  /** Overrides for tests. */
-  readonly findCli?: () => TailscaleCli | null;
-  readonly os?: string;
 }
 
 export const makeRemoteAccess = (options: RemoteAccessOptions) => {
@@ -195,15 +188,4 @@ export const makeRemoteAccess = (options: RemoteAccessOptions) => {
   return { status, enable, disable };
 };
 
-export class RemoteAccessControl extends Context.Service<
-  RemoteAccessControl,
-  {
-    readonly status: Effect.Effect<RemoteAccessStatus>;
-    readonly enable: Effect.Effect<RemoteAccessStatus, RemoteAccessError>;
-    readonly disable: Effect.Effect<RemoteAccessStatus, RemoteAccessError>;
-  }
->()("polaris/daemon/remoteAccess/RemoteAccessControl") {
-  static layer(options: RemoteAccessOptions) {
-    return Layer.succeed(RemoteAccessControl)(makeRemoteAccess(options));
-  }
-}
+export { RemoteAccessControl, type RemoteAccessOptions } from "./service.ts";

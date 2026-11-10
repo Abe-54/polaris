@@ -51,14 +51,17 @@ describe("polarisToolView", () => {
     expect(call("polaris_1.status", "{}").tool).toBe("status");
   });
 
-  test("dispatch reads as the Task started and where, never JSON", () => {
+  test.each([
+    ["", "Started B1 Codex · gpt-5.5 · Mac Studio"],
+    [',"serviceTier":"priority"', "Started B1 Codex · gpt-5.5 · fast mode · Mac Studio"],
+  ])("dispatch reads as the Task started and where, never JSON (%s)", (tier, expected) => {
     const view = call(
       "mcp__polaris__dispatch",
-      '{"tasks":[{"taskId":"B1","worker":{"host":"Mac Studio","selection":{"harness":"codex","model":"gpt-5.5"}}}]}',
+      `{"tasks":[{"taskId":"B1","worker":{"host":"Mac Studio","selection":{"harness":"codex","model":"gpt-5.5"${tier}}}}]}`,
       recorded("Dispatch recorded.")
     );
 
-    expect(line(view)).toBe("Started B1 Codex · gpt-5.5 · Mac Studio");
+    expect(line(view)).toBe(expected);
     expect(view.detail[0]?.hue).toBe("codex");
     expect(view.reply).toBe("Dispatch recorded · revision 9");
     expect(view.links).toEqual([{ label: "Open B1", taskId: "B1" }]);
@@ -71,7 +74,7 @@ describe("polarisToolView", () => {
       `{"start":{"name":"Constellations v1","workspaceId":"w"},"operations":[
         {"_tag":"Add","task":{"id":"B6","title":"Lease bench","kind":"task","deps":["B2"]}},
         {"_tag":"Add","task":{"id":"G2","title":"Spec and tools merged","kind":"gate"}},
-        {"_tag":"Edit","taskId":"A2","revision":1,"task":{"id":"A2","title":"Decider","kind":"task"}},
+        {"_tag":"Edit","taskId":"A2","revision":1,"task":{"deps":null,"brief":null}},
         {"_tag":"Cancel","taskId":"A3","revision":1}]}`
     );
 
@@ -281,5 +284,82 @@ describe("polarisToolView", () => {
     expect(call("polaris.status", "{}", {}, "failed").refusal?.message).toBe(
       "The call didn't reach Polaris"
     );
+  });
+});
+
+describe("history tools", () => {
+  const SEARCHED = [
+    '2 matches for "flaky test" in 40 Turns of 3 sessions, newest first.',
+    '- s-abc "Fix the flaky test" · Turn 4 · 2026-11-09T13:52:00Z · reply: the flaky test was a race',
+    '- s-def "" · Turn 2 · 2026-11-08T09:00:00Z · command: $ bun test flaky',
+    "Next: Read a match in full with read_history and since.",
+  ].join("\n");
+
+  test("search_history: the query and scope, the match count, each snippet under its session", () => {
+    const view = call(
+      "mcp__polaris__search_history",
+      '{"query":"flaky test","scope":"workspace"}',
+      { text: SEARCHED }
+    );
+
+    expect(line(view)).toBe("Searched history for “flaky test” in this workspace");
+    expect(view.caption).toBe("2 matches");
+    const rows = view.well?.kind === "history" ? view.well.rows : [];
+
+    expect(rows.map((r) => [r.session, r.text])).toEqual([
+      [{ id: "s-abc", title: "Fix the flaky test" }, "the flaky test was a race"],
+      [{ id: "s-def", title: "Untitled" }, "$ bun test flaky"],
+    ]);
+    expect(rows[0]?.heading).toStartWith("Turn 4 · reply");
+  });
+
+  test("search_history in one session names no other, and an empty search says so", () => {
+    const view = call("polaris.search_history", '{"query":"deploy"}', {
+      text: 'No matches for "deploy" in 12 Turns of 1 sessions, newest first.\nNext: Continue.',
+    });
+
+    expect(line(view)).toBe("Searched history for “deploy” in this session");
+    expect(view.caption).toBe("no matches");
+    expect(view.well).toBeNull();
+  });
+
+  test("sessions: the scope and how many, each session with its Harness, state and Turns", () => {
+    const view = call("mcp__polaris__sessions", '{"scope":"host","query":"lint"}', {
+      text: [
+        "1 sessions:",
+        '- s-abc · "Lint ratchet" · codex · idle · 7 Turns · updated 2026-11-09T10:00:00Z · (this session) · polaris',
+        "Next: Search one with search_history, or read it with read_history.",
+      ].join("\n"),
+    });
+
+    expect(line(view)).toBe("Listed sessions “lint” on this host");
+    expect(view.caption).toBe("1 session");
+    expect(view.well).toEqual({
+      kind: "history",
+      rows: [
+        {
+          session: { id: "s-abc", title: "Lint ratchet" },
+          heading: "codex · idle · 7 Turns · this session",
+          text: null,
+        },
+      ],
+    });
+  });
+
+  test("read_history: whose Turns, and the session it read opens from the row", () => {
+    const view = call("polaris.read_history", '{"session":"Fix the flaky test","turns":1}', {
+      text: [
+        "Session s-abc",
+        "## Turn 4 · completed · started 2026-11-09T13:52:00Z",
+        "Assistant: The race is gone.",
+        "Next: Continue with what you found.",
+      ].join("\n"),
+    });
+
+    expect(line(view)).toBe("Read Fix the flaky test's last 1 Turn");
+    expect(view.sessions).toEqual([{ id: "s-abc", title: "Fix the flaky test" }]);
+    expect(view.well?.kind === "turns" ? view.well.turns.map((t) => t.reply) : []).toEqual([
+      "The race is gone.",
+    ]);
   });
 });

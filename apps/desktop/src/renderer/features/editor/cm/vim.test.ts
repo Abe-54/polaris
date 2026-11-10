@@ -46,7 +46,7 @@ test("vim's language keys run their registry commands by id", async () => {
     press("<C-i>");
     expect(ran).toEqual([
       "editor.language.definition",
-      "editor.language.definition",
+      "editor.language.declaration",
       "editor.language.typeDefinition",
       "editor.language.implementation",
       "editor.language.references",

@@ -95,7 +95,7 @@ test("a dependency cycle doesn't hang the chart", () => {
   expect(
     starChartOf(s)
       .tasks.map((t) => t.id)
-      .toSorted()
+      .sort()
   ).toEqual(["a", "b"]);
 });
 

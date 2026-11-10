@@ -104,6 +104,7 @@ export const turnsOf = ({
         reply: entry.session.lastReplyPreview ?? null,
         digestStarted: lead !== undefined && turnId !== null && digestStarted(lead, turnId),
         backgroundTasks: waitingOn(entry.session).length,
+        backgroundReportsPending: entry.session.backgroundReportsPending,
         userTurn,
         updatedAt: entry.session.updatedAt,
       };
@@ -149,6 +150,7 @@ export const notificationsOf = ({
               title: entry.lastNotification.title,
               body: entry.lastNotification.body,
               automatic: entry.lastNotification.automatic,
+              constellationId: entry.lastNotification.constellationId ?? null,
             },
           ]
     )

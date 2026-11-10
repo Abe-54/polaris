@@ -17,6 +17,7 @@ interface HarnessSelectionFields {
   harness?: NonNullable<HarnessSelection["harness"]>;
   model?: NonNullable<HarnessSelection["model"]>;
   effort?: NonNullable<HarnessSelection["effort"]>;
+  serviceTier?: Exclude<HarnessSelection["serviceTier"], undefined>;
 }
 
 export const resolvers = (binding: McpBinding, commands: ConstellationCommands) => {
@@ -38,6 +39,8 @@ export const resolvers = (binding: McpBinding, commands: ConstellationCommands) 
     if (model !== undefined) fields.model = model;
 
     if (input.effort !== undefined) fields.effort = input.effort;
+
+    if (input.serviceTier !== undefined) fields.serviceTier = input.serviceTier;
 
     return new HarnessSelection(fields);
   });

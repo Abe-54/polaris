@@ -36,6 +36,12 @@ describe("probe parsers", () => {
     expect(cpuPercent({ busy: 0, total: 0 }, { busy: 50, total: 200 })).toBe(25);
     expect(cpuPercent({ busy: 10, total: 100 }, { busy: 10, total: 100 })).toBe(0);
   });
+
+  test("counters that disagree still read 0 to 100", () => {
+    // Busy moving further than the total (per-core counters read a tick apart) is all busy.
+    expect(cpuPercent({ busy: 0, total: 0 }, { busy: 300, total: 200 })).toBe(100);
+    expect(cpuPercent({ busy: 50, total: 0 }, { busy: 0, total: 200 })).toBe(0);
+  });
 });
 
 describe("systemProbe on this Host", () => {

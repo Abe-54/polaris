@@ -4,17 +4,18 @@
  * streaming in. A Snapshot resets it, except the checkpoint commits seen so
  * far; Subagents' own items stay out, the Subagents themselves are kept.
  */
-import type {
-  AgentSession,
-  ApprovalDecision,
+import {
+  type AgentSession,
+  type ApprovalDecision,
   ApprovalRequest,
-  DomainEvent,
-  SessionStreamItem,
-  Subagent,
-  Turn,
-  TurnItem,
+  type DomainEvent,
+  RequestId,
+  type SessionStreamItem,
+  type Subagent,
+  type Turn,
+  type TurnItem,
 } from "@polaris/protocol";
-import { Match } from "effect";
+import { Match, Predicate } from "effect";
 
 export interface TurnEntry {
   readonly turn: Turn;
@@ -244,20 +245,93 @@ export const withOlder = (
 };
 
 /**
- * The commit a session Risk Summary of every ended Turn is keyed by: the last
- * ended Turn's after-checkpoint, when this feed saw it recorded.
+ * The commit a session Risk Summary of every ended Turn is keyed by: the last ended Turn's
+ * after-checkpoint, as the Turn carries it, or as this feed saw it recorded (older Daemons).
  */
 export const summaryHead = (state: SessionFold): string | null => {
   const ended = state.turns.findLast((entry) => entry.turn.status !== "working");
   const ref = ended?.turn.checkpointAfter ?? null;
 
-  return ref === null ? null : (state.checkpoints.get(ref) ?? null);
+  if (ref === null) return null;
+
+  return ended?.turn.checkpointAfterCommit ?? state.checkpoints.get(ref) ?? null;
 };
 
-/** The last Secret Request that ended in the session's latest Turn: the strip says how. */
+const REQUEST_SECRET = /^(?:mcp__polaris(?:_\d+)?__|polaris(?:_\d+)?\.)request_secret$/;
+
+/** How Polaris's reply to `request_secret` begins for each ending (`mcp/tools/secret.ts`). */
+const SECRET_REPLIES: ReadonlyArray<readonly [prefix: string, SecretOutcome["outcome"]]> = [
+  ["Saved.", "saved"],
+  ["The user declined", "declined"],
+  ["No answer in", "ended"],
+  ["The request ended unanswered", "ended"],
+];
+
+type ToolOutput = Extract<TurnItem, { readonly _tag: "ToolCall" }>["output"];
+
+/** The first text in a tool's output, as Harnesses wrap MCP text blocks. */
+const textIn = (output: ToolOutput, depth = 0): string | null => {
+  if (depth > 4 || output === null || output === undefined) return null;
+
+  if (Predicate.isString(output)) return output;
+
+  const parts = Array.isArray(output)
+    ? output
+    : ["text", "content", "result"].flatMap((key) =>
+        Predicate.hasProperty(output, key) ? [output[key]] : []
+      );
+
+  for (const part of parts) {
+    const text = textIn(part, depth + 1);
+
+    if (text !== null) return text;
+  }
+
+  return null;
+};
+
+/** A finished `request_secret` call as the strip shows it, from Polaris's reply (ENG-631). */
+const toolSecretOutcome = (turn: Turn, item: TurnItem): SecretOutcome | null => {
+  if (!Predicate.isTagged(item, "ToolCall") || !REQUEST_SECRET.test(item.name)) return null;
+  const reply = (textIn(item.output) ?? "").trimStart();
+  const outcome = SECRET_REPLIES.find(([prefix]) => reply.startsWith(prefix))?.[1];
+  const label = Predicate.hasProperty(item.input, "label") ? item.input.label : null;
+
+  if (outcome === undefined || !Predicate.isString(label) || label === "") return null;
+
+  const request = new ApprovalRequest({
+    id: RequestId.make(`tool:${item.id}`),
+    sessionId: turn.sessionId,
+    turnId: turn.id,
+    kind: "secret",
+    title: label,
+    detail: null,
+    options: [],
+    questions: [],
+    openedAt: item.startedAt ?? turn.startedAt,
+  });
+
+  return { request, outcome };
+};
+
+/**
+ * The last Secret Request that ended in the session's latest Turn: the strip says how. One this
+ * feed didn't see end (a reload) comes from its `request_secret` call's reply.
+ */
 export const latestSecretOutcome = (state: SessionFold): SecretOutcome | null => {
-  const last = state.turns.at(-1)?.turn.id;
+  const latest = state.turns.at(-1);
   const outcome = state.secretOutcomes.at(-1);
 
-  return outcome !== undefined && outcome.request.turnId === last ? outcome : null;
+  if (latest === undefined) return null;
+
+  if (outcome !== undefined && outcome.request.turnId === latest.turn.id) return outcome;
+
+  for (let at = latest.items.length - 1; at >= 0; at--) {
+    const item = latest.items[at];
+    const ended = item === undefined ? null : toolSecretOutcome(latest.turn, item);
+
+    if (ended !== null) return ended;
+  }
+
+  return null;
 };

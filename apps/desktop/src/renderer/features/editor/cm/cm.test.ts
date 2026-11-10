@@ -180,7 +180,10 @@ describe("an agent's marks (E3)", () => {
 
     state = state.update({ effects: write(0, 1, "t2") }).state;
     expect([...agentLines(state)]).toEqual([1]);
-    expect(state.update({ effects: agentCleared.of(null) }).state.field(agentField)).toBeNull();
+    const cleared = state.update({ effects: agentCleared.of(null) }).state;
+
+    expect(cleared.field(agentField)).toBeNull();
+    expect([...agentLines(cleared)]).toEqual([]);
   });
 });
 

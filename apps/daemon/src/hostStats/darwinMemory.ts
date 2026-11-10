@@ -2,7 +2,7 @@
  * Memory in use on macOS, read with `host_statistics64` through `bun:ffi` (about a
  * microsecond). `os.freemem()` there counts only free pages, so the page cache reads as used.
  */
-import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dlopen, FFIType } from "bun:ffi";
 import { libcPath } from "../platform/index.ts";
 
 /** `<mach/host_info.h>`: `HOST_VM_INFO64`, and `vm_statistics64_data_t` in 32-bit words. */
@@ -38,8 +38,7 @@ export const darwinMemoryUsed = (): number | null => {
 
   count[0] = HOST_VM_INFO64_COUNT;
 
-  if (mach.symbols.host_statistics64(mach.host, HOST_VM_INFO64, ptr(stats), ptr(count)) !== 0)
-    return null;
+  if (mach.symbols.host_statistics64(mach.host, HOST_VM_INFO64, stats, count) !== 0) return null;
   const view = new DataView(stats.buffer);
   const pages = (offset: number) => view.getUint32(offset, true);
 

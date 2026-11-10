@@ -1,6 +1,7 @@
 /**
  * app.json for one build: the network whitelist lists every origin the app
- * may reach. A bare host gets both `https://` and `wss://`.
+ * may reach. A bare host gets both `https://` and `wss://`; wildcards, paths,
+ * queries and fragments are refused.
  */
 
 export interface Manifest {
@@ -12,6 +13,17 @@ export interface Manifest {
 }
 
 const SCHEMES = new Set(["https:", "wss:", "http:", "ws:"]);
+
+const DNS_OR_IPV4 = /^[a-z0-9-]+(\.[a-z0-9-]+)*$/;
+
+const IPV6 = /^\[[0-9a-f:.]+\]$/;
+
+/** One exact Host: no wildcard or other non-DNS character, no path, query or fragment. */
+const isExactOrigin = (url: URL): boolean =>
+  (DNS_OR_IPV4.test(url.hostname) || IPV6.test(url.hostname)) &&
+  url.pathname === "/" &&
+  url.search === "" &&
+  url.hash === "";
 
 export class BadHost extends Error {}
 
@@ -26,8 +38,9 @@ export const originsOf = (host: string): ReadonlyArray<string> => {
     throw new BadHost(`not a host or origin: ${host}`);
   }
 
-  if (!SCHEMES.has(url.protocol) || url.username !== "" || url.password !== "")
-    throw new BadHost(`not a host or origin: ${host}`);
+  const plain = SCHEMES.has(url.protocol) && url.username === "" && url.password === "";
+
+  if (!plain || !isExactOrigin(url)) throw new BadHost(`not a host or origin: ${host}`);
 
   return host.includes("://") ? [url.origin] : [url.origin, `wss://${url.host}`];
 };

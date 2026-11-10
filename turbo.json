@@ -19,7 +19,14 @@
         "AWS_REGION",
         "AWS_ROLE_ARN",
         "POLARIS_EMAIL_FROM",
-        "POLARIS_EMAIL_CONFIGURATION_SET"
+        "POLARIS_EMAIL_CONFIGURATION_SET",
+        "POLARIS_EMAIL_LIMIT_SECRET",
+        "POLARIS_EMAIL_TRANSPORT",
+        "POLARIS_PUSH_SECRET",
+        "KV_REST_API_URL",
+        "KV_REST_API_TOKEN",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN"
       ]
     },
     "typecheck": { "dependsOn": ["^typecheck"] },

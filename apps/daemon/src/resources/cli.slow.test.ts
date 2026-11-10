@@ -1,9 +1,7 @@
 import { expect } from "bun:test";
-import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { connectRpc, type DaemonClient, socketTransport } from "@polaris/client";
-import { CommandId } from "@polaris/protocol";
 import { localEndpoint } from "@polaris/protocol/endpoint";
 import { Effect } from "effect";
 import { posixTest } from "../platform/testing.ts";
@@ -118,14 +116,10 @@ posixTest("Windows bug: polaris lease gates its command through /bin/sh and fd 3
 
     try {
       await eventually(async () => listening);
-      expect((await snapshot()).resources).toHaveLength(0);
-      await call((client) =>
-        client["host.resources.declare"]({
-          commandId: CommandId.make(randomUUID()),
-          name: "bench",
-          capacity: 1,
-        })
-      );
+      expect((await snapshot()).resources.map((r) => [r.name, r.capacity])).toEqual([
+        ["bench", 1],
+        ["smoke", 1],
+      ]);
 
       const bench = Bun.spawn(
         [

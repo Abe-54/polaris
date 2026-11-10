@@ -4,7 +4,10 @@
  * the driver calls. Tests push events with `emit` and read what the driver sent
  * from `requests`.
  */
-import { Effect } from "effect";
+import { type PermissionMode, SessionId, TurnId } from "@polaris/protocol";
+import { Effect, Stream } from "effect";
+import { HarnessEvent, type HarnessSession } from "../../HarnessDriver.ts";
+import { openSession } from "../OpenCodeSession.ts";
 import type { Payload } from "../protocol.ts";
 import type { OpenCodeServer } from "../Server.ts";
 
@@ -66,6 +69,7 @@ export const makeFakeServer = (options: { readonly sessionId?: string } = {}): F
     [`PATCH /session/${sessionId}`, (r) => session(sessionId, r.directory ?? "/")],
     [`POST /session/${sessionId}/prompt_async`, () => null],
     [`POST /session/${sessionId}/abort`, () => true],
+    [`POST /session/${sessionId}/summarize`, () => true],
     ["GET /session/status", () => ({})],
     ["GET /permission", () => []],
     ["GET /question", () => []],
@@ -169,3 +173,116 @@ export const makeFakeServer = (options: { readonly sessionId?: string } = {}): F
     },
   };
 };
+
+// ---------------------------------------------------------------------------
+// A session against the fake, recording its events
+
+export type EventOf<T extends HarnessEvent["_tag"]> = Extract<HarnessEvent, { readonly _tag: T }>;
+
+export const ofTag = <T extends HarnessEvent["_tag"]>(
+  events: ReadonlyArray<HarnessEvent>,
+  tag: T
+) => events.filter(HarnessEvent.$is(tag));
+
+export const CWD = "/repo";
+
+const cleanup: Array<() => void> = [];
+
+/** Runs `fn` at the next `stopFakes`. */
+export const onCleanup = (fn: () => void) => {
+  cleanup.push(fn);
+};
+
+/** Stops every fake server `withSession` started; call it from `afterEach`. */
+export const stopFakes = () => {
+  for (const fn of cleanup.splice(0)) fn();
+};
+
+export interface Harness {
+  readonly session: HarnessSession;
+  readonly fake: FakeServer;
+  readonly events: Array<HarnessEvent>;
+  readonly emit: (...payloads: ReadonlyArray<unknown>) => void;
+  /** The first event with `tag` (and matching `where`), waiting up to two seconds. */
+  readonly waitFor: <T extends HarnessEvent["_tag"]>(
+    tag: T,
+    where?: (e: EventOf<T>) => boolean
+  ) => Effect.Effect<EventOf<T>>;
+}
+
+export interface Options {
+  readonly resumeCursor?: string;
+  readonly permissionMode?: PermissionMode;
+  readonly model?: string | null;
+  readonly sessionId?: string;
+  readonly setup?: (fake: FakeServer) => void;
+}
+
+/** Opens a session against a fake server and runs `body`; the scope closes afterwards. */
+export const withSession = async <A>(
+  body: (h: Harness) => Effect.Effect<A, unknown>,
+  options: Options = {}
+) => {
+  const fake = makeFakeServer({ sessionId: options.sessionId ?? FAKE_SESSION_ID });
+  cleanup.push(fake.stop);
+  options.setup?.(fake);
+  const events: Array<HarnessEvent> = [];
+
+  const program = Effect.gen(function* () {
+    const session = yield* openSession(
+      fake.asServer("/home/user/.polaris/opencode-server.password"),
+      {
+        sessionId: SessionId.make("s1"),
+        cwd: CWD,
+        permissionMode: options.permissionMode ?? "supervised",
+        model: options.model ?? null,
+        effort: null,
+        resumeCursor: options.resumeCursor ?? null,
+      }
+    );
+
+    yield* session.events.pipe(
+      Stream.runForEach((e) => Effect.sync(() => events.push(e))),
+      Effect.forkDetach
+    );
+
+    const waitFor = <T extends HarnessEvent["_tag"]>(
+      tag: T,
+      where: (e: EventOf<T>) => boolean = () => true
+    ) =>
+      Effect.promise(async () => {
+        for (let i = 0; i < 200; i++) {
+          const found = ofTag(events, tag).find(where);
+
+          if (found) return found;
+          await Bun.sleep(10);
+        }
+
+        throw new Error(`timed out waiting for ${tag}; saw ${events.map((e) => e._tag).join(",")}`);
+      });
+
+    const emit = (...payloads: ReadonlyArray<unknown>) => {
+      for (const payload of payloads) fake.emit(CWD, payload);
+    };
+
+    return yield* body({ session, fake, events, emit, waitFor });
+  });
+
+  const result = await Effect.runPromise(Effect.scoped(program));
+  await Bun.sleep(20);
+
+  return { result, events, fake };
+};
+
+export const turnInput = (
+  turnId: string,
+  prompt: string,
+  model: string | null = null,
+  effort: string | null = null
+) => ({
+  turnId: TurnId.make(turnId),
+  prompt,
+  attachments: [],
+  model,
+  effort,
+});

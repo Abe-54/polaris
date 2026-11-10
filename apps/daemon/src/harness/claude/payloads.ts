@@ -18,6 +18,12 @@ export const StringOrNull = Schema.NullOr(Schema.String).pipe(
   Schema.withDecodingDefaultKey(Effect.succeed(null))
 );
 
+/** A boolean field; a missing key, or a value of any other type, reads as false. */
+const FlagOrFalse = Schema.Boolean.pipe(
+  Schema.catchDecoding(() => Effect.succeed(Option.some(false))),
+  Schema.withDecodingDefaultKey(Effect.succeed(false))
+);
+
 /** An array field; elements that don't decode as `item` read as null, anything else as `[]`. */
 const lenientArray = <S extends Schema.Top>(item: S) =>
   Schema.Array(
@@ -91,6 +97,12 @@ const ToolFields = Schema.Struct({
   stderr: StringOrNull,
   /** On a Bash result: the background task the command moved to. */
   backgroundTaskId: StringOrNull,
+  /** On a Bash result: what a non-zero exit Claude Code didn't count as an error meant. */
+  returnCodeInterpretation: StringOrNull,
+  /** On a Bash result: the command was interrupted before it exited. */
+  interrupted: FlagOrFalse,
+  /** On a Bash input: the command started in the background. */
+  run_in_background: FlagOrFalse,
   /** The Agent (Task) tool's helper kind and Model override. */
   subagent_type: StringOrNull,
   model: StringOrNull,
@@ -112,6 +124,9 @@ const NO_FIELDS: ToolFields = {
   stdout: null,
   stderr: null,
   backgroundTaskId: null,
+  returnCodeInterpretation: null,
+  interrupted: false,
+  run_in_background: false,
   subagent_type: null,
   model: null,
   message: null,

@@ -1,4 +1,4 @@
-/** Best-effort nested-realm removal; the host remains the WebRTC boundary (ADR 0089). */
+/** Best-effort nested-realm removal; the host remains the WebRTC boundary (ADR 0101). */
 export const GUARD_JS = String.raw`
 var call = Reflect.apply;
 var define = Object.defineProperty;

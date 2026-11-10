@@ -2,7 +2,8 @@
  * OpenCode's commands in a directory, from its server's `GET /command`: custom
  * commands, MCP prompts and Skills. A Turn that starts with one of them runs
  * through `POST /session/{id}/command`, which expands its template the way
- * OpenCode's TUI does (`slashCommandOf`).
+ * OpenCode's TUI does (`slashCommandOf`). Of the TUI's own commands only `/compact` is
+ * offered; it runs through `summarize` (`OpenCodeSession.ts`).
  */
 import { SlashCommand, type SlashCommandKind } from "@polaris/protocol";
 import { Effect } from "effect";
@@ -38,10 +39,30 @@ export const readCommands = (client: OpenCodeClient) =>
 const order = (a: SlashCommand, b: SlashCommand) =>
   a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "skill" ? -1 : 1;
 
+/** OpenCode's TUI command Polaris runs itself. */
+export const COMPACT_COMMAND = new SlashCommand({
+  name: "compact",
+  sigil: "/",
+  description: "Summarize the conversation to free up context",
+  argumentHint: null,
+  kind: "command",
+  source: "built-in",
+  plugin: null,
+  run: "harness",
+  action: null,
+  template: null,
+});
+
 export const listOpenCodeCommands = (
   client: OpenCodeClient
 ): Effect.Effect<ReadonlyArray<SlashCommand>, HarnessError> =>
-  Effect.map(readCommands(client), (commands) => commands.map(toCommand).sort(order));
+  Effect.map(readCommands(client), (commands) => [
+    COMPACT_COMMAND,
+    ...commands
+      .filter((command) => command.name !== COMPACT_COMMAND.name)
+      .map(toCommand)
+      .sort(order),
+  ]);
 
 const SLASH = /^\/(\S+)(?:\s+([\s\S]*))?$/;
 

@@ -1,5 +1,5 @@
 /**
- * Visualizations in the thread (ENG-599, ADR 0089, DESIGN.md Visualizations): which Tool Calls
+ * Visualizations in the thread (ENG-599, ADR 0101, DESIGN.md Visualizations): which Tool Calls
  * draw one, its id and title, which later calls revise it, and the frame's messages and heights.
  */
 import type { TurnItem } from "@polaris/protocol";

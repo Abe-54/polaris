@@ -9,7 +9,9 @@ import {
   type QueueItem,
   queueAcceptState,
   queueItem,
+  queueLanes,
   queueSummary,
+  riskNote,
   type TurnRisk,
   wellMeta,
 } from "./queue.ts";
@@ -68,6 +70,21 @@ describe("the review queue", () => {
     expect(queue.critical).toBe(3);
   });
 
+  test("a turn with only a dismissed Critical counts nothing and notes it was dismissed", () => {
+    const only = item("d", 900, reviewed(finding("d", "critical", { status: "dismissed" })));
+
+    const mixed = item(
+      "m",
+      900,
+      reviewed(finding("d", "critical", { status: "dismissed" }), finding("h", "high"))
+    );
+
+    expect(only.tally.critical).toBe(0);
+    expect(riskNote(only)).toBe("1 dismissed");
+    expect(riskNote(mixed)).toBeNull();
+    expect(mixed.findings.map((f) => f.identity)).toEqual(["h", "d"]);
+  });
+
   test("equal tallies put the newest turn first, and unread turns follow every finding", () => {
     const queue = buildQueue([
       item("old", 100, reviewed(finding("a", "high"))),
@@ -90,6 +107,27 @@ describe("the review queue", () => {
 
     expect(keys(queue.clean)).toEqual(["resolved", "clean"]);
     expect(keys(queue.pages)).toEqual(["loading", "unreviewed", "failed", "reading"]);
+  });
+
+  test("the lanes under the hero: the turns behind it, then the clean ones; an empty lane has none", () => {
+    const lanes = (queue: ReturnType<typeof buildQueue>) =>
+      queueLanes(queue).map((lane) => `${lane.label}: ${keys(lane.data).join(", ")}`);
+
+    expect(
+      lanes(
+        buildQueue([
+          item("critical", 100, reviewed(finding("c", "critical"))),
+          item("medium", 200, reviewed(finding("m", "medium"))),
+          item("clean", 300, reviewed()),
+        ])
+      )
+    ).toEqual(["waiting · 1: medium", "clean · 1: clean"]);
+    expect(lanes(buildQueue([item("critical", 100, reviewed(finding("c", "critical")))]))).toEqual(
+      []
+    );
+    expect(
+      lanes(buildQueue(Array.from({ length: 1001 }, (_, n) => item(`c${n}`, n, reviewed()))))[0]
+    ).toStartWith("clean · 1,001: ");
   });
 
   test("the header counts open Criticals and every turn", () => {

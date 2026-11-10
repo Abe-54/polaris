@@ -419,6 +419,7 @@ export const review = (d: GraphDecision, command: GraphCommand<"Review">) => {
         mergedHead: command.action.mergedHead,
         receipts,
         evidence: tier,
+        findings: d.ctx.mergeFindings ?? [],
       })
     );
     d.notify(NotificationItem.cases.Settled.make({ attemptId: attempt.id, state: "accepted" }));

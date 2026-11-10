@@ -37,7 +37,6 @@ test("Zeta cursor is in the resulting buffer, otherwise the last hunk supplies i
   expect(withCursor.edits).toEqual([{ from: 14, to: 15, text: "200" }]);
   expect(withCursor.cursor).toBe(14);
   expect(editResult(input, "<|marker_1|>const value = 200;\n<|marker_2|>").cursor).toBe(17);
-  expect(editResult(input, "<|marker_1|><|marker_1|>").edits).toEqual([]);
   expect(editResult(input, "<|marker_1|>const value = 1;\n<|marker_2|>").cursor).toBeNull();
 });
 
@@ -146,6 +145,10 @@ test("empty consecutive Zeta markers delete a region, repeated markers abstain",
   expect(result.edits).toEqual([{ from: 0, to: 6, text: "" }]);
   expect(applyEdits(buffer, result.edits)).toBe("d");
   expect(result.cursor).toBe(0);
+  const repeated = editResult({ ...request, buffer, cursor: 0 }, "<|marker_1|><|marker_1|>");
+  expect(repeated.edits).toEqual([]);
+  expect(repeated.suppressed).toEqual([]);
+  expect(repeated.cursor).toBeNull();
 });
 
 test("whitespace-only echoes still report each dropped hunk", () => {

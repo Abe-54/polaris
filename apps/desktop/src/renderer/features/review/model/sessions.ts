@@ -20,6 +20,13 @@ export const sessionsOf = (models: AppState["hostModels"]): ReadonlyArray<Sessio
               state: session.state,
               turnCount: session.turnCount,
               acceptedThroughIndex: session.acceptedThroughIndex ?? null,
+              userTurns:
+                session.currentUserTurn == null
+                  ? null
+                  : {
+                      current: session.currentUserTurn.number,
+                      acceptedThrough: session.acceptedThroughUserTurn ?? null,
+                    },
               updatedAt: session.updatedAt,
               workspaceName: model.workspaces.get(session.workspaceId)?.name ?? null,
             },

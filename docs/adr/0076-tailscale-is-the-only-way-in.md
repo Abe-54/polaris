@@ -33,6 +33,13 @@ module is adapted from T3 Code; it also finds the macOS app's bundled CLI.
   `port-in-use`; neither is rewritten or removed. Status is unavailable with this reason
   unless our proven gateway is already served at `/polaris`, in which case it stays on with
   its URL (Funnel still suppresses the URL).
+- These guards read `serve status --json` and then run `serve` in a separate process, so they
+  cover only the config Tailscale held at that read. A Funnel, foreground Serve or HTTP
+  listener another CLI adds in between is not seen, and `serve` clears such a Funnel; the
+  CLI's own config check starts after ours. Tailscale has no conditional update Polaris can
+  use without replacing the user's whole Serve config, so concurrent edits of port 443 while
+  turning Remote Access on are unsupported (ENG-422). Status reads back what Tailscale then
+  serves. `remoteAccess.slow.test.ts` pins this race against the fake CLI.
 - A file, text or trailing-slash handler at `/polaris` also counts as exposed. Unreadable
   Serve config is unavailable, never off.
 - Remote Access serves only a gateway that answers a fresh challenge with the HMAC of

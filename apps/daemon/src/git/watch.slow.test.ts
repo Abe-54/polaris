@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, utimesSync } from "node:fs";
+import { appendFileSync, mkdirSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Exit, Layer, Queue, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
@@ -145,6 +145,25 @@ describe("watchGitState", () => {
 
     // Only HEAD's reflog and the branch ref move on an empty commit.
     await gitText(root, ["commit", "-q", "--allow-empty", "-m", "second"]);
+
+    expect(await watch.next()).toBe(true);
+  });
+
+  test("a reflog that appears after the watch opens is watched too", async () => {
+    const root = await makeRepo({});
+    cleanup.push(() => removeTempDir(root));
+    const watch = await watching(root);
+
+    // The first commit creates .git/logs; settle its own events before the reflog moves.
+    write(root, "a.txt", "one\n");
+    await gitText(root, ["add", "a.txt"]);
+    await gitText(root, ["commit", "-qm", "first"]);
+    expect(await watch.next()).toBe(true);
+
+    while (await watch.next(150));
+
+    // Only the reflog moves: a real commit also rewrites the index, which hides a dead logs watch.
+    appendFileSync(join(root, ".git", "logs", "HEAD"), "moved\n");
 
     expect(await watch.next()).toBe(true);
   });

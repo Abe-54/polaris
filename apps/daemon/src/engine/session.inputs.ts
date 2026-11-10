@@ -75,6 +75,8 @@ export const eventSchemas = {
     Schema.Struct({
       turnId: TurnId,
       index: Schema.Int,
+      /** The Turn's `userTurnNumber`, for `TurnsAccepted.throughUserTurn`. */
+      userTurnNumber: Schema.optionalKey(Schema.NullOr(Schema.Int)),
       status: TurnStatus,
       revertLaterTurns: Schema.Boolean,
       acceptedBy: Schema.String,
@@ -109,7 +111,10 @@ export const eventSchemas = {
     })
   ),
   "harness.backgroundTasksChanged": standard(
-    Schema.Struct({ tasks: Schema.Array(BackgroundTask) })
+    Schema.Struct({
+      tasks: Schema.Array(BackgroundTask),
+      reportsPending: Schema.optionalKey(Schema.Boolean),
+    })
   ),
   "harness.subagentStarted": standard(Schema.Struct({ subagent: Subagent })),
   "harness.subagentEnded": standard(
@@ -195,6 +200,12 @@ export const normalizedInput = (input: SessionInput, at: string) => {
       withdrawnBy: input.withdrawnBy ?? "harness",
       reason: input.reason ?? "The Harness withdrew the request",
     };
+
+  if (input.type === "harness.backgroundTasksChanged")
+    return { ...input, reportsPending: input.reportsPending ?? false };
+
+  if (input.type === "turns.accept")
+    return { ...input, userTurnNumber: input.userTurnNumber ?? null };
 
   return input.type === "harness.turnEnded" ? { ...input, limit: input.limit ?? null } : input;
 };

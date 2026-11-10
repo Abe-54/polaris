@@ -2,11 +2,12 @@
 /**
  * Visualizations in the real app (ENG-598), on the `#preview/visualizations` fixtures: each state's
  * screenshot, the sandbox checks (origin, network, navigation, WebRTC, foreign messages), live
- * theme and pv.state, then the 30-frame budget and scroll performance. Prints one JSON report.
+ * theme and pv.state, then the 30-frame budget, scroll performance and memory (physical footprint
+ * of the app's process tree and the Daemon's, ENG-636). Prints one JSON report.
  *
  *   node scripts/visualizationScreens.ts --out <dir> [--build]
  */
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createSocket } from "node:dgram";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +21,9 @@ import {
 } from "./lib/electron.ts";
 import { startDaemon } from "./lib/daemon.ts";
 import { frameStats } from "./lib/sessionFlow.ts";
+import { takeScriptLease } from "../../../tooling/leases.ts";
+
+await takeScriptLease("smoke");
 
 const args = process.argv.slice(2);
 
@@ -312,8 +316,32 @@ try {
 
   check("no request left the app", leaked.length === 0, leaked);
 
-  const metrics = () =>
-    app.evaluate(({ app: electronApp }) => {
+  /** Peak physical footprint over 3 s (sampleTree.ts), beside Electron's summed working set. */
+  const footprint = () => {
+    const lines = execFileSync(
+      "bun",
+      [
+        join(APP_DIR, "scripts/lib/sampleTree.ts"),
+        "3000",
+        `app=${app.process().pid ?? 0}`,
+        `daemon=${daemon.pid ?? 0}`,
+      ],
+      { encoding: "utf8" }
+    );
+
+    // SAFETY: sampleTree.ts prints one JSON object per line.
+    const trees = lines
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { label: string; footprintMiB: number | null });
+
+    return Object.fromEntries(
+      trees.map((tree) => [`${tree.label}FootprintMiB`, Math.round(tree.footprintMiB ?? -1)])
+    );
+  };
+
+  const metrics = async () => {
+    const working = await app.evaluate(({ app: electronApp }) => {
       const all = electronApp.getAppMetrics();
 
       return {
@@ -321,6 +349,9 @@ try {
         workingSetMB: Math.round(all.reduce((sum, m) => sum + m.memory.workingSetSize, 0) / 1024),
       };
     });
+
+    return { ...working, ...footprint() };
+  };
 
   await open(page, "polaris");
   await page.waitForTimeout(2500);

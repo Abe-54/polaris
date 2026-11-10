@@ -1,7 +1,9 @@
 /** The tools over the session itself: `wait_for_command`, `notify` and `request_secret`. */
-import type { NotifyInput, RequestSecretInput, WaitInput } from "./inputs.ts";
-import type { ToolResult } from "./result.ts";
-import type { Built, Head, PolarisToolView, Segment } from "./types.ts";
+import type { SecretOutcome } from "../../../../store/sessionModel.ts";
+import { polarisTool } from "../runs.ts";
+import { decodeInput, type NotifyInput, RequestSecretInput, type WaitInput } from "./inputs.ts";
+import { outputText, parseResult, type ToolResult } from "./result.ts";
+import type { Built, Head, PolarisToolView, Segment, ToolCallItem } from "./types.ts";
 import { count } from "./words.ts";
 import { clientCopy } from "../../../../../shared/clientCopy.ts";
 
@@ -167,12 +169,30 @@ export const withBanner = (view: PolarisToolView, banner: BannerRecord | null): 
 };
 
 /** How a Secret Request ended, from Polaris's reply to the agent (`mcp/tools/secret.ts`). */
-const SECRET_CAPTIONS: ReadonlyArray<readonly [prefix: string, caption: string]> = [
-  ["Saved.", "saved securely"],
-  ["The user declined", "declined"],
-  ["No answer in", "timed out"],
-  ["The request ended unanswered", "ended"],
+const SECRET_ENDINGS: ReadonlyArray<
+  readonly [prefix: string, caption: string, outcome: SecretOutcome]
+> = [
+  ["Saved.", "saved securely", "provided"],
+  ["The user declined", "declined", "declined"],
+  ["No answer in", "timed out", "ended"],
+  ["The request ended unanswered", "ended", "ended"],
 ];
+
+const endingOf = (summary: string) => SECRET_ENDINGS.find(([prefix]) => summary.startsWith(prefix));
+
+/**
+ * A finished `request_secret` call's label and how it ended, read from Polaris's reply, so a
+ * Secret Request's answered state outlives the feed that saw it (ENG-631); null otherwise.
+ */
+export const secretEnding = (
+  item: ToolCallItem
+): { readonly label: string; readonly outcome: SecretOutcome } | null => {
+  if (polarisTool(item.name) !== "request_secret" || item.status === "running") return null;
+  const ending = endingOf(parseResult(outputText(item))?.summary ?? "");
+  const { label = "" } = decodeInput(RequestSecretInput, item);
+
+  return ending === undefined || label === "" ? null : { label, outcome: ending[2] };
+};
 
 /** `request_secret`: the label it asked for and how it ended; never a value, which it never sees. */
 export const requestSecret = (
@@ -186,7 +206,7 @@ export const requestSecret = (
       verbs: ["Asking you for a secret", "Asked you for a secret", "ask you for a secret"],
       subject: label === "" ? null : { text: label },
       detail: [],
-      caption: SECRET_CAPTIONS.find(([prefix]) => summary.startsWith(prefix))?.[1] ?? null,
+      caption: endingOf(summary)?.[1] ?? null,
     },
     well: null,
     links: [],

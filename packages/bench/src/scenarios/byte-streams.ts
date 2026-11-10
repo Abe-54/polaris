@@ -10,7 +10,7 @@ import { Effect, Ref, Stream } from "effect";
 import { awaitReady, connect } from "../daemon.ts";
 import { settle } from "../drive.ts";
 import { summarize } from "../stats.ts";
-import { latency, memory, type Metric, type Scenario, throughput } from "../types.ts";
+import { latency, memory, type Metric, rss, type Scenario, throughput } from "../types.ts";
 
 const CHUNK = 64 * 1024;
 
@@ -114,7 +114,11 @@ export const byteStreams: Scenario = {
       const during = summarize(rpc.flatMap((r) => (r.at >= start && r.at <= end ? [r.ms] : [])));
       const mb = size / 1e6;
 
-      const metrics = {
+      const peakTolerance = { tolerance: { relative: 0.35, absolute: size / 1024 / 1024 / 4 } };
+
+      const metrics: Record<string, Metric> = {};
+
+      Object.assign(metrics, {
         transfer_mb_per_s: throughput(mb / seconds, "MB/s", {
           tolerance: { relative: 0.5, absolute: 0 },
         }),
@@ -122,10 +126,15 @@ export const byteStreams: Scenario = {
         rpc_during_p50_ms: latency(during.median, { tolerance: { relative: 0.5, absolute: 5 } }),
         rpc_during_p99_ms: latency(during.p99, { tolerance: { relative: 0.5, absolute: 20 } }),
         rpc_during_max_ms: latency(during.max, { tolerance: { relative: 0.5, absolute: 50 } }),
-        rss_peak_over_base_mib: memory(report.rssBytes.max - base.rssBytes, {
-          tolerance: { relative: 0.35, absolute: size / 1024 / 1024 / 4 },
-        }),
-      } satisfies Record<string, Metric>;
+        rss_peak_over_base_mib: rss(memory(report.rssBytes.max - base.rssBytes, peakTolerance)),
+      } satisfies Record<string, Metric>);
+
+      if (report.footprintBytes && base.footprintBytes !== null) {
+        metrics.footprint_peak_over_base_mib = memory(
+          report.footprintBytes.max - base.footprintBytes,
+          peakTolerance
+        );
+      }
 
       return {
         metrics,

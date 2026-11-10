@@ -2,7 +2,7 @@ import type { SessionId } from "@polaris/protocol";
 import { Effect, Option } from "effect";
 import { TraceRuntime, type TraceEnvironment } from "./runtimeService.ts";
 
-/** Only endpoint variables cross reviewer allowlists; exporter headers and vendor credentials do not. */
+/** Endpoint variables for repository-env children; never a Reviewer's (ENG-676). Headers stay out. */
 export const traceEndpointEnvironment = (source: TraceEnvironment) => {
   const result: Record<string, string> = {};
 

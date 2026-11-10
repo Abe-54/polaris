@@ -84,8 +84,9 @@ await polaris.close();
 
 When the connection drops, a feed emits its last view with `connected: false`, reconnects with
 backoff and carries on from where it was. A Host that was never reached fails the feed at once
-(`HostUnreachable`), so a wrong pairing doesn't wait forever. Pass `reconnect: false` to end feeds
-on the first drop instead.
+(`HostUnreachable`), so a wrong pairing doesn't wait forever. `subscribeHosts` is the exception:
+it shows such a Host disconnected with `error` set and keeps retrying it with the same backoff.
+Pass `reconnect: false` to end feeds on the first drop instead.
 
 ## Voice
 

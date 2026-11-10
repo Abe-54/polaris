@@ -55,7 +55,7 @@ export const subagentEnded = (
 
 /** The Harness went away (exit, restart, failure, Archive): what it left open ends `interrupted`. */
 export const endBackgroundWork = (record: SessionRecord, at: string): Array<DomainEvent> => [
-  ...(record.session.backgroundTasks.length > 0
+  ...(record.session.backgroundTasks.length > 0 || record.session.backgroundReportsPending
     ? [
         DomainEvent.cases.SessionBackgroundTasksChanged.make({
           sessionId: record.session.id,

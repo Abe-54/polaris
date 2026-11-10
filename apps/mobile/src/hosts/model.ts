@@ -136,6 +136,8 @@ export const buildHosts = (hosts: ReadonlyArray<HostInput>, now: number): HostsM
 };
 
 export interface HostDetails {
+  /** Which Host's notification switch the sheet shows. */
+  readonly hostId: string;
   readonly name: string;
   readonly state: ConnectionState;
   /** "Connected for 2h", "Reconnecting for 42s", "Offline · last seen 3h ago". */
@@ -163,6 +165,7 @@ const detailStatus = (host: HostInput, now: number): string =>
 
 /** The host details sheet (MX-AE): its Connection State and how long, then its readouts. */
 export const hostDetails = (host: HostInput, now: number): HostDetails => ({
+  hostId: host.hostId,
   name: host.name,
   state: host.state,
   status: detailStatus(host, now),

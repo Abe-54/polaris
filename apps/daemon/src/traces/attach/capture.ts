@@ -30,7 +30,10 @@ export const captureAttached = Effect.fnUntraced(function* (
 
   const target = yield* Effect.try({
     try: () => targets.get(sessionId, pid),
-    catch: () => attachError("This process is not registered. Restart with profiling instead."),
+    catch: (error) =>
+      error instanceof ProfileError
+        ? error
+        : attachError("This process is not registered. Restart with profiling instead."),
   });
 
   const turnId =

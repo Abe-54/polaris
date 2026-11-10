@@ -74,8 +74,32 @@ directory that just had 1000 writes. Without the probe every run loses 2 to 9 of
 - Our own FSEvents stream through `bun:ffi`: FSEvents calls back on its own thread, and the
   paths it hands over are freed before a thread-safe `JSCallback` runs.
 
-## Not fixed here
+## Live watches rescan after each rebuild (ENG-370)
 
-Every `fs.watch` opened, and on Bun 1.4.3 every one closed, anywhere in the Daemon rebuilds
-the shared stream, so watches that are already live can lose changes during the rebuild
-too. That is ENG-370.
+Every `fs.watch` opened, and on Bun 1.4 every one closed, anywhere in the Daemon rebuilds the
+shared stream, so watches that are already live lose changes made during the rebuild too.
+Measured on an M2 Max (Bun 1.4.4, heavy load): 3 to 5 of 60 changes on two live watches lost
+per run while another watch opened or closed after a 1000-write burst.
+
+So after each probe proves a rebuilt stream live, every live watch is told it may have missed
+changes, as FSEvents' own `MustScanSubDirs` would (`onNativeWatchesRebuilt` in `fsevents.ts`):
+
+- A directory watch (`files/watch.ts`: open file tabs, `git.watch`, directory interest) runs
+  its settle recheck (ADR 0046).
+- A `watchRoot` reports its own root, which its callers already treat as "look at everything".
+- Opening or closing a directory watch, and closing a `watchRoot`, starts a probe
+  (`nativeWatchesChanged`); opening a `watchRoot` already waits for one. With no live watch
+  left, no probe runs.
+
+The probe only proves the stream started after the caller's watch, so a change dropped by that
+rebuild happened before the rescan runs, and the rescan finds it.
+
+- Cost: one probe per open or close (about 10 ms, overlapping ones shared), then one stat per
+  watched file and one spurious root change per `watchRoot`. Nothing runs while no watch opens
+  or closes; an idle Daemon still wakes for nothing.
+- A rescan is a hint, not an event: `git.watch` and directory-interest subscribers may see one
+  extra notification when a tab opens or closes.
+- Rejected: sharing watches per path to register less. It narrows the window but every new
+  directory still rebuilds the stream.
+- The real fix is upstream: Bun could start the new stream before stopping the old one, or keep
+  one stream per watcher. The regression test is `files/fsevents.slow.test.ts` (macOS only).

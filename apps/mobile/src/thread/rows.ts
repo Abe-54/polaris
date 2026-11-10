@@ -50,7 +50,11 @@ export type ThreadRow = RowBase &
     /** A Turn the user didn't send, as one quiet line after the Turn before it: idle compaction. */
     | { readonly kind: "quiet"; readonly text: string }
     /** A steer the Harness took, where it landed in the Turn. */
-    | { readonly kind: "steered"; readonly text: string }
+    | {
+        readonly kind: "steered";
+        readonly text: string;
+        readonly attachments: ReadonlyArray<Attachment>;
+      }
     /** A steer or queued follow-up still on its way, or why a steer didn't land. */
     | {
         readonly kind: "outgoing";
@@ -189,8 +193,13 @@ const planStep = (item: Extract<TurnItem, { _tag: "Plan" }>): Step => {
 type Piece =
   | {
       readonly kind: "text";
-      readonly row: "reply" | "steered" | "error";
+      readonly row: "reply" | "error";
       readonly text: string;
+    }
+  | {
+      readonly kind: "steered";
+      readonly text: string;
+      readonly attachments: ReadonlyArray<Attachment>;
     }
   | Step
   | { readonly kind: "visualization"; readonly visualization: Visualization }
@@ -200,7 +209,7 @@ const pieceOf = (item: TurnItem): Piece =>
   Match.value(item).pipe(
     Match.tagsExhaustive({
       AssistantMessage: ({ text }): Piece => ({ kind: "text", row: "reply", text }),
-      UserMessage: ({ text }): Piece => ({ kind: "text", row: "steered", text }),
+      UserMessage: ({ text, attachments = [] }): Piece => ({ kind: "steered", text, attachments }),
       Error: ({ message }): Piece => ({ kind: "text", row: "error", text: message }),
       // Thinking stays out of the phone's thread.
       Reasoning: (): Piece => null,
@@ -334,6 +343,13 @@ const openRows = (
       return;
     }
 
+    if (piece.kind === "steered") {
+      if (piece.text.trim() !== "" || piece.attachments.length > 0)
+        rows.push({ ...piece, key: `${turn.id}:${id}`, turnId: turn.id });
+
+      return;
+    }
+
     const text = streamed.get(id) ?? piece.text;
 
     if (text.trim() === "") return;
@@ -420,6 +436,9 @@ const factsOf = (entry: TurnEntry, rows: ReadonlyArray<ThreadRow>): TurnFacts =>
 /** A finished Turn: its replies carry its facts, and the last one its receipt. */
 const withReceipt = (entry: TurnEntry, rows: Array<ThreadRow>): ReadonlyArray<ThreadRow> => {
   if (entry.turn.status === "working") return rows;
+
+  // A completed Turn that showed nothing has nothing to report or offer: no lone "0s" (ENG-551).
+  if (rows.length === 0 && ENDINGS[entry.turn.status] === null) return rows;
   const turn = factsOf(entry, rows);
   // The receipt ends the Turn: under its last reply only when nothing follows that reply.
   const summary = rows.at(-1)?.kind === "reply" ? rows.length - 1 : -1;
@@ -501,7 +520,7 @@ export const outgoingRows = (
     turnId: entry.turnId,
     id: entry.id,
     text: entry.text,
-    attachments: [],
+    attachments: entry.attachments,
     failed: entry.status === "failed",
     note: entry.status === "failed" ? `${entry.error ?? "Didn't send"} · Tap to edit` : "Steering…",
   })),
@@ -559,27 +578,35 @@ export interface HeaderLine {
   readonly rest: string;
 }
 
-/** The thread header's second line (MX-E). */
+/** "09:05": a moment in the phone's time; null when it isn't one. */
+export const clockOf = (at: Date): string | null =>
+  Number.isNaN(at.getTime())
+    ? null
+    : `${at.getHours().toString().padStart(2, "0")}:${at.getMinutes().toString().padStart(2, "0")}`;
+
+/**
+ * The thread header's second line (MX-E). While the Host is away it says when the state was last
+ * known, "Working · as of 11:42", never passing the last state off as live (MX-AV, ENG-550).
+ */
 export const headerLine = (
   session: Pick<Session, "state" | "turnCount" | "currentUserTurn">,
-  place: string | null
+  place: string | null,
+  asOf: string | null = null
 ): HeaderLine => {
   const turn =
     session.turnCount > 0 ? `turn ${session.currentUserTurn?.number ?? session.turnCount}` : null;
 
   return {
     state: STATE_WORDS[session.state],
-    rest: [turn, place].filter((part) => part !== null && part !== "").join(" · "),
+    rest: [asOf === null ? null : `as of ${asOf}`, turn, place]
+      .filter((part) => part !== null && part !== "")
+      .join(" · "),
   };
 };
 
 /** "Turn 23 · 11:42": the long-press menu's first header line, in the phone's time. */
 export const turnHeading = (facts: Pick<TurnFacts, "number" | "startedAt">): string => {
-  const at = new Date(facts.startedAt);
-
-  const time = Number.isNaN(at.getTime())
-    ? null
-    : `${at.getHours().toString().padStart(2, "0")}:${at.getMinutes().toString().padStart(2, "0")}`;
-
-  return [`Turn ${facts.number}`, time].filter((part) => part !== null).join(" · ");
+  return [`Turn ${facts.number}`, clockOf(new Date(facts.startedAt))]
+    .filter((part) => part !== null)
+    .join(" · ");
 };

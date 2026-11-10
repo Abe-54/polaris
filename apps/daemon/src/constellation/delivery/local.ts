@@ -18,6 +18,7 @@ import { pendingInputs, type PendingInput } from "./messages.ts";
 import { newTurn, startedTurn, takesDelivery } from "./turns.ts";
 import { unblocksAttempt } from "../blocked.ts";
 import { heldWait } from "../waiting.ts";
+import { sessionRestartNote } from "../restartNote.ts";
 
 const deliverInput = Effect.fn("Constellation.deliverLocalInput")(function* (
   id: ConstellationId,
@@ -255,6 +256,7 @@ const nudge = Effect.fn("Constellation.nudgeSilentWorker")(function* (
   const effects = yield* ConstellationSessionEffects;
   const owner = yield* ConstellationOwner;
   const now = yield* Clock.currentTimeMillis;
+  const note = yield* sessionRestartNote(store, sessionId);
 
   const result = yield* store.commit({
     commandId: null,
@@ -301,7 +303,8 @@ const nudge = Effect.fn("Constellation.nudgeSilentWorker")(function* (
         return Effect.succeed(d.events);
       }
 
-      const prompt = `Your Attempt isn't claimed: claim it, ask for a decision or answer, call block with the Tasks and reason you are waiting on, or call waiting_on if background work you started will wake you. Continue ${attempt.taskId} if work remains.`;
+      const ask = `Your Attempt isn't claimed: claim it, ask for a decision or answer, call block with the Tasks and reason you are waiting on, or call waiting_on if background work you started will wake you. Continue ${attempt.taskId} if work remains.`;
+      const prompt = note === null ? ask : `${note}\n\n${ask}`;
       const turn = newTurn(record.session, prompt, new Date().toISOString());
 
       if (!takesDelivery(record, turn)) return Effect.succeed([]);

@@ -76,7 +76,10 @@ const revokeArchived = (
 export class CdpRelay extends Context.Service<
   CdpRelay,
   {
-    /** The session's relay URL, issuing a token on first use; the same URL until revoked. */
+    /**
+     * The session's relay URL, issuing a token on first use; the same URL until revoked or the
+     * Daemon restarts, which rotates every token (`harness/browser` rewrites live configs).
+     */
     readonly issue: (sessionId: SessionId) => Effect.Effect<CdpEndpoint, CdpSessionNotLive>;
     /** Revokes the session's token and closes its open relay sockets. Idempotent. */
     readonly revoke: (sessionId: SessionId) => Effect.Effect<void>;
@@ -114,8 +117,10 @@ export class CdpRelay extends Context.Service<
           return Option.some(presence);
         });
 
-        // Tokens of sessions archived (or forgotten) while the Daemon was down die at startup.
-        for (const sessionId of yield* store.sessions.pipe(Effect.orDie)) yield* live(sessionId);
+        // At startup every stored token dies: an archived session's with it, a live one's rotates.
+        for (const sessionId of yield* store.sessions.pipe(Effect.orDie))
+          if (Option.isNone(yield* live(sessionId)))
+            yield* store.retire(sessionId).pipe(Effect.orDie);
 
         const server = yield* startRelayServer({
           port: options.port ?? 0,

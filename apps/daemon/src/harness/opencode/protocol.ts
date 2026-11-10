@@ -40,6 +40,11 @@ export const MessageInfo = Schema.Struct({
   sessionID: Schema.String,
   role: Schema.Literals(["user", "assistant"]),
   error: Schema.optional(MessageError),
+  /** An assistant message's Model; a user message names it in `model` instead. */
+  providerID: Schema.optional(Schema.String),
+  modelID: Schema.optional(Schema.String),
+  /** `true` on the assistant message a compaction writes its summary into. */
+  summary: Schema.optional(Schema.Unknown),
 });
 
 export const MessageUpdated = Schema.Struct({ sessionID: Schema.String, info: MessageInfo });
@@ -109,8 +114,34 @@ export const ToolPart = Schema.Struct({
 
 export type ToolPart = typeof ToolPart.Type;
 
+export const StepFinishPart = Schema.Struct({
+  ...PartBase,
+  type: Schema.Literal("step-finish"),
+  tokens: Schema.Struct({
+    input: Schema.Number,
+    output: Schema.Number,
+    reasoning: Schema.Number,
+    cache: Schema.Struct({ read: Schema.Number, write: Schema.Number }),
+  }),
+});
+
+export type StepFinishPart = typeof StepFinishPart.Type;
+
+/** The user message that asks for a compaction: `/compact` (`auto: false`) or a full window. */
+export const CompactionPart = Schema.Struct({
+  ...PartBase,
+  type: Schema.Literal("compaction"),
+  auto: Schema.Boolean,
+});
+
 /** The parts the driver maps; every other part type decodes to none and is skipped. */
-export const Part = Schema.Union([TextPart, ReasoningPart, ToolPart]);
+export const Part = Schema.Union([
+  TextPart,
+  ReasoningPart,
+  ToolPart,
+  StepFinishPart,
+  CompactionPart,
+]);
 
 export type Part = typeof Part.Type;
 
@@ -137,6 +168,12 @@ export const SessionStatusChanged = Schema.Struct({
 export const SessionStatusMap = Schema.Record(Schema.String, SessionStatus);
 
 export const SessionIdle = Schema.Struct({ sessionID: Schema.String });
+
+/**
+ * `session.compacted`: the summary is written. Not in `generated/`: written from the
+ * `@opencode-ai/sdk` 1.18.33 types (`EventSessionCompacted`).
+ */
+export const SessionCompacted = Schema.Struct({ sessionID: Schema.String });
 
 export const SessionError = Schema.Struct({
   sessionID: Schema.optional(Schema.String),
@@ -185,6 +222,7 @@ export const ProviderModel = Schema.Struct({
   name: Schema.String,
   status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated", "active"])),
   variants: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  limit: Schema.optional(Schema.Struct({ context: Schema.Number })),
 });
 
 export const ConfigProviders = Schema.Struct({
@@ -257,6 +295,10 @@ conforms<Conforms<PartOf<"reasoning">, typeof ReasoningPart>>();
 
 conforms<Conforms<PartOf<"tool">, typeof ToolPart>>();
 
+conforms<Conforms<PartOf<"step-finish">, typeof StepFinishPart>>();
+
+conforms<Conforms<PartOf<"compaction">, typeof CompactionPart>>();
+
 conforms<Conforms<Gen.EventMessagePartUpdated["properties"], typeof PartUpdated>>();
 
 conforms<Conforms<Gen.EventMessagePartDelta["properties"], typeof PartDelta>>();
@@ -300,6 +342,16 @@ export interface CommandBody {
   agent?: string;
 }
 
+/**
+ * `POST /session/{id}/summarize`: compacts the session with this Model; answers `true` once
+ * the summary is written. Not in `generated/`: from the `@opencode-ai/sdk` 1.18.33 types.
+ */
+export interface SummarizeBody {
+  providerID: string;
+  modelID: string;
+  auto?: boolean;
+}
+
 /** Wire shapes the driver sends; typed against the generated request bodies. */
 export type SessionCreateBody = Gen.SessionCreateBody;
 
@@ -316,6 +368,7 @@ export type PermissionRuleset = Gen.PermissionRuleset;
 /** Every body the driver sends. */
 export type Outgoing =
   | CommandBody
+  | SummarizeBody
   | SessionCreateBody
   | SessionUpdateBody
   | PromptAsyncBody

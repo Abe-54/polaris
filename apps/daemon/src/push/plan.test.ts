@@ -2,26 +2,43 @@ import { Schema } from "effect";
 import { describe, expect, test } from "bun:test";
 import { ApprovalRequest, DomainEvent, type HostStreamItem } from "@polaris/protocol";
 import type { PushMessage } from "@polaris/protocol/relay";
-import { emptyPlan, nextSettle, type PlanState, planItem, planSettled, SETTLE_MS } from "./plan.ts";
+import {
+  emptyPlan,
+  FAILED_NO_REPLY,
+  markDigestTurn,
+  nextSettle,
+  type PlanState,
+  planItem,
+  planSettled,
+  SETTLE_MS,
+} from "./plan.ts";
 import {
   approval,
   event,
   approvalRequested,
   backgroundTasks,
-  leadNotified,
   notified,
   sessionCreated,
   snapshot,
   synchronized,
   turnEnded,
+  turnFailed,
   turnStarted,
   workerSession,
 } from "./push.testing.ts";
 
 const host = { hostId: "host-1", hostName: "studio" };
 
+/** The notifier learned from the store model that this Turn is a digest's. */
+interface DigestMark {
+  readonly digestTurn: string;
+}
+
 /** Feeds items at `now`, collecting what they push; then lets settles run until `until`. */
-const run = (items: ReadonlyArray<readonly [number, HostStreamItem]>, until: number) => {
+const run = (
+  items: ReadonlyArray<readonly [number, HostStreamItem | DigestMark]>,
+  until: number
+) => {
   let state: PlanState = emptyPlan;
   const sent: Array<PushMessage & { readonly sentAt: number }> = [];
 
@@ -35,6 +52,12 @@ const run = (items: ReadonlyArray<readonly [number, HostStreamItem]>, until: num
 
   for (const [now, item] of items) {
     settleUpTo(now);
+
+    if ("digestTurn" in item) {
+      state = markDigestTurn(state, item.digestTurn);
+      continue;
+    }
+
     const planned = planItem(state, item, { ...host, now });
     state = planned.state;
     sent.push(...planned.send.map(({ message }) => ({ ...message, sentAt: now })));
@@ -101,6 +124,18 @@ describe("push plan", () => {
     ]);
   });
 
+  test("a failed Turn pushes as a failure, with its reply or a stand-in", () => {
+    const sent = run(
+      [...start, [100, turnFailed("t1", "Rate limited")], [10_000, turnFailed("t2", null)]],
+      100_000
+    );
+
+    expect(sent.map((m) => [m.kind, m.title, m.body])).toEqual([
+      ["turn-ended", "Claude Code's turn failed", "Rate limited"],
+      ["turn-ended", "Claude Code's turn failed", FAILED_NO_REPLY],
+    ]);
+  });
+
   test("a Turn that starts within the settle (a continuation) cancels it; its own end pushes", () => {
     const sent = run(
       [
@@ -162,8 +197,8 @@ describe("push plan", () => {
     const sent = run(
       [
         ...start,
-        [10, leadNotified("digest")],
         [10, turnStarted("digest")],
+        [100, { digestTurn: "digest" }],
         [100, turnEnded("digest", "Dispatched B")],
         [20_000, turnStarted("t2")],
         [21_000, turnEnded("t2", "Merged A")],

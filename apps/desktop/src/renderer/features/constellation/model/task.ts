@@ -388,7 +388,9 @@ const actorFor = (
   if (attempt === null)
     return actorLine(
       harnessWord(task.suggested?.harness ?? null),
-      task.suggested?.model ?? null,
+      [task.suggested?.model, task.suggested?.serviceTier === "priority" ? "fast mode" : null]
+        .filter((part) => part != null)
+        .join(" · "),
       null
     );
 

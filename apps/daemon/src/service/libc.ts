@@ -123,7 +123,7 @@ export const isCloseOnExec = (fd: number): boolean =>
 export const isStreamSocket = (fd: number): boolean => {
   const kind = new Int32Array(1);
   const length = new Uint32Array([kind.byteLength]);
-  const result = libc().getsockopt(fd, SOL_SOCKET, SO_TYPE, ptr(kind), ptr(length));
+  const result = libc().getsockopt(fd, SOL_SOCKET, SO_TYPE, kind, length);
 
   return result === 0 && kind[0] === SOCK_STREAM;
 };
@@ -134,15 +134,17 @@ export const isListeningSocket = (fd: number): boolean => {
 
   if ("proc_pidfdinfo" in symbols) {
     // Darwin's socket_fdinfo is 792 bytes; psi.soi_options is at 188 (sys/proc_info.h).
-    const info = new ArrayBuffer(792);
-    const result = symbols.proc_pidfdinfo(process.pid, fd, 3, ptr(info), info.byteLength);
+    const info = new Uint8Array(792);
+    const result = symbols.proc_pidfdinfo(process.pid, fd, 3, info, info.byteLength);
 
-    return result === info.byteLength && (new DataView(info).getInt16(188, true) & 0x0002) !== 0;
+    return (
+      result === info.byteLength && (new DataView(info.buffer).getInt16(188, true) & 0x0002) !== 0
+    );
   }
 
   const accepting = new Int32Array(1);
   const length = new Uint32Array([accepting.byteLength]);
-  const result = symbols.getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, ptr(accepting), ptr(length));
+  const result = symbols.getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, accepting, length);
 
   return result === 0 && accepting[0] !== 0;
 };
@@ -167,13 +169,13 @@ export const closeFd = (fd: number): void => {
  */
 export const pollReadable = (fd: number, timeoutMs: number): boolean => {
   // struct pollfd { int fd; short events; short revents; }
-  const pollfd = new ArrayBuffer(8);
-  const view = new DataView(pollfd);
+  const pollfd = new Uint8Array(8);
+  const view = new DataView(pollfd.buffer);
   view.setInt32(0, fd, true);
   view.setInt16(4, POLLIN, true);
 
   for (;;) {
-    const ready = libc().poll(ptr(pollfd), 1, timeoutMs);
+    const ready = libc().poll(pollfd, 1, timeoutMs);
 
     if (ready < 0 && errno() === EINTR) continue;
     check("poll", ready);
@@ -193,7 +195,7 @@ export const acceptFd = (listenerFd: number): number =>
  */
 export const socketPair = (): readonly [number, number] => {
   const fds = new Int32Array(2);
-  check("socketpair", libc().socketpair(AF_UNIX, SOCK_STREAM, 0, ptr(fds)));
+  check("socketpair", libc().socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
 
   return [fds[0]!, fds[1]!];
 };
@@ -205,7 +207,7 @@ export const socketPair = (): readonly [number, number] => {
  */
 export const reapChild = (pid: number): number | null => {
   const status = new Int32Array(1);
-  const result = check("waitpid", libc().waitpid(pid, ptr(status), WNOHANG));
+  const result = check("waitpid", libc().waitpid(pid, status, WNOHANG));
 
   return result === 0 ? null : status[0]!;
 };
@@ -260,7 +262,7 @@ export const execve = (
   const argvArray = pointerArray(argv);
   const envArray = pointerArray(envEntries);
   const pathBuffer = cString(path);
-  const result = libc().execve(ptr(pathBuffer), ptr(argvArray), ptr(envArray));
+  const result = libc().execve(pathBuffer, argvArray, envArray);
   keepAlive.length = 0;
   throw new LibcError("execve", result < 0 ? errno() : -1);
 };

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { mkdirSync, renameSync } from "node:fs";
+import { basename, join } from "node:path";
 import { Effect, Layer } from "effect";
 import { makeBenchDriver } from "./bench/BenchDriver.ts";
 import { isBenchKind } from "./bench/kinds.ts";
@@ -12,6 +13,7 @@ import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
 import { DRIVER_CAPABILITIES, harnessRegistryLayer, lazyDriver } from "./registry.ts";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
+import { shellFake } from "./testing/shellFake.ts";
 
 describe("lazyDriver", () => {
   test("loads the real driver once, on first probe, not when built", async () => {
@@ -134,6 +136,69 @@ describe("bench mode", () => {
       for (const [key, value] of Object.entries(saved))
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
+    }
+  });
+});
+
+describe("binaries found at each use (ENG-413)", () => {
+  test("a Codex installed on PATH after the registry is built is available without a restart", async () => {
+    const dir = newTempDir("polaris-registry-");
+    const bin = join(dir, "bin");
+    // Written aside before PATH narrows (on Windows the fake's .cmd needs sh), moved in later.
+    const staged = join(dir, "staged");
+    mkdirSync(staged);
+    const fake = basename(shellFake(staged, "codex", "echo codex-cli 0.98.0"));
+
+    const vars = {
+      PATH: bin,
+      POLARIS_HOME: dir,
+      POLARIS_CODEX: undefined,
+      POLARIS_CLAUDE: undefined,
+    };
+
+    const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+
+    const restoreEnv = (values: Record<string, string | undefined>) => {
+      for (const [key, value] of Object.entries(values))
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    };
+
+    restoreEnv(vars);
+
+    try {
+      const [before, after, claude] = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const registry = yield* HarnessRegistry;
+            const codex = yield* registry.get("codex");
+
+            const missing = yield* codex.probe;
+            const claude = yield* (yield* registry.get("claude")).probe;
+
+            yield* Effect.sync(() => renameSync(staged, bin));
+
+            return [missing, yield* codex.probe, claude] as const;
+          })
+        ).pipe(
+          Effect.provide(
+            harnessRegistryLayer({ bench: false }).pipe(
+              Layer.provide(Layer.mergeAll(PlanLimitReporter.none, BrowserMcp.none))
+            )
+          )
+        )
+      );
+
+      expect(before).toEqual({
+        available: false,
+        version: null,
+        detail: `codex was not found on the Daemon's PATH (${bin})`,
+      });
+      expect(after).toEqual({ available: true, version: "0.98.0", detail: join(bin, fake) });
+      expect(claude.detail).toBe(`\`claude\` was not found on the Daemon's PATH (${bin})`);
+    } finally {
+      restoreEnv(saved);
+      removeTempDir(dir);
     }
   });
 });

@@ -2,7 +2,8 @@
  * A Table tab's load as one Self-Trace Span (ENG-745): from its `data.describe` to the first page
  * of rows. A load that ends without asking for rows says why, so a Span shows where it stopped.
  */
-import { useEffect, useRef } from "react";
+import type { TraceContext } from "@polaris/protocol";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { type RendererSpan, selfTraces } from "../../../selfTraces/index.ts";
 import type { Loaded } from "../../data/hooks.tsx";
 import type { Pages } from "./usePages.ts";
@@ -65,8 +66,18 @@ interface OpenLoad {
   asked: boolean;
 }
 
-/** One Span per target while Self-Traces are on; effects run on state changes, not every render. */
-export const useLoadTrace = (target: LoadTarget | null, state: LoadState) => {
+export interface LoadSpan {
+  readonly target: LoadTarget | null;
+  readonly open: RefObject<OpenLoad | null>;
+  /** The open load's trace, for its describe and first page; undefined once it ends. */
+  readonly trace: () => TraceContext | undefined;
+}
+
+/**
+ * One Span per target while Self-Traces are on. Call it before the describe's hook: effects run
+ * in order, so the Span is open when the describe is sent and can parent the Daemon's Spans.
+ */
+export const useLoadSpan = (target: LoadTarget | null): LoadSpan => {
   const open = useRef<OpenLoad | null>(null);
   const source = target?.source;
   const table = target?.table;
@@ -89,6 +100,16 @@ export const useLoadTrace = (target: LoadTarget | null, state: LoadState) => {
     };
   }, [source, table, engine]);
 
+  const trace = useCallback(() => open.current?.span.trace, []);
+
+  return { target, open, trace };
+};
+
+/** Ends the load's Span when its state says how it ended; effects run on state changes. */
+export const useLoadTrace = ({ target, open }: LoadSpan, state: LoadState) => {
+  const source = target?.source;
+  const table = target?.table;
+  const engine = target?.engine;
   const { described, describeError, detail, problem, pages } = state;
 
   // The target is a dependency so this also runs right after a new Span starts.
@@ -110,5 +131,5 @@ export const useLoadTrace = (target: LoadTarget | null, state: LoadState) => {
       "polaris.data.outcome": end.outcome,
       ...(end.outcome === "rows" ? { "polaris.data.rows": end.rows } : undefined),
     });
-  }, [source, table, engine, described, describeError, detail, problem, pages]);
+  }, [open, source, table, engine, described, describeError, detail, problem, pages]);
 };

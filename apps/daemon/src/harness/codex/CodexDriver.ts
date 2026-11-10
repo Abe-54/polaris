@@ -20,8 +20,10 @@ import { codexNotInstalled } from "./RpcConnection.ts";
 import { which } from "../../service/userPath.ts";
 
 export interface CodexDriverOptions extends ToolServers {
-  /** The `codex` binary; defaults to the one on PATH. */
+  /** A fixed `codex` binary (null: none); without it or `findCodex`, the one on PATH at each use. */
   readonly codexPath?: string | null;
+  /** Finds the `codex` binary at each use, so one installed after start is picked up. */
+  readonly findCodex?: () => string | null;
   /**
    * The shared app-server's socket; defaults to `~/.polaris/codex.sock`. Keep it
    * short: Unix socket paths are limited to ~104 bytes.
@@ -39,7 +41,11 @@ export interface CodexDriverOptions extends ToolServers {
 export const probeCodex = (codexPath: string | null): Effect.Effect<HarnessProbe> =>
   Effect.promise(async (): Promise<HarnessProbe> => {
     if (codexPath === null)
-      return { available: false, version: null, detail: "codex was not found on PATH" };
+      return {
+        available: false,
+        version: null,
+        detail: `codex was not found on the Daemon's PATH (${process.env.PATH ?? ""})`,
+      };
 
     try {
       const proc = Bun.spawn([codexPath, "--version"], {
@@ -74,13 +80,17 @@ export const makeCodexDriver = (
   options: CodexDriverOptions = {}
 ): Effect.Effect<HarnessDriver, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const codexPath = options.codexPath === undefined ? which("codex") : options.codexPath;
+    // Found again at each use, so a Codex installed or moved after start is picked up (ENG-413).
+    const codexPath =
+      options.findCodex ??
+      (options.codexPath === undefined ? () => which("codex") : () => options.codexPath ?? null);
 
     const socketPath = options.socketPath ?? join(polarisHome(), "codex.sock");
     const clientVersion = options.clientVersion ?? "0.0.0";
 
     const appServer = yield* acquireAppServer({
-      codexPath,
+      codexPath: null,
+      findCodex: codexPath,
       socketPath,
       spawn: options.spawnAppServer ?? true,
     });
@@ -99,22 +109,31 @@ export const makeCodexDriver = (
         stopBackground: true,
         compact: true,
       },
-      probe: probeCodex(codexPath),
-      listModels: listCodexModels({ codexPath, socketPath, clientVersion }),
-      listCommands: listCodexCommands({ codexPath, socketPath, clientVersion }),
+      probe: Effect.suspend(() => probeCodex(codexPath())),
+      listModels: Effect.suspend(() =>
+        listCodexModels({ codexPath: codexPath(), socketPath, clientVersion })
+      ),
+      listCommands: (cwd) =>
+        Effect.suspend(() =>
+          listCodexCommands({ codexPath: codexPath(), socketPath, clientVersion })(cwd)
+        ),
       open: (openOptions) =>
-        codexPath === null
-          ? Effect.fail(codexNotInstalled())
-          : openSession(
-              {
-                appServer,
-                codexPath,
-                clientVersion,
-                planLimits,
-                browser: options.browser,
-                simulator: options.simulator,
-              },
-              openOptions
-            ),
+        Effect.suspend(() => {
+          const path = codexPath();
+
+          return path === null
+            ? Effect.fail(codexNotInstalled())
+            : openSession(
+                {
+                  appServer,
+                  codexPath: path,
+                  clientVersion,
+                  planLimits,
+                  browser: options.browser,
+                  simulator: options.simulator,
+                },
+                openOptions
+              );
+        }),
     } satisfies HarnessDriver;
   });

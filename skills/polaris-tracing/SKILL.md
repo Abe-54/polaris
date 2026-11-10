@@ -65,7 +65,7 @@ Keep one exporter per signal. For `@vercel/otel` with an existing separate vendo
 
 ## Installing this skill
 
-Use the skill shipped with the matching Polaris release. For this source checkout, install the reviewed local copy globally so the project gains no files:
+Every Polaris Daemon is built with a copy of this skill, and Set up tracing in the Traces view installs that copy globally for the session's agent, with no network. For this source checkout, install the reviewed local copy globally so the project gains no files:
 
 ```sh
 npx skills add ./skills/polaris-tracing -a claude-code codex -y -g

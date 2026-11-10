@@ -9,12 +9,14 @@ import { Predicate } from "effect";
 import { acceleratorLabel, currentKeyPlatform, type KeyPlatform } from "./chord.ts";
 import { DATA_BINDINGS, type DataCommandId } from "./keymapData.ts";
 import { DIFF_BINDINGS, type DiffCommandId } from "./keymapDiff.ts";
+import { SETTINGS_BINDINGS, type SettingsCommandId } from "./keymapSettings.ts";
 import { TRACES_BINDINGS, type TracesCommandId } from "./keymapTraces.ts";
 import { REQUESTS_BINDINGS, type RequestsCommandId } from "./keymapRequests.ts";
 import { VIEW_BINDINGS, type ViewCommandId } from "./keymapView.ts";
 
 export type CommandId =
   | ViewCommandId
+  | SettingsCommandId
   | "jump.open"
   | "help.shortcuts"
   | "session.new"
@@ -32,20 +34,6 @@ export type CommandId =
   | "transcript.find"
   | "transcript.jumpToEnd"
   | "theme.toggle"
-  | "settings.open"
-  | "settings.about"
-  | "updates.check"
-  | "updates.restart"
-  | "settings.appearance"
-  | "settings.sessions"
-  | "settings.editor"
-  | "settings.harnesses"
-  | "settings.constellations"
-  | "settings.usage"
-  | "settings.hosts"
-  | "settings.reviewer"
-  | "settings.github"
-  | "github.addAccount"
   | "workspace.add"
   | "review.nextTab"
   | "review.previousTab"
@@ -506,104 +494,13 @@ export const KEYMAP: ReadonlyArray<KeyBinding> = [
     menu: "Go",
     palette: SETTINGS(["open", "folder", "repository"]),
   },
-  // macOS's own Settings… chord, in the app menu (DESIGN.md, Settings).
-  {
-    id: "settings.open",
-    title: "Settings…",
-    needsInput: true,
-    keys: ["CmdOrCtrl+,"],
-    menu: "App",
-    palette: SETTINGS(["preferences"]),
-  },
-  {
-    id: "settings.about",
-    title: "Settings: About",
-    keys: [],
-    palette: SETTINGS(["version", "release", "polaris"]),
-  },
-  {
-    id: "updates.check",
-    title: "Check for updates",
-    keys: [],
-    palette: SETTINGS(["update", "release", "version"]),
-  },
-  {
-    id: "updates.restart",
-    title: "Restart to update",
-    keys: [],
-    palette: {
-      group: "app",
-      detail: "Polaris {updateVersion} · agent sessions keep working",
-      keywords: ["update", "restart", "upgrade"],
-    },
-  },
-  {
-    id: "settings.appearance",
-    title: "Settings: Appearance",
-    keys: [],
-    palette: SETTINGS(["theme", "density", "text size", "font", "motion", "colourblind"]),
-  },
-  {
-    id: "settings.sessions",
-    title: "Settings: Sessions",
-    keys: [],
-    palette: SETTINGS(["worktree", "branch", "prefix", "output", "notifications", "archive"]),
-  },
-  {
-    id: "settings.editor",
-    title: "Settings: Editor",
-    keys: [],
-    palette: SETTINGS(["vim", "format on save", "languages", "autosave"]),
-  },
   {
     id: "editor.toggleInlineDiagnostics",
     title: "Toggle inline diagnostics",
     keys: [],
     palette: SETTINGS(["error lens", "errors", "warnings", "problems", "diagnostics"]),
   },
-  {
-    id: "settings.harnesses",
-    title: "Settings: Harnesses",
-    keys: [],
-    palette: SETTINGS(["claude", "codex", "opencode", "sign in", "model", "permissions"]),
-  },
-  {
-    id: "settings.constellations",
-    title: "Settings: Constellations",
-    keys: [],
-    palette: SETTINGS(["lead", "workers"]),
-  },
-  {
-    id: "settings.usage",
-    title: "Settings: Usage",
-    keys: [],
-    palette: SETTINGS(["tokens", "cost", "plan limits", "rate limit"]),
-  },
-  {
-    id: "settings.hosts",
-    title: "Settings: Hosts",
-    keys: [],
-    palette: SETTINGS(["machines", "ssh"]),
-  },
-  {
-    id: "settings.reviewer",
-    title: "Settings: Reviewer",
-    keys: [],
-    palette: SETTINGS(["review", "risk summary", "model", "effort", "codex", "claude"]),
-  },
-  {
-    id: "settings.github",
-    title: "Settings: GitHub accounts",
-    keys: [],
-    palette: SETTINGS(["github", "account", "owner", "organization", "sign in", "pull requests"]),
-  },
-  {
-    id: "github.addAccount",
-    title: "Add GitHub account…",
-    needsInput: true,
-    keys: [],
-    palette: SETTINGS(["github", "sign in", "device code"]),
-  },
+  ...SETTINGS_BINDINGS,
   {
     id: "help.shortcuts",
     title: "Keyboard shortcuts",

@@ -20,6 +20,8 @@ All at `error`. Type-aware rules run through `oxlint-tsgolint`, which uses the T
 - **`polaris/no-fixed-sleep`** (`plugins/polaris/fixedSleep.mjs`): in test files and test helpers (`*.test.*`, `*.testing.*`, `testing.ts`, `testing/`), no fixed sleep over 50 ms. See below.
 - **`polaris/await-expect-promise`**: an `expect(…).rejects` / `.resolves` statement must be awaited. bun types the matcher as `void`, so write `await Promise.resolve(expect(p).rejects.toThrow(…))`; unawaited, the assertions after it run before the promise settles.
 - **`polaris/effect-cleanup-return`**: a `useEffect` / `useLayoutEffect` / `useInsertionEffect` callback is never `async` and has a block body, unless its expression body is a function, an identifier (a cleanup) or `void …`. React calls whatever an effect returns as its cleanup; Chromium's scroll methods return a Promise though the DOM types say `void`, so `() => el.scrollIntoView()` threw on unmount and blanked the window (ENG-756). Write `{ return subscribe(); }` when the call returns a cleanup.
+- **`polaris/no-ptr-argument`** (`plugins/polaris/ptrArgument.mjs`): `bun:ffi`'s `ptr(…)` (however imported) is never a direct call argument; pass the typed array, or a subarray or view for an offset (ADR 0066). `ptr()` roots nothing, so the buffer can be collected before the call reads it. Storing an address (`BigInt(ptr(x))`, a `const`) stays allowed where a later call keeps its memory alive.
+- **`polaris/child-env`** (`plugins/polaris/childEnv.mjs`, exceptions in `childEnvAllowlist.mjs`): in `apps/daemon/src/`, every `Bun.spawn`/`spawnSync`, `node:child_process` launch and Claude Agent SDK `Options` literal passes `env:` from `childEnv(…)` or a builder over it (`harnessEnv`, the `security/repository-env` builders), directly, through a const or a spread options const, or as a literal object that inherits nothing. Bun's default env keeps `POLARIS_HANDOFF` after the Daemon deletes it (ENG-269). `Bun.Terminal` takes no env; its shell starts through `Bun.spawn`. The `security/repository-env` modules are exempt (childEnv is forbidden there); tests and test helpers are exempt.
 - **anti-slop**: every generic rule, the native companion `oxc/no-accumulating-spread`, and every Effect rule.
 - **security**: the guards from the October 2026 security audit (see below and `docs/security/README.md`).
 
@@ -44,6 +46,7 @@ tsgolint checks one file at a time, so a file that names a group (`RpcGroup.Rpcs
 Existing violations are recorded in `tooling/lint/baseline.json` as counts per file and rule. `bun run lint` fails when a file's count for a rule goes above its baseline, which covers a new violation in an old file, any violation in a new file, and any rule a file wasn't breaking before.
 
 - `bun run lint` checks the whole repo. `bun tooling/lint/ratchet.ts <files…>` checks just those files; the git hooks use that.
+- `bun run quality <files…>` fixes before it checks: `oxlint --fix` from the repo root (every `.oxlintrc.json` and plugin applies; only safe fixes), then oxfmt, then the ratchet. The pre-commit hook only formats, so lint fixes never land in a commit unseen; `--check` changes nothing.
 - When you fix baselined violations, lint says so. `bun run lint:baseline` then lowers the counts (and drops fixed or deleted files). It never raises a count or adds an entry.
 - Commit the lowered baseline with the fix. Merge conflicts in `baseline.json` resolve by taking the lower count, or by running `bun run lint:baseline` after the merge.
 - Renaming or splitting a file drops its baseline entry, so the new file must be clean. That's deliberate: the split is the moment to fix it.
@@ -107,7 +110,15 @@ The generic rules that matter most day to day:
 - `no-object-parameters`: a function (including an `Effect.fn`) takes an owner-provided, named input type parsed at its boundary, not an inline object type.
 - `no-known-value-widening`: `const x: Record<string, T> = { … }` throws away the known keys; prefer inference or `satisfies`.
 - `no-module-mocking`: no `vi.mock`/`jest.mock`-style module mocking; replace dependencies through a real seam (a Layer).
-- `require-readable-spacing`: blank lines between statement groups. Autofixable with `oxlint --fix`; oxfmt keeps the blank lines it adds (it only collapses runs of blank lines to one), so the two never fight.
+- `require-readable-spacing`: blank lines between statement groups. Autofixable: `bun run quality <files…>` applies it; oxfmt keeps the blank lines it adds (it only collapses runs of blank lines to one), so the two never fight.
+
+## Caught errors
+
+A `catch` binds `unknown`, and the anti-slop rules (`no-unknown-parameters`, `no-known-value-widening`, SAFETY comments on assertions) reject the quick ways of narrowing it. Judgement, not a rule: decode it at the catch with Effect Schema instead.
+
+- To log it, use `errorInfo` in `apps/site/lib/log`: `Function.flow(Schema.decodeUnknownOption(Schema.instanceOf(Error)), Option.match({ onNone, onSome }))`, where `onSome` is a typed helper taking an `Error` and returning only safe fields (the type name and an HTTP status, never the message).
+- To branch on a known error, decode against its class: `const decodeTimeout = Schema.decodeUnknownOption(Schema.instanceOf(ValidationTimeout))`, then `if (Option.isSome(decodeTimeout(error)))` (as in `apps/site/app/api/email/_lib/validator.ts`).
+- No `catch (error: any)`, `error as Error` or `typeof`/`in` probing; a typed helper takes the decoded value, not `unknown`.
 
 ## Fixtures
 

@@ -39,6 +39,16 @@ export interface SubagentScope {
   readonly subagentId: SubagentId;
 }
 
+/** Who asks a server request: a Subagent, or nobody named for the session's own thread. */
+export interface Asker {
+  readonly subagentId?: SubagentId;
+}
+
+/** Where a server request goes: its Polaris Turn, and the Subagent asking. */
+export interface RequestScope extends Asker {
+  readonly turnId: TurnId;
+}
+
 export class CodexSubagents {
   /** Every Subagent thread seen, with the Polaris Turn it belongs to. */
   private readonly known = new Map<string, TurnId>();
@@ -49,6 +59,11 @@ export class CodexSubagents {
     const turnId = this.known.get(threadId);
 
     return turnId === undefined ? undefined : { turnId, subagentId: SubagentId.make(threadId) };
+  }
+
+  /** A request from a thread other than the session's is its Subagent's, reported or not yet. */
+  asking(sessionThread: string, requestThread: string): Asker {
+    return requestThread === sessionThread ? {} : { subagentId: SubagentId.make(requestThread) };
   }
 
   /** What an item on the Polaris thread says about Subagents: their start or end. */

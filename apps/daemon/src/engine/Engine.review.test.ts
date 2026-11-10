@@ -116,6 +116,21 @@ const hostEvents = (capabilities: ReadonlyArray<Capability>) =>
     )
   );
 
+const acceptedEvents = Effect.flatMap(Engine, (engine) =>
+  engine.subscribeHost(Sequence.make(0), { capabilities: ["session.accept"] }).pipe(
+    Stream.takeUntil((item: HostStreamItem) => Predicate.isTagged(item, "Synchronized")),
+    Stream.runCollect
+  )
+).pipe(
+  Effect.map((items) =>
+    items.flatMap((item) =>
+      Predicate.isTagged(item, "Event") && Predicate.isTagged(item.envelope.event, "TurnsAccepted")
+        ? [item.envelope.event]
+        : []
+    )
+  )
+);
+
 const hostSnapshot = (capabilities: ReadonlyArray<Capability>) =>
   Effect.flatMap(Engine, (engine) =>
     engine.subscribeHost(null, { capabilities }).pipe(Stream.take(1), Stream.runCollect)
@@ -214,6 +229,11 @@ describe("feedback and accepting Turns", () => {
           })
         );
         expect(yield* rejection(accept())).toBe("the Turns through Turn 2 are already accepted");
+        expect((yield* store.model).sessions.get(sessionId)?.session.acceptedThroughUserTurn).toBe(
+          2
+        );
+        // Clients fold the user Turn from the event, as they can't see the Turn it names.
+        expect((yield* acceptedEvents).map((e) => e.throughUserTurn)).toEqual([1, 2]);
 
         const pullRequest = new PullRequestRef({
           repo: new RepoRef({ host: "github.com", owner: "acme", name: "app" }),

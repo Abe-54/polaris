@@ -40,6 +40,13 @@ const decodePermissions = P.decoder(Schema.Array(P.PermissionRequest));
 
 const decodeQuestions = P.decoder(Schema.Array(P.QuestionRequest));
 
+const decodeProviders = P.decoder(P.ConfigProviders);
+
+const decodeConfig = P.decoder(P.Config);
+
+/** A Turn that compacts the session: OpenCode's TUI command, run through `summarize`. */
+const isCompact = (prompt: string) => prompt.trim() === "/compact";
+
 const CONNECT_TIMEOUT = "10 seconds";
 
 /** What a mentioned path is on this Host (`mentionParts`). */
@@ -127,6 +134,19 @@ const catchUp = (client: OpenCodeClient, sessionId: string, translator: Translat
       if (request.sessionID === sessionId) translator.openQuestion(request);
   });
 
+/** The Model OpenCode would pick on its own: the configured `model`, else the first provider's default. */
+const defaultModel = (client: OpenCodeClient) =>
+  Effect.gen(function* () {
+    const configured = decodeConfig(yield* client.get("/config"))?.model ?? null;
+
+    if (configured !== null) return parseModelId(configured);
+    const providers = decodeProviders(yield* client.get("/config/providers"));
+    const first = providers?.providers[0];
+    const modelID = first === undefined ? undefined : providers?.default[first.id];
+
+    return first === undefined || modelID === undefined ? null : { providerID: first.id, modelID };
+  });
+
 export const openSession = (
   server: OpenCodeServer,
   options: OpenOptions
@@ -187,6 +207,17 @@ export const openSession = (
 
     if (options.resumeCursor !== null) yield* catchUp(client, sessionId, translator);
 
+    // The Models' context windows, for `ContextUsed`; a report before they arrive has none.
+    yield* client.get("/config/providers").pipe(
+      Effect.map((payload) => {
+        const providers = decodeProviders(payload);
+
+        if (providers !== null) translator.context.setWindows(providers);
+      }),
+      Effect.ignore,
+      Effect.forkScoped
+    );
+
     let agent = agentFor(options.permissionMode);
 
     const prompt = (body: P.PromptAsyncBody) =>
@@ -208,12 +239,41 @@ export const openSession = (
         Effect.asVoid
       );
 
+    /** `/compact`: `summarize` answers once the summary is written, so it runs aside like a command. */
+    const compact = (input: TurnInput, model: P.SummarizeBody) =>
+      client
+        .send("POST", `${sessionPath}/summarize`, {
+          providerID: model.providerID,
+          modelID: model.modelID,
+          auto: false,
+        } satisfies P.SummarizeBody)
+        .pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => translator.failLocalTurn(input.turnId, error.message))
+          ),
+          Effect.forkDetach,
+          Effect.asVoid
+        );
+
+    const sendCompact = (input: TurnInput, chosen: P.SummarizeBody | null) =>
+      Effect.gen(function* () {
+        const model = chosen ?? translator.context.lastModel() ?? (yield* defaultModel(client));
+
+        if (model === null)
+          return yield* opencodeError("OpenCode has no Model to compact this session with");
+        translator.beginLocalTurn({ id: input.turnId, model, variant: input.effort });
+
+        return yield* compact(input, model);
+      });
+
     const sendTurn = (input: TurnInput) =>
       Effect.gen(function* () {
         if (translator.turn() !== null)
           return yield* opencodeError("A Turn is already in progress; steer or interrupt it");
         const model = yield* modelOf(input.model);
         const variant = input.effort;
+
+        if (isCompact(input.prompt)) return yield* sendCompact(input, model);
 
         const slash = input.prompt.trimStart().startsWith("/")
           ? slashCommandOf(input.prompt, yield* readCommands(client))

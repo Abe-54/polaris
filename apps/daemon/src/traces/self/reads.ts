@@ -15,19 +15,32 @@ import type { TraceSessions } from "../sessionsService.ts";
 import type { TracePage } from "../store.ts";
 import type { TraceStore } from "../storeService.ts";
 import { SELF_CHECKOUT } from "./scope.ts";
+import { selfTracer } from "./tracer.ts";
 
 export const DEFAULT_LIMIT = 50;
 
 /** The scopes to read, first the one a prefix resolves in when both hold it. */
 export type ReadScopes = readonly [string] | readonly [string, string];
 
-export const readScopes = (options: {
+interface ScopeOptions {
   readonly runtime: TraceRuntime["Service"];
   readonly sessions: TraceSessions["Service"];
   readonly polarisWorkspace: Effect.Effect<WorkspaceId | null>;
   readonly sessionId: SessionId;
   readonly scope: "self" | undefined;
-}): Effect.Effect<ReadScopes, TraceError> =>
+}
+
+export const readScopes = (options: ScopeOptions): Effect.Effect<ReadScopes, TraceError> =>
+  resolveScopes(options).pipe(
+    // Self-Spans wait in memory for a batch (ENG-721); a read sends what is waiting.
+    Effect.tap((scopes) =>
+      Effect.sync(() => {
+        if (scopes.includes(SELF_CHECKOUT)) selfTracer.flush();
+      })
+    )
+  );
+
+const resolveScopes = (options: ScopeOptions): Effect.Effect<ReadScopes, TraceError> =>
   Effect.gen(function* () {
     const checkout = yield* options.runtime.checkout(options.sessionId);
 

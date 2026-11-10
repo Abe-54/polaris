@@ -5,6 +5,7 @@ import {
   fitControlRow,
   litSegments,
   moonsOf,
+  sendDisabled,
   sendPress,
   STOP_GRACE_MS,
 } from "./controlRow.ts";
@@ -82,10 +83,10 @@ describe("context ring", () => {
 });
 
 describe("control row fit", () => {
-  const crowded = { running: 20, queue: true, attach: true, mic: true };
+  const crowded = { running: 20, attach: true, mic: true };
 
   test("a 402pt phone's row holds the demo's three moons, ring and words", () => {
-    expect(fitControlRow(368, 1, { running: 3, queue: false, attach: true, mic: true })).toEqual({
+    expect(fitControlRow(368, 1, { running: 3, attach: true, mic: true })).toEqual({
       moons: 3,
       ring: true,
       ringWords: true,
@@ -94,7 +95,7 @@ describe("control row fit", () => {
   });
 
   test("crowded, the ring's words and the extra moons give way before the ring and mic", () => {
-    expect(fitControlRow(368, 1, crowded)).toEqual({
+    expect(fitControlRow(312, 1, crowded)).toEqual({
       moons: 1,
       ring: true,
       ringWords: false,
@@ -102,17 +103,17 @@ describe("control row fit", () => {
     });
   });
 
-  test("on a 320pt phone with Queue, the ring and mic give way too", () => {
+  test("on a 320pt phone only the ring gives way: Queue lives in the Working strip, not here", () => {
     expect(fitControlRow(286, 1, crowded)).toEqual({
       moons: 1,
       ring: false,
       ringWords: false,
-      mic: false,
+      mic: true,
     });
   });
 
   test("larger text needs more room for the same row", () => {
-    const parts = { running: 3, queue: false, attach: true, mic: true };
+    const parts = { running: 3, attach: true, mic: true };
 
     expect(fitControlRow(368, 3, parts).ringWords).toBe(false);
   });
@@ -128,6 +129,14 @@ describe("control row fit", () => {
 });
 
 describe("send and stop", () => {
+  test("while the host is away Stop is off, and Send still takes a message to queue", () => {
+    const away = { empty: false, blocked: false, away: true };
+
+    expect([sendDisabled({ ...away, stop: true }), sendDisabled({ ...away, stop: false })]).toEqual(
+      [true, false]
+    );
+  });
+
   test("a second tap just after Send doesn't stop the Turn it sent", () => {
     expect(sendPress({ stop: true, now: 1_000 + STOP_GRACE_MS - 1, sentAt: 1_000 })).toBe("ignore");
   });

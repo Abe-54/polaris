@@ -115,7 +115,10 @@ export const ImageViewer = ({ path, onClose }: ImageViewerProps) => {
         className="w-auto max-w-[min(90vw,1200px)] gap-0 p-0"
         data-testid="image-viewer"
       >
-        <Body hostKey={place.hostKey} path={onHost(place.root, path) ?? path} />
+        <Body
+          hostKey={place.hostKey}
+          path={onHost(place.root, path, place.windows === true) ?? path}
+        />
       </DialogContent>
     </Dialog>
   );

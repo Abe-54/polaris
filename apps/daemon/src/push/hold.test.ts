@@ -3,20 +3,38 @@
  * Host stream, read positions and the relay's wake).
  */
 import { expect, test } from "bun:test";
-import { ApprovalDecision, DomainEvent, type HostStreamItem, RequestId } from "@polaris/protocol";
-import type { PushMessage } from "@polaris/protocol/relay";
+import {
+  type AgentSession,
+  ApprovalDecision,
+  AttemptId,
+  ConstellationId,
+  DomainEvent,
+  type HostStreamItem,
+  RequestId,
+} from "@polaris/protocol";
+import type { PushMessage, PushRegistration } from "@polaris/protocol/relay";
 import { Effect, Layer, PubSub, Stream } from "effect";
 import { RelayRoute } from "../linkedDevices/route.ts";
 import type { PushTarget } from "../linkedDevices/store.ts";
 import { HostPresence } from "../presence/index.ts";
 import { hold } from "./hold.ts";
 import { PushHostEvents, PushNotifier } from "./notifier.ts";
-import { emptyPlan, planItem, planSettled, type Push, SETTLE_MS } from "./plan.ts";
+import { patchSession } from "../store/model.ts";
+import {
+  type AttemptFailure,
+  CONTINUE_BODY,
+  emptyPlan,
+  planItem,
+  planSettled,
+  type Push,
+  SETTLE_MS,
+} from "./plan.ts";
 import {
   approvalRequested,
   event,
   notified,
   SESSION_ID,
+  session,
   snapshot,
   synchronized,
   turnEnded,
@@ -44,7 +62,12 @@ const withNotifier = (
     readonly feed: (item: HostStreamItem) => void;
     readonly presence: HostPresence["Service"];
     readonly woken: ReadonlyArray<PushMessage>;
-  }) => Effect.Effect<void>
+  }) => Effect.Effect<void>,
+  options: {
+    readonly listed?: AgentSession;
+    readonly registration?: Partial<PushRegistration>;
+    readonly failure?: AttemptFailure;
+  } = {}
 ) =>
   Effect.runPromise(
     Effect.scoped(
@@ -67,7 +90,10 @@ const withNotifier = (
           unlinkSelf: () => unused,
           registerPush: () => unused,
           unregisterPush: () => unused,
-          pushTargets: () => [target],
+          pushTargets: () => [
+            // SAFETY: as `target`; the notifier reads only the switches set here.
+            { ...target, registration: options.registration ?? {} } as PushTarget,
+          ],
           watchPush: () => () => {},
           registerLiveActivity: () => unused,
           unregisterLiveActivity: () => unused,
@@ -85,9 +111,11 @@ const withNotifier = (
                 Layer.succeed(PushHostEvents)({
                   subscribe: () =>
                     Stream.concat(
-                      Stream.make(snapshot(), synchronized()),
+                      Stream.make(snapshot(options.listed), synchronized()),
                       Stream.fromPubSub(events)
                     ),
+                  isDigestTurn: () => Effect.succeed(false),
+                  attemptFailure: () => Effect.succeed(options.failure ?? null),
                 }),
                 Layer.succeed(RelayRoute)(route),
                 Layer.succeed(HostPresence)(presence)
@@ -175,6 +203,101 @@ test("with two Desktop Apps the Host stays quiet until both are away", () =>
       yield* Effect.sleep("50 millis");
       expect(requestIds(woken)).toEqual(["r1"]);
     })
+  ));
+
+// ENG-500: recovery withdrew the request; what still needs the user is Continue.
+const waiting = patchSession(session, { state: "needs-you" });
+
+const stateChanged = (state: AgentSession["state"]) =>
+  event(DomainEvent.cases.SessionStateChanged.make({ sessionId: SESSION_ID, state, reason: null }));
+
+test("after a restart, a session waiting on Continue is held and goes out when the user leaves", () =>
+  withNotifier(
+    60_000,
+    ({ presence, woken }) =>
+      Effect.gen(function* () {
+        presence.report(1, "present");
+        presence.report(1, "away");
+        yield* Effect.sleep("50 millis");
+        expect(woken.map(({ kind, requestId, body }) => ({ kind, requestId, body }))).toEqual([
+          { kind: "needs-you", requestId: null, body: CONTINUE_BODY },
+        ]);
+      }),
+    { listed: waiting }
+  ));
+
+test("a held Continue never pushes once the session leaves Needs You at the Mac", () =>
+  withNotifier(
+    60_000,
+    ({ feed, presence, woken }) =>
+      Effect.gen(function* () {
+        presence.report(1, "present");
+        feed(stateChanged("starting"));
+        yield* Effect.sleep("50 millis");
+        presence.report(1, "away");
+        yield* Effect.sleep("50 millis");
+        expect(woken).toEqual([]);
+      }),
+    { listed: waiting }
+  ));
+
+const failure: AttemptFailure = {
+  constellationId: "c1",
+  constellation: "Push burn-down",
+  leadSessionId: SESSION_ID,
+  taskId: "X21",
+  reason: "The Harness exited",
+};
+
+const settledFailed = event(
+  DomainEvent.cases.AttemptSettled.make({
+    constellationId: ConstellationId.make("c1"),
+    revision: 3,
+    attemptId: AttemptId.make("a1"),
+    attemptRevision: 2,
+    outcome: "failed",
+    reason: "The Harness exited",
+  })
+);
+
+test("a Constellation's failed Attempt pushes, opening the Constellation", () =>
+  withNotifier(
+    60_000,
+    ({ feed, woken }) =>
+      Effect.gen(function* () {
+        feed(settledFailed);
+        yield* Effect.sleep("50 millis");
+        expect(
+          woken.map(({ kind, title, body, constellationId }) => ({
+            kind,
+            title,
+            body,
+            constellationId,
+          }))
+        ).toEqual([
+          {
+            kind: "notify",
+            title: "X21 failed",
+            body: "The Harness exited",
+            constellationId: "c1",
+          },
+        ]);
+      }),
+    { failure }
+  ));
+
+test("a device that turned this Host off gets no pushes from it: Needs You, finished Turns or failures", () =>
+  withNotifier(
+    60_000,
+    ({ feed, woken }) =>
+      Effect.gen(function* () {
+        feed(approvalRequested("r1"));
+        feed(notified("n1", false));
+        feed(settledFailed);
+        yield* Effect.sleep("50 millis");
+        expect(woken).toEqual([]);
+      }),
+    { failure, registration: { notifications: false } }
   ));
 
 const host = { hostId: "host-1", hostName: "studio" };

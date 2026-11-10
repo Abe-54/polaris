@@ -254,8 +254,11 @@ const connectSocket = (path: string, installedHome?: string) =>
  * Whether the pipe's owner is checked before the first byte: on Windows under Node (the
  * Desktop App). Bun can't adopt a handle as a socket, so its tools connect as before (ADR 0062).
  */
-export const checksPipeOwner = (path: string, platform: string = process.platform): boolean =>
-  platform === "win32" && isPipePath(path) && process.versions.bun === undefined;
+export const checksPipeOwner = (
+  path: string,
+  platform: string = process.platform,
+  bun: boolean = process.versions.bun !== undefined
+): boolean => platform === "win32" && isPipePath(path) && !bun;
 
 const openLocal = (path: string, installedHome?: string): Effect.Effect<Opened, ConnectFailure> =>
   checksPipeOwner(path)

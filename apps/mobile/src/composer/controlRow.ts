@@ -67,7 +67,6 @@ export const litSegments = (share: number): number =>
 /** What the row has to hold besides the chip and Send. */
 export interface RowParts {
   readonly running: number;
-  readonly queue: boolean;
   readonly attach: boolean;
   readonly mic: boolean;
 }
@@ -93,8 +92,7 @@ const widthOf = (fit: RowFit, parts: RowParts, scale: number): number => {
     fit.moons === 0 ? 0 : 4 + fit.moons * 16 + 4 + 8 * `${parts.running}`.length * scale;
 
   const ring = fit.ring ? 18 + (fit.ringWords ? 4 + 30 * scale : 0) : 0;
-  const queue = parts.queue ? 8 + 40 * scale : 0;
-  const shown = [moons, ring, parts.attach ? BUTTON : 0, fit.mic ? BUTTON : 0, queue];
+  const shown = [moons, ring, parts.attach ? BUTTON : 0, fit.mic ? BUTTON : 0];
 
   return chip + send + shown.reduce((sum, w) => sum + w + (w > 0 ? GAP : 0), GAP);
 };
@@ -125,6 +123,19 @@ export const fitControlRow = (width: number | null, fontScale: number, parts: Ro
 
   return fit;
 };
+
+/** Send needs text and an open field; Stop needs the Host, which it can't reach while away. */
+export const sendDisabled = ({
+  stop,
+  empty,
+  blocked,
+  away,
+}: {
+  readonly stop: boolean;
+  readonly empty: boolean;
+  readonly blocked: boolean;
+  readonly away: boolean;
+}): boolean => (stop ? away : empty || blocked);
 
 /** How long Stop ignores a tap after Send: a double tap must not interrupt what it just sent. */
 export const STOP_GRACE_MS = 600;

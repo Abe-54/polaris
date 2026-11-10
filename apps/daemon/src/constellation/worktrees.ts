@@ -15,6 +15,7 @@ import { gitStatus } from "../git/status.ts";
 import { listWorktrees, samePath } from "../git/WorktreeTracker.ts";
 import { mergedInto } from "../git/constellationBundles.ts";
 import { mergeClaim, type MergeOutcome } from "./merge.ts";
+import { leadCheckout } from "./leadCheckout.ts";
 import { TransferStorage, decodePlacement, encodePlacement } from "./transfers/storage.ts";
 
 const requestJson = Schema.encodeSync(Schema.fromJsonString(WorktreeRequest));
@@ -32,7 +33,9 @@ export const gitOperation = <A>(f: () => Promise<A>) =>
 
 const component = (name: string) => {
   if (!/^[a-zA-Z0-9_-]+$/.test(name))
-    throw new Error("Constellation and Task IDs must be single path components");
+    throw new Error(
+      `${name} is not a single path component: Constellation and Task IDs may contain only letters, digits, - and _`
+    );
 
   return name;
 };
@@ -132,8 +135,9 @@ export class ConstellationWorktrees extends Context.Service<
     readonly prepare: (
       request: WorktreeRequest
     ) => Effect.Effect<PreparedWorktree, ConstellationTransferError>;
+    /** A Gate runs in the checkout holding the lead branch (`leadCheckout.ts`). */
     readonly gate: (
-      repoPath: string,
+      graph: Constellation,
       leadPath: string
     ) => Effect.Effect<PreparedWorktree, ConstellationTransferError>;
     readonly probeClaim: (
@@ -142,7 +146,7 @@ export class ConstellationWorktrees extends Context.Service<
       { dirtyPaths: ReadonlyArray<string>; branch: string; head: string },
       ConstellationTransferError
     >;
-    /** Accept's merge of the claimed head into the Lead's branch (`merge.ts`), one at a time. */
+    /** Accept's merge of the claimed head into the lead branch's checkout (`merge.ts`), one at a time. */
     readonly mergeClaim: (
       graph: Constellation,
       attempt: Attempt,
@@ -215,34 +219,16 @@ export class ConstellationWorktrees extends Context.Service<
               return prepared;
             })
           ),
-        gate: (repoPath, leadPath) =>
-          gitOperation(async () => {
-            const status = await gitStatus(leadPath);
+        gate: (graph, leadPath) =>
+          serial.withPermits(1)(
+            Effect.gen(function* () {
+              const checkout = yield* gitOperation(() => leadCheckout(graph, leadPath));
 
-            if (status.branch === null || status.head === null)
-              throw new Error("The Gate requires the Lead's current branch");
+              if (checkout instanceof ConstellationTransferError) return yield* checkout;
 
-            if (
-              !samePath(
-                await gitText(repoPath, [
-                  "rev-parse",
-                  "--path-format=absolute",
-                  "--git-common-dir",
-                ]),
-                await gitText(leadPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
-              )
-            )
-              throw new Error("The Lead checkout belongs to another repository");
-
-            return PreparedWorktree.make({
-              repoPath,
-              worktree: leadPath,
-              branch: status.branch,
-              base: status.head,
-              managed: false,
-              managedBranch: false,
-            });
-          }),
+              return yield* gitOperation(() => gateWorktree(leadPath, checkout));
+            })
+          ),
         probeClaim: (attempt) =>
           gitOperation(async () => {
             const status = await gitStatus(attempt.worktree);
@@ -266,7 +252,15 @@ export class ConstellationWorktrees extends Context.Service<
             };
           }),
         mergeClaim: (graph, attempt, leadPath, mergedHead) =>
-          serial.withPermits(1)(mergeClaim(graph, attempt, leadPath, mergedHead)),
+          serial.withPermits(1)(
+            Effect.gen(function* () {
+              const checkout = yield* gitOperation(() => leadCheckout(graph, leadPath));
+
+              if (checkout instanceof ConstellationTransferError) return yield* checkout;
+
+              return yield* mergeClaim(graph, attempt, checkout, mergedHead);
+            })
+          ),
         cleanup: (graph, leadPath, candidates, busySessions, mergedRef = "HEAD") =>
           serial.withPermits(1)(
             Effect.gen(function* () {
@@ -325,6 +319,31 @@ export class ConstellationWorktrees extends Context.Service<
     })
   );
 }
+
+/** The Gate's placement: the lead branch's checkout, as it stands. */
+const gateWorktree = async (repoPath: string, checkout: string) => {
+  const status = await gitStatus(checkout);
+
+  if (status.branch === null || status.head === null)
+    throw new Error("The Gate requires the lead branch checked out");
+
+  if (
+    !samePath(
+      await gitText(repoPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+      await gitText(checkout, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    )
+  )
+    throw new Error("The Lead checkout belongs to another repository");
+
+  return PreparedWorktree.make({
+    repoPath,
+    worktree: checkout,
+    branch: status.branch,
+    base: status.head,
+    managed: false,
+    managedBranch: false,
+  });
+};
 
 const cleanupBlock = async (
   graph: Constellation,

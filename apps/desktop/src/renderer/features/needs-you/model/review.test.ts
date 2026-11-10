@@ -191,6 +191,34 @@ describe("reviewOf", () => {
     ).toEqual(target);
   });
 
+  test("the subject the Daemon names wins over a title another session shares", () => {
+    const renamed = sessionWith("renamed", { state: "idle", title: "Fix the login form, v2" });
+
+    // A newer session carries the title the run was started under.
+    const lookalike = sessionWith("lookalike", {
+      state: "idle",
+      title: "Fix the login form",
+      updatedAt: "2026-10-19T10:00:00.000Z",
+    });
+
+    const run = sessionWith("named", {
+      state: "idle",
+      origin: "reviewer",
+      title: "Reviewer · Fix the login form",
+      cwd: workspace.path,
+      reviewSubject: ReviewSubject.cases.SessionTurns.make({
+        sessionId: SessionId.make("renamed"),
+        firstTurnId: null,
+        lastTurnId: null,
+      }),
+    });
+
+    expect(of(run, [renamed, lookalike])).toMatchObject({
+      change: "Fix the login form, v2",
+      target: { kind: "session", hostKey: "local", sessionId: "renamed" },
+    });
+  });
+
   test("a Reviewer started before sessions carried their origin is known by its title", () => {
     const old = sessionWith("old", { state: "idle", title: "Reviewer · Fix the login form" });
 

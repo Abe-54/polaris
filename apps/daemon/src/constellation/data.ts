@@ -1,4 +1,4 @@
-import type { Attempt, Constellation, TaskDefinition } from "@polaris/protocol";
+import type { Attempt, Constellation, TaskDefinition, TaskPatch } from "@polaris/protocol";
 
 export const taskData = (task: TaskDefinition) => ({
   id: task.id,
@@ -12,6 +12,24 @@ export const taskData = (task: TaskDefinition) => ({
   group: task.group,
   parent: task.parent,
 });
+
+/** An Edit's patch over the current Task: omitted keeps, null or [] clears (ENG-412). */
+export const patchedTaskData = (task: TaskDefinition, patch: TaskPatch) => {
+  const current = taskData(task);
+
+  return {
+    ...current,
+    title: patch.title ?? current.title,
+    kind: patch.kind ?? current.kind,
+    deps: patch.deps === undefined ? current.deps : (patch.deps ?? []),
+    area: patch.area === undefined ? current.area : (patch.area ?? []),
+    brief: patch.brief === undefined ? current.brief : (patch.brief ?? ""),
+    criteria: patch.criteria === undefined ? current.criteria : (patch.criteria ?? []),
+    suggested: patch.suggested === undefined ? current.suggested : patch.suggested,
+    group: patch.group === undefined ? current.group : patch.group,
+    parent: patch.parent === undefined ? current.parent : patch.parent,
+  };
+};
 
 export const attemptData = (attempt: Attempt) => ({
   id: attempt.id,
@@ -54,6 +72,7 @@ export const graphData = (graph: Constellation) => ({
   workspaceId: graph.workspaceId,
   hostId: graph.hostId,
   leadSessionId: graph.leadSessionId,
+  leadBranch: graph.leadBranch,
   name: graph.name,
   state: graph.state,
   revision: graph.revision,

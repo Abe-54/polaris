@@ -1,4 +1,4 @@
-/** The `simulator.*` RPCs over `SimulatorHub` (ENG-829); `developerModeDefaults` stubs them elsewhere. */
+/** The `simulator.*` RPCs over `SimulatorHub` (ENG-829); `defaults/features.ts` answers them elsewhere. */
 import { SimulatorRpcs } from "@polaris/protocol";
 import { Effect } from "effect";
 import { SimulatorHub } from "../simulator/service.ts";

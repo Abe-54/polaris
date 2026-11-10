@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 import { HarnessKind } from "../harnesses.ts";
 import { HostId, SessionId, Timestamp, TurnId, WorkspaceId } from "../ids.ts";
-import { ModelId, optionalArray, optionalNullable, ReasoningEffort } from "../models.ts";
+import {
+  ModelId,
+  optionalArray,
+  optionalNullable,
+  ReasoningEffort,
+  ServiceTier,
+} from "../models.ts";
 import { WorkerLiveness } from "./liveness.ts";
 
 export const ConstellationId = Schema.String.pipe(Schema.brand("ConstellationId"));
@@ -9,6 +15,12 @@ export const ConstellationId = Schema.String.pipe(Schema.brand("ConstellationId"
 export type ConstellationId = typeof ConstellationId.Type;
 
 export const TaskId = Schema.NonEmptyString.pipe(Schema.brand("TaskId"));
+
+/**
+ * What a new Task id may contain: it names worktree and branch path components (ENG-741).
+ * Checked when a Task is declared, not on TaskId, so logs with older ids still decode.
+ */
+export const taskIdPattern = /^[A-Za-z0-9_-]+$/;
 
 export type TaskId = typeof TaskId.Type;
 
@@ -97,6 +109,8 @@ export class HarnessSelection extends Schema.Class<HarnessSelection>("HarnessSel
   harness: Schema.optionalKey(HarnessKind),
   model: Schema.optionalKey(ModelId),
   effort: Schema.optionalKey(ReasoningEffort),
+  /** Codex's service tier (`priority` is fast mode); a Harness without tiers ignores it (ENG-475). */
+  serviceTier: Schema.optionalKey(Schema.NullOr(ServiceTier)),
 }) {}
 
 export class TaskDefinition extends Schema.Class<TaskDefinition>("TaskDefinition")({
@@ -111,6 +125,25 @@ export class TaskDefinition extends Schema.Class<TaskDefinition>("TaskDefinition
   group: optionalNullable(Schema.String),
   parent: optionalNullable(TaskId),
 }) {}
+
+/**
+ * An Edit's changes: an omitted field keeps its value, null or [] clears it (ENG-412).
+ * `id`, when given, must match the edited Task.
+ */
+export const TaskPatch = Schema.Struct({
+  id: Schema.optionalKey(TaskId),
+  title: Schema.optionalKey(Schema.NonEmptyString),
+  kind: Schema.optionalKey(TaskDefinition.fields.kind),
+  deps: Schema.optionalKey(Schema.NullOr(Schema.Array(TaskId))),
+  area: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.NonEmptyString))),
+  brief: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  criteria: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
+  suggested: Schema.optionalKey(Schema.NullOr(HarnessSelection)),
+  group: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  parent: Schema.optionalKey(Schema.NullOr(TaskId)),
+});
+
+export type TaskPatch = typeof TaskPatch.Type;
 
 /** Task state and Gate readiness are derived from Attempts, never written here. */
 export class Task extends Schema.Class<Task>("ConstellationTask")({
@@ -207,6 +240,8 @@ export class Attempt extends Schema.Class<Attempt>("ConstellationAttempt")({
   mergedHead: optionalNullable(Schema.String),
   receipts: optionalArray(CheckReceipt),
   evidence: optionalNullable(EvidenceTier),
+  /** What Accept recorded about its merge, e.g. notices it may have left stale (ENG-276). */
+  acceptFindings: optionalArray(ConstellationFinding),
   /** When the worker claimed (AttemptClaimed); null before. */
   claimedAt: Schema.NullOr(Timestamp),
   /**
@@ -289,6 +324,11 @@ export class Constellation extends Schema.Class<Constellation>("Constellation")(
   workspaceId: WorkspaceId,
   hostId: HostId,
   leadSessionId: SessionId,
+  /**
+   * The branch Accept merges into, recorded at start from the Lead's checkout (ADR 0099).
+   * Absent on graphs started before it was recorded.
+   */
+  leadBranch: Schema.optional(Schema.NonEmptyString),
   name: Schema.NonEmptyString,
   state: ConstellationState,
   revision: Revision,

@@ -1,5 +1,7 @@
 import "../../../test/dom.testing.ts";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { ApprovalRequest, SubagentId } from "@polaris/protocol";
+import { subagentMoon } from "@polaris/ui";
 import { afterEach, describe, expect, test } from "bun:test";
 import { approval } from "../../../store/fixtures.testing.ts";
 import { type NoticeInput, notices } from "../model/notices.ts";
@@ -68,5 +70,45 @@ describe("the todo list in the notice strip", () => {
     expect(screen.getByTestId("notice-approval")).not.toBeNull();
     expect(screen.queryByTestId("notice-todo")).toBeNull();
     expect(screen.getByTestId("notice-more").textContent).toContain("+1");
+  });
+});
+
+describe("an approval in the notice strip", () => {
+  test("a Subagent's request says a subagent asks, with its moon", () => {
+    const asked = ApprovalRequest.make({
+      id: approval.id,
+      sessionId: approval.sessionId,
+      turnId: approval.turnId,
+      kind: "command",
+      subagentId: SubagentId.make("sub-2"),
+      title: approval.title,
+      detail: null,
+      options: [],
+      openedAt: approval.openedAt,
+    });
+
+    show({
+      approvals: [asked],
+      subagents: [
+        { id: "sub-1", index: 0 },
+        { id: "sub-2", index: 1 },
+      ],
+    });
+
+    const row = screen.getByTestId("notice-approval");
+
+    expect(row.textContent).toContain("A subagent wants to run");
+    expect(row.querySelector("[data-slot=celestial]")?.getAttribute("data-body")).toBe(
+      subagentMoon(1)
+    );
+  });
+
+  test("the lead's own request names the Harness, with no moon", () => {
+    show({ approvals: [approval], subagents: [{ id: "sub-1", index: 0 }] });
+
+    const row = screen.getByTestId("notice-approval");
+
+    expect(row.textContent).toContain("Claude Code wants to run");
+    expect(row.querySelector("[data-slot=celestial]")).toBeNull();
   });
 });

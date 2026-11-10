@@ -323,6 +323,7 @@ const initial = (command: ConstellationCommand, ctx: ConstellationContext) => {
         workspaceId: command.start.workspaceId,
         hostId: ctx.hostId,
         leadSessionId: command.start.leadSessionId,
+        leadBranch: ctx.leadBranch,
         name: command.start.name,
         state: "planning",
         revision: 0,

@@ -88,6 +88,13 @@ const setup = (kept: ReadonlyArray<KeptSession> = []) => {
   return { registry, fake, claims, saved: () => saved };
 };
 
+/** The refusal's message, or null when `attempt` didn't fail with one. */
+const refusal = (attempt: Promise<unknown>) =>
+  attempt.then(
+    () => null,
+    (cause: unknown) => (cause instanceof BrowserRefused ? cause.message : null)
+  );
+
 /** Whether `attempt` failed with a refusal. */
 const refused = (attempt: Promise<unknown>) =>
   attempt.then(
@@ -172,20 +179,32 @@ describe("tab lists", () => {
     expect(registry.sessionTabs("mac", sid("s1")).tabs).toEqual([]);
   });
 
-  test("a session's Browser stays in its first workspace", async () => {
+  // The workspace check comes after the URL's and before the tab limit.
+  test.each([
+    ["a tab it may open", 0, "localhost:3000", "This session's Browser is in another workspace"],
+    [
+      "a full session",
+      MAX_TABS,
+      "localhost:3000",
+      "This session's Browser is in another workspace",
+    ],
+    ["a URL no tab may open", 0, "javascript:alert(1)", "A tab can't open javascript:alert(1)"],
+  ])("a session's Browser stays in its first workspace: %s", async (_, tabs, url, reason) => {
     const { registry } = setup();
 
-    await open(registry, "localhost:3000");
+    await open(registry, "localhost:2999");
+
+    for (let n = 1; n < tabs; n++) await open(registry, `localhost:${3000 + n}`);
 
     const moved = registry.openTab({
       hostKey: "mac",
       sessionId: sid("s1"),
       workspaceId: wid("elsewhere"),
-      url: "localhost:3000",
+      url,
       openedBy: USER,
     });
 
-    expect(await refused(moved)).toBe(true);
+    expect(await refusal(moved)).toBe(reason);
   });
 
   test("an agent's tab finds its session's workspace on the Host and loads at once", async () => {

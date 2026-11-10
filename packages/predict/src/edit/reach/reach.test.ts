@@ -168,6 +168,9 @@ describe("reachFocuses", () => {
   });
 
   test("an out-of-range cursor yields no probe", () => {
-    expect(reachFocuses(input("a", [], 5))).toEqual([]);
+    const buffer = [...lines(5), "oldName();", ...lines(30), "newName();"].join("\n");
+    const history = [{ path: "a.ts", line: 36, before: "oldName();", after: "newName();" }];
+    expect(reachFocuses(input(buffer, history, buffer.length + 5))).toEqual([]);
+    expect(reachFocuses(input(buffer, history, -1))).toEqual([]);
   });
 });

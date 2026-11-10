@@ -178,7 +178,7 @@ module `modules/polaris-live-activity` and `src/live/`.
 
 ## Visualizations
 
-`src/visualization/` draws the `visualize` Tool Call (ENG-599, ADR 0089, DESIGN.md Visualizations) as
+`src/visualization/` draws the `visualize` Tool Call (ENG-599, ADR 0101, DESIGN.md Visualizations) as
 a card in the thread, never folded into a run: `model.ts` reads the Daemon's `viz_…` id from the
 call's output and finds the earlier ones a later call `replaces` (they collapse to "Revised below");
 `VisualizationFrame` renders `@polaris/visualization`'s `buildFrameDocument` in a
@@ -223,6 +223,10 @@ only for `http`, `https` and `mailto`; images show their alt text; HTML shows as
 `src/review/` is Paper M5: `ReviewScreen({ hostId, sessionId, turnId?, colourblind?, onBack? })` reviews one agent session's Turn. It reads the Turn's diff (`git.diff`, as a blob), runs or reads its Risk Summary (`review.runRiskSummary`, then `review.watchRiskSummary`), and shows the Polaris summary with its tally, the files ordered by risk (or by path under Files), and findings inline under the line they flag. Accept sends `AcceptTurns` and is paused while a Critical finding is open. Send back sends the user's reply as a feedback Turn, and "Ask {harness} to fix" quotes the flagged lines. A Critical finding can't be hidden: a dismissed one stays listed, and its card stays visible when its file is closed.
 
 The diff renderer is Pierre Diffs' patch parser on Hermes. Metro resolves `@pierre/diffs` to its DOM-free `parsePatchFiles` module only, about 13 KB, without Shiki or the DOM renderer. Rows are drawn by a React Native `FlatList`. There is no syntax colouring or word-level highlighting yet. `colourblind` switches to the `-cvd` diff pair.
+
+The app is portrait: `expo-screen-orientation`'s plugin starts it locked to portrait, and the file
+diff screen unlocks landscape while it is open (`src/diff/orientation.ts`), where it lays out MX-R's
+before/after split. Adding the module needs a new native build or dev client.
 
 The diff bench measures it on a device or simulator. It renders Review over a synthetic 2,000-line Turn and reports parse time and frame intervals on screen (and as `POLARIS_DIFF_BENCH {json}` in the log):
 
@@ -280,10 +284,14 @@ opaquely; the Notification Service Extension opens it.
   once the Host's connection is live, within a background task (about 30 s). `usePushLinks`
   (in `Shell`) opens what a tap points at: the constellation for one about a constellation
   (`constellationId` in `userInfo.polaris`), else the session.
-- This iPhone's switch, Hosts → Notifications on this iPhone (`src/push/constellations.ts`,
-  SecureStore `polaris.push.constellations`, on by default), rides on the registration as
-  `automatic`; turning it off registers again, and each Host stops sending Polaris's own
-  constellation notifications here. Approvals and agents' `notify` still arrive.
+- This iPhone's switches ride on each registration, and a change registers again (ENG-561):
+  - per Host, on its details sheet (`src/push/hostNotifications.ts`, SecureStore
+    `polaris.push.hosts-off`, on by default), as `notifications`: off, that Host sends this
+    iPhone no pushes at all (Needs You, finished Turns, notifications and failures);
+  - when a constellation needs you, for every Host, in Settings → Notifications
+    (`src/push/constellations.ts`, SecureStore `polaris.push.constellations`, kept from when it
+    sat on the Host sheet), as `automatic`: off, each Host stops sending Polaris's own
+    constellation notifications here.
 
 Unlinking this iPhone asks each Host to drop its registration (`devices.unregisterPush`, up to
 3 s) before the connections close, and rotates the push key, so a Host that missed it can't be
@@ -336,6 +344,22 @@ Connection State machine, the resumable feed, the Markdown parser and the Self-T
 `bun run --cwd apps/mobile hermes` runs the same check and prints each result.
 `src/runtime/vmHost.ts` supplies the two things React Native adds over the bare VM that the check
 needs: `console` and timers that honour their delay.
+
+The app's own code runs on Bun in its tests, so those tests run without Hermes' gaps:
+`src/runtime/hermesMissing.json` lists the builtin methods Bun has and the app's Hermes lacks
+(`Array.prototype.toSorted` among them), and `bunfig.toml` preloads
+`src/runtime/hermesBuiltins.preload.ts`, which deletes them, so a test that reaches one fails as the
+app would. The list comes from the VM: `bun run hermes` fails when it is stale and `--write`
+rewrites it. Run the tests from `apps/mobile` (`bun run --cwd apps/mobile test`); a `bun test` from
+the repository root reads the root's `bunfig.toml` and keeps Bun's builtins.
+
+## Fixtures in a release bundle
+
+Fixtures and worst-case data live in `*.testing.ts` modules. Galleries and dev data use them only
+in `__DEV__`, so `metro.config.mjs` resolves them to an empty module when Metro bundles for
+release. A module that imports one may read it only inside a function or a `__DEV__` branch, never
+while it loads: `scripts/testingImports.test.ts` fails on a load-time read, directly or through a
+local helper. Build gallery data in a `*.testing.ts` module (as `home/ui/galleryRows.testing.ts`).
 
 ## Tokens
 

@@ -29,6 +29,8 @@ import { ConstellationOwner, ConstellationRuntime } from "./runtime.ts";
 import { emptyResources } from "../resources/model.ts";
 import { type HostSlots } from "./slots.ts";
 import { statusOutline, statusSince } from "./status.ts";
+import { ignoredTierNotes } from "./serviceTier.ts";
+import { scopedResult, statusScope, type StatusView } from "./statusView.ts";
 import { subscribeConstellation } from "./streams.ts";
 
 export const canRead = (binding: ConstellationBinding, record: ConstellationRecord) =>
@@ -50,10 +52,26 @@ export const graphResult = (
   json: boolean,
   projections: ReadonlyArray<TaskProjection> = projectTasks(record),
   sessions?: ReadModel["sessions"],
-  host?: HostSlots
+  host?: HostSlots,
+  view: StatusView = {}
+) =>
+  scopedResult(
+    record,
+    graphFullResult(record, sequence, json, projections, sessions, host, view),
+    statusScope(record, view)
+  );
+
+const graphFullResult = (
+  record: ConstellationRecord,
+  sequence: Sequence | null,
+  json: boolean,
+  projections: ReadonlyArray<TaskProjection>,
+  sessions: ReadModel["sessions"] | undefined,
+  host: HostSlots | undefined,
+  view: StatusView
 ) =>
   new ConstellationResult({
-    summary: statusOutline(record, sessions, host),
+    summary: statusOutline(record, sessions, host, view),
     next: nextAction(record),
     revision: record.graph.revision,
     sequence,
@@ -124,10 +142,16 @@ const make = Effect.gen(function* () {
     binding: ConstellationBinding,
     id: ConstellationId,
     json: boolean,
-    since?: number
+    view: StatusView = {}
   ) {
     const model = yield* store.model;
     const record = yield* authorize(model, id, binding);
+    const { since, task } = view;
+
+    if (task !== undefined && !record.graph.tasks.some((t) => t.id === task))
+      return yield* refusal(record, [
+        finding("E-TASK-UNKNOWN", `Task ${task} does not exist`, "Read status for the Task ids."),
+      ]);
     const observed = yield* liveness.read(record);
 
     const host: HostSlots = {
@@ -147,7 +171,8 @@ const make = Effect.gen(function* () {
         fetchedAttempts: yield* branches.read(record.graph),
       }),
       model.sessions,
-      host
+      host,
+      view
     );
 
     if (since === undefined) return result;
@@ -162,7 +187,7 @@ const make = Effect.gen(function* () {
       );
 
     return new ConstellationResult({
-      summary: statusSince(record, events, since, model.sessions, host),
+      summary: statusSince(record, events, since, model.sessions, host, view),
       next: result.next,
       revision: result.revision,
       sequence: result.sequence,
@@ -352,7 +377,7 @@ const make = Effect.gen(function* () {
         finding("E-NOT-FOUND", "The constellation does not exist", "Start it with plan."),
       ]);
 
-    return graphResult(
+    const result = graphResult(
       record,
       commit.sequence,
       true,
@@ -361,6 +386,22 @@ const make = Effect.gen(function* () {
       }),
       model.sessions
     );
+
+    const notes = Predicate.isTagged(commit, "Committed")
+      ? ignoredTierNotes(input, record, prepared.attempts, model.sessions)
+      : [];
+
+    return notes.length === 0
+      ? result
+      : new ConstellationResult({
+          summary: result.summary,
+          next: [...notes, result.next].join(" "),
+          revision: result.revision,
+          sequence: result.sequence,
+          constellation: result.constellation,
+          projections: result.projections,
+          proposals: result.proposals,
+        });
   });
 
   return {

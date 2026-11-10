@@ -98,6 +98,11 @@ end. It requires the same Client trust and approve Grant as RespondToApproval.
 Same-user local callers can already answer approvals over the bare socket;
 ENG-700 owns that authorization decision and is outside this change.
 
+Late attach misses code V8 optimised before the inspector session began: a hot
+`setInterval` loop shows only as `listOnTimeout` (plain Node 24 reproduces it; G4 F3).
+The MCP `profile` output and the Desktop's open attached Profile say so and point to
+Restart with profiling (`LATE_ATTACH_LIMIT`, ENG-704).
+
 Only cooperative Node processes register. No SIGUSR1 or arbitrary-PID path exists.
 Windows, Bun, older Node without getBuiltinModule, and --disable-sigusr1 or
 permission-restricted processes are refused. Existing inspectors are left alone.

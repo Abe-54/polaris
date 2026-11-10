@@ -46,6 +46,7 @@ describe("language commands", () => {
   test("every feature the tools row had is a command, with VS Code's keys", () => {
     expect(LANGUAGE_NAVIGATION.map((c) => [c.title, shortcutOf(c)])).toEqual([
       ["Go to definition", "F12"],
+      ["Go to declaration", ""],
       ["Go to type definition", ""],
       ["Go to implementation", ""],
       ["Find references", "⇧F12"],

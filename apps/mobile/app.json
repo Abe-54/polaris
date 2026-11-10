@@ -4,7 +4,7 @@
     "slug": "polaris",
     "scheme": "polaris",
     "version": "0.7.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
     "ios": {
@@ -55,6 +55,12 @@
         "expo-notifications",
         {
           "mode": "development"
+        }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
         }
       ]
     ]

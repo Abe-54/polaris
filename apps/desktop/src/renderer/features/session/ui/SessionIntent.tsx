@@ -15,6 +15,7 @@ import { Commands } from "../../../commands.ts";
 import { emptyHostModel } from "../../../store/hostModel.ts";
 import type { SessionData } from "../../../store/plain.ts";
 import type { SessionModel } from "../../../store/sessionModel.ts";
+import { isWindowsHost } from "../../../shell/hostPlatform.ts";
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
 import { modelLabel, useHarnessModels } from "../../harness/index.ts";
 import { InTerminalBar } from "../../terminal/index.ts";
@@ -226,7 +227,13 @@ export const SessionIntent = ({ hostKey, sessionId }: SessionViewProps) => {
     onForkTurn: forkAction(canFork, (turnId) => void startFork(turnId)),
   };
 
-  const place = { hostKey, root: session.cwd, workspaceId: session.workspaceId };
+  const place = {
+    hostKey,
+    root: session.cwd,
+    workspaceId: session.workspaceId,
+    sessionId: session.id,
+    windows: isWindowsHost(host),
+  };
 
   return (
     <EditorPlaceProvider value={place}>
@@ -257,6 +264,7 @@ export const SessionIntent = ({ hostKey, sessionId }: SessionViewProps) => {
             ctx={ctx}
           />
         )}
+        {chrome.dock}
         <InTerminalBar
           session={{
             hostKey,

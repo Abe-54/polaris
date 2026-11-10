@@ -163,6 +163,7 @@ export const startRelay = (
     delivered: (outcome, hosts, alert) => emit({ event: "relay.live", outcome, hosts, alert }),
     maxActivities: config.maxLiveActivities,
     maxPerHost: config.maxPeers,
+    hostGoneMs: config.liveHostGoneMs,
   });
 
   const limits = {
@@ -198,6 +199,8 @@ export const startRelay = (
     ws.data.endpoint = endpointFor(ws, auth, address);
     ws.send(encodeControl({ t: "ready", address }));
     hub.attach(ws.data.endpoint, peers);
+
+    if (ws.data.endpoint.role === "host") live.hostBack(address);
   };
 
   const answerWake = (ws: Socket, wake: Wake, outcome: WakeOutcome, started: number) => {
@@ -368,6 +371,9 @@ export const startRelay = (
         clearTimeout(data.authTimer ?? undefined);
 
         if (data.endpoint !== null) hub.detach(data.endpoint);
+
+        if (data.endpoint?.role === "host" && hub.host(data.endpoint.address) === undefined)
+          live.hostGone(data.endpoint.address);
         gate.release(data.ip);
         emit({
           event: "relay.connection",

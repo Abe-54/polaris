@@ -1,4 +1,4 @@
-// RT1 repro (ENG-656): realistic secrets reach traces.sqlite unredacted. Expected to FAIL on 08798fa8f.
+// RT1 regression (ENG-656): realistic secrets never reach traces.sqlite unredacted.
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";

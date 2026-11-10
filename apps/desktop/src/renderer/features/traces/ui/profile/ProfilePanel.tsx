@@ -230,6 +230,10 @@ const Quiet = ({ children }: { readonly children: ReactNode }) => (
   <div className="px-panel pb-panel flex min-h-[100px] flex-col gap-1 pt-1">{children}</div>
 );
 
+/** ENG-704: V8 hides code it optimised before the attach, so a hot timer loop reads as its caller. */
+export const LATE_ATTACH_NOTE =
+  "An attached profile can miss code already running hot before it began, such as a timer loop that shows only as listOnTimeout. Restart with profiling records it from the start.";
+
 const Shown = ({
   at,
   workspaceId,
@@ -287,6 +291,14 @@ const Shown = ({
         onAdd={detail === null ? null : add}
         onClose={() => selectProfile(at, null)}
       />
+      {profile.origin === "attach" ? (
+        <p
+          className="px-panel text-caption text-text-subtle pb-1"
+          data-testid="profile-attach-note"
+        >
+          {LATE_ATTACH_NOTE}
+        </p>
+      ) : null}
       <p className="sr-only" aria-live="polite" data-testid="profile-frame-announce">
         {detail === null || layout === null || frame === null || frameFn === null
           ? ""

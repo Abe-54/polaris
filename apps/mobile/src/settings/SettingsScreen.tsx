@@ -1,6 +1,7 @@
 /**
  * Settings (Paper MX-G): Appearance with a card per dark, then Hosts, Notifications and Motion.
- * Notifications opens iOS Settings for Polaris; the app has no screen of its own for them yet.
+ * Notifications holds the switch for when a constellation needs you, for every host, and opens
+ * iOS Settings; each host's own switch is on its details sheet (ENG-561).
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import {
@@ -24,7 +25,18 @@ import {
   MotionGlyph,
   NotificationsGlyph,
 } from "./icons.tsx";
-import { developerModeLine, hostsLine, MOTION_CHOICES, motionLine, THEME_CARDS } from "./model.ts";
+import {
+  developerModeLine,
+  hostsLine,
+  MOTION_CHOICES,
+  motionLine,
+  notificationsLine,
+  THEME_CARDS,
+} from "./model.ts";
+import {
+  constellationNotifications,
+  useConstellationNotifications,
+} from "../push/constellations.ts";
 import { useDeveloperMode } from "./useDeveloperMode.ts";
 import { ThemeCard } from "./ThemeCard.tsx";
 import { ACCESSIBILITY_SCALE, CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
@@ -116,6 +128,25 @@ const chooseMotion = (setMotion: (motion: (typeof MOTION_CHOICES)[number]["motio
     }
   );
 
+const chooseNotifications = (on: boolean) =>
+  ActionSheetIOS.showActionSheetWithOptions(
+    {
+      title: "Notifications",
+      message: "When a constellation needs you, on this iPhone, for every host",
+      options: [
+        on ? "Turn off constellation notifications" : "Turn on constellation notifications",
+        "Open iOS Settings",
+        "Cancel",
+      ],
+      cancelButtonIndex: 2,
+    },
+    (index) => {
+      if (index === 0) constellationNotifications.set(!on);
+
+      if (index === 1) void Linking.openSettings();
+    }
+  );
+
 export const SettingsScreen = ({
   tabBarHeight,
   onHosts,
@@ -126,6 +157,7 @@ export const SettingsScreen = ({
   const insets = useSafeAreaInsets();
   const { colours } = useTheme();
   const { motion, setMotion } = useMotionPreference();
+  const constellations = useConstellationNotifications();
 
   const followed = useFollowedHosts();
   const developerMode = developerModeLine(useDeveloperMode(followed));
@@ -185,8 +217,8 @@ export const SettingsScreen = ({
           <Row
             Glyph={NotificationsGlyph}
             title="Notifications"
-            line="In iOS Settings"
-            onPress={() => void Linking.openSettings()}
+            line={notificationsLine(constellations)}
+            onPress={() => chooseNotifications(constellations)}
           />
           <Row
             Glyph={MotionGlyph}

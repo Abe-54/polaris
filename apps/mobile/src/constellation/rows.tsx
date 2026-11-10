@@ -39,6 +39,11 @@ const wordColour = (colours: MobileColours, tone: Tone): string => {
   return tone === "waiting" || tone === "ended" ? colours.textFaint : colours.textSubtle;
 };
 
+/** DESIGN.md, Tree: id and title indent per level (ENG-690); past three levels they stay put. */
+const NEST_STEP = 16;
+
+const NEST_MAX = 3;
+
 const quiet = (tone: Tone) => tone === "waiting" || tone === "ended";
 
 /** "1 needs you · 1 working", or "3 done · show" for a finished group. */
@@ -136,6 +141,26 @@ const Second = ({
   );
 };
 
+/** "← M, X": its deps other than the row it hangs under, each id in its state's tone. */
+const Also = ({ deps }: { readonly deps: TaskRow["also"] }) => {
+  const styles = useStyles();
+  const { colours } = useTheme();
+
+  if (deps.length === 0) return null;
+
+  return (
+    <Text style={styles.also} accessibilityLabel={`also after ${deps.map((d) => d.id).join(", ")}`}>
+      {"  ← "}
+      {deps.map((dep, n) => (
+        <Text key={dep.id}>
+          {n === 0 ? "" : ", "}
+          <Text style={[styles.alsoId, { color: idColour(colours, dep.tone) }]}>{dep.id}</Text>
+        </Text>
+      ))}
+    </Text>
+  );
+};
+
 export const TaskRowView = ({
   row,
   first,
@@ -167,6 +192,9 @@ export const TaskRowView = ({
     <View style={[styles.task, !first && styles.divided]}>
       <View style={[styles.rail, last && styles.railEnd]} />
       <TaskGlyph tone={row.tone} harness={row.harness} gate={row.gate} />
+      {row.depth === 0 ? null : (
+        <View style={{ width: Math.min(row.depth, NEST_MAX) * NEST_STEP - 12 }} />
+      )}
       <Text style={[styles.id, { color: idColour(colours, row.tone) }]}>{row.id}</Text>
       <View style={styles.body}>
         <Pressable
@@ -181,6 +209,7 @@ export const TaskRowView = ({
             numberOfLines={2}
           >
             {row.title}
+            <Also deps={row.also} />
           </Text>
           <Text style={[styles.word, { color: wordColour(colours, row.tone) }]}>{row.word}</Text>
         </Pressable>
@@ -223,5 +252,7 @@ const useStyles = themedStyles((colours) => ({
   word: { ...mobileType.footnote },
   command: { ...mobileType.index, color: colours.textSubtle },
   faint: { ...mobileType.footnote, color: colours.textFaint },
+  also: { ...mobileType.footnote, color: colours.textFaint },
+  alsoId: { ...mobileType.index, fontSize: 12 },
   claimLine: { paddingTop: 2 },
 }));

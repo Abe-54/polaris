@@ -4,6 +4,7 @@
  * expanded, or stopped; off screen it keeps its height with no frame.
  */
 import { ChevronRightIcon, cn, LiveDither } from "@polaris/ui";
+import { linkConfirms } from "@polaris/visualization";
 import {
   type ReactNode,
   type RefObject,
@@ -221,6 +222,12 @@ const ShownCard = ({ view }: { readonly view: Shown }) => {
   const [stopped, setStopped] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  // A frame asking again and again gets one confirm at a time, then none (ENG-634).
+  const [confirms] = useState(linkConfirms);
+
+  const askToOpen = (url: string) => {
+    if (confirms.request()) setLink(url);
+  };
 
   if (scope.revised.has(view.id) && !reopened)
     return <RevisedLine title={view.title} onOpen={() => setReopened(true)} />;
@@ -242,7 +249,7 @@ const ShownCard = ({ view }: { readonly view: Shown }) => {
         <Title text={view.title} />
         {stopped ? null : <ExpandButton onClick={() => setExpanded(true)} />}
       </TitleLine>
-      {stopped ? <Stopped /> : <Body view={view} onOpenLink={setLink} onStopped={stop} />}
+      {stopped ? <Stopped /> : <Body view={view} onOpenLink={askToOpen} onStopped={stop} />}
       {expanded && !stopped ? (
         <Expanded
           id={view.id}
@@ -250,11 +257,18 @@ const ShownCard = ({ view }: { readonly view: Shown }) => {
           html={view.html}
           where={scope.where(view.id)}
           onClose={() => setExpanded(false)}
-          onOpenLink={setLink}
+          onOpenLink={askToOpen}
           onStopped={stop}
         />
       ) : null}
-      <LinkDialog title={view.title} url={link} onClose={() => setLink(null)} />
+      <LinkDialog
+        title={view.title}
+        url={link}
+        onClose={(opened) => {
+          confirms.settled(opened);
+          setLink(null);
+        }}
+      />
     </div>
   );
 };

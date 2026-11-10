@@ -69,6 +69,6 @@ The file API today reads, stats, lists, searches, greps and watches. It doesn't 
 ## 7. Budgets (a new `editor` bench scenario)
 
 - Open a 1 MB file: under 150 ms on This Mac, under 400 ms on a remote Host.
-- Typing latency of at most one frame at 180 Hz.
+- Typing: each keystroke paints on the next frame at the display's real refresh rate (p95 of frames late is 0), with about 1 ms of work per key (p95). The work runs from keydown until the key's last handler ends; a key is late by the frames its paint lands after the first frame following that work. Key-to-paint in milliseconds is reported as a diagnostic, not a pass or fail: a literal "one frame at 180 Hz" (5.56 ms) can't be met on a display that runs at 165 Hz (ENG-248).
 - 20 open tabs stay inside the 1 GB whole-app budget.
 - No idle cost: no new timers or watchers beyond open files and the existing index.

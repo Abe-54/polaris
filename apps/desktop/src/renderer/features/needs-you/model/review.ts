@@ -4,7 +4,7 @@
  * request's runs work in its Review Checkout; an Agent Session's in its Workspace, titled
  * "Reviewer · <session title>" (or "Walkthrough · …").
  */
-import type { AgentSession, ReviewCheckout } from "@polaris/protocol";
+import type { AgentSession, ReviewSubject } from "@polaris/protocol";
 import { Predicate } from "effect";
 import { type PullListView, type PullRowView, repoOfRow } from "../../../../shared/github.ts";
 import type { NeedsYouReview, ReviewTarget, UserTurn } from "../../../../shared/needsYou.ts";
@@ -61,8 +61,8 @@ interface Found {
   readonly target: ReviewTarget;
 }
 
-const pullReview = (checkout: ReviewCheckout, pulls: ReadonlyArray<PullRow>): Found | null => {
-  const pull = pullOf(checkout);
+const pullReview = (subject: ReviewSubject, pulls: ReadonlyArray<PullRow>): Found | null => {
+  const pull = pullOf({ subject });
 
   if (pull === null) return null;
 
@@ -93,14 +93,19 @@ const sessionByTitle = (model: HostModel, session: AgentSession, title: string) 
     )
     .sort((a, b) => b.session.updatedAt.localeCompare(a.session.updatedAt))[0]?.session.id;
 
+const bySubject = (input: ReviewInput, subject: ReviewSubject): Found | null =>
+  Predicate.isTagged(subject, "SessionTurns")
+    ? sessionReview(input.hostKey, input.model, subject.sessionId)
+    : pullReview(subject, input.pulls);
+
 const foundOf = (input: ReviewInput, kind: Kind): Found | null => {
   const { hostKey, model, session } = input;
+
+  // A Daemon with `session.review-subject` names it; older ones leave the cwd and title.
+  if (session.reviewSubject != null) return bySubject(input, session.reviewSubject);
   const checkout = [...model.reviewCheckouts.values()].find((c) => c.path === session.cwd);
 
-  if (checkout !== undefined && Predicate.isTagged(checkout.subject, "SessionTurns"))
-    return sessionReview(hostKey, model, checkout.subject.sessionId);
-
-  if (checkout !== undefined) return pullReview(checkout, input.pulls);
+  if (checkout !== undefined) return bySubject(input, checkout.subject);
   const reviewed = sessionByTitle(model, session, reviewedTitle(session, kind));
 
   return reviewed === undefined ? null : sessionReview(hostKey, model, reviewed);

@@ -56,7 +56,22 @@ export type Well =
     }
   | { readonly kind: "tail"; readonly text: string }
   | { readonly kind: "banner"; readonly title: string; readonly body: string }
-  | { readonly kind: "turns"; readonly turns: ReadonlyArray<TurnLine> };
+  | { readonly kind: "turns"; readonly turns: ReadonlyArray<TurnLine> }
+  | { readonly kind: "history"; readonly rows: ReadonlyArray<HistoryRow> };
+
+/** A session a history row names, which opens from it. */
+export interface SessionRef {
+  readonly id: string;
+  readonly title: string;
+}
+
+/** A session `sessions` listed, or a match `search_history` found: where, then what. */
+export interface HistoryRow {
+  readonly session: SessionRef | null;
+  /** "Turn 4 · reply · 13:52", or the session's Harness, state and Turns. */
+  readonly heading: string;
+  readonly text: string | null;
+}
 
 /** A link in the well's foot: opens a Task's worker in the Lead's Intent column. */
 export interface TaskLink {
@@ -77,6 +92,8 @@ export interface Built {
   readonly head: Head;
   readonly well: Well | null;
   readonly links: ReadonlyArray<TaskLink>;
+  /** Sessions the foot opens (the one `read_history` read); none if absent. */
+  readonly sessions?: ReadonlyArray<SessionRef>;
 }
 
 /** Polaris refused the call: its finding, which the agent reads and acts on. */
@@ -99,6 +116,8 @@ export interface PolarisToolView {
   /** Polaris's reply in words ("Plan recorded · revision 8"); null while pending. */
   readonly reply: string | null;
   readonly links: ReadonlyArray<TaskLink>;
+  /** Sessions the foot opens, on the row's own Host. */
+  readonly sessions: ReadonlyArray<SessionRef>;
   /** A `notify` call's title and body, which find its banner in the Desktop App's record. */
   readonly notice: { readonly title: string; readonly body: string } | null;
   /** Behind Show raw: the real name, input and result. */

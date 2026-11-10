@@ -12,7 +12,13 @@ import type { ReadModel } from "../store/model.ts";
 
 export type ConstellationPreparation = Pick<
   ConstellationContext,
-  "attempts" | "newLeadSessionId" | "claimProbe" | "recordedChecks" | "handoverDeferred"
+  | "attempts"
+  | "newLeadSessionId"
+  | "claimProbe"
+  | "recordedChecks"
+  | "mergeFindings"
+  | "handoverDeferred"
+  | "leadBranch"
 >;
 
 /** Worktree, Harness and delivery slices inject side effects through this boundary. */

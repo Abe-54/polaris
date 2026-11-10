@@ -5,6 +5,7 @@ export { constellationInstructions, CONSTELLATION_SKILL_VERSION } from "./skills
 export { startWorker } from "./start.ts";
 
 export {
+  ignoredServiceTier,
   selectWorker,
   workerBrief,
   type WorkerAssignment,

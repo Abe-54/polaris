@@ -5,6 +5,7 @@ import { editorRoute } from "../../../../routes/editor.ts";
 import { onDraftChange, updateDraft } from "../../../session/state.ts";
 import type { ProfilesApi } from "../../data/profilesApi.ts";
 import { profileSelection, selectProfile } from "../../model/profile/store.ts";
+import { LATE_ATTACH_NOTE } from "./ProfilePanel.tsx";
 import { selectSpan } from "../../model/store.ts";
 import { host } from "../../preview/appState.ts";
 import { fixtureProfilesApi, LEDGER_PROFILE } from "../../preview/profiles.ts";
@@ -246,3 +247,22 @@ test("a user profile request records with inline consent and displays a Daemon r
     screen.getByRole("button", { name: "Profile ledger-api for 5 s" }).hasAttribute("disabled")
   ).toBe(false);
 });
+
+test.each([
+  ["attach", true],
+  ["restart", false],
+  ["command", false],
+] as const)(
+  "a %s Profile names the late-attach limit and Restart with profiling: %p",
+  async (origin, noted) => {
+    const { at } = mount();
+
+    await screen.findByTestId("waterfall");
+    act(() => selectProfile(at, { ...LEDGER_PROFILE, origin }));
+    await screen.findByTestId("profile-header");
+
+    expect(screen.queryByTestId("profile-attach-note")?.textContent ?? null).toBe(
+      noted ? LATE_ATTACH_NOTE : null
+    );
+  }
+);

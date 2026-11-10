@@ -9,6 +9,7 @@ import { observeWorkerHost } from "./recovery.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { ConstellationRuntime } from "./runtime.ts";
 import { startWorker } from "./startWorker.ts";
+import { RemoteWorkers } from "./transfers/assignments.ts";
 
 /** Only the authenticated transport sets this annotation. Unbound Desktop connections are the user. */
 export class ConstellationCaller extends Context.Service<
@@ -25,6 +26,7 @@ export const ConstellationRpcHandlers = ConstellationRpcs.toLayer(
     const stats = yield* ConstellationStatsService;
     const store = yield* EventStore;
     const runtime = yield* ConstellationRuntime;
+    const workers = yield* RemoteWorkers;
     const C = ConstellationCommand.cases;
 
     return {
@@ -89,10 +91,16 @@ export const ConstellationRpcHandlers = ConstellationRpcs.toLayer(
       "constellation.worker.start": ({ constellationId, attemptId }, { client }) =>
         startWorker(caller(client.annotations), constellationId, attemptId).pipe(
           Effect.provideService(EventStore, store),
-          Effect.provideService(ConstellationRuntime, runtime)
+          Effect.provideService(ConstellationRuntime, runtime),
+          Effect.provideService(RemoteWorkers, workers)
         ),
       "constellation.status": ({ constellationId, json, since }, { client }) =>
-        graphs.status(caller(client.annotations), constellationId, json === true, since),
+        graphs.status(
+          caller(client.annotations),
+          constellationId,
+          json === true,
+          since === undefined ? {} : { since }
+        ),
       "constellation.stats": ({ constellationId }, { client }) =>
         stats.get(caller(client.annotations), constellationId),
       "constellation.subscribe": ({ constellationId, afterSequence }, { client }) =>

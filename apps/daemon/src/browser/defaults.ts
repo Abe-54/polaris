@@ -8,6 +8,7 @@ const unsupported = (capability: "host-address" | "browser.host") =>
 export const browserDefaults = {
   "byteStream.credit": () => Effect.fail(unsupported("host-address")),
   "hostAddress.open": () => Stream.fail(unsupported("host-address")),
+  "hostAddress.names": () => Effect.fail(unsupported("host-address")),
   "browser.host": () => Stream.fail(unsupported("browser.host")),
   "browser.claim": () => Effect.fail(unsupported("browser.host")),
   "browser.release": () => Effect.void,

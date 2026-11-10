@@ -40,9 +40,10 @@ import {
   Unsupported,
   HostStreamItem,
   Workspace,
+  UserAccessGate,
   WorkspaceId,
 } from "@polaris/protocol";
-import { Deferred, Effect, PubSub, Queue, Redacted, Stream } from "effect";
+import { Deferred, Effect, Layer, PubSub, Queue, Redacted, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
 import { RpcClientDefect, RpcClientError } from "effect/rpc/RpcClientError";
 import { type ThreadClient, ThreadRpcs } from "./source.ts";
@@ -359,7 +360,15 @@ export const makeFakeHost = Effect.fnUntraced(function* (options: FakeHostOption
       ),
   });
 
-  const client = yield* RpcTest.makeClient(ThreadRpcs).pipe(Effect.provide(handlers));
+  const client = yield* RpcTest.makeClient(ThreadRpcs).pipe(
+    // The fake Host's user is the app's: its gate lets everything through.
+    Effect.provide(
+      Layer.merge(
+        handlers,
+        Layer.succeed(UserAccessGate, (effect) => effect)
+      )
+    )
+  );
 
   const lossy: ThreadClient = {
     ...client,

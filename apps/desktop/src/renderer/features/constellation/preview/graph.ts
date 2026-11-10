@@ -3,6 +3,7 @@
  * digest, Claims with receipts, a remote worker, a stopped worker, a proposal and a Future.
  */
 import {
+  OpenQuestion,
   Attempt,
   AttemptCause,
   AttemptId,
@@ -634,3 +635,27 @@ export const slugRecord = (patch: Partial<Constellation> = {}): ConstellationRec
     digests: record.digests.map((d) => ({ ...d, items: [...d.items, ...slugDigest] })),
   };
 };
+
+/** Two workers asking the user, as the Lead chat pins them above its composer (ENG-345). */
+export const askedYou = (): Array<OpenQuestion> => [
+  new OpenQuestion({
+    attemptId: AttemptId.make("att-B1-1"),
+    question: new ConstellationQuestion({
+      id: "q-b1-user",
+      to: "user",
+      text: "May two leads overlap during a handover, or should the old lead stop first?",
+      blocking: true,
+    }),
+    askedAt: ago(6),
+  }),
+  new OpenQuestion({
+    attemptId: AttemptId.make("att-B3-1"),
+    question: new ConstellationQuestion({
+      id: "q-b3-user",
+      to: "user",
+      text: "Keep the bench on the Pi, or move it to the small VM?",
+      blocking: false,
+    }),
+    askedAt: ago(2),
+  }),
+];

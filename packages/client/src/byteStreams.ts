@@ -58,6 +58,20 @@ const creditFor =
     );
 
 /**
+ * The names the Host's hosts file maps to loopback (ENG-621): Host addresses past `localhost`.
+ * Empty when the Daemon predates `host-address.names` or the call fails.
+ */
+export const hostAddressNames = (
+  session: Pick<ByteStreamSession, "client" | "capabilities">
+): Effect.Effect<ReadonlyArray<string>> =>
+  session.capabilities.includes("host-address.names")
+    ? session.client["hostAddress.names"]({}).pipe(
+        Effect.map(({ names }) => names),
+        Effect.orElseSucceed((): ReadonlyArray<string> => [])
+      )
+    : Effect.succeed([]);
+
+/**
  * Opens a byte stream to `target` on the Host's loopback and answers it as a ByteTransport:
  * `incoming` is the Host's bytes, `write` sends ours, `close` (or the scope's end) closes the
  * Daemon's socket. Fails `Unsupported` when the Daemon has no `host-address` capability, and

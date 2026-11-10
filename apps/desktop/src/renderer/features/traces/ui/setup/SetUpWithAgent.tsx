@@ -1,6 +1,6 @@
 /**
  * The empty state's primary block (Paper T4, left): "Set up tracing with an agent" installs the
- * polaris-tracing skill on the Host and starts an agent session; Node instrumentation is a setting.
+ * polaris-tracing skill bundled with the Host's Daemon and starts an agent session; Node instrumentation is a setting.
  */
 import {
   type AgentSession,
@@ -11,16 +11,14 @@ import {
 import { Button } from "@polaris/ui";
 import { useState } from "react";
 import { useShellActions } from "../../../../shell/hooks.ts";
-import { installCommand } from "../../model/agentSetup.ts";
 import { type SetupProgress, setUpTracing } from "./actions.ts";
-import { Copyable } from "./parts.tsx";
 
 const progressLine = (progress: SetupProgress): string | null => {
   switch (progress.kind) {
     case "idle":
       return null;
     case "installing":
-      return "Installing the skill in this workspace’s terminal…";
+      return "Installing the skill on this host…";
     case "starting":
       return "Installed. Starting the agent session…";
     case "started":
@@ -70,11 +68,10 @@ export const SetUpWithAgent = ({
         <span className="text-code-inline text-text-faint font-mono">polaris-tracing skill</span>
       </div>
       <p className="text-caption text-text-subtle">
-        Installs the skill for {harness ?? "Claude Code and Codex"} on this host, then starts{" "}
-        {harness === undefined ? "an agent session" : `a ${harness} session`} that adds
+        Installs the copy bundled with this host’s daemon for {harness ?? "Claude Code and Codex"},
+        then starts {harness === undefined ? "an agent session" : `a ${harness} session`} that adds
         OpenTelemetry here, reading the endpoint from the environment.
       </p>
-      <Copyable text={installCommand(session?.harness ?? null)} label="Copy" />
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="secondary"
@@ -96,13 +93,10 @@ export const SetUpWithAgent = ({
         <div className="flex items-center gap-2" role="status" data-testid="traces-setup-progress">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <p className="text-caption text-text-subtle">{line}</p>
-            {progress.kind !== "failed" || progress.output.length === 0 ? null : (
-              <pre
-                className="text-code-inline text-text-default bg-surface-raised border-hairline rounded-control overflow-x-auto border px-2 py-1.5 font-mono whitespace-pre-wrap"
-                data-testid="traces-setup-output"
-              >
-                {progress.output.join("\n")}
-              </pre>
+            {progress.kind !== "failed" || progress.fix === null ? null : (
+              <p className="text-caption text-text-faint" data-testid="traces-setup-fix">
+                {progress.fix}
+              </p>
             )}
           </div>
           {progress.kind === "started" ? (

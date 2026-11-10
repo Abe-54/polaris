@@ -198,13 +198,15 @@ timestamp, state, alert}}`:
 - a slice with `alert` (a new Needs You) at once, with the alert, spending the host's wake budget;
   over it, the slice goes as routine;
 - past six hosts, those with `active` (work or Needs You) are kept;
-- a host's slice goes when it stops listing the device in `peers`, or sends `slice: null`;
+- a host's slice goes when it stops listing the device in `peers`, sends `slice: null`, or its
+  socket has been gone `POLARIS_RELAY_LIVE_HOST_GONE_MS` (a sleeping host stops saying "working");
 - APNs' `unregistered` ends the activity: every host with a slice in it hears
   `live-gone {token, outcome: "unregistered"}`.
 
 A host holds slices in at most `POLARIS_RELAY_MAX_PEERS` activities, and the relay in at most
-`POLARIS_RELAY_MAX_LIVE_ACTIVITIES` (10,000). A host that disconnects keeps its slice until the
-activity goes stale (15 minutes) or it reconnects and sends a new one; slices are lost when the
+`POLARIS_RELAY_MAX_LIVE_ACTIVITIES` (10,000). A host that disconnects keeps its slice for
+`POLARIS_RELAY_LIVE_HOST_GONE_MS` (2 minutes), then the activity updates without it; a Daemon
+that stops cleanly sends a last idle slice first. Slices are lost when the
 relay restarts, and every host sends its slice again when it reconnects. The relay reads only
 `active` and `alert`; each push logs `relay.live` with its outcome, host count and whether it
 alerted, never the token or the slices.
@@ -216,6 +218,7 @@ alerted, never the token or the slices.
 | `POLARIS_RELAY_WAKES_PER_MINUTE`, `POLARIS_RELAY_WAKE_BURST` | Per host relay address: 60 a minute, burst 20 |
 | `POLARIS_RELAY_MAX_WAKES_IN_FLIGHT` | Wakes and Live Activity updates waiting on the service at once: 256 |
 | `POLARIS_RELAY_MAX_LIVE_ACTIVITIES` | Live Activities the relay holds slices for at once: 10000 |
+| `POLARIS_RELAY_LIVE_HOST_GONE_MS` | How long a disconnected host's Live Activity slices stay: 120000 |
 
 Set both push variables or neither; one without the other stops the relay at start.
 
@@ -285,7 +288,7 @@ built). `railway.json` builds the Dockerfile and health-checks `/healthz`.
   that host and within the rate (across reconnects), and nothing a wake carries is logged.
 - `abuse.slow.test.ts`: key proof failures, auth and idle timeouts, malformed messages, size,
   message and byte rates, per-address socket caps.
-- `process.test.ts`: the same exchange against the `bun src/main.ts` process, including a
+- `process.slow.test.ts`: the same exchange against the `bun src/main.ts` process, including a
   clean `SIGTERM` exit.
 - `packages/protocol/src/relay`: the channel (tampering, replay, gaps, unlinked devices, wrong
   host key) and the wire format.

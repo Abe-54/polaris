@@ -14,7 +14,7 @@ export const HostAddressPort = Schema.Int.check(Schema.isBetween({ minimum: 1, m
 
 /**
  * Why a Host-address stream could not open or stopped. `not-host-address`: the hostname is
- * not `localhost`, a `*.localhost` name or a loopback IP. `refused`, `unreachable`, `timeout`:
+ * not `localhost`, a `*.localhost` name, a loopback IP or a hosts-file loopback name. `refused`, `unreachable`, `timeout`:
  * the loopback connect failed. `reset`: the open socket failed. `too-many-streams`: the
  * connection holds `MAX_BYTE_STREAMS_PER_CONNECTION` already.
  */
@@ -136,4 +136,14 @@ export const HostAddressOpen = Rpc.make("hostAddress.open", {
   stream: true,
 });
 
-export class HostAddressRpcs extends RpcGroup.make(HostAddressOpen) {}
+/**
+ * The names the Host's hosts file maps to loopback (ENG-621), read when asked: Host addresses
+ * beyond `localhost`, so a Client can route them to the Host. Capability `host-address.names`.
+ */
+export const HostAddressNames = Rpc.make("hostAddress.names", {
+  payload: {},
+  success: Schema.Struct({ names: Schema.Array(Schema.String) }),
+  error: Unsupported,
+});
+
+export class HostAddressRpcs extends RpcGroup.make(HostAddressOpen, HostAddressNames) {}

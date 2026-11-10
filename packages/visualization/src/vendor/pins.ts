@@ -1,4 +1,4 @@
-/** The vendored libraries, pinned by the sha256 of the exact upstream file (ADR 0089). */
+/** The vendored libraries, pinned by the sha256 of the exact upstream file (ADR 0101). */
 export interface LibraryPin {
   /** The module under `src/vendor/` holding the file's text. */
   readonly module: string;

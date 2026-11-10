@@ -11,7 +11,7 @@ export const timeline: VisualizeInput = {
 <ol class="pv-steps" id="steps"></ol>
 <script>
   const MILESTONES = [
-    { when: "Oct 28", title: "ADR 0089 accepted", body: "Zero-egress frame, sha256-pinned libraries.", state: "done" },
+    { when: "Oct 28", title: "ADR 0101 accepted", body: "Zero-egress frame, sha256-pinned libraries.", state: "done" },
     { when: "Oct 30", title: "Frame package", body: "Validation, the document builder and the kit.", state: "current" },
     { when: "Nov 4", title: "Desktop and Mobile", body: "Inline frames, expand, theme updates." },
     { when: "Nov 11", title: "Release", body: "The Visuals setting ships, on rich by default." },

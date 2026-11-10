@@ -43,6 +43,8 @@ export interface NeedsYouTurn {
   readonly digestStarted?: boolean;
   /** Live background tasks: an Idle session with any is waiting on them, not done. */
   readonly backgroundTasks: number;
+  /** The Harness will start a Turn for finished tasks' reports (`backgroundReportsPending`). */
+  readonly backgroundReportsPending?: boolean;
   /** The current user Turn: the Daemon's (`currentUserTurn`), else the latest seen live; or null. */
   readonly userTurn: Pick<UserTurn, "id" | "startedAt"> | null;
   /** When the session last changed, on its Host's clock: when it went Idle, at that summary. */
@@ -93,6 +95,8 @@ export interface NeedsYouNotification {
   readonly body: string;
   /** Polaris sent it because a Constellation needs you, not the agent (Settings → Sessions). */
   readonly automatic?: boolean;
+  /** The Constellation it is about; a click opens the Constellation view then. */
+  readonly constellationId?: string | null;
 }
 
 export interface NeedsYouSummary {
@@ -112,6 +116,8 @@ export interface NeedsYouSummary {
 /** What the menu bar and notifications ask the renderer to do. */
 export type NeedsYouAction =
   | { readonly action: "open"; readonly hostKey: string; readonly sessionId: string }
+  /** The Lead's session with its Constellation view in front. */
+  | { readonly action: "open-constellation"; readonly hostKey: string; readonly sessionId: string }
   | {
       readonly action: "approve" | "deny";
       readonly hostKey: string;

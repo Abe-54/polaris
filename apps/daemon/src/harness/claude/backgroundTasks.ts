@@ -29,6 +29,9 @@ export const backgroundControls = (q: Pick<Query, "stopTask" | "backgroundTasks"
 
 const NO_REPORTS: ReadonlyArray<BackgroundTaskRef> = [];
 
+/** `task_updated` statuses after which a task never runs again. */
+const ENDED = new Set(["completed", "failed", "killed"]);
+
 /** The level signal owns waiting; edge notifications identify the next model call's trigger. */
 export class ClaudeBackgroundTasks {
   private live: ReadonlyArray<BackgroundTask> = [];
@@ -37,6 +40,8 @@ export class ClaudeBackgroundTasks {
   /** Without the level signal: foreground tasks, which `task_updated` may move to the background. */
   private readonly foreground = new Map<string, BackgroundTask>();
   private levelSeen = false;
+  /** The `reportsPending` last sent, so a report arriving after its task left still says so. */
+  private pendingSent = false;
 
   takeReports(): ReadonlyArray<BackgroundTaskRef> {
     if (this.reports.size === 0) return NO_REPORTS;
@@ -112,8 +117,12 @@ export class ClaudeBackgroundTasks {
     return this.backgrounded(task);
   }
 
-  /** A foreground task moved to the background (Ctrl-B, `BackgroundCommand`). */
+  /** A foreground task moved to the background (Ctrl-B, `BackgroundCommand`), or one ending. */
   private onUpdated(message: Extract<TaskMessage, { subtype: "task_updated" }>): HarnessEvent[] {
+    const { status } = message.patch;
+
+    // Its report still comes with the notification; only membership ends here.
+    if (status !== undefined && ENDED.has(status)) return this.ended(message.task_id);
     const task = this.foreground.get(message.task_id);
 
     if (this.levelSeen || task === undefined || message.patch.is_backgrounded !== true) return [];
@@ -131,21 +140,20 @@ export class ClaudeBackgroundTasks {
   private onNotification(
     message: Extract<TaskMessage, { subtype: "task_notification" }>
   ): HarnessEvent[] {
-    this.foreground.delete(message.task_id);
-
-    if (message.ambient === true || message.skip_transcript === true) {
-      this.known.delete(message.task_id);
-
-      return [];
-    }
-
     const task = this.known.get(message.task_id);
-
-    if (task === undefined) return [];
     this.known.delete(message.task_id);
-    this.reports.set(task.id, task);
+    const silent = message.ambient === true || message.skip_transcript === true;
 
-    return this.levelSeen ? [] : this.replace(this.live.filter((t) => t.id !== task.id));
+    if (task !== undefined && !silent) this.reports.set(task.id, task);
+
+    return this.ended(message.task_id);
+  }
+
+  /** Without the level, an ended task leaves the tasks; with it, the level says so. */
+  private ended(id: string): HarnessEvent[] {
+    this.foreground.delete(id);
+
+    return this.levelSeen ? [] : this.replace(this.live.filter((t) => t.id !== id));
   }
 
   private remember(task: BackgroundTask): void {
@@ -153,7 +161,17 @@ export class ClaudeBackgroundTasks {
   }
 
   private replace(tasks: ReadonlyArray<BackgroundTask>): HarnessEvent[] {
-    if (
+    const reportsPending = this.reports.size > 0;
+
+    if (reportsPending === this.pendingSent && this.sameAsLive(tasks)) return [];
+    this.live = tasks;
+    this.pendingSent = reportsPending;
+
+    return [HarnessEvent.BackgroundTasksChanged({ tasks, reportsPending })];
+  }
+
+  private sameAsLive(tasks: ReadonlyArray<BackgroundTask>): boolean {
+    return (
       tasks.length === this.live.length &&
       tasks.every(
         (t, i) =>
@@ -161,10 +179,6 @@ export class ClaudeBackgroundTasks {
           t.kind === this.live[i]!.kind &&
           t.description === this.live[i]!.description
       )
-    )
-      return [];
-    this.live = tasks;
-
-    return [HarnessEvent.BackgroundTasksChanged({ tasks })];
+    );
   }
 }

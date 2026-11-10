@@ -1,10 +1,29 @@
 /**
- * Visualizations (ENG-594, ADR 0089): the `visualize` tool's input, the validation the
+ * Visualizations (ENG-594, ADR 0101): the `visualize` tool's input, the validation the
  * Daemon runs when the agent submits, the frame document, and the frame↔app messages.
  */
 import { Schema } from "effect";
 import { buildFrameDocumentWith, type FrameLibraries } from "./frame/document.ts";
 import { type VisualizationProblem, validateWith } from "./validate/index.ts";
+
+export {
+  boundedJson,
+  type BridgeClock,
+  type Coalesced,
+  coalesced,
+  FRAME_MESSAGE_MAX_BYTES,
+  FRAME_MESSAGE_RATE,
+  type FrameInbox,
+  frameInbox,
+  type FrameLane,
+  laneOfText,
+  laneOfType,
+  LINK_CONFIRM_COOLDOWN_MS,
+  LINK_CONFIRM_MAX_DECLINED,
+  type LinkConfirms,
+  linkConfirms,
+  timerClock,
+} from "./bridge/index.ts";
 
 export { FRAME_CSP, type FrameLibraries } from "./frame/document.ts";
 

@@ -9,6 +9,8 @@
  * With `--parallel=N` or `--isolate`, bun's reporter interleaves the files and never says
  * when one ends, so the watchdog adds a preload (`progress.ts`) that marks each file's start and end.
  *
+ * Every run preloads `tmpdir.ts`: a temp root and POLARIS_HOME, never the caller's `~/.polaris`.
+ *
  * Local runs are parallel by default (`parallel.ts`); `POLARIS_TEST_PARALLEL=N` overrides, 1 is serial.
  *
  * `--tier=fast|slow|all` (default all) picks the test files by tier (`tier.ts`). Runs that include
@@ -186,7 +188,10 @@ const run = async (requested: ReadonlyArray<string>): Promise<number> => {
 
   if (quarantine.mode) env.POLARIS_TEST_QUARANTINE = quarantine.mode;
 
+  // bun runs a preload once even when bunfig.toml names it too.
   const preload = [
+    "--preload",
+    join(import.meta.dir, "tmpdir.ts"),
     ...(isolated ? ["--preload", join(import.meta.dir, "progress.ts")] : []),
     ...(quarantine.mode ? ["--preload", join(import.meta.dir, "quarantinePreload.ts")] : []),
   ];

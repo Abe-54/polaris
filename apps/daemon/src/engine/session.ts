@@ -183,7 +183,7 @@ const turnEnded = (
 
   events.push(
     ...withdrawPending(record, "harness", "The Turn ended", turn.id),
-    endTurn(turn, status, event.at, event.checkpoint?.ref ?? turn.checkpointAfter)
+    endTurn(turn, status, event.at, event.checkpoint)
   );
 
   return settle(enq, record, events, withState ? turnEndState(event) : undefined);
@@ -594,7 +594,7 @@ export const sessionMachine = createMachine({
 
           for (const effect of idleStopEffect(record)) enq.emit(effect);
 
-          return settle(enq, record, backgroundTasksChanged(record, event.tasks));
+          return settle(enq, record, backgroundTasksChanged(record, event));
         },
       },
       states: {

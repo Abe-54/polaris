@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { WslDiscovery, WslDistro } from "@polaris/client/wsl";
-import { unsupportedReason, wslDistrosView, wslTerminalArgv } from "./wsl.ts";
+import { unsupportedReason, wslDistrosView } from "./wsl.ts";
 
 const ubuntu = new WslDistro({ name: "Ubuntu", version: 2, state: "running", isDefault: true });
 
@@ -38,9 +38,5 @@ describe("wslDistrosView", () => {
     });
     expect(wslDistrosView(WslDiscovery.Unsupported()).status).toBe("unsupported");
     expect(wslDistrosView(WslDiscovery.Failed({ detail: "boom" })).detail).toBe("boom");
-  });
-
-  test("the terminal opens a shell in the distro", () => {
-    expect(wslTerminalArgv("Ubuntu")).toEqual(["wsl.exe", "--distribution", "Ubuntu"]);
   });
 });

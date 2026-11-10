@@ -4,7 +4,7 @@ import { readEditorFile, writeEditorFile } from "@polaris/client";
 import { Effect, Stream } from "effect";
 import { awaitReady, cleanup, connect, createTempDir } from "../daemon.ts";
 import { settle, waitUntil } from "../drive.ts";
-import { cpu, latency, memory, type Metric, type Scenario, throughput } from "../types.ts";
+import { cpu, latency, memory, type Metric, rss, type Scenario, throughput } from "../types.ts";
 
 export const editor: Scenario = {
   name: "editor",
@@ -81,7 +81,7 @@ export const editor: Scenario = {
           metrics.tabs20_cpu_over_unwatched_pct = cpu(report.cpuAvgPct - bare.cpuAvgPct, {
             tolerance: { relative: 1, absolute: 0.3 },
           });
-          metrics.tabs20_daemon_rss_mib = memory(report.rssBytes.median);
+          metrics.tabs20_daemon_rss_mib = rss(memory(report.rssBytes.median));
 
           if (report.footprintBytes)
             metrics.tabs20_daemon_footprint_mib = memory(report.footprintBytes.median);

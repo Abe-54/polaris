@@ -275,6 +275,8 @@ describe("Codex driver against a fake app-server", () => {
           title: "bun test",
           detail: "run the tests",
         });
+        // The lead's own request names no Subagent.
+        expect(asked.subagentId).toBeUndefined();
         yield* session.respond(
           asked.requestId,
           ApprovalDecision.cases.Allow.make({ remember: true })

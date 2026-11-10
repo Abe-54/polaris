@@ -32,6 +32,8 @@ export interface RemoteWorkerHooks {
   readonly resume: (
     assignment: RemoteWorkerAssignment
   ) => Effect.Effect<void, ConstellationTransferError>;
+  /** Start a stalled assigned worker's startup again; false when it isn't stalled here. */
+  readonly restartStartup?: (attemptId: AttemptId) => Effect.Effect<boolean>;
 }
 
 export class RemoteWorkers extends Context.Reference<RemoteWorkerHooks>(

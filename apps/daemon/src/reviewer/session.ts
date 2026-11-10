@@ -9,6 +9,7 @@ import {
   type ReviewCheckoutId,
   type ReviewerChoice,
   SessionId,
+  type ReviewSubject,
   type SessionOrigin,
   type Turn,
   type TurnId,
@@ -192,6 +193,8 @@ export interface StartReviewer {
   readonly prompt: string;
   /** What the session is for, so the sidebar files it under Reviews; a Reviewer's by default. */
   readonly origin?: SessionOrigin;
+  /** The Review it is for, named on its session (`AgentSession.reviewSubject`). */
+  readonly subject: ReviewSubject;
   readonly onStarted?: (sessionId: SessionId) => Effect.Effect<void>;
   readonly onAssistant?: (text: string) => Effect.Effect<void>;
 }
@@ -218,6 +221,7 @@ export const startReviewerSession = (options: StartReviewer) =>
           prompt: options.prompt,
           attachments: [],
           origin: options.origin ?? "reviewer",
+          reviewSubject: options.subject,
         })
       );
       yield* dispatch(Command.cases.RenameSession.make({ sessionId, title: options.title }));

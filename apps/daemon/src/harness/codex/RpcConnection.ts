@@ -53,13 +53,13 @@ export const codexError = (message: string, cause?: unknown) =>
     cause === undefined ? { harness: "codex", message } : { harness: "codex", message, cause }
   );
 
-/** No `codex` where the Daemon looked; it looks once at start, so installing needs a restart. */
+/** No `codex` where the Daemon looked; it looks again at the next use, so no restart is needed. */
 export const codexNotInstalled = (
   path: string = process.env.PATH ?? "",
   host: string = shortHostName()
 ) =>
   codexError(
-    `Codex isn't installed on ${host}: there's no codex in the daemon's PATH (${path}). Install it there, then restart the daemon.`
+    `Codex isn't installed on ${host}: there's no codex in the daemon's PATH (${path}). Install it there, then try again.`
   );
 
 const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(RpcMessage));

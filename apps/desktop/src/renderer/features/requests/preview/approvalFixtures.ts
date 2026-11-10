@@ -43,6 +43,7 @@ export const fixtureOriginApproval = (
   options: [],
   questions: [],
   placeholder: null,
+  subagentId: null,
   expiresAt: null,
   openedAt,
   origin,

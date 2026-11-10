@@ -1,6 +1,6 @@
 import { contextBridge } from "electron";
 
-/** Runs before page scripts in every frame, including closed-shadow srcdoc children (ADR 0089). */
+/** Runs before page scripts in every frame, including closed-shadow srcdoc children (ADR 0101). */
 export const lockFrameWebRTC = () => {
   contextBridge.executeInMainWorld({
     func: () => {

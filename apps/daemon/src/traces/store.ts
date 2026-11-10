@@ -158,8 +158,14 @@ export const traceStoreLayerAt = (filename: string, options: TraceWorkerOptions 
           read(TraceWorkerRequest.cases.Overlap.make({ checkout, start, end }), TracePage),
         get: (checkout, traceId) =>
           read(TraceWorkerRequest.cases.Get.make({ checkout, traceId }), TraceDetail),
-        span: (checkout, traceId, spanId) =>
-          read(TraceWorkerRequest.cases.Span.make({ checkout, traceId, spanId }), SpanDetail),
+        span: (checkout, traceId, spanId, before) => {
+          const at = { checkout, traceId, spanId };
+
+          return read(
+            TraceWorkerRequest.cases.Span.make(before === undefined ? at : { ...at, before }),
+            SpanDetail
+          );
+        },
         history: (checkout, traceId, includeSpans = true) =>
           read(
             TraceWorkerRequest.cases.History.make({ checkout, traceId, includeSpans }),

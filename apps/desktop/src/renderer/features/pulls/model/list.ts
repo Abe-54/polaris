@@ -15,7 +15,12 @@ import {
   repoOfRow,
 } from "../../../../shared/github.ts";
 import { age, plural } from "../../../shell/copy.ts";
-import { readySessions, type SessionInfo } from "../../review/model/queue.ts";
+import {
+  readySessions,
+  type SessionInfo,
+  type TurnRange,
+  unacceptedTurns,
+} from "../../review/model/queue.ts";
 import { checkoutKey, pullKey, type RiskLane } from "./risk.ts";
 import { layerText } from "./stack.ts";
 
@@ -219,17 +224,12 @@ export const stacksTogether = (rows: ReadonlyArray<PullRowView>): ReadonlyArray<
   });
 };
 
-const turnsOf = (info: SessionInfo) => {
-  const first = (info.acceptedThroughIndex ?? -1) + 2;
-
-  return first >= info.turnCount ? `turn ${info.turnCount}` : `turns ${first}–${info.turnCount}`;
-};
+const turnsOf = ({ first, last }: TurnRange) =>
+  first >= last ? `turn ${last}` : `turns ${first}–${last}`;
 
 /** Accepting is an Agent Session's review: Turns since the last accept, once there was one. */
-const sinceReview = (info: SessionInfo) =>
-  info.acceptedThroughIndex === null
-    ? null
-    : `${info.turnCount - info.acceptedThroughIndex - 1} since your last review`;
+const sinceReview = ({ since }: TurnRange) =>
+  since === null ? null : `${since} since your last review`;
 
 /** The sessions "Agent sessions ready" shows, newest first, as the queue picks them. */
 export const readyInfos = (sessions: ReadonlyArray<SessionInfo>): ReadonlyArray<SessionInfo> => {
@@ -253,7 +253,11 @@ const sessionRows = (input: ListInput): ReadonlyArray<SessionRowModel> =>
       sessionId: info.id,
       harness: info.harness,
       title: info.title || "Untitled session",
-      meta: [harnessHue(info.harness).name, turnsOf(info), sinceReview(info)]
+      meta: [
+        harnessHue(info.harness).name,
+        turnsOf(unacceptedTurns(info)),
+        sinceReview(unacceptedTurns(info)),
+      ]
         .filter((part) => part !== null)
         .join(" · "),
       changes: input.changesOf(info.hostKey, info.id, info.turnCount),

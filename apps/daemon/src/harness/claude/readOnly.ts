@@ -10,7 +10,6 @@ import { isAbsolute, resolve } from "node:path";
 import { Option, Schema } from "effect";
 import { isWithin } from "../../files/fs.ts";
 import { repositoryEnv } from "../../service/childEnv.ts";
-import { traceEndpointEnvironment } from "../../traces/environment.ts";
 import { confined, type ReadConfinement } from "../confinement.ts";
 import type { ClaudeSandbox } from "./sandbox.ts";
 
@@ -187,9 +186,7 @@ const hiddenReads = (confinement: ReadConfinement) =>
 
 /** Variables the shell gets: what it needs to start, and the confined git's. */
 const shellKeys = (env: Readonly<Record<string, string>>, confinement: ReadConfinement) =>
-  new Set(
-    Object.keys(repositoryEnv(env, { ...confinement.shellEnv, ...traceEndpointEnvironment(env) }))
-  );
+  new Set(Object.keys(repositoryEnv(env, confinement.shellEnv)));
 
 /**
  * Only Bash, so every read goes through Claude Code's OS sandbox: nothing readable but the
@@ -284,6 +281,5 @@ export const readOnlyEnv = (
   return repositoryEnv(source, {
     ...Object.fromEntries(Object.entries(source).filter(([key]) => kept(key))),
     ...confinement.shellEnv,
-    ...traceEndpointEnvironment(source),
   });
 };

@@ -102,6 +102,7 @@ import {
   validateClaudePermissionMode,
 } from "./autoMode.ts";
 import { claudeExecutable } from "./executable.ts";
+import { claudeNotFound, claudeNotInstalled } from "./notInstalled.ts";
 
 export type QueryFn = (params: {
   prompt: string | AsyncIterable<SDKUserMessage>;
@@ -208,8 +209,7 @@ const openSession = Effect.fnUntraced(function* (
 ) {
   const claudePath = driver.claudePath();
 
-  if (claudePath === null)
-    return yield* harnessError("Claude Code is not installed: `claude` was not found on PATH");
+  if (claudePath === null) return yield* harnessError(claudeNotInstalled());
   yield* logStart(options.sessionId, `starting Claude Code at ${claudePath}`);
   const context = yield* Effect.context<never>();
   const startLog = claudeStartLog(options.sessionId, (log) => Effect.runForkWith(context)(log));
@@ -320,7 +320,7 @@ const openSession = Effect.fnUntraced(function* (
     const questions = isQuestionTool(toolName) ? parseQuestions(input) : [];
     emit(
       HarnessEvent.ApprovalRequested({
-        turnId: turn.turnId,
+        ...translator.approvalScope(turn.turnId, context.toolUseID),
         requestId,
         kind: approvalKind(toolName),
         title: isQuestionTool(toolName) ? described.title : (context.title ?? described.title),
@@ -847,8 +847,7 @@ export const makeClaudeDriver = (options: ClaudeDriverOptions = {}): HarnessDriv
   const probe: Effect.Effect<HarnessProbe> = Effect.gen(function* () {
     const path = driver.claudePath();
 
-    if (path === null)
-      return { available: false, version: null, detail: "`claude` was not found on PATH" };
+    if (path === null) return { available: false, version: null, detail: claudeNotFound() };
     const result = yield* Effect.tryPromise(() => runVersion(path)).pipe(Effect.option);
 
     if (Option.isNone(result) || result.value.exitCode !== 0)

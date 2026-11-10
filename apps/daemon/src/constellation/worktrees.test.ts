@@ -103,10 +103,12 @@ test(
           expect(yield* trees.mergeClaim(graph(review), review, root, head)).toEqual({
             merged: true,
             leadHead: head,
+            findings: [],
           });
           expect(yield* trees.mergeClaim(graph(review), review, root, head)).toEqual({
             merged: false,
             leadHead: head,
+            findings: [],
           });
 
           const sentBack = yield* trees.prepare(
@@ -168,7 +170,10 @@ test(
           ).toBe(true);
           yield* trees.prepare(request);
           expect(existsSync(path)).toBe(false);
-          expect(yield* trees.gate(root, root)).toMatchObject({ worktree: root, managed: false });
+          expect(yield* trees.gate(graph(accepted), root)).toMatchObject({
+            worktree: root,
+            managed: false,
+          });
         })
       );
     } finally {

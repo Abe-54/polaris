@@ -1,12 +1,13 @@
 /**
  * Builds the SDK user message for a Turn (or a steer): the prompt text, images
- * inlined as base64 content blocks, and every other attachment referenced by
- * its staged path on the Host so Claude reads it with its own tools.
+ * inlined as base64 content blocks, small text files inlined as text, and every
+ * other attachment referenced by its staged path on the Host.
  */
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Attachment, TurnId } from "@polaris/protocol";
 import { Effect, Schema } from "effect";
 import { HarnessError, HarnessEvent, type TurnInput } from "../HarnessDriver.ts";
+import { inlineTextBlock, readInlineTexts } from "../inlineText.ts";
 import { steerItem } from "../userMessage.ts";
 
 /** What a steer sends besides its text. */
@@ -73,7 +74,15 @@ export const buildUserMessage = Effect.fn("claude.buildUserMessage")(function* (
 }) {
   const readFile = options.readFile ?? ((path: string) => Bun.file(path).bytes());
   const images = inlineImages(options.attachments);
-  const others = options.attachments.filter((a) => !isInlineImage(a));
+  const texts = yield* readInlineTexts(options.attachments, readFile);
+
+  const inlined = options.attachments.flatMap((a) => {
+    const text = texts.get(a.id);
+
+    return text === undefined ? [] : [inlineTextBlock(a, text)];
+  });
+
+  const others = options.attachments.filter((a) => !isInlineImage(a) && !texts.has(a.id));
 
   const content: ContentBlock[] = [];
 
@@ -98,8 +107,9 @@ export const buildUserMessage = Effect.fn("claude.buildUserMessage")(function* (
     });
   }
 
-  const text =
-    others.length > 0 ? `${options.prompt}\n\n${attachmentNote(others)}` : options.prompt;
+  const text = [options.prompt, ...inlined, ...(others.length > 0 ? [attachmentNote(others)] : [])]
+    .filter((part) => part !== "")
+    .join("\n\n");
 
   // The API refuses an empty text block; an images-only message sends none.
   if (text !== "" || content.length === 0) content.push({ type: "text", text });

@@ -1,13 +1,13 @@
 # Push to Linked Devices
 
-The Daemon pushes Needs You, notifications (`SessionNotified`) and finished Turns to Linked Devices through the Polaris Relay and
+The Daemon pushes Needs You, notifications (`SessionNotified`), finished Turns and failures to Linked Devices through the Polaris Relay and
 APNs (`apps/relay/README.md`, Push; `apps/site/app/api/push/README.md`). The relay and the push
 service carry each payload sealed to the device and can't read it.
 
 | File | What |
 |---|---|
-| `plan.ts` | Which Host stream items push: each new approval or question at once; each `SessionNotified` at once, as `notify` (an agent's `notify`, or Polaris's own when a Constellation needs the user); a finished Turn once its session stays Idle with no background tasks for 3 s (ADR 0073), except a Lead Turn Polaris started for a digest. A Constellation worker (`AgentSession.worker`, which the Host stream's Snapshot also sets from the graphs) pushes only Needs You (ENG-586). Pure. |
-| `notifier.ts` | `PushNotifier`: follows the Engine's Host stream (`PushHostEvents`) only while some device is registered, runs the plan and its settle timer, and wakes each registered device, or holds a Needs You while the user is present. |
+| `plan.ts` | Which Host stream items push: each new approval or question at once; each `SessionNotified` at once, as `notify` (an agent's `notify`, or Polaris's own when a Constellation needs the user); a finished Turn once its session stays Idle with no background tasks for 3 s (ADR 0073), except a Lead Turn Polaris started for a digest (`markDigestTurn`); a failed Turn says so ("Claude Code's turn failed"), and a Constellation's failed Attempt pushes as a `notify` on its Lead's session (`attemptFailed`, ENG-561). A Constellation worker (`AgentSession.worker`, which the Host stream's Snapshot also sets from the graphs) pushes only Needs You (ENG-586). Pure. |
+| `notifier.ts` | `PushNotifier`: follows the Engine's Host stream (`PushHostEvents`) only while some device is registered, learns digest Turns and failed Attempts' Tasks from the store model (the Host stream leaves out `LeadNotified`, ENG-587, and `AttemptSettled` names no Task), runs the plan and its settle timer, and wakes each registered device, or holds a Needs You while the user is present. |
 | `hold.ts` | The Needs You held while the user is at a Desktop App, and which of them they answered there. Pure. |
 | `slice.ts` | Folds the Host stream into this Host's Live Activity slice (ADR 0088): the user's working sessions and the earliest start, the newest tool step, the oldest open approval or question. Pure. |
 | `liveNotifier.ts` | `LiveNotifier`: follows the Host stream only while some device has a Live Activity registered, and sends the sealed slice in a relay `live` frame: after 1 s of quiet, at once with an alert for a new Needs You, and again when the registrations change or the relay socket connects. |
@@ -23,7 +23,8 @@ by its relay identity over this Host's relay address, environment and token). Th
 checks the ticket and the key, and keeps the registration in `linked-devices.sqlite`. Only a
 Linked Device's connection may register (`not-a-device` otherwise). `automatic: false` is the
 device's setting for automatic notifications (Constellations needing the user): those skip it,
-while Needs You, agents' notifications and finished Turns still arrive. A new registration
+while Needs You, agents' notifications and finished Turns still arrive. `notifications: false`
+is the device's switch for this Host (ENG-561): it gets no pushes from it at all. A new registration
 replaces the last one, so the app rotates its key or token by registering again. Unlinking the
 device deletes its registration; `unregistered` from APNs deletes it until the device
 registers again.
@@ -44,6 +45,10 @@ the extension's own Swift (needs swiftc).
 
 Presence doesn't hold slices: the activity is the phone's, and the relay sends it anyway.
 
+A clean shutdown sends a last idle slice (nothing working, nothing waiting) before the relay
+socket closes; a Host that goes without one (sleep, crash) leaves the activity when the relay
+has missed its socket for 2 minutes (ENG-585, `apps/relay/README.md`).
+
 ## Presence (ENG-495)
 
 While the user is at a Desktop App, its connection reports `presence.report { presence: "present" }`
@@ -56,6 +61,11 @@ While present, a finished Turn or a notification isn't pushed at all: the Deskto
 as a banner, and a burst of them when the user leaves would be stale (ENG-524). A Needs You is
 held instead, dropped once its request is resolved or withdrawn, and the rest go out when
 presence ends, oldest first (at most 200 kept).
+
+Held pushes live in memory. A restart withdraws every request (recovery), so the Daemon's first
+Snapshot re-plans what still needs the user: each user's session in Needs You gets a held
+Needs You ("Waiting for you to continue"), sent when the user next leaves a Desktop App and
+dropped once the session leaves Needs You (ENG-500).
 
 ## Cost
 

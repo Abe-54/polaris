@@ -137,7 +137,7 @@ test("actual one connection routes validated language RPC/feed/blob and invalida
         const server = yield* startServer({
           ...options(root),
           handlers,
-          capabilities: ["languages", "languages.preview-media"],
+          capabilities: ["languages", "languages.preview-media", "files.read"],
         });
 
         hostId = server.hostInfo.hostId;

@@ -1,47 +1,75 @@
 /**
  * The proxy rules of a remote Host's Browser partition. Chromium never consults a PAC script
  * for loopback, `<-loopback>` or not, so the partition sends everything to its proxy
- * and bypasses the complement of the Host addresses (ADR 0093).
+ * and bypasses the complement of the Host addresses (ADR 0093), the Host's hosts-file
+ * loopback names included (ENG-621).
  */
-const LOCALHOST = "localhost";
-
 const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
 /** Characters of a canonical hostname, as Chromium's URL parser leaves them. */
 const NAME_CHARS = `${LETTERS}0123456789-_.`;
 
-/**
- * Glob rules matching every name that ends `…c` + a proper suffix of `name`, `c` not the
- * character `name` has there, plus the proper suffixes themselves. `firstBefore` limits `c`
- * when the suffix is a single character, as digits there could match an IPv4 literal.
- */
-const notEndingWith = (name: string, firstBefore: string): ReadonlyArray<string> => {
-  const rules: Array<string> = [];
+/** A suffix in the trie of protected names: itself only (`exact`), or every name ending in it. */
+interface Node {
+  readonly children: Map<string, Node>;
+  covers: "exact" | "suffix" | null;
+}
 
-  for (let k = 1; k <= name.length; k++) {
-    const suffix = name.slice(-k);
-    const expected = k === name.length ? "." : name.at(-k - 1)!;
-    const before = k === 1 ? firstBefore : NAME_CHARS;
+const node = (): Node => ({ children: new Map(), covers: null });
 
-    for (const c of before) if (c !== expected) rules.push(`*${c}${suffix}`);
+const protectedTrie = (extraNames: ReadonlyArray<string>): Node => {
+  const root = node();
 
-    // A rule starting with "." would mean "*." to Chromium: skip the bare ".".
-    if (k < name.length && !suffix.startsWith(".")) rules.push(suffix);
-  }
+  const protect = (text: string, covers: "exact" | "suffix") => {
+    let at = root;
 
-  return rules;
+    for (const c of text.split("").reverse()) {
+      const next = at.children.get(c) ?? node();
+
+      at.children.set(c, next);
+      at = next;
+    }
+
+    if (at.covers !== "suffix") at.covers = covers;
+  };
+
+  for (const name of ["localhost", "localhost."]) protect(name, "exact");
+
+  for (const suffix of [".localhost", ".localhost."]) protect(suffix, "suffix");
+
+  for (const name of extraNames)
+    if (name.split("").every((c) => NAME_CHARS.includes(c)) && !name.startsWith(".")) {
+      protect(name, "exact");
+      protect(`${name}.`, "exact");
+    }
+
+  return root;
 };
 
 /**
- * Glob rules for every hostname that is not `localhost` or a `*.localhost` name, with or
- * without a trailing dot. Chromium matches them against IPv4 literals too, so none ends in a
- * digit; IPv6 literals keep their brackets, so none ends in `]`.
+ * Glob rules for every hostname outside the trie: below each suffix, `*` + a character the
+ * trie lacks there + the suffix, and the suffix itself unless protected. Chromium matches
+ * globs against IPv4 literals too, so no rule ends in a digit (such names reach the proxy).
  */
-const nameRules = (): ReadonlyArray<string> => [
-  ...Array.from(`${LETTERS.replace("t", "")}-_`, (c) => `*${c}`),
-  ...notEndingWith(LOCALHOST, NAME_CHARS),
-  ...notEndingWith(`${LOCALHOST}.`, `${LETTERS}-_`),
-];
+const nameRules = (extraNames: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const rules: Array<string> = [];
+
+  const walk = (at: Node, suffix: string) => {
+    if (at.covers === "suffix" || /\d\.?$/.test(suffix)) return;
+    const before = suffix === "" || suffix === "." ? `${LETTERS}-_` : NAME_CHARS;
+
+    for (const c of before) if (!at.children.has(c)) rules.push(`*${c}${suffix}`);
+
+    // A rule starting with "." would mean "*." to Chromium: skip such suffixes.
+    if (suffix !== "" && !suffix.startsWith(".") && at.covers === null) rules.push(suffix);
+
+    for (const [c, child] of at.children) walk(child, `${c}${suffix}`);
+  };
+
+  walk(protectedTrie(extraNames), "");
+
+  return rules;
+};
 
 /** IPv4 outside 0.0.0.0/8 and 127.0.0.0/8; IPv6 outside ::/8 (::1, IPv4-mapped loopback). */
 const IP_RULES = [
@@ -73,11 +101,12 @@ const IP_RULES = [
  * the Client's own loopback. Anything left proxied that isn't a Host address (a name ending
  * in a digit, `0.0.0.0`) reaches the proxy, which loads it directly or refuses it.
  */
-export const PROXY_BYPASS_RULES = ["<-loopback>", ...nameRules(), ...IP_RULES].join(",");
+export const proxyBypassRules = (extraNames: ReadonlyArray<string> = []) =>
+  ["<-loopback>", ...nameRules(extraNames), ...IP_RULES].join(",");
 
-/** The `session.setProxy` config of a remote Host's partition. */
-export const remoteProxyConfig = (proxyPort: number) => ({
+/** The `session.setProxy` config of a remote Host's partition; `names` from its hosts file. */
+export const remoteProxyConfig = (proxyPort: number, names: ReadonlyArray<string> = []) => ({
   mode: "fixed_servers" as const,
   proxyRules: `http://127.0.0.1:${proxyPort}`,
-  proxyBypassRules: PROXY_BYPASS_RULES,
+  proxyBypassRules: proxyBypassRules(names),
 });

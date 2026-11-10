@@ -1,7 +1,7 @@
 /**
- * The composer footer's right side (Paper X-E): the running Subagents as their moons and a
- * count (a popover lists each), the context ring (hover for the context card), and the
- * permission mode chip with its menu.
+ * The composer footer's right side (Paper X-E): "Draft saved" once the Host holds the draft
+ * (continuity), the running Subagents as their moons and a count (a popover lists each), the
+ * context ring (hover for the context card), and the permission mode chip with its menu.
  */
 import {
   CHIP,
@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@polaris/ui";
+import type { DraftStatus } from "@polaris/client/continuity";
 import { useState } from "react";
 import type { SessionData } from "../../../store/plain.ts";
 import { send } from "../dispatch.ts";
@@ -38,6 +39,32 @@ const NEARLY_FULL_WORDS = "hidden @min-[600px]/composer:inline";
 const PERMISSION_WORDS = "hidden @min-[500px]/composer:inline";
 
 const SUBAGENT_WORDS = "hidden @min-[440px]/composer:inline";
+
+// "Draft saved" is the first to go; "Draft not saved" stays, since it's worth knowing.
+const DRAFT_SAVED_WORDS = "hidden @min-[680px]/composer:inline";
+
+/** Says whether the Host holds the composer's text; nothing for an empty composer. */
+export const draftCaption = (draft: string, status: DraftStatus | null): string | null => {
+  if (draft.trim() === "") return null;
+
+  if (status === "saved") return "Draft saved";
+
+  return status === "unsaved" ? "Draft not saved" : null;
+};
+
+const DraftCaption = ({ text }: { readonly text: string | null }) =>
+  text === null ? null : (
+    <span
+      data-testid="composer-draft-status"
+      title={text === "Draft saved" ? "Your other devices see this draft" : undefined}
+      className={cn(
+        "text-caption whitespace-nowrap",
+        text === "Draft saved" ? cn("text-text-faint", DRAFT_SAVED_WORDS) : "text-text-subtle"
+      )}
+    >
+      {text}
+    </span>
+  );
 
 const Subagents = ({
   harness,
@@ -234,6 +261,8 @@ export interface ComposerStatusProps {
   readonly roster: SubagentRoster;
   readonly onOpenSubagent: (subagentId: string) => void;
   readonly turnNumber: number | null;
+  /** `draftCaption`'s words, or null. */
+  readonly draft?: string | null;
 }
 
 export const ComposerStatus = ({
@@ -243,8 +272,10 @@ export const ComposerStatus = ({
   roster,
   onOpenSubagent,
   turnNumber,
+  draft,
 }: ComposerStatusProps) => (
   <>
+    <DraftCaption text={draft ?? null} />
     <Subagents harness={harness} roster={roster} onOpen={onOpenSubagent} />
     <ContextChip hostKey={hostKey} session={session} turnNumber={turnNumber} />
     <Permission hostKey={hostKey} session={session} />

@@ -35,10 +35,23 @@ test("finals accumulate, a guess is replaced, and one still pending at the end i
   );
 });
 
-test("a provider failure fails the stream", async () => {
-  const exit = await fold(
-    Stream.concat(Stream.make({ text: "hey", isFinal: false }), Stream.fail(providerFailed("gone")))
+test("a provider failure fails the stream without a finished snapshot", async () => {
+  const seen: VoiceTranscript[] = [];
+
+  const exit = await Effect.runPromiseExit(
+    Stream.runForEach(
+      snapshots(
+        Stream.concat(
+          Stream.make({ text: "hey", isFinal: false }),
+          Stream.fail(providerFailed("gone"))
+        )
+      ),
+      (transcript) => Effect.sync(() => seen.push(transcript))
+    )
   );
 
   expect(exit).toEqual(Exit.fail(providerFailed("gone")));
+  expect(seen).toEqual([
+    new VoiceTranscript({ finalText: "", interimText: "hey", finished: false }),
+  ]);
 });

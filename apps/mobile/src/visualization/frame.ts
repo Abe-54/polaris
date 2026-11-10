@@ -1,5 +1,5 @@
 /**
- * The WebView side of the zero-egress frame (ADR 0089): the tokens the app sends in, the theme
+ * The WebView side of the zero-egress frame (ADR 0101): the tokens the app sends in, the theme
  * message it injects, and the navigation policy that lets only the document's own load through.
  */
 import { FRAME_TOKEN_THEMES, type HostMessage } from "@polaris/visualization";

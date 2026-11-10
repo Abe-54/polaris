@@ -1,4 +1,5 @@
 import * as P from "@polaris/protocol";
+import { Match } from "effect";
 import type { EditorState } from "@codemirror/state";
 import type { EditorLanguageCoordinator } from "./integration.ts";
 import type { LanguageProvider } from "./types.ts";
@@ -14,6 +15,7 @@ import { providerLabel } from "../trust/store.ts";
 
 export type LanguageCommand =
   | "definition"
+  | "declaration"
   | "typeDefinition"
   | "implementation"
   | "references"
@@ -116,6 +118,7 @@ export class LanguageQueries {
 
     const panel = {
       definition: "Definitions",
+      declaration: "Declarations",
       typeDefinition: "Type definitions",
       implementation: "Implementations",
       references: "References",
@@ -156,6 +159,7 @@ export class LanguageQueries {
 
       if (
         (command === "definition" ||
+          command === "declaration" ||
           command === "typeDefinition" ||
           command === "implementation") &&
         rows.length === 1 &&
@@ -196,14 +200,16 @@ export class LanguageQueries {
 
     if (
       command === "definition" ||
+      command === "declaration" ||
       command === "typeDefinition" ||
       command === "implementation" ||
       command === "references"
     ) {
-      const answers =
-        command === "references"
-          ? await features.references(head, true, signal)
-          : await features.navigation(`textDocument/${command}`, head, signal);
+      const answers = await Match.value(command).pipe(
+        Match.when("references", () => features.references(head, true, signal)),
+        Match.when("declaration", () => features.declaration(head, signal)),
+        Match.orElse((method) => features.navigation(`textDocument/${method}`, head, signal))
+      );
 
       rows = answers.flatMap(({ provider, payload }) =>
         ("uri" in payload ? [payload] : payload).map((location) =>

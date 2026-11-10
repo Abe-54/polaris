@@ -314,12 +314,28 @@ export class SchemaStore {
   affected(sessionId: string, turn: string, source: string) {
     return affectedRows(this.entries(sessionId, turn), source);
   }
-  diff(sessionId: SessionId, turn?: TurnId) {
-    const records = this.records(sessionId, turn).filter((x) => x.used);
+  /** A Turn group's records and Query Log entries, in Turn order: the session's, narrowed. */
+  private inTurns(sessionId: SessionId, turns: ReadonlyArray<TurnId>) {
+    const ids = new Set<string>(turns);
+
+    return {
+      records: this.records(sessionId).filter((x) => ids.has(x.turn)),
+      entries: this.entries(sessionId).filter((x) => x.author.turn && ids.has(x.author.turn)),
+    };
+  }
+  diff(sessionId: SessionId, turn?: TurnId, asking?: ReadonlyArray<TurnId>) {
+    // A group always holds `turn`, even when a Client left it out of `turns`.
+    const turns =
+      asking === undefined || turn === undefined || asking.length === 0 || asking.includes(turn)
+        ? asking
+        : [turn, ...asking];
+
+    const group = turns !== undefined && turns.length > 0 ? this.inTurns(sessionId, turns) : null;
+    const records = (group?.records ?? this.records(sessionId, turn)).filter((x) => x.used);
     const groups = new Map<string, SnapshotRecord[]>();
 
     for (const r of records) groups.set(r.source.id, [...(groups.get(r.source.id) ?? []), r]);
-    const entries = this.entries(sessionId, turn);
+    const entries = group?.entries ?? this.entries(sessionId, turn);
 
     const sources: SchemaSourceDiff[] = [...groups.values()].map((group) => {
       const first = group[0]!;
@@ -371,12 +387,18 @@ export class SchemaStore {
       };
     });
 
+    const asked = group === null ? (turn === undefined ? [] : [turn]) : (turns ?? []);
+
     const pruned =
-      turn === undefined
+      asked.length === 0
         ? this.db.query("SELECT 1 FROM data_schema_pruned WHERE session=? LIMIT 1").get(sessionId)
-        : this.db
-            .query("SELECT 1 FROM data_schema_pruned WHERE session=? AND turn=?")
-            .get(sessionId, turn);
+        : asked.some((t) =>
+            this.db
+              .query("SELECT 1 FROM data_schema_pruned WHERE session=? AND turn=?")
+              .get(sessionId, t)
+          );
+
+    turn ??= asked[0];
 
     return {
       sessionId,

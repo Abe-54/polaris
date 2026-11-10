@@ -496,6 +496,7 @@ export const fixtureDataApproval = (
     detail: null,
     options: [],
     questions: [],
+    subagentId: null,
     placeholder: null,
     expiresAt: null,
     openedAt,

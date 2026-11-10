@@ -3,6 +3,7 @@
  * (`model/conversation.ts`), which Turn Output shows, and the composer's draft. It outlives the
  * view, so switching back to a session paints it as it was left.
  */
+import type { DraftStatus } from "@polaris/client/continuity";
 import type { AttachmentId } from "@polaris/protocol";
 import type { QuestionProgress } from "@polaris/ui";
 import { useStore } from "zustand";
@@ -38,6 +39,8 @@ export interface SessionUi {
   /** The Subagent Output's Subagent tab shows; null shows Changes (or a Lead's tab). */
   readonly subagentId: string | null;
   readonly draft: string;
+  /** Whether the Host holds the draft (continuity); null until a write or a Host draft. */
+  readonly draftStatus: DraftStatus | null;
   readonly attachments: ReadonlyArray<StagedAttachment>;
   /** Steers and queued follow-ups (⌘↵) not in the conversation yet (`model/outbox.ts`). */
   readonly outbox: ReadonlyArray<Outgoing<StagedAttachment>>;
@@ -50,6 +53,7 @@ const EMPTY: SessionUi = {
   diffTurnId: null,
   subagentId: null,
   draft: "",
+  draftStatus: null,
   attachments: [],
   outbox: [],
   question: null,

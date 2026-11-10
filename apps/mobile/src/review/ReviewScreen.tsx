@@ -9,7 +9,8 @@ import {
   type RiskFinding,
   type VerdictReason,
 } from "@polaris/protocol";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import type { HostConnection } from "../runtime/hostConnection.ts";
 import { useHost } from "../runtime/hosts.tsx";
 import {
   acceptCommand,
@@ -21,6 +22,8 @@ import {
 import { canAccept } from "./accept/index.ts";
 import type { LineRow } from "./diffRows.ts";
 import { acceptState } from "./model.ts";
+import { reviewGate, type ReviewGateInput } from "./ReviewScreen/gate.ts";
+import { ReviewGateScreen } from "./ReviewScreen/Gate.tsx";
 import { useAsks } from "./ReviewScreen/useAsks.ts";
 import { ReviewView } from "./ReviewView.tsx";
 import { reviewSlot } from "./submissions.ts";
@@ -37,6 +40,21 @@ export interface ReviewScreenProps {
   readonly onBack?: () => void;
 }
 
+const noSubscribe = () => () => undefined;
+
+/** The Host as the gate reads it: its name, Connection State and own failure; null unlinked. */
+const useGateHost = (connection: HostConnection | null): ReviewGateInput["host"] => {
+  const subscribe = connection?.subscribe ?? noSubscribe;
+  const state = useSyncExternalStore(subscribe, () => connection?.status().state ?? null);
+
+  const failure = useSyncExternalStore(
+    subscribe,
+    () => connection?.status().failure?.detail ?? null
+  );
+
+  return connection === null || state === null ? null : { name: connection.name, state, failure };
+};
+
 export const ReviewScreen = ({
   hostId,
   sessionId,
@@ -52,6 +70,7 @@ export const ReviewScreen = ({
   const session = review.session.kind === "ready" ? review.session.value.session : null;
   const summary = review.risk.kind === "ready" ? review.risk.value : null;
   const asks = useAsks(live, summary);
+  const gateHost = useGateHost(connection);
 
   const submit = useCallback(
     (slot: string, payload: string, build: (itemId: string) => Command) => {
@@ -132,10 +151,27 @@ export const ReviewScreen = ({
     return review.diff.kind === "failed" ? review.diff.message : null;
   }, [review.session, review.diff, turn]);
 
+  const gate = reviewGate({
+    host: gateHost,
+    session:
+      review.session.kind === "ready"
+        ? { kind: "ready", turnFound: turn !== null }
+        : review.session,
+  });
+
+  if (gate.kind !== "ready" || turn === null)
+    return (
+      <ReviewGateScreen
+        gate={gate.kind === "ready" ? { kind: "loading" } : gate}
+        onBack={onBack}
+        onRetry={() => connection?.retryNow()}
+      />
+    );
+
   return (
     <ReviewView
       scope={`${hostId}/${sessionId}`}
-      turnNumber={turn === null ? 0 : (turn.userTurnNumber ?? turn.index + 1)}
+      turnNumber={turn.userTurnNumber ?? turn.index + 1}
       sessionTitle={session === null || session.title === "" ? "Untitled" : session.title}
       harnessName={
         session === null ? "the agent" : (harnessEntry(session.harness)?.name ?? session.harness)

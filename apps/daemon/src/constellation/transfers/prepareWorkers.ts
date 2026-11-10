@@ -21,6 +21,7 @@ import { latestAttempt, projectTask } from "../projections.ts";
 import { finding, refusal } from "../decision.ts";
 import { RemotePlacements } from "./placements.ts";
 import { resolveCommit } from "../../git/git.ts";
+import { leadRef } from "../leadCheckout.ts";
 import type { ConstellationRecord } from "../../store/constellation.ts";
 
 export interface WorkerPreparation {
@@ -189,7 +190,7 @@ const prepareOne = Effect.fnUntraced(function* <R>(
 
   if (input.task.kind === "gate") {
     const worktree = yield* trees
-      .gate(input.leadPath, input.leadPath)
+      .gate(input.graph, input.leadPath)
       .pipe(Effect.mapError(transferFailure(input)));
 
     return yield* hooks.prepareSession({ ...input, worktree });
@@ -197,9 +198,9 @@ const prepareOne = Effect.fnUntraced(function* <R>(
 
   const base = Predicate.isTagged(input.placement, "New") ? input.placement.base : null;
 
-  const baseHead = yield* gitOperation(() => resolveCommit(input.leadPath, base ?? "HEAD")).pipe(
-    Effect.mapError(transferFailure(input))
-  );
+  const baseHead = yield* gitOperation(() =>
+    resolveCommit(input.leadPath, base ?? leadRef(input.graph))
+  ).pipe(Effect.mapError(transferFailure(input)));
 
   if (baseHead === null) return yield* fail(input, "E-BASE", "The requested base is unavailable");
   const worker = remotePlacement(input);

@@ -41,9 +41,15 @@ export interface HostAddressesInput<R> {
   /** The Host's loopback is this machine's: the local Host, or one on a local socket. */
   readonly isLocal: (hostKey: string) => boolean;
   readonly open: (hostKey: string) => OpenHostAddress<R>;
+  /** The names the Host's hosts file maps to loopback, asked at each partition setup (ENG-621). */
+  readonly names?: (hostKey: string) => Promise<ReadonlyArray<string>>;
   readonly run: (effect: Effect.Effect<void, never, R>) => Fiber.Fiber<void>;
   /** Applies a route to a partition; `configurePartition` outside tests. */
-  readonly configure?: (session: Session, route: PartitionRoute) => Promise<void>;
+  readonly configure?: (
+    session: Session,
+    route: PartitionRoute,
+    isHostAddress: (hostname: string) => boolean
+  ) => Promise<void>;
   /** Takes a removed Host's rules off a partition; `retirePartition` outside tests. */
   readonly retire?: (session: Session) => Promise<void>;
 }
@@ -62,10 +68,18 @@ const removedWhileSettingUp = (hostKey: string) =>
 export const createHostAddresses = <R>({
   isLocal,
   open,
+  names = () => Promise.resolve([]),
   run,
-  configure = (session, route) => configurePartition(session, route, isHostAddress),
+  configure = configurePartition,
   retire = retirePartition,
 }: HostAddressesInput<R>): HostAddresses => {
+  /** Each remote Host's hosts-file loopback names, as of its latest partition setup. */
+  const hostNames = new Map<string, ReadonlySet<string>>();
+
+  const isHostAddressOn = (hostKey: string) => (hostname: string) =>
+    isHostAddress(hostname) ||
+    (hostNames.get(hostKey)?.has(hostname.toLowerCase().replace(/\.$/, "")) ?? false);
+
   const servers = new Map<string, Promise<ProxyServer>>();
   const started = new Map<string, ProxyServer>();
   const setups = new Map<Session, Setup>();
@@ -101,7 +115,11 @@ export const createHostAddresses = <R>({
     let server = servers.get(hostKey);
 
     if (server === undefined) {
-      const starting = startProxyServer({ open: open(hostKey), isHostAddress, run });
+      const starting = startProxyServer({
+        open: open(hostKey),
+        isHostAddress: isHostAddressOn(hostKey),
+        run,
+      });
 
       server = starting;
       servers.set(hostKey, starting);
@@ -114,12 +132,20 @@ export const createHostAddresses = <R>({
     return server;
   };
 
+  const remoteRoute = async (hostKey: string): Promise<PartitionRoute> => {
+    const server = await serverFor(hostKey);
+    const known = await names(hostKey).catch((): ReadonlyArray<string> => []);
+
+    hostNames.set(hostKey, new Set(known));
+
+    return { kind: "remote", proxyPort: server.port, names: known };
+  };
+
   const setUp = async (hostKey: string, session: Session) =>
     configure(
       session,
-      isLocal(hostKey)
-        ? { kind: "local" }
-        : { kind: "remote", proxyPort: (await serverFor(hostKey)).port }
+      isLocal(hostKey) ? { kind: "local" } : await remoteRoute(hostKey),
+      isHostAddressOn(hostKey)
     );
 
   const forget = async (hostKey: string) => {
@@ -132,6 +158,7 @@ export const createHostAddresses = <R>({
     // Synchronously, so a setup asked for right after starts afresh on a new proxy.
     servers.delete(hostKey);
     started.delete(hostKey);
+    hostNames.delete(hostKey);
     sessions.forEach((session) => setups.delete(session));
 
     const registered = (async () => {

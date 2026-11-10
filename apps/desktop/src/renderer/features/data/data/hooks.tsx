@@ -28,6 +28,7 @@ import {
   liveDataApi,
   type Snapshots,
   type TableChange,
+  type TraceOf,
 } from "./api.ts";
 
 const ApiContext = createContext<DataApi>(liveDataApi);
@@ -142,7 +143,8 @@ export const useTableChanges = (at: DataSessionKey): Loaded<ReadonlyArray<TableC
 export const useDescribe = (
   at: DataSessionKey,
   input: DescribeInput | null,
-  generation: string | number = 0
+  generation: string | number = 0,
+  trace?: TraceOf
 ): Loaded<SchemaTree | TableDetail> => {
   const api = useDataApi();
   const [state, setState] = useState<Loaded<SchemaTree | TableDetail>>(LOADING);
@@ -151,6 +153,9 @@ export const useDescribe = (
   const table = input?.table;
   const sample = input?.sample;
   const shown = useRef<string | null>(null);
+  const traceOf = useRef(trace);
+
+  traceOf.current = trace;
 
   useEffect(() => {
     if (source === undefined) return;
@@ -159,7 +164,10 @@ export const useDescribe = (
 
     if (shown.current !== key) setState(LOADING);
     shown.current = key;
-    void api.describe({ hostKey, sessionId }, { source, table, sample }).then((result) => {
+    const context = traceOf.current?.();
+    const options = context === undefined ? undefined : { trace: context };
+
+    void api.describe({ hostKey, sessionId }, { source, table, sample }, options).then((result) => {
       if (!live) return;
       setState(
         result.ok

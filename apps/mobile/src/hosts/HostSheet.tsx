@@ -1,13 +1,10 @@
 /**
  * The host details sheet (Paper MX-AE): Connection State and how long, the last failure, round
- * trip, route, agent sessions, this iPhone's notification switch, and Unlink for relay Hosts.
+ * trip, route, agent sessions, this iPhone's switch for this Host's pushes, and Unlink for relay Hosts.
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import { Alert, Pressable, Switch, Text, View } from "react-native";
-import {
-  constellationNotifications,
-  useConstellationNotifications,
-} from "../push/constellations.ts";
+import { hostNotifications, useHostNotifications } from "../push/hostNotifications.ts";
 import { InstrumentSheet, SheetHeader, Well } from "../sheet/index.tsx";
 import { themedStyles, useTheme } from "../theme/index.ts";
 import { CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
@@ -45,26 +42,31 @@ const Readout = ({
   );
 };
 
-/** The device-wide switch (Paper M9), said honestly: no Host has a switch of its own yet. */
-const Notifications = () => {
+/** Exactly what the switch stops, so off can be trusted (ENG-561). */
+export const HOST_NOTIFICATIONS_CAPTION =
+  "Pushes from this host: needs you, finished turns and failures";
+
+/** This iPhone's switch for this Host (MX-AE): off and the Host sends it no pushes. */
+const Notifications = ({ hostId }: { readonly hostId: string }) => {
   const styles = useStyles();
   const { colours } = useTheme();
-  const on = useConstellationNotifications();
+  const on = useHostNotifications(hostId);
 
   return (
     <Well style={styles.switchWell}>
       <View style={styles.switchText}>
         <Text style={styles.switchTitle} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
-          When a constellation needs you
+          Notifications
         </Text>
         <Text style={styles.switchCaption} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
-          On this iPhone, for every host
+          {HOST_NOTIFICATIONS_CAPTION}
         </Text>
       </View>
       <Switch
         value={on}
-        onValueChange={constellationNotifications.set}
-        accessibilityLabel="When a constellation needs you"
+        onValueChange={(next) => hostNotifications.set(hostId, next)}
+        accessibilityLabel="Notifications"
+        accessibilityHint={HOST_NOTIFICATIONS_CAPTION}
         trackColor={{ true: colours.textDefault, false: colours.rowSelected }}
         thumbColor={on ? colours.panel : colours.textSubtle}
         ios_backgroundColor={colours.rowSelected}
@@ -133,7 +135,7 @@ export const HostSheet = ({
           </Well>
           {onUnlink === null ? null : (
             <>
-              <Notifications />
+              <Notifications hostId={details.hostId} />
               <Pressable
                 accessibilityRole="button"
                 onPress={() => confirmUnlink(details.name, onUnlink)}

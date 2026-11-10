@@ -5,6 +5,7 @@
 import type { Schema } from "effect";
 import { polarisTool } from "../runs.ts";
 import * as inputs from "./inputs.ts";
+import * as history from "./history.ts";
 import { decodeInput } from "./inputs.ts";
 import * as lead from "./lead.ts";
 import { outputText, parseResult, type ToolResult } from "./result.ts";
@@ -14,7 +15,7 @@ import * as visualization from "./visualization.ts";
 import * as worker from "./worker.ts";
 import { lowerFirst } from "./words.ts";
 
-export { type BannerRecord, withBanner } from "./session.ts";
+export { type BannerRecord, secretEnding, withBanner } from "./session.ts";
 
 export type * from "./types.ts";
 
@@ -46,6 +47,9 @@ const BUILDERS = new Map<string, Builder>([
   ["status", () => lead.status()],
   ["set_state", tool(inputs.SetStateInput, lead.setState)],
   ["read_worker", tool(inputs.ReadWorkerInput, lead.readWorker)],
+  ["sessions", tool(inputs.SessionsInput, history.sessions)],
+  ["search_history", tool(inputs.SearchHistoryInput, history.searchHistory)],
+  ["read_history", tool(inputs.ReadHistoryInput, history.readHistory)],
   ["message", tool(inputs.MessageInput, worker.message)],
   ["block", tool(inputs.BlockInput, worker.block)],
   ["progress", tool(inputs.ProgressInput, worker.progress)],
@@ -125,6 +129,7 @@ export const polarisToolView = (item: ToolCallItem): PolarisToolView | null => {
     tool: name,
     subject,
     links: built.links,
+    sessions: built.sessions ?? [],
     notice: noticeOf(name, item),
     raw: { name: item.name, input: JSON.stringify(item.input, null, 2) ?? "", output: text },
   };

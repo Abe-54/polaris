@@ -13,6 +13,7 @@ import { startServer } from "../transport/server.ts";
 import { VoiceProvider } from "./provider.ts";
 import { makeVoiceRpcs } from "./VoiceRpcs.ts";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 
 const KEY = "0123456789abcdef0123456789abcdef01234567";
 
@@ -70,7 +71,7 @@ test("the SDK streams an audio iterator to the relay and yields its snapshots", 
       });
 
       const desktop = yield* connectRpc(yield* clientSocket(server.socketPath));
-      const hello = yield* desktop.client.hello(identity);
+      const hello = yield* desktop.client.hello({ ...identity, ...TEST_USER_KEY });
 
       yield* desktop.client["voice.setKey"]({ provider: "deepgram", key: Redacted.make(KEY) });
 

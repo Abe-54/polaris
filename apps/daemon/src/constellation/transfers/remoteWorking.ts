@@ -1,4 +1,5 @@
 import {
+  CommandId,
   type DomainEvent,
   type Attempt,
   type AttemptId,
@@ -278,11 +279,46 @@ export const remoteWorkingAttemptsLayer = <E, R>(hooks: RemoteWorkingHooks<E, R>
         Effect.forkIn(parent)
       );
 
+      const restartStartup = Effect.fnUntraced(function* (attemptId: AttemptId) {
+        const assignment = (yield* storage.assignments.pipe(Effect.orDie)).find(
+          (a) => a.attemptId === attemptId
+        );
+
+        if (assignment === undefined) return false;
+        const attempt = assignmentAttempt(assignment);
+
+        if (
+          attempt.hostId !== hostId ||
+          attempt.state !== "working" ||
+          assignment.graph.attempts.findLast((a) => a.taskId === attempt.taskId)?.id !==
+            attempt.id ||
+          assignment.graph.state === "completed" ||
+          assignment.graph.state === "archived" ||
+          (yield* storage.claimedAttempts.pipe(Effect.orDie)).has(attempt.id)
+        )
+          return false;
+
+        for (const receipt of ["start", "startup-failed"])
+          if (
+            yield* store
+              .hasCommandReceipt(CommandId.make(`${attemptId}:${receipt}`))
+              .pipe(Effect.orDie)
+          )
+            return false;
+
+        // The same path a Daemon restart takes: a fresh slot, then the brief exactly once.
+        yield* stop(attemptId);
+        yield* start(assignment, true).pipe(Effect.orDie);
+
+        return true;
+      });
+
       return {
         prepare: hooks.prepare,
         assigned: (assignment) => start(assignment, false),
         resume: (assignment) => start(assignment, true),
         claimed: stop,
+        restartStartup,
       } satisfies RemoteWorkerHooks;
     })
   );

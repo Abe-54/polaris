@@ -24,7 +24,7 @@ export const watchKey = (hostKey: string, checkout: Pick<ReviewCheckout, "id">) 
 export const pullName = (pull: PullRef) =>
   `${pull.repo.owner}/${pull.repo.name}#${pull.number}`.toLowerCase();
 
-export const pullOf = (checkout: ReviewCheckout): PullRef | null =>
+export const pullOf = (checkout: Pick<ReviewCheckout, "subject">): PullRef | null =>
   Predicate.isTagged(checkout.subject, "PullRequest")
     ? {
         repo: {

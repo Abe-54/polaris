@@ -23,6 +23,8 @@ export const Capability = Schema.Literals([
   /** Agent execute and user grid commits (ENG-645). */
   "data.writes",
   "data.schemaDiff",
+  /** `turns` on `data.schemaDiff`: one diff across a Turn group (ENG-672). */
+  "data.schemaDiff.turns",
   /** Checkout Traces watch, trace details and Span logs (ADR 0094). */
   "traces",
   /** Workspace Traces settings and exporter detection; advertised only when implemented. */
@@ -40,6 +42,8 @@ export const Capability = Schema.Literals([
   "data.sqlite",
   /** Explicit Turn/Trace route comparison; advertised only when implemented. */
   "traces.compare",
+  /** `traces.installSkill`: the polaris-tracing skill bundled with the Daemon (ENG-694). */
+  "traces.skill",
   /** `host.restartPreview` and `host.prepareRestart`: Restart daemon's confirm and clean stop (ADR 0087). */
   "host.restart",
   /** `remoteAccess.status`, `remoteAccess.enable` and `remoteAccess.disable` (Tailscale, ADR 0076). */
@@ -86,7 +90,8 @@ export const Capability = Schema.Literals([
   /**
    * Subagents: `SubagentStarted`/`SubagentEnded`, a Subagent's own items (with a
    * `subagentId`), and `TurnDetail.subagents`. A Client announces it in `hello`;
-   * the Daemon leaves all of these out for Clients that didn't.
+   * the Daemon leaves all of these out for Clients that didn't. `ApprovalRequest.subagentId`
+   * is sent to every Client (the request must still be answered); one without it ignores it.
    */
   "session.subagents",
   /** Live background task snapshots and SessionBackgroundTasksChanged events. */
@@ -97,6 +102,8 @@ export const Capability = Schema.Literals([
   "session.stop-background",
   /** The `BackgroundCommand` command, and `HarnessModels.backgroundsCommands`. */
   "session.background-command",
+  /** `SessionBackgroundCommandFailed`: a `BackgroundCommand` the Harness couldn't carry out. */
+  "session.background-command-failed",
   /** `SessionCompacted` and `AgentSession.lastCompaction`; `ContextUsage`'s breakdown fields need nothing. */
   "session.compaction",
   /** `SessionNotified`: an agent's notification for the user (MCP `notify`). */
@@ -108,6 +115,15 @@ export const Capability = Schema.Literals([
   "approval.secret",
   /** `PinSession`, `SessionPinned`, and `AgentSession.pinnedAt` and `origin`. */
   "session.pin",
+  /** `AgentSession.reviewSubject`: the Review a Reviewer's or walkthrough's session is for. */
+  "session.review-subject",
+  /**
+   * `AgentSession.backgroundReportsPending` and `SessionBackgroundTasksChanged.reportsPending`:
+   * the Harness will start a Turn for finished background tasks' reports.
+   */
+  "session.background-reports",
+  /** `Turn.checkpointAfterCommit`: the commit of a Turn's after-checkpoint. */
+  "session.checkpoint-commit",
   /**
    * The `plan` PermissionMode. A Daemon sends a Client without it `supervised` for a planning
    * session; a Client starts a session `supervised` on a Daemon without it.
@@ -116,8 +132,9 @@ export const Capability = Schema.Literals([
   /** The Limited Session State, `SetResumeAtReset` and `SessionResumeAtResetChanged`. */
   "session.limited",
   /**
-   * `Turn.userTurnNumber` and `replyPreview`, and `AgentSession.currentUserTurn` and
-   * `lastReplyPreview`: without it they are null, and a Client numbers and times Turns itself.
+   * `Turn.userTurnNumber` and `replyPreview`, `AgentSession.currentUserTurn`, `lastReplyPreview`
+   * and `acceptedThroughUserTurn`, and `TurnsAccepted.throughUserTurn`: without it they are
+   * null, and a Client numbers and times Turns itself.
    */
   "session.user-turns",
   /** `RunShellCommand`, `Turn.shellCommand`, `CommandExecution.origin` and `HarnessModels.runsShellCommands`. */
@@ -188,6 +205,8 @@ export const Capability = Schema.Literals([
   "blobs",
   /** `hostAddress.open` and `byteStream.credit`: Host-address streams to the Host's loopback (ADR 0093). */
   "host-address",
+  /** `hostAddress.names`: the names the Host's hosts file maps to loopback (ENG-621). */
+  "host-address.names",
   /**
    * `browser.*` and `byteStream.credit`: Browser hosting and Browser streams (ADR 0092). A Client
    * announces it when it can host Browsers; the Daemon refuses `browser.host` from one that didn't.
