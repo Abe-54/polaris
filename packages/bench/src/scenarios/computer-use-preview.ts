@@ -244,7 +244,8 @@ export const computerUsePreview: Scenario = {
       const notes: Array<string> = [];
       const exact = { tolerance: { relative: 0, absolute: 0 } };
 
-      yield* settle(2000);
+      // The Daemon is still busy for a while after it starts and after the scripted Turn.
+      yield* settle(ctx.quick ? 10_000 : 25_000);
       metrics.unwatched_capture_processes = count(captureProcesses(sampler), "", exact);
       // Longer than the phases need: it is stopped by hand before the still phase.
       const typing = yield* startTyping(document.name, baseS + localS + remoteS + 60);
