@@ -133,7 +133,7 @@ const context: RequestContext = {
   restartToUpdate: () => undefined,
   showAppInFinder: () => undefined,
   settings: () => ({ theme: "dark", hosts: [{ alias: "studio" }] }),
-  cache: { get: () => [], put: () => undefined },
+  cache: { get: () => [], put: () => undefined, rendererFlushed: () => undefined },
   prices: { table: () => Promise.reject(new Error("no prices in tests")) },
   setAppearance: () => undefined,
   setSessionDefault: () => undefined,

@@ -98,7 +98,7 @@ import {
   whenHostRemoved,
 } from "./hostAddress/open.ts";
 import { openPrices } from "./prices.ts";
-import { openSnapshotCache } from "./snapshotCache.ts";
+import { openSnapshotCache, type SnapshotCache } from "./snapshotCache.ts";
 import type { SessionPrefsPatch } from "../shared/contract.ts";
 import {
   appearanceOf,
@@ -208,6 +208,8 @@ let languageIpc: ReturnType<typeof registerLanguageIpc> | null = null;
 let localHost: LocalHostApi | null = null;
 
 let ipc: { readonly dispose: () => void } | null = null;
+
+let snapshotCache: SnapshotCache | null = null;
 
 let predictionOutcomes: PredictionOutcomes | null = null;
 
@@ -575,6 +577,9 @@ const start = async () => {
       Promise.reject(new Error("host addresses aren't set up")),
   });
 
+  const cache = openSnapshotCache(app.getPath("userData"));
+
+  snapshotCache = cache;
   ipc = registerIpc({
     runtime,
     trusted,
@@ -593,7 +598,7 @@ const start = async () => {
       predictionBridge,
       chooseFolder,
       settings: () => settings,
-      cache: openSnapshotCache(app.getPath("userData")),
+      cache,
       prices: openPrices(app.getPath("userData")),
       setAppearance,
       setSessionDefault,
@@ -662,6 +667,16 @@ const start = async () => {
 
   watchWindowCrashes(win.webContents, recordCrash);
 
+  // The renderer holds Hosts for the cache up to 30 s; leaving the window writes them now.
+  const flushCache = () => {
+    const event: AppEvent = { kind: "cache-flush", id: 0 };
+
+    win.webContents.send(CHANNELS.app, event);
+  };
+
+  win.on("blur", flushCache);
+  win.on("hide", flushCache);
+
   // macOS: closing the window hides it, so the star, notifications and badge keep counting.
   if (process.platform === "darwin") {
     win.on("close", (event) => {
@@ -716,7 +731,23 @@ const start = async () => {
 
 let quitting = false;
 
-const finishQuit = () => {
+/** A quit has begun: the cache is flushing, then everything shuts down. */
+let closing = false;
+
+const CACHE_QUIT_TIMEOUT_MS = 2000;
+
+/** The renderers' pending Hosts, then the cache file, before anything shuts down. */
+const flushCacheForQuit = () =>
+  snapshotCache?.flushForQuit((id) => {
+    const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+
+    if (windows.length === 0) snapshotCache?.rendererFlushed(id);
+    const event: AppEvent = { kind: "cache-flush", id };
+
+    for (const win of windows) win.webContents.send(CHANNELS.app, event);
+  }, CACHE_QUIT_TIMEOUT_MS) ?? Promise.resolve();
+
+const cleanUpAndQuit = () => {
   quitting = true;
   exiting = true;
   ipc?.dispose();
@@ -742,9 +773,17 @@ const finishQuit = () => {
   });
 };
 
+const finishQuit = () => {
+  if (closing) return;
+  closing = true;
+  void flushCacheForQuit().then(cleanUpAndQuit);
+};
+
 app.on("before-quit", (event) => {
   if (quitting) return;
   event.preventDefault();
+
+  if (closing) return;
 
   // Cleanup precedes Squirrel closing windows; Editor cancellation leaves the app usable.
   if (holdsQuit()) {

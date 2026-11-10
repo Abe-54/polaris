@@ -108,7 +108,7 @@ Follow-ups: Linux AppImage/deb (today `--linux` makes an unpacked `Polaris-linux
 | `src/main/local/` | `LocalHost`: whether this Client has a local Host, its name, and which Daemon serves it (the system socket or Windows pipe, the dev Daemon, a given socket); `unsupported` on Windows on Arm. |
 | `src/main/protocol.ts`, `window.ts`, `menu.ts` | `app://polaris` with a strict CSP, the `hiddenInset` window, the native menu (Settings… ⌘,, ⌘1–3, appearance, density). |
 | `src/shared/deepLink.ts`, `src/main/deepLinks.ts`, `src/renderer/routes/deepLink.ts` | `polaris://` links (below): parsed with Effect Schema, held until the renderer loads, then resolved to a Host by `hostId` and navigated. |
-| `src/main/snapshotCache.ts` | The last synchronized Host snapshots, painted at launch and then revalidated (ENG-175). |
+| `src/main/snapshotCache.ts` | The last synchronized Host snapshots, painted at launch and then revalidated (ENG-175). The renderer puts a changed Host at most every 30 s, and at once when the window blurs, hides or quits; main writes it asynchronously and atomically, encoding only that Host (ENG-904). |
 | `src/main/notifications/`, `src/main/tray/` | Needs You outside the window: native notifications (`plan.ts` decides, tested), the menu bar star with the count and a menu of waiting sessions, the Dock badge. Fed by the renderer's `needsYou.publish`. |
 | `src/renderer/store/` | Pure reducers for Host and session feeds (`hostModel.ts`, `sessionModel.ts`), a zustand vanilla store applying one frame's updates at a time (`store.ts`, `frameQueue.ts`). |
 | `scripts/` | `build.ts`, `dev.ts`, `smoke.ts` and their helpers. |
