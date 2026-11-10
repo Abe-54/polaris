@@ -255,7 +255,7 @@ describe("computer use access", () => {
       revokedAt: null,
     });
 
-    expect(rpcs).toHaveLength(10);
+    expect(rpcs).toHaveLength(11);
     expect(rpcs.filter((rpc) => decideAccess(pairing, rpc, null) === null)).toEqual([]);
   });
 

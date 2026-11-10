@@ -33,6 +33,7 @@ import {
 
 import { emptyResources, foldResources, type ResourcesModel } from "../resources/model.ts";
 
+import { approvalCapability } from "./approvalCapability.ts";
 import { pickCelestial } from "./celestial.ts";
 import { foldConstellation, graphEvent, type ConstellationRecord } from "./constellation.ts";
 import { purgeWorkspace } from "./removal.ts";
@@ -248,6 +249,7 @@ export const gatingCapabilities: ReadonlyArray<Capability> = [
   "session.pin",
   "session.limited",
   "approval.secret",
+  "computer-use",
 ];
 
 const needs = (capability: Capability) => (): Capability => capability;
@@ -311,7 +313,7 @@ export const eventCapability = (event: DomainEvent): Capability | null =>
       ReviewCheckoutOpened: needs("review.checkouts"),
       ReviewCheckoutChanged: needs("review.checkouts"),
       ReviewCheckoutRemoved: needs("review.checkouts"),
-      ApprovalRequested: ({ request }) => (request.kind === "secret" ? "approval.secret" : null),
+      ApprovalRequested: ({ request }) => approvalCapability(request.kind),
       ApprovalResolved: ({ decision }) =>
         Predicate.isTagged(decision, "Provided") ? "approval.secret" : null,
     },

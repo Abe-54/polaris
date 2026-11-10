@@ -57,7 +57,7 @@ Capability `remote-access` (ENG-400, ADR 0076). `remoteAccess.status` answers `R
 
 ### Computer use (`computerUse.ts`, `computerUsePolicy.ts`)
 
-Capabilities `computer-use` and `computer-use.preview` (ENG-846, ADR 0104). [`computer-use.md`](./computer-use.md) is the contract other work builds against: each Host's status and its feed (`computerUse.status`, `watch`, `enable`, `disable`, `openSetup`), the `app` and `headed-input` ApprovalKinds with `ApprovalRequest.app`, the always-allowed list (`computerUse.allowedApps`, `removeAllowedApp`), the preview (`computerUse.preview.watch`, `preview.latest`), `ToolCall.computerUse`, and the policy as pure functions (`decideAppUse` and what changes an `AppPolicy`). The Daemon answers all of it `Unsupported` until each part lands.
+Capabilities `computer-use` and `computer-use.preview` (ENG-846, ADR 0104). [`computer-use.md`](./computer-use.md) is the contract other work builds against: each Host's status and its feed (`computerUse.status`, `watch`, `enable`, `disable`, `openSetup`), the `app` and `headed-input` ApprovalKinds with `ApprovalRequest.app`, the always-allowed list (`computerUse.allowedApps`, `removeAllowedApp`, `allowedApps.add`), the preview (`computerUse.preview.watch`, `preview.latest`), `ToolCall.computerUse`, and the policy as pure functions (`decideAppUse` and what changes an `AppPolicy`). The Daemon answers all of it `Unsupported` until each part lands.
 
 ### Status
 

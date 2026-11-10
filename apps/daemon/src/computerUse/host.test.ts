@@ -14,7 +14,14 @@ import {
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ComputerUseHelper } from "../service/computerUse/index.ts";
 import { ComputerUseHost } from "./host.ts";
-import { type FakeHost, fakeHost, macStatus } from "./host.testing.ts";
+import {
+  a11yInstalled,
+  busctl,
+  type FakeHost,
+  fakeHost,
+  linuxDesktop,
+  macStatus,
+} from "./host.testing.ts";
 import { makeHelper, toolOf } from "../service/computerUse/helper.testing.ts";
 import { newTempDir } from "../platform/tempDir.testing.ts";
 import type { HostProbe } from "./probe.ts";
@@ -48,23 +55,6 @@ const run = <A, E>(
   );
 
 const tag = (status: ComputerUseStatus) => status.state._tag;
-
-/** A Linux Host with a live Wayland desktop in the Daemon's environment. */
-const linuxDesktop = async (host: FakeHost) => {
-  await host.listen(join(host.root, "run", "1000", "wayland-0"));
-
-  return host.probe({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" } });
-};
-
-const a11yInstalled = (host: FakeHost) =>
-  host.file(join(host.root, "dbus-1", "org.a11y.Bus.service"));
-
-/** busctl answering the a11y bus's address, and the registry's ping exiting `ping`. */
-const busctl = (host: FakeHost, ping: number) =>
-  host.command(
-    "busctl",
-    `case "$*" in *GetAddress*) printf 's "unix:path=/tmp/a11y"\\n';; *Ping*) exit ${ping};; esac`
-  );
 
 test("a Host with no desktop says so whether computer use is on or off", async () => {
   const host = fakeHost();
@@ -375,6 +365,37 @@ test("the always-allowed list is kept by name, survives a restart, and removes b
 
   expect(added.map((allowed) => allowed.app.name)).toEqual(["Arc", "Figma"]);
   expect(afterRestart.map((allowed) => allowed.app.id)).toEqual([arc.id]);
+});
+
+test("an app added in Settings is named by the Host, and by its id when the Host can't", async () => {
+  const host = fakeHost();
+
+  host.command(
+    "mdfind",
+    `case "$*" in *com.apple.Terminal*) echo /System/Applications/Utilities/Terminal.app;; esac`
+  );
+
+  const probe = host.probe({ platform: "darwin" });
+  const hostile = AppId.make("x' || kMDItemFSName == '*");
+
+  const apps = await run({ probe, file: join(host.root, "cu.json") }, (service) =>
+    Effect.gen(function* () {
+      yield* service.addAllowedApp(AppId.make("com.apple.Terminal"));
+      yield* service.addAllowedApp(AppId.make("dev.example.gone"));
+      yield* service.addAllowedApp(hostile);
+
+      return yield* service.addAllowedApp(AppId.make("com.apple.Terminal"));
+    })
+  );
+
+  expect(apps.map((allowed) => [allowed.app.id, allowed.app.name])).toEqual([
+    ["dev.example.gone", "dev.example.gone"],
+    ["com.apple.Terminal", "Terminal"],
+    [hostile, hostile],
+  ]);
+  // An id that could end the quoted value never reaches Spotlight's query.
+  expect(host.calls("mdfind")).toHaveLength(3);
+  expect(host.calls("mdfind").join("\n")).not.toContain("kMDItemFSName");
 });
 
 macTest("watching the Host checks it once and never again until asked", async () => {

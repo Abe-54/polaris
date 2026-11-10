@@ -39,18 +39,33 @@ interface Definition<I> {
   readonly name: string;
   readonly description: string;
   readonly input: Schema.Codec<I, unknown>;
-  /** Real pointer and keyboard input: refused until the user approves it (D3). */
+  /** Real pointer and keyboard input: needs the user's headed-input approval for the app. */
   readonly headed: boolean;
   /** Reads the screen and changes nothing. */
   readonly observes: boolean;
+  /**
+   * About the Host, not one app, when the call names none: a `listing` runs unasked, a
+   * `capture` shows whatever is on screen, so only while the session controls an app.
+   */
+  readonly hostWide?: HostWide;
+  /** The screen points a headed call sends input to: each must be in the app's own window. */
+  readonly points?: (input: I) => ReadonlyArray<ScreenPoint>;
   readonly argv: (input: I) => ReadonlyArray<string>;
   readonly target: (input: I) => Target;
+}
+
+export type HostWide = "listing" | "capture";
+
+export interface ScreenPoint {
+  readonly x: number;
+  readonly y: number;
 }
 
 /** A call's input, parsed: what it runs and what it acts on. */
 export interface ParsedCall {
   readonly argv: ReadonlyArray<string>;
   readonly target: Target;
+  readonly points: ReadonlyArray<ScreenPoint>;
   /** The display a screenshot captures, when it captures a whole one. */
   readonly screen: number | null;
 }
@@ -61,6 +76,7 @@ export interface DesktopTool {
   readonly input: Schema.Top;
   readonly headed: boolean;
   readonly observes: boolean;
+  readonly hostWide: HostWide | null;
   /** None when the input doesn't fit the tool's schema. */
   readonly parse: (input: Json) => Option.Option<ParsedCall>;
 }
@@ -78,10 +94,16 @@ const tool = <I>(definition: Definition<I>): DesktopTool => {
     input: definition.input,
     headed: definition.headed,
     observes: definition.observes,
+    hostWide: definition.hostWide ?? null,
     parse: (json) =>
       Option.map(decode(json), (input) => ({
         argv: definition.argv(input),
         target: definition.target(input),
+        // Rounded as `point` rounds them, so the check and the click are the same point.
+        points: (definition.points?.(input) ?? []).map(({ x, y }) => ({
+          x: Math.round(x),
+          y: Math.round(y),
+        })),
         screen: Option.getOrNull(decodeScreenOf(json))?.screen ?? null,
       })),
   };
@@ -233,6 +255,7 @@ const screenshot = tool({
   }),
   headed: false,
   observes: true,
+  hostWide: "capture",
   argv: (input) => [
     "screenshot",
     ...flag("app", input.app),
@@ -248,6 +271,7 @@ const listApps = tool({
   input: Schema.Struct({ app: optional(text("Only apps whose name matches this.")) }),
   headed: false,
   observes: true,
+  hostWide: "listing",
   argv: (input) => ["list-apps", ...flag("app", input.app)],
   target: () => none,
 });
@@ -258,6 +282,7 @@ const listWindows = tool({
   input: Schema.Struct({ app: optional(App) }),
   headed: false,
   observes: true,
+  hostWide: "listing",
   argv: (input) => ["list-windows", ...flag("app", input.app)],
   target: onApp,
 });
@@ -301,6 +326,7 @@ const mouseClick = tool({
   }),
   headed: true,
   observes: false,
+  points: (input) => [input],
   argv: (input) => [
     "mouse-click",
     point("xy", input.x, input.y),
@@ -316,6 +342,7 @@ const mouseMove = tool({
   input: Schema.Struct({ x: X, y: Y, app: App }),
   headed: true,
   observes: false,
+  points: (input) => [input],
   argv: (input) => ["mouse-move", point("xy", input.x, input.y)],
   target: onApp,
 });
@@ -326,6 +353,7 @@ const hover = tool({
   input: Schema.Struct({ x: X, y: Y, app: App }),
   headed: true,
   observes: false,
+  points: (input) => [input],
   argv: (input) => ["hover", point("xy", input.x, input.y)],
   target: onApp,
 });
@@ -342,6 +370,10 @@ const drag = tool({
   }),
   headed: true,
   observes: false,
+  points: (input) => [
+    { x: input.from_x, y: input.from_y },
+    { x: input.to_x, y: input.to_y },
+  ],
   argv: (input) => [
     "drag",
     point("from-xy", input.from_x, input.from_y),

@@ -6,3 +6,13 @@ export { ComputerUseHostRpcHandlers, ComputerUseHostRpcs } from "./rpc.ts";
 export { type Desktop, detectDesktop } from "./desktop.ts";
 
 export { type HostProbe, hostProbe, type ProbeOptions } from "./probe.ts";
+
+export {
+  AppControl,
+  appMessages,
+  type AppUseAnswer,
+  type AppUseCall,
+  type AskForApp,
+} from "./control.ts";
+
+export { builtInRefused } from "./refused.ts";

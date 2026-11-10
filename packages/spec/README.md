@@ -906,7 +906,7 @@ The model has no permission mode and no Harness, and neither has `AppPolicy`: th
 
 `verification/computerUse.model.slow.test.ts` drives the real code against an independent model of this spec and fails under each of those bugs made in `computerUsePolicy.ts`, and under one that ignores `InUse`.
 
-**Left out, on purpose.** The preview, the status and its feed, and the always-allowed list's storage are outside the EventStore and are not modelled. Neither is the user taking control back in headed mode, nor who answers: `appDecisionRefusal` also refuses an Extension's "always", per command, from its Actor. Until the Daemon's computer use service lands, the test itself plays the part of that service: it opens the approval when the policy asks for one, and keeps a refused answer from the machine.
+**Left out, on purpose.** The preview, the status and its feed, and the always-allowed list's storage are outside the EventStore and are not modelled. Neither is the user taking control back in headed mode, nor who answers: `appDecisionRefusal` also refuses an Extension's "always", per command, from its Actor. The test plays the part of the Daemon's `AppControl` (`apps/daemon/src/computerUse/control.ts`): it opens the approval when the policy asks for one. Every answer goes to the machine, which rejects the ones `appDecisionRefusal` refuses (`decisionRefusal` in `engine/session.approvals.ts`), so the card stays. `engine/Engine.computerUse*.test.ts` run the same rules through the real Engine and `AppControl`.
 
 ## Data write approvals (ENG-645)
 
