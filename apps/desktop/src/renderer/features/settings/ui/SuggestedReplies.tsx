@@ -38,9 +38,9 @@ const useResolved = (fallback: SuggestedRepliesPref["fallback"]): Choice | null 
 
 /** The cost, stated once: one small request on the resolved model after each Turn. */
 export const fallbackCost = (model: string | null) =>
-  `Claude Code suggests its own. Other harnesses use one small request on ${
-    model ?? "a small, fast model"
-  } after each turn.`;
+  model === null
+    ? "Claude Code suggests its own. Other harnesses use one small request after each turn, on the cheapest fast model that's ready."
+    : `Claude Code suggests its own. Other harnesses use one small request on ${model} after each turn.`;
 
 export const SuggestedRepliesCard = () => {
   const { enabled, fallback } = useSettings((s) => s.sessions.suggestedReplies);
