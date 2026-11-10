@@ -8,7 +8,7 @@
  * Phases: nobody watching; watching at the local cap; at the remote cap; the typing over
  * (a window that no longer changes); then unsubscribed.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PREVIEW_MAX_FPS, type PreviewLink, PreviewItem, SessionId } from "@polaris/protocol";
 import { Effect, Stream } from "effect";
@@ -124,13 +124,13 @@ const measure = (sampler: Sampler, ms: number, seen: Watched | null) =>
   });
 
 /** Opens a scratch document in TextEdit without bringing it forward; answers its window id. */
-const openDocument = (dir: string) =>
+const openDocument = () =>
   Effect.acquireRelease(
     Effect.promise(async () => {
+      const dir = createTempDir("preview-doc");
       const name = `polaris-preview-${process.pid}.txt`;
       const running = (await run(["/bin/sh", "-c", "pgrep -x TextEdit || true"])).trim() !== "";
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, name), "The Polaris bench types here.\n");
+      writeFileSync(join(dir, name), "The Polaris bench types here.\n", { flag: "wx" });
       await run(["/usr/bin/open", "-g", "-a", "TextEdit", join(dir, name)]);
 
       for (let tries = 0; tries < 100; tries++) {
@@ -139,19 +139,21 @@ const openDocument = (dir: string) =>
           `tell application "TextEdit" to get id of (first window whose name is "${name}")`
         ).catch(() => "");
 
-        if (id.trim() !== "") return { name, window: { id: id.trim(), title: name }, running };
+        if (id.trim() !== "") return { dir, name, window: { id: id.trim(), title: name }, running };
         await Bun.sleep(100);
       }
 
       throw new Error("TextEdit did not open the scratch document");
     }),
     // TextEdit is quit only when this scenario started it; else only the document is closed.
-    ({ name, running }) =>
+    ({ dir, name, running }) =>
       Effect.promise(() =>
         (running
           ? osascript(`tell application "TextEdit" to close document "${name}" saving no`)
           : run(["/usr/bin/pkill", "-x", "TextEdit"])
-        ).catch(() => "")
+        )
+          .catch(() => "")
+          .finally(() => cleanup(dir))
       )
   );
 
@@ -224,7 +226,7 @@ export const computerUsePreview: Scenario = {
       const localS = ctx.quick ? 6 : 15;
       const remoteS = ctx.quick ? 5 : 10;
       const baseS = ctx.quick ? 3 : 5;
-      const document = yield* openDocument("/tmp/polaris-bench");
+      const document = yield* openDocument();
 
       const daemon = yield* ctx.launch({
         env: {
