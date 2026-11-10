@@ -15,7 +15,7 @@ import {
   Workspace,
   WorkspaceId,
 } from "@polaris/protocol";
-import { Effect, Exit, Fiber, Predicate, Stream } from "effect";
+import { Effect, Exit, Fiber, Option, Predicate, Scheduler, Stream } from "effect";
 import { CommitResult, EventStore } from "./EventStore.ts";
 import { patchTurn } from "./model.ts";
 
@@ -257,6 +257,44 @@ describe("EventStore", () => {
         expect(replay).toEqual(new CommandRejected({ commandId: rejected, reason: "no" }));
       })
     );
+  });
+
+  test("a commit queued while the drain is ending is still written", async () => {
+    // A small operation budget makes the drain yield between its last check and its exit.
+    const stalledWith = (budget: number) =>
+      Effect.gen(function* () {
+        const store = yield* EventStore;
+        const empty = () => store.commit({ commandId: null, decide: () => Effect.succeed([]) });
+        const stalled: Array<number> = [];
+
+        for (let stagger = 0; stagger < 30; stagger++) {
+          const first = yield* Effect.forkChild(empty());
+
+          const second = yield* Effect.forkChild(
+            Effect.gen(function* () {
+              for (let i = 0; i < stagger; i++) yield* Effect.yieldNow;
+
+              return yield* empty();
+            })
+          );
+
+          yield* Fiber.join(first);
+          const settled = yield* Fiber.join(second).pipe(Effect.timeoutOption("300 millis"));
+
+          if (Option.isNone(settled)) stalled.push(stagger);
+        }
+
+        return stalled;
+      }).pipe(
+        Effect.provide(EventStore.layerSqlite(":memory:")),
+        Effect.provideService(Scheduler.MaxOpsBeforeYield, budget)
+      );
+
+    for (const budget of [3, 4, 5])
+      expect({ budget, stalled: await Effect.runPromise(stalledWith(budget)) }).toEqual({
+        budget,
+        stalled: [],
+      });
   });
 
   test("subscribers hear of a batch only once it is committed", async () => {
