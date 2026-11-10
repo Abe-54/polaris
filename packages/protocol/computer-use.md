@@ -145,6 +145,8 @@ Every preview image is a JPEG that travels as a blob (binary side-chunks), never
 
 **Who may always-allow.** The Desktop App, and the Mobile App answering as a Linked Device. No Extension may: Even G2 and Raycast offer "allow" (for this session) and "deny" only, and the Daemon refuses `Allow { remember: true }` on `app` from an Extension whatever its Grants. Nobody may always-allow headed input.
 
+**The user gate (ADR 0100).** On the local socket the Desktop App is told apart from any other process by its user key. `enable`, `allowedApps.add`, `openSetup`, `preview.watch` and `preview.latest` are user-only: a process with only the socket, such as an agent's shell, is refused with `UserAccessRequired`, so it can't turn computer use on, always-allow an app, put System Settings on the user's screen, or watch a window another session drives. `status`, `watch`, `app`, `allowedApps`, `disable` and `removeAllowedApp` stay open to it: they read or narrow. The gate decides only for token-less socket Clients; a Linked Device is decided by its allowlist (the table above), so it still fetches `preview.latest` without a user key.
+
 A Linked Device fetches `preview.latest` on demand, to show what the agent sees next to an approval. The live stream (`preview.watch`) stays on the Desktop App.
 
 A Linked Device or an Extension sees the approvals only once it announces `computer-use`.

@@ -23,6 +23,7 @@ import { previewHandlers } from "./rpcs.ts";
 import type { PreviewSource } from "./source.ts";
 import { stillLayer } from "./still.ts";
 import { PreviewTargets } from "./targets.ts";
+import { TEST_USER_KEY } from "../../transport/userAccess.testing.ts";
 
 const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
@@ -73,7 +74,7 @@ const serve = (source: Layer.Layer<PreviewSource, never, PreviewTargets>) =>
       yield* socketTransport(server.socketPath)
     ).pipe(Scope.provide(scope));
 
-    yield* connection.client.hello(hello);
+    yield* connection.client.hello({ ...hello, ...TEST_USER_KEY });
 
     return { ...connection, disconnect: Scope.close(scope, Exit.void) };
   });

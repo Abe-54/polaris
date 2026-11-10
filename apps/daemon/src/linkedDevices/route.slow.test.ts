@@ -261,6 +261,17 @@ test("a linked device reaches the Daemon with Client power and is recorded as th
 
         expect(new Set(refusals.map((error) => error._tag))).toEqual(new Set(["NotGranted"]));
 
+        // ENG-846: the last preview frame is user-only on the socket, and still a Linked Device's.
+        const frame = yield* Effect.flip(
+          open.client["computerUse.preview.latest"]({
+            sessionId: SessionId.make("s1"),
+            maxEdgePx: null,
+          })
+        );
+
+        // This server has no preview, so reaching its placeholder is past both gates.
+        expect(frame._tag).toBe("Unsupported");
+
         // RX3-1, ENG-458: a phone starts sessions in any mode; a hidden origin is refused.
         const start = (command: Command) =>
           Effect.flip(open.client.dispatch({ commandId: CommandId.make("c3"), command })).pipe(

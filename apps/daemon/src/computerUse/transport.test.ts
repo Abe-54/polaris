@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
-import { AppId, ComputerUseItem, DaemonRpcs } from "@polaris/protocol";
+import { AppId, ComputerUseItem, DaemonRpcs, SessionId } from "@polaris/protocol";
 import { Effect, Fiber, Layer, Stream } from "effect";
 import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
@@ -13,7 +13,7 @@ import { ComputerUseHost, ComputerUseHostRpcHandlers } from "./index.ts";
 
 const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
-test("the Desktop App turns computer use on, watches it turn ready, and the app RPC is still a stub; a keyless process can't turn it on or allow an app", async () => {
+test("the Desktop App turns computer use on, watches it turn ready, and the app RPC is still a stub; a keyless process can't turn it on, allow an app, open setup or see the preview", async () => {
   const host = fakeHost();
   await host.listen(join(host.root, "run", "1000", "wayland-0"));
   host.file(join(host.root, "dbus-1", "org.a11y.Bus.service"));
@@ -58,10 +58,19 @@ test("the Desktop App turns computer use on, watches it turn ready, and the app 
         yield* keyless.client.hello(hello);
         const terminal = AppId.make("com.apple.Terminal");
 
-        const refused = [
-          yield* Effect.flip(keyless.client["computerUse.enable"]({})),
-          yield* Effect.flip(keyless.client["computerUse.allowedApps.add"]({ appId: terminal })),
-        ];
+        const preview = { sessionId: SessionId.make("s1"), maxEdgePx: null };
+
+        const refused = yield* Effect.all([
+          Effect.flip(keyless.client["computerUse.enable"]({})),
+          Effect.flip(keyless.client["computerUse.allowedApps.add"]({ appId: terminal })),
+          Effect.flip(keyless.client["computerUse.openSetup"]({ permission: null })),
+          Effect.flip(keyless.client["computerUse.preview.latest"](preview)),
+          Effect.flip(
+            Stream.runDrain(
+              keyless.client["computerUse.preview.watch"]({ ...preview, link: "local" })
+            )
+          ),
+        ]);
 
         const read = yield* keyless.client["computerUse.status"]({ refresh: false });
 
@@ -82,9 +91,14 @@ test("the Desktop App turns computer use on, watches it turn ready, and the app 
         const added = yield* client["computerUse.allowedApps.add"]({ appId: terminal });
         const listed = yield* client["computerUse.allowedApps"]({});
 
-        expect(refused.map((error) => error._tag)).toEqual([
-          "UserAccessRequired",
-          "UserAccessRequired",
+        expect(
+          refused.map((error) => `${error._tag}:${"what" in error ? error.what : ""}`)
+        ).toEqual([
+          "UserAccessRequired:computerUse.enable",
+          "UserAccessRequired:computerUse.allowedApps.add",
+          "UserAccessRequired:computerUse.openSetup",
+          "UserAccessRequired:computerUse.preview.latest",
+          "UserAccessRequired:computerUse.preview.watch",
         ]);
 
         expect(read.state._tag).toBe("Off");
