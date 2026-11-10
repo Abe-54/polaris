@@ -18,7 +18,7 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
 | `packages/client` | Client runtime: connections to many Daemons over SSH, Connection State, resume, install/upgrade. |
 | `packages/predict` | The fill-in-the-middle predictor behind tab completion (`@polaris/predict`): runs in the Client main process and the Daemon, on TypeScript, Effect and web APIs only (see its README). |
 | `packages/syntax-diff` | The syntax-aware diff: token alignment (Myers over tokens), patches with token emphasis, and tokenizers behind a small interface (the TypeScript parser; the Desktop App adds the highlighter's tokens). |
-| `packages/visualization` | Visualizations (`@polaris/visualization`, ADR 0089): the `visualize` tool input, submit-time validation, the zero-egress frame document and the frame↔app messages; shared by the Daemon, the Desktop App and the Mobile App. |
+| `packages/visualization` | Visualizations (`@polaris/visualization`, ADR 0101): the `visualize` tool input, submit-time validation, the zero-egress frame document and the frame↔app messages; shared by the Daemon, the Desktop App and the Mobile App. |
 | `packages/bench` | Benchmarks: the real Daemon under scripted load, a process-tree memory/CPU sampler, baselines and comparisons. |
 | `packages/spec` | The Quint spec of commits, streams, Client feeds and approvals, and its checks (see Verification). |
 | `apps/daemon` | The Daemon (`polaris` binary): event store, Harness drivers, transport, files, git, terminals, user service. |
