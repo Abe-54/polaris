@@ -225,6 +225,21 @@ const make = Effect.gen(function* () {
   const titleOf = (sessionId: SessionId) =>
     Effect.map(store.model, (model) => model.sessions.get(sessionId)?.session.title ?? null);
 
+  /** Whether the session's log has a Turn in flight: its end frees the apps, before any reactor. */
+  const inTurn = (sessionId: SessionId) =>
+    Effect.map(
+      store.model,
+      (model) =>
+        model.sessions.get(sessionId)?.turns.some((turn) => turn.status === "working") ?? false
+    );
+
+  const release = (sessionId: SessionId) =>
+    Effect.suspend(() => {
+      policy = releaseSession(policy, sessionId);
+
+      return publish;
+    });
+
   const refuse = (message: string) => AppUseAnswer.Refuse({ message });
 
   /** Opens the approval and folds the answer in; the reason it wasn't allowed, or null. */
@@ -279,15 +294,20 @@ const make = Effect.gen(function* () {
     const use = { sessionId: call.sessionId, appId: call.app.id, headed: call.headed };
     let asked = false;
 
-    // At most the app approval, then the headed one, then the use itself.
-    for (let round = 0; round < 3; round++) {
+    // At most a stale holder's release, the app approval, the headed one, then the use itself.
+    for (let round = 0; round < 4; round++) {
       const decision = decideAppUse(yield* current(use.appId), use);
 
       if (AppUseDecision.guards.Refused(decision))
         return refuse(appMessages.refused(call.app.name));
 
-      if (AppUseDecision.guards.InUse(decision))
-        return refuse(appMessages.inUse(call.app.name, yield* titleOf(decision.by)));
+      if (AppUseDecision.guards.InUse(decision)) {
+        if (yield* inTurn(decision.by))
+          return refuse(appMessages.inUse(call.app.name, yield* titleOf(decision.by)));
+        // The holder's Turn ended in the log and its release hasn't run yet.
+        yield* release(decision.by);
+        continue;
+      }
 
       if (AppUseDecision.guards.Allowed(decision)) {
         const at = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -309,12 +329,7 @@ const make = Effect.gen(function* () {
     use: (call) => serially(call.sessionId)(decide(call)),
     controlling: (sessionId) =>
       Effect.sync(() => [...policy.controllers.values()].includes(sessionId)),
-    release: (sessionId) =>
-      Effect.suspend(() => {
-        policy = releaseSession(policy, sessionId);
-
-        return publish;
-      }),
+    release,
     forget: (sessionId) =>
       Effect.suspend(() => {
         policy = forgetSession(policy, sessionId);
