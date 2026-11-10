@@ -1,5 +1,5 @@
 import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
-import { SuggestedReplies } from "../suggestedReply/index.ts";
+import { lazySuggestedReplies } from "../suggestedReply/lazy.ts";
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
@@ -147,8 +147,8 @@ export const traceServices = lazyTraces.pipe(
   Layer.provide(Layer.merge(ReviewerPolicyLive, traceWorkspaceTrust))
 );
 
-/** The Engine, and the Polaris fallback for Suggested Replies that follows its log (ENG-886). */
-const engine = SuggestedReplies.layer().pipe(Layer.provideMerge(Engine.layer));
+/** The Engine, and the Polaris fallback for Suggested Replies, loaded once they're on (ENG-886). */
+const engine = lazySuggestedReplies.pipe(Layer.provideMerge(Engine.layer));
 
 export const engineServices = Layer.mergeAll(engine, releaseWhenQuiet()).pipe(
   Layer.provideMerge(
