@@ -45,7 +45,15 @@ const fakeIndex = () =>
   );
 
 /** A composer whose ↵ records what the Turn would send: the draft, as `SessionComposer` sends it. */
-const Composer = ({ search, sent }: { search: MentionSearch; sent: Array<string> }) => {
+const Composer = ({
+  search,
+  sent,
+  history,
+}: {
+  search: MentionSearch;
+  sent: Array<string>;
+  history?: () => ReadonlyArray<string>;
+}) => {
   const [value, setValue] = useState("");
   const draft = useRef("");
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
@@ -73,6 +81,7 @@ const Composer = ({ search, sent }: { search: MentionSearch; sent: Array<string>
         frecency={{}}
         onPicked={() => undefined}
         mentions={search}
+        history={history}
       />
     </div>
   );
@@ -116,10 +125,13 @@ const press = async (key: string) => {
   await act(async () => undefined);
 };
 
-const mount = async (search: MentionSearch = fakeIndex()) => {
+const mount = async (
+  search: MentionSearch = fakeIndex(),
+  history?: () => ReadonlyArray<string>
+) => {
   const sent: Array<string> = [];
 
-  render(<Composer search={search} sent={sent} />);
+  render(<Composer search={search} sent={sent} history={history} />);
   await act(async () => undefined);
 
   return sent;
@@ -237,5 +249,24 @@ describe("/ Skills anywhere in the message (ENG-544)", () => {
       await type(text);
       expect(document.querySelector('[data-testid="command-menu"]')).toBeNull();
     }
+  });
+});
+
+describe("↑/↓ through what was sent (ENG-903)", () => {
+  test("↑ reads the history when pressed, not as the composer renders", async () => {
+    const entries = ["fix the flaky test"];
+    const read = jest.fn(() => [...entries]);
+
+    await mount(fakeIndex(), read);
+    await type("draft");
+    await act(async () => editor().update(() => $getRoot().clear(), { discrete: true }));
+    expect(read).not.toHaveBeenCalled();
+
+    // Sent since the last render: ↑ still brings it back first.
+    entries.push("now the docs");
+    await press("ArrowUp");
+    expect(input().textContent).toBe("now the docs");
+    await press("ArrowUp");
+    expect(input().textContent).toBe("fix the flaky test");
   });
 });

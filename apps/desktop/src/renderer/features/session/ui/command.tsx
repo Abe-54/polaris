@@ -14,7 +14,7 @@ import {
   outputOpen,
 } from "../model/collapse.ts";
 import { plural } from "../model/format.ts";
-import { type ItemView, outputTail } from "../model/items.ts";
+import { type ItemView, lineCount, outputTail } from "../model/items.ts";
 import { shellRuns } from "../model/shellSyntax.ts";
 import { BackgroundAction } from "./backgroundAction.tsx";
 import { CommandCard } from "./commandCard.tsx";
@@ -37,9 +37,6 @@ const exitLabel = (item: CommandView): string => {
 
   return item.exitCode === null ? item.status : `exit ${item.exitCode}`;
 };
-
-const lineCount = (output: string) =>
-  (output.endsWith("\n") ? output.slice(0, -1) : output).split("\n").length;
 
 /**
  * Whether the fold's delay has passed: at once for a command already done when
@@ -67,9 +64,15 @@ const useSettled = (done: boolean) => {
   };
 };
 
-const Output = ({ output }: { readonly output: string }) => {
+const Output = ({
+  output,
+  newlines,
+}: {
+  readonly output: string;
+  readonly newlines: number | undefined;
+}) => {
   const [all, setAll] = useState(false);
-  const tail = outputTail(output, TAIL_LINES);
+  const tail = outputTail(output, TAIL_LINES, newlines);
 
   return (
     <div className="border-hairline border-t" data-testid="command-output">
@@ -167,7 +170,7 @@ const Line = ({
       {card === null ? text : card(text)}
       {item.output !== "" && canFold && !open ? (
         <span className="text-caption text-text-subtle tabular">
-          {plural(lineCount(item.output), "line")}
+          {plural(lineCount(item.output, item.outputNewlines), "line")}
         </span>
       ) : null}
       <span className="text-caption text-text-subtle tabular">{exitLabel(item)}</span>
@@ -242,7 +245,7 @@ export const Command = ({
           <BackgroundAction itemId={item.id} />
         </div>
       )}
-      {hasOutput && open ? <Output output={item.output} /> : null}
+      {hasOutput && open ? <Output output={item.output} newlines={item.outputNewlines} /> : null}
       {!hasOutput && open ? (
         <p className="text-caption text-text-subtle border-hairline border-t px-3 py-1.5">
           No output
