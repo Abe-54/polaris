@@ -40,6 +40,7 @@ const waitWord = (row: SessionRow): string =>
         Match.when("secret", () => "secret"),
         Match.when("app", () => "app"),
         Match.when("headed-input", () => "headed input"),
+        Match.when("computer-use", () => "computer use"),
         Match.exhaustive
       );
 
