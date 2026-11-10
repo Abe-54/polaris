@@ -324,7 +324,7 @@ Scope: the Desktop App (macOS), and the Mobile App in its own section at the end
 
 **North star: "Night watch."** Polaris is the window a developer keeps open for hours while several agents work. The chrome is quiet, nearly colourless, and flat, so the code and the agents' work stay in front. Two things break the quiet, and only when they mean something:
 
-1. **Signals.** Colour appears only for Session State, Severity, diffs, and Harness identity. Motion appears only while an Agent Session is Working.
+1. **Signals.** Colour appears only for Session State, Severity, diffs, and Harness identity. Looping motion appears only while an Agent Session is Working; every other motion shows one change and ends.
 2. **The pixel world.** Pixel icons on watercolour-washed tiles, dither that shimmers in a Harness's hue while it works, and full pixel scenes (a night sky with Polaris in dark mode, a meadow at dawn in light mode) in onboarding and empty states.
 
 Dark is the default theme; light is equally supported. Every token exists in both, and neither is an afterthought.
@@ -940,11 +940,13 @@ Nucleo UI outline, 1px stroke, 16px, in `text-subtle` (or `text-strong` when sel
 
 ### Motion
 
-Quiet. Hover is instant. Press is 120ms. Small reveals are 160ms. Panels and toasts are 200ms. All use ease-out. The tokens are `--duration-press`, `--duration-reveal`, `--duration-panel` and `--ease-out`, which is also every transition's default curve. A press dips a button to 97%. Every disclosure uses one chevron (`DisclosureChevron`): it points right when closed and turns down over 120ms. No bounce, springs, or overshoot (Output's slide-in is a 200ms ease-out, not a spring). Reduce Motion drops all transitions to instant fades, stills the dither, and stills the scenes.
+Quiet. Hover is instant. Press is 120ms. Small reveals are 160ms. Panels and toasts are 200ms. All use ease-out. The tokens are `--duration-press`, `--duration-reveal`, `--duration-panel` and `--ease-out`, which is also every transition's default curve. A press dips a button to 97%. Every disclosure uses one chevron (`DisclosureChevron`): it points right when closed and turns down over 120ms. Nothing bounces except a morph (Output's slide-in is a 200ms ease-out, not a spring). Reduce Motion drops all transitions to instant fades, stills the dither, and stills the scenes.
+
+**Morphs.** When one chrome surface becomes another (the editor card's foot dividing into the terminal card and the status strip, a selection moving between segments), it changes as one surface and never cuts. A morph that moves a surface uses the morph spring: a 280ms response with 20% bounce, played over 400ms (`--duration-morph` and `--ease-morph`; `MORPH_MS` and `MORPH_EASE` from `@polaris/ui` for the Web Animations API). It first reaches rest at about 185ms, peaks 1.5% past it, and is within 1% from 257ms; no morph overshoots by more than 2% of its travel, and a surface that leaves does not bounce (it uses ease-out). A selection that only moves between siblings slides in 160ms on ease-out, without overshoot. A morph plays once and ends, can be interrupted at any frame, and under Reduce Motion is a crossfade or nothing. The transcript, diff bodies, editor text, tables and charts never morph: what the user is reading stays still.
 
 ### Performance
 
-- Animate `transform` and `opacity` only. Anything that triggers layout or paint per frame (width, height, top, box-shadow, blur radius) does not animate.
+- Animate `transform` and `opacity`. A morph (see Motion) may also animate `border-radius` and `clip-path` on chrome surfaces, for its length only. Anything that triggers layout per frame (width, height, top) never animates, and neither do `box-shadow` or a blur radius.
 - Dialogs and the jump menu are opaque `surface-raised` cards at every moment, their input row included: the card scales in from 98% over 200ms and closes at once, and only the scrim fades. Nothing behind ever shows through a dialog, even mid-animation.
 - The Working dither steps a sprite strip by `transform`.
 - Long lists and diffs are virtualised; nothing animates on scroll.
