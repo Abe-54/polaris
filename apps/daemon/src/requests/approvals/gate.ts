@@ -13,12 +13,16 @@ export class OriginGrant extends Context.Reference<RequestId | null>(
 /** The real origin with the masked path, so the card never shows a secret. */
 const agentSend = (send: PendingSend): AgentSend => {
   const variable = send.variables.find((resolved) => resolved.origin !== undefined)?.name;
+  const token = send.variables.find((resolved) => resolved.masked && resolved.file !== undefined);
 
   return {
     url: send.origin === "" ? send.url : `${send.origin}${send.path}`,
     method: send.method,
     ...(variable === undefined ? undefined : { variable }),
     ...(send.environment === undefined ? undefined : { environment: send.environment }),
+    ...(token?.file === undefined
+      ? undefined
+      : { tokenSource: { file: token.file, name: token.name } }),
   };
 };
 

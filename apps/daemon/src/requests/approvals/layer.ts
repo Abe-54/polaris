@@ -97,7 +97,7 @@ export const originApprovalsLayer = (probes?: LocalityProbes) =>
 
       const storage = <A>(f: () => A) => Effect.try({ try: f, catch: storageError });
 
-      /** Opens one card per origin, or returns the id of the one already pending. */
+      /** Opens one card per origin in this Agent Session, or returns the id of the one it already has pending. */
       const raise = Effect.fnUntraced(function* (
         sessionId: SessionId,
         approval: OriginApproval,
@@ -114,9 +114,9 @@ export const originApprovalsLayer = (probes?: LocalityProbes) =>
               if (!record || !current || (turn !== undefined && turn !== current.id))
                 return Effect.succeed([]);
 
-              const pending = [...model.sessions.values()]
-                .flatMap((session) => [...session.pending.values()])
-                .find((request) => request.origin?.origin === approval.origin);
+              const pending = [...record.pending.values()].find(
+                (request) => request.origin?.origin === approval.origin
+              );
 
               if (pending) {
                 approvalId = pending.id;
