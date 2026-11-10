@@ -2,6 +2,7 @@
  * Fakes for engine tests: a scriptable Harness driver and in-memory
  * Checkpoints, WorktreeTracker and AttachmentStore. Not used in production.
  */
+import { SuggestedReplyPreference } from "./suggestedReplyPreference.ts";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
@@ -269,9 +270,14 @@ export const untrustedWorkspaces = Layer.succeed(WorkspaceTrust)({
   trusted: () => Effect.succeed(false),
 });
 
-export const fakeServices = (fakes: Fakes, drivers: ReadonlyArray<FakeDriver>) =>
+export const fakeServices = (
+  fakes: Fakes,
+  drivers: ReadonlyArray<FakeDriver>,
+  suggestedRepliesPath: string = join(tempDir(), "suggested-replies.json")
+) =>
   Layer.mergeAll(
     untrustedWorkspaces,
+    SuggestedReplyPreference.layer(suggestedRepliesPath),
     Layer.succeed(Checkpoints)({
       capture: ({ sessionId, turnId, label }) =>
         Effect.sync(() => {
@@ -386,6 +392,8 @@ export const engineLayer = (options: {
   readonly autoArchiveSettingsPath?: string;
   /** Default: `idle-compaction-settings.json` next to `filename`. */
   readonly idleCompactionSettingsPath?: string;
+  /** Default: `suggested-replies.json` next to `filename`. */
+  readonly suggestedReplySettingsPath?: string;
 }) => {
   const baseStore = EventStore.layerSqlite(options.filename).pipe(
     Layer.provide(
@@ -415,14 +423,18 @@ export const engineLayer = (options: {
       join(dirname(options.filename), "idle-compaction-settings.json"),
   };
 
+  const services = fakeServices(
+    options.fakes,
+    options.drivers,
+    options.suggestedReplySettingsPath ?? join(dirname(options.filename), "suggested-replies.json")
+  );
+
   return Engine.layer.pipe(
     Layer.provideMerge(store),
     Layer.provide(options.workspaceTrust ?? Layer.empty),
     Layer.provide(options.checkpoints ?? Layer.empty),
     Layer.provide(
-      options.checkpoints === undefined
-        ? fakeServices(options.fakes, options.drivers)
-        : Layer.merge(fakeServices(options.fakes, options.drivers), options.checkpoints)
+      options.checkpoints === undefined ? services : Layer.merge(services, options.checkpoints)
     ),
     Layer.provide(options.reviewCheckoutGit ?? pendingReviewCheckoutGit),
     Layer.provide(

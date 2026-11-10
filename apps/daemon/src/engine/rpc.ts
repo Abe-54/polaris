@@ -221,7 +221,27 @@ const SetIdleCompactionHandler = DaemonRpcs.toLayerHandler(
   })
 );
 
+const SuggestedRepliesHandler = DaemonRpcs.toLayerHandler(
+  "sessions.suggestedReplies",
+  Effect.gen(function* () {
+    const engine = yield* Engine;
+
+    return () => engine.suggestedReplies.resolved;
+  })
+);
+
+const SetSuggestedRepliesHandler = DaemonRpcs.toLayerHandler(
+  "sessions.setSuggestedReplies",
+  Effect.gen(function* () {
+    const engine = yield* Engine;
+
+    return ({ settings }) => engine.suggestedReplies.set(settings);
+  })
+);
+
 export const EngineRpcHandlers = Layer.mergeAll(
+  SuggestedRepliesHandler,
+  SetSuggestedRepliesHandler,
   AutoArchiveHandler,
   SetAutoArchiveHandler,
   IdleCompactionHandler,

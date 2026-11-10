@@ -29,6 +29,8 @@ import {
   type ReviewCheckoutStatus,
   type Sequence,
   type SessionId,
+  type SuggestedReplySource,
+  type TurnId,
   type SessionStreamItem,
   type TerminalLaunch,
   type TurnPage,
@@ -40,6 +42,8 @@ import { registerHandoffContributor } from "../service/upgrade.ts";
 import { AutoArchive } from "./autoArchive.ts";
 import { Dispatcher, type DispatchInput } from "./dispatch.ts";
 import { IdleCompaction } from "./idleCompaction.ts";
+import { suggestReply } from "./suggestedReplies.ts";
+import { SuggestedReplyPreference } from "./suggestedReplyPreference.ts";
 import { LimitResume } from "./limitResume.ts";
 import { CheckpointPruning } from "./pruning.ts";
 import { Reactors } from "./reactors.ts";
@@ -117,6 +121,15 @@ export class Engine extends Context.Service<
     readonly setIdleCompactionSettings: (
       settings: IdleCompactionSettings
     ) => Effect.Effect<void, FileError>;
+    /** The Host's Suggested Reply preference (`suggestedReplyPreference.ts`). */
+    readonly suggestedReplies: typeof SuggestedReplyPreference.Service;
+    /** Commits a Suggested Reply for `turnId`, if it is still the latest, ended Turn (`suggestedReplies.ts`). */
+    readonly offerSuggestedReply: (
+      sessionId: SessionId,
+      turnId: TurnId,
+      text: string,
+      source: SuggestedReplySource
+    ) => Effect.Effect<void, ServiceError>;
     /** A Review Checkout as it is on disk now: what would block an update or removal. */
     readonly checkoutStatus: (
       checkoutId: ReviewCheckoutId
@@ -245,6 +258,11 @@ const make = Effect.gen(function* () {
     setAutoArchiveSettings: autoArchive.setSettings,
     idleCompactionSettings: idleCompaction.settings,
     setIdleCompactionSettings: idleCompaction.setSettings,
+    suggestedReplies: yield* SuggestedReplyPreference,
+    offerSuggestedReply: (sessionId, turnId, text, source) =>
+      Effect.asVoid(
+        runtime.recordFor(sessionId, (record) => suggestReply(record, turnId, text, source))
+      ),
     checkoutReviewed: checkouts.reviewed,
     checkoutStatus: (checkoutId) =>
       checkouts.status(checkoutId).pipe(

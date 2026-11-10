@@ -16,6 +16,7 @@
  * `BrowserMcp`, which gives Claude Code and Codex sessions the Browser's MCP server; with
  * `SimulatorMcp` in context they get the Simulator's too.
  */
+import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
 import type { HarnessKind, KnownHarnessKind } from "@polaris/protocol";
 import { Effect, Layer, Option, Scope } from "effect";
 import { HarnessRegistry, ServiceError } from "../services.ts";
@@ -108,6 +109,13 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const { report } = yield* PlanLimitReporter;
       const browser = yield* BrowserMcp;
       const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
+      const preference = yield* Effect.serviceOption(SuggestedReplyPreference);
+
+      // Read per Turn by the Claude driver (ENG-885); off when the Daemon has no preference.
+      const suggestedReplies = {
+        suggestedReplies: () => Option.isSome(preference) && preference.value.enabledNow(),
+      };
+
       const planLimits = { report };
       // The app-server the Codex driver may start belongs to this layer, not to the first `open`.
       const scope = yield* Effect.scope;
@@ -152,6 +160,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 planLimits,
                 browser,
                 simulator,
+                ...suggestedReplies,
               })
             )
           ),
