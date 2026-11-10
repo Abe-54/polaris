@@ -39,6 +39,11 @@ export interface PolarisOptions {
   readonly reconnect?: boolean;
   /** The longest wait between reconnection attempts (default 10 s). */
   readonly maxReconnectDelay?: Duration.Input;
+  /**
+   * Receive computer use approvals (`app`, `headed-input`). Answer them with allow or deny
+   * only: `alwaysAllowable` says when `remember` is refused (default false).
+   */
+  readonly computerUse?: boolean;
 }
 
 /** How to answer an approval. */
@@ -175,6 +180,7 @@ export const openPolaris = Effect.fn("openPolaris")(function* (
     clientName: options.clientName,
     clientVersion: options.clientVersion ?? SDK_VERSION,
     openTransport,
+    computerUse: options.computerUse ?? false,
   };
 
   const links = new Map<string, HostLink>();
