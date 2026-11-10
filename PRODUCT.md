@@ -6,11 +6,11 @@
 
 macos
 
-The Desktop App is the only shipped Client. The Mobile App (iPhone, including iPhone Duo) is designed in DESIGN.md's Mobile App section (ENG-458).
+The Desktop App ships for macOS on Apple silicon; a Windows build is experimental and connects only to remote Hosts. The Mobile App (iPhone, including iPhone Duo) is in TestFlight by invitation; its design is DESIGN.md's Mobile App section (ENG-458).
 
 ## Stack
 
-Electron (decided in ENG-184): Chromium 152, React with the React Compiler, Pierre Diffs for Review, CodeMirror 6 later for the Editor. Budgets: display-rate frames (measured at 180 Hz) and under 1 GB for the whole app.
+Electron (decided in ENG-184): Chromium 152, React with the React Compiler, Pierre Diffs for Review, CodeMirror 6 for the Editor. Budgets: display-rate frames (measured at 180 Hz) and under 1 GB for the whole app.
 
 ## Users
 
@@ -26,7 +26,7 @@ Polaris drives Harnesses rather than reimplementing one, and it supervises Agent
 
 ## Operating Context
 
-- Long sessions in a single main window, moving between the Orchestrator, Review, and the Editor.
+- Long sessions in a single main window, moving between the Orchestrator, Review, the Editor, Data, Traces and Requests.
 - Several Agent Sessions in flight at once, on different Hosts and Workspaces, each in one Session State.
 - Pull requests and Agent Session Turns reviewed in Review Checkouts, away from the user's own working tree.
 - Users sometimes take a session over in the Harness's own terminal UI (In Terminal) and hand it back.
@@ -51,7 +51,7 @@ Polaris drives Harnesses rather than reimplementing one, and it supervises Agent
 
 - Visual inspiration: six X posts (calm SF Pro/Inter product UI, pixel icons on watercolour tiles over pixel landscapes, a dither "mode" activation). Not assets; nothing from them may be shipped as-is.
 - Nucleo icon library (UI outline and pixel families) via the Nucleo MCP.
-- No shipped UI, screenshots, or custom illustrations exist yet. Pixel scenes must be commissioned or made; do not fabricate them from the references.
+- The shipped UI is the first reference: the Desktop App and the Mobile App, the release notes under `docs/releases/`, the gallery (`bun run --cwd packages/ui gallery`) and the brand assets under `design/assets`. New pixel scenes must still be commissioned or made; do not fabricate them from the references.
 
 ## Product Principles
 

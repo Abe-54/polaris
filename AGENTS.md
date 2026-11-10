@@ -1,6 +1,6 @@
 # Polaris — agent guide
 
-Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Desktop App, and later a React Native Mobile App. Read these before changing anything:
+Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Desktop App, and an Expo React Native Mobile App (in TestFlight). Read these before changing anything:
 
 - `CONTRIBUTING.md`, before changing code: its Checks section defines the required and report lanes, test tiers, quarantine, budgets and the PR flow.
 - `CONTEXT.md`: the glossary. Use its terms exactly (Host, Daemon, Workspace, Agent Session, Turn, Session State…) in code, comments and UI copy.
@@ -16,7 +16,9 @@ Polaris is an IDE and agent orchestrator: a Bun Daemon per Host, an Electron Des
 | `packages/sdk` | The public SDK for Extensions (`@polaris/sdk`): pairing strings, the socket and gateway transports, Host and session feeds, commands; a Promise API and an Effect API. The protocol is bundled in at build (see its README). |
 | `extensions/even-g2` | The Even Realities G2 glasses app (`@polaris/even-g2`): agent sessions, approvals and voice replies on the glasses over `@polaris/sdk`, pairing on the phone; packed for Even Hub (see its README). |
 | `packages/client` | Client runtime: connections to many Daemons over SSH, Connection State, resume, install/upgrade. |
+| `packages/predict` | The fill-in-the-middle predictor behind tab completion (`@polaris/predict`): runs in the Client main process and the Daemon, on TypeScript, Effect and web APIs only (see its README). |
 | `packages/syntax-diff` | The syntax-aware diff: token alignment (Myers over tokens), patches with token emphasis, and tokenizers behind a small interface (the TypeScript parser; the Desktop App adds the highlighter's tokens). |
+| `packages/visualization` | Visualizations (`@polaris/visualization`, ADR 0101): the `visualize` tool input, submit-time validation, the zero-egress frame document and the frame↔app messages; shared by the Daemon, the Desktop App and the Mobile App. |
 | `packages/bench` | Benchmarks: the real Daemon under scripted load, a process-tree memory/CPU sampler, baselines and comparisons. |
 | `packages/spec` | The Quint spec of commits, streams, Client feeds and approvals, and its checks (see Verification). |
 | `apps/daemon` | The Daemon (`polaris` binary): event store, Harness drivers, transport, files, git, terminals, user service. |

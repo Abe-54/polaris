@@ -3,7 +3,6 @@
 Decisions with no accepted standard yet. Flag them in reviews and mockups
 instead of inventing a standard inline. Promote through `intake.md`.
 
-- Mobile App: no design at all (PRODUCT.md: scope undecided).
 - Connection State visuals: glossary exists (ENG-179), but no accepted
   treatment for Reconnecting (dimmed last-known state), Needs Attention
   (inline, never modal), or Offline on the machine/workspace bar, rows, or
