@@ -42,6 +42,7 @@ export class ItemClock {
       ApprovalWithdrawn: (e) => e,
       TurnEnded: (e) => e,
       TitleSuggested: (e) => e,
+      ReplySuggested: (e) => e,
       ContextUsed: (e) => e,
       WorktreeCreated: (e) => e,
       Exited: (e) => e,

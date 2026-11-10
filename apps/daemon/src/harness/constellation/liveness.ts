@@ -78,6 +78,7 @@ export const observeLiveness = (
     ApprovalRequested: () => facts,
     ApprovalWithdrawn: () => facts,
     TitleSuggested: () => facts,
+    ReplySuggested: () => facts,
     WorktreeCreated: () => facts,
   });
 
