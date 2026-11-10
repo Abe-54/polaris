@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { unpackArchive } from "@polaris/client/install";
 import { REPO_ROOT } from "../lib/build.ts";
 import { daemonChecksumsName, RELEASE_DIR, stageDaemon, writeDaemonArchives } from "./archives.ts";
-import { DARWIN_PATHS, daemonDist, hash, removeDists } from "./dist.testing.ts";
+import { DARWIN_PATHS, daemonDist, dropDarwinFile, hash, removeDists } from "./dist.testing.ts";
 import { fileFacts, readManifest, verifyDaemonManifest } from "./manifest.ts";
 
 const roots: string[] = [];
@@ -50,6 +50,14 @@ const plist = (keys: Record<string, string>) =>
 /** The macOS Daemon's app bundle and its executables, under a dist. */
 const DAEMON_APP = "darwin-arm64/PolarisDaemon.app";
 
+const HELPER_APP = "darwin-arm64/Polaris Computer Use.app";
+
+const HELPER_EXECUTABLES = [
+  "polaris-computer-use",
+  "agent-desktop",
+  "agent-desktop-macos-helper",
+] as const;
+
 const daemonFile = (name: keyof typeof DARWIN_PATHS) => `darwin-arm64/${DARWIN_PATHS[name]}`;
 
 /** A release dist whose darwin-arm64 bundle holds real Mach-O files, archived like a release. */
@@ -65,6 +73,15 @@ const releaseDist = () => {
   writeFileSync(
     join(dist, daemonFile("Info.plist")),
     plist({ CFBundleExecutable: "polaris", CFBundleIdentifier: "dev.lux.polaris.daemon" })
+  );
+
+  for (const name of HELPER_EXECUTABLES) copyFileSync(MACHO, join(dist, daemonFile(name)));
+  writeFileSync(
+    join(dist, daemonFile("computer-use-Info.plist")),
+    plist({
+      CFBundleExecutable: "polaris-computer-use",
+      CFBundleIdentifier: "dev.lux.polaris.computer-use",
+    })
   );
 
   for (const name of Object.keys(files))
@@ -231,6 +248,12 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
       ["Info.plist", 0o644],
       ["Polaris.icns", 0o644],
       ["CodeResources", 0o644],
+      ["polaris-computer-use", 0o755],
+      ["agent-desktop", 0o755],
+      ["agent-desktop-macos-helper", 0o755],
+      ["computer-use-Info.plist", 0o644],
+      ["computer-use-Polaris.icns", 0o644],
+      ["computer-use-CodeResources", 0o644],
     ]);
     expect(Buffer.from(archived[0]!.bytes).equals(polaris)).toBe(true);
     const sealed = readFileSync(join(dist, daemonFile("CodeResources")));
@@ -247,6 +270,43 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     verifyDaemonManifest(staged, VERSION);
     expect(readManifest(staged)).toEqual({ ...manifest, bundled: ["darwin-arm64"] });
     expect(verifies("--deep", join(staged, DAEMON_APP))).toBe(true);
+  });
+
+  test("signs the computer use helper app as its own bundle, in the dist and the app", () => {
+    const source = releaseDist();
+    const bundle = handoff(source, releaseApp(source));
+
+    expect(signApp(bundle)).toEqual({ ok: true, error: "" });
+
+    const { dist, app } = signed(bundle);
+    const helper = signature(join(dist, HELPER_APP));
+    // Its own identity, so its privacy grants are not the Daemon's (ENG-846).
+    expect(helper).toContain("Identifier=dev.lux.polaris.computer-use\n");
+    expect(helper).toContain("(adhoc,runtime)");
+    expect(helper).toContain("com.apple.security.automation.apple-events");
+    expect(helper).not.toContain("com.apple.security.cs.allow-jit");
+    expect(verifies("--deep", join(dist, HELPER_APP))).toBe(true);
+
+    for (const tool of ["agent-desktop", "agent-desktop-macos-helper"] as const)
+      expect(signature(join(dist, daemonFile(tool)))).toContain("(adhoc,runtime)");
+
+    // The archive and the app's staged copy carry the signed bytes, so they verify on a Host.
+    const archive = readManifest(dist).platforms["darwin-arm64"]!.archive!;
+    const archived = unpackArchive(readFileSync(join(dist, RELEASE_DIR, archive.name)));
+    const launcher = archived.find((entry) => entry.name === "polaris-computer-use")!;
+    const signedLauncher = readFileSync(join(dist, daemonFile("polaris-computer-use")));
+    expect(Buffer.from(launcher.bytes).equals(signedLauncher)).toBe(true);
+    expect(verifies("--deep", join(app, "Contents/Resources/daemon", HELPER_APP))).toBe(true);
+  });
+
+  test("refuses a Daemon build with no computer use helper", () => {
+    const source = releaseDist();
+    dropDarwinFile(source, "agent-desktop");
+
+    const { ok, error } = signApp(handoff(source, releaseApp(source)));
+
+    expect(ok).toBe(false);
+    expect(error).toContain("missing darwin-arm64 computer use helper");
   });
 
   test("signs the app from the inside out, keeping the Daemon's own entitlements", () => {

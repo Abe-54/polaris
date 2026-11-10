@@ -9,6 +9,9 @@
  * On macOS both executables live in `darwin-arm64/PolarisDaemon.app` (ENG-680,
  * `apps/daemon/src/service/bundle.ts`), signed as one bundle, and the manifest gives each
  * file's `path` there. No links: the release signer refuses them in its hand-off.
+ * Beside it is `Polaris Computer Use.app` (ENG-846, `service/computerUse/`): a launcher
+ * compiled here with clang and the pinned agent-desktop, signed as a second bundle. A dev
+ * build's has its own bundle id, so dev and release never share a privacy grant.
  *
  * fff's native library (`@ff-labs/fff-bun`, MIT) is embedded by the compile
  * step: fff-bun imports `@ff-labs/fff-bin-<platform>/libfff_c.*` with
@@ -53,6 +56,15 @@ import {
   DAEMON_ICON,
   infoPlist,
 } from "../apps/daemon/src/service/bundle.ts";
+import { installAgentDesktop } from "../apps/daemon/src/install/agentDesktop/install.ts";
+import { buildHelper } from "../apps/daemon/src/service/computerUse/build.ts";
+import {
+  COMPUTER_USE_BUNDLE,
+  HELPER_EXECUTABLES,
+  HELPER_FILES,
+  launcherOf,
+} from "../apps/daemon/src/service/computerUse/bundle.ts";
+import { AGENT_DESKTOP_VERSION } from "../apps/daemon/src/install/agentDesktop/pin.ts";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
 import { BETTERLEAKS_VERSION, betterleaksAsset } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { buildVersion } from "./buildVersion.ts";
@@ -276,13 +288,47 @@ const finishBundle = async (outDir: string, version: string) => {
   await signAdHoc(bundle);
 };
 
+/** The helper app beside the Daemon's bundle, holding the pinned agent-desktop for `platform`. */
+const bundleHelper = async (
+  platform: Platform,
+  outDir: string,
+  version: string,
+  release: boolean
+) => {
+  const { binary } = await installAgentDesktop({
+    root: join(root, "node_modules", ".cache", "polaris-agent-desktop", platform),
+    platform,
+  });
+
+  const helper = await buildHelper({
+    dir: outDir,
+    version,
+    release,
+    inputs: {
+      "agent-desktop": binary,
+      "agent-desktop-macos-helper": join(dirname(binary), "agent-desktop-macos-helper"),
+      "computer-use-Polaris.icns": join(root, "design", "assets", "app-icon", DAEMON_ICON),
+    },
+  });
+
+  if (platform !== hostPlatform) return;
+  // Proves the launcher disclaims and runs the pinned agent-desktop on this macOS.
+  const output = await run([launcherOf(helper), "run", "agent-desktop", "version"]);
+
+  if (!output.includes(`"version":"${AGENT_DESKTOP_VERSION}"`))
+    throw new Error(`the helper's agent-desktop printed "${output.trim()}"`);
+  console.log(`  computer use helper: ok (agent-desktop ${AGENT_DESKTOP_VERSION})`);
+};
+
 type FileEntry = typeof FileEntry.Type;
 
-/** A build's file: Betterleaks is marked executable, and a file not at its name gets its `path`. */
+const EXECUTABLES: ReadonlySet<string> = new Set(["betterleaks", ...HELPER_EXECUTABLES]);
+
+/** A build's file: executables beside `polaris` are marked, and a file not at its name gets its `path`. */
 const fileEntry = (outDir: string, name: string, path: string): FileEntry => {
   const full = join(outDir, path);
   const facts = { sha256: sha256(full), size: statSync(full).size };
-  const entry = name === "betterleaks" ? { ...facts, executable: true } : facts;
+  const entry = EXECUTABLES.has(name) ? { ...facts, executable: true } : facts;
 
   return path === name ? entry : { ...entry, path };
 };
@@ -295,13 +341,21 @@ const fileEntries = (outDir: string, paths: Record<string, string>) =>
 
 /** Where each file of a darwin build is inside the platform directory. */
 const bundlePaths = (betterleaks: boolean): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(BUNDLE_FILES)
+  Object.fromEntries<string>([
+    ...Object.entries(BUNDLE_FILES)
       .filter(([name]) => betterleaks || name !== "betterleaks")
-      .map(([name, path]) => [name, join(DAEMON_BUNDLE, path)])
-  );
+      .map(([name, path]): [string, string] => [name, join(DAEMON_BUNDLE, path)]),
+    ...Object.entries(HELPER_FILES).map(([name, path]): [string, string] => [
+      name,
+      join(COMPUTER_USE_BUNDLE, path),
+    ]),
+  ]);
 
-const build = async (platform: Platform, version: string): Promise<PlatformBuild> => {
+const build = async (
+  platform: Platform,
+  version: string,
+  release: boolean
+): Promise<PlatformBuild> => {
   const { target, define } = PLATFORMS[platform];
   const outDir = join(distDir, platform);
   rmSync(outDir, { recursive: true, force: true });
@@ -341,7 +395,10 @@ const build = async (platform: Platform, version: string): Promise<PlatformBuild
 
   const betterleaks = await bundleBetterleaks(platform, binDir);
 
-  if (darwin) await finishBundle(outDir, version);
+  if (darwin) {
+    await finishBundle(outDir, version);
+    await bundleHelper(platform, outDir, version, release);
+  }
 
   if (platform === hostPlatform) {
     // `selftest` also proves the embedded fff library loads and searches.
@@ -402,7 +459,7 @@ const main = async () => {
 
   for (const platform of platforms) {
     const started = performance.now();
-    built[platform] = await build(platform, version);
+    built[platform] = await build(platform, version, release);
     const seconds = ((performance.now() - started) / 1000).toFixed(1);
     console.log(`built ${platform} in ${seconds}s`);
   }

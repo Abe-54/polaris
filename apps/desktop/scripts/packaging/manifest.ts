@@ -27,6 +27,13 @@ export const appBundleOf = (executable: string): string | null => {
   return executable.endsWith(`.app/Contents/MacOS/${basename(executable)}`) ? root : null;
 };
 
+/** "Polaris Computer Use.app": its launcher and the tools it runs (`service/computerUse/bundle.ts`). */
+const HELPER_LAUNCHER = "polaris-computer-use";
+
+const HELPER_TOOLS = ["agent-desktop", "agent-desktop-macos-helper"] as const;
+
+const HELPER_ENTITLEMENTS = "computer-use.plist";
+
 const Embedded = Schema.Struct({
   package: Schema.String,
   version: Schema.String,
@@ -142,6 +149,18 @@ export const signDaemonBuilds = (
   sign(at("betterleaks"), "betterleaks.plist");
   sign(bundle, "daemon.plist");
   execute(["codesign", "--verify", "--deep", "--strict", bundle]);
+
+  // The computer use helper app beside it (ENG-846): its tools, then the bundle.
+  if (!build.files[HELPER_LAUNCHER] || HELPER_TOOLS.some((tool) => !build.files[tool]))
+    throw new Error("missing darwin-arm64 computer use helper");
+
+  const helper = appBundleOf(at(HELPER_LAUNCHER));
+
+  if (helper === null) throw new Error("the computer use helper is not in an app bundle");
+
+  for (const tool of HELPER_TOOLS) sign(at(tool), HELPER_ENTITLEMENTS);
+  sign(helper, HELPER_ENTITLEMENTS);
+  execute(["codesign", "--verify", "--deep", "--strict", helper]);
 
   const files = Object.fromEntries(
     Object.entries(build.files).map(([name, entry]) => [name, { ...entry, ...fileFacts(at(name)) }])

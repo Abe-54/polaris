@@ -56,6 +56,12 @@ describe("release Daemon archives", () => {
               ["Info.plist", 0o644],
               ["Polaris.icns", 0o644],
               ["CodeResources", 0o644],
+              ["polaris-computer-use", 0o755],
+              ["agent-desktop", 0o755],
+              ["agent-desktop-macos-helper", 0o755],
+              ["computer-use-Info.plist", 0o644],
+              ["computer-use-Polaris.icns", 0o644],
+              ["computer-use-CodeResources", 0o644],
             ]
           : []),
       ]);
