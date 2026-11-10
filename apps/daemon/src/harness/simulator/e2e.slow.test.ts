@@ -78,87 +78,96 @@ interface E2eState {
 
 const state: E2eState = { udid: "", root: "", url: "", runtime: null, scope: null };
 
-describe.skipIf(!xcode)("the Simulator's MCP server on a real Simulator", () => {
-  beforeAll(async () => {
-    const runtimeOf = runtimeId();
+/** Booting a real Simulator starves a shared CI runner; it runs in CI only when asked (ENG-863). */
+const offCi = process.env.CI !== undefined && process.env.POLARIS_REAL_SIMULATOR !== "1";
 
-    if (runtimeOf === undefined) throw new Error("no iOS runtime with an iPhone 17");
-    state.udid = simctl("create", `polaris-e2e-${process.pid}`, DEVICE_TYPE, runtimeOf);
-    state.root = newTempDir("simulator-e2e-");
+const OFF_CI =
+  " [not on CI unless POLARIS_REAL_SIMULATOR=1: a real Simulator boot starves the shared runner (ENG-863)]";
 
-    const runtime = ManagedRuntime.make(
-      SimulatorMcpLive.layerWith(Effect.succeed(activity), { softWaitMs: 600_000 }).pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            SimulatorDetection.layer,
-            SimulatorTools.layerWith(() => ({ root: join(state.root, "tools") }))
-          )
-        ),
-        Layer.provide(HostPlatform.live)
-      )
-    );
+describe.skipIf(!xcode || offCi)(
+  `the Simulator's MCP server on a real Simulator${offCi ? OFF_CI : ""}`,
+  () => {
+    beforeAll(async () => {
+      const runtimeOf = runtimeId();
 
-    const scope = Effect.runSync(Scope.make());
+      if (runtimeOf === undefined) throw new Error("no iOS runtime with an iPhone 17");
+      state.udid = simctl("create", `polaris-e2e-${process.pid}`, DEVICE_TYPE, runtimeOf);
+      state.root = newTempDir("simulator-e2e-");
 
-    state.runtime = runtime;
-    state.scope = scope;
+      const runtime = ManagedRuntime.make(
+        SimulatorMcpLive.layerWith(Effect.succeed(activity), { softWaitMs: 600_000 }).pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              SimulatorDetection.layer,
+              SimulatorTools.layerWith(() => ({ root: join(state.root, "tools") }))
+            )
+          ),
+          Layer.provide(HostPlatform.live)
+        )
+      );
 
-    const server = await runtime.runPromise(
-      Effect.gen(function* () {
-        return yield* (yield* SimulatorMcp).forSession(SessionId.make("e2e"));
-      }).pipe(Scope.provide(scope))
-    );
+      const scope = Effect.runSync(Scope.make());
 
-    state.url = server!.url;
-  }, 600_000);
+      state.runtime = runtime;
+      state.scope = scope;
 
-  afterAll(async () => {
-    if (state.scope !== null) await Effect.runPromise(Scope.close(state.scope, Exit.void));
-    await state.runtime?.dispose();
+      const server = await runtime.runPromise(
+        Effect.gen(function* () {
+          return yield* (yield* SimulatorMcp).forSession(SessionId.make("e2e"));
+        }).pipe(Scope.provide(scope))
+      );
 
-    if (state.udid !== "") {
-      try {
-        simctl("shutdown", state.udid);
-      } catch {
-        // Already shut down.
+      state.url = server!.url;
+    }, 600_000);
+
+    afterAll(async () => {
+      if (state.scope !== null) await Effect.runPromise(Scope.close(state.scope, Exit.void));
+      await state.runtime?.dispose();
+
+      if (state.udid !== "") {
+        try {
+          simctl("shutdown", state.udid);
+        } catch {
+          // Already shut down.
+        }
+
+        simctl("delete", state.udid);
       }
 
-      simctl("delete", state.udid);
-    }
+      if (state.root !== "") removeTempDir(state.root);
+    }, 300_000);
 
-    if (state.root !== "") removeTempDir(state.root);
-  }, 300_000);
+    test("open, snapshot, tap and screenshot Settings", async () => {
+      const listed = await callTool(state.url, "simulator_list");
 
-  test("open, snapshot, tap and screenshot Settings", async () => {
-    const listed = await callTool(state.url, "simulator_list");
+      expect(textOf(listed)).toContain(state.udid);
 
-    expect(textOf(listed)).toContain(state.udid);
+      const opened = await callTool(state.url, "simulator_open", {
+        id: state.udid,
+        app: "com.apple.Preferences",
+      });
 
-    const opened = await callTool(state.url, "simulator_open", {
-      id: state.udid,
-      app: "com.apple.Preferences",
-    });
+      expect(opened.isError, textOf(opened)).toBeUndefined();
+      expect(marks).toContain(`booted ${state.udid}`);
+      expect(marks).toContain(`opened e2e ${state.udid}`);
+      const snapshot = await callTool(state.url, "simulator_snapshot");
 
-    expect(opened.isError, textOf(opened)).toBeUndefined();
-    expect(marks).toContain(`booted ${state.udid}`);
-    expect(marks).toContain(`opened e2e ${state.udid}`);
-    const snapshot = await callTool(state.url, "simulator_snapshot");
+      expect(textOf(snapshot)).toContain("General");
+      const tapped = await callTool(state.url, "simulator_tap", { target: 'label="General"' });
 
-    expect(textOf(snapshot)).toContain("General");
-    const tapped = await callTool(state.url, "simulator_tap", { target: 'label="General"' });
+      expect(tapped.isError, textOf(tapped)).toBeUndefined();
+      expect(textOf(await callTool(state.url, "simulator_snapshot"))).toContain("About");
+      const shot = await callTool(state.url, "simulator_screenshot");
 
-    expect(tapped.isError, textOf(tapped)).toBeUndefined();
-    expect(textOf(await callTool(state.url, "simulator_snapshot"))).toContain("About");
-    const shot = await callTool(state.url, "simulator_screenshot");
-
-    expect(shot.content[0]?.type).toBe("image");
-    expect(
-      Buffer.from(shot.content[0]?.data ?? "", "base64")
-        .subarray(1, 4)
-        .toString()
-    ).toBe("PNG");
-    expect(marks.filter((mark) => mark === "driving e2e").length).toBe(
-      marks.filter((mark) => mark === "idle e2e").length
-    );
-  }, 900_000);
-});
+      expect(shot.content[0]?.type).toBe("image");
+      expect(
+        Buffer.from(shot.content[0]?.data ?? "", "base64")
+          .subarray(1, 4)
+          .toString()
+      ).toBe("PNG");
+      expect(marks.filter((mark) => mark === "driving e2e").length).toBe(
+        marks.filter((mark) => mark === "idle e2e").length
+      );
+    }, 900_000);
+  }
+);

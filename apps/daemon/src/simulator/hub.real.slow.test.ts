@@ -97,92 +97,101 @@ const realHub = async () => {
   }).pipe(Layer.provide(Layer.merge(HostPlatform.live, iosReadyDetection)));
 };
 
-describe.skipIf(target === null)("SimulatorHub on a real hub", () => {
-  test("watch, boot, attach, restart, shutdown and the idle stop", async () => {
-    const { runtime, deviceType } = target!;
-    const name = `polaris-test-${crypto.randomUUID().slice(0, 8)}`;
-    const created = simctl("create", name, deviceType, runtime);
-    expect(created.ok).toBe(true);
-    const id = created.out;
+/** Booting a real Simulator starves a shared CI runner; it runs in CI only when asked (ENG-863). */
+const offCi = process.env.CI !== undefined && process.env.POLARIS_REAL_SIMULATOR !== "1";
 
-    try {
-      const layer = await realHub();
+const OFF_CI =
+  " [not on CI unless POLARIS_REAL_SIMULATOR=1: a real Simulator boot starves the shared runner (ENG-863)]";
 
-      await Effect.runPromise(
-        Effect.scoped(
+describe.skipIf(target === null || offCi)(
+  `SimulatorHub on a real hub${offCi ? OFF_CI : ""}`,
+  () => {
+    test("watch, boot, attach, restart, shutdown and the idle stop", async () => {
+      const { runtime, deviceType } = target!;
+      const name = `polaris-test-${crypto.randomUUID().slice(0, 8)}`;
+      const created = simctl("create", name, deviceType, runtime);
+      expect(created.ok).toBe(true);
+      const id = created.out;
+
+      try {
+        const layer = await realHub();
+
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const hub = yield* SimulatorHub;
+              const head = Option.getOrThrow(yield* Stream.runHead(hub.watch));
+              expect(isSnapshot(head)).toBe(true);
+              const listed = isSnapshot(head) ? head.simulators : [];
+              expect(listed.find((s) => s.id === id)?.state).toBe("Shutdown");
+
+              yield* hub.boot(id);
+              expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(true);
+
+              const items: Array<SimulatorAttachItem> = [];
+
+              const attach = yield* hub.attach(SESSION, id).pipe(
+                Stream.runForEach((item) => Effect.sync(() => items.push(item))),
+                Effect.forkScoped
+              );
+
+              yield* Effect.promise(() => until(() => items.length === 1, 120_000));
+              const first = items[0]!;
+              expect(yield* settledBarrier(first, id)).toBe("live");
+
+              yield* hub.restart;
+              yield* Effect.promise(() => until(() => items.length === 2, 120_000));
+              expect(items[1]!.token).not.toBe(first.token);
+              expect(yield* settledBarrier(items[1]!, id)).toBe("live");
+
+              // Detached and idle: the hub stops and shuts down the Simulator Polaris booted.
+              yield* Fiber.interrupt(attach);
+              const supervisor = SimulatorHubLive.testing.supervisorOf(hub)!;
+              yield* Effect.promise(() => until(() => supervisor.pid === null, 180_000));
+              expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(false);
+
+              yield* hub.boot(id);
+              yield* hub.shutdown(id, false);
+              expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(false);
+            })
+          ).pipe(Effect.provide(layer))
+        );
+      } finally {
+        simctl("shutdown", id);
+        simctl("delete", id);
+      }
+
+      expect(simctl("list", "devices").out).not.toContain(name);
+    }, 900_000);
+    test("a Simulator an agent booted with no hub running shuts down at idle", async () => {
+      const { runtime, deviceType } = target!;
+      const name = `polaris-test-${crypto.randomUUID().slice(0, 8)}`;
+      const created = simctl("create", name, deviceType, runtime);
+      expect(created.ok).toBe(true);
+      const id = created.out;
+
+      try {
+        // agent-device boots with simctl, never through the hub.
+        expect(simctl("boot", id).ok).toBe(true);
+        const layer = await realHub();
+
+        await Effect.runPromise(
           Effect.gen(function* () {
             const hub = yield* SimulatorHub;
-            const head = Option.getOrThrow(yield* Stream.runHead(hub.watch));
-            expect(isSnapshot(head)).toBe(true);
-            const listed = isSnapshot(head) ? head.simulators : [];
-            expect(listed.find((s) => s.id === id)?.state).toBe("Shutdown");
-
-            yield* hub.boot(id);
-            expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(true);
-
-            const items: Array<SimulatorAttachItem> = [];
-
-            const attach = yield* hub.attach(SESSION, id).pipe(
-              Stream.runForEach((item) => Effect.sync(() => items.push(item))),
-              Effect.forkScoped
+            yield* hub.agentBooted(id);
+            yield* Effect.promise(() =>
+              until(() => simctl("list", "devices").out.includes(`${id}) (Shutdown)`), 300_000)
             );
-
-            yield* Effect.promise(() => until(() => items.length === 1, 120_000));
-            const first = items[0]!;
-            expect(yield* settledBarrier(first, id)).toBe("live");
-
-            yield* hub.restart;
-            yield* Effect.promise(() => until(() => items.length === 2, 120_000));
-            expect(items[1]!.token).not.toBe(first.token);
-            expect(yield* settledBarrier(items[1]!, id)).toBe("live");
-
-            // Detached and idle: the hub stops and shuts down the Simulator Polaris booted.
-            yield* Fiber.interrupt(attach);
             const supervisor = SimulatorHubLive.testing.supervisorOf(hub)!;
-            yield* Effect.promise(() => until(() => supervisor.pid === null, 180_000));
-            expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(false);
+            yield* Effect.promise(() => until(() => supervisor.pid === null, 120_000));
+          }).pipe(Effect.provide(layer))
+        );
+      } finally {
+        simctl("shutdown", id);
+        simctl("delete", id);
+      }
 
-            yield* hub.boot(id);
-            yield* hub.shutdown(id, false);
-            expect((yield* Effect.promise(() => stateOf(id)))?.booted).toBe(false);
-          })
-        ).pipe(Effect.provide(layer))
-      );
-    } finally {
-      simctl("shutdown", id);
-      simctl("delete", id);
-    }
-
-    expect(simctl("list", "devices").out).not.toContain(name);
-  }, 900_000);
-  test("a Simulator an agent booted with no hub running shuts down at idle", async () => {
-    const { runtime, deviceType } = target!;
-    const name = `polaris-test-${crypto.randomUUID().slice(0, 8)}`;
-    const created = simctl("create", name, deviceType, runtime);
-    expect(created.ok).toBe(true);
-    const id = created.out;
-
-    try {
-      // agent-device boots with simctl, never through the hub.
-      expect(simctl("boot", id).ok).toBe(true);
-      const layer = await realHub();
-
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const hub = yield* SimulatorHub;
-          yield* hub.agentBooted(id);
-          yield* Effect.promise(() =>
-            until(() => simctl("list", "devices").out.includes(`${id}) (Shutdown)`), 300_000)
-          );
-          const supervisor = SimulatorHubLive.testing.supervisorOf(hub)!;
-          yield* Effect.promise(() => until(() => supervisor.pid === null, 120_000));
-        }).pipe(Effect.provide(layer))
-      );
-    } finally {
-      simctl("shutdown", id);
-      simctl("delete", id);
-    }
-
-    expect(simctl("list", "devices").out).not.toContain(name);
-  }, 900_000);
-});
+      expect(simctl("list", "devices").out).not.toContain(name);
+    }, 900_000);
+  }
+);
