@@ -42,17 +42,18 @@ const scripted = (answer: Effect.Effect<{ reply: string | null }, HarnessError>)
 
 const enabled = SuggestedReplySettings.make({ enabled: true, fallback: null });
 
-const warning = new PlanLimit({
-  harness: "codex",
-  kind: "five-hour",
-  scope: null,
-  windowMinutes: 300,
-  usedPercent: 92,
-  status: "warning",
-  resetsAt: null,
-  observedAt: at,
-  plan: null,
-});
+const limitOf = (harness: "claude" | "codex", status: "warning" | "reached") =>
+  new PlanLimit({
+    harness,
+    kind: "five-hour",
+    scope: null,
+    windowMinutes: 300,
+    usedPercent: 26,
+    status,
+    resetsAt: null,
+    observedAt: at,
+    plan: null,
+  });
 
 /** How often each check the service makes was read: the last one it reached shows it decided. */
 const reads = { settings: 0, availability: 0, limits: 0 };
@@ -234,6 +235,21 @@ test("a Harness signed in after the Daemon's cached report still writes the sugg
   expect(calls.map((c) => c.harness)).toEqual(["codex"]);
 });
 
+test("a Plan Limit warning, as Claude sends for a fast pace at low use, still gets a suggestion", async () => {
+  const { calls, backend } = scripted(Effect.succeed({ reply: "Commit it." }));
+
+  const reply = await run(
+    { backend, limits: [limitOf("codex", "warning"), limitOf("claude", "warning")] },
+    Effect.andThen(
+      commitAll([ended(turn(1))]),
+      eventually(suggestion, (s) => s != null)
+    )
+  );
+
+  expect(reply?.text).toBe("Commit it.");
+  expect(calls).toHaveLength(1);
+});
+
 test("a 'nothing' answer commits nothing", async () => {
   const { calls, backend } = scripted(Effect.succeed({ reply: null }));
 
@@ -341,7 +357,11 @@ test("a failing Harness commits nothing and the service keeps following", async 
 
 test.each([
   ["the preference is off", "settings", { settings: SuggestedReplySettings.make({}) }],
-  ["the session's Harness is near a Plan Limit", "limits", { limits: [warning] }],
+  [
+    "the fallback's Harness has reached a Plan Limit",
+    "limits",
+    { limits: [limitOf("codex", "reached")] },
+  ],
   ["no fallback Harness is ready", "availability", { ready: [] }],
 ] as const)("nothing runs when %s", async (_, decided, options) => {
   const { calls, backend } = scripted(Effect.succeed({ reply: "never" }));

@@ -30,7 +30,7 @@ import { EventStore, type LiveItem } from "../store/EventStore.ts";
 import { UsageIndex } from "../usage/service.ts";
 import type { ReplyBackend } from "./backend.ts";
 import { instructions, PROMPT_TURNS, replyJsonSchema, replyPrompt, replyText } from "./prompt.ts";
-import { nearPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
+import { atPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
 
 /** A suggestion that takes longer is dropped; the user is likely typing by then. */
 export const SUGGEST_TIMEOUT = Duration.seconds(15);
@@ -81,7 +81,7 @@ const turnEvent = (event: DomainEvent) =>
   );
 
 /** Why a run offered nothing, or that it offered: on the span, since none of these is logged. */
-type Outcome = "not-due" | "no-ready-fallback" | "near-plan-limit" | "no-reply" | "offered";
+type Outcome = "not-due" | "no-ready-fallback" | "plan-limit-reached" | "no-reply" | "offered";
 
 const outcome = (value: Outcome) => Effect.annotateCurrentSpan("suggestedReply.outcome", value);
 
@@ -115,8 +115,8 @@ const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
       });
       const limits = Option.isSome(usage) ? yield* usage.value.planLimits : [];
 
-      if (nearPlanLimit(record.session.harness, limits) || nearPlanLimit(choice.harness, limits))
-        return yield* outcome("near-plan-limit");
+      // The session's own Harness is irrelevant here: a Limited session is never due.
+      if (atPlanLimit(choice.harness, limits)) return yield* outcome("plan-limit-reached");
 
       const turns = record.turns.filter((turn) => turn.status !== "working").slice(-PROMPT_TURNS);
 

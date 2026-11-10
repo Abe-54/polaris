@@ -2,7 +2,7 @@ export type { ReplyBackend } from "./backend.ts";
 
 export {
   NATIVE_SUGGESTIONS,
-  nearPlanLimit,
+  atPlanLimit,
   type RunnableFallback,
   runnableFallback,
   suggestionDue,

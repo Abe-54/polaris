@@ -13,8 +13,9 @@ The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use 
 
 - **When** (`suggestionDue`): the user's own session (no `origin`), out of plan mode, not
   Limited, after a completed Turn that isn't the first, an idle compaction or a shell command.
-  Not when the session's Harness or the fallback's is near a Plan Limit (a window that isn't
-  `ok` in the Usage index).
+  Not when the fallback's Harness has reached a Plan Limit (`atPlanLimit`: a `reached` window
+  in the Usage index). A `warning` doesn't stop it: Claude sends one for a fast pace even at
+  low use, and a suggestion is one small request.
 - **Which** (`runnableFallback`): the preference's resolution (`resolveFallback`: the Settings
   choice, or when unset the first ready entry of `AUTO_SUGGESTED_REPLY_FALLBACKS`), kept only
   when its Harness is ready and has an inline runner (Claude Code, Codex). Readiness comes from
@@ -28,7 +29,7 @@ The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use 
 - **Cancellation**: a new Turn, or another ended one, interrupts the request in flight, which
   kills the process. `SUGGEST_TIMEOUT` (15 s) drops a slow one. Every failure is logged only.
 - **Traces**: each run's `suggestedReply.suggest` span carries `suggestedReply.outcome`:
-  `not-due`, `no-ready-fallback`, `near-plan-limit`, `no-reply` or `offered`.
+  `not-due`, `no-ready-fallback`, `plan-limit-reached`, `no-reply` or `offered`.
 - **Usage**: Claude Code runs with `--no-session-persistence` and Codex on an ephemeral thread,
   so nothing is written to the logs the Usage index reads, and no session's Usage counts it.
 - **Idle cost**: one log subscription and nothing else. With the preference off, an ended Turn
