@@ -30,6 +30,7 @@ import {
 } from "@polaris/ui";
 import { age } from "../../../shell/copy.ts";
 import { SentAttachments } from "../../attachments/index.ts";
+import { ComputerUseApproval } from "../../computer-use/index.ts";
 import { useNow } from "../../../shell/useNow.ts";
 import { Decisions } from "../../../commands.ts";
 import { useApp, useShellActions } from "../../../shell/hooks.ts";
@@ -552,6 +553,16 @@ const Approval = ({
 
   if (request.origin !== undefined)
     return <OriginApproval request={request} target={request.origin} ctx={ctx} />;
+
+  if (request.kind === "app" || request.kind === "headed-input")
+    return (
+      <ComputerUseApproval
+        request={request}
+        hostKey={ctx.diff.hostKey}
+        harness={ctx.harness}
+        onRespond={(decision) => ctx.onRespond(request, decision)}
+      />
+    );
   const who = ctx.harness === null ? "The agent" : harnessHue(ctx.harness).name;
   const respond = (decision: ApprovalDecision) => ctx.onRespond(request, decision);
 

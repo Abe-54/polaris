@@ -50,6 +50,11 @@ export const computerUseHandlers = {
     appId,
   }: RequestInput<"computerUse.removeAllowedApp">) =>
     onHost(hostKey, (session) => session.client["computerUse.removeAllowedApp"]({ appId })),
+  "computerUse.allowedApps.add": ({
+    hostKey,
+    appId,
+  }: RequestInput<"computerUse.allowedApps.add">) =>
+    onHost(hostKey, (session) => session.client["computerUse.allowedApps.add"]({ appId })),
 };
 
 /** Ends with the connection, or at once on a Daemon without computer use; the renderer resubscribes. */
