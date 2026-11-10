@@ -25,7 +25,7 @@ import {
   type NotFound,
   type NotGranted,
   Sequence,
-  type SessionId,
+  SessionId,
   SubagentDetail,
   type Turn,
   TurnId,
@@ -66,6 +66,7 @@ import {
   SubagentJson,
   TurnItemJson,
   TurnJson,
+  worktreeDetectedRows,
   writeEvent,
   writeProjection,
 } from "./projection.ts";
@@ -178,6 +179,15 @@ export class EventStore extends Context.Service<
       readonly beforeIndex: number | null;
       readonly limit: number | null;
     }) => Effect.Effect<ReadonlyArray<Turn>, ServiceError>;
+    /** One Turn of a session by its id, from SQL; null when the session has no such Turn. */
+    readonly readTurn: (options: {
+      readonly sessionId: SessionId;
+      readonly turnId: TurnId;
+    }) => Effect.Effect<Turn | null, ServiceError>;
+    /** The ids of each session's Turns, ordered by index, without decoding a Turn. */
+    readonly readTurnIds: (
+      sessionIds: ReadonlyArray<SessionId>
+    ) => Effect.Effect<ReadonlyMap<SessionId, ReadonlyArray<TurnId>>, ServiceError>;
     /** The last recorded state of a Worktree, even one since removed (from its `WorktreeDetected`). */
     readonly lastKnownWorktree: (
       worktreeId: Worktree["id"]
@@ -326,12 +336,38 @@ export class EventStore extends Context.Service<
           Effect.mapError(storeError("read turns"))
         );
 
+      const readTurn = (options: { readonly sessionId: SessionId; readonly turnId: TurnId }) =>
+        sql<{ data: string }>`
+          SELECT data FROM turns
+          WHERE id = ${options.turnId} AND session_id = ${options.sessionId}`.pipe(
+          Effect.map(([row]) => (row === undefined ? null : TurnJson.decode(row.data))),
+          Effect.mapError(storeError("read a Turn"))
+        );
+
+      // The ids travel as one JSON parameter, so any number of sessions is one query.
+      const readTurnIds = (sessionIds: ReadonlyArray<SessionId>) =>
+        Effect.gen(function* () {
+          const bySession = new Map<SessionId, Array<TurnId>>();
+
+          if (sessionIds.length === 0) return bySession;
+
+          const rows = yield* sql<{ session_id: string; id: string }>`
+            SELECT session_id, id FROM turns
+            WHERE session_id IN (SELECT value FROM json_each(${JSON.stringify(sessionIds)}))
+            ORDER BY session_id, turn_index`;
+
+          for (const row of rows) {
+            const sessionId = SessionId.make(row.session_id);
+            const ids = bySession.get(sessionId) ?? [];
+            ids.push(TurnId.make(row.id));
+            bySession.set(sessionId, ids);
+          }
+
+          return bySession;
+        }).pipe(Effect.mapError(storeError("read Turn ids")));
+
       const lastKnownWorktree = (worktreeId: Worktree["id"]) =>
-        sql<{ payload: string }>`
-          SELECT payload FROM events
-          WHERE event_type = 'WorktreeDetected'
-            AND json_extract(payload, '$.worktree.id') = ${worktreeId}
-          ORDER BY sequence DESC LIMIT 1`.pipe(
+        worktreeDetectedRows(sql, worktreeId).pipe(
           Effect.map((rows) => {
             const event = rows[0] === undefined ? null : EventJson.decode(rows[0].payload);
 
@@ -370,6 +406,8 @@ export class EventStore extends Context.Service<
             Effect.mapError(storeError("read Constellation events"))
           ),
         readTurns,
+        readTurn,
+        readTurnIds,
         lastKnownWorktree,
         readTurnItems,
         readSubagents,
@@ -504,7 +542,10 @@ const groupCommit = ({ sql, modelRef, hub, startupIndex }: CommitTarget) =>
         });
 
         const after = project(batch.next, envelope);
-        batch.writes.push(writeEvent(sql, envelope), writeProjection(sql, after, envelope));
+        batch.writes.push(
+          writeEvent(sql, envelope),
+          writeProjection(sql, { before: batch.next, after }, envelope)
+        );
         envelopes.push(envelope);
         batch.published.push(envelope);
         batch.next = after;

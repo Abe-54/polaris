@@ -180,6 +180,20 @@ const continuity = Effect.gen(function* () {
   `;
 });
 
+/**
+ * Indexes for the log reads of a start and of the pruning sweep (ENG-900): events by type, and
+ * the Constellation fold's rows. `events_graph` only serves a query with this same WHERE.
+ */
+const eventTypeIndexes = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  // IF NOT EXISTS: the tests that rewind the migrator run this on a database that has both.
+  yield* sql`CREATE INDEX IF NOT EXISTS events_type ON events (event_type, sequence)`;
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS events_graph ON events (sequence)
+    WHERE constellation_id IS NOT NULL OR event_type = 'WorkspaceRemoved'
+  `;
+});
+
 export const migrations = SqliteMigrator.fromRecord({
   "0001_event_store": init,
   "0002_subagents": subagents,
@@ -190,6 +204,7 @@ export const migrations = SqliteMigrator.fromRecord({
   "0006_continuity": continuity,
   /** `Turn.checkpointAfterCommit` and `AgentSession.acceptedThroughUserTurn` for logged sessions. */
   "0007_turn_fields": backfillTurnFields,
+  "0008_event_type_indexes": eventTypeIndexes,
 });
 
 export const MigrationsLayer = SqliteMigrator.layer({ loader: migrations });
