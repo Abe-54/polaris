@@ -7,7 +7,8 @@
  *       Started by the Daemon with stdio inherited. It first replaces itself with a copy
  *       whose responsibility is disclaimed (posix_spawn, POSIX_SPAWN_SETEXEC and
  *       responsibility_spawnattrs_setdisclaim, the private SPI Chromium uses), then runs
- *       the tool, forwards signals to it and exits with its status.
+ *       the tool, forwards signals to it and exits with its status. SIGUSR1 kills the
+ *       tool outright, since a SIGKILL sent to this process could not be passed on.
  *   polaris-computer-use connect <socket>
  *       Started by LaunchServices (`open`), which makes it its own responsible process
  *       with no SPI. It connects to the Daemon's Unix socket three times (control, data,
@@ -44,7 +45,7 @@ extern char **environ;
 extern int responsibility_spawnattrs_setdisclaim(posix_spawnattr_t *attrs, int disclaim)
     __attribute__((weak_import));
 
-static const int FORWARDED[] = {SIGTERM, SIGINT, SIGHUP, SIGQUIT};
+static const int FORWARDED[] = {SIGTERM, SIGINT, SIGHUP, SIGQUIT, SIGUSR1};
 #define FORWARDED_COUNT ((int)(sizeof(FORWARDED) / sizeof(FORWARDED[0])))
 
 static void fail(int code, const char *what) {
@@ -139,7 +140,8 @@ static int exit_code_of(int status) {
 }
 
 /*
- * Waits for the tool. Signals sent to this process go on to it; on `control` (when not -1)
+ * Waits for the tool. Signals sent to this process go on to it, SIGUSR1 as SIGKILL; on
+ * `control` (when not -1)
  * a `k` kills it, any other byte or the Daemon hanging up terminates it.
  */
 static int supervise(pid_t child, int control) {
@@ -174,7 +176,8 @@ static int supervise(pid_t child, int control) {
       fail(EXIT_SYSTEM, "kevent");
     }
 
-    if (event.filter == EVFILT_SIGNAL) kill(child, (int)event.ident);
+    if (event.filter == EVFILT_SIGNAL)
+      kill(child, event.ident == SIGUSR1 ? SIGKILL : (int)event.ident);
 
     if (event.filter == EVFILT_READ) {
       char byte = 0;

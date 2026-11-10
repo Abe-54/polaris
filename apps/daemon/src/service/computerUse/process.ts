@@ -67,6 +67,7 @@ export const spawnDisclaimed = (helper: string, request: HelperRequest): HelperP
     stdout: proc.stdout,
     stderr: proc.stderr,
     exited: proc.exited,
-    kill: (signal = "SIGTERM") => proc.kill(signal),
+    // A SIGKILL would end the launcher and orphan the tool; SIGUSR1 has it kill the tool.
+    kill: (signal = "SIGTERM") => proc.kill(signal === "SIGKILL" ? "SIGUSR1" : "SIGTERM"),
   };
 };

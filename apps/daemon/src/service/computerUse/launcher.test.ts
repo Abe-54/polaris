@@ -20,6 +20,7 @@ case "$1" in
   fail) echo oops >&2; exit 7 ;;
   hang) trap 'exit 42' TERM; echo ready; while :; do sleep 0.05; done ;;
   parent) echo $PPID; cat ;;
+  stubborn) trap '' TERM; echo $$; while :; do sleep 0.05; done ;;
   big) head -c 300000 /dev/zero | tr '\\0' x ;;
   status) cat "$0.status" ;;
 esac
@@ -134,6 +135,28 @@ describe.skipIf(process.platform !== "darwin")("a tool run inside the helper app
       );
 
       expect(code).toBe(42);
+    });
+
+    test("closing the scope kills a tool that ignores SIGTERM, leaving no orphan", async () => {
+      const stopped = await Effect.runPromise(
+        Effect.gen(function* () {
+          const cu = yield* ComputerUseHelper;
+
+          const running = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const started = yield* cu.spawn({ tool: "agent-desktop", args: ["stubborn"], via });
+              const pid = Number(yield* Effect.promise(() => firstLine(started.stdout)));
+
+              return { pid, exited: started.exited };
+            })
+          );
+
+          return { pid: running.pid, code: yield* Effect.promise(() => running.exited) };
+        }).pipe(Effect.provide(ComputerUseHelper.layerAt(() => helper, { launch: execHelper })))
+      );
+
+      expect(stopped.code).toBe(128 + 9);
+      expect(() => process.kill(stopped.pid, 0)).toThrow();
     });
   };
 
