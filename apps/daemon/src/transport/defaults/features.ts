@@ -7,6 +7,7 @@ import {
   PredictionRpcs,
   ProfilesRpcs,
   SelfTraceRpcs,
+  SimulatorRpcs,
   TraceCompareRpcs,
   TracingSkillRpcs,
   TracesRpcs,
@@ -81,12 +82,23 @@ const developerModeDefaults = DeveloperModeRpcs.toLayer({
   "developerMode.watch": unsupportedFeed("developer-mode"),
 });
 
-/** Languages, Prediction, the browser, Data, Traces and Developer Mode. */
+/** Unsupported until `serve.ts` layers `SimulatorRpcHandlers` over it. */
+const simulatorDefaults = SimulatorRpcs.toLayer({
+  "simulator.watch": unsupportedFeed("simulator"),
+  "simulator.boot": unsupported("simulator"),
+  "simulator.shutdown": unsupported("simulator"),
+  "simulator.restart": unsupported("simulator"),
+  "simulator.attach": unsupportedFeed("simulator"),
+  "simulator.sessionFeed": unsupportedFeed("simulator"),
+});
+
+/** Languages, Prediction, the browser, Data, Traces, Developer Mode and the Simulator. */
 export const featureDefaults = Layer.mergeAll(
   LanguageRpcs.toLayer(languageDefaults),
   predictionDefaults,
   BrowserStackRpcs.toLayer(browserDefaults),
   dataDefaults,
   traceDefaults,
-  developerModeDefaults
+  developerModeDefaults,
+  simulatorDefaults
 );

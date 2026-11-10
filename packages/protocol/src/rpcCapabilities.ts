@@ -244,6 +244,12 @@ export const RPC_CAPABILITIES = {
   "developerMode.setWorkspace": developer,
   "developerMode.lease": developer,
   "developerMode.watch": developer,
+  "simulator.watch": "simulator",
+  "simulator.boot": "simulator",
+  "simulator.shutdown": "simulator",
+  "simulator.restart": "simulator",
+  "simulator.attach": "simulator",
+  "simulator.sessionFeed": "simulator",
 } as const satisfies Record<Exclude<DaemonRpcTag, LanguageRpcTag>, RpcRequirement>;
 
 const isLanguageRpc = (tag: DaemonRpcTag): tag is LanguageRpcTag =>

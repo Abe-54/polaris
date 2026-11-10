@@ -13,10 +13,11 @@
  * `POLARIS_CODEX`, `POLARIS_CLAUDE`, `POLARIS_OPENCODE`, `POLARIS_GEMINI` and
  * `POLARIS_COPILOT` can point at the binaries explicitly.
  * Requires `PlanLimitReporter`, where the drivers report what their Harness exposes, and
- * `BrowserMcp`, which gives Claude Code and Codex sessions the Browser's MCP server.
+ * `BrowserMcp`, which gives Claude Code and Codex sessions the Browser's MCP server; with
+ * `SimulatorMcp` in context they get the Simulator's too.
  */
 import type { HarnessKind, KnownHarnessKind } from "@polaris/protocol";
-import { Effect, Layer, Scope } from "effect";
+import { Effect, Layer, Option, Scope } from "effect";
 import { HarnessRegistry, ServiceError } from "../services.ts";
 import { ACP_HARNESSES } from "./acp/harnesses.ts";
 import { isBenchKind } from "./bench/kinds.ts";
@@ -24,6 +25,7 @@ import { ClaudeHookReceiver } from "./claude/hooks.ts";
 import { type HarnessDriver, HarnessError } from "./HarnessDriver.ts";
 import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
+import { SimulatorMcp } from "../simulator/service.ts";
 import { findExecutable } from "../platform/executable.ts";
 
 const binary = (env: string, name: string): string | null =>
@@ -105,6 +107,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const hookReceiver = yield* ClaudeHookReceiver;
       const { report } = yield* PlanLimitReporter;
       const browser = yield* BrowserMcp;
+      const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
       const planLimits = { report };
       // The app-server the Codex driver may start belongs to this layer, not to the first `open`.
       const scope = yield* Effect.scope;
@@ -131,6 +134,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 findCodex: () => binary("POLARIS_CODEX", "codex"),
                 planLimits,
                 browser,
+                simulator,
               })
             ),
             Scope.provide(scope)
@@ -147,6 +151,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 claudePath: () => binary("POLARIS_CLAUDE", "claude"),
                 planLimits,
                 browser,
+                simulator,
               })
             )
           ),

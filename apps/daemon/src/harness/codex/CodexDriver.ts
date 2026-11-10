@@ -8,7 +8,7 @@ import { harnessEnv } from "../environment.ts";
 import { join } from "node:path";
 import { Effect, type Scope } from "effect";
 import { polarisHome } from "../../paths.ts";
-import type { BrowserMcp } from "../browser/index.ts";
+import type { ToolServers } from "../toolServers.ts";
 import type { HarnessDriver, HarnessProbe } from "../HarnessDriver.ts";
 import { CodexLimitTracker } from "../limits/codex.ts";
 import type { PlanLimitReporter } from "../limits/PlanLimitReporter.ts";
@@ -19,7 +19,7 @@ import { listCodexModels } from "./models.ts";
 import { codexNotInstalled } from "./RpcConnection.ts";
 import { which } from "../../service/userPath.ts";
 
-export interface CodexDriverOptions {
+export interface CodexDriverOptions extends ToolServers {
   /** A fixed `codex` binary (null: none); without it or `findCodex`, the one on PATH at each use. */
   readonly codexPath?: string | null;
   /** Finds the `codex` binary at each use, so one installed after start is picked up. */
@@ -35,8 +35,6 @@ export interface CodexDriverOptions {
   readonly clientVersion?: string;
   /** Receives the account's Plan Limits as Codex reports them. */
   readonly planLimits?: PlanLimitReporter["Service"];
-  /** The Browser's MCP server for each thread that isn't read-only. */
-  readonly browser?: BrowserMcp["Service"];
 }
 
 /** `codex --version` only: never starts a session, a server, MCP servers or a login. */
@@ -132,6 +130,7 @@ export const makeCodexDriver = (
                   clientVersion,
                   planLimits,
                   browser: options.browser,
+                  simulator: options.simulator,
                 },
                 openOptions
               );

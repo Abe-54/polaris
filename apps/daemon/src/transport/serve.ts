@@ -13,6 +13,9 @@ import { PredictionServerLive } from "../prediction/server.ts";
  */
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import { supportsTrash } from "../files/trash.ts";
+import { hostPlatform } from "../platform/index.ts";
+import { simulatorCapable } from "../simulator/service.ts";
+import { lazySimulator, SimulatorRpcHandlers } from "./lazySimulator.ts";
 import { type Capability, HARNESS_CATALOGUE } from "@polaris/protocol";
 import { selfTraceLoggers } from "@polaris/client/selfTraces/logger";
 import { Deferred, Effect, Layer, Logger } from "effect";
@@ -117,7 +120,7 @@ const browserMcp = BrowserMcp.layer.pipe(
 
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
-  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp))
+  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator))
 );
 
 /**
@@ -160,6 +163,8 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   Layer.provideMerge(ReviewerSessions.layer),
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).
   Layer.provideMerge(DeveloperModeLive),
+  // The Simulator's hub and MCP server (ENG-829), loaded on first use; one instance with the Harnesses'.
+  Layer.provideMerge(lazySimulator),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -211,6 +216,7 @@ export const daemonHandlers = Layer.mergeAll(
   TerminalRpcsLive.pipe(Layer.provide(TerminalsDaemonLive)),
   lazyVoiceHandlers,
   byteStreamHandlers,
+  SimulatorRpcHandlers,
   selfTraceExport
 ).pipe(Layer.provide(daemonServices));
 
@@ -333,6 +339,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host-address",
   "host-address.names",
   "browser.host",
+  ...(simulatorCapable(hostPlatform()) ? ["simulator" as const] : []),
 ];
 
 /**

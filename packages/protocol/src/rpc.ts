@@ -68,6 +68,7 @@ import { SecretRpcs } from "./secrets.ts";
 import { TerminalRpcs } from "./terminal.ts";
 import { RestartRpcs } from "./restart.ts";
 import { BrowserStackRpcs } from "./browser.ts";
+import { SimulatorRpcs } from "./simulator.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { Hello } from "./hello.ts";
 import {
@@ -791,7 +792,7 @@ export const DaemonRpcDefinitions = RpcGroup.make(
     TraceCompareRpcs,
     TracingSkillRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs);
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, SimulatorRpcs, RequestsRpcs);
 
 // A const, not a class: inferring `RpcGroup.Rpcs` from a class over the gated group is
 // too deep for the linter's single-program checker (TS2589), which types every Client as `any`.
@@ -803,19 +804,20 @@ export const DaemonRpcs = gateUserRpcs(DaemonRpcDefinitions);
  * refusal decodes; the Desktop App stays on `DaemonRpcs`, which carries only the
  * user gate's `UserAccessRequired` (ADR 0100).
  */
-export class ExtensionDaemonRpcs extends DaemonRpcs.omit("dispatch")
+// A const, not a class: as a class its type trips type-aware lint's instantiation limit (lint-config README).
+export const ExtensionDaemonRpcs = DaemonRpcs.omit("dispatch")
   .add(
     Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])).middleware(
       UserAccessGate
     )
   )
-  .middleware(GrantGate) {}
+  .middleware(GrantGate);
 
 /**
  * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests, which only the Desktop App
  * may call (RPC_GRANTS: client); leaving it out keeps the client type within the checker's depth.
  */
-export class ExtensionClientRpcs extends ExtensionDaemonRpcs.omit(
+export const ExtensionClientRpcs = ExtensionDaemonRpcs.omit(
   "requests.watch",
   "requests.save",
   "requests.send",
@@ -825,4 +827,4 @@ export class ExtensionClientRpcs extends ExtensionDaemonRpcs.omit(
   "requests.send.get",
   "requests.curl.parse",
   "requests.curl.format"
-) {}
+);

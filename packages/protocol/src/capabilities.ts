@@ -212,6 +212,8 @@ export const Capability = Schema.Literals([
    * announces it when it can host Browsers; the Daemon refuses `browser.host` from one that didn't.
    */
   "browser.host",
+  /** `simulator.*`: the Simulator (ADR 0099), only on a Host that can run at least one platform. */
+  "simulator",
   /** `usage.query` and `usage.watch`: Usage and Plan Limits on this Host. */
   "usage",
   /**

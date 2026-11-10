@@ -64,6 +64,7 @@ import { BrowserRequestInputs, BrowserSubscriptionInputs } from "./browserContra
 import { SecretRequestInputs } from "./secretContract.ts";
 import { GitHubRequestInputs, GitHubSubscriptionInputs } from "./githubContract.ts";
 import { GitRequestInputs, GitSubscriptionInputs } from "./gitContract.ts";
+import { SimulatorRequestInputs, SimulatorSubscriptionInputs } from "./simulatorContract.ts";
 import { BRANCH_PREFIX } from "./sessionPrefs.ts";
 import {
   PredictionUiInputs,
@@ -611,6 +612,7 @@ export const RequestInputs = {
   ...SecretRequestInputs,
   ...DataRequestInputs,
   ...TracesRequestInputs,
+  ...SimulatorRequestInputs,
   ...RequestsRequestInputs,
 } as const;
 
@@ -676,6 +678,7 @@ export const SubscriptionInputs = {
   ...BrowserSubscriptionInputs,
   ...DataSubscriptionInputs,
   ...TracesSubscriptionInputs,
+  ...SimulatorSubscriptionInputs,
   ...RequestsSubscriptionInputs,
   /** One Constellation's stream (`constellation.subscribe`): Snapshot, Synchronized, then events. */
   constellation: Schema.Struct({

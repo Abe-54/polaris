@@ -328,6 +328,13 @@ export const USER_RPCS = {
   "requests.send.get": "any",
   "requests.curl.parse": "any",
   "requests.curl.format": "user",
+  "simulator.watch": "any",
+  "simulator.boot": "any",
+  "simulator.shutdown": "any",
+  "simulator.restart": "any",
+  // Its endpoint takes taps and keys on the Simulator, as `terminal.input` does on a terminal.
+  "simulator.attach": "user",
+  "simulator.sessionFeed": "any",
 } as const satisfies Record<DaemonRpcTag, UserAccessNeed>;
 
 /** The RPCs the user gate decides: every `user` one, and `dispatch`, decided per Command. */

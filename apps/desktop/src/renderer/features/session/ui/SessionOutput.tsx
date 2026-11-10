@@ -48,6 +48,8 @@ import { OutputTab, SubagentPane, SubagentTab, useShownSubagent } from "./Subage
 import { EditorPlaceProvider, OpenInEditorButton } from "../../editor-links/index.ts";
 import { leaveBrowser } from "../output/browser.ts";
 import { BrowserOutputTab, SessionBrowser, useBrowserShown } from "./BrowserOutput.tsx";
+import { leaveSimulator } from "../output/simulator.ts";
+import { SessionSimulator, SimulatorOutputTab, useSimulatorShown } from "./SimulatorOutput.tsx";
 import { useSettings } from "../../settings/index.ts";
 import {
   DataOutput,
@@ -462,6 +464,45 @@ const pickedPane = (
   return traces === null ? null : <TracesOutput {...traces} />;
 };
 
+/** The Browser's or the Simulator's body while its tab is shown; null otherwise. */
+const toolPane = ({
+  hostKey,
+  sessionId,
+  session,
+  harness,
+  browser,
+  simulator,
+}: {
+  readonly hostKey: string;
+  readonly sessionId: SessionId;
+  readonly session: ShownSession;
+  readonly harness: ReturnType<typeof harnessOf>;
+  readonly browser: boolean;
+  readonly simulator: boolean;
+}) => {
+  if (session === null) return null;
+
+  if (browser)
+    return (
+      <SessionBrowser
+        hostKey={hostKey}
+        sessionId={sessionId}
+        workspaceId={session.workspaceId}
+        harness={harness}
+      />
+    );
+
+  return simulator ? (
+    <SessionSimulator
+      hostKey={hostKey}
+      sessionId={sessionId}
+      workspaceId={session.workspaceId}
+      cwd={session.cwd}
+      harness={harness}
+    />
+  ) : null;
+};
+
 export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) => {
   const model = useSession(hostKey, sessionId);
   const key = uiKey(hostKey, sessionId);
@@ -469,10 +510,11 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const subagent = useShownSubagent(hostKey, sessionId);
   const browser = useBrowserShown(hostKey, sessionId, subagent !== null);
+  const simulator = useSimulatorShown(hostKey, sessionId, subagent !== null) && !browser;
 
   const groups = groupTurns(model.turns);
   const current = groupOf(groups, ui.diffTurnId) ?? groups.at(-1) ?? null;
-  const free = subagent === null && !browser;
+  const free = subagent === null && !browser && !simulator;
   const dataTab = useDataTab(hostKey, sessionId, model, current, free);
   const data = dataTab.shown !== null;
   const tracesTab = useTracesTab(hostKey, sessionId, key, current, free && !data);
@@ -497,6 +539,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
   const changes = () => {
     close();
     leaveBrowser(hostKey, sessionId);
+    leaveSimulator(hostKey, sessionId);
     setDataOutputShown(key, false);
     setTracesOutputShown(key, false);
   };
@@ -509,6 +552,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
   };
 
   const place = placeOf(hostKey, session, isWindowsHost(useHost(hostKey)));
+  const tool = toolPane({ hostKey, sessionId, session, harness, browser, simulator });
 
   return (
     <EditorPlaceProvider value={place}>
@@ -530,6 +574,7 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             onPick={() => {
               close();
               leaveBrowser(hostKey, sessionId);
+              leaveSimulator(hostKey, sessionId);
               setTracesOutputShown(key, false);
             }}
           />
@@ -538,6 +583,12 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             hostKey={hostKey}
             sessionId={sessionId}
             on={browser}
+            harness={harness}
+          />
+          <SimulatorOutputTab
+            hostKey={hostKey}
+            sessionId={sessionId}
+            on={simulator}
             harness={harness}
           />
           {subagent === null ? null : (
@@ -562,13 +613,8 @@ export const SessionOutput = ({ hostKey, sessionId, tabs }: SessionOutputProps) 
             />
           )}
         </div>
-        {browser && session !== null ? (
-          <SessionBrowser
-            hostKey={hostKey}
-            sessionId={sessionId}
-            workspaceId={session.workspaceId}
-            harness={harness}
-          />
+        {tool !== null ? (
+          tool
         ) : picked !== null ? (
           picked
         ) : subagent === null ? (

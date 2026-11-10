@@ -64,7 +64,7 @@ const UI_SYNC: ReadonlyArray<readonly [string, string]> = [
   ["ShieldIcon", "ShieldOutline18"],
 ];
 
-/** A fourth UI file: the Browser's chrome in Output. */
+/** A fourth UI file: the Browser's and the Simulator's chrome in Output. */
 const UI_BROWSER: ReadonlyArray<readonly [string, string]> = [
   ["LockIcon", "LockOutline18"],
   ["GlobeIcon", "GlobeOutline18"],
@@ -72,6 +72,10 @@ const UI_BROWSER: ReadonlyArray<readonly [string, string]> = [
   ["CursorIcon", "CursorDefaultOutline18"],
   ["CodeIcon", "CodeOutline18"],
   ["PickElementIcon", "SquareDashedCursorOutline18"],
+  ["HomeIcon", "HouseOutline18"],
+  ["RotateLeftIcon", "RotateObjAnticlockwiseOutline18"],
+  ["CameraIcon", "CameraOutline18"],
+  ["PowerIcon", "PowerOffOutline18"],
 ];
 
 /** Polaris name → Nucleo pixel outline 24px component. Polaris-owned concepts only. */
