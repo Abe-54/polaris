@@ -50,6 +50,7 @@ ever carries.
 | Terminals | `terminal.input` | A Harness in a terminal answers its own approval prompts from typed input. |
 | Agent instructions | `traces.installSkill` | It writes a skill into every Harness's global config, which steers all future agents. |
 | Constellations | `constellation.answer`, `constellation.review` | These are the user's answers and reviews. Leads and Workers act through the Polaris MCP tools in the Daemon, which never go through the socket. |
+| Computer use | `computerUse.enable`, `computerUse.allowedApps.add` | Turning computer use on lets agents control apps on the Host, and an always-allowed app skips its app approval (ADR 0104, ENG-846). Turning it off and removing an app stay `any`. |
 
 Everything else stays `any`: reads, the Daemon's own CLIs (`polaris lease`, `polaris
 constellation stats`, `polaris extension list`), traces ingest, files, git, settings.

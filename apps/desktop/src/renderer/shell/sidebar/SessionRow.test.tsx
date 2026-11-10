@@ -3,7 +3,7 @@ import "../../test/dom.testing.ts";
 import "../../app/slots.tsx";
 import { TooltipProvider } from "@polaris/ui";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { createStore } from "zustand/vanilla";
 import { FIXTURE_SESSIONS } from "../../features/data/preview/fixtures.ts";
 import { DATA_AT, dataHost, dataHostModel } from "../../features/data/preview/scene.ts";
@@ -11,7 +11,13 @@ import { createCommandRegistry } from "../../routes/commands.ts";
 import { createNavigation } from "../../routes/navigation.ts";
 import { type AppState, initialState } from "../../store/store.ts";
 import { AppProvider } from "../hooks.ts";
+import { installFakeBridge } from "../../test/bridge.testing.ts";
 import { CompactSessionRow } from "./SessionRow.tsx";
+
+// The row watches the apps its session controls (`computerUse.watch`).
+beforeEach(() => {
+  installFakeBridge();
+});
 
 afterEach(cleanup);
 

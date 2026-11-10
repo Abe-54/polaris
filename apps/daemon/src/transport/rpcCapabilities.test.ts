@@ -6,6 +6,7 @@ import {
   RPC_CAPABILITIES,
   rpcAllowed,
 } from "@polaris/protocol";
+import { livePreview, PREVIEW_CAPABILITY } from "../computerUse/preview/group.ts";
 import { hostPlatform } from "../platform/index.ts";
 import { simulatorCapable } from "../simulator/service.ts";
 import { daemonCapabilities, LANGUAGE_CAPABILITIES } from "./serve.ts";
@@ -27,11 +28,21 @@ const simulatorServed = new Set<string>(
     : Object.entries(RPC_CAPABILITIES).flatMap(([tag, need]) => (need === "simulator" ? [tag] : []))
 );
 
+/** Without the capture tool the live preview answers Unsupported and isn't announced. */
+const previewServed = new Set<string>(
+  livePreview()
+    ? []
+    : Object.entries(RPC_CAPABILITIES).flatMap(([tag, need]) =>
+        need === PREVIEW_CAPABILITY ? [tag] : []
+      )
+);
+
+const conditional = (tag: string) =>
+  languageServed.has(tag) || simulatorServed.has(tag) || previewServed.has(tag);
+
 test("this Daemon announces the capability of every RPC it serves, so no Client guard refuses it", () => {
   const refused = [...DaemonRpcs.requests.values()].flatMap(({ _tag: tag }) =>
-    languageServed.has(tag) || simulatorServed.has(tag) || rpcAllowed(tag, daemonCapabilities)
-      ? []
-      : [tag]
+    conditional(tag) || rpcAllowed(tag, daemonCapabilities) ? [] : [tag]
   );
 
   expect(refused).toEqual([]);

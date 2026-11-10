@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { connectRpcWith, socketTransport } from "@polaris/client";
 import { AppId, ComputerUseItem, DaemonRpcs } from "@polaris/protocol";
 import { Effect, Fiber, Layer, Stream } from "effect";
+import { TEST_USER_KEY } from "../transport/userAccess.testing.ts";
 import { HostSecrets } from "../secrets/index.ts";
 import { startServer } from "../transport/server.ts";
 import { removeTempDirSettled } from "../platform/tempDir.testing.ts";
@@ -12,7 +13,7 @@ import { ComputerUseHost, ComputerUseHostRpcHandlers } from "./index.ts";
 
 const hello = { clientName: "test", clientVersion: "0", deviceLabel: "test", capabilities: [] };
 
-test("a Client turns computer use on, watches it turn ready, and the app RPC is still a stub", async () => {
+test("the Desktop App turns computer use on, watches it turn ready, and the app RPC is still a stub; a keyless process can't turn it on or allow an app", async () => {
   const host = fakeHost();
   await host.listen(join(host.root, "run", "1000", "wayland-0"));
   host.file(join(host.root, "dbus-1", "org.a11y.Bus.service"));
@@ -46,7 +47,23 @@ test("a Client turns computer use on, watches it turn ready, and the app RPC is 
           yield* socketTransport(server.socketPath)
         );
 
-        yield* client.hello(hello);
+        yield* client.hello({ ...hello, ...TEST_USER_KEY });
+
+        // A process with only the socket, such as an agent's shell, holds no user key (ADR 0100).
+        const keyless = yield* connectRpcWith(
+          DaemonRpcs,
+          yield* socketTransport(server.socketPath)
+        );
+
+        yield* keyless.client.hello(hello);
+        const terminal = AppId.make("com.apple.Terminal");
+
+        const refused = [
+          yield* Effect.flip(keyless.client["computerUse.enable"]({})),
+          yield* Effect.flip(keyless.client["computerUse.allowedApps.add"]({ appId: terminal })),
+        ];
+
+        const read = yield* keyless.client["computerUse.status"]({ refresh: false });
 
         const off = yield* client["computerUse.status"]({ refresh: false });
 
@@ -62,10 +79,15 @@ test("a Client turns computer use on, watches it turn ready, and the app RPC is 
           client["computerUse.app"]({ appId: AppId.make("com.figma.Desktop") })
         );
 
-        const terminal = AppId.make("com.apple.Terminal");
         const added = yield* client["computerUse.allowedApps.add"]({ appId: terminal });
         const listed = yield* client["computerUse.allowedApps"]({});
 
+        expect(refused.map((error) => error._tag)).toEqual([
+          "UserAccessRequired",
+          "UserAccessRequired",
+        ]);
+
+        expect(read.state._tag).toBe("Off");
         expect(added.map((allowed) => allowed.app.id)).toEqual([terminal]);
         expect(listed).toEqual(added);
         expect([off.state._tag, on.state._tag]).toEqual(["Off", "Ready"]);
