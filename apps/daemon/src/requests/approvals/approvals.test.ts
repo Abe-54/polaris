@@ -1,11 +1,27 @@
 import { expect, test } from "bun:test";
-import { ApprovalDecision, ApprovalRequest, RequestId, type HttpMethod } from "@polaris/protocol";
+import {
+  AgentSession,
+  ApprovalDecision,
+  ApprovalRequest,
+  DomainEvent,
+  RequestId,
+  SessionId,
+  Turn,
+  TurnId,
+  type HttpMethod,
+} from "@polaris/protocol";
 import { Effect, Fiber, Layer, Predicate, Schema, type Scope } from "effect";
 import { EventStore } from "../../store/EventStore.ts";
 import { DataDatabase } from "../../data/database.ts";
 import { decideSession } from "../../engine/session.ts";
 import { seedDataSession, started } from "../../data/approvals.testing.ts";
-import { OriginApprovals, READS_ONLY, originApprovalsLayer, type OwnerLookup } from "./index.ts";
+import {
+  OriginApprovals,
+  READS_ONLY,
+  originApprovalsLayer,
+  originGate,
+  type OwnerLookup,
+} from "./index.ts";
 
 const sessionId = started.session.id;
 
@@ -14,7 +30,7 @@ const API = "https://api.example.com";
 const tunnel: OwnerLookup = async () => [{ pid: 7, executable: "/usr/local/bin/cloudflared" }];
 
 const run = <A, E>(
-  program: Effect.Effect<A, E, OriginApprovals | EventStore | Scope.Scope>,
+  program: Effect.Effect<A, E, OriginApprovals | EventStore | DataDatabase | Scope.Scope>,
   owners: OwnerLookup = tunnel
 ) =>
   Effect.runPromise(
@@ -29,25 +45,30 @@ const run = <A, E>(
   );
 
 /** The approval id the Send waits on, or undefined when it went straight through. */
-const send = (method: HttpMethod, url = `${API}/v1/items`, approvalId?: RequestId) =>
+const send = (
+  method: HttpMethod,
+  url = `${API}/v1/items`,
+  approvalId?: RequestId,
+  session: SessionId = sessionId
+) =>
   Effect.gen(function* () {
     const approvals = yield* OriginApprovals;
 
     const result = yield* approvals
-      .require(sessionId, { url, method }, approvalId ? { approvalId } : {})
+      .require(session, { url, method }, approvalId ? { approvalId } : {})
       .pipe(Effect.as(undefined), Effect.catchTag("OriginApprovalRequired", Effect.succeed));
 
     return result?.approvalId;
   });
 
-const respond = (requestId: RequestId, decision: ApprovalDecision) =>
+const respond = (requestId: RequestId, decision: ApprovalDecision, session = sessionId) =>
   Effect.gen(function* () {
     const store = yield* EventStore;
     yield* store.commit({
       commandId: null,
       decide: (model) =>
         Effect.succeed(
-          decideSession(model.sessions.get(sessionId), {
+          decideSession(model.sessions.get(session), {
             type: "approval.respond",
             requestId,
             decision,
@@ -57,14 +78,45 @@ const respond = (requestId: RequestId, decision: ApprovalDecision) =>
     });
   });
 
-const pending = Effect.gen(function* () {
-  const record = (yield* (yield* EventStore).model).sessions.get(sessionId)!;
+const pendingOf = (session = sessionId) =>
+  Effect.gen(function* () {
+    const record = (yield* (yield* EventStore).model).sessions.get(session)!;
 
-  return [...record.pending.values()];
-});
+    return [...record.pending.values()];
+  });
+
+const pending = pendingOf();
 
 const allow = (originScope: "reads" | "reads-and-writes", remember = true) =>
   ApprovalDecision.cases.Allow.make({ remember, originScope });
+
+const other = SessionId.make("s-other");
+
+const otherTurn = TurnId.make("t-other");
+
+/** A second Agent Session with a working Turn, beside the seeded one. */
+const seedOther = Effect.gen(function* () {
+  const store = yield* EventStore;
+  yield* store.commit({
+    commandId: null,
+    decide: () =>
+      Effect.succeed([
+        DomainEvent.cases.SessionCreated.make({
+          session: new AgentSession({
+            ...Schema.decodeUnknownSync(Schema.Struct(AgentSession.fields))(started.session),
+            id: other,
+          }),
+        }),
+        DomainEvent.cases.TurnStarted.make({
+          turn: new Turn({
+            ...Schema.decodeUnknownSync(Schema.Struct(Turn.fields))(started.turns[0]),
+            id: otherTurn,
+            sessionId: other,
+          }),
+        }),
+      ]),
+  });
+});
 
 test("concurrent agent Sends to one Remote Origin open exactly one card with its origin", () =>
   run(
@@ -185,5 +237,67 @@ test("only the Daemon raises an Origin Approval, and it takes no text answer", (
       });
 
       expect(harness.events.some((e) => Predicate.isTagged(e, "ApprovalRequested"))).toBe(false);
+    })
+  ));
+
+test("each agent session gets its own card for one Remote Origin, and allowing one once doesn't send the other's", () =>
+  run(
+    Effect.gen(function* () {
+      const approvals = yield* OriginApprovals;
+      yield* seedOther;
+      const mine = (yield* send("POST"))!;
+      const theirs = (yield* send("DELETE", `${API}/v1/everything`, undefined, other))!;
+      expect(theirs).not.toBe(mine);
+
+      const cards = yield* pendingOf(other);
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.origin?.method).toBe("DELETE");
+
+      yield* respond(mine, allow("reads-and-writes", false));
+      expect(yield* send("DELETE", `${API}/v1/everything`, theirs, other)).toBe(theirs);
+      expect(yield* approvals.rules).toEqual([]);
+    })
+  ));
+
+test("a one-Send grant can't be spent by another agent session", () =>
+  run(
+    Effect.gen(function* () {
+      yield* seedOther;
+      const mine = (yield* send("POST"))!;
+      const { db } = yield* DataDatabase;
+      db.query("INSERT INTO origin_approval_waiters(request,session,turn) VALUES (?,?,?)").run(
+        mine,
+        other,
+        otherTurn
+      );
+
+      yield* respond(mine, allow("reads-and-writes", false));
+      expect(yield* send("POST", undefined, mine, other)).toBeString();
+      expect(yield* send("POST", undefined, mine)).toBeUndefined();
+    })
+  ));
+
+test("the card names the file and variable a masked token came from", () =>
+  run(
+    Effect.gen(function* () {
+      const approvals = yield* OriginApprovals;
+      yield* originGate(approvals)({
+        checkout: "/model",
+        ref: null,
+        method: "GET",
+        write: false,
+        origin: "https://api.example.com:443",
+        url: `${API}/v1/me`,
+        path: "/v1/me",
+        variables: [
+          { name: "BASE_URL", source: "dotenv", masked: false, value: API, file: ".env" },
+          { name: "API_TOKEN", source: "dotenv", masked: true, file: ".env.local" },
+        ],
+        by: { kind: "agent", sessionId, turn: started.turns[0]!.id },
+      }).pipe(Effect.flip);
+
+      const [card] = yield* pending;
+      expect(card!.origin?.tokenSource).toEqual({ file: ".env.local", name: "API_TOKEN" });
+      expect(card!.detail).toBe("GET /v1/me\nToken from API_TOKEN in .env.local");
     })
   ));

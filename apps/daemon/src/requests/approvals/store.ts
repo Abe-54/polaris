@@ -20,6 +20,7 @@ export const scopeAllows = (scope: OriginScope | undefined, write: boolean) =>
   scope === "reads-and-writes" || (scope === "reads" && !write);
 
 interface RequestRow {
+  readonly session: string;
   readonly origin: string;
   readonly status: "pending" | "approved" | "denied";
   readonly scope: OriginScope | null;
@@ -130,11 +131,12 @@ export class OriginApprovalStore {
       .run(id, session, turn);
   }
 
-  /** Spends a one-Send grant: the waiter's Turn, the same origin and a scope that allows it. */
+  /** Spends a one-Send grant: the card's own Agent Session, the waiter's Turn, the same origin and a scope that allows it. */
   consume(id: string, session: string, turn: string, origin: string, write: boolean) {
     const row = this.row(id);
 
-    if (row?.status !== "approved" || row.origin !== origin) return false;
+    if (row?.status !== "approved" || row.session !== session || row.origin !== origin)
+      return false;
 
     if (!scopeAllows(row.scope ?? undefined, write)) return false;
 
@@ -166,7 +168,7 @@ export class OriginApprovalStore {
   private row(id: string) {
     return this.db
       .query<RequestRow, [string]>(
-        "SELECT origin,status,scope,reason FROM origin_approval_requests WHERE id=?"
+        "SELECT session,origin,status,scope,reason FROM origin_approval_requests WHERE id=?"
       )
       .get(id);
   }
