@@ -56,3 +56,13 @@ test("a null or blank reply is nothing to offer", () => {
   expect(replyText({ reply: "  \n" })).toBeNull();
   expect(replyText({ reply: " Ship it. " })).toBe("Ship it.");
 });
+
+test.each(["null", "NULL", '"null"', "None.", "nothing"])(
+  "a model's word for no reply (%s) is nothing to offer",
+  (reply) => expect(replyText({ reply })).toBeNull()
+);
+
+test("inline code marks are dropped from a reply", () => {
+  expect(replyText({ reply: "B: `hasPendingRetry`" })).toBe("B: hasPendingRetry");
+  expect(replyText({ reply: "Null checks first, please" })).toBe("Null checks first, please");
+});
