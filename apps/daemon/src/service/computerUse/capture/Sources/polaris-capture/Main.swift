@@ -12,8 +12,9 @@ enum Main {
     let (events, continuation) = AsyncStream.makeStream(of: Event.self)
     let capture = Capture(output: Output(), events: continuation, locked: screenIsLocked())
 
-    // Lives as long as the process: stdin closing is what ends it.
-    Task {
+    // Lives as long as the process: stdin closing is what ends it. Off the main actor, so
+    // reading lines never hands the iterator across isolation (an error under Swift 6.1).
+    Task.detached {
       do {
         for try await line in FileHandle.standardInput.bytes.lines {
           if let command = try? Command(line: line) { continuation.yield(.command(command)) }
