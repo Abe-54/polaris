@@ -4,8 +4,8 @@ import { Effect, Stream } from "effect";
 const request = () => Effect.fail(new Unsupported({ capability: "computer-use" }));
 
 /**
- * Computer use (ENG-846) until its services land: every RPC answers `Unsupported`, in a layer
- * of its own (`COMPUTER_USE_RPC_TAGS`), as `defaultHandlers` leaves the newer groups.
+ * Computer use (ENG-846) where no real handler serves it: `Unsupported`, in a layer of its own
+ * (`COMPUTER_USE_RPC_TAGS`). `computerUse/` serves the status, setup, on/off and allowed list.
  */
 export const computerUseDefaults = ComputerUseRpcs.toLayer({
   "computerUse.status": request,
