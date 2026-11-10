@@ -26,7 +26,7 @@ import type { CommitResult } from "../store/EventStore.ts";
 import { type ReadModel, workingTurn } from "../store/model.ts";
 import { CONTINUE_PROMPT } from "./decider.ts";
 import { CheckpointPruning } from "./pruning.ts";
-import { daemonOwned } from "./session.approvals.ts";
+import { daemonOwned, isComputerUseApproval } from "./session.approvals.ts";
 import { ReviewCheckouts } from "./reviewCheckouts.ts";
 import { EngineRuntime } from "./runtime.ts";
 import { SecretRequests } from "./secretRequests.ts";
@@ -325,8 +325,7 @@ const make = Effect.gen(function* () {
           .get(command.sessionId)
           ?.pending.get(command.requestId);
 
-        // A computer use request is Polaris's own; its waiting call reads the answer.
-        return request !== undefined && (daemonOwned(request) || request.kind === "computer-use")
+        return request !== undefined && (daemonOwned(request) || isComputerUseApproval(request))
           ? Effect.void
           : respond(command.sessionId, command.requestId, command.decision);
       },

@@ -215,6 +215,17 @@ export const RemoveAllowedApp = Rpc.make("computerUse.removeAllowedApp", {
   error: Unsupported,
 });
 
+/**
+ * Always-allows an app the user picked in Settings and answers the list; an app already on it
+ * is fine. The only way a built-in always-refused app is ever allowed: no approval reaches one.
+ * The Desktop App only.
+ */
+export const AddAllowedApp = Rpc.make("computerUse.allowedApps.add", {
+  payload: { appId: AppId },
+  success: Schema.Array(AllowedApp),
+  error: Unsupported,
+});
+
 /** An app with its icon, for a Tool Call's `AppRef`; `NotFound` when the Host has no such app. */
 export const GetDesktopApp = Rpc.make("computerUse.app", {
   payload: { appId: AppId },
@@ -321,6 +332,7 @@ export class ComputerUseRpcs extends RpcGroup.make(
   OpenComputerUseSetup,
   ListAllowedApps,
   RemoveAllowedApp,
+  AddAllowedApp,
   GetDesktopApp,
   WatchPreview,
   LatestPreview
@@ -335,6 +347,7 @@ export const COMPUTER_USE_RPC_TAGS = [
   "computerUse.openSetup",
   "computerUse.allowedApps",
   "computerUse.removeAllowedApp",
+  "computerUse.allowedApps.add",
   "computerUse.app",
   "computerUse.preview.watch",
   "computerUse.preview.latest",

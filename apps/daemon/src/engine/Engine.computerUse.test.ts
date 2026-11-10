@@ -1,273 +1,139 @@
+/** Computer use through the real Engine (ENG-846): first use, always allow and the refused apps. */
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { AppId, ApprovalDecision, type Capability, Command, SessionId } from "@polaris/protocol";
+import { Effect, Option, Predicate, Stream } from "effect";
+import { ComputerUseHost } from "../computerUse/index.ts";
+import { DesktopMcp } from "../harness/desktop/index.ts";
 import {
-  ApprovalDecision,
-  type ApprovalRequest,
-  Command,
-  type ComputerUseState,
-  SessionId,
-  SessionPlacement,
-} from "@polaris/protocol";
-import { Deferred, Effect, Fiber, Layer, Option, Predicate, type Scope, Stream } from "effect";
-import { DesktopMcp, type DesktopServer } from "../harness/desktop/index.ts";
-import { fakeDeps, fakeHost, fakeRunner, OFF, READY } from "../harness/desktop/testing.ts";
-import { HarnessEvent } from "../harness/HarnessDriver.ts";
-import type { EventStore } from "../store/EventStore.ts";
+  allow,
+  allowed,
+  asking,
+  call,
+  dispatch,
+  endTurn,
+  open,
+  pendingOf,
+  ranCommand,
+  respond,
+  run,
+  setup,
+  textOf,
+} from "./computerUse.testing.ts";
 import { Engine } from "./Engine.ts";
-import {
-  cid,
-  engineLayer,
-  type FakeDriver,
-  fakeRepo,
-  makeFakeDriver,
-  makeFakes,
-  tempDir,
-  waitFor,
-  waitUntil,
-} from "./testing.ts";
+import { waitFor } from "./testing.ts";
 
-type Env = Engine | EventStore;
-
-const CURSOR = "thr_numbers";
-
-/**
- * A fake Codex whose sessions get polaris_desktop through the real DesktopMcp, on a Host whose
- * state the test turns: each open records the server it got.
- */
-const setup = () => {
-  let state: ComputerUseState = OFF;
-  const ready = Effect.runSync(Deferred.make<void>());
-
-  const desktop = Effect.runSync(
-    Effect.provide(
-      Effect.gen(function* () {
-        return yield* DesktopMcp;
-      }),
-      DesktopMcp.layerWith(
-        fakeDeps(fakeRunner({}).runner, {
-          host: fakeHost({
-            state: Effect.sync(() => state),
-            untilReady: Deferred.await(ready),
-          }),
-        })
-      )
-    )
-  );
-
-  const fake = makeFakeDriver("codex");
-  const servers: Array<DesktopServer | null> = [];
-
-  const driver: FakeDriver = {
-    ...fake,
-    driver: {
-      ...fake.driver,
-      open: (options) =>
-        Effect.gen(function* () {
-          servers.push(yield* desktop.forSession(options));
-
-          return yield* fake.driver.open(options);
-        }),
-    },
-  };
-
-  const layer = engineLayer({
-    filename: join(tempDir(), "state.sqlite"),
-    fakes: makeFakes(),
-    drivers: [driver],
-  }).pipe(Layer.provide(Layer.succeed(DesktopMcp)(desktop)));
-
-  /** The user turns computer use on and the Host turns Ready. */
-  const turnOn = Effect.andThen(
-    Effect.sync(() => void (state = READY)),
-    Deferred.succeed(ready, undefined)
-  );
-
-  return { layer, fake, servers, turnOn };
-};
-
-const run = <A, E>(layer: Layer.Layer<Env>, program: Effect.Effect<A, E, Env | Scope.Scope>) =>
-  Effect.runPromise(Effect.scoped(program).pipe(Effect.provide(layer)));
-
-const dispatch = (command: Command) =>
-  Effect.flatMap(Engine, (engine) =>
-    engine.dispatch({ commandId: cid(), command, deviceLabel: "test" })
-  );
-
-const startWorking = (sessionId: SessionId, fake: FakeDriver) =>
-  Effect.gen(function* () {
-    yield* dispatch(Command.cases.RegisterWorkspace.make({ path: fakeRepo(), name: null }));
-    const model = yield* waitFor((m) => m.workspaces.size > 0);
-    yield* dispatch(
-      Command.cases.StartSession.make({
-        sessionId,
-        workspaceId: [...model.workspaces.values()][0]!.id,
-        harness: "codex",
-        placement: SessionPlacement.cases.InPlace.make({}),
-        permissionMode: "supervised",
-        model: null,
-        effort: null,
-        prompt: "Fill in the quarterly report in Numbers",
-        attachments: [],
-      })
-    );
-    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "working");
-    yield* waitUntil(() => fake.latest(sessionId) !== undefined);
-    fake.latest(sessionId)!.emit(HarnessEvent.CursorAssigned({ cursor: CURSOR }));
-    yield* waitFor((m) => m.sessions.get(sessionId)?.session.harnessCursor === CURSOR);
-  });
-
-/** The agent calls request_computer_use; resolves once the session Needs You for it. */
-const agentAsks = (sessionId: SessionId, server: DesktopServer | null | undefined) =>
-  Effect.gen(function* () {
-    const tool = server?.tools.find((t) => t.name === "request_computer_use");
-    expect(tool).toBeDefined();
-
-    const call = yield* Effect.promise(
-      () =>
-        tool?.call({ app: "Numbers", reason: "To fill in the quarterly report" }) ??
-        Promise.reject(new Error("no tool"))
-    ).pipe(Effect.forkScoped);
-
-    const model = yield* waitFor((m) => (m.sessions.get(sessionId)?.pending.size ?? 0) > 0);
-    const record = model.sessions.get(sessionId)!;
-    const request: ApprovalRequest = [...record.pending.values()][0]!;
-
-    return { call, request, state: record.session.state };
-  });
-
-const textOf = (result: { readonly content: ReadonlyArray<{ readonly type: string }> }) =>
-  result.content.map((c) => ("text" in c ? String(c.text) : "")).join("\n");
-
-const endTurn = (sessionId: SessionId, fake: FakeDriver) =>
-  Effect.gen(function* () {
-    const model = yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "working");
-    const turnId = model.sessions.get(sessionId)!.turns.at(-1)!.id;
-    fake
-      .latest(sessionId)!
-      .emit(HarnessEvent.TurnEnded({ turnId, status: "completed", error: null }));
-    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "idle");
-  });
-
-describe("a session asks for computer use while it's off", () => {
-  test("it Needs You with the notice; turning computer use on clears it, and the next Turn resumes with polaris_desktop", async () => {
-    const { layer, fake, servers, turnOn } = setup();
-    const S = SessionId.make("cu-on");
+describe("the first use of an app", () => {
+  test("asks in every permission mode, and nothing runs until the user allows it", async () => {
+    const { layer, ran, driver } = await setup();
+    const S = SessionId.make("cu-first");
 
     const seen = await run(
       layer,
       Effect.gen(function* () {
-        yield* startWorking(S, fake);
-        const { call, request, state } = yield* agentAsks(S, servers[0]);
+        const server = yield* open(S, "full-access");
+        const { result, request } = yield* asking(server, S, "snapshot", { app: "TextEdit" });
+        const state = (yield* waitFor(() => true)).sessions.get(S)?.session.state;
+        const before = ranCommand(ran, "snapshot");
+        yield* respond(request, allow());
+        const first = yield* Effect.promise(() => result);
+        const second = yield* Effect.promise(() => call(server, "snapshot", { app: "TextEdit" }));
 
-        yield* turnOn;
-
-        const answer = textOf(yield* Fiber.join(call));
-
-        const cleared = yield* waitFor(
-          (m) => m.sessions.get(S)?.pending.size === 0,
-          2000,
-          "the request clears"
-        );
-
-        yield* endTurn(S, fake);
-        const first = fake.latest(S)!;
-        yield* waitUntil(() => first.closed, 2000, "the Harness stops after the Turn");
-
-        yield* dispatch(
-          Command.cases.SendTurn.make({ sessionId: S, prompt: "Carry on", attachments: [] })
-        );
-        yield* waitUntil(() => servers.length === 2, 2000, "the next Turn reopens the Harness");
-
-        return {
-          request,
-          state,
-          answer,
-          after: cleared.sessions.get(S)!.session.state,
-          firstTools: servers[0]?.tools.map((t) => t.name),
-          nextTools: servers[1]?.tools.map((t) => t.name) ?? [],
-          resumed: fake.latest(S)!.options.resumeCursor,
-          turns: fake.latest(S)!.turns.map((t) => t.prompt),
-        };
+        return { request, state, before, first, second, pending: yield* pendingOf(S) };
       })
     );
 
-    expect(seen.state).toBe("needs-you");
-    expect(seen.request.kind).toBe("computer-use");
-    expect(seen.request.computerUse).toMatchObject({
-      state: OFF,
-      app: "Numbers",
-      reason: "To fill in the quarterly report",
+    expect(seen.request).toMatchObject({
+      kind: "app",
+      app: { id: "com.apple.TextEdit", name: "TextEdit" },
     });
-    expect(seen.firstTools).toEqual(["request_computer_use"]);
-    expect(seen.answer).toContain("Computer use is on now");
-    expect(seen.after).toBe("working");
-    expect(seen.nextTools).toContain("snapshot");
-    expect(seen.nextTools).not.toContain("request_computer_use");
-    // The same conversation: the reopened Harness resumes the first one's thread.
-    expect(seen.resumed).toBe(CURSOR);
-    expect(seen.turns).toEqual(["Carry on"]);
+    expect(seen.state).toBe("needs-you");
+    expect(seen.before).toBe(0);
+    expect(seen.first.isError).toBeUndefined();
+    expect(seen.second.isError).toBeUndefined();
+    expect(seen.pending).toEqual([]);
+    expect(ranCommand(ran, "snapshot")).toBe(2);
+    // Polaris asked, not the Harness: the answer never goes to it.
+    expect(driver.latest(S)?.responses).toEqual([]);
   });
 
-  test("Not now clears it, the agent carries on without, and the Harness keeps running", async () => {
-    const { layer, fake, servers } = setup();
-    const S = SessionId.make("cu-not-now");
+  test("a deny tells the agent, runs nothing, and the next use asks again", async () => {
+    const { layer, ran } = await setup();
+    const S = SessionId.make("cu-deny");
 
-    const seen = await run(
+    const [denied, again] = await run(
       layer,
       Effect.gen(function* () {
-        yield* startWorking(S, fake);
-        const { call, request } = yield* agentAsks(S, servers[0]);
+        const server = yield* open(S);
+        const first = yield* asking(server, S, "snapshot", { app: "TextEdit" });
+        yield* respond(first.request, ApprovalDecision.cases.Deny.make({ reason: null }));
+        const result = yield* Effect.promise(() => first.result);
+        const second = yield* asking(server, S, "snapshot", { app: "TextEdit" });
+        yield* respond(second.request, allow());
+        yield* Effect.promise(() => second.result);
 
-        const refused = yield* dispatch(
-          Command.cases.RespondToApproval.make({
-            sessionId: S,
-            requestId: request.id,
-            decision: ApprovalDecision.cases.Allow.make({ remember: false }),
-          })
-        ).pipe(Effect.flip);
-
-        const stillPending = (yield* waitFor(() => true)).sessions.get(S)?.pending.size;
-
-        yield* dispatch(
-          Command.cases.RespondToApproval.make({
-            sessionId: S,
-            requestId: request.id,
-            decision: ApprovalDecision.cases.Deny.make({ reason: null }),
-          })
-        );
-        const answer = textOf(yield* Fiber.join(call));
-        yield* endTurn(S, fake);
-
-        return {
-          refused,
-          stillPending,
-          answer,
-          responses: fake.latest(S)!.responses.length,
-          closed: fake.latest(S)!.closed,
-        };
+        return [result, second.request.kind] as const;
       })
     );
 
-    expect(Predicate.isTagged(seen.refused, "CommandRejected")).toBe(true);
-    expect(seen.stillPending).toBe(1);
-    expect(seen.answer).toContain("The user said not now");
-    // Polaris opened it, so the Harness is never asked to answer it.
-    expect(seen.responses).toBe(0);
-    expect(seen.closed).toBe(false);
+    expect(textOf(denied)).toBe("The user didn't allow TextEdit for this session.");
+    expect(again).toBe("app");
+    expect(ranCommand(ran, "snapshot")).toBe(1);
   });
 
-  test("a Client without computer-use is never sent the request", async () => {
-    const { layer, fake, servers } = setup();
+  test("an allow for one session doesn't cover another, and survives a Daemon restart", async () => {
+    const first = await setup();
+    const A = SessionId.make("cu-a");
+    const B = SessionId.make("cu-b");
+
+    const other = await run(
+      first.layer,
+      Effect.gen(function* () {
+        const a = yield* open(A);
+        yield* allowed(a, A, "snapshot", { app: "TextEdit" });
+        yield* endTurn(first.driver, A);
+        const b = yield* open(B);
+        const { result, request } = yield* asking(b, B, "snapshot", { app: "TextEdit" });
+        yield* respond(request, ApprovalDecision.cases.Deny.make({ reason: null }));
+        yield* Effect.promise(() => result);
+
+        return request.sessionId;
+      })
+    );
+
+    expect(other).toBe(B);
+
+    const restarted = await setup(first.reuse);
+
+    const after = await run(
+      restarted.layer,
+      Effect.gen(function* () {
+        yield* dispatch(
+          Command.cases.SendTurn.make({ sessionId: A, prompt: "again", attachments: [] })
+        );
+        yield* waitFor((m) => m.sessions.get(A)?.session.state === "working");
+        const server = (yield* (yield* DesktopMcp).forSession({ sessionId: A }))!;
+        const result = yield* Effect.promise(() => call(server, "snapshot", { app: "TextEdit" }));
+
+        return { result, pending: yield* pendingOf(A) };
+      })
+    );
+
+    expect(after.result.isError).toBeUndefined();
+    expect(after.pending).toEqual([]);
+  });
+
+  test("a Client that didn't announce computer-use is never sent the approval", async () => {
+    const { layer } = await setup();
     const S = SessionId.make("cu-gated");
 
     const [older, newer] = await run(
       layer,
       Effect.gen(function* () {
-        yield* startWorking(S, fake);
-        yield* agentAsks(S, servers[0]);
+        const server = yield* open(S);
+        const { result, request } = yield* asking(server, S, "snapshot", { app: "TextEdit" });
         const engine = yield* Engine;
 
-        const pendingSeen = (capabilities: ReadonlyArray<"computer-use">) =>
+        const snapshot = (capabilities: ReadonlyArray<Capability>) =>
           engine
             .subscribeSession({ sessionId: S, afterSequence: null, turnLimit: null, capabilities })
             .pipe(
@@ -280,11 +146,154 @@ describe("a session asks for computer use while it's off", () => {
               })
             );
 
-        return [yield* pendingSeen([]), yield* pendingSeen(["computer-use"])] as const;
+        const counts = [yield* snapshot([]), yield* snapshot(["computer-use"])] as const;
+        yield* respond(request, allow());
+        yield* Effect.promise(() => result);
+
+        return counts;
       })
     );
 
     expect(older).toBe(0);
     expect(newer).toBe(1);
+  });
+});
+
+describe("always allow", () => {
+  test("is saved on the Host: no session asks for the app again until it is removed", async () => {
+    const { layer, driver } = await setup();
+    const A = SessionId.make("cu-always-a");
+    const B = SessionId.make("cu-always-b");
+
+    const seen = await run(
+      layer,
+      Effect.gen(function* () {
+        const host = yield* ComputerUseHost;
+        const a = yield* open(A);
+        const { result, request } = yield* asking(a, A, "snapshot", { app: "TextEdit" });
+        yield* respond(request, allow(true));
+        yield* Effect.promise(() => result);
+        const saved = (yield* host.allowedApps).map((entry) => entry.app.id);
+        yield* endTurn(driver, A);
+        const b = yield* open(B);
+        const unasked = yield* Effect.promise(() => call(b, "snapshot", { app: "TextEdit" }));
+        const pending = yield* pendingOf(B);
+        yield* host.removeAllowedApp(AppId.make("com.apple.TextEdit"));
+        const again = yield* asking(b, B, "snapshot", { app: "TextEdit" });
+        yield* respond(again.request, allow());
+        yield* Effect.promise(() => again.result);
+
+        return { saved, unasked, pending, again: again.request.kind };
+      })
+    );
+
+    expect(seen.saved).toEqual([AppId.make("com.apple.TextEdit")]);
+    expect(seen.unasked.isError).toBeUndefined();
+    expect(seen.pending).toEqual([]);
+    expect(seen.again).toBe("app");
+  });
+
+  test("with no Desktop App, an Extension allows for the session but can't always-allow", async () => {
+    const { layer, ran } = await setup();
+    const S = SessionId.make("cu-sdk");
+
+    const seen = await run(
+      layer,
+      Effect.gen(function* () {
+        const host = yield* ComputerUseHost;
+        const server = yield* open(S);
+        const { result, request } = yield* asking(server, S, "snapshot", { app: "TextEdit" });
+        const refused = yield* Effect.flip(respond(request, allow(true), ["approve"]));
+        const stillPending = (yield* pendingOf(S)).map((pending) => pending.id);
+        yield* respond(request, allow(), ["approve"]);
+        const answered = yield* Effect.promise(() => result);
+
+        return { refused, stillPending, request, answered, always: yield* host.allowedApps };
+      })
+    );
+
+    expect(seen.refused).toMatchObject({
+      reason: "An extension can only allow an app for this session",
+    });
+    expect(seen.stillPending).toEqual([seen.request.id]);
+    expect(seen.answered.isError).toBeUndefined();
+    expect(seen.always).toEqual([]);
+    expect(ranCommand(ran, "snapshot")).toBe(1);
+  });
+});
+
+describe("the always-refused apps", () => {
+  test.each([
+    ["Terminal", "Terminal"],
+    ["Quarterly Report", "Quarterly Report"],
+    ["com.googlecode.iterm2", "Quarterly Report"],
+  ])("%s is refused by its bundle id, with no approval and nothing run", async (asked, name) => {
+    const { layer, ran } = await setup();
+    const S = SessionId.make("cu-refused");
+
+    const [result, pending] = await run(
+      layer,
+      Effect.gen(function* () {
+        const server = yield* open(S, "full-access");
+        const refused = yield* Effect.promise(() => call(server, "launch", { app: asked }));
+        const click = { x: 1, y: 2, app: asked };
+        const headed = yield* Effect.promise(() => call(server, "mouse_click", click));
+        expect(textOf(headed)).toBe(textOf(refused));
+        // No card ever opens, so no "Always allow" can put it on the Host's list.
+        expect(yield* (yield* ComputerUseHost).allowedApps).toEqual([]);
+
+        return [refused, yield* pendingOf(S)] as const;
+      })
+    );
+
+    expect(textOf(result)).toBe(
+      `polaris_desktop doesn't drive ${name}: it would get around the approvals this session asks for. Only the user can allow it, in the computer use settings for this host. Until then, ask them to do this step.`
+    );
+    expect(pending).toEqual([]);
+    expect(ranCommand(ran, "launch")).toBe(0);
+  });
+
+  test("an app that only shares a refused app's name is asked about like any other", async () => {
+    const { layer } = await setup();
+    const S = SessionId.make("cu-namesake");
+
+    const request = await run(
+      layer,
+      Effect.gen(function* () {
+        const server = yield* open(S);
+        const asked = yield* asking(server, S, "snapshot", { app: "Passwords" });
+        yield* respond(asked.request, allow());
+        yield* Effect.promise(() => asked.result);
+
+        return asked.request;
+      })
+    );
+
+    expect(request).toMatchObject({ kind: "app", app: { id: "com.example.crossword" } });
+  });
+
+  test("one the user added in Settings is used without asking, until they remove it", async () => {
+    const { layer, ran } = await setup();
+    const S = SessionId.make("cu-refused-lifted");
+    const terminal = AppId.make("com.apple.Terminal");
+
+    const [added, removed, pending] = await run(
+      layer,
+      Effect.gen(function* () {
+        const host = yield* ComputerUseHost;
+        const server = yield* open(S);
+        yield* host.addAllowedApp(terminal);
+        const used = yield* Effect.promise(() => call(server, "snapshot", { app: "Terminal" }));
+        yield* host.removeAllowedApp(terminal);
+        const after = yield* Effect.promise(() => call(server, "snapshot", { app: "Terminal" }));
+
+        return [used, after, yield* pendingOf(S)] as const;
+      })
+    );
+
+    expect(added.isError).toBeUndefined();
+    expect(textOf(removed)).toContain("polaris_desktop doesn't drive Terminal");
+    expect(pending).toEqual([]);
+    expect(ranCommand(ran, "snapshot")).toBe(1);
   });
 });

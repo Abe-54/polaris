@@ -1,6 +1,7 @@
 /** A fake agent-desktop at the process boundary: canned envelopes by command, every argv kept. */
-import { ComputerUseState } from "@polaris/protocol";
+import { AppId, AppRef, ComputerUseState } from "@polaris/protocol";
 import { Effect, type Schema, Stream } from "effect";
+import { Authorization, type Authorize } from "./authorize.ts";
 import type { DisplayAwake } from "./awake.ts";
 import type { DesktopHost } from "./host.ts";
 import type { DesktopMcpDeps } from "./index.ts";
@@ -45,11 +46,22 @@ export const OFF = ComputerUseState.cases.Off.make({});
 
 export const NO_DESKTOP = ComputerUseState.cases.NoDesktop.make({});
 
+/** Every app allowed, unasked: for tests of what isn't the policy. */
+export const allowAll: Authorize = {
+  use: () => Effect.succeed(Authorization.Allow({ asked: false })),
+  controlling: () => Effect.succeed(true),
+  release: () => Effect.void,
+  forget: () => Effect.void,
+};
+
 export const fakeHost = (overrides: Partial<DesktopHost> = {}): DesktopHost => ({
   state: Effect.succeed(READY),
   untilReady: Effect.never,
   env: Effect.succeed({}),
   locked: Effect.succeed(false),
+  inputIdle: Effect.succeed(null),
+  // Like a Host with no bundle ids: an app that isn't running is known by the name asked.
+  identify: (app) => Effect.succeed(new AppRef({ id: AppId.make(app), name: app })),
   name: "workbox",
   ...overrides,
 });
@@ -78,6 +90,32 @@ export const fakeDeps = (
     title: () => Effect.succeed("Fill in the quarterly report in Numbers please"),
     turnEnds: () => Effect.succeed(Stream.never),
   },
+  authorize: allowAll,
   awake: countingAwake().awake,
   ...overrides,
 });
+
+/** A `list-windows` answer: each app's one window, the first app in front. */
+export const windowsOf = (
+  ...apps: ReadonlyArray<{
+    readonly app: string;
+    readonly at: readonly [number, number, number, number];
+  }>
+) =>
+  ok(
+    "list-windows",
+    apps.map(({ app, at: [x, y, width, height] }, index) => ({
+      id: `w-${index + 1}`,
+      title: app,
+      app_name: app,
+      visible: true,
+      is_focused: index === 0,
+      bounds: { x, y, width, height },
+    }))
+  );
+
+/** Dia in front, across two displays, with TextEdit behind it. */
+export const DIA_IN_FRONT = windowsOf(
+  { app: "Dia", at: [-500, 0, 1500, 900] },
+  { app: "TextEdit", at: [1200, 100, 400, 300] }
+);

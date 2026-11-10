@@ -73,6 +73,10 @@ const byteStream = () => {
     start: (c) => {
       controller = c;
     },
+    // A reader that stops early closes the controller itself; closing it again throws.
+    cancel: () => {
+      open = false;
+    },
   });
 
   return {

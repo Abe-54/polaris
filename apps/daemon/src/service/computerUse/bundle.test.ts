@@ -1,17 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
-import {
-  BUNDLE_FILE_NAMES,
-  BUNDLE_FILES,
-  BUNDLE_LIBRARY_NAMES,
-  DAEMON_BUNDLE,
-  infoPlist,
-} from "../bundle.ts";
+import { BUNDLE_FILE_NAMES, BUNDLE_FILES, DAEMON_BUNDLE, infoPlist } from "../bundle.ts";
 import { type InstallContext, layout, stageBinary } from "../install.ts";
-import { buildHelper } from "./build.ts";
 import {
   COMPUTER_USE_BUNDLE,
   HELPER_FILE_NAMES,
@@ -20,8 +13,6 @@ import {
   helperBeside,
   helperInfoPlist,
 } from "./bundle.ts";
-
-const macOnly = process.platform === "darwin" ? test : test.skip;
 
 let root: string;
 
@@ -90,6 +81,7 @@ test("an upload's helper files go to the helper app beside the Daemon's bundle",
     "polaris-computer-use",
     "agent-desktop",
     "agent-desktop-macos-helper",
+    "polaris-capture",
   ] as const)
     expect(statSync(at(name)).mode & 0o777).toBe(0o755);
   expect(statSync(at("computer-use-Info.plist")).mode & 0o777).toBe(0o644);
@@ -105,49 +97,4 @@ test("a build from before the helper installs without one", async () => {
 
   const versionDir = layout(ctx(), "1.2.3").versionDir!;
   expect(helperBeside(join(versionDir, DAEMON_BUNDLE, BUNDLE_FILES.polaris))).toBeNull();
-});
-
-macOnly("a built helper verifies after the flat trip, under the build's bundle id", async () => {
-  const dist = join(root, "dist");
-  const daemon = join(dist, DAEMON_BUNDLE);
-
-  for (const name of ["polaris", "betterleaks", ...BUNDLE_LIBRARY_NAMES] as const) {
-    mkdirSync(dirname(join(daemon, BUNDLE_FILES[name])), { recursive: true });
-    copyFileSync("/usr/bin/true", join(daemon, BUNDLE_FILES[name]));
-  }
-
-  writeFileSync(join(daemon, BUNDLE_FILES["Info.plist"]), infoPlist("1.2.3"));
-  mkdirSync(dirname(join(daemon, BUNDLE_FILES["Polaris.icns"])), { recursive: true });
-  writeFileSync(join(daemon, BUNDLE_FILES["Polaris.icns"]), "icns");
-  expect(Bun.spawnSync(["codesign", "--force", "--sign", "-", daemon]).exitCode).toBe(0);
-  const icon = join(root, "icon.icns");
-  writeFileSync(icon, "icns");
-
-  const built = await buildHelper({
-    dir: dist,
-    version: "1.2.3-dev.1.abc1234",
-    release: false,
-    inputs: {
-      "agent-desktop": "/usr/bin/true",
-      "agent-desktop-macos-helper": "/usr/bin/true",
-      "computer-use-Polaris.icns": icon,
-    },
-  });
-
-  const upload = join(root, "upload");
-  mkdirSync(upload);
-
-  for (const name of BUNDLE_FILE_NAMES)
-    copyFileSync(join(daemon, BUNDLE_FILES[name]), join(upload, name));
-
-  for (const name of HELPER_FILE_NAMES)
-    copyFileSync(join(built, HELPER_FILES[name]), join(upload, name));
-  await stage(join(upload, "polaris"), "1.2.3-dev.1.abc1234");
-
-  const installed = join(layout(ctx(), "1.2.3-dev.1.abc1234").versionDir!, COMPUTER_USE_BUNDLE);
-  const verify = Bun.spawnSync(["codesign", "--verify", "--deep", "--strict", installed]);
-  expect(verify.stderr.toString()).toBe("");
-  expect(verify.exitCode).toBe(0);
-  const shown = Bun.spawnSync(["codesign", "--display", "--verbose=1", installed]);
-  expect(shown.stderr.toString()).toContain("Identifier=dev.lux.polaris.computer-use.dev\n");
 });

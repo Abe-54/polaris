@@ -3,8 +3,8 @@
  * the model's sequence as the cut: a snapshot (or a replay of the events after
  * the Client's sequence) up to the cut, `Synchronized`, then live items after it.
  */
+import { approvalCapability } from "../store/eventCapability.ts";
 import {
-  type ApprovalRequest,
   type Capability,
   HostStreamItem,
   NotFound,
@@ -74,18 +74,12 @@ const decodes =
     return needed === null || capabilities.includes(needed);
   };
 
-/** Kinds only a Client that announced their capability decodes. */
-const GATED_KINDS: Partial<Record<ApprovalRequest["kind"], Capability>> = {
-  secret: "approval.secret",
-  "computer-use": "computer-use",
-};
-
 /** Pending requests a Client can decode: a gated kind only with its capability. */
 const pendingFor = (record: SessionRecord, capabilities: ReadonlyArray<Capability>) =>
   [...record.pending.values()].filter((request) => {
-    const needed = GATED_KINDS[request.kind];
+    const needed = approvalCapability(request.kind);
 
-    return needed === undefined || capabilities.includes(needed);
+    return needed === null || capabilities.includes(needed);
   });
 
 const summaryOf = (

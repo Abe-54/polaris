@@ -62,6 +62,12 @@ test("a Client turns computer use on, watches it turn ready, and the app RPC is 
           client["computerUse.app"]({ appId: AppId.make("com.figma.Desktop") })
         );
 
+        const terminal = AppId.make("com.apple.Terminal");
+        const added = yield* client["computerUse.allowedApps.add"]({ appId: terminal });
+        const listed = yield* client["computerUse.allowedApps"]({});
+
+        expect(added.map((allowed) => allowed.app.id)).toEqual([terminal]);
+        expect(listed).toEqual(added);
         expect([off.state._tag, on.state._tag]).toEqual(["Off", "Ready"]);
 
         expect(

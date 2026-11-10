@@ -12,7 +12,7 @@ import {
   ComputerUseState,
   ComputerUseStatus,
   type ControlledApp,
-  type DesktopApp,
+  DesktopApp,
 } from "@polaris/protocol";
 import {
   Context,
@@ -32,7 +32,7 @@ import { ComputerUseHelper } from "../service/computerUse/index.ts";
 import { type Desktop, detectDesktop } from "./desktop.ts";
 import { feedOf, type HostFeed } from "./feed.ts";
 import { linuxSetup } from "./linux.ts";
-import { macSetup, openSetupCommands } from "./mac.ts";
+import { appName, macSetup, openSetupCommands } from "./mac.ts";
 import { type HostProbe, hostProbe } from "./probe.ts";
 import { computerUseFile, type StoredComputerUse } from "./storage.ts";
 
@@ -83,6 +83,8 @@ export class ComputerUseHost extends Context.Service<
     readonly allowedApps: Effect.Effect<ReadonlyArray<AllowedApp>>;
     /** "Always allow on this Host"; an app already on the list keeps its first `allowedAt`. */
     readonly allowApp: (app: DesktopApp) => Effect.Effect<ReadonlyArray<AllowedApp>>;
+    /** Settings' "add app": the Host names it (its id when it can't), then always-allows it. */
+    readonly addAllowedApp: (appId: AppId) => Effect.Effect<ReadonlyArray<AllowedApp>>;
     readonly removeAllowedApp: (appId: AppId) => Effect.Effect<ReadonlyArray<AllowedApp>>;
     /** Replaces the Controlled apps the Host feed shows. */
     readonly setControlledApps: (apps: ReadonlyArray<ControlledApp>) => Effect.Effect<void>;
@@ -269,6 +271,11 @@ const make = Effect.fnUntraced(function* (options: HostOptions) {
     openSetup,
     allowedApps,
     allowApp,
+    addAllowedApp: (appId) =>
+      Effect.flatMap(
+        Effect.promise(() => appName(probe, appId)),
+        (name) => allowApp(new DesktopApp({ id: appId, name, icon: null }))
+      ),
     removeAllowedApp,
     setControlledApps: (apps) =>
       SubscriptionRef.update(ref, (state) => ({ ...state, controlled: apps })),

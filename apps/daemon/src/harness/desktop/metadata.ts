@@ -4,7 +4,7 @@
  */
 import { AppId, AppRef, AppWindow, ComputerUseCall, type TurnItem } from "@polaris/protocol";
 import { Option, Schema } from "effect";
-import type { Target } from "./catalog.ts";
+import type { ScreenPoint, Target } from "./catalog.ts";
 import type { Envelope } from "./envelope.ts";
 
 /** The server name in both Harnesses; not `desktop`, which a user's own server may take. */
@@ -30,6 +30,90 @@ const Seen = Schema.Struct({
 
 const decodeSeen = Schema.decodeUnknownOption(Seen);
 
+const PlacedWindow = Schema.Struct({
+  app_name: Schema.String,
+  visible: Schema.Boolean,
+  is_focused: Schema.Boolean,
+  bounds: Schema.Struct({
+    x: Schema.Number,
+    y: Schema.Number,
+    width: Schema.Number,
+    height: Schema.Number,
+  }),
+});
+
+const decodePlaced = Schema.decodeUnknownOption(Schema.Array(PlacedWindow));
+
+/**
+ * Why headed input at `points` wouldn't land in `app`, from a `list-windows` envelope: the app
+ * must be in front and each point inside one of its visible windows. Null when it would.
+ */
+export const offApp = (
+  app: AppRef,
+  points: ReadonlyArray<ScreenPoint>,
+  listed: Envelope | null
+): string | null => {
+  const windows = listed?.ok ? Option.getOrNull(decodePlaced(listed.data)) : null;
+
+  if (windows === null) return `polaris_desktop couldn't check where ${app.name}'s windows are.`;
+
+  const mine = (window: typeof PlacedWindow.Type) =>
+    window.app_name.toLowerCase() === app.name.toLowerCase();
+
+  const covers = ({ visible, bounds }: typeof PlacedWindow.Type, { x, y }: ScreenPoint) =>
+    visible &&
+    x >= bounds.x &&
+    x < bounds.x + bounds.width &&
+    y >= bounds.y &&
+    y < bounds.y + bounds.height;
+
+  if (!windows.some((window) => mine(window) && window.is_focused))
+    return `${app.name} isn't in front, so this input would go to another app. focus_window it first.`;
+
+  // The list has no stacking order: outside the focused window, any other app's window may be on top.
+  const lands = (point: ScreenPoint) =>
+    windows.some((window) => mine(window) && window.is_focused && covers(window, point)) ||
+    (windows.some((window) => mine(window) && covers(window, point)) &&
+      !windows.some((window) => !mine(window) && covers(window, point)));
+
+  const outside = points.find((point) => !lands(point));
+
+  return outside === undefined
+    ? null
+    : `(${outside.x}, ${outside.y}) isn't in a ${app.name} window that is in front, so this input could go to another app.`;
+};
+
+const decodeApps = Schema.decodeUnknownOption(Schema.Struct({ apps: Schema.Array(ListedApp) }));
+
+/** The apps a `list-apps` envelope lists. */
+export const listedApps = (envelope: Envelope | null): ReadonlyArray<typeof ListedApp.Type> =>
+  envelope?.ok ? Option.getOrElse(decodeApps(envelope.data), () => ({ apps: [] })).apps : [];
+
+const refOf = (app: typeof ListedApp.Type) =>
+  new AppRef({ id: AppId.make(app.bundle_id ?? app.name), name: app.name });
+
+/**
+ * The one app `asked` names among those agent-desktop matched for it: an exact name or id,
+ * else the only match. Null for none; `ambiguous` when the name fits several apps.
+ */
+export const pickApp = (
+  asked: string,
+  apps: ReadonlyArray<typeof ListedApp.Type>
+): AppRef | "ambiguous" | null => {
+  const wanted = asked.trim().toLowerCase();
+
+  const exact = apps.filter(
+    (app) => app.name.toLowerCase() === wanted || app.bundle_id?.toLowerCase() === wanted
+  );
+
+  const byId = new Map((exact.length > 0 ? exact : apps).map((app) => [refOf(app).id, refOf(app)]));
+  const [first] = byId.values();
+
+  if (first === undefined) return null;
+
+  return byId.size === 1 ? first : "ambiguous";
+};
+
 const decodeWindows = Schema.decodeUnknownOption(Schema.Array(ListedWindow));
 
 /** `@s8f3k2p9:e5` → `s8f3k2p9`. */
@@ -44,6 +128,7 @@ interface SnapshotSeen {
 /** What one session's calls have seen; small, and gone with the session. */
 export class Sightings {
   private readonly bundles = new Map<string, string>();
+  private readonly apps = new Map<string, AppRef>();
   private readonly titles = new Map<string, string | null>();
   private readonly windowApps = new Map<string, string>();
   private readonly snapshots = new Map<string, SnapshotSeen>();
@@ -62,7 +147,11 @@ export class Sightings {
       for (const app of seen.apps ?? [])
         if (app.bundle_id !== undefined) this.bundles.set(app.name, app.bundle_id);
 
-      if (seen.window !== undefined) this.titles.set(seen.window.id, seen.window.title ?? null);
+      if (seen.window !== undefined) {
+        this.titles.set(seen.window.id, seen.window.title ?? null);
+
+        if (seen.app !== undefined) this.windowApps.set(seen.window.id, seen.app);
+      }
 
       if (seen.snapshot_id !== undefined)
         this.snapshots.set(seen.snapshot_id, {
@@ -72,8 +161,35 @@ export class Sightings {
     });
   }
 
-  knowsBundleOf(name: string): boolean {
-    return this.bundles.has(name);
+  /** The app a call's `app` was resolved to, by what the agent called it. */
+  appOf(asked: string): AppRef | undefined {
+    return this.apps.get(asked.trim().toLowerCase());
+  }
+
+  resolved(asked: string, app: AppRef): void {
+    this.apps.set(asked.trim().toLowerCase(), app);
+    this.apps.set(app.name.toLowerCase(), app);
+  }
+
+  /**
+   * Every app the call names: its `app`, its ref's snapshot and its window's owner, each on its
+   * own. `unknown` when its ref or window isn't one this session saw, so nothing vouches for it.
+   */
+  askedApps(target: Target) {
+    const fromRef =
+      target.ref === null
+        ? null
+        : (this.snapshots.get(snapshotOfRef(target.ref) ?? "")?.app ?? null);
+
+    const ofWindow =
+      target.windowId === null ? null : (this.windowApps.get(target.windowId) ?? null);
+
+    return {
+      names: [target.app, fromRef, ofWindow].filter((name) => name !== null),
+      unknown:
+        (target.ref !== null && fromRef === null) ||
+        (target.windowId !== null && ofWindow === null),
+    };
   }
 
   /** The app and window a call acted on, as far as this session knows them. */
@@ -90,7 +206,10 @@ export class Sightings {
 
     return new ComputerUseCall({
       app:
-        name === null ? null : new AppRef({ id: AppId.make(this.bundles.get(name) ?? name), name }),
+        name === null
+          ? null
+          : (this.appOf(name) ??
+            new AppRef({ id: AppId.make(this.bundles.get(name) ?? name), name })),
       window:
         windowId === null
           ? null

@@ -62,6 +62,7 @@ describe("shipped Daemon manifest", () => {
       // The helper app's tools are sealed by its own signature, after the Daemon's.
       join(helper, "Contents/MacOS/agent-desktop"),
       join(helper, "Contents/MacOS/agent-desktop-macos-helper"),
+      join(helper, "Contents/MacOS/polaris-capture"),
       helper,
     ]);
 
@@ -105,6 +106,7 @@ describe("shipped Daemon manifest", () => {
       "computer-use-CodeResources",
       "libfff_c.dylib",
       "polaris",
+      "polaris-capture",
       "polaris-computer-use",
       "sodium-native.node",
     ]);

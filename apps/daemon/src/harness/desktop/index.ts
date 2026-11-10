@@ -16,11 +16,11 @@ import {
 } from "effect";
 import { jsonSchema } from "../../mcp/tools/shared.ts";
 import { EventStore } from "../../store/EventStore.ts";
-import { type Authorize, defaultAuthorize } from "./authorize.ts";
+import type { Authorize } from "./authorize.ts";
 import { type DisplayAwake, hostAwake } from "./awake.ts";
 import { DESKTOP_TOOLS, type DesktopTool, type Json } from "./catalog.ts";
 import type { DesktopResult } from "./envelope.ts";
-import { computerUseDesktopHost, type DesktopHost, localDesktopHost } from "./host.ts";
+import type { DesktopHost } from "./host.ts";
 import { desktopHttp, type ListedTool } from "./http.ts";
 import {
   callRequest,
@@ -33,12 +33,13 @@ import {
 } from "./request.ts";
 import { type DesktopRunner, directRunner, helperRunner } from "./runner.ts";
 import { type Acted, desktopSession } from "./session.ts";
+import { type Takeover, takeover } from "./takeover.ts";
 
 export { DESKTOP_MCP_NAME, computerUseCallOf } from "./metadata.ts";
 
 export type { Authorize, DesktopCall, Authorization } from "./authorize.ts";
 
-export type { DesktopHost } from "./host.ts";
+export { computerUseDesktopHost, type DesktopHost } from "./host.ts";
 
 export type { Acted, ActedOn } from "./session.ts";
 
@@ -91,15 +92,16 @@ export interface DesktopMcpDeps {
   readonly runner: DesktopRunner;
   readonly host: DesktopHost;
   readonly sessions: DesktopSessions;
-  /** D3's approvals; until then headed input waits on `POLARIS_COMPUTER_USE_HEADED`. */
-  readonly authorize?: Authorize;
+  /** The Host's app policy: approvals, the refused apps and one session per app. */
+  readonly authorize: Authorize;
   readonly awake?: DisplayAwake;
+  readonly takeover?: Takeover;
   /** D4's preview targets (`PreviewTargets.acted`); none until it is wired in. */
   readonly acted?: Acted | undefined;
 }
 
 export const desktopInstructions = (host: string) =>
-  `polaris_desktop controls native apps on ${host} through their accessibility trees: snapshot an app, act on its refs, then snapshot again to check. Use it for native apps and for any app the user names; for web pages use polaris_browser. Headed tools move the real pointer and keyboard, only for apps with no accessibility tree, and need the user's approval.`;
+  `polaris_desktop controls native apps on ${host} through their accessibility trees: snapshot an app, act on its refs, then snapshot again to check. Use it for native apps and for any app the user names; for web pages use polaris_browser. The user approves each app the first time a session uses it, and one session uses an app at a time. Headed tools move the real pointer and keyboard, only for apps with no accessibility tree, and need the user's approval for that app; if the user takes the pointer or keyboard back, stop and wait for them.`;
 
 const listed = (definition: DesktopTool): ListedTool => ({
   name: definition.name,
@@ -110,7 +112,6 @@ const listed = (definition: DesktopTool): ListedTool => ({
 
 const make = (deps: DesktopMcpDeps) => {
   const http = desktopHttp();
-  const authorize = deps.authorize ?? defaultAuthorize();
   const awake = deps.awake ?? hostAwake();
   let request: RequestComputerUse | null = null;
 
@@ -156,12 +157,15 @@ const make = (deps: DesktopMcpDeps) => {
     return serve([tool], requestInstructions(state, deps.host.name), REQUEST_CALL_SECONDS);
   };
 
+  const userInput = deps.takeover ?? takeover();
+
   const open = Effect.fnUntraced(function* (sessionId: SessionId) {
     const session = desktopSession({
       sessionId,
       runner: deps.runner,
       host: deps.host,
-      authorize,
+      authorize: deps.authorize,
+      takeover: userInput,
       awake,
       title: deps.sessions.title(sessionId),
       acted: deps.acted,
@@ -208,7 +212,7 @@ const make = (deps: DesktopMcpDeps) => {
 };
 
 /** Each session's title and Turn ends, from the event store. */
-const storeSessions = Effect.gen(function* () {
+export const storeSessions = Effect.gen(function* () {
   const store = yield* EventStore;
 
   return {
@@ -241,21 +245,25 @@ export class DesktopMcp extends Context.Service<
   static readonly layerWith = (deps: DesktopMcpDeps) => Layer.sync(DesktopMcp, () => make(deps));
 
   /** agent-desktop inside the helper on macOS, the Host's own elsewhere; `host` says when it's ready. */
-  static readonly layerOn = <R>(host: Effect.Effect<DesktopHost, never, R>, acted?: Acted) =>
+  static readonly layerOn = <R, R2>(
+    host: Effect.Effect<DesktopHost, never, R>,
+    authorize: Effect.Effect<Authorize, never, R2>,
+    acted?: Acted
+  ) =>
     Layer.effect(
       DesktopMcp,
       Effect.gen(function* () {
         const runner = process.platform === "darwin" ? yield* helperRunner : yield* directRunner;
 
-        return make({ runner, host: yield* host, sessions: yield* storeSessions, acted });
+        return make({
+          runner,
+          host: yield* host,
+          sessions: yield* storeSessions,
+          authorize: yield* authorize,
+          acted,
+        });
       })
     );
-
-  /** On D1's ComputerUseHost: its state decides the tools, and its display env reaches them. */
-  static readonly layer = DesktopMcp.layerOn(computerUseDesktopHost);
-
-  /** Without D1's ComputerUseHost: ready when the helper's grants are, never asking. */
-  static readonly layerLocal = DesktopMcp.layerOn(localDesktopHost);
 
   static readonly none = Layer.succeed(DesktopMcp)(
     DesktopMcp.of({ forSession: () => Effect.succeed(null), bindRequests: () => Effect.void })

@@ -56,6 +56,7 @@ const HELPER_EXECUTABLES = [
   "polaris-computer-use",
   "agent-desktop",
   "agent-desktop-macos-helper",
+  "polaris-capture",
 ] as const;
 
 const DAEMON_LIBRARIES = ["libfff_c.dylib", "sodium-native.node"] as const;
@@ -257,6 +258,7 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
       ["polaris-computer-use", 0o755],
       ["agent-desktop", 0o755],
       ["agent-desktop-macos-helper", 0o755],
+      ["polaris-capture", 0o755],
       ["computer-use-Info.plist", 0o644],
       ["computer-use-Polaris.icns", 0o644],
       ["computer-use-CodeResources", 0o644],
@@ -294,7 +296,7 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     expect(helper).not.toContain("com.apple.security.cs.allow-jit");
     expect(verifies("--deep", join(dist, HELPER_APP))).toBe(true);
 
-    for (const tool of ["agent-desktop", "agent-desktop-macos-helper"] as const)
+    for (const tool of ["agent-desktop", "agent-desktop-macos-helper", "polaris-capture"] as const)
       expect(signature(join(dist, daemonFile(tool)))).toContain("(adhoc,runtime)");
 
     // The archive and the app's staged copy carry the signed bytes, so they verify on a Host.

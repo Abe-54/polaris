@@ -3,6 +3,7 @@ import { predictionContext } from "./prediction-context.ts";
 import { blobs } from "./blobs.ts";
 import { byteStreams } from "./byte-streams.ts";
 import { coldStart } from "./cold-start.ts";
+import { computerUsePreview } from "./computer-use-preview.ts";
 import { desktopIdle } from "./desktop-idle.ts";
 import { editor } from "./editor.ts";
 import { files } from "./files.ts";
@@ -38,4 +39,5 @@ export const SCENARIOS: ReadonlyArray<Scenario> = [
   review,
   usage,
   usageContention,
+  computerUsePreview,
 ];

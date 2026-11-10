@@ -35,7 +35,6 @@ import {
   type Turn,
 } from "@polaris/protocol";
 import { Context, Effect, Layer, Option, type Stream } from "effect";
-import { DesktopMcp } from "../harness/desktop/index.ts";
 import type { ServiceError } from "../services.ts";
 import { registerHandoffContributor } from "../service/upgrade.ts";
 import { AutoArchive } from "./autoArchive.ts";
@@ -53,6 +52,7 @@ import {
   Streams,
   type TurnPageRequest,
 } from "./streams.ts";
+import { AppApprovals } from "./appApprovals.ts";
 import { ComputerUseRequests } from "./computerUseRequests.ts";
 import { SecretRequests } from "./secretRequests.ts";
 import { Supervisor } from "./supervisor.ts";
@@ -85,6 +85,10 @@ export class Engine extends Context.Service<
     readonly requestSecret: SecretRequests["Service"]["request"];
     /** Saves a Secret Request's value and answers it `Provided`. */
     readonly provideSecret: SecretRequests["Service"]["provide"];
+    /** Computer use asks the user for an app, or headed input in it, on the Turn in flight (ADR 0104). */
+    readonly requestAppApproval: AppApprovals["Service"]["request"];
+    /** `request_computer_use` while computer use is off, until it's on or the user says Not now. */
+    readonly requestComputerUse: ComputerUseRequests["Service"]["request"];
     readonly subscribeHost: (
       afterSequence: Sequence | null,
       options?: HostSubscription
@@ -149,7 +153,9 @@ const EngineParts = Layer.mergeAll(Dispatcher.layer, Streams.layer).pipe(
     )
   ),
   Layer.provideMerge(Supervisor.layer),
-  Layer.provideMerge(Layer.merge(SecretRequests.layer, ComputerUseRequests.layer)),
+  Layer.provideMerge(SecretRequests.layer),
+  Layer.provideMerge(AppApprovals.layer),
+  Layer.provideMerge(ComputerUseRequests.layer),
   Layer.provideMerge(EngineRuntime.layer),
   (parts) =>
     Layer.mergeAll(LimitResume.layer, AutoArchive.layer, IdleCompaction.layer).pipe(
@@ -168,7 +174,7 @@ const make = Effect.gen(function* () {
   const idleCompaction = yield* IdleCompaction;
   const secrets = yield* SecretRequests;
   const computerUse = yield* ComputerUseRequests;
-  const desktop = yield* Effect.serviceOption(DesktopMcp);
+  const apps = yield* AppApprovals;
   const prepareForUpgrade = prepareSessionsForUpgrade(runtime);
   const prepareForRestart = prepareSessionsForUpgrade(runtime, "restart");
 
@@ -184,8 +190,6 @@ const make = Effect.gen(function* () {
     beforeExec: prepareForUpgrade,
   });
 
-  // The Harness registry is built before the Engine, so polaris_desktop gets its requests here.
-  if (Option.isSome(desktop)) yield* desktop.value.bindRequests(computerUse.request);
   yield* pruning.startSweeper;
   yield* (yield* LimitResume).start;
   yield* autoArchive.start;
@@ -232,6 +236,8 @@ const make = Effect.gen(function* () {
     dispatch,
     requestSecret: secrets.request,
     provideSecret: secrets.provide,
+    requestAppApproval: apps.request,
+    requestComputerUse: computerUse.request,
     subscribeHost: streams.subscribeHost,
     subscribeSession: streams.subscribeSession,
     readTurnPage: streams.readTurnPage,

@@ -30,7 +30,7 @@ export const appBundleOf = (executable: string): string | null => {
 /** "Polaris Computer Use.app": its launcher and the tools it runs (`service/computerUse/bundle.ts`). */
 const HELPER_LAUNCHER = "polaris-computer-use";
 
-const HELPER_TOOLS = ["agent-desktop", "agent-desktop-macos-helper"] as const;
+const HELPER_TOOLS = ["agent-desktop", "agent-desktop-macos-helper", "polaris-capture"] as const;
 
 const HELPER_ENTITLEMENTS = "computer-use.plist";
 

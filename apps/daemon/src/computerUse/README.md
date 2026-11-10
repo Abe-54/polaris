@@ -4,10 +4,12 @@
 
 | File | What |
 |---|---|
-| `host.ts` | `ComputerUseHost`: `current`, `ensure`, `changes`, `desktopEnv`, `enable`, `disable`, `openSetup`, the allowed list (`allowApp`, `removeAllowedApp`), `setControlledApps` and `feed`. `stateOf` is the order of the states. |
+| `host.ts` | `ComputerUseHost`: `current`, `ensure`, `changes`, `desktopEnv`, `enable`, `disable`, `openSetup`, the allowed list (`allowApp` for an approval's "Always allow", `addAllowedApp` for Settings' add, `removeAllowedApp`), `setControlledApps` and `feed`. `stateOf` is the order of the states. |
 | `desktop.ts` | `detectDesktop`: whether there is a desktop session, found by the Daemon itself. |
 | `linux.ts`, `mac.ts` | What each platform still needs (`NeedsSetup`), and the setup commands on macOS. |
 | `feed.ts` | `computerUse.watch`: a `Status`, `AllowedApps` and `ControlledApps` first, then each again when it changes. |
+| `control.ts` | `AppControl`: the policy at run time. Each `polaris_desktop` call on an app goes through `decideAppUse`; an approval is asked through the Engine (`requestAppApproval`, bound in `transport/serve.ts` once the Engine is up). A session's approvals are folded from its log on first use (`foldApprovals`), so they survive a restart and go when it is archived. Controlled apps live in memory, go to the Host feed, and are released at a Turn's end, when the session stops and when computer use is turned off. |
+| `refused.ts` | The built-in always-refused apps by bundle id: terminals, script runners, System Settings, Keychain Access, Passwords and password managers, and Polaris (`dev.lux.polaris*`). A refused app never opens an approval, so no card's "Always allow" can lift it: the call is refused with a message naming the Host's computer use settings. Only an app already on the Host's always-allowed list is not refused. By name only where the Host gives apps no id. |
 | `storage.ts` | `~/.polaris/computer-use.json` (mode 600): `enabled` and the always-allowed apps. A missing or unreadable file reads as off with no apps. |
 | `probe.ts` | `hostProbe`: the only process boundary. It covers the platform, the Daemon's environment, files, Unix sockets and short commands (5 s timeout). Tests point it at a temp directory with fake commands on `PATH`. |
 | `rpc.ts` | The seven `computerUse.*` RPCs for status, setup, on/off and the allowed list. `computerUse.app` and the preview still answer `Unsupported` from `transport/computerUseDefaults.ts`. |
