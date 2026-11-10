@@ -54,6 +54,7 @@ const SHOT_SCENES = new Map([
   ["availability", "new"],
   ["viewer", "attachments"],
   ["commands", "interrupted"],
+  ["new-commands", "new"],
   ["chip", "interrupted"],
   ["subagent-open", "subagents"],
   ["subagent-hover", "subagents"],
@@ -231,16 +232,16 @@ const open = async (page: Page, scene: string) => {
   } else if (scene === "availability") {
     await page.getByTestId("other-harnesses").first().click();
     await page.getByTestId("availability-sheet").waitFor();
-  } else if (scene === "commands" || scene === "chip") {
+  } else if (scene === "commands" || scene === "new-commands" || scene === "chip") {
     const input = page.locator('[data-testid="composer-input"]:visible');
 
     await input.click();
     await page.keyboard.press("Meta+A");
     await page.keyboard.press("Backspace");
-    await page.keyboard.type(scene === "commands" ? "/s" : "/simplify the parser, keep its API");
-    await (scene === "commands"
-      ? page.getByTestId("command-menu").waitFor()
-      : page.locator(".composer-chip").first().waitFor());
+    await page.keyboard.type(scene === "chip" ? "/simplify the parser, keep its API" : "/s");
+    await (scene === "chip"
+      ? page.locator(".composer-chip").first().waitFor()
+      : page.getByTestId("command-menu").waitFor());
   } else if (scene.startsWith("subagent-")) {
     await openSubagent(page, scene);
   } else if (scene.startsWith("background-")) {

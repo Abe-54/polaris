@@ -7,19 +7,21 @@ import { Button, cn, PixelFailedIcon } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { SentAttachments } from "../../attachments/index.ts";
 import type { Outgoing } from "../model/outbox.ts";
-import { softWrap } from "./softWrap.tsx";
+import { SentBody, type SentWhere } from "./sentBody.tsx";
 
 const BUBBLE =
   "rounded-card bg-fill-selected text-body text-text-strong py-row-x max-w-[340px] px-3.5 break-words whitespace-pre-wrap";
 
 const Bubble = ({
   text,
+  where,
   faded = false,
   above = null,
   children,
   testId,
 }: {
   readonly text: string;
+  readonly where: SentWhere;
   readonly faded?: boolean;
   /** What the message carries, above it. */
   readonly above?: ReactNode;
@@ -30,7 +32,7 @@ const Bubble = ({
     {above}
     {text === "" ? null : (
       <p className={cn(BUBBLE, "transition-opacity duration-200 ease-out", faded && "opacity-60")}>
-        {softWrap(text)}
+        <SentBody text={text} where={where} />
       </p>
     )}
     <div className="text-caption text-text-subtle flex h-5 max-w-[340px] items-center gap-2">
@@ -42,15 +44,17 @@ const Bubble = ({
 /** A steer the Harness took, in the Turn where it landed. */
 export const Steered = ({
   text,
+  where,
   above = null,
   time = null,
 }: {
   readonly text: string;
+  readonly where: SentWhere;
   /** The attachments it carried. */
   readonly above?: ReactNode;
   readonly time?: ReactNode;
 }) => (
-  <Bubble text={text} above={above} testId="steered">
+  <Bubble text={text} where={where} above={above} testId="steered">
     Steered this turn
     {time === null ? null : <span aria-hidden="true">·</span>}
     {time}
@@ -59,8 +63,8 @@ export const Steered = ({
 
 export interface OutgoingProps {
   readonly entry: Outgoing;
-  /** The session's Host, where its attachments are staged. */
-  readonly hostKey: string;
+  /** The session's Host, where its attachments are staged, Harness and directory. */
+  readonly where: SentWhere;
   /** A Turn is in flight that takes steers: a failed steer retries as one. */
   readonly canSteer: boolean;
   readonly onRetry: () => void;
@@ -73,12 +77,12 @@ const waitingLabel = (entry: Outgoing): string => {
   return entry.status === "waiting" ? "Queued for after this turn" : "Sending…";
 };
 
-export const OutgoingMessage = ({ entry, hostKey, canSteer, onRetry, onEdit }: OutgoingProps) => {
-  const above = <SentAttachments hostKey={hostKey} attachments={entry.attachments} />;
+export const OutgoingMessage = ({ entry, where, canSteer, onRetry, onEdit }: OutgoingProps) => {
+  const above = <SentAttachments hostKey={where.hostKey} attachments={entry.attachments} />;
 
   if (entry.status !== "failed")
     return (
-      <Bubble text={entry.text} faded above={above} testId="outgoing">
+      <Bubble text={entry.text} where={where} faded above={above} testId="outgoing">
         <span data-testid="outgoing-status">{waitingLabel(entry)}</span>
         {entry.status === "waiting" ? (
           <Button variant="ghost" size="sm" onClick={onEdit}>
@@ -90,7 +94,7 @@ export const OutgoingMessage = ({ entry, hostKey, canSteer, onRetry, onEdit }: O
   const again = entry.kind === "steer" && !canSteer ? "Send as next turn" : "Retry";
 
   return (
-    <Bubble text={entry.text} above={above} testId="outgoing-failed">
+    <Bubble text={entry.text} where={where} above={above} testId="outgoing-failed">
       <PixelFailedIcon size={12} className="text-failed shrink-0" />
       <span className="min-w-0 truncate" data-testid="outgoing-status">
         {entry.error ?? (entry.kind === "steer" ? "Couldn't steer" : "Couldn't send")}
