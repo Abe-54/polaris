@@ -112,3 +112,50 @@ test("an override for a workspace that isn't a git repo still names it and its h
   expect(accepting.getByText("dotfiles")).toBeTruthy();
   expect(accepting.getByText("Mac Studio · overrides")).toBeTruthy();
 });
+
+const suggestedReplies = () => {
+  const found = screen
+    .getAllByRole("heading")
+    .find((h) => h.textContent?.startsWith("Suggested replies"));
+
+  const section = found?.closest("section");
+
+  if (section == null) throw new Error("no Suggested replies card");
+
+  return within(section);
+};
+
+test("suggested replies start off with an automatic fallback, and the switch saves", () => {
+  mount();
+  const card = suggestedReplies();
+
+  expect(card.getByText("Off")).toBeTruthy();
+  expect(card.getByRole("combobox", { name: "Harness" }).textContent).toContain("Automatic");
+
+  act(() => {
+    fireEvent.click(card.getByRole("switch", { name: "Suggest replies" }));
+  });
+
+  expect(fake.sent("settings.setSessions")).toEqual([
+    { patch: { suggestedReplies: { enabled: true, fallback: null } } },
+  ]);
+});
+
+test("suggested replies state the cost once, on the fallback's model", () => {
+  settingsStore.setState({
+    sessions: {
+      ...DEFAULT_SESSION_PREFS,
+      suggestedReplies: {
+        enabled: true,
+        fallback: { harness: "claude", model: "claude-haiku-5-5", effort: null },
+      },
+    },
+  });
+  mount();
+
+  expect(
+    suggestedReplies().getByText(
+      "Claude Code suggests its own. Other harnesses use one small request on Haiku 5.5 after each turn."
+    )
+  ).toBeTruthy();
+});

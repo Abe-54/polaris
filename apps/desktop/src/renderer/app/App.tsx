@@ -19,6 +19,7 @@ import {
   ConstellationDefaultsPublisher,
   IdleCompactionPublisher,
   VisualsPublisher,
+  SuggestedRepliesPublisher,
   DeveloperModePublisher,
 } from "../features/settings/index.ts";
 import { PullsPublisher } from "../features/pulls/index.ts";
@@ -49,6 +50,7 @@ export const App = ({ value, onboarding = settled }: AppProps) => (
               <ConstellationDefaultsPublisher />
               <IdleCompactionPublisher />
               <VisualsPublisher />
+              <SuggestedRepliesPublisher />
               <DeveloperModePublisher />
               <PullsPublisher />
               <CheckoutPublisher />
