@@ -7,7 +7,8 @@ A Cargo workspace beside the Bun relay (`apps/relay`):
 | `relay` (`polaris-relay`) | The Polaris Relay in Rust. Same wire contract, limits, close codes, log lines and environment variables as `apps/relay`, whose README is the contract. |
 | `bench` (`relay-bench`) | A load generator that starts a relay build, drives it over its real wire protocol, and reports latency, throughput, and the CPU and memory the relay process used. |
 
-ADR 0104 has the design and the measurements behind it.
+ADR 0104 has the design and the measurements behind it. Our relay on Railway is this build
+(`apps/relay/railway.json`).
 
 ```sh
 cargo build --release          # from apps/relay-rs: target/release/{polaris-relay,relay-bench}

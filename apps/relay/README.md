@@ -6,8 +6,9 @@ forwards frames between a device and the Hosts that link it and can read none of
 are end-to-end encrypted with Noise between device and Daemon, with keys exchanged at link
 time.
 
-It is a Bun + Effect service shipped as a container: ours runs on Railway, and anyone can run
-their own.
+It is a service shipped as a container, in two builds held to this contract: Bun + Effect
+(this directory) and Rust (`apps/relay-rs`, ADR 0104). Ours is the Rust build on Railway, and
+anyone can run their own of either.
 
 This README is the contract for the Daemon side (R2) and the Mobile App (R4). The shared code
 lives in `packages/protocol`:
@@ -274,7 +275,9 @@ TLS terminates in front of the relay: Railway's edge, or your own proxy. Behind 
 `POLARIS_RELAY_TRUST_PROXY=true` so per-address limits use the first `X-Forwarded-For` hop.
 Without that, every client looks like the proxy. The relay is one process with in-memory
 state, so run a single replica; spreading parties across replicas needs shared routing (not
-built). `railway.json` builds the Dockerfile and health-checks `/healthz`.
+built). `railway.json` builds the Rust relay's image (`apps/relay-rs/Dockerfile`) and
+health-checks `/healthz`; pointing its `dockerfilePath` and `watchPatterns` back at
+`apps/relay` deploys the Bun build.
 
 `apps/relay-rs` holds the same relay in Rust, held to this contract by the tests below, and
 the load generator that measures both (ADR 0104).

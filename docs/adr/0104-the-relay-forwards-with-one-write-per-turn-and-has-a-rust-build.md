@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 amends: ADR 0080
 ---
 
@@ -155,9 +155,12 @@ ordinary traffic on its own measured the same at either size.
   `shutdown`) and never closes with `early-message`; `apps/relay-rs/README.md` lists them.
 - CI's `relay-rs` job formats, lints and tests `apps/relay-rs`, then runs the Bun relay's suite
   against its binary, whenever either relay or the protocol changes (ENG-861).
-- Railway still runs the Bun build. Switching is a change of Dockerfile in
-  `apps/relay/railway.json` (ENG-862); that decision is why this ADR is proposed and not
-  accepted.
+- Railway runs the Rust build (ENG-862), with the default workers: the cores it is given, at
+  most 8. Going back is `dockerfilePath` and `watchPatterns` in `apps/relay/railway.json`;
+  parties reconnect on their own either way. The relay now redeploys only when
+  `apps/relay-rs` changes, not on every protocol change.
+- The Bun build stays as the reference: its README is the contract and its suite, run
+  in-process and against the Rust binary, is what holds the two together.
 - Each party's topic costs the Bun relay about 0.4 KiB a socket.
 - On macOS the Rust relay is woken for write readiness that Linux does not report, so its CPU
   reads higher on a Mac. Measure on Linux.
