@@ -1,14 +1,13 @@
 /** When the Daemon writes a fallback Suggested Reply (ADR 0106), and with which Harness. */
-import {
-  AUTO_SUGGESTED_REPLY_FALLBACKS,
-  type HarnessKind,
-  type HostHarnesses,
-  type PlanLimit,
-  ResolvedSuggestedReplyFallback,
-  type SuggestedReplyFallback,
-  type SuggestedReplySettings,
-  type Turn,
+import type {
+  HarnessKind,
+  HostHarnesses,
+  PlanLimit,
+  SuggestedReplyFallback,
+  SuggestedReplySettings,
+  Turn,
 } from "@polaris/protocol";
+import { resolveFallback } from "../engine/suggestedReplyPreference.ts";
 import { lastTurn, type SessionRecord } from "../store/model.ts";
 
 /** Harnesses that write their own Suggested Replies; the fallback never runs for them. */
@@ -51,25 +50,28 @@ export const suggestionDue = (record: SessionRecord | undefined): Turn | null =>
   return turn;
 };
 
+/** A fallback an inline runner drives. */
+export interface RunnableFallback {
+  readonly harness: InlineHarness;
+  readonly model: SuggestedReplyFallback["model"];
+  readonly effort: SuggestedReplyFallback["effort"];
+}
+
 const ready = (report: HostHarnesses, harness: HarnessKind) =>
   report.harnesses.some((entry) => entry.harness === harness && entry.status === "ready");
 
-const runnable = (report: HostHarnesses, choice: SuggestedReplyFallback) =>
-  isInlineHarness(choice.harness) && ready(report, choice.harness);
-
-/** The Settings choice when its Harness is ready, else (when unset) the first ready automatic one. */
-export const resolveFallback = (
+/**
+ * The fallback to write with now, or null: the preference's resolution (`resolveFallback`),
+ * kept only when an inline runner can drive it and its Harness is ready.
+ */
+export const runnableFallback = (
   settings: SuggestedReplySettings,
   report: HostHarnesses
-): ResolvedSuggestedReplyFallback => {
-  if (settings.fallback !== null)
-    return ResolvedSuggestedReplyFallback.make({
-      choice: runnable(report, settings.fallback) ? settings.fallback : null,
-      source: "settings",
-    });
+): RunnableFallback | null => {
+  const { choice } = resolveFallback(settings, report);
 
-  return ResolvedSuggestedReplyFallback.make({
-    choice: AUTO_SUGGESTED_REPLY_FALLBACKS.find((choice) => runnable(report, choice)) ?? null,
-    source: "auto",
-  });
+  if (choice === null) return null;
+  const { harness, model, effort } = choice;
+
+  return isInlineHarness(harness) && ready(report, harness) ? { harness, model, effort } : null;
 };

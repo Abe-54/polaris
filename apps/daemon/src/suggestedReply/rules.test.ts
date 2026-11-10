@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PlanLimit, SuggestedReplyFallback, SuggestedReplySettings } from "@polaris/protocol";
-import { nearPlanLimit, resolveFallback, suggestionDue } from "./rules.ts";
+import { nearPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
 import { agentSession, at, record, report, turn } from "./testing.ts";
 
 describe("suggestionDue", () => {
@@ -56,21 +56,25 @@ test("near a Plan Limit means a window of that Harness isn't ok", () => {
   expect(nearPlanLimit("codex", [limit("codex", "ok"), limit("claude", "reached")])).toBe(false);
 });
 
-describe("resolveFallback", () => {
+describe("runnableFallback", () => {
   const haiku = SuggestedReplyFallback.make({ harness: "claude", model: "m", effort: null });
 
   const settings = (fallback: SuggestedReplyFallback | null) =>
     SuggestedReplySettings.make({ enabled: true, fallback });
 
   test("the Settings choice when its Harness is ready, and nothing when it isn't", () => {
-    expect(resolveFallback(settings(haiku), report("claude")).choice).toEqual(haiku);
-    expect(resolveFallback(settings(haiku), report("codex")).choice).toBeNull();
+    expect(runnableFallback(settings(haiku), report("claude"))).toEqual({
+      harness: "claude",
+      model: "m",
+      effort: null,
+    });
+    expect(runnableFallback(settings(haiku), report("codex"))).toBeNull();
   });
 
   test("unset picks a ready automatic fallback, or nothing", () => {
-    expect(resolveFallback(settings(null), report("codex")).choice?.harness).toBe("codex");
-    expect(resolveFallback(settings(null), report("claude")).choice?.harness).toBe("claude");
-    expect(resolveFallback(settings(null), report("opencode")).choice).toBeNull();
+    expect(runnableFallback(settings(null), report("claude"))?.harness).toBe("claude");
+    expect(runnableFallback(settings(null), report("codex"))?.harness).toBe("codex");
+    expect(runnableFallback(settings(null), report("opencode"))).toBeNull();
   });
 
   test("a Harness without an inline runner is never chosen", () => {
@@ -80,6 +84,6 @@ describe("resolveFallback", () => {
       effort: null,
     });
 
-    expect(resolveFallback(settings(opencode), report("opencode")).choice).toBeNull();
+    expect(runnableFallback(settings(opencode), report("opencode"))).toBeNull();
   });
 });

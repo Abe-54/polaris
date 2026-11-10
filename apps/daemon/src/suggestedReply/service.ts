@@ -8,7 +8,6 @@ import { join } from "node:path";
 import {
   DomainEvent,
   type SessionId,
-  SuggestedReply,
   type SuggestedReplySettings,
   type TurnId,
 } from "@polaris/protocol";
@@ -26,21 +25,27 @@ import {
 } from "effect";
 import { Availability } from "../harness/availability/Availability.ts";
 import { HarnessError } from "../harness/HarnessDriver.ts";
+import { Engine } from "../engine/Engine.ts";
 import { EventStore, type LiveItem } from "../store/EventStore.ts";
 import { UsageIndex } from "../usage/service.ts";
 import type { ReplyBackend } from "./backend.ts";
 import { instructions, PROMPT_TURNS, replyJsonSchema, replyPrompt, replyText } from "./prompt.ts";
-import { isInlineHarness, nearPlanLimit, resolveFallback, suggestionDue } from "./rules.ts";
+import { nearPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
 
 /** A suggestion that takes longer is dropped; the user is likely typing by then. */
 export const SUGGEST_TIMEOUT = Duration.seconds(15);
 
 export interface SuggestedRepliesOptions {
-  /** The Host preference, read at each ended Turn. */
-  readonly settings: Effect.Effect<SuggestedReplySettings>;
   /** Default: the inline runners, or the scripted one under `POLARIS_BENCH_HARNESS=1`. */
   readonly backend?: ReplyBackend;
   readonly timeout?: Duration.Input;
+}
+
+/** What the Engine lends the fallback: the Host preference and the commit of an offer. */
+export interface SuggestedReplySeams {
+  /** Read at each ended Turn. */
+  readonly settings: Effect.Effect<SuggestedReplySettings>;
+  readonly offer: Engine["Service"]["offerSuggestedReply"];
 }
 
 /** Loaded on the first suggestion, so a Host with the preference off never loads the runners. */
@@ -75,7 +80,7 @@ const turnEvent = (event: DomainEvent) =>
     Match.orElse(() => null)
   );
 
-const make = (options: SuggestedRepliesOptions) =>
+const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
   Effect.gen(function* () {
     const store = yield* EventStore;
     const availability = yield* Availability;
@@ -83,23 +88,6 @@ const make = (options: SuggestedRepliesOptions) =>
     const running = yield* FiberMap.make<SessionId>();
     const timeout = options.timeout ?? SUGGEST_TIMEOUT;
     let backend: ReplyBackend | undefined = options.backend;
-
-    /** Still the latest ended Turn and still due one: checked under the commit lock. */
-    const commit = (sessionId: SessionId, turnId: TurnId, text: string) =>
-      store.commit({
-        commandId: null,
-        decide: (model) =>
-          Effect.succeed(
-            suggestionDue(model.sessions.get(sessionId))?.id === turnId
-              ? [
-                  DomainEvent.cases.SessionReplySuggested.make({
-                    sessionId,
-                    reply: SuggestedReply.make({ turnId, text, source: "polaris" }),
-                  }),
-                ]
-              : []
-          ),
-      });
 
     const suggest = Effect.fn("suggestedReply.suggest")(function* (
       sessionId: SessionId,
@@ -110,9 +98,9 @@ const make = (options: SuggestedRepliesOptions) =>
 
       if (record === undefined || suggestionDue(record)?.id !== turnId) return;
 
-      const { choice } = resolveFallback(yield* options.settings, yield* availability.get(false));
+      const choice = runnableFallback(yield* options.settings, yield* availability.get(false));
 
-      if (choice === null || !isInlineHarness(choice.harness)) return;
+      if (choice === null) return;
       const limits = Option.isSome(usage) ? yield* usage.value.planLimits : [];
 
       if (nearPlanLimit(record.session.harness, limits) || nearPlanLimit(choice.harness, limits))
@@ -152,7 +140,8 @@ const make = (options: SuggestedRepliesOptions) =>
       const text = replyText(answer);
 
       if (text === null) return;
-      yield* commit(sessionId, turnId, text);
+      // The Engine commits it only if this Turn is still the latest and has ended.
+      yield* options.offer(sessionId, turnId, text, "polaris");
     });
 
     /** Every failure is the user's to never see: logged, and the composer stays empty. */
@@ -204,7 +193,20 @@ export class SuggestedReplies extends Context.Service<
     readonly inFlight: Effect.Effect<number>;
   }
 >()("polaris/daemon/suggestedReply/SuggestedReplies") {
-  /** Follows the log from when it's built until its scope closes. */
-  static readonly layer = (options: SuggestedRepliesOptions) =>
+  /** Follows the log from when it's built until its scope closes, on the Engine's seams. */
+  static readonly layer = (options: SuggestedRepliesOptions = {}) =>
+    Layer.effect(
+      SuggestedReplies,
+      Effect.flatMap(Engine, (engine) =>
+        make({
+          ...options,
+          settings: engine.suggestedReplies.current,
+          offer: engine.offerSuggestedReply,
+        })
+      )
+    );
+
+  /** The same, on seams a test supplies. */
+  static readonly layerWith = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
     Layer.effect(SuggestedReplies, make(options));
 }

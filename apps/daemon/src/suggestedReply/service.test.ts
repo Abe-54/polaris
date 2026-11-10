@@ -13,6 +13,7 @@ import { Availability } from "../harness/availability/Availability.ts";
 import { HarnessError } from "../harness/HarnessDriver.ts";
 import type { StructuredJob } from "../inline/structured.ts";
 import { tempDir } from "../platform/tempDir.testing.ts";
+import { suggestReply } from "../engine/suggestedReplies.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { UsageIndex } from "../usage/service.ts";
 import type { ReplyBackend } from "./backend.ts";
@@ -137,11 +138,31 @@ const run = <A, E>(
 
   reads.settings = reads.availability = reads.limits = 0;
 
-  const layer = SuggestedReplies.layer({
-    settings: counted("settings", options.settings ?? enabled),
-    backend: options.backend,
-    timeout: options.timeout ?? SUGGEST_TIMEOUT,
-  }).pipe(
+  // The Engine's own decision commits the offer, as `Engine.offerSuggestedReply` does.
+  const fallback = Layer.unwrap(
+    Effect.map(EventStore, (events) =>
+      SuggestedReplies.layerWith({
+        settings: counted("settings", options.settings ?? enabled),
+        offer: (session, turnId, text, source) =>
+          events
+            .commit({
+              commandId: null,
+              decide: (model) => {
+                const found = model.sessions.get(session);
+
+                return Effect.succeed(
+                  found === undefined ? [] : suggestReply(found, turnId, text, source)
+                );
+              },
+            })
+            .pipe(Effect.asVoid),
+        backend: options.backend,
+        timeout: options.timeout ?? SUGGEST_TIMEOUT,
+      })
+    )
+  );
+
+  const layer = fallback.pipe(
     Layer.provideMerge(store),
     Layer.provide(availabilityOf(options.ready ?? ["codex"])),
     Layer.provide(usageWith(options.limits ?? []))
