@@ -109,7 +109,8 @@ export const createMainWindow = (input: MainWindowInput) => {
     webPreferences: {
       preload,
       ...FRAME_WEB_PREFERENCES,
-      spellcheck: false,
+      // Only the composer opts in (index.html turns it off at the root); Linux would fetch Hunspell dictionaries.
+      spellcheck: platform !== "linux",
       v8CacheOptions: "bypassHeatCheck",
       additionalArguments: [`${PLATFORM_ARG}${platform}`],
     },

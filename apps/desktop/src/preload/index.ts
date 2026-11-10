@@ -3,7 +3,7 @@
  * through `contextBridge`. Sandboxed, so it may require nothing but `electron`.
  * One IPC listener demultiplexes every subscription's batched items.
  */
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webFrame } from "electron";
 import { createLanguageApi } from "./languages.ts";
 import { platformFromArgv } from "../shared/platform.ts";
 import {
@@ -50,6 +50,10 @@ function exposePolarisApi() {
   const api: PolarisApi = {
     platform: platformFromArgv(process.argv, process.platform),
     languages: createLanguageApi(),
+    spelling: {
+      suggestions: (word) =>
+        webFrame.isWordMisspelled(word) ? webFrame.getWordSuggestions(word) : null,
+    },
     notify: (method, input) => ipcRenderer.send(method, input),
     request: (method, input, options) =>
       ipcRenderer.invoke(
