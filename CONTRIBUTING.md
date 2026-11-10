@@ -115,6 +115,7 @@ On a pull request, CI selects by what the change affects (`turbo query affected`
 | Quint spec and trace validation | Ubuntu | `packages/spec/`, `apps/daemon/src/engine/`, `store/` or `verification/`, or `packages/client/src/resume.ts` changed |
 | Bench (memory and start-up modules gate; latency and CPU only report) | Ubuntu | the daemon, client, protocol or SDK is affected |
 | Desktop budgets | Ubuntu | the desktop app or the daemon is affected |
+| Rust relay: format, clippy, its tests, and the Bun relay's suite against its binary | Ubuntu | the relay is affected, or `apps/relay-rs/` changed |
 | Daemon build (every target but darwin), smokes (Linux x64 and arm64, Windows with its pipe), Windows service end to end | Ubuntu for the build, then each platform | the daemon or client is affected, or `scripts/build-daemon.ts` changed |
 
 **macOS** runs its tests and scripts' checks, in two jobs, on a pull request only when the change could behave differently there (`tooling/ci/macosScope.ts`): a non-test source file that mentions `darwin`, `launchd`, `codesign`, `macOS` or `process.platform`, or `ci.yml`, `.github/actions/`, `bun.lock`, `package.json`, `patches/`, `scripts/build-daemon*`, `tooling/test/` or `apps/daemon/scripts/`. There they only report, often after `CI` has. On a push to main they always run and the `CI (macOS)` job counts them; the nightly counts its macOS tests too, and builds and signs the darwin Daemon. `CI` itself never includes them, on main or on a pull request, so read `CI` and `CI (macOS)` together for main's state:

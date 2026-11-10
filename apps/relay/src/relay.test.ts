@@ -7,6 +7,7 @@ import {
   type RelaySession,
   type StaticKeyPair,
 } from "@polaris/protocol/relay/party";
+import { Predicate } from "effect";
 import { TestParty } from "./testing/party.ts";
 import { type Identified, identify, startTestRelay, type TestRelay } from "./testing/relay.ts";
 
@@ -181,6 +182,68 @@ describe("relay", () => {
     });
     device.sendRecord(p.host.address, new Uint8Array(16));
     expect(await device.control("unreachable")).toEqual({ t: "unreachable", peer: p.host.address });
+  });
+});
+
+describe("relay forwarding", () => {
+  /** Sizes either side of what the relay batches, so batched and direct writes interleave. */
+  const SIZES = [16, 300, 9_000, 16, 40_000, 1_200, 16, 16, 65_544, 16];
+
+  const record = (index: number, size: number) =>
+    Uint8Array.from({ length: size }, (_, i) => (index * 31 + i) % 251);
+
+  test("a burst of mixed sizes arrives whole, in order, from the sender's address", async () => {
+    relay = startTestRelay({ messagesPerSecond: 10_000 });
+    const p = await pair();
+    const host = await connectHost(p);
+    const device = await connectDevice(p);
+    await host.control("presence");
+    const sizes = Array.from({ length: 30 }, () => SIZES).flat();
+
+    for (const [index, size] of sizes.entries())
+      device.sendRecord(p.host.address, record(index, size));
+
+    for (const [index, size] of sizes.entries()) {
+      const frame = await host.data();
+      expect(frame.peer).toBe(p.device.address);
+      expect(Buffer.compare(frame.payload, record(index, size))).toBe(0);
+    }
+  });
+
+  test("frames a party sent before it left arrive before the news that it left", async () => {
+    relay = startTestRelay();
+    const p = await pair();
+    const host = await connectHost(p);
+    const device = await connectDevice(p);
+    await host.control("presence");
+    const order: Array<string> = [];
+    host.ws.addEventListener("message", (event) =>
+      order.push(Predicate.isString(event.data) ? "control" : "data")
+    );
+
+    for (let index = 0; index < 20; index++) device.sendRecord(p.host.address, record(index, 64));
+    await device.close();
+    expect(await host.control("presence")).toMatchObject({ online: false });
+    expect(order).toEqual([...Array.from({ length: 20 }, () => "data"), "control"]);
+  });
+
+  test("a forward the relay refuses, sent amid frames it forwards, loses none of them", async () => {
+    relay = startTestRelay();
+    const p = await pair();
+    const stranger = await identify();
+    const host = await connectHost(p);
+    const device = await connectDevice(p);
+    await host.control("presence");
+
+    // The refusal goes straight to the host while its frames still wait for the turn's write.
+    for (let index = 0; index < 5; index++) host.sendRecord(p.device.address, record(index, 64));
+    host.sendRecord(stranger.address, record(9, 64));
+
+    for (let index = 5; index < 8; index++) host.sendRecord(p.device.address, record(index, 64));
+    expect(await host.control("unreachable")).toEqual({ t: "unreachable", peer: stranger.address });
+
+    for (let index = 0; index < 8; index++)
+      expect(Buffer.compare((await device.data()).payload, record(index, 64))).toBe(0);
   });
 });
 
