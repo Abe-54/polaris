@@ -102,12 +102,15 @@ const useEndOnUnlink = (linkedNow: boolean, running: { current: boolean }) => {
 
 const useDriver = (hosts: ReadonlyArray<LiveHost>, linkedNow: boolean) => {
   const foreground = useForeground();
+
   const content = useMemo(
     () => liveContent(hosts, { budget: Platform.OS === "android" ? "local" : "push" }),
     [hosts]
   );
-  // One may be showing from before this launch: update and end find it, or do nothing.
-  const running = useRef(Platform.OS !== "android");
+
+  // One may be showing from before this launch, on Android too (a notification outlives the
+  // process): update and end find it, or do nothing. Busy content starts one either way.
+  const running = useRef(true);
   const idleSince = useRef<number | null>(null);
   const lastRun = useRef(0);
   const [tick, setTick] = useState(0);
