@@ -33,10 +33,10 @@ export class SuggestedReplyFallback extends Schema.Class<SuggestedReplyFallback>
   effort: Schema.NullOr(ReasoningEffort),
 }) {}
 
-/** The automatic fallbacks, first ready wins: the cheapest fast model on each Harness. */
+/** The automatic fallbacks, first ready wins: Codex's small model, then Claude Haiku. */
 export const AUTO_SUGGESTED_REPLY_FALLBACKS: ReadonlyArray<SuggestedReplyFallback> = [
-  SuggestedReplyFallback.make({ harness: "claude", model: "claude-haiku-5-5", effort: null }),
   SuggestedReplyFallback.make({ harness: "codex", model: "gpt-6-luna", effort: "low" }),
+  SuggestedReplyFallback.make({ harness: "claude", model: "claude-haiku-5-5", effort: null }),
 ];
 
 /** The Host preference (capability `sessions.suggested-replies`). */
