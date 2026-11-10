@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { Effect } from "effect";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
-import { makeHelper } from "../../service/computerUse/helper.testing.ts";
+import { launcherRuns, MAC_ONLY, makeHelper } from "../../service/computerUse/helper.testing.ts";
 import { ComputerUseHelper } from "../../service/computerUse/index.ts";
 import { execHelper } from "../../service/computerUse/launch.ts";
 import { helperRunner } from "./runner.ts";
@@ -15,14 +15,6 @@ let root: string;
 
 let helper: string;
 
-beforeAll(async () => {
-  root = realpathSync(newTempDir("polaris-cud-", { short: true }));
-  // This test run stands in for the Daemon: the launcher serves the program beside it.
-  helper = await makeHelper(root, process.execPath);
-});
-
-afterAll(() => removeTempDir(root));
-
 const run = (args: ReadonlyArray<string>, env: Record<string, string>, signal?: AbortSignal) =>
   Effect.runPromise(
     Effect.flatMap(helperRunner, (runner) => runner.run(args, env, signal)).pipe(
@@ -30,7 +22,15 @@ const run = (args: ReadonlyArray<string>, env: Record<string, string>, signal?: 
     )
   );
 
-describe.skipIf(process.platform !== "darwin")("agent-desktop inside the helper", () => {
+describe.skipIf(!launcherRuns)(`agent-desktop inside the helper${MAC_ONLY}`, () => {
+  beforeAll(async () => {
+    root = realpathSync(newTempDir("polaris-cud-", { short: true }));
+    // This test run stands in for the Daemon: the launcher serves the program beside it.
+    helper = await makeHelper(root, process.execPath);
+  });
+
+  afterAll(() => removeTempDir(root));
+
   test("gets its arguments and the Host's display env, and answers its stdout", async () => {
     const stdout = await run(["facts", "--session", "run-7"], { POLARIS_TEST_VAR: "display" });
 

@@ -24,6 +24,13 @@ case "$1" in
 esac
 `;
 
+/** Where the launcher builds and runs: it is Mach, the Security framework and a private SPI. */
+export const launcherRuns = process.platform === "darwin";
+
+/** Ends the name of a suite skipped elsewhere, so a run says why. */
+export const MAC_ONLY =
+  " [macOS only: the launcher is built with clang on Mach and Security.framework]";
+
 /** The tool's path inside the helper at `helper`. */
 export const toolOf = (helper: string) => join(helper, HELPER_FILES["agent-desktop"]);
 

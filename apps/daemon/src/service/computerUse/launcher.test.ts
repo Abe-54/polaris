@@ -9,7 +9,7 @@ import { dlopen, FFIType } from "bun:ffi";
 import { Effect } from "effect";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
 import { COMPUTER_USE_LAUNCHER, launcherOf } from "./bundle.ts";
-import { makeHelper, toolOf } from "./helper.testing.ts";
+import { launcherRuns, MAC_ONLY, makeHelper, toolOf } from "./helper.testing.ts";
 import { ComputerUseHelper, type HelperRequest, type SpawnVia } from "./index.ts";
 import { execHelper } from "./launch.ts";
 
@@ -18,14 +18,6 @@ let root: string;
 let helper: string;
 
 const tool = () => toolOf(helper);
-
-beforeAll(async () => {
-  root = realpathSync(newTempDir("polaris-cu-", { short: true }));
-  // This test run stands in for the Daemon: the launcher serves the program beside it.
-  helper = await makeHelper(root, process.execPath);
-});
-
-afterAll(() => removeTempDir(root));
 
 /** Runs the tool to its end through the service and collects what it wrote. */
 const runTool = (request: Partial<HelperRequest> & Pick<HelperRequest, "args">, stdin = "") =>
@@ -66,7 +58,15 @@ const firstLine = async (stream: ReadableStream<Uint8Array>) => {
 
 const VIAS: ReadonlyArray<SpawnVia> = ["disclaim", "launch-services"];
 
-describe.skipIf(process.platform !== "darwin")("a tool run inside the helper app", () => {
+describe.skipIf(!launcherRuns)(`a tool run inside the helper app${MAC_ONLY}`, () => {
+  beforeAll(async () => {
+    root = realpathSync(newTempDir("polaris-cu-", { short: true }));
+    // This test run stands in for the Daemon: the launcher serves the program beside it.
+    helper = await makeHelper(root, process.execPath);
+  });
+
+  afterAll(() => removeTempDir(root));
+
   const through = (via: SpawnVia) => {
     test("keeps its stdio, so a request written to stdin is answered on stdout", async () => {
       const result = await runTool({ args: ["echo"], via }, '{"jsonrpc":"2.0","id":1}\n');

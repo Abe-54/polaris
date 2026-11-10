@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
-import { makeHelper } from "./helper.testing.ts";
+import { launcherRuns, MAC_ONLY, makeHelper } from "./helper.testing.ts";
 import type { SpawnVia } from "./index.ts";
 
 const REFUSAL = "polaris-computer-use: refused: the caller is not the Polaris Daemon";
@@ -41,28 +41,6 @@ const sh = async (argv: ReadonlyArray<string>) => {
   return stdout;
 };
 
-beforeAll(async () => {
-  root = realpathSync(newTempDir("polaris-cu-", { short: true }));
-  resigned = join(root, "resigned");
-  await sh(["/bin/cp", "-c", vendor, resigned]);
-  await sh([
-    "/usr/bin/codesign",
-    "--force",
-    "--sign",
-    "-",
-    "-i",
-    "com.example.not-polaris",
-    resigned,
-  ]);
-
-  helpers = {
-    vendor: await makeHelper(join(root, "a"), vendor),
-    resigned: await makeHelper(join(root, "b"), resigned),
-  };
-});
-
-afterAll(() => removeTempDir(root));
-
 let markers = 0;
 
 /** Runs `caller.testing.ts` under `caller` against `helper`; the tool would create `marker`. */
@@ -77,7 +55,29 @@ const call = async (caller: string, helper: string, via: SpawnVia) => {
   return { ...outcome, ran: existsSync(marker) };
 };
 
-describe.skipIf(process.platform !== "darwin")("the helper's launcher", () => {
+describe.skipIf(!launcherRuns)(`the helper's launcher${MAC_ONLY}`, () => {
+  beforeAll(async () => {
+    root = realpathSync(newTempDir("polaris-cu-", { short: true }));
+    resigned = join(root, "resigned");
+    await sh(["/bin/cp", "-c", vendor, resigned]);
+    await sh([
+      "/usr/bin/codesign",
+      "--force",
+      "--sign",
+      "-",
+      "-i",
+      "com.example.not-polaris",
+      resigned,
+    ]);
+
+    helpers = {
+      vendor: await makeHelper(join(root, "a"), vendor),
+      resigned: await makeHelper(join(root, "b"), resigned),
+    };
+  });
+
+  afterAll(() => removeTempDir(root));
+
   describe.each<SpawnVia>(["disclaim", "launch-services"])("through %s", (via) => {
     test("runs the tool for the program signed as its Daemon", async () => {
       expect(await call(vendor, helpers.vendor, via)).toEqual({
