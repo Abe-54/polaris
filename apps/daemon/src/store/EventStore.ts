@@ -603,6 +603,13 @@ const groupCommit = ({ sql, modelRef, hub, startupIndex }: CommitTarget) =>
         }
       }).pipe(Effect.uninterruptible);
 
+    /** Schedules the drain; the caller has just seen that none is scheduled or running. */
+    const schedule = (): void => {
+      writing = true;
+      // A microtask: the fibers running now queue their commits first (docs/adr/0002-group-commit.md).
+      queueMicrotask(() => Effect.runForkWith(context)(drain));
+    };
+
     /** Writes batches until nothing is queued. */
     const drain = Effect.gen(function* () {
       while (queued.length > 0) {
@@ -614,6 +621,9 @@ const groupCommit = ({ sql, modelRef, hub, startupIndex }: CommitTarget) =>
       Effect.ensuring(
         Effect.sync(() => {
           writing = false;
+
+          // A commit queued after the loop's last check has no writer yet: start one.
+          if (queued.length > 0) schedule();
         })
       ),
       Effect.uninterruptible
@@ -629,11 +639,7 @@ const groupCommit = ({ sql, modelRef, hub, startupIndex }: CommitTarget) =>
 
         queued.push(pending);
 
-        if (!writing) {
-          // A microtask: the fibers running now queue their commits first (docs/adr/0002-group-commit.md).
-          writing = true;
-          queueMicrotask(() => Effect.runForkWith(context)(drain));
-        }
+        if (!writing) schedule();
 
         // SAFETY: a command id names one command, so a rejection replayed from its receipt is one its `decide` failed with.
         return Deferred.await(pending.deferred).pipe(
