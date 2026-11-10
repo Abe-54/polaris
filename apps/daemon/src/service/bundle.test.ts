@@ -15,7 +15,9 @@ import { Effect, Layer } from "effect";
 import {
   BUNDLE_FILE_NAMES,
   BUNDLE_FILES,
+  BUNDLE_LIBRARY_NAMES,
   type BundleFile,
+  type BundleLibrary,
   DAEMON_BUNDLE,
   infoPlist,
 } from "./bundle.ts";
@@ -53,11 +55,19 @@ const ctx = (os: InstallContext["os"]): InstallContext => ({
   launchdLabel: "bundle-test",
 });
 
+// SAFETY: built from BUNDLE_LIBRARY_NAMES, so it has exactly the BundleLibrary keys.
+const libraryContents = () =>
+  Object.fromEntries(BUNDLE_LIBRARY_NAMES.map((name) => [name, `library ${name}`])) as Record<
+    BundleLibrary,
+    string
+  >;
+
 /** A build's bundle files laid flat in `dir`, as an upload or a Release archive has them. */
 const flatBuild = (dir: string, version: string): Record<BundleFile, string> => {
   mkdirSync(dir, { recursive: true });
 
   const contents: Record<BundleFile, string> = {
+    ...libraryContents(),
     polaris: `#!/bin/sh\necho polaris ${version} darwin-arm64\n`,
     betterleaks: "#!/bin/sh\necho betterleaks\n",
     "Info.plist": infoPlist(version),
@@ -93,6 +103,10 @@ describeBundle("a macOS build installs as an app bundle (ENG-680)", () => {
 
     for (const name of BUNDLE_FILE_NAMES)
       expect(readFileSync(join(bundle, BUNDLE_FILES[name]), "utf8")).toBe(contents[name]);
+    // The libraries the Daemon loads from its bundle (ENG-877) are placed with the rest.
+    expect(readFileSync(join(bundle, "Contents/Frameworks/libfff_c.dylib"), "utf8")).toBe(
+      "library libfff_c.dylib"
+    );
     expect(statSync(join(bundle, BUNDLE_FILES.betterleaks)).mode & 0o777).toBe(0o755);
     expect(statSync(join(bundle, BUNDLE_FILES["Info.plist"])).mode & 0o777).toBe(0o644);
     // Every launcher (launchd, Clients' `bin/current/polaris`) reaches the bundle's executable.
@@ -142,7 +156,7 @@ describeBundle("a macOS build installs as an app bundle (ENG-680)", () => {
     const built = join(root, "dist", DAEMON_BUNDLE);
     const at = (name: BundleFile) => join(built, BUNDLE_FILES[name]);
 
-    for (const name of ["polaris", "betterleaks"] as const) {
+    for (const name of ["polaris", "betterleaks", ...BUNDLE_LIBRARY_NAMES] as const) {
       mkdirSync(dirname(at(name)), { recursive: true });
       copyFileSync("/usr/bin/true", at(name));
     }

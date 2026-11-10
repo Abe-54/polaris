@@ -29,7 +29,7 @@ const MACH_O_64 = 0xfe_ed_fa_cf;
 const LC_SEGMENT_64 = 0x19;
 
 /** Where the embedded program (`__BUN`) is in a compiled Mach-O: its text is left alone. */
-const embeddedProgram = (bytes: Buffer) => {
+export const embeddedProgram = (bytes: Buffer) => {
   if (bytes.readUInt32LE(0) !== MACH_O_64) throw new Error("not a 64-bit Mach-O executable");
   const commands = bytes.readUInt32LE(16);
   let at = 32;
