@@ -4,9 +4,10 @@
  * Hidden, the status is the editor card's foot row and the Terminal chip floats over the code.
  * The change between the two is a morph (`morph.ts`).
  */
-import { cn, Kbd, Panel, TerminalIcon, useExitPresence } from "@polaris/ui";
+import { cn, Kbd, Panel, TerminalIcon } from "@polaris/ui";
 import { Component, createRef, type ReactNode, type RefObject } from "react";
-import { exitMs, partsIn, playDivide, playJoin, settle } from "./morph.ts";
+import { useTerminalLeaving } from "./leaving.ts";
+import { partsIn, playDivide, playJoin, settle } from "./morph.ts";
 import { OpenDrawer, toggleHint, useTerminalDock } from "./TerminalDock.tsx";
 
 export interface TerminalPanelsProps {
@@ -183,9 +184,6 @@ export const EditorColumn = ({
     </MorphColumn>
   );
 };
-
-/** True for the join's length after the terminal hides: keep passing `terminal` meanwhile. */
-export const useTerminalLeaving = (shown: boolean) => useExitPresence(shown, exitMs());
 
 export const TerminalPanels = ({ hostKey, workspaceId, children, status }: TerminalPanelsProps) => {
   const { dock, shown, toggle, count, drawerProps } = useTerminalDock(hostKey, workspaceId);
