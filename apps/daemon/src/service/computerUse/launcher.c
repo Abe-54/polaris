@@ -1,5 +1,5 @@
 /*
- * The main executable of "Polaris Computer Use.app" (ADR 0104, ENG-846). It runs one of the
+ * The main executable of "Polaris Computer Use.app" (ADR 0107, ENG-846). It runs one of the
  * tools beside it in Contents/MacOS as its child, so TCC charges this bundle for what the
  * tool does, and never the Daemon. It serves the Daemon only (ENG-867).
  *

@@ -1,6 +1,6 @@
 # polaris_desktop
 
-Computer use for Agent Sessions (ENG-846, ADR 0104): an MCP server the Daemon runs for each session, wrapping the pinned agent-desktop CLI. Each tool call runs one agent-desktop command and answers its JSON envelope.
+Computer use for Agent Sessions (ENG-846, ADR 0107): an MCP server the Daemon runs for each session, wrapping the pinned agent-desktop CLI. Each tool call runs one agent-desktop command and answers its JSON envelope.
 
 - **Where agent-desktop runs.** On macOS inside Polaris Computer Use.app (`ComputerUseHelper.spawn`, responsibility disclaimed), so TCC charges the helper; elsewhere the Host's install (`AgentDesktop`). `runner.ts`.
 - **How Harnesses reach it.** One service, `DesktopMcp.forSession`, with a thin adapter each: Claude Code gets an in-process SDK server with its tools pre-allowed (`claude/desktop.ts`); Codex gets a loopback Streamable HTTP URL with a per-session token, its tools pre-approved, and `features.computer_use=false` on every thread (`codex/desktop.ts`, `http.ts`).

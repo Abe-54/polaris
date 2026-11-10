@@ -8,6 +8,6 @@ export interface ToolServers {
   readonly browser?: BrowserMcp["Service"] | undefined;
   /** The Simulator's MCP server, `polaris_simulator`. */
   readonly simulator?: SimulatorMcp["Service"] | undefined;
-  /** Computer use, `polaris_desktop`, once the Host is ready (ADR 0104). */
+  /** Computer use, `polaris_desktop`, once the Host is ready (ADR 0107). */
   readonly desktop?: DesktopMcp["Service"] | undefined;
 }

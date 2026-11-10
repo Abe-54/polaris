@@ -1,6 +1,6 @@
 // -*- mode: Bluespec; -*-
 /**
- * Computer use (ENG-846, ADR 0104): app approvals, headed-input approvals, the Host's
+ * Computer use (ENG-846, ADR 0107): app approvals, headed-input approvals, the Host's
  * always-allowed list, the always-refused list and one session per app.
  *
  * It refines the HRequest/Respond lifecycle of `polaris`: an `app` or `headed-input` approval

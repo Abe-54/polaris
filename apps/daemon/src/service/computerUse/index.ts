@@ -1,5 +1,5 @@
 /**
- * The Daemon's one way to run a process inside "Polaris Computer Use.app" (ADR 0104), so that
+ * The Daemon's one way to run a process inside "Polaris Computer Use.app" (ADR 0107), so that
  * macOS charges the helper's privacy grants and never the Daemon's. stdio is kept, so MCP
  * over stdio works. macOS only: other Hosts have no TCC and run agent-desktop directly.
  */

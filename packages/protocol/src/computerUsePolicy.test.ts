@@ -1,4 +1,4 @@
-/** The rules of ADR 0104 by name; the model-based test in the Daemon covers their interleavings. */
+/** The rules of ADR 0107 by name; the model-based test in the Daemon covers their interleavings. */
 import { describe, expect, test } from "bun:test";
 import { AppId } from "./computerUse.ts";
 import {

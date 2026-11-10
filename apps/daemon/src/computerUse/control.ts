@@ -1,5 +1,5 @@
 /**
- * The Host's computer use policy at run time (ADR 0104): each `polaris_desktop` call on an app
+ * The Host's computer use policy at run time (ADR 0107): each `polaris_desktop` call on an app
  * is decided by `decideAppUse`, asking the user through the Engine when it needs an approval.
  * A session's approvals are folded from its log; the Controlled apps live only in memory.
  */

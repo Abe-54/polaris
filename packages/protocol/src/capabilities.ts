@@ -114,7 +114,7 @@ export const Capability = Schema.Literals([
    */
   "approval.secret",
   /**
-   * Computer use (ADR 0104): `computerUse.*` but the live preview, the `app` and `headed-input`
+   * Computer use (ADR 0107): `computerUse.*` but the live preview, the `app` and `headed-input`
    * ApprovalKinds and `ToolCall.computerUse`. A Client without it is sent neither kind.
    */
   "computer-use",

@@ -1,5 +1,5 @@
 /**
- * What every `polaris_desktop` call on an app asks first: the Host's app policy (ADR 0104),
+ * What every `polaris_desktop` call on an app asks first: the Host's app policy (ADR 0107),
  * `AppControl` in `computerUse/control.ts`. It may wait on the user's approval.
  */
 import type { AppRef, SessionId } from "@polaris/protocol";

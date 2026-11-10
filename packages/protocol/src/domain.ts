@@ -619,7 +619,7 @@ export const inStartOrder = (items: ReadonlyArray<TurnItem>): Array<TurnItem> =>
 
 /**
  * `secret`: a Secret Request (ADR 0089), sent only to Clients with `approval.secret`.
- * `app` and `headed-input`: computer use (ADR 0104), sent only to Clients with `computer-use`.
+ * `app` and `headed-input`: computer use (ADR 0107), sent only to Clients with `computer-use`.
  */
 export const ApprovalKind = Schema.Literals([
   "command",

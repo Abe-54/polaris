@@ -152,7 +152,7 @@ export const signDaemonBuilds = (
 
   // Nested code first: the bundle's signature seals Betterleaks' as it is then.
   sign(at("betterleaks"), "betterleaks.plist");
-  // The Daemon has library validation: it loads only libraries signed by this team (ADR 0105).
+  // The Daemon has library validation: it loads only libraries signed by this team (ADR 0108).
 
   for (const library of bundleLibraries(Object.keys(build.files).map(at), bundle)) sign(library);
   sign(bundle, "daemon.plist");

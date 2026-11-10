@@ -1,6 +1,6 @@
 # Computer use: the wire contract
 
-What the Daemon, the Desktop App, the Mobile App and Extensions build against for computer use (ENG-846, ADR 0104). The schemas are in `src/computerUse.ts`, the policy in `src/computerUsePolicy.ts`, and the additions to existing types in `src/domain.ts`. The policy is specified in `packages/spec/computer-use.qnt`.
+What the Daemon, the Desktop App, the Mobile App and Extensions build against for computer use (ENG-846, ADR 0107). The schemas are in `src/computerUse.ts`, the policy in `src/computerUsePolicy.ts`, and the additions to existing types in `src/domain.ts`. The policy is specified in `packages/spec/computer-use.qnt`.
 
 The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemon/src/computerUse/`) and announces `computer-use`. It serves the preview too (`apps/daemon/src/computerUse/preview/`): `preview.latest` on every Host, and `preview.watch` with `computer-use.preview` on macOS when the capture tool is beside the Daemon. `computerUse.app` still answers `Unsupported` (`apps/daemon/src/transport/computerUseDefaults.ts`, a layer of its own that the real handlers replace). The Engine sends all three approval kinds: `app` and `headed-input` (`apps/daemon/src/engine/appApprovals.ts`), with `app.icon` null until `computerUse.app` is served, and `computer-use` when a session asks for computer use while it's off (`apps/daemon/src/engine/computerUseRequests.ts`, below).
 

@@ -1,6 +1,6 @@
 /**
  * A process running inside the helper app, as the Daemon sees it, and the setting that picks
- * how its launcher is started (ADR 0104).
+ * how its launcher is started (ADR 0107).
  */
 import type { HelperTool } from "./bundle.ts";
 

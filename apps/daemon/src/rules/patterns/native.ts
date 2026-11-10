@@ -8,7 +8,7 @@
  * literal `require` of the platform's `.node` file, the grammars through
  * `type: "file"` imports. Native code can't open a file inside the binary,
  * so the grammars are copied to `~/.polaris/lib/grammars/` on first use.
- * A darwin build embeds neither: both are files in its bundle (ADR 0105, `service/bundleLibraries.ts`).
+ * A darwin build embeds neither: both are files in its bundle (ADR 0108, `service/bundleLibraries.ts`).
  * Linux builds pick glibc or musl with `--define process.env.POLARIS_LIBC='"musl"'`.
  */
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";

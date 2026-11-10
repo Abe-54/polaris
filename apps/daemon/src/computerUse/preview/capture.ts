@@ -1,6 +1,6 @@
 /**
  * The live preview on macOS: `polaris-capture` run inside Polaris Computer Use.app, so its
- * Screen Recording grant applies (ADR 0104). One process per watched session, size and link,
+ * Screen Recording grant applies (ADR 0107). One process per watched session, size and link,
  * shared by its watchers, started with the first and killed with the last.
  */
 import {

@@ -1,5 +1,5 @@
 /**
- * The built-in always-refused apps (ADR 0104), by stable id: the bundle id on macOS. They would
+ * The built-in always-refused apps (ADR 0107), by stable id: the bundle id on macOS. They would
  * hand an agent a shell or the user's secrets, past the approvals its session asks for.
  */
 import type { AppId } from "./computerUse.ts";

@@ -10,7 +10,7 @@ It covers the event store's group commit, receipts and gapless sequence (`apps/d
 | `languages.qnt` | M3.1 contract-only model: isolated contexts, queue/version/generation fences, durable edit acknowledgment and guarded undo. Future T1/X1 runtime adapters must emit observed traces; P1 installs no runtime. |
 | `polaris.qnt` | The model, its properties, and its instances: `current` (the code as it is), `review` (the code as it is, with Clients also accepting Turns and recording Verdicts, in one session), `finding1` … `finding4` (the code before each finding's fix, kept as mutants that must still violate `safety`) and `small` (for Apalache). |
 | `polaris_test.qnt` | Scenario tests: interleavings written out by hand (group commit, retry after a crash, answer races, withdrawal races, a Secret Request timing out, restart, a usage limit waiting for Continue, a dropped subscriber, the host feed, Archive, late approval requests, accepting Turns, Verdicts off the host stream, an upstream defect failing a feed), and one per finding against its mutant. |
-| `computer-use.qnt` | Computer use (ENG-846, ADR 0104): app and headed-input approvals, the always-allowed and always-refused lists, and one session per app. Imported by `computer_use` and its three mutants in `polaris.qnt`. |
+| `computer-use.qnt` | Computer use (ENG-846, ADR 0107): app and headed-input approvals, the always-allowed and always-refused lists, and one session per app. Imported by `computer_use` and its three mutants in `polaris.qnt`. |
 | `computer-use-request.qnt` | A session asks for computer use while it's off (ENG-846): the `computer-use` approval, Not now, the Host turning Ready, and the Harness reopening after the Turn. Imported by `computer_use_request` and its two mutants in `polaris.qnt`. |
 | `scripts/check.ts` | Runs every check (`bun run spec`). |
 | `scripts/replay.ts` | Trace validation: replays logs the real Engine committed through the model (below). |
@@ -891,7 +891,7 @@ MySQL SHOW, DESCRIBE/DESC and EXPLAIN are accepted by the lexical allowlist but 
 
 ## Computer use (ENG-846)
 
-`computer_use` in `polaris.qnt` imports `computer-use.qnt`, which refines the HRequest/Respond lifecycle for the two new approval kinds, `app` and `headed-input` (ADR 0104). In `polaris` itself they are requests like any other: opened only for the Turn in flight, answered once, withdrawn when the Turn ends or the Daemon restarts. So `polaris`'s commands, commits, streams and recovery don't change. The refinement says what an answer grants, to whom and for how long. The contract is written up in `packages/protocol/computer-use.md`.
+`computer_use` in `polaris.qnt` imports `computer-use.qnt`, which refines the HRequest/Respond lifecycle for the two new approval kinds, `app` and `headed-input` (ADR 0107). In `polaris` itself they are requests like any other: opened only for the Turn in flight, answered once, withdrawn when the Turn ends or the Daemon restarts. So `polaris`'s commands, commits, streams and recovery don't change. The refinement says what an answer grants, to whom and for how long. The contract is written up in `packages/protocol/computer-use.md`.
 
 | Spec | Code |
 |---|---|

@@ -474,7 +474,7 @@ def sign_daemon(signer: Signer, dist: Path, entitlements: Path, version: str) ->
     bundle = app_bundle_of(paths["polaris"])
     helper = helper_of(paths, bundle)
     sign(signer, paths["betterleaks"], entitlements / DAEMON_ENTITLEMENTS["betterleaks"])
-    # The Daemon has library validation: it loads only libraries signed by this team (ADR 0105).
+    # The Daemon has library validation: it loads only libraries signed by this team (ADR 0108).
     for library in bundle_libraries(paths, bundle):
         sign(signer, library, None)
     sign(signer, bundle, entitlements / DAEMON_ENTITLEMENTS["polaris"])

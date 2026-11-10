@@ -1,6 +1,6 @@
 /**
  * `polaris_desktop`, the computer use MCP server the Daemon runs for each Agent Session (ENG-846,
- * ADR 0104): agent-desktop's commands as tools. Claude Code gets them in process, Codex over HTTP.
+ * ADR 0107): agent-desktop's commands as tools. Claude Code gets them in process, Codex over HTTP.
  */
 import type { ComputerUseState, SessionId } from "@polaris/protocol";
 import {

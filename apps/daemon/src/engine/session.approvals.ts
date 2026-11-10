@@ -37,7 +37,7 @@ export const decisionRefusal = (
   if (request?.kind === "computer-use" && !Predicate.isTagged(decision, "Deny"))
     return "a computer use request takes Not now, or clears once computer use is on";
 
-  // Computer use (ADR 0104): never always for headed input, nor from an Extension.
+  // Computer use (ADR 0107): never always for headed input, nor from an Extension.
   const app = request === undefined ? null : appDecisionRefusal(request.kind, decision, actor);
 
   if (app !== null) return app;

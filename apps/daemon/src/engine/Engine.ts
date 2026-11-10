@@ -89,7 +89,7 @@ export class Engine extends Context.Service<
     readonly requestSecret: SecretRequests["Service"]["request"];
     /** Saves a Secret Request's value and answers it `Provided`. */
     readonly provideSecret: SecretRequests["Service"]["provide"];
-    /** Computer use asks the user for an app, or headed input in it, on the Turn in flight (ADR 0104). */
+    /** Computer use asks the user for an app, or headed input in it, on the Turn in flight (ADR 0107). */
     readonly requestAppApproval: AppApprovals["Service"]["request"];
     /** `request_computer_use` while computer use is off, until it's on or the user says Not now. */
     readonly requestComputerUse: ComputerUseRequests["Service"]["request"];

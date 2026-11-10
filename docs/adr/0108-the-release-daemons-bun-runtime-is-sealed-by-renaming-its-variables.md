@@ -6,7 +6,7 @@ status: accepted (ENG-875, ENG-846); amended (ENG-877)
 
 ## Context
 
-The computer use launcher serves only a process signed as the Daemon (ADR 0104, ENG-867). That
+The computer use launcher serves only a process signed as the Daemon (ADR 0107, ENG-867). That
 check names the binary, not what it runs, and the Daemon is a `bun build --compile` executable:
 the whole Bun runtime with the Daemon's program appended. Bun 1.4.4 (read at its commit
 38afee6c) reads these from the environment before any of the Daemon's code runs:
@@ -63,7 +63,7 @@ the renamed names on a copy signed with the hardened runtime and the release ent
   `compile.executablePath`.** Correct, and independent of dyld, but it puts a Bun source build
   in the release pipeline. This is the way out if the seal stops holding.
 - **Signing dev builds with the hardened runtime.** Not done: it needs the JIT entitlements in
-  dev signing, and dev builds are already unprotected (ADR 0104).
+  dev signing, and dev builds are already unprotected (ADR 0107).
 
 ## Consequences
 

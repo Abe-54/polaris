@@ -1,5 +1,5 @@
 /**
- * The user taking the pointer and keyboard back during headed input (ADR 0104). The Host's
+ * The user taking the pointer and keyboard back during headed input (ADR 0107). The Host's
  * idle clock counts our own synthetic input too, so input counts as the user's only when it
  * came after our last action finished.
  */

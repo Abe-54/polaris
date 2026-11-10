@@ -1,5 +1,5 @@
 /**
- * Computer use approvals (ADR 0104): `polaris_desktop` opens an approval of kind `app` or
+ * Computer use approvals (ADR 0107): `polaris_desktop` opens an approval of kind `app` or
  * `headed-input` on the session's Turn in flight and waits for the user's answer. They go
  * through the Session machine like any request; no Harness and no permission mode sees them.
  */

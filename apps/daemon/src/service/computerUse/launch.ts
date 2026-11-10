@@ -1,7 +1,7 @@
 /**
  * The ways the Daemon starts the helper's launcher (`launcher.c`) to serve the Mach service
  * `service`: its `run`, which disclaims responsibility so TCC charges the helper (the
- * default), or LaunchServices, the fallback for a macOS without the disclaim SPI (ADR 0104).
+ * default), or LaunchServices, the fallback for a macOS without the disclaim SPI (ADR 0107).
  */
 import { executableOf } from "../../platform/executable.ts";
 import { childEnv } from "../childEnv.ts";

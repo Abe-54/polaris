@@ -1,6 +1,6 @@
 /**
  * macOS: "Polaris Computer Use.app", the helper app that holds computer use's privacy grants
- * (ADR 0104). It sits beside `PolarisDaemon.app`, ships flat like it (`../bundle.ts`), and
+ * (ADR 0107). It sits beside `PolarisDaemon.app`, ships flat like it (`../bundle.ts`), and
  * holds the pinned agent-desktop and the preview's capture tool (`capture/`) next to its
  * launcher (`launcher.c`).
  */

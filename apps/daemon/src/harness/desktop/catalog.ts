@@ -1,6 +1,6 @@
 /**
  * The `polaris_desktop` tools: each one's input, its agent-desktop argv, and what it targets.
- * Headed tools drive the real pointer and keyboard; `authorize` gates them (ADR 0104).
+ * Headed tools drive the real pointer and keyboard; `authorize` gates them (ADR 0107).
  */
 import { Option, Schema } from "effect";
 

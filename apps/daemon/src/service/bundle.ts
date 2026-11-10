@@ -20,7 +20,7 @@ export const DAEMON_ICON = "Polaris.icns";
 
 /**
  * The native libraries the Daemon loads from its bundle instead of embedding them (ENG-877,
- * ADR 0105): by file name in `Contents/Frameworks`, which is also their flat name in a build.
+ * ADR 0108): by file name in `Contents/Frameworks`, which is also their flat name in a build.
  */
 export const BUNDLE_LIBRARY_NAMES = [
   "libfff_c.dylib",

@@ -1,5 +1,5 @@
 /**
- * The Daemon's side of the hand-off to the helper's launcher (ADR 0104, ENG-867): three
+ * The Daemon's side of the hand-off to the helper's launcher (ADR 0107, ENG-867): three
  * socket pairs, and one Mach message that carries the launcher's ends as fileports. The
  * kernel stamps that message with this process's audit token, which is what the launcher
  * checks; nothing a caller could say about itself is trusted. macOS only.

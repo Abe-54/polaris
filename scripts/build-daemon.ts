@@ -37,13 +37,13 @@
  * The version is compiled in (`process.env.POLARIS_BUILD_VERSION`, read by `service/platform.ts`).
  * So is a sourcemap, which Bun applies to `Error.stack` (`daemonBundle.ts`, ENG-752).
  *
- * A darwin build embeds no native library (ENG-877, ADR 0105,
+ * A darwin build embeds no native library (ENG-877, ADR 0108,
  * `apps/daemon/src/service/bundleLibraries.ts`): Bun would write each to the temp directory
  * and load whatever file has its name and size. fff's, ast-grep's addon and grammars and
  * libsodium are files in `PolarisDaemon.app/Contents/Frameworks`, which the release signer
  * signs, and the build fails when the Daemon loads a library from anywhere else.
  *
- * A darwin release build's Bun runtime is sealed (ENG-875, ADR 0105,
+ * A darwin release build's Bun runtime is sealed (ENG-875, ADR 0108,
  * `apps/daemon/src/service/sealedRuntime.ts`): `BUN_BE_BUN`, `BUN_OPTIONS` and `BUN_INSPECT*`
  * no longer make the signed binary run foreign JavaScript. The build fails when they still do.
  */
@@ -407,7 +407,7 @@ const assertOwnLibraries = async (binary: string, expected: string) => {
   const embedded = embeddedLibraries(binary);
 
   if (embedded > 0) {
-    throw new Error(`${binary} embeds ${embedded} native libraries: see docs/adr/0105 (ENG-877)`);
+    throw new Error(`${binary} embeds ${embedded} native libraries: see docs/adr/0108 (ENG-877)`);
   }
 
   if (expected === "") return;
@@ -428,7 +428,7 @@ const assertSealed = async (binary: string) => {
   const open = await openRoutes(binary, { command: ["version"], names: "bun" });
 
   if (open.length > 0) {
-    throw new Error(`${binary} runs foreign JavaScript through ${open.join(", ")} (ADR 0105)`);
+    throw new Error(`${binary} runs foreign JavaScript through ${open.join(", ")} (ADR 0108)`);
   }
 
   console.log("  sealed runtime: ok (BUN_BE_BUN, BUN_OPTIONS, BUN_INSPECT)");

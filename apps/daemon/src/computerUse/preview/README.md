@@ -1,6 +1,6 @@
 # The computer use preview
 
-What a watching Client sees of the window an Agent Session works in (ENG-846, ADR 0104). The wire contract is `packages/protocol/computer-use.md`, "Preview": `computerUse.preview.watch` (live frames) and `computerUse.preview.latest` (one image). The other computer use RPCs are not here.
+What a watching Client sees of the window an Agent Session works in (ENG-846, ADR 0107). The wire contract is `packages/protocol/computer-use.md`, "Preview": `computerUse.preview.watch` (live frames) and `computerUse.preview.latest` (one image). The other computer use RPCs are not here.
 
 | File | What |
 |---|---|

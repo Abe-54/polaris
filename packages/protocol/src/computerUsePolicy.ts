@@ -1,5 +1,5 @@
 /**
- * The computer use policy Polaris enforces whatever the Harness and permission mode (ADR 0104):
+ * The computer use policy Polaris enforces whatever the Harness and permission mode (ADR 0107):
  * which app an Agent Session may act in, as pure functions the Daemon folds its state through.
  * Specified by `packages/spec/computer-use.qnt`; `computer-use.md` has the rules in prose.
  */

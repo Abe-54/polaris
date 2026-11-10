@@ -1,5 +1,5 @@
 /**
- * Seals the Bun runtime inside a compiled darwin Daemon (ENG-875, ADR 0105). Bun reads a few
+ * Seals the Bun runtime inside a compiled darwin Daemon (ENG-875, ADR 0108). Bun reads a few
  * environment variables before the Daemon's code runs and they make the signed binary run
  * anybody's JavaScript. Bun has no switch for them, so the build renames them inside the
  * binary to `DYLD_` names: Bun no longer reads the old names, and dyld removes every `DYLD_`
@@ -70,7 +70,7 @@ const rename = (bytes: Buffer, name: string, program: ReturnType<typeof embedded
 /**
  * Seals the compiled darwin executable at `path` in place; its signature must be made after.
  * Throws, writing nothing, when a name is not there as often as expected: a Bun upgrade
- * changed the runtime and the routes must be read again (ADR 0105).
+ * changed the runtime and the routes must be read again (ADR 0108).
  */
 export const sealRuntime = (path: string): void => {
   const bytes = readFileSync(path);
@@ -81,7 +81,7 @@ export const sealRuntime = (path: string): void => {
 
     if (found !== count) {
       throw new Error(
-        `${path}: ${name} stands ${found} times in the Bun runtime, expected ${count}; see docs/adr/0105`
+        `${path}: ${name} stands ${found} times in the Bun runtime, expected ${count}; see docs/adr/0108`
       );
     }
   }

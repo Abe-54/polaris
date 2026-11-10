@@ -1,5 +1,5 @@
 /**
- * Computer use (CONTEXT.md; ENG-846, ADR 0104): an Agent Session operating its Host's desktop
+ * Computer use (CONTEXT.md; ENG-846, ADR 0107): an Agent Session operating its Host's desktop
  * apps. This file is the wire contract: each Host's status and its feed, the app an approval
  * names, the always-allowed list, the preview, and a Tool Call's app and window.
  * `computer-use.md` beside the package README is the write-up. Capability `computer-use`.

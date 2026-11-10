@@ -1,5 +1,5 @@
 /**
- * A darwin Daemon's native libraries ship as files in its bundle (ENG-877, ADR 0105). Bun
+ * A darwin Daemon's native libraries ship as files in its bundle (ENG-877, ADR 0108). Bun
  * writes an embedded library to the temp directory before it loads it and reuses any file of
  * that name and size, so a compiled darwin Daemon embeds none: the build keeps them out with
  * `bundleLibrariesPlugin` and copies them to `Contents/Frameworks`, where the release signer
@@ -86,7 +86,7 @@ export const placeBundleLibraries = (
   const missing = BUNDLE_LIBRARY_NAMES.filter((name) => !sources.has(name));
 
   if (missing.length > 0) {
-    throw new Error(`the Daemon's build did not import ${missing.join(", ")} (ADR 0105)`);
+    throw new Error(`the Daemon's build did not import ${missing.join(", ")} (ADR 0108)`);
   }
 
   mkdirSync(join(bundle, BUNDLE_LIBRARY_DIR), { recursive: true });
