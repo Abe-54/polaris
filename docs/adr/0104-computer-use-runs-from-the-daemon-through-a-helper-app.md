@@ -41,6 +41,9 @@ charges the Daemon (`PolarisDaemon.app`, see the app-bundle ADR). That has four 
 - **Fallback if the disclaim stops working:** launch the helper through LaunchServices and talk to
   it over a socket. An app launched by LaunchServices is its own responsible process, so the
   helper's grant still applies; the spike did not test this path.
+  Amended (ENG-867): on either path the helper takes its sockets from the Daemon in a Mach message
+  and checks the sender's audit token, because a Unix socket's `LOCAL_PEERTOKEN` is not captured at
+  connect: it follows whichever process last used the socket, through `exec`.
 - **Polaris enforces policy, not the Harness.** `polaris_desktop` checks app approvals (per app per
   session, in every permission mode, with "always allow" stored per Host), headed approvals (per
   app per session), the built-in always-refused list, and per-app locks (one session controls an
