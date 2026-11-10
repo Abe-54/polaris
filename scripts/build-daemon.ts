@@ -27,12 +27,18 @@
  * downloaded at its pinned version (`apps/daemon/src/rules/secrets/pin.ts`),
  * checked against its SHA-256, and listed in the manifest as an executable.
  *
- *   bun scripts/build-daemon.ts [--release] [darwin-arm64|linux-x64|linux-arm64|linux-x64-musl|linux-arm64-musl|windows-x64 ...]
+ *   bun scripts/build-daemon.ts [--release] [--out=<dir>] [darwin-arm64|linux-x64|linux-arm64|linux-x64-musl|linux-arm64-musl|windows-x64 ...]
+ *
+ * `--out` builds into `<dir>` instead of `apps/daemon/dist`.
  *
  * Without `--release` it is a dev build: its version names the commit
  * (`buildVersion.ts`), so a Client upgrades a Host from one dev build to the next.
  * The version is compiled in (`process.env.POLARIS_BUILD_VERSION`, read by `service/platform.ts`).
  * So is a sourcemap, which Bun applies to `Error.stack` (`daemonBundle.ts`, ENG-752).
+ *
+ * A darwin release build's Bun runtime is sealed (ENG-875, ADR 0105,
+ * `apps/daemon/src/service/sealedRuntime.ts`): `BUN_BE_BUN`, `BUN_OPTIONS` and `BUN_INSPECT*`
+ * no longer make the signed binary run foreign JavaScript. The build fails when they still do.
  */
 import { createHash } from "node:crypto";
 import {
@@ -47,7 +53,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Option, Schema } from "effect";
 import {
   BUNDLE_FILES,
@@ -64,6 +70,7 @@ import {
   HELPER_FILES,
 } from "../apps/daemon/src/service/computerUse/bundle.ts";
 import { AGENT_DESKTOP_VERSION } from "../apps/daemon/src/install/agentDesktop/pin.ts";
+import { openRoutes, sealRuntime } from "../apps/daemon/src/service/sealedRuntime.ts";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
 import { BETTERLEAKS_VERSION, betterleaksAsset } from "../apps/daemon/src/rules/secrets/pin.ts";
 import { buildVersion } from "./buildVersion.ts";
@@ -74,7 +81,12 @@ const root = join(import.meta.dir, "..");
 
 const daemonDir = join(root, "apps", "daemon");
 
-const distDir = join(daemonDir, "dist");
+const OUT_FLAG = "--out=";
+
+const outFlag = process.argv.find((arg) => arg.startsWith(OUT_FLAG));
+
+const distDir =
+  outFlag === undefined ? join(daemonDir, "dist") : resolve(outFlag.slice(OUT_FLAG.length));
 
 const GNU = ['FFF_LIBC="gnu"', 'process.env.POLARIS_LIBC="gnu"'];
 
@@ -211,8 +223,12 @@ const fffBinInstalled = (platform: Platform): boolean => {
 const astGrepInstalled = (platform: Platform): boolean =>
   findPackage(daemonDir, `@ast-grep/napi-${PLATFORMS[platform].astGrep}`) !== null;
 
+/** The bundler resolves every platform's ast-grep addon, whichever one it builds. */
+const everyAstGrepInstalled = () =>
+  Object.keys(PLATFORMS).filter(isPlatform).every(astGrepInstalled);
+
 const targetPackagesInstalled = (platform: Platform) =>
-  fffBinInstalled(platform) && astGrepInstalled(platform);
+  fffBinInstalled(platform) && everyAstGrepInstalled();
 
 /** Install the target platforms' optional packages (fff-bin-*, ast-grep's napi-*) from the lockfile. */
 const ensureTargetPackages = async (platforms: ReadonlyArray<Platform>) => {
@@ -350,6 +366,17 @@ const bundlePaths = (betterleaks: boolean): Record<string, string> =>
     ]),
   ]);
 
+/** Fails the build when the built Daemon still runs a script its environment names. */
+const assertSealed = async (binary: string) => {
+  const open = await openRoutes(binary, { command: ["version"], names: "bun" });
+
+  if (open.length > 0) {
+    throw new Error(`${binary} runs foreign JavaScript through ${open.join(", ")} (ADR 0105)`);
+  }
+
+  console.log("  sealed runtime: ok (BUN_BE_BUN, BUN_OPTIONS, BUN_INSPECT)");
+};
+
 const build = async (
   platform: Platform,
   version: string,
@@ -391,6 +418,10 @@ const build = async (
 
   if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
   instrumentation.assertEmbedded();
+  const sealed = darwin && release;
+
+  // Before the bundle is signed: the seal changes the executable's bytes.
+  if (sealed) sealRuntime(binary);
 
   const betterleaks = await bundleBetterleaks(platform, binDir);
 
@@ -409,6 +440,8 @@ const build = async (
     }
 
     console.log(output.replaceAll(/^/gm, "  "));
+
+    if (sealed) await assertSealed(binary);
   }
 
   const flat =
@@ -425,7 +458,7 @@ const build = async (
 const main = async () => {
   const args = process.argv.slice(2);
   const release = args.includes("--release");
-  const requested = args.filter((arg) => arg !== "--release");
+  const requested = args.filter((arg) => arg !== "--release" && !arg.startsWith(OUT_FLAG));
   const unknown = requested.filter((platform) => !isPlatform(platform));
 
   if (unknown.length > 0) throw new Error(`unknown platform(s): ${unknown.join(", ")}`);
