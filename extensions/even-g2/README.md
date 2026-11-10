@@ -11,7 +11,7 @@ even-realities/evenhub-templates@8cb01354 (MIT; see `ATTRIBUTION.md`).
 |---|---|---|---|---|
 | Sessions | every paired Host's sessions: Needs you, then Working, then Idle, then the rest | open the session | | exit (asks first) |
 | Session | title, state, Host; the oldest approval's title and detail, or the last reply | actions | speak a reply | back |
-| Actions | Approve / Deny, a question's options, Interrupt, Continue (after an interrupted Turn), fixed replies, Speak a reply | run it | | back |
+| Actions | Approve / Deny (Allow once / Deny for computer use: "Use ‹app›?", "Take mouse and keyboard?"; an Extension can't always-allow), a question's options, Interrupt, Continue (after an interrupted Turn), fixed replies, Speak a reply | run it | | back |
 | Voice | live text while you hold; then Send / Retry / Cancel | stop, or choose | release stops | cancel |
 
 An approval that arrives while the app is open jumps to the front, unless you are speaking; then it

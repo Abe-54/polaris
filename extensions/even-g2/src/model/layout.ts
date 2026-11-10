@@ -115,13 +115,13 @@ const sessionsPage = (state: AppState): Page => {
 
 /** CU4: an app approval asks "Use ‹app›?", headed input "Take mouse and keyboard?" with its app. */
 const approvalLine = (approval: ApprovalRequest): string => {
-  const app = approval.app?.name ?? "an app";
+  const app = approval.app?.name;
 
   switch (approval.kind) {
     case "app":
-      return `Use ${app}?`;
+      return app === undefined ? `${approval.title}?` : `Use ${app}?`;
     case "headed-input":
-      return `Take mouse and keyboard? · ${app}`;
+      return app === undefined ? "Take mouse and keyboard?" : `Take mouse and keyboard? · ${app}`;
     case "question":
       return `Question: ${approval.title}`;
     default:
