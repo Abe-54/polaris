@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { SessionId, type SimulatorAttachItem, type SimulatorWatchItem } from "@polaris/protocol";
 import { Effect, Fiber, Layer, Option, Predicate, Schedule, Schema, Stream } from "effect";
 import { everySessionLive } from "../browser/relaySessions.ts";
-import { bunRuntime, installSimulatorTools } from "../install/simulator/install.ts";
+import { installSimulatorTools } from "../install/simulator/install.ts";
 import { HostPlatform } from "../platform/index.ts";
 import { tempDir } from "../platform/tempDir.testing.ts";
 import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
@@ -76,13 +76,12 @@ const isSnapshot = (item: SimulatorWatchItem) => Predicate.isTagged(item, "Snaps
 /** The hub service on a real expo-device-hub, idling out after 3 s. */
 const realHub = async () => {
   const installed = await installSimulatorTools({ root: tempDir("sim-tools-") });
-  const runtimeCommand = bunRuntime();
 
   return SimulatorHubLive.layerWith({
     dir: join(tempDir("simhub-", { short: true }), "home"),
     command: Effect.succeed({
-      argv: [...runtimeCommand.argv, installed.hub],
-      env: runtimeCommand.env,
+      argv: [installed.bun.program, installed.hub],
+      env: installed.bun.env,
     }),
     listIos: () => listLocalIos(liveProbe().run),
     sessions: everySessionLive,

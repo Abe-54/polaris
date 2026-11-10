@@ -2,10 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { installSimulatorTools } from "../install/simulator/install.ts";
+import { AGENT_DEVICE_VERSION } from "../install/simulator/pin.ts";
+import {
+  type BunRuntime,
+  bunRuntimeSource,
+  ownBun,
+  runsAsBun,
+} from "../install/simulator/runtime.ts";
 import { DAEMON_BUNDLE } from "./bundle.ts";
 import {
   binaryOf,
   buildDaemon,
+  DARWIN_PLATFORM,
   onDarwinArm64,
   runIn,
   signHardened,
@@ -73,6 +82,37 @@ describe.skipIf(!onDarwinArm64)("a darwin release Daemon's Bun runtime is sealed
       EVERY_ROUTE
     );
   }, 120_000);
+
+  // Real network: Oven's pinned Bun from GitHub, then the pinned tools from npm (ENG-829).
+  test("the Simulator's tools install and run through Oven's Bun, which the sealed Daemon is not", async () => {
+    const sealed = binaryOf(release);
+    const root = join(dir, "tools");
+
+    const bun = bunRuntimeSource({
+      root: join(root, "bun"),
+      platform: DARWIN_PLATFORM,
+      executable: sealed,
+    });
+
+    const tools = await installSimulatorTools({ root: join(root, "simulator"), bun });
+
+    const runAs = (bun: BunRuntime, script: string, flag: string) =>
+      run([bun.program, script, flag], { ...process.env, ...bun.env });
+
+    const hub = await runAs(tools.bun, tools.hub, "--help");
+    const agentDevice = await runAs(tools.bun, tools.agentDevice, "--version");
+    // What the Simulator did before: the sealed Daemon asked to be Bun.
+    const asDaemon = await runAs(ownBun(sealed), tools.hub, "--help");
+
+    expect(await runsAsBun(sealed)).toBe(false);
+    expect(await runsAsBun(binaryOf(dev))).toBe(true);
+    expect(tools.bun.program).toStartWith(join(root, "bun"));
+    expect(hub.code).toBe(0);
+    expect(hub.stdout + hub.stderr).toContain("--require-token");
+    expect(agentDevice.stdout.trim()).toBe(AGENT_DEVICE_VERSION);
+    expect(asDaemon.code).toBe(2);
+    expect(asDaemon.stderr).toStartWith("usage: polaris <serve|");
+  }, 300_000);
 
   test("sealing refuses a runtime where a variable's name is not where it was", () => {
     const copy = join(dir, "polaris-copy");

@@ -1,20 +1,19 @@
 /**
- * Installs the pinned Simulator tools into `<root>/<version>/` with the Daemon's own Bun:
+ * Installs the pinned Simulator tools into `<root>/<version>/` with Bun (`runtime.ts`):
  * `bun install --frozen-lockfile` checks every tarball against the lockfile's sha512, runs no
  * lifecycle scripts, and the result is renamed into place only once both entry scripts exist.
  */
 import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { executableOf } from "../../platform/executable.ts";
 import { childEnv } from "../../service/childEnv.ts";
+import { type BunRuntime, type BunRuntimeSource, ownBunSource } from "./runtime.ts";
 import {
   SIMULATOR_TOOLS_ENTRIES,
   SIMULATOR_TOOLS_LOCKFILE,
   SIMULATOR_TOOLS_MANIFEST,
   SIMULATOR_TOOLS_VERSION,
 } from "./pin.ts";
-
-/** Runs a script as Bun: the compiled `polaris` is Bun with `BUN_BE_BUN=1`, and `bun` from source. */
-export const bunRuntime = () => ({ argv: [process.execPath], env: { BUN_BE_BUN: "1" } });
 
 export interface SimulatorToolsOptions {
   /** Holds one directory per installed version. */
@@ -23,6 +22,8 @@ export interface SimulatorToolsOptions {
   readonly manifest?: object;
   readonly lockfile?: string;
   readonly entries?: { readonly hub: string; readonly agentDevice: string };
+  /** The Bun that installs and runs the tools; the Daemon's own when left out. */
+  readonly bun?: BunRuntimeSource;
   /** Added to the install's environment; tests point `BUN_CONFIG_REGISTRY` at a fake registry. */
   readonly env?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
@@ -34,6 +35,8 @@ export interface InstalledSimulatorTools {
   readonly hub: string;
   /** agent-device's CLI script. */
   readonly agentDevice: string;
+  /** What runs both scripts: a sealed Daemon is not Bun itself (ADR 0108). */
+  readonly bun: BunRuntime;
 }
 
 /** Written last, inside the staging directory, so a directory without it is never used. */
@@ -48,11 +51,12 @@ const pinnedOf = (options: SimulatorToolsOptions) => {
     version,
     dir,
     entries,
-    installed: {
+    installed: (bun: BunRuntime): InstalledSimulatorTools => ({
       dir,
       hub: join(dir, entries.hub),
       agentDevice: join(dir, entries.agentDevice),
-    } satisfies InstalledSimulatorTools,
+      bun,
+    }),
   };
 };
 
@@ -68,7 +72,10 @@ export const installedOnDisk = async (
 ): Promise<InstalledSimulatorTools | null> => {
   const { dir, installed } = pinnedOf(options);
 
-  return (await exists(join(dir, MARKER))) ? installed : null;
+  if (!(await exists(join(dir, MARKER)))) return null;
+  const bun = await (options.bun ?? ownBunSource).onDisk();
+
+  return bun === null ? null : installed(bun);
 };
 
 /** bun's own `error:` lines: they name the package and the check, not the Host's paths. */
@@ -79,9 +86,7 @@ const errorLines = (stderr: string) =>
     .filter((line) => line.startsWith("error:"))
     .join("; ");
 
-const bunInstall = async (cwd: string, options: SimulatorToolsOptions) => {
-  const runtime = bunRuntime();
-
+const bunInstall = async (cwd: string, runtime: BunRuntime, options: SimulatorToolsOptions) => {
   const spawnOptions: Bun.SpawnOptions.SpawnOptions<"ignore", "ignore", "pipe"> = {
     env: childEnv({
       ...process.env,
@@ -96,10 +101,9 @@ const bunInstall = async (cwd: string, options: SimulatorToolsOptions) => {
 
   if (options.signal !== undefined) spawnOptions.signal = options.signal;
 
-  // bunRuntime's program: the Daemon's own binary, run as Bun.
   const proc = Bun.spawn(
     [
-      process.execPath,
+      executableOf(runtime.program),
       `--cwd=${cwd}`,
       "install",
       "--frozen-lockfile",
@@ -131,7 +135,8 @@ export const installSimulatorTools = async (
     JSON.stringify(options.manifest ?? SIMULATOR_TOOLS_MANIFEST)
   );
   await writeFile(join(staging, "bun.lock"), options.lockfile ?? SIMULATOR_TOOLS_LOCKFILE);
-  await bunInstall(staging, options);
+  const bun = await (options.bun ?? ownBunSource).install(options.signal);
+  await bunInstall(staging, bun, options);
   await rm(join(staging, ".cache"), { recursive: true, force: true });
 
   for (const entry of [entries.hub, entries.agentDevice])
@@ -142,7 +147,7 @@ export const installSimulatorTools = async (
   await rename(staging, dir);
   await pruneOlder(options.root, version);
 
-  return installed;
+  return installed(bun);
 };
 
 /** A running hub keeps its old files open on Unix; the Simulator is never on Windows. */

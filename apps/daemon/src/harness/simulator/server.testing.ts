@@ -1,7 +1,7 @@
 /** A `SimulatorMcp` over fake detection, installs and agent-device, for tests. */
 import { type HostSimulatorSupport, SessionId, SimulatorSupport } from "@polaris/protocol";
 import { Effect, Exit, Layer, ManagedRuntime, type Schema, Scope, Stream } from "effect";
-import { SimulatorTools } from "../../install/simulator/index.ts";
+import { SimulatorTools, ownBun } from "../../install/simulator/index.ts";
 import { HostPlatform, type PlatformFacts } from "../../platform/index.ts";
 import { SimulatorDetection } from "../../simulator/index.ts";
 import type { SimulatorActivity } from "./activity.ts";
@@ -98,7 +98,12 @@ export const setup = (
         Layer.succeed(SimulatorTools)(
           SimulatorTools.of({
             current: Effect.die("unused"),
-            ensure: Effect.succeed({ dir: "/t", hub: "/t/hub", agentDevice: "/t/ad.mjs" }),
+            ensure: Effect.succeed({
+              dir: "/t",
+              hub: "/t/hub",
+              agentDevice: "/t/ad.mjs",
+              bun: ownBun(),
+            }),
           })
         )
       )

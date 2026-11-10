@@ -26,7 +26,7 @@ The Simulator MCP server calls these; none starts the hub or needs a Desktop App
 
 ## The hub process
 
-`hubProcess.ts` starts one hub per Host with `BUN_BE_BUN=1 <polaris> <hub> --host 127.0.0.1 --port <free> --require-token`, its state dir and `TMPDIR` under `~/.polaris/simulator/hub/`. That directory is cleared before every start and removed after every stop, so serve-sim's per-device files (one holds the dead hub's token) never carry over. The hub picks its own token; the Daemon reads it from the state file once `/healthz` answers. The Daemon never loads `/vendor/serve-sim/`, whose page spawns a helper that outlives the hub.
+`hubProcess.ts` starts one hub per Host with `<bun> <hub> --host 127.0.0.1 --port <free> --require-token`, where `<bun>` is the runtime the tools installed with (`install/simulator/runtime.ts`: `BUN_BE_BUN=1 <polaris>`, or Oven's pinned Bun on a sealed macOS release, ADR 0108), its state dir and `TMPDIR` under `~/.polaris/simulator/hub/`. That directory is cleared before every start and removed after every stop, so serve-sim's per-device files (one holds the dead hub's token) never carry over. The hub picks its own token; the Daemon reads it from the state file once `/healthz` answers. The Daemon never loads `/vendor/serve-sim/`, whose page spawns a helper that outlives the hub.
 
 `supervisor.ts` owns the lifecycle, one start, stop or restart at a time:
 

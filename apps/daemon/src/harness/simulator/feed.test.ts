@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { SessionId, SimulatorSessionItem, SimulatorSupport } from "@polaris/protocol";
 import { Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
-import { SimulatorTools } from "../../install/simulator/index.ts";
+import { SimulatorTools, ownBun } from "../../install/simulator/index.ts";
 import { HostPlatform } from "../../platform/index.ts";
 import { SimulatorHub } from "../../simulator/hub.ts";
 import { fakeHost, OURS, until } from "../../simulator/hub.testing.ts";
@@ -58,7 +58,12 @@ describe("the Simulator tools on the Daemon's hub", () => {
           Layer.succeed(SimulatorTools)(
             SimulatorTools.of({
               current: Effect.die("unused"),
-              ensure: Effect.succeed({ dir: "/t", hub: "/t/hub", agentDevice: "/t/ad.mjs" }),
+              ensure: Effect.succeed({
+                dir: "/t",
+                hub: "/t/hub",
+                agentDevice: "/t/ad.mjs",
+                bun: ownBun(),
+              }),
             })
           )
         )

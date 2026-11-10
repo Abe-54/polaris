@@ -18,7 +18,7 @@ import {
 } from "@polaris/protocol";
 import { type Cause, Effect, Layer, Option, Predicate, Queue, type Scope, Stream } from "effect";
 import { type SessionLookup, sessionsFromStore } from "../browser/relaySessions.ts";
-import { bunRuntime, SimulatorTools } from "../install/simulator/index.ts";
+import { SimulatorTools } from "../install/simulator/index.ts";
 import { paths } from "../paths.ts";
 import { HostPlatform } from "../platform/index.ts";
 import { EventStore } from "../store/EventStore.ts";
@@ -69,13 +69,12 @@ export const SimulatorHubLive = {
     Effect.gen(function* () {
       const store = yield* EventStore;
       const tools = yield* SimulatorTools;
-      const runtime = bunRuntime();
 
       return layerWith({
         dir: join(paths().root, "simulator"),
         command: Effect.map(tools.ensure, (installed) => ({
-          argv: [...runtime.argv, installed.hub],
-          env: runtime.env,
+          argv: [installed.bun.program, installed.hub],
+          env: installed.bun.env,
         })),
         listIos: () => listLocalIos(liveProbe().run),
         sessions: sessionsFromStore(store),

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { SimulatorUnavailable } from "@polaris/protocol";
 import { paths } from "../../paths.ts";
-import { HostPlatform } from "../../platform/index.ts";
+import { HostPlatform, runtimePlatformOf } from "../../platform/index.ts";
 import { simulatorCapable } from "../../simulator/support.ts";
 import { DEFAULT_POLICY, type Installer, type InstallPolicy, onDemand } from "../onDemand.ts";
 import {
@@ -17,7 +17,11 @@ import {
   type SimulatorToolsOptions,
 } from "./install.ts";
 
-export { bunRuntime, type InstalledSimulatorTools } from "./install.ts";
+import { bunRuntimeSource } from "./runtime.ts";
+
+export { type InstalledSimulatorTools } from "./install.ts";
+
+export { type BunRuntime, ownBun } from "./runtime.ts";
 
 export { AGENT_DEVICE_VERSION, EXPO_DEVICE_HUB_VERSION, SIMULATOR_TOOLS_VERSION } from "./pin.ts";
 
@@ -65,7 +69,18 @@ export class SimulatorTools extends Context.Service<
       })
     );
 
-  static readonly layer = SimulatorTools.layerWith(() => ({
-    root: join(paths().root, "tools", "simulator"),
-  }));
+  /** A sealed Daemon's Bun goes beside the tools, in `~/.polaris/tools/bun/` (ADR 0108). */
+  static readonly layer = Layer.unwrap(
+    Effect.map(HostPlatform, (facts) => {
+      const bun = bunRuntimeSource({
+        root: join(paths().root, "tools", "bun"),
+        platform: runtimePlatformOf(facts),
+      });
+
+      return SimulatorTools.layerWith(() => ({
+        root: join(paths().root, "tools", "simulator"),
+        bun,
+      }));
+    })
+  );
 }

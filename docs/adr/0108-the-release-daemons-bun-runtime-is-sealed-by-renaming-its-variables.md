@@ -79,6 +79,13 @@ the renamed names on a copy signed with the hardened runtime and the release ent
   through to the processes it starts.
 - `BUN_INSPECT_CONNECT_TO` is closed by the same rename but has no run of its own in the checks:
   it connects after a short command has ended.
+- The Simulator's tools (ADR 0099, ENG-829) ran as `BUN_BE_BUN=1 <polaris>`, which a sealed
+  Daemon refuses like any other script. A sealed Daemon runs them with Oven's own release of
+  its Bun version instead, downloaded on first Simulator use and checked against a pinned
+  sha256 (`apps/daemon/src/install/simulator/runtime.ts`). It keeps Oven's Developer ID
+  signature: nothing signed as Polaris runs foreign JavaScript, so the launcher's check of the
+  Daemon's identity means what it did. A second runtime shipped in the bundle would have been
+  signed by our team, and 60 MB in every download. Other builds are still their own Bun.
 - Not closed here: the Desktop App's `ELECTRON_RUN_AS_NODE` (ENG-878). A native library planted
   in the temp directory (ENG-877) is closed by the amendment below.
 
