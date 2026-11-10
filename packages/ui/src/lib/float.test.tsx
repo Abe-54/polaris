@@ -12,6 +12,12 @@ describe("floating layer motion", () => {
     expect(FLOAT_MOTION).not.toContain("data-[state=closed]");
   });
 
+  test("floating layers scale in from the side that faces their trigger", () => {
+    expect(FLOAT_MOTION).toContain("data-[state=open]:zoom-in-[0.96]");
+    expect(FLOAT_MOTION).toContain("origin-(--radix-popper-transform-origin)");
+    expect(TOOLTIP_MOTION).not.toContain("zoom-in");
+  });
+
   test("tooltips fade in only on a delayed open", () => {
     expect(TOOLTIP_MOTION).toContain("data-[state=delayed-open]:fade-in-0");
     expect(TOOLTIP_MOTION).not.toContain("data-[state=closed]");
