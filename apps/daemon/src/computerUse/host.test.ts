@@ -14,7 +14,14 @@ import {
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ComputerUseHelper } from "../service/computerUse/index.ts";
 import { ComputerUseHost } from "./host.ts";
-import { type FakeHost, fakeHost, macStatus } from "./host.testing.ts";
+import {
+  a11yInstalled,
+  busctl,
+  type FakeHost,
+  fakeHost,
+  linuxDesktop,
+  macStatus,
+} from "./host.testing.ts";
 import { makeHelper, toolOf } from "../service/computerUse/helper.testing.ts";
 import { newTempDir } from "../platform/tempDir.testing.ts";
 import type { HostProbe } from "./probe.ts";
@@ -48,23 +55,6 @@ const run = <A, E>(
   );
 
 const tag = (status: ComputerUseStatus) => status.state._tag;
-
-/** A Linux Host with a live Wayland desktop in the Daemon's environment. */
-const linuxDesktop = async (host: FakeHost) => {
-  await host.listen(join(host.root, "run", "1000", "wayland-0"));
-
-  return host.probe({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" } });
-};
-
-const a11yInstalled = (host: FakeHost) =>
-  host.file(join(host.root, "dbus-1", "org.a11y.Bus.service"));
-
-/** busctl answering the a11y bus's address, and the registry's ping exiting `ping`. */
-const busctl = (host: FakeHost, ping: number) =>
-  host.command(
-    "busctl",
-    `case "$*" in *GetAddress*) printf 's "unix:path=/tmp/a11y"\\n';; *Ping*) exit ${ping};; esac`
-  );
 
 test("a Host with no desktop says so whether computer use is on or off", async () => {
   const host = fakeHost();

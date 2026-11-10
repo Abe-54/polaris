@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Queue, Schema, Stream } from "effect";
-import { Authorization, defaultAuthorize, HEADED_REFUSED, neverRefused } from "./authorize.ts";
+import {
+  Authorization,
+  mixedApps,
+  NAME_THE_APP,
+  SCREEN_NEEDS_APP,
+  unknownApp,
+  UNSEEN_TARGET,
+} from "./authorize.ts";
 import { HEADED_HINT } from "./envelope.ts";
 import { lockedMessage } from "./host.ts";
 import {
@@ -11,7 +18,8 @@ import {
   type DesktopMcpDeps,
   type DesktopServer,
 } from "./index.ts";
-import { countingAwake, error, fakeDeps, fakeHost, fakeRunner, ok } from "./testing.ts";
+import { takeover, tookOver, USER_ACTIVE_MS } from "./takeover.ts";
+import { allowAll, countingAwake, error, fakeDeps, fakeHost, fakeRunner, ok } from "./testing.ts";
 
 const sessionId = SessionId.make("ses-desktop");
 
@@ -157,11 +165,16 @@ describe("a call", () => {
   });
 
   test("an action the element can't do points at the headed tools too", async () => {
-    const { runner } = fakeRunner({ click: error("click", "ACTION_NOT_SUPPORTED") });
+    const { runner } = fakeRunner({
+      snapshot: ok("snapshot", { app: "Game", ref_count: 1, snapshot_id: "s2", tree: {} }),
+      click: error("click", "ACTION_NOT_SUPPORTED"),
+    });
 
-    const result = await withServer(fakeDeps(runner), (server) =>
-      call(server, "click", { ref: "@s2:e1" })
-    );
+    const result = await withServer(fakeDeps(runner), async (server) => {
+      await call(server, "snapshot", { app: "Game" });
+
+      return call(server, "click", { ref: "@s2:e1" });
+    });
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain(HEADED_HINT);
@@ -219,21 +232,32 @@ describe("the preview follows what a call acted on", () => {
 });
 
 describe("headed input", () => {
-  test("is refused while the flag is off", async () => {
+  test("is refused, with nothing sent, when the policy refuses it", async () => {
     const { runner, calls } = fakeRunner({});
-    const deps = fakeDeps(runner, { authorize: defaultAuthorize(() => false) });
+
+    const deps = fakeDeps(runner, {
+      authorize: {
+        ...allowAll,
+        use: (desktopCall) =>
+          Effect.succeed(
+            desktopCall.headed
+              ? Authorization.Refuse({ message: "no headed input" })
+              : Authorization.Allow({ asked: false })
+          ),
+      },
+    });
 
     const result = await withServer(deps, (server) =>
       call(server, "mouse_click", { x: 10, y: 20, app: "Dia" })
     );
 
-    expect(textOf(result)).toBe(HEADED_REFUSED);
-    expect(calls).toEqual([]);
+    expect(textOf(result)).toBe("no headed input");
+    expect(calls.some((args) => args.includes("mouse-click"))).toBe(false);
   });
 
-  test("runs with --headed once the flag is on, negative coordinates included", async () => {
+  test("runs with --headed once allowed, negative coordinates included", async () => {
     const { runner, calls } = fakeRunner({});
-    const deps = fakeDeps(runner, { authorize: defaultAuthorize(() => true) });
+    const deps = fakeDeps(runner);
 
     const result = await withServer(deps, (server) =>
       call(server, "mouse_click", { x: -100, y: 50, app: "Dia" })
@@ -247,25 +271,163 @@ describe("headed input", () => {
     expect(computerUseCallOf(result.content)?.headed).toBe(true);
   });
 
-  test("the authorize hook sees the app a ref belongs to", async () => {
-    const seen: Array<string | null> = [];
-    const { runner } = fakeRunner({ snapshot: TEXTEDIT_SNAPSHOT });
+  test("the policy is asked about the app a ref belongs to, by its bundle id", async () => {
+    const seen: Array<string> = [];
+
+    const { runner } = fakeRunner({
+      snapshot: TEXTEDIT_SNAPSHOT,
+      "list-apps": ok("list-apps", {
+        apps: [{ name: "TextEdit", bundle_id: "com.apple.TextEdit" }],
+      }),
+    });
 
     const deps = fakeDeps(runner, {
-      authorize: (desktopCall) =>
-        Effect.sync(() => {
-          seen.push(desktopCall.target.appName);
+      authorize: {
+        ...allowAll,
+        use: (desktopCall) =>
+          Effect.sync(() => {
+            seen.push(desktopCall.app.id);
 
-          return Authorization.Allow();
-        }),
+            return Authorization.Allow({ asked: false });
+          }),
+      },
     });
 
     await withServer(deps, async (server) => {
-      await call(server, "snapshot", { app: "TextEdit" });
+      await call(server, "snapshot", { app: "textedit" });
       await call(server, "click", { ref: "@s1abc:e2" });
     });
 
-    expect(seen).toEqual(["TextEdit", "TextEdit"]);
+    expect(seen).toEqual(["com.apple.TextEdit", "com.apple.TextEdit"]);
+  });
+});
+
+describe("which app a call is for", () => {
+  test("a call that names no app is refused before anything runs", async () => {
+    const { runner, calls } = fakeRunner({ snapshot: TEXTEDIT_SNAPSHOT });
+
+    const result = await withServer(fakeDeps(runner), (server) => call(server, "snapshot", {}));
+
+    expect(textOf(result)).toBe(NAME_THE_APP);
+    expect(calls).toEqual([]);
+  });
+
+  test("a name that fits two running apps is refused, an exact name isn't", async () => {
+    const { runner } = fakeRunner({
+      "list-apps": ok("list-apps", {
+        apps: [
+          { name: "Notes", bundle_id: "com.apple.Notes" },
+          { name: "Notesnook", bundle_id: "com.streetwriters.notesnook" },
+        ],
+      }),
+    });
+
+    const [vague, exact] = await withServer(fakeDeps(runner), async (server) => [
+      await call(server, "snapshot", { app: "Note" }),
+      await call(server, "snapshot", { app: "Notes" }),
+    ]);
+
+    expect(textOf(vague)).toBe(unknownApp("Note", "workbox"));
+    expect(computerUseCallOf(exact.content)).toMatchObject({
+      app: { id: "com.apple.Notes", name: "Notes" },
+    });
+  });
+
+  test("a window or ref of another app can't ride on the app the call names", async () => {
+    const { runner, calls } = fakeRunner({
+      "list-windows": ok("list-windows", [{ id: "w-9", title: "zsh", app_name: "Terminal" }]),
+      "list-apps": ok("list-apps", {
+        apps: [
+          { name: "TextEdit", bundle_id: "com.apple.TextEdit" },
+          { name: "Terminal", bundle_id: "com.apple.Terminal" },
+        ],
+      }),
+    });
+
+    const [mixed, unseen] = await withServer(fakeDeps(runner), async (server) => {
+      await call(server, "list_windows", {});
+
+      return [
+        await call(server, "focus_window", { app: "TextEdit", window_id: "w-9" }),
+        await call(server, "focus_window", { app: "TextEdit", window_id: "w-never-listed" }),
+      ];
+    });
+
+    expect(textOf(mixed)).toBe(mixedApps("TextEdit", "Terminal"));
+    expect(textOf(unseen)).toBe(UNSEEN_TARGET);
+    expect(calls.some((args) => args.includes("focus-window"))).toBe(false);
+  });
+
+  test("an app that isn't running and the Host doesn't know is refused", async () => {
+    const { runner, calls } = fakeRunner({});
+    const deps = fakeDeps(runner, { host: fakeHost({ identify: () => Effect.succeed(null) }) });
+
+    const result = await withServer(deps, (server) => call(server, "launch", { app: "Nope" }));
+
+    expect(textOf(result)).toBe(unknownApp("Nope", "workbox"));
+    expect(calls.some((args) => args.includes("launch"))).toBe(false);
+  });
+
+  test("the whole screen is captured only while the session controls an app", async () => {
+    const { runner, calls } = fakeRunner({});
+    let controlling = false;
+
+    const deps = fakeDeps(runner, {
+      authorize: { ...allowAll, controlling: () => Effect.sync(() => controlling) },
+    });
+
+    const refused = await withServer(deps, async (server) => {
+      const first = await call(server, "screenshot", { screen: 0 });
+      controlling = true;
+      await call(server, "screenshot", { screen: 0 });
+
+      return first;
+    });
+
+    expect(textOf(refused)).toBe(SCREEN_NEEDS_APP);
+    expect(calls.filter((args) => args.includes("screenshot"))).toHaveLength(1);
+  });
+});
+
+describe("the user taking over during headed input", () => {
+  const click = (idle: number | null, asked = false) => {
+    const { runner, calls } = fakeRunner({});
+
+    const deps = fakeDeps(runner, {
+      host: fakeHost({ inputIdle: Effect.sync(() => idle) }),
+      authorize: { ...allowAll, use: () => Effect.succeed(Authorization.Allow({ asked })) },
+    });
+
+    return withServer(deps, async (server) => ({
+      result: await call(server, "mouse_click", { x: 1, y: 2, app: "Dia" }),
+      sent: calls.some((args) => args.includes("mouse-click")),
+    }));
+  };
+
+  test("input a moment ago pauses the action and tells the agent", async () => {
+    const { result, sent } = await click(200);
+
+    expect(textOf(result)).toBe(tookOver("workbox"));
+    expect(sent).toBe(false);
+  });
+
+  test("an idle Host, and one that can't tell, let it through", async () => {
+    expect((await click(USER_ACTIVE_MS + 1)).sent).toBe(true);
+    expect((await click(null)).sent).toBe(true);
+  });
+
+  test("the user answering the approval is not a takeover", async () => {
+    expect((await click(200, true)).sent).toBe(true);
+  });
+
+  test("our own input isn't the user's, but input after it is", () => {
+    let now = 10_000;
+    const tracker = takeover(() => now);
+    tracker.acted();
+    now += 400;
+    expect(tracker.userActive(350)).toBe(false);
+    now += 2000;
+    expect(tracker.userActive(100)).toBe(true);
   });
 });
 
@@ -343,39 +505,5 @@ describe("Codex's way in", () => {
     );
 
     expect(refused).toBe(true);
-  });
-});
-
-describe("the default authorize", () => {
-  const deps = (runner: ReturnType<typeof fakeRunner>["runner"]) =>
-    fakeDeps(runner, { authorize: defaultAuthorize(() => true) });
-
-  test.each([["Terminal"], ["iterm2"], ["System Settings"]])("never launches %s", async (app) => {
-    const { runner, calls } = fakeRunner({});
-
-    const result = await withServer(deps(runner), (server) => call(server, "launch", { app }));
-
-    expect(textOf(result)).toBe(neverRefused(app));
-    expect(calls).toEqual([]);
-  });
-
-  test("refuses typing into a shell whose window an unscoped snapshot read", async () => {
-    const { runner, calls } = fakeRunner({
-      snapshot: ok("snapshot", {
-        app: "Terminal",
-        ref_count: 1,
-        snapshot_id: "s9",
-        window: { id: "w-1", title: "zsh" },
-      }),
-    });
-
-    const result = await withServer(deps(runner), async (server) => {
-      await call(server, "snapshot", {});
-
-      return call(server, "type", { ref: "@s9:e1", text: "rm -rf ~\n" });
-    });
-
-    expect(textOf(result)).toBe(neverRefused("Terminal"));
-    expect(calls.some((args) => args.includes("type"))).toBe(false);
   });
 });

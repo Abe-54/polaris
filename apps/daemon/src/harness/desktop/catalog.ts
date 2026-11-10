@@ -39,10 +39,12 @@ interface Definition<I> {
   readonly name: string;
   readonly description: string;
   readonly input: Schema.Codec<I, unknown>;
-  /** Real pointer and keyboard input: refused until the user approves it (D3). */
+  /** Real pointer and keyboard input: needs the user's headed-input approval for the app. */
   readonly headed: boolean;
   /** Reads the screen and changes nothing. */
   readonly observes: boolean;
+  /** About the Host, not one app, when the call names none: it runs without an app approval. */
+  readonly hostWide?: boolean;
   readonly argv: (input: I) => ReadonlyArray<string>;
   readonly target: (input: I) => Target;
 }
@@ -61,6 +63,7 @@ export interface DesktopTool {
   readonly input: Schema.Top;
   readonly headed: boolean;
   readonly observes: boolean;
+  readonly hostWide: boolean;
   /** None when the input doesn't fit the tool's schema. */
   readonly parse: (input: Json) => Option.Option<ParsedCall>;
 }
@@ -78,6 +81,7 @@ const tool = <I>(definition: Definition<I>): DesktopTool => {
     input: definition.input,
     headed: definition.headed,
     observes: definition.observes,
+    hostWide: definition.hostWide ?? false,
     parse: (json) =>
       Option.map(decode(json), (input) => ({
         argv: definition.argv(input),
@@ -233,6 +237,7 @@ const screenshot = tool({
   }),
   headed: false,
   observes: true,
+  hostWide: true,
   argv: (input) => [
     "screenshot",
     ...flag("app", input.app),
@@ -248,6 +253,7 @@ const listApps = tool({
   input: Schema.Struct({ app: optional(text("Only apps whose name matches this.")) }),
   headed: false,
   observes: true,
+  hostWide: true,
   argv: (input) => ["list-apps", ...flag("app", input.app)],
   target: () => none,
 });
@@ -258,6 +264,7 @@ const listWindows = tool({
   input: Schema.Struct({ app: optional(App) }),
   headed: false,
   observes: true,
+  hostWide: true,
   argv: (input) => ["list-windows", ...flag("app", input.app)],
   target: onApp,
 });

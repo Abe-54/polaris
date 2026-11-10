@@ -47,9 +47,8 @@ import { HarnessRpcsLive } from "../harness/HarnessRpcs.ts";
 import { latestRolloutLimits, PlanLimitReporter } from "../harness/limits/index.ts";
 import { HarnessRegistryLive } from "../harness/registry.ts";
 import { BrowserMcp } from "../harness/browser/index.ts";
-import { DesktopMcp } from "../harness/desktop/index.ts";
+import { computerUseDesktopHost, DesktopMcp } from "../harness/desktop/index.ts";
 import { AgentDesktop } from "../install/agentDesktop/index.ts";
-import { ComputerUseHelper } from "../service/computerUse/index.ts";
 import { AgentBrowser } from "../install/agentBrowser/index.ts";
 import { releaseMemory, releaseWhenQuiet } from "../memory/index.ts";
 import { userPath } from "../service/userPath.ts";
@@ -92,7 +91,7 @@ import { lazyReviewer } from "./lazyReviewer.ts";
 import { lazyUsage } from "./lazyUsage.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
-import { ComputerUseHost, ComputerUseHostRpcHandlers } from "../computerUse/index.ts";
+import { AppControl, ComputerUseHost, ComputerUseHostRpcHandlers } from "../computerUse/index.ts";
 import { ComputerUseHelper } from "../service/computerUse/index.ts";
 
 /** Exit status when another Daemon already holds the lock or answers on the socket. */
@@ -121,9 +120,21 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
-/** Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS. */
-const desktopMcp = DesktopMcp.layer.pipe(
+/**
+ * Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS. The tools
+ * follow `ComputerUseHost`'s status and ask `AppControl` before each app; D4 replaces `acted`.
+ */
+const desktopMcp = DesktopMcp.layerOn(computerUseDesktopHost, AppControl).pipe(
   Layer.provide(Layer.mergeAll(ComputerUseHelper.layer, AgentDesktop.layer))
+);
+
+/** `AppControl` sits under the Engine it asks for approvals: bound once the Engine is up. */
+const appApprovals = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const engine = yield* Engine;
+
+    yield* (yield* AppControl).bind(engine.requestAppApproval);
+  })
 );
 
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
@@ -145,7 +156,10 @@ export const traceServices = lazyTraces.pipe(
   Layer.provide(Layer.merge(ReviewerPolicyLive, traceWorkspaceTrust))
 );
 
-export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).pipe(
+export const engineServices = Layer.mergeAll(
+  appApprovals.pipe(Layer.provideMerge(Engine.layer)),
+  releaseWhenQuiet()
+).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       ConstellationHarness.layer,
@@ -172,6 +186,7 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).
   Layer.provideMerge(DeveloperModeLive),
   // Computer use on this Host: its RPCs and the polaris_desktop tools read one status (ENG-846).
+  Layer.provideMerge(AppControl.layer),
   Layer.provideMerge(ComputerUseHost.layer.pipe(Layer.provideMerge(ComputerUseHelper.layer))),
   Layer.provideMerge(EventStore.layerLive)
 );

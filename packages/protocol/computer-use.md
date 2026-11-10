@@ -2,7 +2,7 @@
 
 What the Daemon, the Desktop App, the Mobile App and Extensions build against for computer use (ENG-846, ADR 0104). The schemas are in `src/computerUse.ts`, the policy in `src/computerUsePolicy.ts`, and the additions to existing types in `src/domain.ts`. The policy is specified in `packages/spec/computer-use.qnt`.
 
-The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemon/src/computerUse/`) and announces `computer-use`. `computerUse.app` and the preview still answer `Unsupported` (`apps/daemon/src/transport/computerUseDefaults.ts`, a layer of its own that the real handlers replace), and the Engine doesn't send the two approval kinds yet.
+The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemon/src/computerUse/`) and announces `computer-use`. `computerUse.app` and the preview still answer `Unsupported` (`apps/daemon/src/transport/computerUseDefaults.ts`, a layer of its own that the real handlers replace). The Engine sends the two approval kinds (`apps/daemon/src/engine/appApprovals.ts`), with `app.icon` null until `computerUse.app` is served.
 
 `COMPUTER_USE_RPC_TAGS` lists the ten RPCs. The SDK's Client group (`ExtensionClientRpcs`) leaves them out, as it does Requests: no Extension may call them.
 
@@ -72,7 +72,7 @@ Two new `ApprovalKind`s. Both carry the app in `ApprovalRequest.app` (a `Desktop
 
 `decideAppUse(policy, { sessionId, appId, headed })` answers the first that applies:
 
-1. `Refused`: the app is on the built-in always-refused list. No approval and no always-allow reaches it.
+1. `Refused`: the app is on the built-in always-refused list. No approval reaches it; the Daemon leaves an app off that list while the Host's always-allowed list names it.
 2. `InUse { by }`: another session controls the app. The tool call is refused; there is no queue.
 3. `NeedsApproval { kind: "app" }`: the app is neither always-allowed nor allowed for this session.
 4. `NeedsApproval { kind: "headed-input" }`: the use is headed, and headed input is not allowed for this session in this app.

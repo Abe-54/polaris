@@ -1,5 +1,7 @@
 /** A fake agent-desktop at the process boundary: canned envelopes by command, every argv kept. */
+import { AppId, AppRef } from "@polaris/protocol";
 import { Effect, type Schema, Stream } from "effect";
+import { Authorization, type Authorize } from "./authorize.ts";
 import type { DisplayAwake } from "./awake.ts";
 import type { DesktopHost } from "./host.ts";
 import type { DesktopMcpDeps } from "./index.ts";
@@ -38,10 +40,21 @@ export const fakeRunner = (answers: Readonly<Record<string, string>>) => {
   return { runner, calls, commandOf };
 };
 
+/** Every app allowed, unasked: for tests of what isn't the policy. */
+export const allowAll: Authorize = {
+  use: () => Effect.succeed(Authorization.Allow({ asked: false })),
+  controlling: () => Effect.succeed(true),
+  release: () => Effect.void,
+  forget: () => Effect.void,
+};
+
 export const fakeHost = (overrides: Partial<DesktopHost> = {}): DesktopHost => ({
   ready: Effect.succeed(true),
   env: Effect.succeed({}),
   locked: Effect.succeed(false),
+  inputIdle: Effect.succeed(null),
+  // Like a Host with no bundle ids: an app that isn't running is known by the name asked.
+  identify: (app) => Effect.succeed(new AppRef({ id: AppId.make(app), name: app })),
   name: "workbox",
   ...overrides,
 });
@@ -70,6 +83,7 @@ export const fakeDeps = (
     title: () => Effect.succeed("Fill in the quarterly report in Numbers please"),
     turnEnds: () => Effect.succeed(Stream.never),
   },
+  authorize: allowAll,
   awake: countingAwake().awake,
   ...overrides,
 });

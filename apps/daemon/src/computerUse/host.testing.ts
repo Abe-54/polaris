@@ -95,3 +95,20 @@ export const macStatus = (accessibility: string, screenRecording: string) =>
       platform: "macos",
     },
   });
+
+/** A Linux Host with a live Wayland desktop in the Daemon's environment. */
+export const linuxDesktop = async (host: FakeHost) => {
+  await host.listen(join(host.root, "run", "1000", "wayland-0"));
+
+  return host.probe({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" } });
+};
+
+export const a11yInstalled = (host: FakeHost) =>
+  host.file(join(host.root, "dbus-1", "org.a11y.Bus.service"));
+
+/** busctl answering the a11y bus's address, and the registry's ping exiting `ping`. */
+export const busctl = (host: FakeHost, ping: number) =>
+  host.command(
+    "busctl",
+    `case "$*" in *GetAddress*) printf 's "unix:path=/tmp/a11y"\\n';; *Ping*) exit ${ping};; esac`
+  );

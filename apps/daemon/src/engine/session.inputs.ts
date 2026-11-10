@@ -3,6 +3,7 @@
  * commands and engine signals, as Effect Schemas, and what it emits.
  */
 import {
+  Actor,
   AgentSession,
   BackgroundTask,
   ApprovalDecision,
@@ -60,7 +61,13 @@ export const eventSchemas = {
     })
   ),
   "approval.respond": standard(
-    Schema.Struct({ requestId: RequestId, decision: ApprovalDecision, resolvedBy: Schema.String })
+    Schema.Struct({
+      requestId: RequestId,
+      decision: ApprovalDecision,
+      resolvedBy: Schema.String,
+      /** Who answers: an Extension can't always-allow an app (`appDecisionRefusal`). */
+      actor: Schema.optionalKey(Schema.NullOr(Actor)),
+    })
   ),
   "permissionMode.set": standard(Schema.Struct({ permissionMode: PermissionMode })),
   "model.set": standard(
@@ -185,6 +192,8 @@ export const isEmitted = (event: EventObject): event is Emitted => EMITTED.has(e
 export const normalizedInput = (input: SessionInput, at: string) => {
   if (input.type === "idle.timeout")
     return { ...input, backgroundExpired: input.backgroundExpired ?? false, at: input.at ?? at };
+
+  if (input.type === "approval.respond") return { ...input, actor: input.actor ?? null };
 
   if (input.type === "daemon.recover")
     return { ...input, stoppedFor: input.stoppedFor ?? input.cause };

@@ -7,7 +7,6 @@ import {
   AgentSession,
   answerAppApproval,
   type AppApprovalKind,
-  appDecisionRefusal,
   AppId,
   type AppPolicy,
   ApprovalDecision,
@@ -218,18 +217,13 @@ class Actual {
 
     if (request === undefined) return;
 
-    // A refused answer never reaches the machine, so the card stays; the policy sees it anyway.
-    const decided =
-      appDecisionRefusal(kind, decision) === null
-        ? this.decide(s, {
-            type: "approval.respond",
-            requestId: request.id,
-            decision,
-            resolvedBy: "model",
-          }).flatMap((event) =>
-            DomainEvent.guards.ApprovalResolved(event) ? [event.decision] : []
-          )
-        : [decision];
+    // The machine refuses an answer `appDecisionRefusal` refuses: no event, so the card stays.
+    const decided = this.decide(s, {
+      type: "approval.respond",
+      requestId: request.id,
+      decision,
+      resolvedBy: "model",
+    }).flatMap((event) => (DomainEvent.guards.ApprovalResolved(event) ? [event.decision] : []));
 
     for (const made of decided)
       this.policy = answerAppApproval(
