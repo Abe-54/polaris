@@ -4,6 +4,7 @@
  * the Client's sequence) up to the cut, `Synchronized`, then live items after it.
  */
 import {
+  type ApprovalRequest,
   type Capability,
   HostStreamItem,
   NotFound,
@@ -73,11 +74,19 @@ const decodes =
     return needed === null || capabilities.includes(needed);
   };
 
-/** Pending requests a Client can decode: a Secret Request only with `approval.secret`. */
+/** Kinds only a Client that announced their capability decodes. */
+const GATED_KINDS: Partial<Record<ApprovalRequest["kind"], Capability>> = {
+  secret: "approval.secret",
+  "computer-use": "computer-use",
+};
+
+/** Pending requests a Client can decode: a gated kind only with its capability. */
 const pendingFor = (record: SessionRecord, capabilities: ReadonlyArray<Capability>) =>
-  [...record.pending.values()].filter(
-    (request) => request.kind !== "secret" || capabilities.includes("approval.secret")
-  );
+  [...record.pending.values()].filter((request) => {
+    const needed = GATED_KINDS[request.kind];
+
+    return needed === undefined || capabilities.includes(needed);
+  });
 
 const summaryOf = (
   record: SessionRecord,

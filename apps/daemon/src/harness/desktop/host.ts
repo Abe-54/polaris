@@ -1,16 +1,20 @@
 /**
- * What `polaris_desktop` needs from the Host: whether computer use is ready (D1's status),
- * the environment agent-desktop needs to reach the display, and whether the screen is locked.
+ * What `polaris_desktop` needs from the Host: computer use's state (D1's status), the
+ * environment agent-desktop needs to reach the display, and whether the screen is locked.
  */
-import { Effect } from "effect";
+import { ComputerUseState } from "@polaris/protocol";
+import { Effect, Predicate, Stream } from "effect";
+import { ComputerUseHost } from "../../computerUse/index.ts";
 import { AgentDesktop } from "../../install/agentDesktop/index.ts";
 import { shortHostName } from "../../service/hostName.ts";
 import { ComputerUseHelper } from "../../service/computerUse/index.ts";
 import type { Env } from "./runner.ts";
 
 export interface DesktopHost {
-  /** Rechecks the Host: true when sessions get the tools (D1's `Ready`). */
-  readonly ready: Effect.Effect<boolean>;
+  /** Rechecks the Host: `Ready` gets the tools, `Off` and `NeedsSetup` the request tool. */
+  readonly state: Effect.Effect<ComputerUseState>;
+  /** Completes once the Host is `Ready`. */
+  readonly untilReady: Effect.Effect<void>;
   /** Merged into agent-desktop's environment (D1's `desktopEnv`: the display on Linux). */
   readonly env: Effect.Effect<Env>;
   readonly locked: Effect.Effect<boolean>;
@@ -23,6 +27,13 @@ export const lockedMessage = (host: string) => `The screen on ${host} is locked.
 /** `IOConsoleLocked` in the IORegistry root: true while the login window covers the session. */
 export const consoleLocked = (ioreg: string): boolean =>
   /<key>IOConsoleLocked<\/key>\s*<true\/>/.test(ioreg);
+
+const fromReady = (ready: Effect.Effect<boolean>) => ({
+  state: Effect.map(ready, (yes) =>
+    yes ? ComputerUseState.cases.Ready.make({}) : ComputerUseState.cases.NoDesktop.make({})
+  ),
+  untilReady: Effect.never,
+});
 
 const macLocked = Effect.tryPromise(async () => {
   const proc = Bun.spawn(["/usr/sbin/ioreg", "-n", "Root", "-d1", "-a"], {
@@ -45,9 +56,11 @@ export const localDesktopHost = Effect.gen(function* () {
     const helper = yield* ComputerUseHelper;
 
     return {
-      ready: helper.permissions.pipe(
-        Effect.map((permissions) => permissions.state === "ready"),
-        Effect.orElseSucceed(() => false)
+      ...fromReady(
+        helper.permissions.pipe(
+          Effect.map((permissions) => permissions.state === "ready"),
+          Effect.orElseSucceed(() => false)
+        )
       ),
       env: Effect.succeed({}),
       locked: macLocked,
@@ -58,12 +71,31 @@ export const localDesktopHost = Effect.gen(function* () {
   const agentDesktop = yield* AgentDesktop;
 
   return {
-    ready: agentDesktop.current.pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false)
+    ...fromReady(
+      agentDesktop.current.pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false)
+      )
     ),
     env: Effect.succeed({}),
     locked: Effect.succeed(false),
     name,
+  } satisfies DesktopHost;
+});
+
+/** D1's `ComputerUseHost`: its state, rechecked on each session's open, and its display env. */
+export const computerUseDesktopHost = Effect.gen(function* () {
+  const host = yield* ComputerUseHost;
+
+  return {
+    state: Effect.map(host.ensure, (status) => status.state),
+    untilReady: host.changes.pipe(
+      Stream.filter((status) => Predicate.isTagged(status.state, "Ready")),
+      Stream.runHead,
+      Effect.asVoid
+    ),
+    env: host.desktopEnv,
+    locked: process.platform === "darwin" ? macLocked : Effect.succeed(false),
+    name: shortHostName(),
   } satisfies DesktopHost;
 });

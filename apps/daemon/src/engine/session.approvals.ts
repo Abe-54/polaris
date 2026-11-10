@@ -1,10 +1,11 @@
-/** Approval rules the Session machine applies: Secret Requests' decisions, and withdrawals. */
+/** Approval rules the Session machine applies: Secret and computer use requests' decisions, and withdrawals. */
 import {
   ApprovalDecision,
   DomainEvent,
   type ApprovalRequest,
   type RequestId,
 } from "@polaris/protocol";
+import { Predicate } from "effect";
 import type { SessionRecord } from "../store/model.ts";
 import { workingTurn } from "../store/model.ts";
 
@@ -28,6 +29,10 @@ export const decisionRefusal = (
   decision: ApprovalDecision
 ): string | null => {
   const request = record.pending.get(requestId);
+
+  // Only Not now answers it; turning computer use on clears it (the Daemon withdraws it).
+  if (request?.kind === "computer-use" && !Predicate.isTagged(decision, "Deny"))
+    return "a computer use request takes Not now, or clears once computer use is on";
   const secret = request?.kind === "secret";
   const attach = request?.profileAttach !== undefined;
 

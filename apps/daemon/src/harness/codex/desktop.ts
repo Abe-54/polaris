@@ -6,9 +6,6 @@ import { Effect } from "effect";
 import type { OpenOptions } from "../HarnessDriver.ts";
 import { DESKTOP_MCP_NAME, type DesktopMcp } from "../desktop/index.ts";
 
-/** Longer than the slowest agent-desktop command the runner waits for (90 s). */
-const DESKTOP_TOOL_TIMEOUT_SECONDS = 120;
-
 /** Set on every thread, with or without polaris_desktop. */
 export const CODEX_COMPUTER_USE_OFF = { "features.computer_use": false } as const;
 
@@ -26,7 +23,7 @@ export const codexDesktopConfig = Effect.fnUntraced(function* (
     ...CODEX_COMPUTER_USE_OFF,
     [`mcp_servers.${DESKTOP_MCP_NAME}`]: {
       url: yield* server.url,
-      tool_timeout_sec: DESKTOP_TOOL_TIMEOUT_SECONDS,
+      tool_timeout_sec: server.callSeconds,
       tools: Object.fromEntries(
         server.tools.map((t) => [t.name, { approval_mode: "approve" }] as const)
       ),

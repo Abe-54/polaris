@@ -93,7 +93,6 @@ import { lazyUsage } from "./lazyUsage.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
 import { ComputerUseHost, ComputerUseHostRpcHandlers } from "../computerUse/index.ts";
-import { ComputerUseHelper } from "../service/computerUse/index.ts";
 
 /** Exit status when another Daemon already holds the lock or answers on the socket. */
 export const SERVE_EXIT_ALREADY_RUNNING = 75;
@@ -121,7 +120,10 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
-/** Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS. */
+/**
+ * Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS, on the
+ * ComputerUseHost below. The Engine binds its requests to it, so it is merged in beside harnesses.
+ */
 const desktopMcp = DesktopMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(ComputerUseHelper.layer, AgentDesktop.layer))
 );
@@ -152,6 +154,7 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
       ConstellationLiveness.proxyLayer,
       lazyHostResources,
       harnesses,
+      desktopMcp,
       CheckpointsLive,
       WorktreeTrackerLive,
       ReviewCheckoutGitLive,

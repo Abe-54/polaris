@@ -325,7 +325,8 @@ const make = Effect.gen(function* () {
           .get(command.sessionId)
           ?.pending.get(command.requestId);
 
-        return request !== undefined && daemonOwned(request)
+        // A computer use request is Polaris's own; its waiting call reads the answer.
+        return request !== undefined && (daemonOwned(request) || request.kind === "computer-use")
           ? Effect.void
           : respond(command.sessionId, command.requestId, command.decision);
       },

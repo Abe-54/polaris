@@ -35,6 +35,7 @@ import {
   type Turn,
 } from "@polaris/protocol";
 import { Context, Effect, Layer, Option, type Stream } from "effect";
+import { DesktopMcp } from "../harness/desktop/index.ts";
 import type { ServiceError } from "../services.ts";
 import { registerHandoffContributor } from "../service/upgrade.ts";
 import { AutoArchive } from "./autoArchive.ts";
@@ -52,6 +53,7 @@ import {
   Streams,
   type TurnPageRequest,
 } from "./streams.ts";
+import { ComputerUseRequests } from "./computerUseRequests.ts";
 import { SecretRequests } from "./secretRequests.ts";
 import { Supervisor } from "./supervisor.ts";
 import { TerminalHandoff } from "./terminal.ts";
@@ -147,7 +149,7 @@ const EngineParts = Layer.mergeAll(Dispatcher.layer, Streams.layer).pipe(
     )
   ),
   Layer.provideMerge(Supervisor.layer),
-  Layer.provideMerge(SecretRequests.layer),
+  Layer.provideMerge(Layer.merge(SecretRequests.layer, ComputerUseRequests.layer)),
   Layer.provideMerge(EngineRuntime.layer),
   (parts) =>
     Layer.mergeAll(LimitResume.layer, AutoArchive.layer, IdleCompaction.layer).pipe(
@@ -165,6 +167,8 @@ const make = Effect.gen(function* () {
   const autoArchive = yield* AutoArchive;
   const idleCompaction = yield* IdleCompaction;
   const secrets = yield* SecretRequests;
+  const computerUse = yield* ComputerUseRequests;
+  const desktop = yield* Effect.serviceOption(DesktopMcp);
   const prepareForUpgrade = prepareSessionsForUpgrade(runtime);
   const prepareForRestart = prepareSessionsForUpgrade(runtime, "restart");
 
@@ -180,6 +184,8 @@ const make = Effect.gen(function* () {
     beforeExec: prepareForUpgrade,
   });
 
+  // The Harness registry is built before the Engine, so polaris_desktop gets its requests here.
+  if (Option.isSome(desktop)) yield* desktop.value.bindRequests(computerUse.request);
   yield* pruning.startSweeper;
   yield* (yield* LimitResume).start;
   yield* autoArchive.start;

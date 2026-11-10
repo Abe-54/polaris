@@ -216,6 +216,51 @@ for (const mutant of ["headed", "lock", "removed"]) {
   );
 }
 
+run("Computer use request scenarios", ["test", "polaris.qnt", "--main=computer_use_request"]);
+
+const computerUseRequest = run("Computer use request safety", [
+  "run",
+  "polaris.qnt",
+  "--main=computer_use_request",
+  "--invariant=safety",
+  `--max-samples=${samples}`,
+  "--max-steps=60",
+  `--seed=${seed}`,
+  "--verbosity=1",
+  "--witnesses",
+  "witnessReopened",
+  "witnessNotNow",
+]);
+
+if (/was witnessed in 0 trace/.test(computerUseRequest)) {
+  failed = true;
+  console.log(
+    "✗ a computer use request witness was never reached: the simulation no longer covers it"
+  );
+}
+
+for (const mutant of ["reopen", "allow"]) {
+  const main = `computer_use_request_${mutant}_mutant`;
+  run(`Computer use request ${mutant} regression witness`, [
+    "test",
+    "polaris.qnt",
+    `--main=${main}`,
+  ]);
+  run(
+    `Computer use request ${mutant} mutant violates safety`,
+    [
+      "run",
+      "polaris.qnt",
+      `--main=${main}`,
+      "--invariant=safety",
+      `--max-samples=${samples}`,
+      "--max-steps=60",
+      `--seed=${seed}`,
+    ],
+    true
+  );
+}
+
 run("typecheck polaris_test.qnt", ["typecheck", "polaris_test.qnt"]);
 
 run("typecheck worker-admission.qnt", ["typecheck", "worker-admission.qnt"]);

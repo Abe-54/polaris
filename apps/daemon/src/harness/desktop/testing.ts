@@ -1,4 +1,5 @@
 /** A fake agent-desktop at the process boundary: canned envelopes by command, every argv kept. */
+import { ComputerUseState } from "@polaris/protocol";
 import { Effect, type Schema, Stream } from "effect";
 import type { DisplayAwake } from "./awake.ts";
 import type { DesktopHost } from "./host.ts";
@@ -38,8 +39,15 @@ export const fakeRunner = (answers: Readonly<Record<string, string>>) => {
   return { runner, calls, commandOf };
 };
 
+export const READY = ComputerUseState.cases.Ready.make({});
+
+export const OFF = ComputerUseState.cases.Off.make({});
+
+export const NO_DESKTOP = ComputerUseState.cases.NoDesktop.make({});
+
 export const fakeHost = (overrides: Partial<DesktopHost> = {}): DesktopHost => ({
-  ready: Effect.succeed(true),
+  state: Effect.succeed(READY),
+  untilReady: Effect.never,
   env: Effect.succeed({}),
   locked: Effect.succeed(false),
   name: "workbox",
