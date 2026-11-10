@@ -11,6 +11,9 @@ import {
 // Android runs only on macOS and Linux, so its SDK paths are POSIX paths.
 import { posix } from "node:path";
 import type { PlatformFacts } from "../platform/index.ts";
+import { androidPossible, iosPossible } from "./service.ts";
+
+export { androidPossible, iosPossible, simulatorCapable } from "./service.ts";
 
 export interface CommandResult {
   readonly exitCode: number;
@@ -58,20 +61,6 @@ const unsupported = SimulatorSupport.cases.Unsupported.make({});
 
 const needs = (missing: ReadonlyArray<SimulatorRequirement>) =>
   missing.length === 0 ? ready : SimulatorSupport.cases.NeedsSetup.make({ missing });
-
-/** iOS Simulators run only on a Mac. */
-export const iosPossible = (facts: PlatformFacts): boolean => facts.os === "darwin";
-
-/**
- * Google ships the emulator for macOS and glibc Linux on x64; Linux on arm64 (the Pi) has none.
- * Windows waits until the hub is proven there.
- */
-export const androidPossible = (facts: PlatformFacts): boolean =>
-  facts.os === "darwin" || (facts.os === "linux" && facts.arch === "x64" && facts.libc === "glibc");
-
-/** Whether `simulator` is advertised: some platform isn't `Unsupported`. A pure check, no I/O. */
-export const simulatorCapable = (facts: PlatformFacts): boolean =>
-  iosPossible(facts) || androidPossible(facts);
 
 const answered = (result: CommandResult | "timeout" | null): result is CommandResult =>
   result !== null && result !== "timeout";

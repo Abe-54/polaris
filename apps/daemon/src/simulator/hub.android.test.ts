@@ -5,7 +5,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { Effect, Option, Predicate, Stream } from "effect";
 import { SimulatorHub } from "./hub.ts";
-import { EMULATOR, fakeHost, OURS, until } from "./hub.testing.ts";
+import { EMULATOR, fakeHost, hubsStopped, OURS, until } from "./hub.testing.ts";
 
 // The fake hub's waits (`until`) allow 10 s on a loaded run.
 setDefaultTimeout(20_000);
@@ -62,7 +62,7 @@ describe("Android Emulators through the hub", () => {
       Effect.gen(function* () {
         yield* hub.boot(OURS);
         yield* hub.boot(EMULATOR);
-        yield* Effect.promise(() => until(() => host.log().some((l) => l.startsWith("term "))));
+        yield* Effect.promise(() => until(() => hubsStopped(host.log())));
       })
     );
 

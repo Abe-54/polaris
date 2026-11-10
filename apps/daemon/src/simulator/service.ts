@@ -1,6 +1,6 @@
 /**
- * The `SimulatorHub` service: the Host's Simulators behind the `simulator.*` RPCs and the
- * Simulator MCP server. Only types here, so the Daemon starts without loading the hub (`hub.ts`).
+ * What the Daemon loads of the Simulator at start: the `SimulatorHub` and `SimulatorMcp` service
+ * tags and the pure capability check. The hub (`hub.ts`) and the MCP server load on first use.
  */
 import type {
   HubFailed,
@@ -14,7 +14,24 @@ import type {
   SimulatorWatchItem,
   Unsupported,
 } from "@polaris/protocol";
-import { Context, type Effect, type Scope, type Stream } from "effect";
+import { Context, Effect, Layer, type Schema, type Scope, type Stream } from "effect";
+import type { SimulatorTool } from "../harness/simulator/tools.ts";
+import type { ToolResult } from "../harness/simulator/session.ts";
+import type { PlatformFacts } from "../platform/index.ts";
+
+/** iOS Simulators run only on a Mac. */
+export const iosPossible = (facts: PlatformFacts): boolean => facts.os === "darwin";
+
+/**
+ * Google ships the emulator for macOS and glibc Linux on x64; Linux on arm64 (the Pi) has none.
+ * Windows waits until the hub is proven there.
+ */
+export const androidPossible = (facts: PlatformFacts): boolean =>
+  facts.os === "darwin" || (facts.os === "linux" && facts.arch === "x64" && facts.libc === "glibc");
+
+/** Whether `simulator` is advertised: some platform isn't `Unsupported`. A pure check, no I/O. */
+export const simulatorCapable = (facts: PlatformFacts): boolean =>
+  iosPossible(facts) || androidPossible(facts);
 
 type SimulatorError = SimulatorNotFound | SimulatorUnavailable | HubFailed | Unsupported;
 
@@ -45,3 +62,36 @@ export class SimulatorHub extends Context.Service<
     readonly agentBooted: (id: string) => Effect.Effect<void>;
   }
 >()("polaris/daemon/simulator/SimulatorHub") {}
+
+/** Not `simulator`: a user's own server of that name would shadow or be shadowed by it. */
+export const SIMULATOR_MCP_NAME = "polaris_simulator";
+
+/** Codex's per-call limit: past the 45 s a call waits before saying it carries on. */
+export const SIMULATOR_TOOL_TIMEOUT_SECONDS = 120;
+
+/**
+ * The session's tools two ways: `url` (its token in the path) for a Harness that takes the
+ * config off argv, and `call` in-process for one whose config `ps` would show.
+ */
+export interface SimulatorMcpServer {
+  readonly url: string;
+  readonly tools: ReadonlyArray<SimulatorTool>;
+  readonly call: (name: string, input: typeof Schema.Json.Type) => Promise<ToolResult>;
+}
+
+export class SimulatorMcp extends Context.Service<
+  SimulatorMcp,
+  {
+    /**
+     * The session's server while the scope lasts, or null on a Host that can't run Simulators
+     * or when setup fails: never a failure, so the session opens without Simulator tools.
+     */
+    readonly forSession: (
+      sessionId: SessionId
+    ) => Effect.Effect<SimulatorMcpServer | null, never, Scope.Scope>;
+  }
+>()("polaris/daemon/harness/SimulatorMcp") {
+  static readonly none = Layer.succeed(SimulatorMcp)(
+    SimulatorMcp.of({ forSession: () => Effect.succeed(null) })
+  );
+}

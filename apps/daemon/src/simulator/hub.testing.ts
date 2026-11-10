@@ -156,3 +156,13 @@ export const alive = (pid: number | null) => {
     return false;
   }
 };
+
+/**
+ * Every hub the fake started has exited, and one did. By pid, not its `term` line: Windows ends
+ * a process on SIGTERM without running its handler.
+ */
+export const hubsStopped = (log: ReadonlyArray<string>) => {
+  const pids = log.flatMap((line) => (line.startsWith("start ") ? [Number(line.slice(6))] : []));
+
+  return pids.length > 0 && pids.every((pid) => !alive(pid));
+};

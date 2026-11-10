@@ -123,12 +123,12 @@ export const spawnHub = async (
   const proc = Bun.spawn(
     [...command.argv, "--host", "127.0.0.1", "--port", String(port), "--require-token"],
     {
-      env: {
-        ...childEnv(),
+      env: childEnv({
+        ...process.env,
         ...command.env,
         EXPO_DEVICE_HUB_STATE_DIR: stateDir,
         TMPDIR: `${tmpDir}/`,
-      },
+      }),
       stdin: "ignore",
       stdout: Bun.file(join(dir, "hub.log")),
       stderr: Bun.file(join(dir, "hub.err.log")),

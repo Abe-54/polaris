@@ -3,7 +3,7 @@ import type { SimulatorAttachItem } from "@polaris/protocol";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Fiber, Stream } from "effect";
 import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
-import { alive, fakeHost, OURS, until, USERS } from "./hub.testing.ts";
+import { alive, fakeHost, hubsStopped, OURS, until, USERS } from "./hub.testing.ts";
 
 // The fake hub's waits (`until`) allow 10 s on a loaded run.
 setDefaultTimeout(20_000);
@@ -54,7 +54,7 @@ describe("SimulatorHub lifecycle", () => {
         expect(alive(pid)).toBe(true);
 
         yield* detach;
-        yield* Effect.promise(() => until(() => host.log().includes(`term ${pid}`)));
+        yield* Effect.promise(() => until(() => !alive(pid)));
         expect(host.log()).toContain(`shutdown ${OURS}`);
         expect(host.log()).not.toContain(`shutdown ${USERS}`);
         expect(host.booted(USERS)).toBe(true);
@@ -71,7 +71,7 @@ describe("SimulatorHub lifecycle", () => {
       Effect.flatMap(SimulatorHub, (hub) =>
         Effect.gen(function* () {
           yield* hub.agentBooted(OURS);
-          yield* Effect.promise(() => until(() => host.log().some((l) => l.startsWith("term "))));
+          yield* Effect.promise(() => until(() => hubsStopped(host.log())));
         })
       ).pipe(Effect.provide(host.layer()))
     );
@@ -93,7 +93,7 @@ describe("SimulatorHub lifecycle", () => {
           host.stale(false);
           const pid = pidOf(hub);
 
-          yield* Effect.promise(() => until(() => host.log().includes(`term ${pid}`)));
+          yield* Effect.promise(() => until(() => !alive(pid)));
           expect(host.log()).toContain(`shutdown ${OURS}`);
         })
       ).pipe(Effect.provide(host.layer()))
@@ -124,7 +124,7 @@ describe("SimulatorHub lifecycle", () => {
         host.wedge(true);
         yield* Effect.promise(() => until(() => items.length === 2));
         host.wedge(false);
-        expect(host.log()).toContain(`term ${wedged}`);
+        yield* Effect.promise(() => until(() => !alive(wedged)));
 
         yield* hub.restart;
         yield* Effect.promise(() => until(() => items.length === 3));

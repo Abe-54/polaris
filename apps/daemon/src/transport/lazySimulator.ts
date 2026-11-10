@@ -1,8 +1,7 @@
+import { SimulatorRpcs } from "@polaris/protocol";
 import { Context, Effect, Layer, Stream } from "effect";
-import { SimulatorMcp } from "../harness/simulator/service.ts";
 import { hostPlatform } from "../platform/index.ts";
-import { SimulatorHub } from "../simulator/service.ts";
-import { simulatorCapable } from "../simulator/support.ts";
+import { SimulatorHub, SimulatorMcp, simulatorCapable } from "../simulator/service.ts";
 import type { EventStore } from "../store/EventStore.ts";
 import { cacheDaemonBuild } from "./lazy.ts";
 
@@ -55,5 +54,21 @@ export const lazySimulator = Layer.fromBuild((memoMap, scope) =>
         agentBooted: (id) => Effect.flatMap(hub, (loaded) => loaded.agentBooted(id)),
       })
     ).pipe(Context.add(SimulatorMcp, mcp));
+  })
+);
+
+/** The `simulator.*` RPCs over `SimulatorHub`; `defaults/features.ts` answers them elsewhere. */
+export const SimulatorRpcHandlers = SimulatorRpcs.toLayer(
+  Effect.gen(function* () {
+    const hub = yield* SimulatorHub;
+
+    return {
+      "simulator.watch": () => hub.watch,
+      "simulator.boot": ({ id }) => hub.boot(id),
+      "simulator.shutdown": ({ id, force }) => hub.shutdown(id, force === true),
+      "simulator.restart": () => hub.restart,
+      "simulator.attach": ({ sessionId, id }) => hub.attach(sessionId, id),
+      "simulator.sessionFeed": ({ sessionId }) => hub.sessionFeed(sessionId),
+    };
   })
 );

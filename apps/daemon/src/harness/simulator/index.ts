@@ -18,7 +18,7 @@ import { sessionPath, simulatorMcpHttp } from "./http.ts";
 import { failure, type SimulatorSession, simulatorSession } from "./session.ts";
 import type { Platform } from "./platforms.ts";
 import { possiblePlatforms, setupBlocker } from "./setup.ts";
-import { SimulatorMcp } from "./service.ts";
+import { SimulatorMcp } from "../../simulator/service.ts";
 import { simulatorTools } from "./tools.ts";
 
 export {
@@ -26,7 +26,7 @@ export {
   SIMULATOR_TOOL_TIMEOUT_SECONDS,
   SimulatorMcp,
   type SimulatorMcpServer,
-} from "./service.ts";
+} from "../../simulator/service.ts";
 
 const CLOSED = "This session's Simulator tools have closed.";
 

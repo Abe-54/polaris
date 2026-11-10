@@ -83,12 +83,12 @@ const bunInstall = async (cwd: string, options: SimulatorToolsOptions) => {
   const runtime = bunRuntime();
 
   const spawnOptions: Bun.SpawnOptions.SpawnOptions<"ignore", "ignore", "pipe"> = {
-    env: {
-      ...childEnv(),
+    env: childEnv({
+      ...process.env,
       ...runtime.env,
       BUN_INSTALL_CACHE_DIR: join(cwd, ".cache"),
       ...options.env,
-    },
+    }),
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",

@@ -12,7 +12,7 @@ import {
   SIMULATOR_MCP_NAME,
   type SimulatorMcp,
   type SimulatorMcpServer,
-} from "../simulator/service.ts";
+} from "../../simulator/service.ts";
 
 const decodeJson = Schema.decodeUnknownSync(Schema.Json);
 

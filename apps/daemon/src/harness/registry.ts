@@ -25,7 +25,7 @@ import { ClaudeHookReceiver } from "./claude/hooks.ts";
 import { type HarnessDriver, HarnessError } from "./HarnessDriver.ts";
 import { PlanLimitReporter } from "./limits/PlanLimitReporter.ts";
 import { BrowserMcp } from "./browser/index.ts";
-import { SimulatorMcp } from "./simulator/service.ts";
+import { SimulatorMcp } from "../simulator/service.ts";
 import { findExecutable } from "../platform/executable.ts";
 
 const binary = (env: string, name: string): string | null =>

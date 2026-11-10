@@ -46,13 +46,13 @@ export const liveAgentDevice =
     // The Daemon's own executable, run as Bun (`bunRuntime`).
     const proc = Bun.spawn([process.execPath, script, ...args], {
       cwd,
-      env: {
-        ...childEnv(),
+      env: childEnv({
+        ...process.env,
         ...env,
         ...bunRuntime().env,
         AGENT_DEVICE_NO_UPDATE_NOTIFIER: "1",
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: DAEMON_IDLE_TIMEOUT_MS,
-      },
+      }),
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
