@@ -6,8 +6,18 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { connectRpc, socketTransport } from "@polaris/client";
-import { Command, CommandId, type GrantKind, type HostId, PairingId } from "@polaris/protocol";
-import { Effect, Exit, Match, Option, Scope, Stream } from "effect";
+import {
+  type ApprovalDecision,
+  Command,
+  CommandId,
+  type GrantKind,
+  type HostId,
+  PairingId,
+  RequestId,
+  Sequence,
+  SessionId,
+} from "@polaris/protocol";
+import { Effect, Exit, Match, Option, Predicate, Scope, Stream } from "effect";
 import { encodePairing } from "./pairing.ts";
 
 const DAEMON_MAIN = resolve(import.meta.dir, "..", "..", "..", "apps", "daemon", "src", "main.ts");
@@ -27,6 +37,14 @@ export interface TestDaemon {
   readonly revoke: (pairing: string) => Promise<void>;
   /** A fresh git repository registered as a Workspace; resolves with its id. */
   readonly registerWorkspace: () => Promise<string>;
+  /** Answers an approval as the token-less Client (the Desktop App); rejects when refused. */
+  readonly respondAsClient: (
+    sessionId: string,
+    requestId: string,
+    decision: ApprovalDecision
+  ) => Promise<void>;
+  /** The decision the Daemon recorded for an approval, once it is resolved. */
+  readonly resolution: (sessionId: string, requestId: string) => Promise<ApprovalDecision>;
   /** Stops the Daemon and starts it again on the same home. */
   readonly restart: () => Promise<void>;
   readonly stop: () => Promise<void>;
@@ -36,7 +54,8 @@ const identity = {
   clientName: "sdk-tests",
   clientVersion: "0.0.0",
   deviceLabel: "SDK tests",
-  capabilities: [],
+  // Sees computer use approvals, as the Desktop App does.
+  capabilities: ["computer-use" as const],
 };
 
 /** A port nothing listens on now, so a restarted Daemon's gateway keeps its URL. */
@@ -180,6 +199,44 @@ export const launchDaemon = async (options: LaunchOptions = {}): Promise<TestDae
       if (workspace === undefined) throw new Error(`${name} is not in the Host's snapshot`);
 
       return workspace.id;
+    },
+    respondAsClient: async (sessionId, requestId, decision) => {
+      await run((client) =>
+        client.dispatch({
+          commandId: CommandId.make(crypto.randomUUID()),
+          command: Command.cases.RespondToApproval.make({
+            sessionId: SessionId.make(sessionId),
+            requestId: RequestId.make(requestId),
+            decision,
+          }),
+        })
+      );
+    },
+    resolution: async (sessionId, requestId) => {
+      const found = await run((client) =>
+        client
+          .subscribeSession({
+            sessionId: SessionId.make(sessionId),
+            afterSequence: Sequence.make(0),
+            turnLimit: 1,
+          })
+          .pipe(
+            Stream.map((item) => {
+              if (!Predicate.isTagged(item, "Event")) return null;
+              const { event } = item.envelope;
+
+              return Predicate.isTagged(event, "ApprovalResolved") && event.requestId === requestId
+                ? event.decision
+                : null;
+            }),
+            Stream.filter(Predicate.isNotNull),
+            Stream.runHead
+          )
+      );
+
+      if (Option.isNone(found)) throw new Error(`${requestId} was never resolved`);
+
+      return found.value;
     },
     restart: async () => {
       await Effect.runPromise(Scope.close(adminScope, Exit.void));
