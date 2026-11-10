@@ -88,8 +88,7 @@ import { usageLimitWatch } from "./usageLimit.ts";
 import { ClaudeTranslator } from "./translate.ts";
 import { readConfinement } from "../confinement.ts";
 import { readOnlyEnv, readOnlyOptions } from "./readOnly.ts";
-import type { BrowserMcp } from "../browser/index.ts";
-import { claudeBrowserOptions } from "./browser.ts";
+import { claudeToolServers, type ToolServerOptions } from "./toolServers.ts";
 import { withoutShadowedWarning } from "./sdkWarnings.ts";
 import { claudeStartLog } from "./startLog.ts";
 import { logStart } from "../startLog.ts";
@@ -108,7 +107,7 @@ export type QueryFn = (params: {
   options?: Options;
 }) => Query;
 
-export interface ClaudeDriverOptions {
+export interface ClaudeDriverOptions extends ToolServerOptions {
   /** The SDK's `query`; injectable so tests can script a fake Claude. */
   readonly query?: QueryFn;
   /** Absolute path to `claude`; default: resolved on PATH. */
@@ -131,8 +130,6 @@ export interface ClaudeDriverOptions {
   readonly sandbox?: () => ClaudeSandbox;
   /** The Host's name in error messages; default the machine's short hostname. */
   readonly hostName?: string;
-  /** The Browser's MCP server for each session that isn't read-only. */
-  readonly browser?: BrowserMcp["Service"];
 }
 
 const HARNESS = "claude";
@@ -393,7 +390,7 @@ const openSession = Effect.fnUntraced(function* (
     Object.assign(sdkOptions, claudeConstellationOptions(attachments));
   }
 
-  Object.assign(sdkOptions, yield* claudeBrowserOptions(driver.browser, options, sdkOptions));
+  Object.assign(sdkOptions, yield* claudeToolServers(driver, options, sdkOptions));
 
   if (options.readOnly === true) {
     const confinement = yield* Effect.tryPromise({

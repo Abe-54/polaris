@@ -89,6 +89,7 @@ export const fakeHelper = () => {
 
   const layer = Layer.succeed(ComputerUseHelper)(
     ComputerUseHelper.of({
+      bundle: Effect.succeed("/fake/Polaris Computer Use.app"),
       spawn: () =>
         Effect.acquireRelease(
           Effect.sync(() => {
