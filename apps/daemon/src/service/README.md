@@ -64,7 +64,7 @@ On Linux the platform names the libc: a musl process reports `linux-<arch>-musl`
 
 - **Known gap: the launcher does not check who started it** (ENG-867). Any process of the same user can run a tool in the helper under its grant, as with Codex's helper. A check of the parent's signature by pid would not close it (the parent can exec the real `polaris` after starting the launcher); the fix is for the launcher to verify the Daemon's audit token over a socket.
 
-Verified on macOS 27.0 (26A428), arm64, from a child of the release Daemon: with either path, tccd logs `responsible={identifier=dev.lux.polaris.computer-use.dev …}` and `accessing={agent-desktop}`, and names the helper as the attributed bundle; without the disclaim the same child is charged to the Daemon.
+Verified on macOS 27.0 (26A428), arm64, from a child of the release Daemon: with either path, tccd logs `responsible={identifier=dev.lux.polaris.computer-use.dev …}` and `accessing={agent-desktop}`, and names the helper as the attributed bundle; without the disclaim the same child is charged to the Daemon. With no grant, `permissions` answers `needs setup` and a `snapshot` fails with `PERM_DENIED`, though the Daemon itself is granted. After the dev helper was dragged into Device Control and Data Access once, `permissions` answered `ready` and a headless `type` into a TextEdit document was `delivered_verified` on both paths, with Polaris still frontmost.
 
 ## Install (`polaris install`)
 
