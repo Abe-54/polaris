@@ -403,6 +403,64 @@ async fn plain_requests_are_answered_in_turn_on_one_connection() {
 }
 
 #[tokio::test]
+async fn a_connection_is_closed_after_its_share_of_plain_requests() {
+    let relay = start(|_| {});
+    let mut stream = TcpStream::connect(("127.0.0.1", relay.port)).await.unwrap();
+
+    stream
+        .write_all("GET /healthz HTTP/1.1\r\nHost: relay\r\n\r\n".repeat(40).as_bytes())
+        .await
+        .unwrap();
+    let mut replies = String::new();
+    // The relay closes the socket, so the read ends without the client asking.
+    timeout(WAIT, stream.read_to_string(&mut replies)).await.unwrap().unwrap();
+
+    assert_eq!(replies.matches("HTTP/1.1 200 OK").count(), 32, "{replies}");
+    assert_eq!(replies.matches("Connection: close").count(), 1);
+    assert!(replies.ends_with("Connection: close\r\n\r\nok"), "{replies}");
+}
+
+#[tokio::test]
+async fn sockets_that_have_not_upgraded_are_bounded_and_one_that_leaves_makes_room() {
+    // The floor applies: 64 sockets mid-handshake, however small the relay's limit.
+    let relay = start(|config| config.gate.max_connections = 1);
+    let mut waiting = Vec::new();
+
+    for _ in 0..64 {
+        let mut stream = TcpStream::connect(("127.0.0.1", relay.port)).await.unwrap();
+        // Half a request head, so the relay holds the socket open for the rest.
+        stream.write_all(b"GET /healthz HTTP/1.1\r\n").await.unwrap();
+        waiting.push(stream);
+    }
+
+    let healthz = async || {
+        let mut stream = TcpStream::connect(("127.0.0.1", relay.port)).await.unwrap();
+        let request = b"GET /healthz HTTP/1.1\r\nHost: relay\r\nConnection: close\r\n\r\n";
+        let mut reply = String::new();
+        // A socket the relay drops may be reset before or after the request is written.
+        let _ = stream.write_all(request).await;
+        let _ = timeout(WAIT, stream.read_to_string(&mut reply)).await.unwrap();
+
+        reply
+    };
+
+    // Sockets are taken in the order they connected, so this one is the 65th.
+    assert_eq!(healthz().await, "", "one more socket than the bound was answered");
+    let refusals: Vec<Value> =
+        relay.log.events().into_iter().filter(|event| event["event"] == "relay.refused").collect();
+    assert_eq!(refusals.len(), 1, "{refusals:?}");
+    assert_eq!(refusals[0]["reason"], "relay-full");
+
+    // The waiting sockets are still served, and one leaving lets another in.
+    let mut first = waiting.remove(0);
+    first.write_all(b"Host: relay\r\nConnection: close\r\n\r\n").await.unwrap();
+    let mut reply = String::new();
+    timeout(WAIT, first.read_to_string(&mut reply)).await.unwrap().unwrap();
+    assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
+    assert!(healthz().await.starts_with("HTTP/1.1 200 OK"));
+}
+
+#[tokio::test]
 async fn a_receiver_that_stops_reading_is_dropped_and_its_sender_carries_on() {
     let relay = start(|config| {
         config.backpressure_limit_bytes = 256 * 1024;

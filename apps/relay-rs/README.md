@@ -41,6 +41,9 @@ Where it differs from the Bun relay, none of it on the wire contract:
   WebSocket fault such as an unmasked frame), `idle`, `backpressure` (both dropped without a
   close frame, 1006 to the party) and `shutdown` (1001, on SIGTERM).
 - **`PORT=0`** binds a free port, reported in `relay.start`. The tests rely on it.
+- **Sockets that have not upgraded are bounded.** As many may be mid-handshake as may be
+  connected (`POLARIS_RELAY_MAX_CONNECTIONS`, at least 64); one more is closed unanswered and
+  logged as `relay.refused` with `relay-full`. A connection is closed after 32 plain requests.
 
 ### The same tests, both builds
 
@@ -55,8 +58,8 @@ POLARIS_RELAY_COMMAND=$PWD/../relay-rs/target/release/polaris-relay bun test src
 
 Every relay, abuse, push, live and process test passes against the Rust build. Its own tests
 cover what a WebSocket client library won't send: fragments, frames cut across writes, protocol
-faults, pipelined HTTP, a receiver that stops reading, the idle ping, and shutdown
-(`relay/tests/sockets.rs`).
+faults, pipelined HTTP and its bounds, a receiver that stops reading, the idle ping, and
+shutdown (`relay/tests/sockets.rs`).
 
 ### Layout
 
