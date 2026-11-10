@@ -6,6 +6,7 @@
 import { Predicate } from "effect";
 import { SettingsButton, SettingsWell } from "@polaris/ui";
 import { type ReactNode, useEffect, useState } from "react";
+import { clientCopy } from "../../../../shared/clientCopy.ts";
 import { useComputerUseActions, useComputerUseFeed } from "../hooks.ts";
 import { allowStep, cardView, type HostFacts, servicesOf } from "../model.ts";
 import { AllowStepView, ServiceMark, WindowGlyph } from "./parts.tsx";
@@ -37,6 +38,9 @@ const OFF_STEP = {
   services: [],
 };
 
+/** "this Mac" for the generic local name; a Mac named by the user keeps its name. */
+const where = (host: HostFacts) => (host.name === clientCopy().localHost ? "this Mac" : host.name);
+
 const Frame = ({ children }: { readonly children: ReactNode }) => (
   <section
     data-testid="computer-use-onboarding"
@@ -58,7 +62,7 @@ const Heading = ({ title, line }: { readonly title: string; readonly line: strin
 const Ready = ({ host, onDone }: { readonly host: HostFacts; readonly onDone: () => void }) => (
   <Frame>
     <Heading
-      title={`Computer use is ready on ${host.name}`}
+      title={`Computer use is ready on ${where(host)}`}
       line="The first time an agent wants an app, you'll get an approval card for it."
     />
     <SettingsWell>
@@ -105,13 +109,16 @@ const Live = ({
     return started ? <Ready host={host} onDone={() => onClose("done")} /> : null;
 
   const view = cardView(host, state, actions.opened);
-  const step = view.kind === "mac-setup" ? view.step : OFF_STEP;
+  const next = view.kind === "mac-setup" ? view.step : OFF_STEP;
+  // Once its pane is open, the step says what to do there instead of what it opens.
+  const opened = view.kind === "mac-setup" && actions.opened === next.permission;
+  const step = opened ? { ...next, detail: view.well.line } : next;
 
   return (
     <Frame>
       <Heading
         title="Let agents use apps on this Mac"
-        line={`With computer use, an agent can open an app on ${host.name}, see it and click through it. It asks before each new app, and you watch it live in the transcript.`}
+        line={`With computer use, an agent can open an app on ${where(host)}, see it and click through it. It asks before each new app, and you watch it live in the transcript.`}
       />
       <SettingsWell>
         <AllowStepView
