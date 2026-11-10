@@ -252,6 +252,14 @@ describe("walkthrough persistence and controls", () => {
       setAutoArchiveSettings: () => Effect.die("unused"),
       idleCompactionSettings: Effect.die("unused"),
       setIdleCompactionSettings: () => Effect.die("unused"),
+      suggestedReplies: {
+        current: Effect.die("unused"),
+        changes: Stream.die("unused"),
+        enabledNow: () => false,
+        resolved: Effect.die("unused"),
+        set: () => Effect.die("unused"),
+      },
+      offerSuggestedReply: () => Effect.die("unused"),
       checkoutStatus: () => Effect.die("unused"),
       checkoutReviewed: () => Effect.void,
     });
