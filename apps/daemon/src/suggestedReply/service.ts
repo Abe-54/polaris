@@ -2,7 +2,9 @@
  * The fallback Suggested Reply (ENG-886, ADR 0106): after a Turn ends in a session whose
  * Harness has no suggestions of its own, one structured request to the Settings fallback.
  */
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   DomainEvent,
   type SessionId,
@@ -48,6 +50,20 @@ const defaultBackend = () =>
       ? (await import("./bench.ts")).benchReply
       : (await import("./live.ts")).liveReply
   );
+
+/** A fresh directory only this user can write, removed when the request's scope closes. */
+const scratch = Effect.acquireRelease(
+  Effect.tryPromise({
+    try: () => mkdtemp(join(tmpdir(), "polaris-suggest-")),
+    catch: (cause) =>
+      new HarnessError({
+        harness: "polaris",
+        message: "Could not make a scratch directory",
+        cause,
+      }),
+  }),
+  (dir) => Effect.promise(() => rm(dir, { recursive: true, force: true }))
+);
 
 /** The session and Turn a Turn event names, and whether the Turn ended. */
 const turnEvent = (event: DomainEvent) =>
@@ -120,8 +136,10 @@ const make = (options: SuggestedRepliesOptions) =>
         read: false,
       };
 
-      // A scratch directory: no project instructions load, and the request holds only the prompt.
-      const answer = yield* Effect.scoped(backend(choice.harness, job, tmpdir())).pipe(
+      // A private empty directory (0700): nothing in the cwd for either Harness to load.
+      const answer = yield* Effect.scoped(
+        Effect.flatMap(scratch, (dir) => backend(choice.harness, job, dir))
+      ).pipe(
         Effect.timeoutOrElse({
           duration: timeout,
           orElse: () =>

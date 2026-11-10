@@ -18,7 +18,8 @@ again, under the commit lock, that the Turn is still the session's latest and st
   inline runners; anything else resolves to nothing.
 - **What**: the last 3 ended Turns' user messages (prompt and steers) and final agent text,
   newest kept within ~6k tokens (`PROMPT_BUDGET_CHARS`). Tools are off and the Harness runs in
-  the temp directory, so no project instructions load. The answer is `{reply: string | null}`;
+  a fresh private directory (`mkdtemp`, removed afterwards), so no project instructions or
+  config load, and nothing another user planted in the shared temp directory does either. The answer is `{reply: string | null}`;
   null or blank commits nothing.
 - **Cancellation**: a new Turn, or another ended one, interrupts the request in flight, which
   kills the process. `SUGGEST_TIMEOUT` (15 s) drops a slow one. Every failure is logged only.
