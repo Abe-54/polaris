@@ -121,6 +121,25 @@ describe.skipIf(process.platform !== "darwin")("a tool run inside the helper app
       expect(code).toBe(42);
     });
 
+    test("a reader that stopped reading does not break the tool's exit", async () => {
+      const code = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const cu = yield* ComputerUseHelper;
+            const running = yield* cu.spawn({ tool: "agent-desktop", args: ["hang"], via });
+            const reader = running.stdout.getReader();
+            yield* Effect.promise(() => reader.read());
+            yield* Effect.promise(() => reader.cancel());
+            running.kill();
+
+            return yield* Effect.promise(() => running.exited);
+          })
+        ).pipe(Effect.provide(ComputerUseHelper.layerAt(() => helper, { launch: execHelper })))
+      );
+
+      expect(code).toBe(42);
+    });
+
     test("closing the scope kills a tool that ignores SIGTERM, leaving no orphan", async () => {
       const stopped = await Effect.runPromise(
         Effect.gen(function* () {
