@@ -9,6 +9,7 @@ import {
   TurnItem,
 } from "@polaris/protocol";
 import { Match, Option, Schema } from "effect";
+import { computerUseCallOf, DESKTOP_MCP_NAME } from "../desktop/metadata.ts";
 import type * as Gen from "./generated/index.ts";
 import type * as P from "./protocol.ts";
 
@@ -215,6 +216,8 @@ const itemMappers = new Map<string, ItemMapper>([
             name: `${item.server}.${item.tool}`,
             kind: "mcp",
             mcp: { server: item.server, tool: item.tool },
+            computerUse:
+              item.server === DESKTOP_MCP_NAME ? computerUseCallOf(item.result ?? null) : null,
             input: item.arguments,
             output: item.error ?? item.result,
             status: itemStatus(item.status),

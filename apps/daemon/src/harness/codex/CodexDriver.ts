@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { Effect, type Scope } from "effect";
 import { polarisHome } from "../../paths.ts";
 import type { BrowserMcp } from "../browser/index.ts";
+import type { DesktopMcp } from "../desktop/index.ts";
 import type { HarnessDriver, HarnessProbe } from "../HarnessDriver.ts";
 import { CodexLimitTracker } from "../limits/codex.ts";
 import type { PlanLimitReporter } from "../limits/PlanLimitReporter.ts";
@@ -35,6 +36,8 @@ export interface CodexDriverOptions {
   readonly planLimits?: PlanLimitReporter["Service"];
   /** The Browser's MCP server for each thread that isn't read-only. */
   readonly browser?: BrowserMcp["Service"];
+  /** Computer use (`polaris_desktop`) for each thread that isn't read-only, once the Host is ready. */
+  readonly desktop?: DesktopMcp["Service"] | undefined;
 }
 
 /** `codex --version` only: never starts a session, a server, MCP servers or a login. */
@@ -108,7 +111,14 @@ export const makeCodexDriver = (
         codexPath === null
           ? Effect.fail(codexNotInstalled())
           : openSession(
-              { appServer, codexPath, clientVersion, planLimits, browser: options.browser },
+              {
+                appServer,
+                codexPath,
+                clientVersion,
+                planLimits,
+                browser: options.browser,
+                desktop: options.desktop,
+              },
               openOptions
             ),
     } satisfies HarnessDriver;
