@@ -118,14 +118,21 @@ Every term is defined in [`CONTEXT.md`](CONTEXT.md), and the decisions behind th
 |---|---|
 | [`apps/daemon`](apps/daemon) | The daemon: event store, agent drivers, transport, files, git, terminals, language tooling. |
 | [`apps/desktop`](apps/desktop) | The Electron desktop app: the client runtime in the main process, a typed IPC bridge and a React renderer. |
+| [`apps/mobile`](apps/mobile) | The iPhone app (Expo React Native), in TestFlight. |
+| [`apps/relay`](apps/relay) | The relay that lets a linked device reach a host on another network; it forwards end-to-end encrypted frames and can read none of them. |
 | [`apps/site`](apps/site) | [polaris.lux.dev](https://polaris.lux.dev), with the download and update feed routes. |
 | [`packages/protocol`](packages/protocol) | The protocol the app and every daemon share. |
 | [`packages/client`](packages/client) | Connecting to many daemons over SSH: connection states, resuming, installing and upgrading. |
+| [`packages/sdk`](packages/sdk) | The public SDK for extensions: read and drive daemons from a Raycast command, a glasses app or a script. |
 | [`packages/ui`](packages/ui) | The design system in code: DESIGN.md's tokens, components and a gallery. |
+| [`packages/syntax-diff`](packages/syntax-diff) | The syntax-aware diff behind the editor's diff tabs. |
 | [`packages/predict`](packages/predict) | The fill-in-the-middle predictor behind tab completion. |
+| [`packages/visualization`](packages/visualization) | Visualizations: the `visualize` tool's input, its validation and the zero-egress frame they run in. |
 | [`packages/spec`](packages/spec) | The Quint specification and its checks. |
 | [`packages/bench`](packages/bench) | Benchmarks: the real daemon under scripted load, with per-machine baselines. |
 | [`packages/lint-config`](packages/lint-config) | Shared oxlint and oxfmt config and custom rules. |
+| [`extensions/raycast`](extensions/raycast) | The Raycast extension: search sessions and workspaces, answer approvals, start a session. |
+| [`extensions/even-g2`](extensions/even-g2) | The Even Realities G2 glasses app: sessions, approvals and voice replies. |
 | [`tooling`](tooling) | The lint ratchet, the quality runner and the git hooks. |
 | [`design`](design) | Brand assets and the scripts that generate them. |
 
