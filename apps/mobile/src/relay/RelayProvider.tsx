@@ -34,6 +34,7 @@ import {
   saveLink,
   secretsForLinking,
 } from "./store.ts";
+import { startRelay } from "./start.ts";
 import { relayTransport } from "./transport.ts";
 import { unlinkFrom } from "./unlink.ts";
 
@@ -89,20 +90,17 @@ export const RelayProvider = ({ children }: { readonly children: ReactNode }) =>
   useEffect(() => {
     let stopped = false;
 
-    void (async () => {
-      const secrets = await loadSecrets();
-      const stored = secrets === null ? [] : await loadHosts();
-
-      if (secrets !== null && !stopped) {
-        const opened = await deviceKeys(secrets);
-        device.current = makeRelayDevice(opened);
+    void startRelay(
+      () => stopped,
+      (openedDevice, opened, stored) => {
+        device.current = openedDevice;
         setKeys(opened);
         setHosts(stored);
         connectAll(registryRef.current, device.current, stored);
-      }
-
-      if (!stopped) setLoaded(true);
-    })();
+      },
+      () => setLoaded(true),
+      { loadSecrets, loadHosts, deviceKeys, makeRelayDevice }
+    );
 
     return () => {
       stopped = true;
