@@ -10,8 +10,11 @@ import type {
 import { resolveFallback } from "../engine/suggestedReplyPreference.ts";
 import { lastTurn, type SessionRecord } from "../store/model.ts";
 
-/** Harnesses that write their own Suggested Replies; the fallback never runs for them. */
-export const NATIVE_SUGGESTIONS: ReadonlySet<HarnessKind> = new Set(["claude"]);
+/**
+ * Harnesses that write their own Suggested Replies; the fallback never runs for them. Empty:
+ * Claude Code sends none through the SDK yet, so it gets the fallback too (ENG-891).
+ */
+export const NATIVE_SUGGESTIONS: ReadonlySet<HarnessKind> = new Set<HarnessKind>();
 
 /** The Harnesses an inline runner can drive. */
 export type InlineHarness = "claude" | "codex";

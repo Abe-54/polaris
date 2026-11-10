@@ -17,6 +17,7 @@
  * `SimulatorMcp` in context they get the Simulator's too.
  */
 import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
+import { NATIVE_SUGGESTIONS } from "../suggestedReply/rules.ts";
 import type { HarnessKind, KnownHarnessKind } from "@polaris/protocol";
 import { Effect, Layer, Option, Scope } from "effect";
 import { HarnessRegistry, ServiceError } from "../services.ts";
@@ -111,9 +112,12 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
       const preference = yield* Effect.serviceOption(SuggestedReplyPreference);
 
-      // Read per Turn by the Claude driver (ENG-885); off when the Daemon has no preference.
+      // Read per Turn by the Claude driver (ENG-885); off while Claude Code isn't native (ENG-891).
       const suggestedReplies = {
-        suggestedReplies: () => Option.isSome(preference) && preference.value.enabledNow(),
+        suggestedReplies: () =>
+          NATIVE_SUGGESTIONS.has("claude") &&
+          Option.isSome(preference) &&
+          preference.value.enabledNow(),
       };
 
       const planLimits = { report };

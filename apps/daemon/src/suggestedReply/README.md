@@ -1,7 +1,8 @@
 # Suggested Replies: the Polaris fallback
 
 A Suggested Reply (`CONTEXT.md`, ADR 0106) for sessions whose Harness has no suggestions of
-its own: every Harness but Claude Code (`NATIVE_SUGGESTIONS`). Its contract is
+its own (`NATIVE_SUGGESTIONS`): today every Harness, Claude Code included, because Claude Code
+sends no `prompt_suggestion` through the SDK yet (ENG-891). Its contract is
 `packages/protocol/src/suggestedReply.ts`; the native path is the Harness drivers'.
 
 `SuggestedReplies` follows the log for `TurnStarted` and `TurnEnded`. When a Turn ends and

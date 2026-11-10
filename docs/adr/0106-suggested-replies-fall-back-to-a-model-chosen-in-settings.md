@@ -22,3 +22,8 @@ Both sources follow the same rules. There is no suggestion on the first Turn, af
 failed or interrupted Turn, in plan mode, or near a Plan Limit, and either source may
 offer nothing. Both commit the same Suggested Reply event to the Agent Session's log, so
 the suggestion survives a restart and reaches every Client. A newer Turn makes it stale.
+
+**Amended 2026-11-10.** In the end-to-end check, Claude Code 2.1.322 sent no `prompt_suggestion`
+through the Agent SDK (`promptSuggestions: true`, haiku and sonnet). So Claude Code sessions use
+the fallback too, and `NATIVE_SUGGESTIONS` is empty. The native path stays in the driver,
+switched off, until Claude Code sends suggestions (ENG-891).

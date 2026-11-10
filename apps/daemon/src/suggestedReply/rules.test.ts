@@ -15,10 +15,6 @@ describe("suggestionDue", () => {
     ["a Turn still working", record(agentSession(), [turn(0), turn(1, "working")])],
     ["plan mode", record(agentSession({ permissionMode: "plan" }), [turn(0), turn(1)])],
     ["a Limited session", record(agentSession({ state: "limited" }), [turn(0), turn(1)])],
-    [
-      "a Harness with its own suggestions",
-      record(agentSession({ harness: "claude" }), [turn(0), turn(1)]),
-    ],
     ["a Reviewer's session", record(agentSession({ origin: "reviewer" }), [turn(0), turn(1)])],
     [
       "an idle compaction",
@@ -86,4 +82,10 @@ describe("runnableFallback", () => {
 
     expect(runnableFallback(settings(opencode), report("opencode"))).toBeNull();
   });
+});
+
+test("a Claude Code session gets the fallback while Claude Code sends none of its own", () => {
+  const due = suggestionDue(record(agentSession({ harness: "claude" }), [turn(0), turn(1)]));
+
+  expect(due?.index).toBe(1);
 });
