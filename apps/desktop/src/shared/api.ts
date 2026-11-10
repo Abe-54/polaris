@@ -723,10 +723,18 @@ export interface LanguageApi {
   ) => () => void;
 }
 
+/** The built-in spellchecker, as the renderer's webFrame sees it. */
+export interface SpellingApi {
+  /** Null when `word` is spelled right (or no dictionary is loaded); else its corrections, best first. */
+  readonly suggestions: (word: string) => ReadonlyArray<string> | null;
+}
+
 export interface PolarisApi {
   /** The Client's OS from `process.platform`; read it through `clientPlatform()` (shared/platform.ts). */
   readonly platform?: string;
   readonly languages?: LanguageApi;
+  /** Absent in previews and older preloads. */
+  readonly spelling?: SpellingApi;
   readonly notify?: <M extends PredictionNotification>(
     method: M,
     input: PredictionNotificationInput<M>

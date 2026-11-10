@@ -1,6 +1,6 @@
 /**
- * Harness availability on this Host, cached: probed on the first ask, again
- * only when a Client asks to refresh. No timers, so an idle Daemon stays idle.
+ * Harness availability on this Host, cached: probed on the first ask, again on a refresh or
+ * an ask after `STALE_AFTER`. No timers, so an idle Daemon stays idle.
  * A probe that fails or whose callers all left is never cached.
  */
 import { HARNESS_CATALOGUE, HarnessAvailability, HostHarnesses } from "@polaris/protocol";
@@ -8,8 +8,10 @@ import {
   Clock,
   Context,
   Deferred,
+  Duration,
   Effect,
   Layer,
+  Match,
   Predicate,
   Stream,
   SubscriptionRef,
@@ -17,11 +19,19 @@ import {
 import { isBenchKind } from "../bench/kinds.ts";
 import { type ProbeEnv, probeHarness } from "./probe.ts";
 
+/** A report this old may miss a sign-in or an install since, so the next ask probes again. */
+export const STALE_AFTER = Duration.minutes(1);
+
+/**
+ * `false`: the cached report, at once; a stale one also starts a probe, whose report reaches
+ * `changes`. `"when-stale"`: the cached report unless stale, else a new one. `true`: a new one.
+ */
+export type AvailabilityRefresh = boolean | "when-stale";
+
 export class Availability extends Context.Service<
   Availability,
   {
-    /** The cached report; `refresh` probes every Harness again first. */
-    readonly get: (refresh: boolean) => Effect.Effect<HostHarnesses>;
+    readonly get: (refresh: AvailabilityRefresh) => Effect.Effect<HostHarnesses>;
     /** The current report (probing if there is none yet), then each new one. */
     readonly changes: Stream.Stream<HostHarnesses>;
   }
@@ -101,10 +111,29 @@ const makeAvailability = Effect.fnUntraced(function* (options: AvailabilityOptio
     ).pipe(Effect.andThen(Deferred.await(done)));
   });
 
+  const isStale = (report: HostHarnesses) =>
+    Effect.map(
+      Clock.currentTimeMillis,
+      (now) => now - Date.parse(report.checkedAt) >= Duration.toMillis(STALE_AFTER)
+    );
+
+  // A stale report is still answered at once; the probe it starts runs in the layer's scope.
   const current = Effect.suspend(() => {
     const report = SubscriptionRef.getUnsafe(latest);
 
-    return report === null ? probe : Effect.succeed(report);
+    if (report === null) return probe;
+
+    return Effect.flatMap(isStale(report), (stale) =>
+      stale ? Effect.as(Effect.forkIn(probe, scope), report) : Effect.succeed(report)
+    );
+  });
+
+  const unlessStale = Effect.suspend(() => {
+    const report = SubscriptionRef.getUnsafe(latest);
+
+    if (report === null) return probe;
+
+    return Effect.flatMap(isStale(report), (stale) => (stale ? probe : Effect.succeed(report)));
   });
 
   // A refresh wants a probe that started after it: one already running may predate a sign-in.
@@ -113,7 +142,12 @@ const makeAvailability = Effect.fnUntraced(function* (options: AvailabilityOptio
   );
 
   return Availability.of({
-    get: (refresh) => (refresh ? fresh : current),
+    get: (refresh) =>
+      Match.value(refresh).pipe(
+        Match.when("when-stale", () => unlessStale),
+        Match.when(true, () => fresh),
+        Match.orElse(() => current)
+      ),
     changes: Stream.unwrap(
       Effect.as(current, SubscriptionRef.changes(latest).pipe(Stream.filter(Predicate.isNotNull)))
     ),

@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HARNESS_CATALOGUE } from "@polaris/protocol";
-import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
+import { Deferred, Duration, Effect, Fiber, type Scope, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
-import { Availability } from "./Availability.ts";
+import { TestClock } from "effect/testing";
+import { Availability, STALE_AFTER } from "./Availability.ts";
 import { AvailabilityRpcs, AvailabilityRpcsLive } from "./AvailabilityRpcs.ts";
 import { shellFake, shPath } from "../testing/shellFake.ts";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
@@ -224,5 +225,54 @@ describe("harness.availability", () => {
     );
 
     expect(statuses(refreshed)).toMatchObject({ codex: "ready" });
+  });
+
+  test("a sign-in after the report goes stale reaches the next ask that needs it current", async () => {
+    const host = fakeHost();
+
+    const [early, late, probes] = await run(
+      host.env,
+      Effect.gen(function* () {
+        const availability = yield* Availability;
+        yield* availability.get(false);
+        host.signIn();
+        yield* TestClock.adjust(Duration.subtract(STALE_AFTER, Duration.seconds(1)));
+        const early = yield* availability.get("when-stale");
+        yield* TestClock.adjust(Duration.seconds(1));
+        const late = yield* availability.get("when-stale");
+
+        return [early, late, yield* Effect.promise(() => host.probes())] as const;
+      }).pipe(Effect.provide(TestClock.layer()))
+    );
+
+    expect(statuses(early)).toMatchObject({ codex: "needs-sign-in" });
+    expect(statuses(late)).toMatchObject({ codex: "ready" });
+    expect(probes).toBe(2);
+  });
+
+  test("a stale report is answered at once, and the probe it starts reaches watchers", async () => {
+    const host = fakeHost();
+
+    const [answered, watched] = await run(
+      host.env,
+      Effect.gen(function* () {
+        const availability = yield* Availability;
+        yield* availability.get(false);
+        host.signIn();
+        yield* TestClock.adjust(STALE_AFTER);
+        const answered = yield* availability.get(false);
+
+        const watched = yield* availability.changes.pipe(
+          Stream.filter((report) => statuses(report).codex === "ready"),
+          Stream.take(1),
+          Stream.runCollect
+        );
+
+        return [answered, watched] as const;
+      }).pipe(Effect.provide(TestClock.layer()))
+    );
+
+    expect(statuses(answered)).toMatchObject({ codex: "needs-sign-in" });
+    expect(watched).toHaveLength(1);
   });
 });
