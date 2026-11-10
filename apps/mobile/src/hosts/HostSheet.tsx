@@ -3,9 +3,9 @@
  * trip, route, agent sessions, this iPhone's switch for this Host's pushes, and Unlink for relay Hosts.
  */
 import { mobileFont, mobileType } from "@polaris/ui/tokens";
-import { PolarisPush } from "../../modules/polaris-push/index.ts";
-import { Alert, Pressable, Switch, Text, View } from "react-native";
+import { Alert, Platform, Pressable, Switch, Text, View } from "react-native";
 import { hostNotifications, useHostNotifications } from "../push/hostNotifications.ts";
+import { openAndroidNotificationSettings } from "../notifications/android.ts";
 import { DEVICE_COPY } from "../app/platformCopy.ts";
 import { InstrumentSheet, SheetHeader, Well } from "../sheet/index.tsx";
 import { themedStyles, useTheme } from "../theme/index.ts";
@@ -54,6 +54,22 @@ const Notifications = ({ hostId }: { readonly hostId: string }) => {
   const { colours } = useTheme();
   const on = useHostNotifications(hostId);
 
+  if (Platform.OS === "android")
+    return (
+      <Pressable accessibilityRole="button" onPress={() => void openAndroidNotificationSettings()}>
+        <Well style={styles.switchWell}>
+          <View style={styles.switchText}>
+            <Text style={styles.switchTitle} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
+              Live updates
+            </Text>
+            <Text style={styles.switchCaption} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
+              On this device · In Android settings
+            </Text>
+          </View>
+        </Well>
+      </Pressable>
+    );
+
   return (
     <Well style={styles.switchWell}>
       <View style={styles.switchText}>
@@ -62,7 +78,6 @@ const Notifications = ({ hostId }: { readonly hostId: string }) => {
         </Text>
         <Text style={styles.switchCaption} maxFontSizeMultiplier={CONTENT_TEXT_SCALE}>
           {HOST_NOTIFICATIONS_CAPTION}
-
         </Text>
       </View>
       <Switch
@@ -138,7 +153,7 @@ export const HostSheet = ({
           </Well>
           {onUnlink === null ? null : (
             <>
-{PolarisPush === null ? null : <Notifications hostId={details.hostId} />}
+              <Notifications hostId={details.hostId} />
               <Pressable
                 accessibilityRole="button"
                 onPress={() => confirmUnlink(details.name, onUnlink)}

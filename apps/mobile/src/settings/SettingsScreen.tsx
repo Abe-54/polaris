@@ -7,6 +7,7 @@ import { mobileFont, mobileType } from "@polaris/ui/tokens";
 import {
   ActionSheetIOS,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,6 @@ import {
   View,
 } from "react-native";
 import { choose } from "../menus/choices.ts";
-import { PolarisPush } from "../../modules/polaris-push/index.ts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFollowedHosts } from "../home/feed/useFollowedHosts.ts";
 import { HORIZON_INSET } from "../horizon";
@@ -43,6 +43,7 @@ import { useDeveloperMode } from "./useDeveloperMode.ts";
 import { ThemeCard } from "./ThemeCard.tsx";
 import { ACCESSIBILITY_SCALE, CONTENT_TEXT_SCALE } from "../theme/textScale.ts";
 import { InboxBadge } from "../inbox/index.ts";
+import { openAndroidNotificationSettings } from "../notifications/android.ts";
 
 const Row = ({
   Glyph,
@@ -168,6 +169,16 @@ export const SettingsScreen = ({
     }))
   );
 
+  const notificationLine =
+    Platform.OS === "android"
+      ? "Live updates · In Android settings"
+      : notificationsLine(constellations);
+
+  const notificationSettings =
+    Platform.OS === "android"
+      ? () => void openAndroidNotificationSettings()
+      : () => chooseNotifications(constellations);
+
   const panel = { backgroundColor: colours.panel, borderColor: colours.hairline };
 
   return (
@@ -216,8 +227,8 @@ export const SettingsScreen = ({
           <Row
             Glyph={NotificationsGlyph}
             title="Notifications"
-            line={PolarisPush === null ? "Not available on this device" : notificationsLine(constellations)}
-            {...(PolarisPush === null ? {} : { onPress: () => chooseNotifications(constellations) })}
+            line={notificationLine}
+            onPress={notificationSettings}
           />
           <Row
             Glyph={MotionGlyph}

@@ -9,6 +9,7 @@ const opened = [];
 const rn = {
   Platform: { OS: os },
   Settings: { get: () => null },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
   Alert: { alert: (...args) => { alert = args; } },
   ActionSheetIOS: { showActionSheetWithOptions: (...args) => {
     assert.equal(os, "ios", "Android called ActionSheetIOS"); sheet = args;
@@ -25,6 +26,7 @@ mock.module("expo-haptics", () => ({
   impactAsync: async () => {},
   notificationAsync: async () => {},
 }));
+mock.module("expo-notifications", () => ({ requestPermissionsAsync: async () => ({ granted: false }) }));
 const { currentChoice, finishChoice } = await import("./src/menus/choiceStore.ts");
 const offered = () => os === "ios" ? sheet[0].options.slice(0, -1) : currentChoice()?.options;
 const select = (index) => {
