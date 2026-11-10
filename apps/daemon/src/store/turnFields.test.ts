@@ -172,6 +172,9 @@ describe("an event log from before these fields", () => {
     const db = new Database(file);
     db.run("UPDATE turns SET data = json_remove(data, '$.checkpointAfterCommit')");
     db.run("UPDATE sessions SET data = json_remove(data, '$.acceptedThroughUserTurn')");
+    // Later migrations go too, or the migrator (which runs ids above the latest) skips 7.
+    db.run("DROP INDEX events_type");
+    db.run("DROP INDEX events_graph");
     db.run("DELETE FROM effect_sql_migrations WHERE migration_id >= 7");
     db.close();
 

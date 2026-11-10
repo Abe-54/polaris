@@ -198,6 +198,8 @@ describe("an event log from before user Turns", () => {
     // Later migrations go too, or the migrator (which runs ids above the latest) skips 5.
     db.run("DROP TABLE session_reads");
     db.run("DROP TABLE session_drafts");
+    db.run("DROP INDEX events_type");
+    db.run("DROP INDEX events_graph");
     db.run("DELETE FROM effect_sql_migrations WHERE migration_id >= 5");
     db.close();
 

@@ -325,13 +325,8 @@ const make = Effect.gen(function* () {
 
       if (recent !== undefined || record === undefined) return recent ?? null;
 
-      const older = yield* store.readTurns({
-        sessionId,
-        beforeIndex: record.turns[0]?.index ?? null,
-        limit: null,
-      });
-
-      return older.find((t) => t.id === turnId) ?? null;
+      // Older than the Turns in memory: one row by its key (`EventStore.readTurn`).
+      return yield* store.readTurn({ sessionId, turnId });
     });
 
   const runtime: EngineRuntime["Service"] = {
