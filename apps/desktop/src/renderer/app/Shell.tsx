@@ -23,6 +23,7 @@ import { Sidebar } from "../shell/sidebar/Sidebar.tsx";
 import { TitleBar } from "../shell/TitleBar.tsx";
 import { TopBar } from "../shell/TopBar.tsx";
 import { slots } from "./slots.tsx";
+import { warmModes } from "./warmModes.ts";
 
 const MODE_VIEWS = {
   edit: EditMode,
@@ -110,6 +111,13 @@ const useEditToastInset = () => {
   }, [edit]);
 };
 
+/** Mounted with the shell itself, so the warm-up waits for its first paint (ENG-905). */
+const WarmModes = () => {
+  useEffect(warmModes, []);
+
+  return null;
+};
+
 /** The selection bar, ⌘I and ⌘L live with the editor: mounted, and loaded, only in Edit. */
 const InlineInEdit = () => (useSelection().mode === "edit" ? <LazyInline /> : null);
 
@@ -148,6 +156,7 @@ export const Shell = () => {
       <WorkspaceSearch />
       <InlineInEdit />
       <EditorRequests />
+      <WarmModes />
     </div>
   );
 };

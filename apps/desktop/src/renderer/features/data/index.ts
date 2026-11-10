@@ -2,7 +2,7 @@
  * Data mode (⌘4; DESIGN.md, Data; ENG-644): the layout, the tab model and registry, and the
  * hooks over the Data IPC contract. The interface for the shell and other features.
  */
-export { DataMode } from "./ui/LazyDataMode.tsx";
+export { DataMode, dataChunk } from "./ui/LazyDataMode.tsx";
 
 export {
   closeDataTab,
