@@ -21,7 +21,7 @@ export {
   MENU_SHORTCUT,
 } from "./lib/menu";
 
-export { reducedMotion } from "./lib/motion";
+export { MORPH_EASE, MORPH_MS, reducedMotion } from "./lib/motion";
 
 export { useExitPresence } from "./lib/presence";
 

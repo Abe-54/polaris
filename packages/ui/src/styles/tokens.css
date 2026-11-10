@@ -200,6 +200,32 @@
   --duration-press: 120ms;
   --duration-reveal: 160ms;
   --duration-panel: 200ms;
+
+  /* The morph spring: a 280ms response, 20% bounce, played over 400ms (DESIGN.md, Motion). */
+  --duration-morph: 400ms;
+  --ease-morph: linear(
+    0,
+    0.0791,
+    0.2478,
+    0.4364,
+    0.608,
+    0.7471,
+    0.8507,
+    0.9223,
+    0.9682,
+    0.9951,
+    1.0089,
+    1.0144,
+    1.015,
+    1.0132,
+    1.0105,
+    1.0076,
+    1.0052,
+    1.0033,
+    1.0019,
+    1.0009,
+    1
+  );
 }
 
 /* Density: spacing and row heights only, swapped as one set (rule/density-through-tokens). */

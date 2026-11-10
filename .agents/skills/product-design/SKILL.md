@@ -93,7 +93,8 @@ typeset); this skill remains the entry point and its rules win.
 - Signals stay rare: colour only for Starlight, Session State, Severity,
   diffs, git status, syntax, or Harness hue; only the Working dither loops.
 - Electron budgets: display-rate frames (180 Hz measured), under 1 GB for
-  the whole app. Animate `transform` and `opacity` only (DESIGN.md,
+  the whole app. Animate `transform` and `opacity`; a morph may also
+  animate `border-radius` and `clip-path` (DESIGN.md, Motion and
   Performance).
 - Reduce Motion stills the dither; the colourblind diff palette (`-cvd`)
   must stay legible.
