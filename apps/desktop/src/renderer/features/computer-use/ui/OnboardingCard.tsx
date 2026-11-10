@@ -121,9 +121,7 @@ const Live = ({
         />
       </SettingsWell>
       <div className="flex items-center justify-between gap-3 px-2 pb-1">
-        <span className="text-caption text-text-subtle">
-          {view.kind === "mac-setup" ? view.well.line : `Later: Settings › Hosts › ${host.name}`}
-        </span>
+        <span className="text-caption text-text-subtle">Later: Settings › Hosts › {host.name}</span>
         <SettingsButton variant="quiet" onClick={() => onClose("skipped")}>
           Skip for now
         </SettingsButton>
