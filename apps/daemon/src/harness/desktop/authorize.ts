@@ -39,7 +39,7 @@ export const unknownApp = (app: string, host: string) =>
   `polaris_desktop can't find an app called ${JSON.stringify(app)} on ${host}. list_apps shows the ones that are running; use an app's exact name.`;
 
 export const SCREEN_NEEDS_APP =
-  "A screenshot of the whole screen needs an app this session controls: act on the app first (focus_window it), or screenshot the app's window instead.";
+  "A screenshot that names no app needs an app this session controls: act on the app first (focus_window it), or pass `app` to screenshot its window.";
 
 export const UNSEEN_TARGET =
   "polaris_desktop doesn't know that ref or window: use one from this session's own snapshot or list_windows.";

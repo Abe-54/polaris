@@ -19,7 +19,16 @@ import {
   type DesktopServer,
 } from "./index.ts";
 import { takeover, tookOver, USER_ACTIVE_MS } from "./takeover.ts";
-import { allowAll, countingAwake, error, fakeDeps, fakeHost, fakeRunner, ok } from "./testing.ts";
+import {
+  allowAll,
+  countingAwake,
+  DIA_IN_FRONT,
+  error,
+  fakeDeps,
+  fakeHost,
+  fakeRunner,
+  ok,
+} from "./testing.ts";
 
 const sessionId = SessionId.make("ses-desktop");
 
@@ -233,7 +242,7 @@ describe("the preview follows what a call acted on", () => {
 
 describe("headed input", () => {
   test("is refused, with nothing sent, when the policy refuses it", async () => {
-    const { runner, calls } = fakeRunner({});
+    const { runner, calls } = fakeRunner({ "list-windows": DIA_IN_FRONT });
 
     const deps = fakeDeps(runner, {
       authorize: {
@@ -256,7 +265,7 @@ describe("headed input", () => {
   });
 
   test("runs with --headed once allowed, negative coordinates included", async () => {
-    const { runner, calls } = fakeRunner({});
+    const { runner, calls } = fakeRunner({ "list-windows": DIA_IN_FRONT });
     const deps = fakeDeps(runner);
 
     const result = await withServer(deps, (server) =>
@@ -377,21 +386,72 @@ describe("which app a call is for", () => {
     });
 
     const refused = await withServer(deps, async (server) => {
-      const first = await call(server, "screenshot", { screen: 0 });
+      const first = [
+        await call(server, "screenshot", { screen: 0 }),
+        await call(server, "screenshot", {}),
+      ];
+
       controlling = true;
       await call(server, "screenshot", { screen: 0 });
 
       return first;
     });
 
-    expect(textOf(refused)).toBe(SCREEN_NEEDS_APP);
+    expect(refused.map(textOf)).toEqual([SCREEN_NEEDS_APP, SCREEN_NEEDS_APP]);
     expect(calls.filter((args) => args.includes("screenshot"))).toHaveLength(1);
+  });
+});
+
+describe("headed coordinates stay in the app the user allowed", () => {
+  const click = (app: string, x: number, y: number) => {
+    const { runner, calls } = fakeRunner({ "list-windows": DIA_IN_FRONT });
+
+    return withServer(fakeDeps(runner), async (server) => ({
+      text: textOf(await call(server, "mouse_click", { x, y, app })),
+      sent: calls.some((args) => args.includes("mouse-click")),
+    }));
+  };
+
+  test("a point outside the app's windows is refused", async () => {
+    expect(await click("Dia", 1600, 50)).toEqual({
+      text: "(1600, 50) isn't inside a Dia window, so this input would go to another app.",
+      sent: false,
+    });
+  });
+
+  test("an app that isn't in front is refused, even at a point in its own window", async () => {
+    expect(await click("TextEdit", 1300, 200)).toEqual({
+      text: "TextEdit isn't in front, so this input would go to another app. focus_window it first.",
+      sent: false,
+    });
+  });
+
+  test("a drag that ends outside the app is refused", async () => {
+    const { runner, calls } = fakeRunner({ "list-windows": DIA_IN_FRONT });
+
+    const result = await withServer(fakeDeps(runner), (server) =>
+      call(server, "drag", { from_x: 10, from_y: 10, to_x: 10, to_y: 5000, app: "Dia" })
+    );
+
+    expect(result.isError).toBe(true);
+    expect(calls.some((args) => args.includes("drag"))).toBe(false);
+  });
+
+  test("a Host that can't list its windows sends nothing", async () => {
+    const { runner, calls } = fakeRunner({ "list-windows": error("list-windows", "INTERNAL") });
+
+    const result = await withServer(fakeDeps(runner), (server) =>
+      call(server, "mouse_click", { x: 1, y: 2, app: "Dia" })
+    );
+
+    expect(textOf(result)).toBe("polaris_desktop couldn't check where Dia's windows are.");
+    expect(calls.some((args) => args.includes("mouse-click"))).toBe(false);
   });
 });
 
 describe("the user taking over during headed input", () => {
   const click = (idle: number | null, asked = false) => {
-    const { runner, calls } = fakeRunner({});
+    const { runner, calls } = fakeRunner({ "list-windows": DIA_IN_FRONT });
 
     const deps = fakeDeps(runner, {
       host: fakeHost({ inputIdle: Effect.sync(() => idle) }),

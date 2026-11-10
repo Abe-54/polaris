@@ -4,7 +4,7 @@
  */
 import { AppId, AppRef, AppWindow, ComputerUseCall, type TurnItem } from "@polaris/protocol";
 import { Option, Schema } from "effect";
-import type { Target } from "./catalog.ts";
+import type { ScreenPoint, Target } from "./catalog.ts";
 import type { Envelope } from "./envelope.ts";
 
 /** The server name in both Harnesses; not `desktop`, which a user's own server may take. */
@@ -29,6 +29,54 @@ const Seen = Schema.Struct({
 });
 
 const decodeSeen = Schema.decodeUnknownOption(Seen);
+
+const PlacedWindow = Schema.Struct({
+  app_name: Schema.String,
+  visible: Schema.Boolean,
+  is_focused: Schema.Boolean,
+  bounds: Schema.Struct({
+    x: Schema.Number,
+    y: Schema.Number,
+    width: Schema.Number,
+    height: Schema.Number,
+  }),
+});
+
+const decodePlaced = Schema.decodeUnknownOption(Schema.Array(PlacedWindow));
+
+/**
+ * Why headed input at `points` wouldn't land in `app`, from a `list-windows` envelope: the app
+ * must be in front and each point inside one of its visible windows. Null when it would.
+ */
+export const offApp = (
+  app: AppRef,
+  points: ReadonlyArray<ScreenPoint>,
+  listed: Envelope | null
+): string | null => {
+  const windows = listed?.ok ? Option.getOrNull(decodePlaced(listed.data)) : null;
+
+  if (windows === null) return `polaris_desktop couldn't check where ${app.name}'s windows are.`;
+  const own = windows.filter((window) => window.app_name.toLowerCase() === app.name.toLowerCase());
+
+  if (!own.some((window) => window.is_focused))
+    return `${app.name} isn't in front, so this input would go to another app. focus_window it first.`;
+
+  const outside = points.find(
+    ({ x, y }) =>
+      !own.some(
+        ({ visible, bounds }) =>
+          visible &&
+          x >= bounds.x &&
+          x < bounds.x + bounds.width &&
+          y >= bounds.y &&
+          y < bounds.y + bounds.height
+      )
+  );
+
+  return outside === undefined
+    ? null
+    : `(${Math.round(outside.x)}, ${Math.round(outside.y)}) isn't inside a ${app.name} window, so this input would go to another app.`;
+};
 
 const decodeApps = Schema.decodeUnknownOption(Schema.Struct({ apps: Schema.Array(ListedApp) }));
 

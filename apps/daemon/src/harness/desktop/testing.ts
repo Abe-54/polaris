@@ -87,3 +87,28 @@ export const fakeDeps = (
   awake: countingAwake().awake,
   ...overrides,
 });
+
+/** A `list-windows` answer: each app's one window, the first app in front. */
+export const windowsOf = (
+  ...apps: ReadonlyArray<{
+    readonly app: string;
+    readonly at: readonly [number, number, number, number];
+  }>
+) =>
+  ok(
+    "list-windows",
+    apps.map(({ app, at: [x, y, width, height] }, index) => ({
+      id: `w-${index + 1}`,
+      title: app,
+      app_name: app,
+      visible: true,
+      is_focused: index === 0,
+      bounds: { x, y, width, height },
+    }))
+  );
+
+/** Dia in front, across two displays, with TextEdit behind it. */
+export const DIA_IN_FRONT = windowsOf(
+  { app: "Dia", at: [-500, 0, 1500, 900] },
+  { app: "TextEdit", at: [1200, 100, 400, 300] }
+);

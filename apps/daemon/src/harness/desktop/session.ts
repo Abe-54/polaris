@@ -23,7 +23,7 @@ import {
   type ScreenshotData,
 } from "./envelope.ts";
 import { type DesktopHost, lockedMessage } from "./host.ts";
-import { listedApps, pickApp, Sightings } from "./metadata.ts";
+import { listedApps, offApp, pickApp, Sightings } from "./metadata.ts";
 import type { DesktopRunner } from "./runner.ts";
 import { decodeDisplays, screenNote, shrink, WINDOW_NOTE } from "./screenshot.ts";
 import { type Takeover, tookOver } from "./takeover.ts";
@@ -215,10 +215,10 @@ export const desktopSession = (deps: DesktopSessionDeps) => {
     if (refusal !== null) return failure(refusal);
 
     if (app === null) {
-      if (!definition.hostWide) return failure(NAME_THE_APP);
+      if (definition.hostWide === null) return failure(NAME_THE_APP);
 
-      // The whole screen shows every app: only while the user has let this session into one.
-      if (parsed.screen !== null && !(yield* deps.authorize.controlling(deps.sessionId)))
+      // A capture with no app shows whatever is on screen: only once the user let this session into an app.
+      if (definition.hostWide === "capture" && !(yield* deps.authorize.controlling(deps.sessionId)))
         return failure(SCREEN_NEEDS_APP);
 
       return yield* act(definition, parsed, signal);
@@ -232,6 +232,18 @@ export const desktopSession = (deps: DesktopSessionDeps) => {
     });
 
     if (Predicate.isTagged(authorization, "Refuse")) return failure(authorization.message);
+
+    // Coordinates go to whatever is there: only into the app the user allowed.
+    const astray =
+      parsed.points.length === 0
+        ? null
+        : offApp(
+            app,
+            parsed.points,
+            yield* Effect.orElseSucceed(envelope(["list-windows"]), () => null)
+          );
+
+    if (astray !== null) return failure(astray);
 
     // The user who just answered the approval is at the Host: that input isn't a takeover.
     if (definition.headed && !authorization.asked && (yield* userActive))

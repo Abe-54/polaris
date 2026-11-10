@@ -24,7 +24,7 @@ import {
   type DesktopServer,
   storeSessions,
 } from "../harness/desktop/index.ts";
-import { fakeDeps, fakeRunner, ok } from "../harness/desktop/testing.ts";
+import { DIA_IN_FRONT, fakeDeps, fakeRunner, ok } from "../harness/desktop/testing.ts";
 import { HarnessEvent } from "../harness/HarnessDriver.ts";
 import { EventStore } from "../store/EventStore.ts";
 import { Engine } from "./Engine.ts";
@@ -66,7 +66,7 @@ export const setup = async (reuse?: { filename: string; probe: HostProbe; file: 
   const { driver, fakes } = fakeEngineParts();
   const filename = reuse?.filename ?? join(tempDir(), "state.sqlite");
   const { probe, file } = reuse ?? (await readyProbe());
-  const agentDesktop = fakeRunner({ "list-apps": RUNNING });
+  const agentDesktop = fakeRunner({ "list-apps": RUNNING, "list-windows": DIA_IN_FRONT });
 
   const desktop = Layer.unwrap(
     Effect.gen(function* () {
