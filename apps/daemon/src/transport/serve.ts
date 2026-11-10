@@ -120,8 +120,11 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
+/** One Harness availability report for the whole Daemon. */
+const availability = Availability.layer();
+
 /** One preference for the whole Daemon: the Claude driver reads it, the Engine serves it. */
-const suggestedReplyPreference = SuggestedReplyPreference.layer();
+const suggestedReplyPreference = SuggestedReplyPreference.layer().pipe(Layer.provide(availability));
 
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
@@ -162,7 +165,7 @@ export const engineServices = Layer.mergeAll(engine, releaseWhenQuiet()).pipe(
       TerminalsDaemonLive,
       ReviewerPolicyLive,
       RulesLive,
-      Availability.layer(),
+      availability,
       suggestedReplyPreference
     )
   ),
