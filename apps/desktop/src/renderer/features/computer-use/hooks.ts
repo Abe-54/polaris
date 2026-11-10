@@ -84,6 +84,17 @@ export const useComputerUseActions = (hostKey: string): ComputerUseActions => {
     }
   };
 
+  // The Daemon rechecks for 3 minutes after a pane opens; coming back to Polaris later checks too.
+  useEffect(() => {
+    if (opened === undefined) return;
+
+    const refresh = () => void polaris().request("computerUse.status", { hostKey, refresh: true });
+
+    window.addEventListener("focus", refresh);
+
+    return () => window.removeEventListener("focus", refresh);
+  }, [opened, hostKey]);
+
   return {
     busy,
     opened,
