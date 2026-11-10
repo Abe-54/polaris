@@ -38,6 +38,9 @@ import {
   waitFor,
 } from "./testing.ts";
 
+/** A loaded pre-push or CI run can take longer than waitFor's 2 s default. */
+const LOADED_MS = 10_000;
+
 export type Env = Engine | EventStore | DesktopMcp | ComputerUseHost | AppControl;
 
 export const DIA = "company.thebrowser.dia";
@@ -120,7 +123,11 @@ export const open = (sessionId: SessionId, permissionMode: PermissionMode = "sup
     yield* (yield* ComputerUseHost).enable;
     const repo = fakeRepo();
     yield* dispatch(Command.cases.RegisterWorkspace.make({ path: repo, name: null }));
-    const model = yield* waitFor((m) => [...m.workspaces.values()].some((w) => w.path === repo));
+
+    const model = yield* waitFor(
+      (m) => [...m.workspaces.values()].some((w) => w.path === repo),
+      LOADED_MS
+    );
 
     yield* dispatch(
       Command.cases.StartSession.make({
@@ -135,7 +142,7 @@ export const open = (sessionId: SessionId, permissionMode: PermissionMode = "sup
         attachments: [],
       })
     );
-    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "working");
+    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "working", LOADED_MS);
 
     return (yield* (yield* DesktopMcp).forSession({ sessionId }))!;
   });
@@ -160,7 +167,12 @@ export const asking = (
 ) =>
   Effect.gen(function* () {
     const result = call(server, name, input);
-    const model = yield* waitFor((m) => (m.sessions.get(sessionId)?.pending.size ?? 0) > 0);
+
+    const model = yield* waitFor(
+      (m) => (m.sessions.get(sessionId)?.pending.size ?? 0) > 0,
+      LOADED_MS
+    );
+
     const request = [...model.sessions.get(sessionId)!.pending.values()][0]!;
 
     return { result, request };
@@ -201,7 +213,7 @@ export const endTurn = (driver: FakeDriver, sessionId: SessionId) =>
     const harness = driver.latest(sessionId)!;
     const turnId = harness.turns.at(-1)!.turnId;
     harness.emit(HarnessEvent.TurnEnded({ turnId, status: "completed", error: null }));
-    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "idle");
+    yield* waitFor((m) => m.sessions.get(sessionId)?.session.state === "idle", LOADED_MS);
   });
 
 export const ranCommand = (ran: ReadonlyArray<ReadonlyArray<string>>, command: string) =>

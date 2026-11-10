@@ -76,8 +76,9 @@ describe("headed input", () => {
         let last: RequestId | null = null;
 
         for (const _ of [0, 1]) {
-          const model = yield* waitFor((m) =>
-            [...(m.sessions.get(S)?.pending.values() ?? [])].some((r) => r.id !== last)
+          const model = yield* waitFor(
+            (m) => [...(m.sessions.get(S)?.pending.values() ?? [])].some((r) => r.id !== last),
+            10_000
           );
 
           const request = [...model.sessions.get(S)!.pending.values()].find((r) => r.id !== last)!;
@@ -123,7 +124,7 @@ describe("one session per app", () => {
         const free = yield* asking(b, B, "snapshot", { app: "Dia" });
         yield* respond(free.request, allow());
         const got = yield* Effect.promise(() => free.result);
-        const title = (yield* waitFor(() => true)).sessions.get(A)!.session.title;
+        const title = (yield* waitFor(() => true, 10_000)).sessions.get(A)!.session.title;
 
         return { controlled: Option.getOrNull(controlled), busy, asked, got, title };
       })
