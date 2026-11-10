@@ -6,5 +6,5 @@
     "types": ["bun"],
     "customConditions": ["react-native", "browser"]
   },
-  "include": ["index.ts", "src"]
+  "include": ["index.ts", "src", "plugins"]
 }

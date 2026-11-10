@@ -27,6 +27,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "./plugins/android-dark-theme.ts",
       "@bacons/apple-targets",
       [
         "expo-camera",
