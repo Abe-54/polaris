@@ -2,7 +2,7 @@
 
 What the Daemon, the Desktop App, the Mobile App and Extensions build against for computer use (ENG-846, ADR 0104). The schemas are in `src/computerUse.ts`, the policy in `src/computerUsePolicy.ts`, and the additions to existing types in `src/domain.ts`. The policy is specified in `packages/spec/computer-use.qnt`.
 
-The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemon/src/computerUse/`) and announces `computer-use`. It serves the preview too (`apps/daemon/src/computerUse/preview/`): `preview.latest` on every Host, and `preview.watch` with `computer-use.preview` on macOS when the capture tool is beside the Daemon. `computerUse.app` still answers `Unsupported` (`apps/daemon/src/transport/computerUseDefaults.ts`, a layer of its own that the real handlers replace). The Engine sends the two approval kinds (`apps/daemon/src/engine/appApprovals.ts`), with `app.icon` null until `computerUse.app` is served.
+The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemon/src/computerUse/`) and announces `computer-use`. It serves the preview too (`apps/daemon/src/computerUse/preview/`): `preview.latest` on every Host, and `preview.watch` with `computer-use.preview` on macOS when the capture tool is beside the Daemon. `computerUse.app` still answers `Unsupported` (`apps/daemon/src/transport/computerUseDefaults.ts`, a layer of its own that the real handlers replace). The Engine sends all three approval kinds: `app` and `headed-input` (`apps/daemon/src/engine/appApprovals.ts`), with `app.icon` null until `computerUse.app` is served, and `computer-use` when a session asks for computer use while it's off (`apps/daemon/src/engine/computerUseRequests.ts`, below).
 
 `COMPUTER_USE_RPC_TAGS` lists the eleven RPCs. The SDK's Client group (`ExtensionClientRpcs`) leaves them out, as it does Requests: no Extension may call them.
 
@@ -10,10 +10,10 @@ The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemo
 
 | Capability | Who announces it | What it covers |
 |---|---|---|
-| `computer-use` | The Daemon, once it serves the RPCs below. A Client, when it decodes the two new approval kinds. | Every `computerUse.*` RPC except the live preview, the `app` and `headed-input` approval kinds, and `ToolCall.computerUse`. |
+| `computer-use` | The Daemon, once it serves the RPCs below. A Client, when it decodes the three new approval kinds. | Every `computerUse.*` RPC except the live preview, the `app`, `headed-input` and `computer-use` approval kinds, and `ToolCall.computerUse`. |
 | `computer-use.preview` | The Daemon, only on a Host that can capture a window live (macOS). | `computerUse.preview.watch`. |
 
-The Daemon sends an `app` or `headed-input` approval only to a Client that announced `computer-use`, as it does for `secret` and `approval.secret`: an older Client can't decode the kind. `ToolCall.computerUse` is an optional field, so it needs no gate.
+The Daemon sends an `app`, `headed-input` or `computer-use` approval only to a Client that announced `computer-use`, as it does for `secret` and `approval.secret`: an older Client can't decode the kind. `ToolCall.computerUse` is an optional field, so it needs no gate.
 
 ## Status
 
@@ -53,7 +53,7 @@ The Daemon sends an `app` or `headed-input` approval only to a Client that annou
 
 ## Approvals
 
-Two new `ApprovalKind`s. Both carry the app in `ApprovalRequest.app` (a `DesktopApp`) and the session in `sessionId`. Both are answered with `RespondToApproval`, like any approval.
+Two new `ApprovalKind`s for apps (the third, `computer-use`, is in "A session asks for computer use" below). Both carry the app in `ApprovalRequest.app` (a `DesktopApp`) and the session in `sessionId`. Both are answered with `RespondToApproval`, like any approval.
 
 | Kind | Asked | Answers |
 |---|---|---|
@@ -65,6 +65,19 @@ Two new `ApprovalKind`s. Both carry the app in `ApprovalRequest.app` (a `Desktop
 - `Allow { remember: true }` on `headed-input`, from anyone.
 - `Allow { remember: true }` on `app` from an Extension. "Always allow" changes the Host for every later Agent Session, so only the Desktop App and a Linked Device set it; an Extension allows for the session or denies.
 - `Answer` and `Provided`.
+
+## A session asks for computer use
+
+On a Host whose status is `Off` or `NeedsSetup`, an Agent Session that isn't read-only (never the Reviewer) gets one tool in `polaris_desktop`, `request_computer_use { app, reason }`; a `NoDesktop` Host gives none. Calling it puts the session in Needs You with an approval of kind `computer-use`:
+
+- `ApprovalRequest.computerUse` is a `ComputerUseRequest`: `state`, the Host's `ComputerUseState` when the session asked; `app`, the app the agent named, as it wrote it (not an `AppId`); and `reason`, one sentence for the user. `title` is "Use ‹app›", `detail` the reason, and `expiresAt` when the Daemon gives up (30 minutes).
+- **It clears when the Host is `Ready`.** The Daemon withdraws it (`ApprovalWithdrawn`, `withdrawnBy: daemon`, reason `Computer use is on`). The agent is told its tools come on its next Turn: after this Turn ends, the Daemon stops the Harness, and the next Turn resumes the same conversation from its cursor with every `polaris_desktop` tool.
+- **Or when the user picks Not now**: `RespondToApproval` with `Deny`. Any other decision is refused (`CommandRejected`) and the request stays.
+- It is also withdrawn when its Turn ends, the agent stops waiting, or 30 minutes pass.
+
+A Client shows it as the inline prompt (Paper CU3): the fix for the Host's current status from the Host feed, and Not now. It never offers Allow.
+
+The spec is `packages/spec/computer-use-request.qnt`.
 
 ## The policy
 

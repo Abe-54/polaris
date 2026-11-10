@@ -7,13 +7,45 @@ import {
   type AppId,
   OpenComputerUseSetup,
   RemoveAllowedApp,
+  SessionId,
   type AllowedApp,
+  type AppWindow,
   type ComputerUseItem,
   type ComputerUseStatus,
+  type PreviewIdleReason,
 } from "@polaris/protocol";
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
 
 const OnHost = { hostKey: Schema.String.check(Schema.isMinLength(1)) };
+
+/** A session's preview: the longer side wanted in pixels, null for the largest. */
+const Preview = Schema.Struct({
+  ...OnHost,
+  sessionId: SessionId,
+  maxEdgePx: Schema.NullOr(Schema.Int),
+});
+
+/** One preview image with its bytes (a JPEG), taken from its blob in the main process. */
+export interface PreviewImage {
+  readonly bytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly capturedAt: string;
+  readonly window: AppWindow | null;
+}
+
+/**
+ * The live preview feed: frames, an idle reason, or `NoLive` once, at the start, on a Host
+ * without live capture (Linux, Windows, an older Daemon); `computerUse.preview.latest` then.
+ */
+export type PreviewFeedItem = Data.TaggedEnum<{
+  Frame: { readonly image: PreviewImage };
+  Idle: { readonly reason: PreviewIdleReason };
+  NoLive: Record<never, never>;
+}>;
+
+/** Its constructors; across IPC an item arrives as a plain object with the same `_tag`. */
+export const PreviewFeedItem = Data.taggedEnum<PreviewFeedItem>();
 
 export const ComputerUseRequestInputs = {
   "computerUse.status": Schema.Struct({ ...OnHost, refresh: Schema.Boolean }),
@@ -34,6 +66,7 @@ export const ComputerUseRequestInputs = {
   }),
   /** This Mac's app picker: an app chosen under /Applications, read in main, never a plist here. */
   "computerUse.pickApp": Schema.Struct({}),
+  "computerUse.preview.latest": Preview,
 } as const;
 
 /** An app picked on this Mac: its bundle id and name. */
@@ -51,13 +84,18 @@ export interface ComputerUseRequestOutputs {
   readonly "computerUse.allowedApps.add": ReadonlyArray<AllowedApp>;
   /** Null when cancelled. */
   readonly "computerUse.pickApp": PickedApp | null;
+  /** Null before the session's first action, or on a Host that can't take screenshots. */
+  readonly "computerUse.preview.latest": PreviewImage | null;
 }
 
 export const ComputerUseSubscriptionInputs = {
   /** The Host feed: a status, the always-allowed and the controlled apps, then each on change. */
   "computerUse.watch": Schema.Struct(OnHost),
+  /** Subscribing starts the Host's capture and unsubscribing stops it (D4). */
+  "computerUse.preview.watch": Preview,
 } as const;
 
 export interface ComputerUseSubscriptionItems {
   readonly "computerUse.watch": ComputerUseItem;
+  readonly "computerUse.preview.watch": PreviewFeedItem;
 }

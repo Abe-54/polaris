@@ -27,6 +27,8 @@ import {
   fakeDeps,
   fakeHost,
   fakeRunner,
+  NO_DESKTOP,
+  OFF,
   ok,
   windowsOf,
 } from "./testing.ts";
@@ -75,11 +77,27 @@ describe("which sessions get polaris_desktop", () => {
     expect(await withServer(fakeDeps(runner), async (s) => s, true)).toBeNull();
   });
 
-  test("a Host that isn't ready gives no tools", async () => {
+  test("a Host with no desktop gives no tools", async () => {
     const { runner } = fakeRunner({});
-    const deps = fakeDeps(runner, { host: fakeHost({ ready: Effect.succeed(false) }) });
+    const deps = fakeDeps(runner, { host: fakeHost({ state: Effect.succeed(NO_DESKTOP) }) });
 
     expect(await withServer(deps, async (s) => s)).toBeNull();
+  });
+
+  test("an Off Host lists only request_computer_use, which runs nothing on the Host", async () => {
+    const { runner, calls } = fakeRunner({});
+    const deps = fakeDeps(runner, { host: fakeHost({ state: Effect.succeed(OFF) }) });
+
+    const listed = await withServer(deps, async (s) => ({
+      names: s?.tools.map((t) => t.name),
+      description: s?.tools[0]?.description,
+      unbound: await s?.tools[0]?.call({ app: "Numbers", reason: "Fill in the report" }),
+    }));
+
+    expect(listed?.names).toEqual(["request_computer_use"]);
+    expect(listed?.description).toContain("Computer use is off on workbox");
+    expect(listed?.unbound?.isError).toBe(true);
+    expect(calls).toEqual([]);
   });
 
   test("a ready Host lists the headless and headed tools", async () => {

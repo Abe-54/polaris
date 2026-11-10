@@ -4,7 +4,7 @@ Computer use for Agent Sessions (ENG-846, ADR 0104): an MCP server the Daemon ru
 
 - **Where agent-desktop runs.** On macOS inside Polaris Computer Use.app (`ComputerUseHelper.spawn`, responsibility disclaimed), so TCC charges the helper; elsewhere the Host's install (`AgentDesktop`). `runner.ts`.
 - **How Harnesses reach it.** One service, `DesktopMcp.forSession`, with a thin adapter each: Claude Code gets an in-process SDK server with its tools pre-allowed (`claude/desktop.ts`); Codex gets a loopback Streamable HTTP URL with a per-session token, its tools pre-approved, and `features.computer_use=false` on every thread (`codex/desktop.ts`, `http.ts`).
-- **Who gets it.** Never read-only sessions or the Reviewer; only when the Host is ready (`ComputerUseHost`'s status).
+- **Who gets it.** Never read-only sessions or the Reviewer. A Ready Host gives every tool; an Off or NeedsSetup one gives only `request_computer_use` (`request.ts`), which opens a `computer-use` approval through the Engine's `ComputerUseRequests` (bound with `bindRequests`, since the Engine is built after the Harness registry) and waits until the Host is Ready or the user says Not now; a NoDesktop Host gives none.
 - **Tools.** `catalog.ts`. Values go after `--` and flags as `--name=value`, so input that starts with `-` is never read as a flag; refs must look like `@<snapshot>:e<n>`. Headless: snapshot, find, click, type, set_value, scroll, press, screenshot, list_apps, list_windows, launch, focus_window. Headed (real pointer and keyboard, for apps with no accessibility tree): mouse_click, mouse_move, hover, drag, physical_click, physical_type. A snapshot with no refs, or `ACTION_NOT_SUPPORTED`, tells the agent to screenshot the screen and go headed. A screen screenshot is scaled to one pixel per point on macOS and says how its pixels map to screen points.
 - **Per session.** An agent-desktop session (its own snapshot namespace) with the cursor overlay labelled with the session title cut to six words; ended, and ended sessions swept, when the session closes. A display-awake hold (`caffeinate -d`) from a Turn's first call to its `TurnEnded`. A locked screen answers `The screen on <Host> is locked.` without running anything.
 - **Tool Calls.** Every result carries `computer_use` (`ComputerUseCall`: the app by bundle id, the window, headed); both translators read it back into `ToolCall.computerUse` (`metadata.ts`).
@@ -24,5 +24,5 @@ Every call is for one app, resolved to its stable id before anything runs (`sess
 
 | Seam | Here | Replaced by |
 |---|---|---|
-| `DesktopHost` (`host.ts`) | `computerUseDesktopHost`: `ready` is `ComputerUseHost.ensure` being `Ready`, `env` is `desktopEnv`. `transport/serve.ts` passes it to `DesktopMcp.layerOn`. | |
+| `DesktopHost` (`host.ts`): `state`, `untilReady`, `env`, `locked` | `computerUseDesktopHost`, on D1's `ComputerUseHost`: `state` is `ensure`'s, `untilReady` follows `changes`, `env` is `desktopEnv`. `transport/serve.ts` passes it to `DesktopMcp.layerOn`. | |
 | `Acted` (`session.ts`) | None. | D4's `PreviewTargets.acted`, the third argument of `DesktopMcp.layerOn`. |

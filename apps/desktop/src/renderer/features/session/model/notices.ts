@@ -78,6 +78,7 @@ const WANTS: Readonly<Record<ApprovalRequest["kind"], string>> = {
   secret: "is asking for a secret",
   app: "wants to use an app",
   "headed-input": "wants headed input",
+  "computer-use": "wants computer use",
 };
 
 /**

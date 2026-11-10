@@ -229,6 +229,7 @@ describe("walkthrough persistence and controls", () => {
     const engine = Engine.of({
       recoveredTurns: [],
       requestAppApproval: () => Effect.succeed(null),
+      requestComputerUse: () => Effect.die("unused"),
       runCommittedTurn: () => Effect.void,
       canSteerSession: () => Effect.succeed(false),
       steerCommittedInput: () => Effect.void,

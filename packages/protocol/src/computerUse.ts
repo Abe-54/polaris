@@ -112,6 +112,18 @@ export class ComputerUseStatus extends Schema.Class<ComputerUseStatus>("Computer
   checkedAt: Timestamp,
 }) {}
 
+/**
+ * A `computer-use` approval's notice: a session asked for computer use while it's off. It
+ * clears when the Host is `Ready` (the Daemon withdraws it) or on `Deny` ("Not now").
+ */
+export class ComputerUseRequest extends Schema.Class<ComputerUseRequest>("ComputerUseRequest")({
+  /** The Host's state when the session asked: `Off` or `NeedsSetup`. */
+  state: ComputerUseState,
+  /** The app the agent named, as it wrote it; not an `AppId`. */
+  app: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80)),
+  reason: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(600)),
+}) {}
+
 /** An app the user always allows on this Host. */
 export class AllowedApp extends Schema.Class<AllowedApp>("AllowedApp")({
   app: DesktopApp,

@@ -3,7 +3,7 @@ import { SessionId } from "@polaris/protocol";
 import { Effect, Exit, Scope } from "effect";
 import { agentBrowserServer, type BrowserMcp } from "../browser/index.ts";
 import { DesktopMcp } from "../desktop/index.ts";
-import { fakeDeps, fakeHost, fakeRunner } from "../desktop/testing.ts";
+import { fakeDeps, fakeHost, fakeRunner, NO_DESKTOP, READY } from "../desktop/testing.ts";
 import type { OpenOptions } from "../HarnessDriver.ts";
 import { makeClaudeDriver } from "./ClaudeDriver.ts";
 import { FakeClaude } from "./fakeClaude.ts";
@@ -20,7 +20,9 @@ const desktopService = (ready = true) =>
     }).pipe(
       Effect.provide(
         DesktopMcp.layerWith(
-          fakeDeps(fakeRunner({}).runner, { host: fakeHost({ ready: Effect.succeed(ready) }) })
+          fakeDeps(fakeRunner({}).runner, {
+            host: fakeHost({ state: Effect.succeed(ready ? READY : NO_DESKTOP) }),
+          })
         )
       )
     )

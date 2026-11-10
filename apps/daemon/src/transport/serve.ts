@@ -125,7 +125,8 @@ const browserMcp = BrowserMcp.layer.pipe(
 
 /**
  * Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS. The tools
- * follow `ComputerUseHost`'s status and ask `AppControl` before each app.
+ * follow `ComputerUseHost`'s status and ask `AppControl` before each app. The Engine binds its
+ * requests to it, so it is merged in beside harnesses.
  */
 const desktopMcp = Layer.unwrap(
   Effect.gen(function* () {
@@ -136,12 +137,13 @@ const desktopMcp = Layer.unwrap(
   })
 ).pipe(Layer.provide(Layer.mergeAll(ComputerUseHelper.layer, AgentDesktop.layer)));
 
-/** `AppControl` sits under the Engine it asks for approvals: bound once the Engine is up. */
-const appApprovals = Layer.effectDiscard(
+/** `AppControl` and `polaris_desktop` sit under the Engine they ask: bound once it is up. */
+const computerUseBindings = Layer.effectDiscard(
   Effect.gen(function* () {
     const engine = yield* Engine;
 
     yield* (yield* AppControl).bind(engine.requestAppApproval);
+    yield* (yield* DesktopMcp).bindRequests(engine.requestComputerUse);
   })
 );
 
@@ -165,7 +167,7 @@ export const traceServices = lazyTraces.pipe(
 );
 
 export const engineServices = Layer.mergeAll(
-  appApprovals.pipe(Layer.provideMerge(Engine.layer)),
+  computerUseBindings.pipe(Layer.provideMerge(Engine.layer)),
   releaseWhenQuiet()
 ).pipe(
   Layer.provideMerge(
@@ -174,6 +176,7 @@ export const engineServices = Layer.mergeAll(
       ConstellationLiveness.proxyLayer,
       lazyHostResources,
       harnesses,
+      desktopMcp,
       CheckpointsLive,
       WorktreeTrackerLive,
       ReviewCheckoutGitLive,

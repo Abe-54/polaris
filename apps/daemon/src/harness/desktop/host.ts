@@ -1,17 +1,19 @@
 /**
- * What `polaris_desktop` needs from the Host: whether computer use is ready (D1's status),
+ * What `polaris_desktop` needs from the Host: computer use's state (D1's status),
  * the environment agent-desktop needs to reach the display, and whether the screen is locked.
  */
 import { dlopen, FFIType } from "bun:ffi";
-import { AppId, AppRef } from "@polaris/protocol";
-import { Effect, Predicate } from "effect";
+import { AppId, AppRef, type ComputerUseState } from "@polaris/protocol";
+import { Effect, Predicate, Stream } from "effect";
 import { ComputerUseHost } from "../../computerUse/host.ts";
 import { shortHostName } from "../../service/hostName.ts";
 import type { Env } from "./runner.ts";
 
 export interface DesktopHost {
-  /** Rechecks the Host: true when sessions get the tools (D1's `Ready`). */
-  readonly ready: Effect.Effect<boolean>;
+  /** Rechecks the Host: `Ready` gets the tools, `Off` and `NeedsSetup` the request tool. */
+  readonly state: Effect.Effect<ComputerUseState>;
+  /** Completes once the Host is `Ready`. */
+  readonly untilReady: Effect.Effect<void>;
   /** Merged into agent-desktop's environment (D1's `desktopEnv`: the display on Linux). */
   readonly env: Effect.Effect<Env>;
   readonly locked: Effect.Effect<boolean>;
@@ -111,7 +113,12 @@ export const computerUseDesktopHost = Effect.gen(function* () {
   const mac = process.platform === "darwin";
 
   return {
-    ready: Effect.map(host.ensure, (status) => Predicate.isTagged(status.state, "Ready")),
+    state: Effect.map(host.ensure, (status) => status.state),
+    untilReady: host.changes.pipe(
+      Stream.filter((status) => Predicate.isTagged(status.state, "Ready")),
+      Stream.runHead,
+      Effect.asVoid
+    ),
     env: host.desktopEnv,
     locked: mac ? macLocked : Effect.succeed(false),
     inputIdle: mac ? macInputIdle : Effect.succeed(null),

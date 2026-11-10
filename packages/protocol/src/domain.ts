@@ -6,7 +6,7 @@ import { ScrubbedDataValue, ScrubbedText } from "./dataValues.ts";
 import { DataWritePreviewFacts } from "./data.ts";
 import { HttpMethod } from "./requests.ts";
 import { CelestialBody } from "./celestial.ts";
-import { ComputerUseCall, DesktopApp } from "./computerUse.ts";
+import { ComputerUseCall, ComputerUseRequest, DesktopApp } from "./computerUse.ts";
 import { HarnessKind } from "./harnesses.ts";
 import {
   AttachmentId,
@@ -597,6 +597,8 @@ export const ApprovalKind = Schema.Literals([
   "secret",
   "app",
   "headed-input",
+  /** A session asks for computer use while it's off (`ApprovalRequest.computerUse`). */
+  "computer-use",
 ]);
 
 export type ApprovalKind = typeof ApprovalKind.Type;
@@ -662,6 +664,8 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   origin: Schema.optionalKey(OriginApproval),
   /** For `app` and `headed-input`: the app the session asks to use; always set for them. */
   app: Schema.optionalKey(DesktopApp),
+  /** For `computer-use`: the Host's state, the app and the reason; always set for it. */
+  computerUse: Schema.optionalKey(ComputerUseRequest),
   dataWrite: Schema.optionalKey(
     Schema.Struct({
       target: DataSourceApproval,

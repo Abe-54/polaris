@@ -51,6 +51,7 @@ import { softWrap } from "./softWrap.tsx";
 import { SessionTargetContext } from "./polarisTool/target.ts";
 import { PromptMenu, TurnMenu } from "./turnMenu.tsx";
 import { LimitCard, type UsageLimit } from "./LimitCard.tsx";
+import { ComputerUseRequestCard } from "./ComputerUseRequestCard.tsx";
 import { SecretCard, SettledSecretCard } from "./SecretCard.tsx";
 import { DataSourceApprovalCard } from "../../data/approval/DataSourceApprovalCard.tsx";
 import { sourceForTarget } from "../../data/approval/decide.ts";
@@ -374,7 +375,7 @@ const Agent = ({ row, ctx }: { row: Extract<Row, { kind: "item" }>; ctx: RowCont
   </TurnMenu>
 );
 
-const KIND_WANTS: Record<Exclude<ApprovalRequest["kind"], "secret">, string> = {
+const KIND_WANTS: Record<Exclude<ApprovalRequest["kind"], "secret" | "computer-use">, string> = {
   command: "wants to run a command",
   "file-change": "wants to change files",
   tool: "wants to use a tool",
@@ -540,6 +541,16 @@ const Approval = ({
   ctx: RowContext;
 }) => {
   if (request.kind === "secret") return <Secret request={request} settled={settled} ctx={ctx} />;
+
+  if (request.kind === "computer-use")
+    return (
+      <ComputerUseRequestCard
+        request={request}
+        hostKey={ctx.diff.hostKey}
+        harness={ctx.harness}
+        onRespond={ctx.onRespond}
+      />
+    );
 
   if (request.dataWrite !== undefined)
     return (

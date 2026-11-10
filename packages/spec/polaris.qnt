@@ -1339,6 +1339,32 @@ module computer_use_removed_mutant {
     .then(removeAlways("figma")).then(use(1,"figma",false)).expect(not(safety))
 }
 
+/** A session asks for computer use while it's off (ENG-846): `request_computer_use`. */
+module computer_use_request {
+  import computer_use_request_model(BUG_NO_REOPEN=false,BUG_ALLOW_CLEARS=false).* from "./computer-use-request"
+  run onClearsAndReopensTest = init.then(ask(1))
+    .expect(cr.asks == Set(1) and safety)
+    .then(answer(1,"allow")).expect(cr.asks == Set(1) and cr.promised.size() == 0 and safety)
+    .then(turnOn).expect(cr.asks.size() == 0 and cr.promised == Set(1) and safety)
+    .then(endTurn(1)).expect(cr.tools.get(1) == "none" and safety)
+    .then(startTurn(1)).expect(cr.tools.get(1) == "full" and cr.reopened == 1 and safety)
+  run notNowKeepsHarnessTest = init.then(ask(1)).then(answer(1,"not-now")).then(endTurn(1))
+    .expect(cr.asks.size() == 0 and cr.tools.get(1) == "request" and cr.promised.size() == 0 and safety)
+  run turnEndWithdrawsTest = init.then(ask(2)).then(endTurn(2))
+    .expect(cr.asks.size() == 0 and safety)
+  run alreadyOnTest = init.then(turnOn).then(ask(1))
+    .expect(cr.asks.size() == 0 and cr.promised == Set(1) and safety)
+}
+module computer_use_request_reopen_mutant {
+  import computer_use_request_model(BUG_NO_REOPEN=true,BUG_ALLOW_CLEARS=false).* from "./computer-use-request"
+  run exposesStaleToolsTest = init.then(ask(1)).then(turnOn).then(endTurn(1)).then(startTurn(1))
+    .expect(not(safety))
+}
+module computer_use_request_allow_mutant {
+  import computer_use_request_model(BUG_NO_REOPEN=false,BUG_ALLOW_CLEARS=true).* from "./computer-use-request"
+  run exposesAllowClearsTest = init.then(ask(1)).then(answer(1,"allow")).expect(not(safety))
+}
+
 /** Writes bind safe previews to identity; COMMIT confirmation can be unknown. */
 module data_writes {
   type WriteState = { turn: bool, phase: str, dryRuns: int, approval: str,

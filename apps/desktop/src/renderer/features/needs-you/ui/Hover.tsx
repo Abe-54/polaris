@@ -69,6 +69,22 @@ const Card = ({ item }: { readonly item: WaitingSession }) => {
     );
   }
 
+  if (request.kind === "computer-use") {
+    return (
+      <div className="flex flex-col gap-2.5 p-3.5" data-testid="needs-you-hover-computer-use">
+        <p className="text-caption text-text-subtle min-w-0 truncate">
+          {name} wants computer use · {age(request.openedAt, now)}
+        </p>
+        <p className="text-label text-text-strong [overflow-wrap:anywhere]">{request.title}</p>
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={open}>
+            Answer in the conversation
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (request.kind === "question") {
     const views = questionViews(request);
     const typed = views.some((v) => v.answers.length === 0);

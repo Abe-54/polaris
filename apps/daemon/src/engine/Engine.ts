@@ -53,6 +53,7 @@ import {
   type TurnPageRequest,
 } from "./streams.ts";
 import { AppApprovals } from "./appApprovals.ts";
+import { ComputerUseRequests } from "./computerUseRequests.ts";
 import { SecretRequests } from "./secretRequests.ts";
 import { Supervisor } from "./supervisor.ts";
 import { TerminalHandoff } from "./terminal.ts";
@@ -86,6 +87,8 @@ export class Engine extends Context.Service<
     readonly provideSecret: SecretRequests["Service"]["provide"];
     /** Computer use asks the user for an app, or headed input in it, on the Turn in flight (ADR 0104). */
     readonly requestAppApproval: AppApprovals["Service"]["request"];
+    /** `request_computer_use` while computer use is off, until it's on or the user says Not now. */
+    readonly requestComputerUse: ComputerUseRequests["Service"]["request"];
     readonly subscribeHost: (
       afterSequence: Sequence | null,
       options?: HostSubscription
@@ -152,6 +155,7 @@ const EngineParts = Layer.mergeAll(Dispatcher.layer, Streams.layer).pipe(
   Layer.provideMerge(Supervisor.layer),
   Layer.provideMerge(SecretRequests.layer),
   Layer.provideMerge(AppApprovals.layer),
+  Layer.provideMerge(ComputerUseRequests.layer),
   Layer.provideMerge(EngineRuntime.layer),
   (parts) =>
     Layer.mergeAll(LimitResume.layer, AutoArchive.layer, IdleCompaction.layer).pipe(
@@ -169,6 +173,7 @@ const make = Effect.gen(function* () {
   const autoArchive = yield* AutoArchive;
   const idleCompaction = yield* IdleCompaction;
   const secrets = yield* SecretRequests;
+  const computerUse = yield* ComputerUseRequests;
   const apps = yield* AppApprovals;
   const prepareForUpgrade = prepareSessionsForUpgrade(runtime);
   const prepareForRestart = prepareSessionsForUpgrade(runtime, "restart");
@@ -232,6 +237,7 @@ const make = Effect.gen(function* () {
     requestSecret: secrets.request,
     provideSecret: secrets.provide,
     requestAppApproval: apps.request,
+    requestComputerUse: computerUse.request,
     subscribeHost: streams.subscribeHost,
     subscribeSession: streams.subscribeSession,
     readTurnPage: streams.readTurnPage,
