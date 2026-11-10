@@ -182,6 +182,20 @@ describe("recent Turns", () => {
       expect(older.map((t) => t.index)).toEqual([first - 3, first - 2, first - 1]);
       const all = yield* store.readTurns({ sessionId: sId, beforeIndex: null, limit: null });
       expect(all.map((t) => t.index)).toEqual(Array.from({ length: total }, (_, i) => i));
+
+      // A Turn no longer in memory is found by its id, under its own session only.
+      const oldest = yield* store.readTurn({ sessionId: sId, turnId: TurnId.make("t-0") });
+      expect(oldest).toEqual(all[0]!);
+      const elsewhere = SessionId.make("s-other");
+      expect(
+        yield* store.readTurn({ sessionId: elsewhere, turnId: TurnId.make("t-0") })
+      ).toBeNull();
+      expect(yield* store.readTurn({ sessionId: sId, turnId: TurnId.make("t-none") })).toBeNull();
+
+      // Ids come in Turn order (not id order: "t-10" sorts before "t-2"), per session asked for.
+      const ids = yield* store.readTurnIds([elsewhere, sId]);
+      expect([...ids]).toEqual([[sId, all.map((t) => t.id)]]);
+      expect(yield* store.readTurnIds([])).toEqual(new Map());
     });
 
     await run(

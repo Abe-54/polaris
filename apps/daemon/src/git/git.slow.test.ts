@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync, realpathSync } from "node:fs";
+import { afterEach, describe, expect, type Mock, spyOn, test } from "bun:test";
+import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { SessionId, TurnId } from "@polaris/protocol";
 import { Effect, Layer } from "effect";
@@ -7,16 +7,35 @@ import { makeFakeBlobChannel } from "../files/testing.ts";
 import { Checkpoints } from "../services.ts";
 import { CheckpointsLive, captureCheckpoint, checkpointRef } from "./Checkpoints.ts";
 import { computeDiff, DiffSpec } from "./diff.ts";
+import { gitExecutable } from "./executable.ts";
 import { handleGitDiff, handleGitStatus } from "./GitRpcs.ts";
 import { findRepoRoot, gitText, mayBeInWorkTree, runGitRaw } from "./git.ts";
+import { globalOptions } from "./safeConfig/index.ts";
 import { parsePorcelainV2 } from "./status.ts";
 import { commitAll, makeRepo, removeTempDir, tempDir, write } from "./testing.ts";
 
 const cleanup: Array<string> = [];
 
+const spies: Array<Mock<typeof Bun.spawn>> = [];
+
 afterEach(() => {
+  for (const spy of spies.splice(0)) spy.mockRestore();
+
   for (const dir of cleanup.splice(0)) removeTempDir(dir);
 });
+
+/** Watches every git the Daemon starts from here; answers each one's command, sorted. */
+const gitsStarted = () => {
+  const spawn = spyOn(Bun, "spawn");
+  spies.push(spawn);
+
+  return () =>
+    spawn.mock.calls
+      .map(([command]) => (Array.isArray(command) ? command : []))
+      .filter((argv) => argv[0] === gitExecutable())
+      .map((argv) => String(argv[1 + globalOptions(argv.slice(1)).length]))
+      .toSorted((a, b) => a.localeCompare(b));
+};
 
 const repo = async (files?: Record<string, string>) => {
   const root = await makeRepo(files);
@@ -238,6 +257,33 @@ describe("git.diff", () => {
     expect(text).toContain("+two");
     expect(text).toContain("diff --git a/fresh.txt b/fresh.txt");
     expect(text).not.toContain("noise.log");
+  });
+
+  test("WorkingTree starts four gits: the snapshot's three and the diff", async () => {
+    const root = await repo({ "a.txt": "one\n" });
+    const spec = DiffSpec.cases.WorkingTree.make({ base: null });
+    await computeDiff(root, spec);
+    write(root, "a.txt", "two\n");
+    const started = gitsStarted();
+    const diff = await computeDiff(root, spec);
+
+    expect(decode(diff.bytes)).toContain("-one\n+two");
+    expect(started()).toEqual(["add", "diff", "rev-parse", "write-tree"]);
+  });
+
+  test("WorkingTree from a subdirectory covers the repository, against HEAD or nothing yet", async () => {
+    const root = await repo({ "a.txt": "one\n", "deep/b.txt": "b\n" });
+    write(root, "a.txt", "two\n");
+    const spec = DiffSpec.cases.WorkingTree.make({ base: null });
+    const diff = await computeDiff(join(root, "deep"), spec);
+    expect(diff.root).toBe(realpathSync.native(root));
+    expect(diff.index.map((file) => file.path)).toEqual(["a.txt"]);
+
+    const unborn = await repo({});
+    mkdirSync(join(unborn, "deep"));
+    write(unborn, "first.txt", "first\n");
+    const all = await computeDiff(join(unborn, "deep"), spec);
+    expect(all.index.map((file) => [file.path, file.status])).toEqual([["first.txt", "added"]]);
   });
 
   test("WorkingTree against an explicit base", async () => {

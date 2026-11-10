@@ -30,6 +30,10 @@ export interface TurnSpan {
 export const harnessStarted = (turn: Turn): boolean =>
   turn.trigger !== null || isIdleCompaction(turn);
 
+/** Whether two groups hold the same Turn views, in order: a cached row or tick still stands. */
+export const sameViews = (a: ReadonlyArray<TurnView>, b: ReadonlyArray<TurnView>) =>
+  a.length === b.length && a.every((v, n) => v === b[n]);
+
 const cache = new WeakMap<ReadonlyArray<TurnView>, ReadonlyArray<TurnGroup>>();
 
 /**

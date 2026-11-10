@@ -4,7 +4,7 @@
  */
 import type { Attachment, ReplyStats, ToolKind, TurnItem } from "@polaris/protocol";
 import { Match, Predicate } from "effect";
-import type { LiveItem } from "../../../store/sessionModel.ts";
+import { countNewlines, type LiveItem } from "../../../store/sessionModel.ts";
 import { type DesktopCall, desktopCallOf } from "./computerUse/index.ts";
 import { type NativeCall, nativeCall, nativeSummary } from "./nativeTools/index.ts";
 import {
@@ -68,6 +68,8 @@ export type ItemView =
       readonly kind: "command";
       readonly command: string;
       readonly output: string;
+      /** While it streams: the "\n"s in all its output, with what the live cap dropped. */
+      readonly outputNewlines?: number | undefined;
       readonly exitCode: number | null;
       readonly status: ItemStatus;
       /** It moved to the background, where it keeps running as a background task. */
@@ -356,7 +358,8 @@ const withStreamed = (view: ItemView, live: LiveItem): ItemView => {
   if ((view.kind === "message" || view.kind === "reasoning") && live.text !== "")
     return { ...view, text: live.text };
 
-  if (view.kind === "command" && live.output !== "") return { ...view, output: live.output };
+  if (view.kind === "command" && live.output !== "")
+    return { ...view, output: live.output, outputNewlines: live.outputNewlines };
 
   return view;
 };
@@ -372,6 +375,7 @@ export const liveItemView = (id: string, live: LiveItem): ItemView => {
       live: true,
       command: "",
       output: live.output,
+      outputNewlines: live.outputNewlines,
       exitCode: null,
       status: "running",
     };
@@ -393,14 +397,33 @@ export interface OutputTail {
   readonly hidden: number;
 }
 
-/** The last `lines` lines of command output, and how many were left out. */
-export const outputTail = (output: string, lines: number): OutputTail => {
+/** Command output's lines, a trailing newline ending the last rather than starting one. */
+export const lineCount = (output: string, newlines: number = countNewlines(output)): number =>
+  newlines + 1 - (output.endsWith("\n") ? 1 : 0);
+
+/**
+ * The last `lines` lines of command output, and how many were left out, found from the end.
+ * `newlines`: the whole output's, when `output` is only its capped tail (`outputNewlines`).
+ */
+export const outputTail = (output: string, lines: number, newlines?: number): OutputTail => {
   const trimmed = output.endsWith("\n") ? output.slice(0, -1) : output;
-  const all = trimmed.split("\n");
+  let cut = trimmed.length;
 
-  if (all.length <= lines) return { text: trimmed, hidden: 0 };
+  for (let found = 0; found < lines; found++) {
+    const at = cut === 0 ? -1 : trimmed.lastIndexOf("\n", cut - 1);
 
-  return { text: all.slice(-lines).join("\n"), hidden: all.length - lines };
+    if (at === -1) {
+      // All of `output` fits; lines dropped before it by the cap are still hidden.
+      return {
+        text: trimmed,
+        hidden: newlines === undefined ? 0 : lineCount(output, newlines) - found - 1,
+      };
+    }
+
+    cut = at;
+  }
+
+  return { text: trimmed.slice(cut + 1), hidden: lineCount(output, newlines) - lines };
 };
 
 /** A Turn's output to copy: the agent's messages as Markdown, in order, a blank line apart. */

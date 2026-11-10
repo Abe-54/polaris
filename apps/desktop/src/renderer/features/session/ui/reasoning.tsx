@@ -2,7 +2,7 @@
  * The folded "Thought" disclosure (DESIGN.md, Turns in the conversation):
  * "Thinking…" with its elapsed time while live, "Thought for 12s" once done.
  */
-import { ChevronDownIcon, ChevronRightIcon } from "@polaris/ui";
+import { DisclosureChevron } from "@polaris/ui";
 import { type ReactNode, useState } from "react";
 import { useNow } from "../../../shell/useNow.ts";
 import type { ItemView } from "../model/items.ts";
@@ -31,11 +31,7 @@ const Disclosure = ({
       className="text-body text-text-subtle hover:text-text-default flex h-6 cursor-default items-center gap-2 self-start"
     >
       {children}
-      {open ? (
-        <ChevronDownIcon size={10} className="text-text-faint" />
-      ) : (
-        <ChevronRightIcon size={10} className="text-text-faint" />
-      )}
+      <DisclosureChevron open={open} className="text-text-faint" />
     </button>
   );
 

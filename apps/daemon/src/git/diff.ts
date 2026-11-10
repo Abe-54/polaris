@@ -2,16 +2,10 @@
  * Unified diffs for `git.diff`: the working tree (untracked files included),
  * one Turn (between its checkpoint refs), or an arbitrary range.
  */
-import { GitDiff } from "@polaris/protocol";
+import { type DiffFile, GitDiff } from "@polaris/protocol";
 import { checkpointRef } from "./Checkpoints.ts";
-import {
-  emptyTree,
-  findRepoRoot,
-  GitOutputTooLarge,
-  resolveCommit,
-  resolveHead,
-  runGit,
-} from "./git.ts";
+import { indexDiff } from "./diffIndex.ts";
+import { emptyTree, findRepoRoot, GitOutputTooLarge, resolveCommit, runGit } from "./git.ts";
 import { megabytes } from "./output.ts";
 import { snapshotWorkingTree } from "./snapshot.ts";
 
@@ -45,7 +39,10 @@ export class NotARepository extends Error {
 
 export interface DiffResult {
   readonly bytes: Uint8Array;
+  /** How many files the patch holds: its `diff --git` headers. */
   readonly files: number;
+  /** Each file's byte range in `bytes` and its line counts, in patch order. */
+  readonly index: ReadonlyArray<DiffFile>;
   readonly root: string;
   /**
    * Where `.gitattributes` and `.polaris/review.md` are read: a range's base, so a change
@@ -80,29 +77,9 @@ const diffTrees = async (root: string, from: string, to: string): Promise<DiffRe
     timeoutMs: DIFF_TIMEOUT_MS,
   }).catch(diffTooLarge);
 
-  return { bytes: stdout, files: countFiles(stdout), root, rulesAt: null };
-};
+  const index = indexDiff(stdout);
 
-/** Counts `diff --git ` headers at line starts without decoding the whole diff. */
-export const countFiles = (bytes: Uint8Array): number => {
-  const marker = new TextEncoder().encode("diff --git ");
-  let count = 0;
-
-  for (let i = 0; i <= bytes.length - marker.length; i++) {
-    if (i !== 0 && bytes[i - 1] !== 0x0a) continue;
-    let match = true;
-
-    for (let k = 0; k < marker.length; k++) {
-      if (bytes[i + k] !== marker[k]) {
-        match = false;
-        break;
-      }
-    }
-
-    if (match) count++;
-  }
-
-  return count;
+  return { bytes: stdout, files: index.length, index, root, rulesAt: null };
 };
 
 const requireCommit = async (root: string, ref: string, what: string): Promise<string> => {
@@ -113,15 +90,17 @@ const requireCommit = async (root: string, ref: string, what: string): Promise<s
   return commit;
 };
 
-const diffWorkingTree = async (cwd: string, root: string, spec: WorkingTreeSpec) => {
-  const snapshot = await snapshotWorkingTree(root);
+/** The snapshot already knows the top level and HEAD: neither is asked of git again. */
+const diffWorkingTree = async (cwd: string, spec: WorkingTreeSpec) => {
+  const snapshot = await snapshotWorkingTree(cwd);
 
   if (snapshot === null) throw new NotARepository(cwd);
+  const { root } = snapshot;
 
   const base =
     spec.base !== null
       ? await requireCommit(root, spec.base, "ref")
-      : ((await resolveHead(root)) ?? (await emptyTree(root)));
+      : (snapshot.head ?? (await emptyTree(root)));
 
   return diffTrees(root, base, snapshot.tree);
 };
@@ -167,15 +146,18 @@ const diffRange = async (root: string, spec: RangeSpec) => {
   return { ...(await diffTrees(root, base, head)), rulesAt: base };
 };
 
-export const computeDiff = async (cwd: string, spec: DiffSpec): Promise<DiffResult> => {
+const requireRoot = async (cwd: string): Promise<string> => {
   const root = await findRepoRoot(cwd);
 
   if (root === null) throw new NotARepository(cwd);
 
-  return DiffSpec.match(spec, {
-    WorkingTree: (workingTree) => diffWorkingTree(cwd, root, workingTree),
-    Turn: (turn) => diffTurn(cwd, root, turn),
-    Range: (range) => diffRange(root, range),
-    Turns: (turns) => diffTurns(cwd, root, turns),
-  });
+  return root;
 };
+
+export const computeDiff = (cwd: string, spec: DiffSpec): Promise<DiffResult> =>
+  DiffSpec.match(spec, {
+    WorkingTree: (workingTree) => diffWorkingTree(cwd, workingTree),
+    Turn: async (turn) => diffTurn(cwd, await requireRoot(cwd), turn),
+    Range: async (range) => diffRange(await requireRoot(cwd), range),
+    Turns: async (turns) => diffTurns(cwd, await requireRoot(cwd), turns),
+  });

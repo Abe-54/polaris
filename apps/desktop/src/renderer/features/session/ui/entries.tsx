@@ -4,7 +4,7 @@
  * one row showing what it is doing while it works; it opens to its task, its
  * own transcript, grouped the same way, and its final report.
  */
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, cn, PixelFailedIcon } from "@polaris/ui";
+import { CheckIcon, cn, DisclosureChevron, PixelFailedIcon } from "@polaris/ui";
 import { useState } from "react";
 import { chooseCollapse, initialOpen } from "../model/collapse.ts";
 import { formatElapsed } from "../model/format.ts";
@@ -28,12 +28,9 @@ const useOpen = (key: string) => {
   return [open, toggle] as const;
 };
 
-const Chevron = ({ open }: { readonly open: boolean }) =>
-  open ? (
-    <ChevronDownIcon size={10} className="text-text-faint shrink-0" />
-  ) : (
-    <ChevronRightIcon size={10} className="text-text-faint shrink-0" />
-  );
+const Chevron = ({ open }: { readonly open: boolean }) => (
+  <DisclosureChevron open={open} className="text-text-faint" />
+);
 
 export interface EntryContext {
   readonly hue: Hue;

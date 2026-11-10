@@ -50,12 +50,15 @@ const useSend = (onReply: ApprovalActionsProps["onReply"]) => {
   return { sending, send };
 };
 
-const Failed = ({ sending }: { readonly sending: Sending }) =>
-  sending.kind === "failed" ? (
-    <Text maxFontSizeMultiplier={CONTENT_TEXT_SCALE} style={useStyles().failed}>
+const Failed = ({ sending }: { readonly sending: Sending }) => {
+  const styles = useStyles();
+
+  return sending.kind === "failed" ? (
+    <Text maxFontSizeMultiplier={CONTENT_TEXT_SCALE} style={styles.failed}>
       Couldn't send. Try again.
     </Text>
   ) : null;
+};
 
 /** Filled white for Approve and a first choice (never Starlight), outlined for other choices. */
 type ButtonKind = "filled" | "outlined" | "plain" | "quiet";

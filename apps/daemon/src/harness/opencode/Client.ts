@@ -5,6 +5,7 @@
  */
 import { Effect, Stream } from "effect";
 import type { HarnessError } from "../HarnessDriver.ts";
+import { readLines } from "../../lines.ts";
 import type * as P from "./protocol.ts";
 import { opencodeError, type ServerHandle } from "./Server.ts";
 
@@ -30,30 +31,21 @@ const headersFor = (handle: ServerHandle, directory: string) => ({
 
 /** Splits an SSE body into the JSON of each event's `data:` lines. */
 async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator<P.Payload> {
-  const decoder = new TextDecoder();
-  let buffer = "";
   let data: Array<string> = [];
 
-  for await (const chunk of body) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let newline = buffer.indexOf("\n");
+  for await (const raw of readLines(body)) {
+    const line = raw.replace(/\r$/, "");
 
-    while (newline >= 0) {
-      const line = buffer.slice(0, newline).replace(/\r$/, "");
-      buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf("\n");
+    if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    else if (line === "" && data.length > 0) {
+      const payload = data.join("\n");
+      data = [];
 
-      if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
-      else if (line === "" && data.length > 0) {
-        const payload = data.join("\n");
-        data = [];
-
-        try {
-          const parsed: P.Payload = JSON.parse(payload);
-          yield parsed;
-        } catch {
-          // A malformed event is skipped, like an unknown one.
-        }
+      try {
+        const parsed: P.Payload = JSON.parse(payload);
+        yield parsed;
+      } catch {
+        // A malformed event is skipped, like an unknown one.
       }
     }
   }

@@ -10,6 +10,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   cn,
+  DisclosureChevron,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
@@ -97,7 +98,7 @@ const RowView = ({ row, path, syntax, wrap, onFold }: RowViewProps) => {
         <div
           className={cn(
             CARD,
-            "rounded-t-row group/file flex h-9 w-[calc(100%-2rem)] items-center border-t pr-1.5",
+            "rounded-t-row group/file flex h-9 w-[calc(100%-2rem)] items-center border-t pr-1.5 transition-[border-radius] duration-120 ease-out",
             row.folded ? "rounded-b-row border-b" : "border-hairline border-b"
           )}
         >
@@ -108,11 +109,7 @@ const RowView = ({ row, path, syntax, wrap, onFold }: RowViewProps) => {
             className="flex h-full min-w-0 flex-1 cursor-default items-center gap-2.5 px-3 text-left"
             data-testid="diff-file"
           >
-            {row.folded ? (
-              <ChevronRightIcon size={12} className="text-text-subtle" />
-            ) : (
-              <ChevronDownIcon size={12} className="text-text-subtle" />
-            )}
+            <DisclosureChevron open={!row.folded} size={12} className="text-text-subtle" />
             <span className="text-code-inline text-text-default truncate font-mono">
               {row.file.oldPath === null ? row.file.path : `${row.file.oldPath} → ${row.file.path}`}
             </span>

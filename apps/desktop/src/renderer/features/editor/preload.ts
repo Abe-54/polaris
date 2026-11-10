@@ -1,8 +1,8 @@
 /**
  * Warms the Editor before the user arrives (QCHECK: an 827 ms cold first open):
  * Edit mode's chunk and the grammars of the tabs it will show. Runs when the
- * pointer or focus reaches the mode switch, never at idle, so an app that
- * never opens the Editor never pays for it.
+ * pointer or focus reaches the mode switch; the grammars never load at idle,
+ * though the chunk does with the other modes' (app/warmModes.ts, ENG-905).
  */
 import { loadLanguage } from "./cm/languages.ts";
 import { readTabs } from "./model/drafts.ts";

@@ -12,6 +12,8 @@ export {
   type TerminalPanelsProps,
 } from "./ui/TerminalPanels.tsx";
 
+export { useTerminalLeaving } from "./ui/leaving.ts";
+
 export {
   InTerminalBar,
   OpenInTerminalItem,

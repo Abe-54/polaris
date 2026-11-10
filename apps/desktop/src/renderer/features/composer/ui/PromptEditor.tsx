@@ -59,8 +59,8 @@ export interface PromptEditorProps {
   readonly frecency: FrecencyTable;
   /** A command was picked from the menu (it counts toward frecency). */
   readonly onPicked: (option: CommandOption) => void;
-  /** What the user sent here, oldest first, for ↑/↓ (`sentMessages`). */
-  readonly history?: ReadonlyArray<string> | undefined;
+  /** What the user sent here, oldest first, for ↑/↓ (`sentMessages`); read only when they're pressed. */
+  readonly history?: (() => ReadonlyArray<string>) | undefined;
   /** Shell mode: the draft is a command, set in mono. */
   readonly mono?: boolean | undefined;
   /** The `@` picker's file search in the session's directory; unset, `@` is just text. */
@@ -278,7 +278,7 @@ export default function PromptEditor(props: PromptEditorProps) {
         },
       },
       recall: (toward) => {
-        const entries = latest.current.props.history ?? NO_HISTORY;
+        const entries = latest.current.props.history?.() ?? NO_HISTORY;
         const step = stepHistory(entries, cursor.current, toward, handle.read().draft.text);
 
         if (step === null) return null;

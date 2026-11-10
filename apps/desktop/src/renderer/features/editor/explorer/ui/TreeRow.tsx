@@ -1,5 +1,5 @@
 /** One Files row (Paper E1): indent, chevron, name, agent slot, git slot. */
-import { ChevronDownIcon, ChevronRightIcon, cn } from "@polaris/ui";
+import { cn, DisclosureChevron } from "@polaris/ui";
 import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import type { TreeRow as Row } from "../model/tree.ts";
 import { AgentSlot, GitSlot, nameTone } from "./slots.tsx";
@@ -19,13 +19,7 @@ export interface TreeRowProps {
 
 const Chevron = ({ row }: { readonly row: Row }) => (
   <span className="text-text-faint flex size-4 shrink-0 items-center justify-center">
-    {row.kind === "folder" ? (
-      row.open ? (
-        <ChevronDownIcon size={16} />
-      ) : (
-        <ChevronRightIcon size={16} />
-      )
-    ) : null}
+    {row.kind === "folder" ? <DisclosureChevron open={row.open} size={16} /> : null}
   </span>
 );
 
