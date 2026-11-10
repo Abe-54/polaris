@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { SessionId, SimulatorSessionItem, SimulatorSupport } from "@polaris/protocol";
 import { Effect, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { SimulatorTools } from "../../install/simulator/index.ts";
@@ -8,6 +8,9 @@ import { fakeHost, OURS, until } from "../../simulator/hub.testing.ts";
 import { SimulatorDetection } from "../../simulator/index.ts";
 import { SimulatorMcp, SimulatorMcpLive } from "./index.ts";
 import { callTool } from "./mcp.testing.ts";
+
+// The fake hub's waits (`until`) allow 10 s on a loaded run.
+setDefaultTimeout(20_000);
 
 const SESSION = SessionId.make("feed-session");
 

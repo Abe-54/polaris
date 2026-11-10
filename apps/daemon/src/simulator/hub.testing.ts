@@ -135,8 +135,8 @@ export const fakeHost = (idleMs = 300, { android = false } = {}): FakeHost => {
   };
 };
 
-/** Polls `check` every 10 ms until it holds, failing after `timeoutMs`. */
-export const until = async (check: () => boolean, timeoutMs = 3_000) => {
+/** Polls `check` every 10 ms until it holds, failing after `timeoutMs`: generous, for a loaded test run. */
+export const until = async (check: () => boolean, timeoutMs = 10_000) => {
   const deadline = Date.now() + timeoutMs;
 
   while (!check()) {

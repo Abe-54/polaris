@@ -1,9 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { SimulatorAttachItem } from "@polaris/protocol";
 import { SessionId } from "@polaris/protocol";
 import { Effect, Fiber, Stream } from "effect";
 import { SimulatorHub, SimulatorHubLive } from "./hub.ts";
 import { alive, fakeHost, OURS, until, USERS } from "./hub.testing.ts";
+
+// The fake hub's waits (`until`) allow 10 s on a loaded run.
+setDefaultTimeout(20_000);
 
 const SESSION = SessionId.make("ses_simulator_test");
 

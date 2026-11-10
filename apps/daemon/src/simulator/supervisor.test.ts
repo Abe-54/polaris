@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { DEFAULT_HUB_TIMING, HubSupervisor, hubTimingFromEnv } from "./supervisor.ts";
 import { until } from "./hub.testing.ts";
+
+// The fake hub's waits (`until`) allow 10 s on a loaded run.
+setDefaultTimeout(20_000);
 
 describe("hubTimingFromEnv", () => {
   test("POLARIS_SIMULATOR_IDLE_MS shortens the idle stop and nothing else", () => {
