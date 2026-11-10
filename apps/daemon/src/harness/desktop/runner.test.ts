@@ -27,7 +27,7 @@ describe.skipIf(!launcherRuns)(`agent-desktop inside the helper${MAC_ONLY}`, () 
     root = realpathSync(newTempDir("polaris-cud-", { short: true }));
     // This test run stands in for the Daemon: the launcher serves the program beside it.
     helper = await makeHelper(root, process.execPath);
-  });
+  }, 60_000);
 
   afterAll(() => removeTempDir(root));
 
@@ -35,7 +35,7 @@ describe.skipIf(!launcherRuns)(`agent-desktop inside the helper${MAC_ONLY}`, () 
     const stdout = await run(["facts", "--session", "run-7"], { POLARIS_TEST_VAR: "display" });
 
     expect(stdout.split("\n").slice(0, 3)).toEqual(["--session", "run-7", "display"]);
-  });
+  }, 20_000);
 
   test("an aborted call stops the tool instead of waiting it out", async () => {
     const controller = new AbortController();

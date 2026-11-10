@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { chmodSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -147,6 +147,11 @@ const sharedHelper = () => {
 
   return built;
 };
+
+// clang builds the launcher once, before the 5 s per-test clock starts; a loaded CI Mac needs it.
+beforeAll(async () => {
+  if (process.platform === "darwin") await sharedHelper();
+}, 60_000);
 
 /**
  * The helper app with a script in agent-desktop's place that prints what `status` holds, so a
