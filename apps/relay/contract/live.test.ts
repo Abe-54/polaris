@@ -3,168 +3,21 @@ import {
   encodeControl,
   LivePushRequest,
   PushHeaders,
-  RelayAddress,
   verifyPushRequest,
   type WakeOutcome,
 } from "@polaris/protocol/relay";
 import { signLiveTicket, signPushTicket } from "@polaris/protocol/relay/party";
 import { Schema } from "effect";
-import type { RelayConfig } from "./config.ts";
-import { LiveActivities, type LivePut, mergeSlots } from "./live.ts";
 import { TestParty } from "./testing/party.ts";
-import { type Identified, identify, startTestRelay, type TestRelay } from "./testing/relay.ts";
+import {
+  type Identified,
+  identify,
+  type RelayConfig,
+  startTestRelay,
+  type TestRelay,
+} from "./testing/relay.ts";
 
 const TOKEN = "b2".repeat(40);
-
-const address = (n: number) =>
-  Schema.decodeSync(RelayAddress)(`${String(n).padStart(2, "0")}${"A".repeat(20)}`);
-
-const DEVICE = address(99);
-
-const put = (host: number, slice: string, more: Partial<LivePut> = {}): LivePut => ({
-  host: address(host),
-  peer: DEVICE,
-  token: TOKEN,
-  environment: "sandbox",
-  slice,
-  active: false,
-  alert: false,
-  ...more,
-});
-
-const until = async (check: () => boolean) => {
-  for (let i = 0; i < 200 && !check(); i++) await Bun.sleep(5);
-};
-
-/** LiveActivities with a 60 ms interval, recording what it asked the push service to send. */
-const activities = (outcome: WakeOutcome = "sent", maxPerHost = 4) => {
-  const sent: Array<LivePushRequest> = [];
-  const gone: Array<{ hosts: ReadonlyArray<RelayAddress>; token: string }> = [];
-
-  const live = new LiveActivities({
-    deliver: async (request) => (sent.push(request), outcome),
-    gone: (hosts, token) => gone.push({ hosts, token }),
-    delivered: () => undefined,
-    maxActivities: 10,
-    maxPerHost,
-    intervalMs: 60,
-    hostGoneMs: 40,
-  });
-
-  return { live, sent, gone, slices: () => sent.map((r) => r.live.state.slices) };
-};
-
-describe("merging", () => {
-  test("slices go by host address, and past six the hosts with work or Needs You stay", () => {
-    const slots = new Map(
-      [7, 3, 5, 1, 6, 2, 4].map((n) => [
-        address(n),
-        { peer: DEVICE, slice: `s${n}`, active: n > 3 },
-      ])
-    );
-
-    expect(mergeSlots(new Map([...slots].slice(0, 3)))).toEqual(["s3", "s5", "s7"]);
-    expect(mergeSlots(slots)).toEqual(["s1", "s2", "s4", "s5", "s6", "s7"]);
-  });
-});
-
-describe("coalescing", () => {
-  test("the first slice goes at once; later ones in the interval go together, latest per host", async () => {
-    const { live, slices } = activities();
-
-    live.put(put(1, "a1"));
-    live.put(put(2, "b1"));
-    live.put(put(1, "a2"));
-    expect(slices()).toEqual([["a1"]]);
-
-    await until(() => slices().length === 2);
-    await Bun.sleep(80);
-    expect(slices()).toEqual([["a1"], ["a2", "b1"]]);
-    live.stop();
-  });
-
-  test("a new Needs You goes at once with the alert, even inside the interval", () => {
-    const { live, sent } = activities();
-
-    live.put(put(1, "a1"));
-    live.put(put(2, "b1", { alert: true, active: true }));
-
-    expect(sent.map((r) => [r.live.alert, r.live.state.slices])).toEqual([
-      [false, ["a1"]],
-      [true, ["a1", "b1"]],
-    ]);
-    live.stop();
-  });
-});
-
-describe("dropping", () => {
-  test("a host that stops listing the device leaves its activity; the update goes without it", async () => {
-    const { live, slices } = activities();
-
-    live.put(put(1, "a1"));
-    live.put(put(2, "b1"));
-    live.unlisted(address(1), new Set());
-    await until(() => slices().length === 2);
-    expect(slices().at(-1)).toEqual(["b1"]);
-
-    live.unlisted(address(2), new Set([DEVICE]));
-    live.put(put(2, "b1", { slice: null }));
-    expect(live.size).toBe(0);
-    live.stop();
-  });
-
-  test("a host whose socket stays gone leaves its activities; one that comes back keeps its slice", async () => {
-    const { live, slices } = activities();
-
-    live.put(put(1, "a1", { active: true }));
-    live.put(put(2, "b1", { active: true }));
-    live.hostGone(address(1));
-    live.hostGone(address(2));
-    live.hostBack(address(2));
-    await until(() => slices().length === 2);
-
-    expect(slices()).toEqual([["a1"], ["b1"]]);
-    live.hostGone(address(2));
-    await until(() => live.size === 0);
-    expect(live.size).toBe(0);
-    live.stop();
-  });
-
-  test("an unregistered token ends the activity and tells every host in it", async () => {
-    const { live, gone } = activities("unregistered");
-
-    live.put(put(1, "a1"));
-    live.put(put(2, "b1", { alert: true }));
-    await until(() => gone.length > 0);
-
-    expect(gone[0]?.hosts).toEqual([address(1), address(2)]);
-    expect(live.size).toBe(0);
-    live.stop();
-  });
-
-  test("another device's ticket for the same token is another activity: it can't join or evict this one", async () => {
-    const { live, slices } = activities();
-
-    live.put(put(1, "mine"));
-    live.put(put(2, "theirs", { peer: address(98), alert: true }));
-    live.put(put(1, "mine", { peer: address(98), slice: null }));
-    await Bun.sleep(80);
-
-    expect(slices()).toEqual([["mine"], ["theirs"]]);
-    expect(live.size).toBe(2);
-    live.stop();
-  });
-
-  test("a host holds slices in at most its share of activities", () => {
-    const { live, sent } = activities("sent", 1);
-
-    live.put(put(1, "a1"));
-    live.put(put(1, "x1", { token: "c3".repeat(40) }));
-
-    expect(sent.map((r) => r.token)).toEqual([TOKEN]);
-    live.stop();
-  });
-});
 
 const SECRET = "live-test-secret-0123456789abcdef0123";
 
@@ -173,6 +26,10 @@ const SLICE = "c2VhbGVkLXNsaWNlLXRoZS1yZWxheS1jYW5ub3QtcmVhZA";
 const OTHER_SLICE = "YW5vdGhlci1ob3N0cy1zZWFsZWQtc2xpY2U";
 
 const decodeLive = Schema.decodeUnknownSync(Schema.fromJsonString(LivePushRequest));
+
+const until = async (check: () => boolean) => {
+  for (let i = 0; i < 200 && !check(); i++) await Bun.sleep(5);
+};
 
 describe("through the relay", () => {
   let relay: TestRelay;

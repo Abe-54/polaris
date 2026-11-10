@@ -14,37 +14,33 @@ use crate::proc::{Usage, usage};
 /// Which relay to start.
 #[derive(Clone, Debug)]
 pub enum TargetKind {
-    /// `bun apps/relay/src/main.ts`.
-    Bun,
-    /// The Rust relay's release binary.
-    Rust,
-    /// Any command that serves the relay on `PORT`.
+    /// This workspace's release binary.
+    Relay,
+    /// Any command that serves the relay on `PORT`, such as another build of it.
     Command(Vec<String>),
 }
 
 impl TargetKind {
     pub fn parse(text: &str) -> Self {
         match text {
-            "bun" => TargetKind::Bun,
-            "rust" => TargetKind::Rust,
+            "relay" => TargetKind::Relay,
             other => TargetKind::Command(other.split_whitespace().map(str::to_owned).collect()),
         }
     }
 
-    fn command(&self, repo: &Path) -> Vec<String> {
+    fn command(&self) -> Vec<String> {
         match self {
-            TargetKind::Bun => vec!["bun".into(), "apps/relay/src/main.ts".into()],
-            TargetKind::Rust => {
-                vec![repo.join("apps/relay-rs/target/release/polaris-relay").display().to_string()]
+            TargetKind::Relay => {
+                vec![workspace().join("target/release/polaris-relay").display().to_string()]
             }
             TargetKind::Command(words) => words.clone(),
         }
     }
 }
 
-/// The repository root: this crate lives at `apps/relay-rs/bench`.
-pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize().unwrap_or_default()
+/// The relay's workspace: this crate lives in its `bench` directory.
+pub fn workspace() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").canonicalize().unwrap_or_default()
 }
 
 /// Per-address limits a load generator on one machine would hit at once.
@@ -75,19 +71,11 @@ pub struct Target {
 impl Target {
     /// Starts the relay on a free loopback port and waits for its `relay.start` line.
     pub async fn start(kind: &TargetKind, env: &[(&str, &str)]) -> Result<Self, Failure> {
-        let repo = repo_root();
-        let words = kind.command(&repo);
+        let words = kind.command();
         let port = free_port()?;
         let (program, args) = words.split_first().ok_or("empty relay command")?;
 
-        let mut command = Command::new(program);
-
-        // The relays of this repository run from its root; a given command runs from here.
-        if !matches!(kind, TargetKind::Command(_)) {
-            command.current_dir(&repo);
-        }
-
-        let mut child = command
+        let mut child = Command::new(program)
             .args(args)
             .env("PORT", port.to_string())
             .env("POLARIS_RELAY_HOSTNAME", "127.0.0.1")

@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@bacons/apple-targets": "5.0.0",
+    "@polaris/relay": "workspace:*",
     "@types/react": "19.3.0",
     "hermes-compiler": "260318099.0.4",
     "sodium-native": "5.2.0",

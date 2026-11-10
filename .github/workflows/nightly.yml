@@ -77,6 +77,8 @@ jobs:
         with:
           node-version: 24
       - uses: ./.github/actions/bun-install
+      # The Daemon's, the Mobile App's and the relay's own suites start the relay's binary.
+      - uses: ./.github/actions/relay-binary
       - name: Fetch the Quint evaluator
         if: runner.os != 'Windows'
         run: bun packages/spec/scripts/fetch-evaluator.ts

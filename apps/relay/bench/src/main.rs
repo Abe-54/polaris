@@ -29,8 +29,8 @@ struct Cli {
 enum Command {
     /// Runs scenarios against a relay it starts.
     Run {
-        /// `bun`, `rust`, or a command that serves the relay on $PORT.
-        #[arg(long, default_value = "bun")]
+        /// `relay` (this workspace's release binary) or a command that serves a relay on $PORT.
+        #[arg(long, default_value = "relay")]
         target: String,
         /// Scenarios to run, comma-separated (default: all).
         #[arg(long, value_delimiter = ',')]
@@ -64,7 +64,7 @@ enum Command {
 fn output(program: &str, args: &[&str]) -> String {
     Process::new(program)
         .args(args)
-        .current_dir(target::repo_root())
+        .current_dir(target::workspace())
         .output()
         .ok()
         .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
@@ -85,7 +85,6 @@ fn environment(threads: usize) -> BTreeMap<String, String> {
         ("arch".into(), std::env::consts::ARCH.into()),
         ("cores".into(), cores.to_string()),
         ("cpu".into(), cpu),
-        ("bun".into(), output("bun", &["--version"])),
         ("commit".into(), output("git", &["rev-parse", "--short", "HEAD"])),
         ("dirty".into(), (!output("git", &["status", "--porcelain"]).is_empty()).to_string()),
         ("loadgen_threads".into(), threads.to_string()),

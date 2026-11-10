@@ -9,7 +9,6 @@ import {
   type WakeOutcome,
 } from "@polaris/protocol/relay";
 import { Schema } from "effect";
-import { pushClient } from "./push.ts";
 import { TestParty } from "./testing/party.ts";
 import { type Identified, identify, startTestRelay, type TestRelay } from "./testing/relay.ts";
 import { signPushTicket } from "@polaris/protocol/relay/party";
@@ -193,6 +192,16 @@ describe("wakes", () => {
     expect((await host.control("woken")).outcome).toBe("unregistered");
   });
 
+  test("a push service that can't be reached answers unavailable", async () => {
+    // Nothing listens on port 1.
+    relay = startTestRelay({ push: { url: "http://127.0.0.1:1/api/push", secret: SECRET } });
+    const device = await identify();
+    const host = await TestParty.connect(relay.url, "host", { peers: [device.address] });
+
+    host.sendText(wake(device, host));
+    expect((await host.control("woken")).outcome).toBe("unavailable");
+  });
+
   test("a relay without a push service says so in its challenge and answers unavailable", async () => {
     relay = startTestRelay();
     const device = await identify();
@@ -202,19 +211,5 @@ describe("wakes", () => {
 
     party.sendText(wake(device, party));
     expect((await party.control("woken")).outcome).toBe("unavailable");
-  });
-});
-
-describe("pushClient", () => {
-  test("an unreachable service or a reply without an outcome is judged by its status", async () => {
-    const config = { url: "http://127.0.0.1:1/api/push", secret: SECRET };
-    const request = { token: TOKEN, environment: "sandbox" as const, payload: PAYLOAD };
-
-    expect(await pushClient(config)(request)).toBe("unavailable");
-
-    const reply = (status: number) => async () => new Response("no json", { status });
-    expect(await pushClient(config, reply(503))(request)).toBe("unavailable");
-    expect(await pushClient(config, reply(429))(request)).toBe("rate-limited");
-    expect(await pushClient(config, reply(401))(request)).toBe("refused");
   });
 });

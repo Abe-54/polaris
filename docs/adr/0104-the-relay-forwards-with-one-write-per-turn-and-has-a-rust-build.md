@@ -156,11 +156,12 @@ ordinary traffic on its own measured the same at either size.
 - CI's `relay-rs` job formats, lints and tests `apps/relay-rs`, then runs the Bun relay's suite
   against its binary, whenever either relay or the protocol changes (ENG-861).
 - Railway runs the Rust build (ENG-862), with the default workers: the cores it is given, at
-  most 8. Going back is `dockerfilePath` and `watchPatterns` in `apps/relay/railway.json`;
-  parties reconnect on their own either way. The relay now redeploys only when
-  `apps/relay-rs` changes, not on every protocol change.
-- The Bun build stays as the reference: its README is the contract and its suite, run
-  in-process and against the Rust binary, is what holds the two together.
+  most 8. The service's Dockerfile path and watch patterns are set on the Railway service,
+  which reads no file in the repository for them; parties reconnect on their own after a
+  deploy. The relay redeploys only when its own sources change, not on every protocol change.
+- ADR 0105 removes the Bun build: the relay is the Rust one, in `apps/relay`. What this ADR
+  says of two builds, `apps/relay-rs`, `POLARIS_RELAY_COMMAND` and the `relay-rs` job
+  describes the time of the comparison.
 - Each party's topic costs the Bun relay about 0.4 KiB a socket.
 - On macOS the Rust relay is woken for write readiness that Linux does not report, so its CPU
   reads higher on a Mac. Measure on Linux.

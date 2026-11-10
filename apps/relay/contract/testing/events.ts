@@ -1,7 +1,6 @@
 /**
- * Wide events: one structured line per connection, written when it closes, plus
- * start and refusal lines. They carry counts and opaque connection IDs only:
- * no payloads, relay addresses, keys or network addresses.
+ * The relay's log lines (README: Logs), as the suite reads them from its stdout. They carry
+ * counts and opaque connection IDs only: no payloads, relay addresses, keys or network addresses.
  */
 
 export interface ConnectionEvent {
@@ -51,8 +50,3 @@ export interface LiveEvent {
 }
 
 export type WideEvent = ConnectionEvent | RefusedEvent | StartEvent | WakeEvent | LiveEvent;
-
-export type EmitWideEvent = (event: WideEvent) => void;
-
-export const stdoutWideEvents: EmitWideEvent = (event) =>
-  console.log(JSON.stringify({ time: new Date().toISOString(), ...event }));
