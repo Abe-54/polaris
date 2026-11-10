@@ -6,7 +6,7 @@
 
 macos
 
-The Desktop App ships for macOS on Apple silicon; a Windows build is experimental and connects only to remote Hosts. The Mobile App (iPhone, including iPhone Duo) is in TestFlight by invitation; its design is DESIGN.md's Mobile App section (ENG-458).
+The Desktop App ships for macOS on Apple silicon; a Windows build is experimental and connects only to remote Hosts. The Mobile App (iPhone, including iPhone Duo, and Android) is designed in DESIGN.md's Mobile App section (ENG-458); the iPhone app is in TestFlight by invitation.
 
 ## Stack
 

@@ -8,6 +8,7 @@
   "scripts": {
     "start": "expo start",
     "ios": "bun scripts/buildSodium.ts && expo run:ios",
+    "android": "expo run:android",
     "dev:daemon": "bun scripts/devDaemon.ts",
     "hermes": "bun scripts/hermes.ts",
     "hermes:build": "bun scripts/buildHermes.ts",

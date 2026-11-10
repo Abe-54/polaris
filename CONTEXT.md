@@ -23,7 +23,7 @@ The macOS Client: a single main window in which the user moves between orchestra
 _Avoid_: IDE window, workspace window
 
 **Mobile App**:
-The iPhone Client (a Linked Device): for starting, continuing, and supervising Agent Sessions on any of the user's Hosts away from the desk; it has no Editor.
+The phone Client on iPhone and Android (a Linked Device): for starting, continuing, and supervising Agent Sessions on any of the user's Hosts away from the desk; it has no Editor.
 
 **Linked Device**:
 A Client the user links once through the Desktop App, after which it sees every Host the Desktop App knows; it reaches them through the Polaris Relay.

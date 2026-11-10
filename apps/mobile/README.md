@@ -22,6 +22,17 @@ bench Harness (the SDK's test Daemon), registers a Workspace and starts two agen
 prompt such as `bench:{"approvalEvery":1,"approvalQuestion":{"question":"…","choices":["A","B"]}}`
 makes a session ask for approval or answer, to try Home's inline replies.
 
+## Run it on Android
+
+Use an Android emulator or connected device with the Android SDK and NDK installed.
+
+```sh
+bun run --cwd apps/mobile android
+```
+
+`android` runs `expo run:android`. Gradle builds libsodium 1.0.21 through CMake;
+there is no separate `buildSodium` step. Rebuild the development client after native module changes.
+
 ## Hosts and the dev bridge
 
 The app is a Client, not an Extension: every screen shares one `HostConnection` per Host
