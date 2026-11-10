@@ -99,6 +99,8 @@ export const wantsLine = (kind: Exclude<ApprovalRequest["kind"], "question" | "s
     Match.when("command", () => "Wants to run"),
     Match.when("file-change", () => "Wants to change"),
     Match.when("tool", () => "Wants to use"),
+    Match.when("app", () => "Wants to use"),
+    Match.when("headed-input", () => "Wants headed input in"),
     Match.exhaustive
   );
 

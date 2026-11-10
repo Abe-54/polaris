@@ -20,6 +20,10 @@ export * from "./bridge.ts";
 
 export * from "./browser.ts";
 
+export * from "./computerUse.ts";
+
+export * from "./computerUsePolicy.ts";
+
 export * from "./byteStreamFlow.ts";
 
 export * from "./byteStreams.ts";

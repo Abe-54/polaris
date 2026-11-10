@@ -76,6 +76,8 @@ const WANTS: Readonly<Record<ApprovalRequest["kind"], string>> = {
   tool: "wants to use a tool",
   question: "has a question",
   secret: "is asking for a secret",
+  app: "wants to use an app",
+  "headed-input": "wants headed input",
 };
 
 /**
