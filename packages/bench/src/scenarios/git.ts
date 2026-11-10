@@ -178,7 +178,9 @@ export const gitScenario: Scenario = {
           `Turn diff: ${turnDiff.value.files} file(s), ${turnDiff.value.bytes} bytes; status: ${status.value.entries.length} entries; working-tree diff: ${workingDiff.value} file(s)`,
           `status with ignored: ${ignoredStatus.value.entries.length} entries over ${ignoredFiles} ignored files`,
           ...(turnDiff.value.files === 0
-            ? ["the Turn diff reported 0 files: see git/README.md (countFiles gets an ArrayBuffer)"]
+            ? [
+                "the Turn diff reported 0 files: see git/README.md (the file index gets an ArrayBuffer)",
+              ]
             : []),
         ],
       };

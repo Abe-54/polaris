@@ -197,6 +197,10 @@ export const mayBeInWorkTree = (cwd: string): boolean => {
   }
 };
 
+/** Git for Windows prints C:/forward/slashes; the Daemon's paths are native. */
+export const nativePath = (path: string): string =>
+  process.platform === "win32" ? resolve(path) : path;
+
 /** The repository's top level, or null when `cwd` is not inside a git work tree. */
 export const findRepoRoot = async (cwd: string): Promise<string | null> => {
   if (!mayBeInWorkTree(cwd)) return null;
@@ -207,8 +211,7 @@ export const findRepoRoot = async (cwd: string): Promise<string | null> => {
 
   if (root === "") return null;
 
-  // Git for Windows prints C:/forward/slashes; the Daemon's paths are native.
-  return process.platform === "win32" ? resolve(root) : root;
+  return nativePath(root);
 };
 
 /** The HEAD commit, or null on an unborn branch. */
