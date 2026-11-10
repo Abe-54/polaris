@@ -7,9 +7,11 @@ import { offersAlwaysAllow } from "../../thread/requests.ts";
 import type { ApprovalRequest } from "@polaris/protocol";
 import { mobileFont } from "@polaris/ui/tokens";
 import { Match } from "effect";
+import { ComputerUseApproval } from "../../computerUse/index.ts";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { themedStyles, useTheme } from "../../theme/index.ts";
+import { harnessName } from "../model/format.ts";
 import { approvalDetail, askLine, quickQuestion } from "../model/lines.ts";
 import { haptics } from "../../motion/index.ts";
 import type { Reply } from "../model/respond.ts";
@@ -22,6 +24,8 @@ export interface ApprovalActionsProps {
   readonly onReply: (reply: Reply) => Promise<void>;
   /** A question this card can't answer inline (several questions): open the agent session. */
   readonly onOpen: () => void;
+  /** Where the agent session runs, which a computer use approval names. */
+  readonly where: { readonly hostId: string; readonly host: string; readonly harness: string };
 }
 
 type Sending =
@@ -249,10 +253,29 @@ const Secret = ({ approval, onOpen }: ApprovalActionsProps) => {
   );
 };
 
+const ComputerUse = ({ approval, enabled, onReply, where }: ApprovalActionsProps) => {
+  const { sending, send } = useSend(onReply);
+
+  return (
+    <>
+      <ComputerUseApproval
+        request={approval}
+        hostId={where.hostId}
+        host={where.host}
+        harness={harnessName(where.harness)}
+        live={enabled && sending.kind !== "sending"}
+        onReply={send}
+      />
+      <Failed sending={sending} />
+    </>
+  );
+};
+
 export const ApprovalActions = (props: ApprovalActionsProps) =>
   Match.value(props.approval.kind).pipe(
     Match.when("question", () => <Question {...props} />),
     Match.when("secret", () => <Secret {...props} />),
+    Match.whenOr("app", "headed-input", () => <ComputerUse {...props} />),
     Match.orElse(() => <Permission {...props} />)
   );
 
