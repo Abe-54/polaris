@@ -89,6 +89,8 @@ import { lazyReviewer } from "./lazyReviewer.ts";
 import { lazyUsage } from "./lazyUsage.ts";
 import { LiveNotifierLive } from "../push/liveNotifier.ts";
 import { PushNotifierLive } from "../push/notifier.ts";
+import { ComputerUseHost, ComputerUseHostRpcHandlers } from "../computerUse/index.ts";
+import { ComputerUseHelper } from "../service/computerUse/index.ts";
 
 /** Exit status when another Daemon already holds the lock or answers on the socket. */
 export const SERVE_EXIT_ALREADY_RUNNING = 75;
@@ -161,6 +163,8 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
   Layer.provideMerge(ReviewerSessions.layer),
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).
   Layer.provideMerge(DeveloperModeLive),
+  // Computer use on this Host: its RPCs and the polaris_desktop tools read one status (ENG-846).
+  Layer.provideMerge(ComputerUseHost.layer.pipe(Layer.provideMerge(ComputerUseHelper.layer))),
   Layer.provideMerge(EventStore.layerLive)
 );
 
@@ -192,6 +196,7 @@ export const daemonHandlers = Layer.mergeAll(
   EngineRpcHandlers,
   VisualsRpcHandlers,
   DeveloperModeRpcHandlers,
+  ComputerUseHostRpcHandlers,
   RestartRpcHandlers,
   ContinuityRpcsLive.pipe(Layer.provide(Continuity.layer)),
   HostStatsRpcsLive.pipe(Layer.provide(HostStats.layer())),
@@ -326,6 +331,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "host.stats",
   "host-address",
   "browser.host",
+  "computer-use",
 ];
 
 /**

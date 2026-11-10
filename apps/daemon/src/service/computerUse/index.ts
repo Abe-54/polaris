@@ -94,12 +94,14 @@ const make = (locate: () => string | null, options: HelperOptions) => {
     })
   );
 
-  return { spawn, permissions };
+  return { bundle: located, spawn, permissions };
 };
 
 export class ComputerUseHelper extends Context.Service<
   ComputerUseHelper,
   {
+    /** The helper app's path, for System Settings to be shown it. */
+    readonly bundle: Effect.Effect<string, ComputerUseUnavailable>;
     /**
      * Starts a tool inside the helper with responsibility disclaimed, or through
      * LaunchServices when the setting says so. Closing the scope kills it. The helper's
