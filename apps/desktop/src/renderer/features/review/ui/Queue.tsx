@@ -5,9 +5,8 @@
  * row opens its menu on right-click.
  */
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
   cn,
+  DisclosureChevron,
   Kbd,
   KICKER,
   SEVERITY_LABELS,
@@ -187,8 +186,6 @@ const GroupHeader = ({
     );
   }
 
-  const Chevron = open ? ChevronDownIcon : ChevronRightIcon;
-
   return (
     <h2 className="flex">
       <button
@@ -199,7 +196,7 @@ const GroupHeader = ({
         onClick={onToggle}
         className={cn(className, "hover:text-text-default flex-1 cursor-default gap-1.5")}
       >
-        <Chevron size={10} className="text-text-faint shrink-0" />
+        <DisclosureChevron open={open} className="text-text-faint" />
         <span className="text-left">{group.label}</span>
         <span aria-hidden>·</span>
         <span className="tabular">{group.rows.length}</span>
