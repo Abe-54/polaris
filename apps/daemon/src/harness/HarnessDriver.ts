@@ -150,6 +150,8 @@ export type HarnessEvent = Data.TaggedEnum<{
     readonly limit?: { readonly resetsAt: string | null } | undefined;
   };
   TitleSuggested: { readonly title: string };
+  /** The Harness's own Suggested Reply for a Turn that just ended. */
+  ReplySuggested: { readonly turnId: TurnId; readonly text: string };
   /**
    * How full the context window is after the latest model call: the tokens it
    * carried, of the Model's window (null while the Harness hasn't said).

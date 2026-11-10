@@ -12,6 +12,7 @@ import {
   NotFound,
   type SessionId,
   Subagent,
+  SuggestedReply,
   type TurnId,
   Worktree,
 } from "@polaris/protocol";
@@ -28,7 +29,7 @@ import {
   type ConstellationLivenessService,
 } from "../constellation/liveness.ts";
 import { LiveItem } from "../store/EventStore.ts";
-import { workingTurn } from "../store/model.ts";
+import { lastTurn, workingTurn } from "../store/model.ts";
 import { UsageIndex } from "../usage/service.ts";
 import { isWorker, usageLimitOf } from "./limits.ts";
 import { worktreeIdFor } from "./decider.ts";
@@ -340,6 +341,20 @@ const make = (
             ? []
             : [DomainEvent.cases.SessionRenamed.make({ sessionId, title: e.title })]
         ),
+      // Only for the latest Turn once it has ended: a newer Turn makes it stale.
+      ReplySuggested: (e) =>
+        rt.recordFor(sessionId, (record) => {
+          const turn = lastTurn(record);
+
+          return turn?.id !== e.turnId || turn.endedAt === null
+            ? []
+            : [
+                DomainEvent.cases.SessionReplySuggested.make({
+                  sessionId,
+                  reply: SuggestedReply.make({ turnId: e.turnId, text: e.text, source: "harness" }),
+                }),
+              ];
+        }),
       ContextUsed: (e) =>
         rt.recordFor(sessionId, (record) => {
           const usage = contextUsageOf(e, record.session.contextUsage);
