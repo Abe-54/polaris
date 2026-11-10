@@ -2,13 +2,18 @@
  * The cards on a live Host: the host page's card for a machine, and the inline prompt for a
  * session, each on the Host feed. A Daemon without `computer-use` shows neither.
  */
+import type { ApprovalDecision, ApprovalRequest, HarnessKind } from "@polaris/protocol";
+import { harnessHue } from "@polaris/ui";
 import { Match } from "effect";
 import type { ConnectionStatusView, MachineView } from "../../../../shared/api.ts";
+import { Decisions } from "../../../commands.ts";
+import { useApp } from "../../../shell/hooks.ts";
 import { writeClipboard } from "../../clipboard.ts";
 import { platformOf } from "../../machines/restart/model.ts";
 import { useComputerUseActions, useComputerUseFeed } from "../hooks.ts";
 import type { HostFacts } from "../model.ts";
 import type { PromptAsk, PromptFix } from "../prompt.ts";
+import { AppApprovalCard } from "./AppApprovalCard.tsx";
 import { ComputerUseCard } from "./ComputerUseCard.tsx";
 import { InlinePrompt } from "./InlinePrompt.tsx";
 import { OnboardingCard } from "./OnboardingCard.tsx";
@@ -80,4 +85,32 @@ export const LocalMacOnboarding = ({ host }: { readonly host: HostLike }) => {
   if (!facts.local || facts.platform !== "macos" || !servesComputerUse(host)) return null;
 
   return <OnboardingCard hostKey={host.key} host={facts} />;
+};
+
+export interface ComputerUseApprovalProps {
+  readonly request: ApprovalRequest;
+  readonly hostKey: string;
+  readonly harness: HarnessKind | null;
+  readonly onRespond: (decision: ApprovalDecision) => void;
+}
+
+/** An app or headed-input approval in the transcript, on its Host's name (Paper CU4). */
+export const ComputerUseApproval = ({
+  request,
+  hostKey,
+  harness,
+  onRespond,
+}: ComputerUseApprovalProps) => {
+  const host = useApp((s) => s.hosts.find((h) => h.key === hostKey)?.label ?? "this Host");
+
+  return (
+    <AppApprovalCard
+      request={request}
+      who={harness === null ? "The agent" : harnessHue(harness).name}
+      host={host}
+      onAllow={() => onRespond(Decisions.Allow({ remember: false }))}
+      onAlwaysAllow={() => onRespond(Decisions.Allow({ remember: true }))}
+      onDeny={() => onRespond(Decisions.Deny({ reason: null }))}
+    />
+  );
 };

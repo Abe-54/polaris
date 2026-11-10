@@ -10,6 +10,8 @@ export {
   type SubscribeSessionOptions,
 } from "./client.ts";
 
+export { alwaysAllowable } from "./approvals.ts";
+
 export type { ConnectError, OpenTransport } from "./connection.ts";
 
 /** What an Extension announces in `hello`; never `approval.secret` (ADR 0089). */
@@ -55,6 +57,7 @@ export { HARNESS_CATALOGUE, type HarnessEntry, harnessEntry } from "@polaris/pro
 export type {
   AgentSession,
   ApprovalRequest,
+  DesktopApp,
   GrantKind,
   HarnessKind,
   HostInfo,

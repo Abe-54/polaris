@@ -1,5 +1,5 @@
 /** What the glasses show for each screen. */
-import type { HostView } from "@polaris/sdk";
+import type { ApprovalRequest, HostView } from "@polaris/sdk";
 import { type AppState, type Voice, VOICE_CHOICES } from "./app.ts";
 import type { MenuItem } from "./menu.ts";
 import {
@@ -113,13 +113,29 @@ const sessionsPage = (state: AppState): Page => {
   };
 };
 
+/** CU4: an app approval asks "Use ‹app›?", headed input "Take mouse and keyboard?" with its app. */
+const approvalLine = (approval: ApprovalRequest): string => {
+  const app = approval.app?.name;
+
+  switch (approval.kind) {
+    case "app":
+      return app === undefined ? `${approval.title}?` : `Use ${app}?`;
+    case "headed-input":
+      return app === undefined ? "Take mouse and keyboard?" : `Take mouse and keyboard? · ${app}`;
+    case "question":
+      return `Question: ${approval.title}`;
+    default:
+      return `Approval: ${approval.title}`;
+  }
+};
+
 const sessionBody = (row: SessionRow) => {
   const { session, pendingApprovals, lastTurnPreview } = row.entry;
   const approval = pendingApprovals[0];
 
   if (approval !== undefined)
     return [
-      `${approval.kind === "question" ? "Question" : "Approval"}: ${approval.title}`,
+      approvalLine(approval),
       ...(approval.detail === null ? [] : [approval.detail]),
       ...(pendingApprovals.length > 1 ? [`and ${pendingApprovals.length - 1} more`] : []),
     ].join("\n");

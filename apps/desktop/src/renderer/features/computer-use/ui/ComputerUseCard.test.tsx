@@ -18,6 +18,8 @@ const actions: ComputerUseActions = {
   openSetup: () => undefined,
   checkAgain: () => undefined,
   remove: () => undefined,
+  add: async () => true,
+  pickApp: async () => null,
 };
 
 const simulator = AllowedApp.make({

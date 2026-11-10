@@ -3,6 +3,7 @@
  * page's card, this Mac's first-run card and the transcript's inline prompt.
  */
 export {
+  ComputerUseApproval,
   ComputerUsePrompt,
   HostComputerUseCard,
   hostFactsOf,
@@ -15,3 +16,5 @@ export { OnboardingCard } from "./ui/OnboardingCard.tsx";
 export { ComputerUseCard } from "./ui/ComputerUseCard.tsx";
 
 export { InlinePrompt } from "./ui/InlinePrompt.tsx";
+
+export { AppApprovalCard } from "./ui/AppApprovalCard.tsx";

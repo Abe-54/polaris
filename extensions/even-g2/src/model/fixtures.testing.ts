@@ -1,7 +1,9 @@
 /** Hosts, sessions and approvals for the model's tests, built with the protocol's own classes. */
 import {
   AgentSession,
+  AppId,
   ApprovalRequest,
+  DesktopApp,
   RequestId,
   SessionId,
   type SessionState,
@@ -43,6 +45,8 @@ export const session = (
     updatedAt: minute(options.updated ?? 0),
   });
 
+const appOf = (name: string) => new DesktopApp({ id: AppId.make(`app.${name}`), name, icon: null });
+
 export const approval = (
   id: string,
   sessionId: string,
@@ -51,9 +55,11 @@ export const approval = (
     readonly title?: string;
     readonly options?: ReadonlyArray<string>;
     readonly opened?: number;
+    /** For `app` and `headed-input`: the app's name. */
+    readonly app?: string;
   } = {}
-) =>
-  new ApprovalRequest({
+) => {
+  const fields = {
     id: RequestId.make(id),
     sessionId: SessionId.make(sessionId),
     turnId: TurnId.make("t1"),
@@ -62,7 +68,12 @@ export const approval = (
     detail: null,
     options: [...(options.options ?? [])],
     openedAt: minute(options.opened ?? 0),
-  });
+  };
+
+  if (options.app === undefined) return new ApprovalRequest(fields);
+
+  return new ApprovalRequest({ ...fields, app: appOf(options.app) });
+};
 
 export const entry = (
   value: AgentSession,

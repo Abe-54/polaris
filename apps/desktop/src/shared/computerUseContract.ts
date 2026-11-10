@@ -3,6 +3,8 @@
  * only when its Daemon announces `computer-use`; answers cross unchanged.
  */
 import {
+  AddAllowedApp,
+  type AppId,
   OpenComputerUseSetup,
   RemoveAllowedApp,
   SessionId,
@@ -57,8 +59,21 @@ export const ComputerUseRequestInputs = {
     ...OnHost,
     ...RemoveAllowedApp.payloadSchema.fields,
   }),
+  /** Settings' "Allow an app…": the only way a refused app is ever allowed (Desktop App only). */
+  "computerUse.allowedApps.add": Schema.Struct({
+    ...OnHost,
+    ...AddAllowedApp.payloadSchema.fields,
+  }),
+  /** This Mac's app picker: an app chosen under /Applications, read in main, never a plist here. */
+  "computerUse.pickApp": Schema.Struct({}),
   "computerUse.preview.latest": Preview,
 } as const;
+
+/** An app picked on this Mac: its bundle id and name. */
+export interface PickedApp {
+  readonly id: AppId;
+  readonly name: string;
+}
 
 export interface ComputerUseRequestOutputs {
   readonly "computerUse.status": ComputerUseStatus;
@@ -66,6 +81,9 @@ export interface ComputerUseRequestOutputs {
   readonly "computerUse.disable": ComputerUseStatus;
   readonly "computerUse.openSetup": ComputerUseStatus;
   readonly "computerUse.removeAllowedApp": ReadonlyArray<AllowedApp>;
+  readonly "computerUse.allowedApps.add": ReadonlyArray<AllowedApp>;
+  /** Null when cancelled. */
+  readonly "computerUse.pickApp": PickedApp | null;
   /** Null before the session's first action, or on a Host that can't take screenshots. */
   readonly "computerUse.preview.latest": PreviewImage | null;
 }

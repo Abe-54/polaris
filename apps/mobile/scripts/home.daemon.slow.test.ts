@@ -3,7 +3,15 @@
  * question land under needs you, and answering them from Home resolves them on the Host.
  */
 import { launchDaemon, type TestDaemon } from "@polaris/sdk/testing";
-import { Command, SessionId, SessionPlacement, WorkspaceId } from "@polaris/protocol";
+import {
+  type ApprovalDecision,
+  Command,
+  Sequence,
+  SessionId,
+  SessionPlacement,
+  WorkspaceId,
+} from "@polaris/protocol";
+import { Effect, Predicate, Stream } from "effect";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { followHost, type FollowedHost } from "../src/home/feed/follow.ts";
 import { buildHome, type SessionRow } from "../src/home/model/home.ts";
@@ -72,6 +80,7 @@ const needsYou = (): ReadonlyArray<SessionRow> =>
 /** A supervised bench agent session whose first item asks for approval. */
 interface BenchScript {
   readonly approvalCommand?: string;
+  readonly approvalApp?: { readonly kind: "app" | "headed-input"; readonly name: string };
   readonly approvalQuestion?: {
     readonly question: string;
     readonly choices: ReadonlyArray<string>;
@@ -150,3 +159,43 @@ test("a question is answered with one of its choices", async () => {
   await answer(row, { kind: "answer", text: "Annual" });
   await cleared(sessionId);
 }, 60_000);
+
+/** The decision the Host recorded for the session's approval. */
+const resolution = (sessionId: SessionId): Promise<ApprovalDecision> =>
+  connection.run((client) =>
+    client.subscribeSession({ sessionId, afterSequence: Sequence.make(0), turnLimit: null }).pipe(
+      Stream.map((item) =>
+        Predicate.isTagged(item, "Event") &&
+        Predicate.isTagged(item.envelope.event, "ApprovalResolved")
+          ? item.envelope.event.decision
+          : null
+      ),
+      Stream.filter(Predicate.isNotNull),
+      Stream.runHead,
+      Effect.flatMap(Effect.fromOption)
+    )
+  );
+
+test.each([
+  ["app", { kind: "always" }, "Allow", true],
+  ["app", { kind: "approve" }, "Allow", false],
+  ["headed-input", { kind: "approve" }, "Allow", false],
+  ["headed-input", { kind: "deny" }, "Deny", null],
+] as const)(
+  "a %s approval answered %o from Home is recorded on the Host",
+  async (kind, reply, tag, remember) => {
+    const sessionId = await start({ approvalApp: { kind, name: "Simulator" } });
+    const row = await asked(sessionId);
+
+    expect(row.approval?.kind).toBe(kind);
+    await answer(row, reply);
+    await cleared(sessionId);
+    const decision = await resolution(sessionId);
+
+    expect([decision._tag, "remember" in decision ? decision.remember : null]).toEqual([
+      tag,
+      remember,
+    ]);
+  },
+  60_000
+);

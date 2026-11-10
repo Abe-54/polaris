@@ -95,9 +95,15 @@ export const allowFor = (request: ApprovalRequest, remember: boolean): ApprovalD
     : approveDecision(approvalScope(request.id));
 };
 
-/** No path offers "Always allow" for a Data Source or Origin Approval (its card chooses), write or profile. */
+/**
+ * No path offers "Always allow" for a Data Source or Origin Approval (its card chooses), write
+ * or profile, nor for headed input, which the Daemon never always-allows.
+ */
 export const offersAlwaysAllow = (request: ApprovalRequest) =>
-  !hasCard(request) && request.dataWrite === undefined && request.profileAttach === undefined;
+  !hasCard(request) &&
+  request.dataWrite === undefined &&
+  request.profileAttach === undefined &&
+  request.kind !== "headed-input";
 
 /** The same server, database and user, as the Daemon keys an approval. */
 export const sameTarget = (

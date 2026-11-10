@@ -11,6 +11,7 @@ import type {
 } from "@polaris/protocol";
 import { Match } from "effect";
 import { useEffect, useState } from "react";
+import type { PickedApp } from "../../../shared/computerUseContract.ts";
 import { polaris } from "../bridge.ts";
 import { call } from "../machines/hooks.tsx";
 import type { Opened } from "./model.ts";
@@ -67,6 +68,10 @@ export interface ComputerUseActions {
   readonly openSetup: (permission?: ComputerUsePermission | null) => void;
   readonly checkAgain: () => void;
   readonly remove: (appId: AppId) => void;
+  /** Always-allows an app picked in Settings; resolves true once the Daemon has it. */
+  readonly add: (appId: AppId) => Promise<boolean>;
+  /** This Mac's picker on /Applications; null when cancelled or not an app bundle. */
+  readonly pickApp: () => Promise<PickedApp | null>;
 }
 
 /** Failures toast (machines' `call`); the feed brings the new status, so answers are dropped. */
@@ -121,5 +126,15 @@ export const useComputerUseActions = (hostKey: string): ComputerUseActions => {
       void run(async () => {
         await call("computerUse.removeAllowedApp", { hostKey, appId });
       }),
+    add: async (appId) => {
+      let added = false;
+
+      await run(async () => {
+        added = (await call("computerUse.allowedApps.add", { hostKey, appId })) !== null;
+      });
+
+      return added;
+    },
+    pickApp: async () => (await call("computerUse.pickApp", {})) ?? null,
   };
 };

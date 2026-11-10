@@ -23,6 +23,9 @@ export interface MenuItem {
 
 export const FIXED_REPLIES = ["Go ahead", "Run the tests", "Summarize where you are"] as const;
 
+/** Computer use is allowed for this session only: an Extension can't always-allow (CU4). */
+const COMPUTER_USE = new Set<ApprovalRequest["kind"]>(["app", "headed-input"]);
+
 const approvalItems = (approval: ApprovalRequest): ReadonlyArray<MenuItem> =>
   approval.kind === "question"
     ? [
@@ -34,7 +37,10 @@ const approvalItems = (approval: ApprovalRequest): ReadonlyArray<MenuItem> =>
         { label: "Deny", action: { kind: "deny", requestId: approval.id } },
       ]
     : [
-        { label: "Approve", action: { kind: "allow", requestId: approval.id } },
+        {
+          label: COMPUTER_USE.has(approval.kind) ? "Allow once" : "Approve",
+          action: { kind: "allow", requestId: approval.id },
+        },
         { label: "Deny", action: { kind: "deny", requestId: approval.id } },
       ];
 

@@ -24,6 +24,8 @@ export * from "./computerUse.ts";
 
 export * from "./computerUsePolicy.ts";
 
+export * from "./computerUseRefused.ts";
+
 export * from "./byteStreamFlow.ts";
 
 export * from "./byteStreams.ts";

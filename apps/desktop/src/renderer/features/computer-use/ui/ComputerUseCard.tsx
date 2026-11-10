@@ -15,6 +15,7 @@ import {
   type HostFacts,
   switchOf,
 } from "../model.ts";
+import { useAllowApp } from "./AllowApp.tsx";
 import { AllowStepView, AppIcon, StatusWellView } from "./parts.tsx";
 
 /** The age of the last check, ticking each second while the card is shown. */
@@ -53,6 +54,7 @@ const AllowedRow = ({
   </div>
 );
 
+/** The always-allowed apps, and "Allow an app…" (CU1b), which also adds one the Host refuses. */
 const AllowedList = ({
   host,
   allowed,
@@ -61,27 +63,38 @@ const AllowedList = ({
   readonly host: HostFacts;
   readonly allowed: ReadonlyArray<AllowedApp>;
   readonly actions: ComputerUseActions;
-}) =>
-  allowed.length === 0 ? null : (
+}) => {
+  const allow = useAllowApp(host, actions);
+
+  return (
     <>
       <div className="px-gap flex items-center justify-between gap-3 pt-1">
-        <span className="text-body text-text-default">Always allowed on {host.name}</span>
-        <span className="text-caption text-text-subtle truncate">
-          Any agent session here can use these without asking
+        <span className="text-body text-text-default shrink-0">Always allowed on {host.name}</span>
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="text-caption text-text-subtle truncate">
+            {allowed.length === 0
+              ? "None yet; each app asks first"
+              : "Any agent session here can use these without asking"}
+          </span>
+          {allow.button}
         </span>
       </div>
-      <SettingsWell>
-        {allowed.map((entry) => (
-          <AllowedRow
-            key={entry.app.id}
-            entry={entry}
-            busy={actions.busy}
-            onRemove={() => actions.remove(entry.app.id)}
-          />
-        ))}
-      </SettingsWell>
+      {allowed.length === 0 ? null : (
+        <SettingsWell>
+          {allowed.map((entry) => (
+            <AllowedRow
+              key={entry.app.id}
+              entry={entry}
+              busy={actions.busy}
+              onRemove={() => actions.remove(entry.app.id)}
+            />
+          ))}
+        </SettingsWell>
+      )}
+      {allow.panel}
     </>
   );
+};
 
 /** The well for the status, then the step or the command that fixes it. */
 const Body = ({

@@ -27,7 +27,10 @@ const bridge = await waitForEvenAppBridge();
 const app = startApp({
   glasses: evenGlasses(bridge),
   connect: (pairings) =>
-    createPolarisWith({ pairings, clientName: CLIENT_NAME }, loggedTransport(log.add)),
+    createPolarisWith(
+      { pairings, clientName: CLIENT_NAME, computerUse: true },
+      loggedTransport(log.add)
+    ),
   onHosts: (hosts) => phone.showHosts(hosts),
   log: log.add,
 });

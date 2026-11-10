@@ -113,6 +113,7 @@ import { cannotInstallHere, installId } from "./updates/identity.ts";
 import { revealAppPath, updatePlatform, windowsAppId } from "./updates/platform.ts";
 import { handleSquirrelStartup } from "./updates/squirrel.ts";
 import { frameDocuments, isFrameUrl } from "./frames.ts";
+import { readBundle } from "./pickApp.ts";
 
 if (await handleSquirrelStartup(process.platform, process.argv, process.execPath)) app.exit(0);
 
@@ -335,6 +336,26 @@ const start = async () => {
   };
 
   const pickFolder = () => chooseFolder("Add a workspace", "Add workspace");
+
+  const pickApp = async () => {
+    const options: Electron.OpenDialogOptions = {
+      title: "Allow an app",
+      buttonLabel: "Choose",
+      defaultPath: "/Applications",
+      filters: [{ name: "Applications", extensions: ["app"] }],
+      properties: ["openFile"],
+    };
+
+    const win = BrowserWindow.getFocusedWindow();
+
+    const picked = await (win === null
+      ? dialog.showOpenDialog(options)
+      : dialog.showOpenDialog(win, options));
+
+    const path = picked.canceled ? undefined : picked.filePaths[0];
+
+    return path === undefined ? null : readBundle(path);
+  };
 
   const applyAppearance = () => {
     const current = appearance();
@@ -565,6 +586,7 @@ const start = async () => {
       sshHosts: () => sshAliasNames(env),
       setWelcomeSeen: () => saveSettings({ welcomeSeen: true }),
       pickFolder,
+      pickApp,
       appVersion: app.getVersion(),
       developmentBuild: dev,
       proofWorkspace: () =>
