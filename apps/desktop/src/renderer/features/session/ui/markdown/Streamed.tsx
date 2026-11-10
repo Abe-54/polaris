@@ -121,6 +121,7 @@ const Streamed = ({ text, live }: StreamedProps) => {
       rehypePlugins={windows ? REHYPE_WINDOWS : REHYPE_POSIX}
       components={COMPONENTS}
       controls={CONTROLS}
+      tableMaxHeight={0}
       shikiTheme={[POLARIS_SHIKI, POLARIS_SHIKI]}
       linkSafety={{ enabled: false }}
       lineNumbers={false}
