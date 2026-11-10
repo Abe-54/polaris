@@ -31,7 +31,14 @@ import type { Outgoing } from "./outbox.ts";
 import type { Entry } from "./runs.ts";
 import { secretCards } from "./secret.ts";
 import type { Source } from "./sources/index.ts";
-import { groupTurns, lastView, openingView, shownItems, type TurnGroup } from "./turnGroups.ts";
+import {
+  groupTurns,
+  lastView,
+  openingView,
+  sameViews,
+  shownItems,
+  type TurnGroup,
+} from "./turnGroups.ts";
 import { noTitles, type SubagentTitles, subagentTitles } from "./subagentTitles.ts";
 import { partRows } from "./turnRows.ts";
 
@@ -235,9 +242,6 @@ interface Folded {
 }
 
 const folded = new WeakMap<TurnView, Folded>();
-
-const sameViews = (a: ReadonlyArray<TurnView>, b: ReadonlyArray<TurnView>) =>
-  a.length === b.length && a.every((v, n) => v === b[n]);
 
 /** A folded Turn's one row; the same object while its Turns are unchanged. */
 const summaryRow = (group: TurnGroup): Row => {

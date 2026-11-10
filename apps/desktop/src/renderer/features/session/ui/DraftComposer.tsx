@@ -88,8 +88,8 @@ export interface DraftComposerProps {
   readonly typeToFocus?: boolean;
   readonly className?: string;
   readonly commands?: ComposerCommands;
-  /** What the user sent in this session, oldest first, for ↑/↓. */
-  readonly history?: ReadonlyArray<string>;
+  /** What the user sent in this session, oldest first, for ↑/↓; read only when they're pressed. */
+  readonly history?: () => ReadonlyArray<string>;
   /** Shell mode (a `!` draft): where the command runs, and whether it waits for this Turn. */
   readonly shell?: { readonly where: string; readonly queued: boolean } | undefined;
   /** The notice strip, when there is something to know (`NoticeStrip`). */

@@ -68,7 +68,7 @@ export interface RequestContext {
   readonly restartToUpdate: () => void;
   readonly showAppInFinder: () => void;
   readonly settings: () => Settings;
-  readonly cache: SnapshotCache;
+  readonly cache: Pick<SnapshotCache, "get" | "put" | "rendererFlushed">;
   /** The price table for Usage estimates. */
   readonly prices: Prices;
   readonly setAppearance: (patch: Partial<Appearance>) => void;
@@ -305,6 +305,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
     }),
   "cache.get": () => Effect.sync(() => ctx.cache.get()),
   "cache.put": ({ host }) => Effect.sync(() => ctx.cache.put(host)).pipe(done),
+  "cache.flushed": ({ id }) => Effect.sync(() => ctx.cache.rendererFlushed(id)).pipe(done),
   "settings.setTheme": ({ theme }) => Effect.sync(() => ctx.setAppearance({ theme })).pipe(done),
   "settings.setDensity": ({ density }) =>
     Effect.sync(() => ctx.setAppearance({ density })).pipe(done),

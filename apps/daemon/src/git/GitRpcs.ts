@@ -28,7 +28,6 @@ import { BlobChannel } from "../services.ts";
 import { ReadContent, toContent } from "../files/fs.ts";
 import { generatedPaths } from "../reviewer/generated.ts";
 import { computeDiff, DiffNotFound, type DiffResult } from "./diff.ts";
-import { indexDiff } from "./diffIndex.ts";
 import { finishingGit, interruptibleGit, interruptibleGitPromise } from "./interrupt.ts";
 import { gitLog } from "./log.ts";
 import { showFile } from "./show.ts";
@@ -94,7 +93,7 @@ const trackingOf = async (cwd: string, status: Status) => ({
 
 /** The file index with each file's `generated` verdict; null where it couldn't be read. */
 const indexWithGenerated = async (diff: DiffResult): Promise<ReadonlyArray<DiffFile>> => {
-  const index = indexDiff(diff.bytes);
+  const { index } = diff;
 
   const generated = await generatedPaths({
     root: diff.root,

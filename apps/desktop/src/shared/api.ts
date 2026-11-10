@@ -471,6 +471,7 @@ export interface RequestOutputs
   "updates.showInFinder": null;
   "cache.get": ReadonlyArray<CachedHost>;
   "cache.put": null;
+  "cache.flushed": null;
   "settings.setTheme": null;
   "settings.setDensity": null;
   "settings.setAppearance": null;
@@ -690,6 +691,8 @@ export type AppEvent =
   | { readonly kind: "open-review"; readonly target: ReviewTarget }
   /** The quit prompt's "Save and quit": the Editor saves every file, then answers `editor.savedAll`. */
   | { readonly kind: "editor-save-all" }
+  /** The window lost focus (id 0) or the app is quitting: put the Hosts waiting for the cache now, then answer `cache.flushed` with the id. */
+  | { readonly kind: "cache-flush"; readonly id: number }
   /** A `polaris://` link (Raycast and the like): open a session or a Workspace, nothing more. */
   | { readonly kind: "deep-link"; readonly link: import("./deepLink.ts").DeepLink }
   /** Self-Traces turned on or off: the Polaris Workspace's Host changed Developer Mode. */

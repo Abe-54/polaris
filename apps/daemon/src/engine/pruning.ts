@@ -50,12 +50,13 @@ const make = (rt: EngineRuntime["Service"]): CheckpointPruning["Service"] => {
   /**
    * What the pruning policy knows about one session. A session that is not
    * Archived keeps every checkpoint, so only an Archived one needs its Turn
-   * order and its Worktree's branch (both read from SQL).
+   * order (`turnIds`, oldest first) and its Worktree's branch (read from SQL).
    */
   const checkpointSession = (
     record: SessionRecord,
     pinned: ReadonlyMap<SessionId, ReadonlyArray<TurnId>>,
-    archivedAt: number | null
+    archivedAt: number | null,
+    turnIds: ReadonlyArray<TurnId>
   ): Effect.Effect<CheckpointSession, ServiceError> =>
     Effect.gen(function* () {
       const session = record.session;
@@ -68,20 +69,12 @@ const make = (rt: EngineRuntime["Service"]): CheckpointPruning["Service"] => {
 
       if (archivedAt === null) return base;
 
-      const stored = yield* store.readTurns({
-        sessionId: session.id,
-        beforeIndex: null,
-        limit: null,
-      });
-
-      const turns = new Map([...stored, ...record.turns].map((turn) => [turn.id, turn]));
-
       const worktree =
         session.worktreeId === null ? null : yield* store.lastKnownWorktree(session.worktreeId);
 
       return {
         ...base,
-        turnIds: [...turns.values()].sort((a, b) => a.index - b.index).map((turn) => turn.id),
+        turnIds,
         worktreeBranch:
           worktree !== null && !worktree.isMain && worktree.createdBySessionId === session.id
             ? worktree.branch
@@ -97,20 +90,34 @@ const make = (rt: EngineRuntime["Service"]): CheckpointPruning["Service"] => {
     const model = yield* store.model;
     const pinned = forkedTurns(model);
     const reviewed = underReview(model);
+
+    const archivedAt = ({ session }: SessionRecord) =>
+      session.state === "archived" && !reviewed.has(session.id)
+        ? Date.parse(session.updatedAt)
+        : null;
+
+    const swept = [...model.sessions.values()].filter(
+      (r) => model.workspaces.get(r.session.workspaceId)?.isGitRepo === true
+    );
+
+    // One read for every Archived session's Turn order, not one per session.
+    const turnIds = yield* store.readTurnIds(
+      swept.flatMap((r) => (archivedAt(r) === null ? [] : [r.session.id]))
+    );
+
     const found: Array<SweepTarget> = [];
 
     for (const workspace of model.workspaces.values()) {
       if (!workspace.isGitRepo) continue;
 
       const sessions = yield* Effect.forEach(
-        [...model.sessions.values()].filter((r) => r.session.workspaceId === workspace.id),
+        swept.filter((r) => r.session.workspaceId === workspace.id),
         (record) =>
           checkpointSession(
             record,
             pinned,
-            record.session.state === "archived" && !reviewed.has(record.session.id)
-              ? Date.parse(record.session.updatedAt)
-              : null
+            archivedAt(record),
+            turnIds.get(record.session.id) ?? []
           )
       );
 
@@ -137,7 +144,15 @@ const make = (rt: EngineRuntime["Service"]): CheckpointPruning["Service"] => {
 
       if (underReview(model).has(record.session.id)) return;
       const at = yield* Clock.currentTimeMillis;
-      const session = yield* checkpointSession(record, forkedTurns(model), at);
+      const turnIds = yield* store.readTurnIds([record.session.id]);
+
+      const session = yield* checkpointSession(
+        record,
+        forkedTurns(model),
+        at,
+        turnIds.get(record.session.id) ?? []
+      );
+
       yield* pruneArchivedSession(workspace.path, session, { policy }).pipe(
         Effect.catch((error) =>
           Effect.logWarning(`checkpoint prune of ${record.session.id}: ${error.message}`)

@@ -5,7 +5,7 @@
  */
 import { fastToggle } from "../../harness/model/fast.ts";
 import type { Command, RequestId, SessionId } from "@polaris/protocol";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { turnNumber } from "../model/turnGroups.ts";
 import { type Harness, harnessHue, sessionCelestial } from "@polaris/ui";
 import { Commands, newSessionId } from "../../../commands.ts";
@@ -223,7 +223,8 @@ export const SessionComposer = (props: SessionComposerProps) => {
   const compact = useCompact(hostKey, session);
   const chrome = useSessionChrome();
 
-  const history = useMemo(() => sentHistory(model.turns, chrome), [model.turns, chrome]);
+  // Scans every Turn, so it runs on ↑/↓ against the latest render's Turns, not on each frame.
+  const history = () => sentHistory(model.turns, chrome);
 
   const change = useModelChange(props);
   const fastAvailable = session.harness === "codex" && hasCapability(host, "session.service-tier");

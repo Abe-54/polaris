@@ -160,6 +160,81 @@ describe("EventStore", () => {
     );
   });
 
+  test("a Turn item leaves its session's row unwritten; a change to the session rewrites it", async () => {
+    const file = join(tempDir("polaris-store-"), "state.sqlite");
+    await run(
+      file,
+      Effect.flatMap(EventStore, (store) => seed(store))
+    );
+
+    // Every write of a `sessions` row from here on, whichever connection makes it.
+    const db = new Database(file);
+    db.run("CREATE TABLE session_writes (id TEXT NOT NULL)");
+    db.run(`CREATE TRIGGER session_written AFTER INSERT ON sessions
+      BEGIN INSERT INTO session_writes VALUES (new.id); END`);
+    const written = () => db.query<{ id: string }, []>("SELECT id FROM session_writes").all();
+
+    const item = (item: TurnItem) =>
+      DomainEvent.cases.TurnItemCompleted.make({
+        sessionId: sId,
+        turnId: tId,
+        item,
+        subagentId: null,
+      });
+
+    try {
+      const live = await run(
+        file,
+        Effect.gen(function* () {
+          const store = yield* EventStore;
+          yield* store.commit({
+            commandId: null,
+            decide: () =>
+              Effect.succeed([
+                item(
+                  TurnItem.cases.Reasoning.make({
+                    id: "r1",
+                    text: "Hmm",
+                    startedAt: null,
+                    endedAt: null,
+                  })
+                ),
+                item(TurnItem.cases.AssistantMessage.make({ id: "m2", text: "a later reply" })),
+              ]),
+          });
+
+          return (yield* store.model).sessions.get(sId)!;
+        })
+      );
+
+      expect(written()).toEqual([]);
+
+      // Nothing was lost by not writing: the reload is the live record, the new preview included.
+      const reloaded = await run(
+        file,
+        Effect.gen(function* () {
+          const store = yield* EventStore;
+          const record = (yield* store.model).sessions.get(sId)!;
+          yield* store.commit({
+            commandId: null,
+            decide: () =>
+              Effect.succeed([
+                DomainEvent.cases.SessionRenamed.make({ sessionId: sId, title: "Again" }),
+              ]),
+          });
+
+          return record;
+        })
+      );
+
+      expect(reloaded).toEqual(live);
+      expect(reloaded.turns[0]!.replyPreview).toBe("a later reply");
+      expect(written()).toEqual([{ id: sId }]);
+    } finally {
+      db.close();
+    }
+  });
+
   test("the Host stream replay leaves out per-item events", async () => {
     await run(
       ":memory:",

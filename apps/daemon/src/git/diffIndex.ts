@@ -128,8 +128,16 @@ const finish = (file: Building, end: number): DiffFile =>
     binary: file.binary,
   });
 
-const startsWithDiff = (bytes: Uint8Array, at: number): boolean =>
-  decoder.decode(bytes.subarray(at, at + 11)) === "diff --git ";
+const FILE_HEADER = new TextEncoder().encode("diff --git ");
+
+/** Whether a file's header starts at `at`, by its bytes: this runs on every line of the patch. */
+const startsWithDiff = (bytes: Uint8Array, at: number): boolean => {
+  if (bytes[at] !== FILE_HEADER[0] || at + FILE_HEADER.length > bytes.length) return false;
+
+  for (let k = 1; k < FILE_HEADER.length; k++) if (bytes[at + k] !== FILE_HEADER[k]) return false;
+
+  return true;
+};
 
 const countLine = (file: Building, first: number | undefined) => {
   if (first === PLUS) file.additions++;

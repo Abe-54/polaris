@@ -12,6 +12,7 @@ import { type Cause, Data, Deferred, Effect, Option, Queue, Schema, type Scope }
 import { HarnessError } from "../HarnessDriver.ts";
 import { type Outgoing, type RpcId, RpcMessage, type RpcPayload } from "./protocol.ts";
 import { stopChild } from "../../platform/processes.ts";
+import { readLines } from "../../lines.ts";
 import { shortHostName } from "../../service/hostName.ts";
 
 /** A server notification or server→client request; `params` is undefined when the server sent none. */
@@ -243,20 +244,10 @@ export const connectStdio = (
         });
 
         void (async () => {
-          const decoder = new TextDecoder();
-          let buffer = "";
+          for await (const raw of readLines(proc.stdout)) {
+            const line = raw.trim();
 
-          for await (const chunk of proc.stdout) {
-            buffer += decoder.decode(chunk, { stream: true });
-            let end = buffer.indexOf("\n");
-
-            while (end >= 0) {
-              const line = buffer.slice(0, end).trim();
-              buffer = buffer.slice(end + 1);
-
-              if (line !== "") onMessage(line);
-              end = buffer.indexOf("\n");
-            }
+            if (line !== "") onMessage(line);
           }
 
           onClose(`codex app-server exited (${await proc.exited})`);

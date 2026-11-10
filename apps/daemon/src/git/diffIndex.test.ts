@@ -66,6 +66,39 @@ describe("the diff index", () => {
     expect(at).toBe(diff.bytes.length);
   });
 
+  test("a line that reads like a file's header inside a hunk isn't one", () => {
+    const patch = [
+      "diff --git a/notes.md b/notes.md",
+      "--- a/notes.md",
+      "+++ b/notes.md",
+      "@@ -1,2 +1,2 @@",
+      " intro",
+      "-diff --git a/old b/old",
+      "+diff --git a/fake b/fake",
+      "diff --git a/other.md b/other.md",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/other.md",
+      "@@ -0,0 +1 @@",
+      "+diff --git a/x b/x",
+      "",
+    ].join("\n");
+
+    const index = indexDiff(new TextEncoder().encode(patch));
+
+    expect(index.map((file) => [file.path, file.status, file.additions, file.deletions])).toEqual([
+      ["notes.md", "modified", 1, 1],
+      ["other.md", "added", 1, 0],
+    ]);
+  });
+
+  test("a patch cut inside a header's first word ends at the file before it", () => {
+    const patch = "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\ndiff --git";
+    const index = indexDiff(new TextEncoder().encode(patch));
+
+    expect(index.map((file) => [file.path, file.length])).toEqual([["a", patch.length]]);
+  });
+
   test("an empty patch has no files; quoted paths are unquoted", () => {
     expect(indexDiff(new Uint8Array())).toEqual([]);
     expect(unquotePath('"caf\\303\\251\\tx"')).toBe("café\tx");

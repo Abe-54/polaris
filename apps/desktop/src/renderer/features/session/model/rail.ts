@@ -6,7 +6,7 @@
  */
 import type { TurnView } from "../../../store/sessionModel.ts";
 import { type Row, summarize, turnOpening } from "./conversation.ts";
-import { groupTurns, openingView } from "./turnGroups.ts";
+import { groupTurns, openingView, sameViews, type TurnGroup } from "./turnGroups.ts";
 
 /** The rail shows from this many Turns. */
 export const RAIL_MIN_TURNS = 3;
@@ -32,12 +32,31 @@ export interface RailTurn {
   readonly files: number;
 }
 
-export const railTurns = (turns: ReadonlyArray<TurnView>): ReadonlyArray<RailTurn> =>
-  groupTurns(turns).map((group) => {
-    const { turnId, number, files, startedAt } = summarize(group);
+interface Cached {
+  readonly views: ReadonlyArray<TurnView>;
+  readonly number: number;
+  readonly turn: RailTurn;
+}
 
-    return { turnId, number, startedAt, opening: turnOpening(openingView(group).turn), files };
-  });
+const cache = new WeakMap<TurnView, Cached>();
+
+/** A group's tick; the same object while its Turns are unchanged, so only the live one is redone. */
+const railTurn = (group: TurnGroup): RailTurn => {
+  const opening = openingView(group);
+  const hit = cache.get(opening);
+
+  if (hit !== undefined && hit.number === group.number && sameViews(hit.views, group.views))
+    return hit.turn;
+  const { turnId, number, files, startedAt } = summarize(group);
+  const turn = { turnId, number, startedAt, opening: turnOpening(opening.turn), files };
+
+  cache.set(opening, { views: group.views, number: group.number, turn });
+
+  return turn;
+};
+
+export const railTurns = (turns: ReadonlyArray<TurnView>): ReadonlyArray<RailTurn> =>
+  groupTurns(turns).map(railTurn);
 
 /** How many ticks fit in `height`, and their pitch: past that, each tick stands for a band of Turns. */
 export const railLayout = (count: number, height: number) => {

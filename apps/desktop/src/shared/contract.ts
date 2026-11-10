@@ -316,6 +316,8 @@ export const RequestInputs = {
   "updates.showInFinder": Schema.Struct({}),
   "cache.get": Schema.Struct({}),
   "cache.put": Schema.Struct({ host: CachedHost }),
+  /** The answer to `cache-flush`: every pending put has been sent. */
+  "cache.flushed": Schema.Struct({ id: Schema.Int }),
   "settings.setTheme": Schema.Struct({ theme: ThemeSource }),
   "settings.setDensity": Schema.Struct({ density: Density }),
   "settings.setAppearance": Schema.Struct({ patch: AppearancePatch }),

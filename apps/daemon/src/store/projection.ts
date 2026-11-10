@@ -106,9 +106,10 @@ export const writeEvent = (sql: SqlClient.SqlClient, envelope: EventEnvelope) =>
 
 type SqlWrite = Effect.Effect<unknown, SqlError.SqlError>;
 
-/** An envelope being projected, the model after it, and the database. */
+/** An envelope being projected, the model before and after it, and the database. */
 interface Projecting {
   readonly sql: SqlClient.SqlClient;
+  readonly before: ReadModel;
   readonly after: ReadModel;
   readonly envelope: EventEnvelope;
 }
@@ -162,11 +163,22 @@ const upsertTurn = (sql: SqlClient.SqlClient, turn: Turn | undefined) =>
         data: TurnJson.encode(turn),
       })}`;
 
-/** Every session event rewrites its session's row; `also` is what else it changes. */
+/** The fold left what the `sessions` row holds as it was (a Turn item never changes it). */
+const sameSessionRow = (before: SessionRecord | undefined, after: SessionRecord | undefined) =>
+  before !== undefined &&
+  after !== undefined &&
+  before.session === after.session &&
+  before.titleLocked === after.titleLocked;
+
+/** A session event rewrites its session's row when the fold changed it; `also` is what else it changes. */
 const sessionRow =
   (sessionId: SessionId, also?: (target: Projecting) => SqlWrite): Projection =>
   (target) => {
-    const session = upsertSession(target.sql, target.after.sessions.get(sessionId));
+    const record = target.after.sessions.get(sessionId);
+
+    const session = sameSessionRow(target.before.sessions.get(sessionId), record)
+      ? Effect.void
+      : upsertSession(target.sql, record);
 
     return also === undefined ? session : Effect.all([session, also(target)]);
   };
@@ -351,12 +363,12 @@ const projectionOf: (event: DomainEvent) => Projection = DomainEvent.match<Proje
   VerdictRecorded: reviewRow,
 });
 
-/** Persist what `envelope` changed in the read model `after` it. */
+/** Persist what `envelope` changed between the read model `before` it and `after` it. */
 export const writeProjection = (
   sql: SqlClient.SqlClient,
-  after: ReadModel,
+  models: { readonly before: ReadModel; readonly after: ReadModel },
   envelope: EventEnvelope
-): SqlWrite => projectionOf(envelope.event)({ sql, after, envelope });
+): SqlWrite => projectionOf(envelope.event)({ sql, ...models, envelope });
 
 // ── Loading ─────────────────────────────────────────────────────────────────
 
@@ -371,6 +383,25 @@ const foldGraphRow = (model: ReadModel, envelope: EventEnvelope): ReadModel =>
         constellations: withoutConstellationsOf(model.constellations, envelope.event.workspaceId),
       }
     : project(model, envelope);
+
+/** Every Resource event in the log, through `events_type` (migration 0008). */
+export const resourceEventRows = (sql: SqlClient.SqlClient) => sql<EventRow>`
+  SELECT sequence, occurred_at, command_id, payload FROM events
+  WHERE event_type IN ('ResourceDeclared', 'ResourceRemoved', 'ResourceLeaseCanceled',
+    'ResourceLeaseQueued', 'ResourceLeased', 'ResourceReleased') ORDER BY sequence`;
+
+// The WHERE must stay the partial index `events_graph`'s own, or SQLite scans the log.
+export const graphEventRows = (sql: SqlClient.SqlClient) =>
+  sql<EventRow>`SELECT sequence, occurred_at, command_id, payload FROM events WHERE constellation_id IS NOT NULL OR event_type = 'WorkspaceRemoved' ORDER BY sequence`;
+
+/** The latest `WorktreeDetected` of a Worktree, newest first through `events_type`. */
+export const worktreeDetectedRows = (sql: SqlClient.SqlClient, worktreeId: Worktree["id"]) => sql<{
+  payload: string;
+}>`
+  SELECT payload FROM events
+  WHERE event_type = 'WorktreeDetected'
+    AND json_extract(payload, '$.worktree.id') = ${worktreeId}
+  ORDER BY sequence DESC LIMIT 1`;
 
 export const loadModel = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
@@ -439,10 +470,7 @@ export const loadModel = (sql: SqlClient.SqlClient) =>
       };
     });
 
-    const resourceRows = yield* sql<EventRow>`
-      SELECT sequence, occurred_at, command_id, payload FROM events
-      WHERE event_type IN ('ResourceDeclared', 'ResourceRemoved', 'ResourceLeaseCanceled',
-        'ResourceLeaseQueued', 'ResourceLeased', 'ResourceReleased') ORDER BY sequence`;
+    const resourceRows = yield* resourceEventRows(sql);
 
     let model: ReadModel = {
       ...emptyModel,
@@ -458,8 +486,7 @@ export const loadModel = (sql: SqlClient.SqlClient) =>
     };
 
     // Constellations fold from the log; a later WorkspaceRemoved drops them again.
-    const graphEvents =
-      yield* sql<EventRow>`SELECT sequence, occurred_at, command_id, payload FROM events WHERE constellation_id IS NOT NULL OR event_type = 'WorkspaceRemoved' ORDER BY sequence`;
+    const graphEvents = yield* graphEventRows(sql);
 
     const cut = model.sequence;
 

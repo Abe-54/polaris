@@ -10,6 +10,7 @@ import { Deferred, Effect, Option, Predicate, Schema, type Scope } from "effect"
 import { HarnessError } from "../HarnessDriver.ts";
 import * as P from "./protocol.ts";
 import { stopChild } from "../../platform/processes.ts";
+import { readLines } from "../../lines.ts";
 
 /** What a session receives from the agent. */
 export interface SessionRoute {
@@ -88,25 +89,15 @@ const trace = (dir: "in" | "out", raw: string) => {
   appendFileSync(file, `${JSON.stringify({ dir, msg: raw })}\n`);
 };
 
-/** Splits a byte stream into lines. */
-const readLines = async (
+/** Calls `onLine` with each non-blank line of a byte stream, trimmed. */
+const trimmedLines = async (
   stream: ReadableStream<Uint8Array>,
   onLine: (line: string) => void
 ): Promise<void> => {
-  const decoder = new TextDecoder();
-  let buffer = "";
+  for await (const raw of readLines(stream)) {
+    const line = raw.trim();
 
-  for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let end = buffer.indexOf("\n");
-
-    while (end >= 0) {
-      const line = buffer.slice(0, end).trim();
-      buffer = buffer.slice(end + 1);
-
-      if (line !== "") onLine(line);
-      end = buffer.indexOf("\n");
-    }
+    if (line !== "") onLine(line);
   }
 };
 
@@ -114,7 +105,7 @@ const readLines = async (
 const stderrTail = (stream: ReadableStream<Uint8Array>) => {
   const lines: Array<string> = [];
 
-  void readLines(stream, (line) => {
+  void trimmedLines(stream, (line) => {
     lines.push(line);
 
     if (lines.length > 5) lines.shift();
@@ -236,7 +227,7 @@ export const spawnAgent = (
     };
 
     void (async () => {
-      await readLines(proc.stdout, onLine);
+      await trimmedLines(proc.stdout, onLine);
       const code = await proc.exited;
 
       const reason = stopping
