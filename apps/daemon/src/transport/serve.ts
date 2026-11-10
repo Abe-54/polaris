@@ -1,3 +1,4 @@
+import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
@@ -118,9 +119,14 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
+/** One preference for the whole Daemon: the Claude driver reads it, the Engine serves it. */
+const suggestedReplyPreference = SuggestedReplyPreference.layer();
+
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
-  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator))
+  Layer.provide(
+    Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator, suggestedReplyPreference)
+  )
 );
 
 /**
@@ -152,7 +158,8 @@ export const engineServices = Layer.mergeAll(Engine.layer, releaseWhenQuiet()).p
       TerminalsDaemonLive,
       ReviewerPolicyLive,
       RulesLive,
-      Availability.layer()
+      Availability.layer(),
+      suggestedReplyPreference
     )
   ),
   Layer.provideMerge(usageServices),
@@ -330,6 +337,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "attachments.settings",
   "sessions.auto-archive",
   "sessions.idle-compaction",
+  "sessions.suggested-replies",
   "sessions.visuals",
   "terminal",
   "terminal.binary",
