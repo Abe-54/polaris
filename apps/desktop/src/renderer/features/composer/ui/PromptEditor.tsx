@@ -21,8 +21,10 @@ import type { FrecencyTable } from "../model/frecency.ts";
 import { AT_DRAFT, type HistoryCursor, stepHistory } from "../model/history.ts";
 import type { MentionRow, MentionSearch } from "../model/mentions.ts";
 import { type CommandNotice, noticeFor } from "../model/notice.ts";
+import type { OfferedReply } from "../model/suggestion.ts";
 import { CommandMenu } from "./CommandMenu.tsx";
 import { MentionMenu } from "./MentionMenu.tsx";
+import { replyAnnouncement, SuggestedReplyGhost } from "./SuggestedReply.tsx";
 import { showsResults, useMentionPicker } from "./useMentionPicker.ts";
 import { useTypeToFocus } from "./typeToFocus.ts";
 import "./composer.css";
@@ -63,6 +65,8 @@ export interface PromptEditorProps {
   readonly mono?: boolean | undefined;
   /** The `@` picker's file search in the session's directory; unset, `@` is just text. */
   readonly mentions?: MentionSearch | null | undefined;
+  /** The session's Suggested Reply when it may be offered (`offeredReply`); shown while empty. */
+  readonly suggestion?: OfferedReply | null | undefined;
 }
 
 const NO_HISTORY: ReadonlyArray<string> = [];
@@ -106,15 +110,24 @@ export default function PromptEditor(props: PromptEditorProps) {
       ? noticeFor(typed.word, typed.atHead, draft.tokens, props.notice, props.options)
       : null;
 
+  // The Turn whose Suggested Reply was used or dismissed; it stays gone for that Turn.
+  const [replyGone, setReplyGone] = useState<string | null>(null);
+  const reply = props.suggestion ?? null;
+
+  const shownReply =
+    reply !== null && !props.disabled && draft.text === "" && replyGone !== reply.turnId
+      ? reply
+      : null;
+
   const open = menu !== null;
-  const latest = useRef({ props, menu, index, dismissed, mention });
+  const latest = useRef({ props, menu, index, dismissed, mention, replyGone });
   const emitted = useRef<string | null>(null);
   // ↑/↓'s place in history, and the text it last showed; any other edit returns to the draft.
   const cursor = useRef<HistoryCursor>(AT_DRAFT);
   const recalled = useRef<string | null>(null);
 
   useEffect(() => {
-    latest.current = { props, menu, index, dismissed, mention };
+    latest.current = { props, menu, index, dismissed, mention, replyGone };
   });
 
   const run = (option: CommandOption | undefined) => {
@@ -192,11 +205,38 @@ export default function PromptEditor(props: PromptEditorProps) {
 
   const at = (m: Menu) => Math.min(latest.current.index, m.options.length - 1);
 
+  /** The reply as the editor stands now, for the keys (like `live`). */
+  const liveReply = (): OfferedReply | null => {
+    const { props: current, replyGone: gone } = latest.current;
+    const now = current.suggestion ?? null;
+
+    if (now === null || current.disabled || now.turnId === gone) return null;
+
+    return handle.read().draft.text === "" ? now : null;
+  };
+
+  const dropReply = (turnId: string) => {
+    latest.current.replyGone = turnId;
+    setReplyGone(turnId);
+  };
+
+  const acceptReply = () => {
+    const now = liveReply();
+
+    if (now === null) return;
+    dropReply(now.turnId);
+    handle.insertWhole(now.text);
+  };
+
   const [handle] = useState(() => {
     const hooks = (): EditorHooks => ({
       options: () => latest.current.props.options,
       onDraft: (next) => {
         if (next.text !== recalled.current) cursor.current = AT_DRAFT;
+        const offered = latest.current.props.suggestion;
+
+        // Typing or pasting over the reply dismisses it for this Turn.
+        if (next.text !== "" && offered != null) dropReply(offered.turnId);
         setDraft(next);
         emitted.current = next.text;
         latest.current.props.onChange(next.text);
@@ -227,6 +267,15 @@ export default function PromptEditor(props: PromptEditorProps) {
           else liveNotice()?.action?.run();
         },
         dismiss: () => setDismissed(handle.read().typed?.word ?? null),
+      },
+      suggestion: {
+        shown: () => liveReply() !== null,
+        accept: acceptReply,
+        dismiss: () => {
+          const now = liveReply();
+
+          if (now !== null) dropReply(now.turnId);
+        },
       },
       recall: (toward) => {
         const entries = latest.current.props.history ?? NO_HISTORY;
@@ -334,7 +383,12 @@ export default function PromptEditor(props: PromptEditorProps) {
         )}
         data-shell={props.mono === true ? "" : undefined}
       />
-      {draft.text === "" ? (
+      <div role="status" aria-live="polite" className="sr-only">
+        {shownReply === null ? "" : replyAnnouncement(shownReply.text)}
+      </div>
+      {shownReply !== null ? (
+        <SuggestedReplyGhost reply={shownReply} onAccept={acceptReply} />
+      ) : draft.text === "" ? (
         <div
           aria-hidden="true"
           className="text-body text-text-faint pointer-events-none absolute inset-x-0 top-0 truncate select-none"

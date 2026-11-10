@@ -30,6 +30,8 @@ import {
   $getSelection,
   $isRangeSelection,
   CLEAR_HISTORY_COMMAND,
+  HISTORY_MERGE_TAG,
+  HISTORY_PUSH_TAG,
   SKIP_DOM_SELECTION_TAG,
 } from "lexical";
 import type { CommandOption, Draft } from "../model/commands.ts";
@@ -61,6 +63,12 @@ export interface EditorHooks {
     readonly pick: (via: "enter" | "tab") => void;
     readonly dismiss: () => void;
   };
+  /** The Suggested Reply in the empty prompt: ⇥ accepts it and esc dismisses it, after the menu. */
+  readonly suggestion: {
+    readonly shown: () => boolean;
+    readonly accept: () => void;
+    readonly dismiss: () => void;
+  };
   /** ↑/↓ with the caret on the first or last line: the sent message to show, or null. */
   readonly recall: (toward: Toward) => string | null;
   /** ↵ sends; with ⌘ or Ctrl, `queue` is true. */
@@ -85,6 +93,8 @@ export interface PromptEditor {
   /** Swaps the typed word for `text`, the caret after it (⇥ into a folder). */
   readonly replaceTypedWord: (text: string) => void;
   readonly removeTypedWord: () => void;
+  /** Types `text` into the empty prompt as one undoable edit, the caret after it. */
+  readonly insertWhole: (text: string) => void;
   readonly retokenize: () => void;
   /** Focuses now with the caret after the draft, typing `text` there first. */
   readonly focusEnd: (text?: string) => void;
@@ -161,6 +171,20 @@ const registerKeys = (editor: LexicalEditor, hooks: () => EditorHooks) => {
       whileMenu((h) => h.menu.pick("enter")),
       high
     ),
+    editor.registerCommand(
+      KEY_TAB_COMMAND,
+      (event) => {
+        const h = hooks();
+
+        if (event.isComposing || event.shiftKey || !h.suggestion.shown()) return false;
+        event.preventDefault();
+        // Outside this key's update, so the insert gets its own undo entry.
+        queueMicrotask(h.suggestion.accept);
+
+        return true;
+      },
+      COMMAND_PRIORITY_NORMAL
+    ),
     editor.registerCommand(KEY_ARROW_UP_COMMAND, recall(-1), COMMAND_PRIORITY_NORMAL),
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, recall(1), COMMAND_PRIORITY_NORMAL),
     editor.registerCommand(KEY_ARROW_LEFT_COMMAND, across("left"), high),
@@ -173,6 +197,7 @@ const registerKeys = (editor: LexicalEditor, hooks: () => EditorHooks) => {
         if (event.isComposing) return false;
 
         if (h.menu.open()) h.menu.dismiss();
+        else if (h.suggestion.shown()) h.suggestion.dismiss();
         else if (!h.onEscape()) return false;
         event.preventDefault();
 
@@ -295,6 +320,12 @@ export const createPromptEditor = (hooks: () => EditorHooks, label: string): Pro
     insertMention: (row) => editor.update(() => $insertMention(row)),
     replaceTypedWord: (text) => editor.update(() => $replaceTypedWord(text)),
     removeTypedWord: () => editor.update(() => $replaceTypedWord("")),
+    insertWhole: (text) => {
+      editor.getRootElement()?.focus({ preventScroll: true });
+      // History has no entry before the first edit; record the empty prompt so undo returns to it.
+      editor.update(() => $setText("", true), { tag: HISTORY_MERGE_TAG, discrete: true });
+      editor.update(() => $setText(text, true), { tag: HISTORY_PUSH_TAG, discrete: true });
+    },
     retokenize: () => editor.update(() => $retokenize()),
     read: () =>
       editor.getEditorState().read(() => ({ typed: $readTypedWord(), draft: $readDraft() })),
