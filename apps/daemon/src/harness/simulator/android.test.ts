@@ -8,6 +8,7 @@ import {
   type SimulatorRequirement,
   SimulatorSupport,
 } from "@polaris/protocol";
+import { delimiter, join } from "node:path";
 import { callTool, textOf } from "./mcp.testing.ts";
 import { defaultAnswer, disposeAll, ok, setup, UDID } from "./server.testing.ts";
 
@@ -77,9 +78,9 @@ describe("Android Emulators through the Simulator tools", () => {
       "--",
     ]);
     expect(envs[0]).toMatchObject({ ANDROID_HOME: SDK, ANDROID_SDK_ROOT: SDK });
-    expect(envs[0]?.PATH?.split(":").slice(0, 2)).toEqual([
-      `${SDK}/platform-tools`,
-      `${SDK}/emulator`,
+    expect(envs[0]?.PATH?.split(delimiter).slice(0, 2)).toEqual([
+      join(SDK, "platform-tools"),
+      join(SDK, "emulator"),
     ]);
     await callTool(server!.url, "simulator_tap", { target: "@e3" });
 

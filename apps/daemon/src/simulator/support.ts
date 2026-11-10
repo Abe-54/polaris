@@ -8,7 +8,8 @@ import {
   type SimulatorRequirement,
   SimulatorSupport,
 } from "@polaris/protocol";
-import { join } from "node:path";
+// Android runs only on macOS and Linux, so its SDK paths are POSIX paths.
+import { posix } from "node:path";
 import type { PlatformFacts } from "../platform/index.ts";
 
 export interface CommandResult {
@@ -131,16 +132,16 @@ const sdkCandidates = (facts: PlatformFacts, probe: SupportProbe): ReadonlyArray
     (root): root is string => root !== undefined && root !== ""
   ),
   ...(facts.os === "darwin"
-    ? [join(probe.home, "Library", "Android", "sdk")]
-    : [join(probe.home, "Android", "Sdk"), join(probe.home, "Android", "sdk")]),
+    ? [posix.join(probe.home, "Library", "Android", "sdk")]
+    : [posix.join(probe.home, "Android", "Sdk"), posix.join(probe.home, "Android", "sdk")]),
 ];
 
 /** An SDK with both the emulator and adb, which serve-emu runs by name. */
 const findSdk = (facts: PlatformFacts, probe: SupportProbe): string | null =>
   sdkCandidates(facts, probe).find(
     (root) =>
-      probe.isFile(join(root, "emulator", "emulator")) &&
-      probe.isFile(join(root, "platform-tools", "adb"))
+      probe.isFile(posix.join(root, "emulator", "emulator")) &&
+      probe.isFile(posix.join(root, "platform-tools", "adb"))
   ) ?? null;
 
 /** serve-emu encodes with the user's own ffmpeg, and only through libx264. */
