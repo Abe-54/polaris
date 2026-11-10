@@ -3,7 +3,16 @@ import { TurnId, TurnItem } from "@polaris/protocol";
 import { turnWith } from "../../../store/fixtures.testing.ts";
 import type { TurnView } from "../../../store/sessionModel.ts";
 import { conversationRows } from "./conversation.ts";
-import { LONGEST, REST, railLayout, tickLength, tickTurn, turnAt, turnsInView } from "./rail.ts";
+import {
+  LONGEST,
+  railLayout,
+  railTurns,
+  REST,
+  tickLength,
+  tickTurn,
+  turnAt,
+  turnsInView,
+} from "./rail.ts";
 
 const view = (index: number): TurnView => ({
   turn: turnWith({ id: TurnId.make(`t${index}`), index, prompt: `prompt ${index}` }),
@@ -49,5 +58,26 @@ describe("turn rail", () => {
     // Folded summaries for t0–t2, then t3's prompt and reply.
     expect(turnsInView(rows, 1, 3, index)).toEqual({ first: 1, last: 3 });
     expect(turnsInView(rows, 9, 12, index)).toBeNull();
+  });
+
+  test("a streaming frame redoes only the live Turn's tick (ENG-903)", () => {
+    const done = [view(0), view(1), view(2)];
+    const live = view(3);
+    const before = railTurns([...done, live]);
+
+    const edit = TurnItem.cases.FileChange.make({
+      id: "f3",
+      changes: [{ path: "src/a.ts", kind: "modify" }],
+      status: "completed",
+    });
+
+    const frame = [...done, { ...live, items: [...live.items, edit] }];
+    const after = railTurns(frame);
+
+    expect(after.slice(0, 3).every((tick, n) => tick === before[n])).toBe(true);
+    expect(after[3]).not.toBe(before[3]);
+    expect(after[3]?.files).toBe(1);
+    // Fresh views miss the cache: every tick computed again comes out the same.
+    expect(after).toEqual(railTurns(frame.map((v) => ({ ...v }))));
   });
 });

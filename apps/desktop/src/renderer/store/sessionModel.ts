@@ -25,8 +25,43 @@ import type { SessionData } from "./plain.ts";
 export interface LiveItem {
   readonly item: TurnItem | null;
   readonly text: string;
+  /** Streamed command output, its last `LIVE_OUTPUT_CAP` chars at most (`capOutput`). */
   readonly output: string;
+  /** The "\n"s in all the output streamed, what the cap dropped too; unset, count `output`'s. */
+  readonly outputNewlines?: number | undefined;
 }
+
+/** Live output kept per command; the completed item carries all of it. */
+export const LIVE_OUTPUT_CAP = 256 * 1024;
+
+/** How many "\n" `text` holds, without splitting it. */
+export const countNewlines = (text: string): number => {
+  let count = 0;
+
+  for (let at = text.indexOf("\n"); at !== -1; at = text.indexOf("\n", at + 1)) count++;
+
+  return count;
+};
+
+/**
+ * `output`'s last `cap` chars, from the first line that starts in them; a single line
+ * longer than that is cut mid-line.
+ */
+export const capOutput = (output: string, cap: number = LIVE_OUTPUT_CAP): string => {
+  if (output.length <= cap) return output;
+  const from = output.length - cap;
+  const lineStart = output.indexOf("\n", from - 1) + 1;
+
+  return lineStart === 0 || lineStart >= output.length
+    ? output.slice(from)
+    : output.slice(lineStart);
+};
+
+const withOutput = (live: LiveItem, text: string): LiveItem => ({
+  ...live,
+  output: capOutput(live.output + text),
+  outputNewlines: (live.outputNewlines ?? countNewlines(live.output)) + countNewlines(text),
+});
 
 /** A Subagent the Turn spawned, with its own items (completed and in progress). */
 export interface SubagentView {
@@ -470,7 +505,7 @@ const applyEnvelope = (model: SessionModel, envelope: EventEnvelope): SessionMod
 };
 
 const liveOf = (view: Holder, itemId: string): LiveItem =>
-  view.live.get(itemId) ?? { item: null, text: "", output: "" };
+  view.live.get(itemId) ?? { item: null, text: "", output: "", outputNewlines: 0 };
 
 const withLive = <H extends Holder>(view: H, itemId: string, live: LiveItem): H => {
   // A delta can trail its item's completion by a frame; never resurrect it.
@@ -508,7 +543,11 @@ export const applySessionItem = (model: SessionModel, item: SessionStreamItem): 
         onHolder(model, turnId, subagentId, (view) => {
           const live = liveOf(view, itemId);
 
-          return withLive(view, itemId, { ...live, [field]: live[field] + text });
+          return withLive(
+            view,
+            itemId,
+            field === "output" ? withOutput(live, text) : { ...live, text: live.text + text }
+          );
         }),
       ItemProgress: ({ turnId, item: progress, subagentId }) =>
         onHolder(model, turnId, subagentId, (view) =>
