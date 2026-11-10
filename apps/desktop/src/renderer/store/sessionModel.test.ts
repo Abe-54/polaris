@@ -7,7 +7,9 @@ import {
   type DomainEvent,
   DomainEvent as Events,
   SessionStreamItem,
+  SuggestedReply,
   TurnDetail,
+  TurnId,
   TurnItem,
 } from "@polaris/protocol";
 import {
@@ -75,6 +77,28 @@ describe("session model", () => {
     ]);
 
     expect(model.session?.lastCompaction).toEqual(compaction);
+  });
+
+  test("a Suggested Reply folds into the session until a newer Turn starts (ENG-885)", () => {
+    const reply = SuggestedReply.make({ turnId, text: "go with B", source: "harness" });
+    const next = turnWith({ id: TurnId.make("t-next"), index: 1 });
+
+    const offered = applySessionItems(started, [
+      event(4, E.SessionReplySuggested.make({ sessionId, reply })),
+    ]);
+
+    expect(offered.session?.suggestedReply).toEqual(reply);
+
+    const after = applySessionItems(offered, [event(5, E.TurnStarted.make({ turn: next }))]);
+
+    expect(after.session?.suggestedReply).toBeNull();
+
+    // Arriving after the newer Turn started, the old Turn's reply is already stale.
+    const late = applySessionItems(after, [
+      event(6, E.SessionReplySuggested.make({ sessionId, reply })),
+    ]);
+
+    expect(late.session?.suggestedReply).toBeNull();
   });
 
   test("context usage folds into the session the header reads", () => {
