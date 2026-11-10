@@ -30,6 +30,7 @@ export const DARWIN_PATHS = {
   "agent-desktop": "Polaris Computer Use.app/Contents/MacOS/agent-desktop",
   "agent-desktop-macos-helper":
     "Polaris Computer Use.app/Contents/MacOS/agent-desktop-macos-helper",
+  "polaris-capture": "Polaris Computer Use.app/Contents/MacOS/polaris-capture",
   "computer-use-Info.plist": "Polaris Computer Use.app/Contents/Info.plist",
   "computer-use-Polaris.icns": "Polaris Computer Use.app/Contents/Resources/Polaris.icns",
   "computer-use-CodeResources": "Polaris Computer Use.app/Contents/_CodeSignature/CodeResources",
@@ -40,6 +41,7 @@ const EXECUTABLES = new Set([
   "polaris-computer-use",
   "agent-desktop",
   "agent-desktop-macos-helper",
+  "polaris-capture",
 ]);
 
 /** Each file a platform's build has, and its path in the platform directory. */

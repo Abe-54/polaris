@@ -1,12 +1,13 @@
 /**
  * Builds "Polaris Computer Use.app" (`bundle.ts`) for the Daemon build and the tests: the
- * launcher compiled from `launcher.c`, the tools beside it, and an ad hoc signature.
- * Build time only, on macOS with the Xcode command line tools; never run on a Host.
+ * launcher compiled from `launcher.c`, the capture tool from `capture/`, the tools beside them,
+ * and an ad hoc signature. Build time only, on macOS with Xcode's tools; never run on a Host.
  */
-import { chmodSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   COMPUTER_USE_BUNDLE,
+  COMPUTER_USE_CAPTURE,
   COMPUTER_USE_LAUNCHER,
   HELPER_EXECUTABLES,
   HELPER_FILES,
@@ -42,10 +43,42 @@ export const compileLauncher = (outfile: string): Promise<void> =>
     join(import.meta.dir, "launcher.c"),
   ]);
 
-/** The files a build brings to the helper: everything but the launcher, plist and signature. */
+const CAPTURE_SOURCES = join(import.meta.dir, "capture", "Sources", COMPUTER_USE_CAPTURE);
+
+/**
+ * Compiles the preview's capture tool (Swift, ScreenCaptureKit) for arm64. Sources go in
+ * order with their folder mapped away, so rebuilds match wherever the checkout is.
+ */
+export const compileCapture = (outfile: string): Promise<void> =>
+  run([
+    "/usr/bin/xcrun",
+    "swiftc",
+    "-target",
+    "arm64-apple-macos13.0",
+    "-swift-version",
+    "6",
+    "-O",
+    "-parse-as-library",
+    "-warnings-as-errors",
+    "-file-prefix-map",
+    `${CAPTURE_SOURCES}=.`,
+    "-module-name",
+    "polaris_capture",
+    "-o",
+    outfile,
+    ...readdirSync(CAPTURE_SOURCES)
+      .filter((name) => name.endsWith(".swift"))
+      .toSorted()
+      .map((name) => join(CAPTURE_SOURCES, name)),
+  ]);
+
+/** The files a build brings to the helper: all but the compiled tools, plist and signature. */
 export type HelperInput = Exclude<
   HelperFile,
-  typeof COMPUTER_USE_LAUNCHER | "computer-use-Info.plist" | "computer-use-CodeResources"
+  | typeof COMPUTER_USE_LAUNCHER
+  | typeof COMPUTER_USE_CAPTURE
+  | "computer-use-Info.plist"
+  | "computer-use-CodeResources"
 >;
 
 export interface HelperBuild {
@@ -68,6 +101,7 @@ export const buildHelper = async (build: HelperBuild): Promise<string> => {
   }
 
   await compileLauncher(at(COMPUTER_USE_LAUNCHER));
+  await compileCapture(at(COMPUTER_USE_CAPTURE));
 
   // SAFETY: `inputs` is a Record<HelperInput, string>, so its keys are exactly HelperInput.
   const inputs = Object.keys(build.inputs) as ReadonlyArray<HelperInput>;

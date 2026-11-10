@@ -59,6 +59,7 @@ describe("shipped Daemon manifest", () => {
       // The helper app's tools are sealed by its own signature, after the Daemon's.
       join(helper, "Contents/MacOS/agent-desktop"),
       join(helper, "Contents/MacOS/agent-desktop-macos-helper"),
+      join(helper, "Contents/MacOS/polaris-capture"),
       helper,
     ]);
 
@@ -96,6 +97,7 @@ describe("shipped Daemon manifest", () => {
       "betterleaks",
       "computer-use-CodeResources",
       "polaris",
+      "polaris-capture",
       "polaris-computer-use",
     ]);
     expect(mac.files.map((file) => file.path)).toContain(

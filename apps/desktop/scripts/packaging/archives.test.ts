@@ -59,6 +59,7 @@ describe("release Daemon archives", () => {
               ["polaris-computer-use", 0o755],
               ["agent-desktop", 0o755],
               ["agent-desktop-macos-helper", 0o755],
+              ["polaris-capture", 0o755],
               ["computer-use-Info.plist", 0o644],
               ["computer-use-Polaris.icns", 0o644],
               ["computer-use-CodeResources", 0o644],

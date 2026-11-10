@@ -56,7 +56,7 @@ APP_ENTITLEMENTS = "electron.plist"
 # "Polaris Computer Use.app" beside the Daemon's bundle: its launcher and the tools it runs (ENG-846).
 HELPER_APP = "Polaris Computer Use.app"
 HELPER_LAUNCHER = "polaris-computer-use"
-HELPER_TOOLS = ("agent-desktop", "agent-desktop-macos-helper")
+HELPER_TOOLS = ("agent-desktop", "agent-desktop-macos-helper", "polaris-capture")
 HELPER_ENTITLEMENTS = "computer-use.plist"
 # The hand-off's only roots, as the build job tars them.
 DAEMON_DIST = "apps/daemon/dist"
