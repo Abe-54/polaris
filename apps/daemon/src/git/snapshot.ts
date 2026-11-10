@@ -9,7 +9,8 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { gitText, mayBeInWorkTree, resolveHead, runGitRaw } from "./git.ts";
+import { gitText, mayBeInWorkTree, nativePath, resolveHead, runGitRaw } from "./git.ts";
+import { holdsNoGitlinks } from "./indexFile.ts";
 
 export interface Snapshot {
   /** The repository top level the snapshot was taken from. */
@@ -26,7 +27,14 @@ interface Repo {
   readonly userIndex: string;
   /** Polaris's own index for this worktree: `<git dir>/polaris/index`. */
   readonly ownIndex: string;
+  /** An object name's bytes in this repository's indexes; null when git didn't say (before 2.25). */
+  readonly hashBytes: number | null;
 }
+
+const HASH_BYTES = new Map([
+  ["sha1", 20],
+  ["sha256", 32],
+]);
 
 /**
  * Never split an index of ours: with the user's `core.splitIndex`, writing it
@@ -56,7 +64,7 @@ const discover = async (cwd: string): Promise<Repo | null> => {
 
   if (!mayBeInWorkTree(cwd)) return null;
 
-  // One process for the top level and both index paths (per worktree).
+  // One process for the top level, both index paths (per worktree) and the hash.
   const result = await runGitRaw(cwd, [
     "rev-parse",
     "--path-format=absolute",
@@ -65,13 +73,15 @@ const discover = async (cwd: string): Promise<Repo | null> => {
     "index",
     "--git-path",
     "polaris/index",
+    "--show-object-format",
   ]).catch(() => null);
 
   if (result === null || result.code !== 0) return null;
-  const [root, userIndex, ownIndex] = decoder.decode(result.stdout).split("\n");
+  const [top, userIndex, ownIndex, format] = decoder.decode(result.stdout).split("\n");
 
-  if (!root || !userIndex || !ownIndex) return null;
-  const repo = { root, userIndex, ownIndex };
+  if (!top || !userIndex || !ownIndex) return null;
+  const hashBytes = HASH_BYTES.get(format ?? "") ?? null;
+  const repo = { root: nativePath(top), userIndex, ownIndex, hashBytes };
   repos.set(cwd, repo);
 
   return repo;
@@ -117,22 +127,18 @@ const copyUserIndex = async (userIndex: string, to: string): Promise<void> => {
   await utimes(to, atimeMs / 1000, Math.floor(mtimeMs) / 1000);
 };
 
-/** An entry's mode as the index stores it (32-bit big-endian 0o160000), and a split index's extension. */
-const GITLINK_MODE = Buffer.from([0, 0, 0xe0, 0]);
-
-const SPLIT_INDEX = Buffer.from("link");
-
-/** False only when no entry can be a gitlink; a match elsewhere in the bytes just costs a listing. */
-const mayHoldGitlinks = async (index: string) => {
+/** False only when the index was read to its end and holds no gitlink; anything else costs a listing. */
+const mayHoldGitlinks = async (index: string, hashBytes: number | null) => {
+  if (hashBytes === null) return true;
   const bytes = await readFile(index).catch(() => null);
 
-  return bytes === null || bytes.includes(GITLINK_MODE) || bytes.includes(SPLIT_INDEX);
+  return bytes === null || !holdsNoGitlinks(bytes, hashBytes);
 };
 
 /** The index's submodules (gitlinks), as `add -A` excludes: it would run git inside each one. */
-const gitlinkExclusions = async (root: string, env: { readonly GIT_INDEX_FILE: string }) => {
-  if (!(await mayHoldGitlinks(env.GIT_INDEX_FILE))) return [];
-  const listed = await runGitRaw(root, ["ls-files", "-s", "-z"], { env });
+const gitlinkExclusions = async (repo: Repo, env: { readonly GIT_INDEX_FILE: string }) => {
+  if (!(await mayHoldGitlinks(env.GIT_INDEX_FILE, repo.hashBytes))) return [];
+  const listed = await runGitRaw(repo.root, ["ls-files", "-s", "-z"], { env });
 
   if (listed.code !== 0) return [];
 
@@ -143,17 +149,18 @@ const gitlinkExclusions = async (root: string, env: { readonly GIT_INDEX_FILE: s
     .map((entry) => `:(exclude,literal)${entry.slice(entry.indexOf("\t") + 1)}`);
 };
 
-const addAndWriteTree = async (root: string, index: string, config: ReadonlyArray<string>) => {
+/** `add -A` into `index`, then its tree, and whether `write-tree` rewrote the index to get it. */
+const addAndWriteTree = async (repo: Repo, index: string, config: ReadonlyArray<string>) => {
   const env = { GIT_INDEX_FILE: index };
-  const excluded = await gitlinkExclusions(root, env);
+  const excluded = await gitlinkExclusions(repo, env);
+  const add = [...config, "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"];
 
   // A submodule's recorded commit stays as the index has it.
-  await gitText(root, [...config, "add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"], {
-    env,
-    stdin: [".", ...excluded].join("\0"),
-  });
+  await gitText(repo.root, add, { env, stdin: [".", ...excluded].join("\0") });
+  const added = await signature(index);
+  const tree = await gitText(repo.root, [...config, "write-tree"], { env });
 
-  return gitText(root, [...config, "write-tree"], { env });
+  return { tree, rewritten: added !== null && (await signature(index)) !== added };
 };
 
 /**
@@ -182,10 +189,11 @@ const ownIndexTree = async (repo: Repo): Promise<string> => {
     await rm(lock, { force: true });
   }
 
-  const tree = await addAndWriteTree(repo.root, repo.ownIndex, OWN_INDEX_CONFIG);
-  // gc doesn't treat our index as a root, so its cached trees can be pruned;
-  // write-tree trusts that cache. A missing tree throws and takes the fallback.
-  await gitText(repo.root, ["cat-file", "-e", `${tree}^{tree}`]);
+  const { tree, rewritten } = await addAndWriteTree(repo, repo.ownIndex, OWN_INDEX_CONFIG);
+
+  // An index left as it was gave its cached tree, which gc may have pruned (ADR 0109):
+  // a missing tree throws and takes the fallback.
+  if (!rewritten) await gitText(repo.root, ["cat-file", "-e", `${tree}^{tree}`]);
   seeds.set(repo.ownIndex, seed);
 
   return tree;
@@ -200,7 +208,7 @@ const tempIndexTree = async (repo: Repo): Promise<string> => {
 
     if (existsSync(repo.userIndex)) await copyUserIndex(repo.userIndex, index);
 
-    return await addAndWriteTree(repo.root, index, INDEX_CONFIG);
+    return (await addAndWriteTree(repo, index, INDEX_CONFIG)).tree;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -1,14 +1,40 @@
-import { afterEach, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { afterEach, expect, type Mock, spyOn, test } from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { gitExecutable } from "./executable.ts";
 import { snapshotWorkingTree } from "./snapshot.ts";
 import { newTempDir, removeTempDir } from "../platform/tempDir.testing.ts";
 
 const dirs: Array<string> = [];
 
+const spies: Array<Mock<typeof Bun.spawn>> = [];
+
 afterEach(() => {
+  for (const spy of spies.splice(0)) spy.mockRestore();
+
   for (const d of dirs.splice(0)) removeTempDir(d);
 });
+
+/** Watches every git the Daemon starts from here; answers how many ran with all of `words`. */
+const countGits = (...words: Array<string>) => {
+  const spawn = spyOn(Bun, "spawn");
+  spies.push(spawn);
+
+  return () =>
+    spawn.mock.calls.filter(([command]) => {
+      const argv = Array.isArray(command) ? command : [];
+
+      return argv[0] === gitExecutable() && words.every((word) => argv.includes(word));
+    }).length;
+};
 
 const git = (cwd: string, ...args: Array<string>) => {
   const r = Bun.spawnSync(["git", ...args], { cwd });
@@ -52,7 +78,11 @@ const makeRepo = (files: Record<string, string>) => {
   git(repo, "config", "user.email", "t@example.com");
   git(repo, "config", "user.name", "t");
 
-  for (const [path, content] of Object.entries(files)) writeFileSync(join(repo, path), content);
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(repo, path)), { recursive: true });
+    writeFileSync(join(repo, path), content);
+  }
+
   git(repo, "add", "-A");
   git(repo, "commit", "-qm", "init");
 
@@ -164,4 +194,102 @@ test("concurrent snapshots of one repository agree", async () => {
   writeFileSync(join(repo, "b.txt"), "b\n");
   const trees = await Promise.all([1, 2, 3, 4].map(() => snapshotWorkingTree(repo)));
   expect(new Set(trees.map((s) => s!.tree)).size).toBe(1);
+});
+
+test("tracked paths that hold `link` cost no listing of the index", async () => {
+  const repo = makeRepo({ "linkedDevices/list.ts": "a\n", "docs/symlink.md": "b\n" });
+  const listings = countGits("ls-files");
+  writeFileSync(join(repo, "hyperlink.txt"), "c\n");
+  const first = await snapshotWorkingTree(repo);
+  writeFileSync(join(repo, "linked.txt"), "d\n");
+  const second = await snapshotWorkingTree(repo);
+
+  expect(filesOf(repo, first!.tree)).toEqual([
+    "docs/symlink.md",
+    "hyperlink.txt",
+    "linkedDevices/list.ts",
+  ]);
+  expect(filesOf(repo, second!.tree)).toContain("linked.txt");
+  expect(listings()).toBe(0);
+});
+
+/** A repository with a nested one staged as a gitlink at `sub`, which then moves to a new commit. */
+const withMovedGitlink = (prepare: (repo: string) => void = () => {}) => {
+  const repo = makeRepo({ "linkedDevices/list.ts": "a\n" });
+  const sub = join(repo, "sub");
+  mkdirSync(sub);
+  git(sub, "init", "-q", "-b", "main");
+  git(sub, "config", "user.email", "t@example.com");
+  git(sub, "config", "user.name", "t");
+  writeFileSync(join(sub, "s.txt"), "one\n");
+  git(sub, "add", "-A");
+  git(sub, "commit", "-qm", "one");
+  const recorded = git(sub, "rev-parse", "HEAD");
+  git(repo, "add", "sub");
+  git(repo, "commit", "-qm", "sub");
+  prepare(repo);
+  writeFileSync(join(sub, "s.txt"), "two\n");
+  git(sub, "commit", "-qam", "two");
+
+  return { repo, recorded };
+};
+
+const gitlinkOf = (repo: string, tree: string) => git(repo, "ls-tree", tree, "sub").split(/\s/)[2];
+
+/** The user's index split, with every entry (the gitlink too) in its shared file. */
+const splitIndex = (repo: string): void => {
+  const past = pastSecond();
+  utimesSync(join(repo, "linkedDevices/list.ts"), past, past);
+  git(repo, "update-index", "--refresh");
+  git(repo, "config", "core.splitIndex", "true");
+  git(repo, "update-index", "--split-index");
+
+  if (readFileSync(join(repo, ".git", "index")).readUInt32BE(8) !== 0) {
+    throw new Error("the split index kept entries of its own");
+  }
+};
+
+test.each([
+  ["version 2", (): void => {}],
+  ["version 4", (repo: string): void => void git(repo, "update-index", "--index-version", "4")],
+  ["a split index", splitIndex],
+] as const)("a submodule keeps its recorded commit: %s", async (_, prepare) => {
+  const { repo, recorded } = withMovedGitlink(prepare);
+  const listings = countGits("ls-files");
+  writeFileSync(join(repo, "new.txt"), "n\n");
+  const first = await snapshotWorkingTree(repo);
+  const second = await snapshotWorkingTree(repo);
+
+  // `add -A` would stage the submodule's new HEAD (and run git inside it) unless it is excluded.
+  expect(gitlinkOf(repo, first!.tree)).toBe(recorded);
+  expect(gitlinkOf(repo, second!.tree)).toBe(recorded);
+  expect(filesOf(repo, second!.tree)).toContain("new.txt");
+  expect(listings()).toBe(2);
+});
+
+test("a tree gc pruned from under its own index is written again, not handed out", async () => {
+  const repo = makeRepo({ "a.txt": "a\n" });
+  const past = pastSecond();
+  writeFileSync(join(repo, "b.txt"), "b\n");
+
+  // Older than the index, so the next `add -A` trusts their stat and leaves the index alone.
+  for (const name of ["a.txt", "b.txt"]) utimesSync(join(repo, name), past, past);
+  const first = await snapshotWorkingTree(repo);
+  git(repo, "gc", "-q", "--prune=now");
+  expect(Bun.spawnSync(["git", "cat-file", "-e", first!.tree], { cwd: repo }).exitCode).not.toBe(0);
+
+  const second = await snapshotWorkingTree(repo);
+  expect(second!.tree).toBe(first!.tree);
+  expect(git(repo, "show", `${second!.tree}:b.txt`)).toBe("b");
+});
+
+test("a snapshot of an edited working tree starts no git to check its tree", async () => {
+  const repo = makeRepo({ "a.txt": "a\n" });
+  await snapshotWorkingTree(repo);
+  const checks = countGits("cat-file");
+  writeFileSync(join(repo, "a.txt"), "edited\n");
+  const snapshot = await snapshotWorkingTree(repo);
+
+  expect(git(repo, "show", `${snapshot!.tree}:a.txt`)).toBe("edited");
+  expect(checks()).toBe(0);
 });

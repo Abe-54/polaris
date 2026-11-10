@@ -66,6 +66,29 @@ describe("the diff index", () => {
     expect(at).toBe(diff.bytes.length);
   });
 
+  test("a line that reads like a file's header inside a hunk isn't one", async () => {
+    const root = await makeRepo({ "notes.md": "intro\n" });
+    cleanup.push(root);
+    const base = await gitText(root, ["rev-parse", "HEAD"]);
+    write(root, "notes.md", "intro\ndiff --git a/fake b/fake\n");
+    write(root, "other.md", "diff --git a/x b/x\n");
+    const head = await commitAll(root, "headers as content");
+    const diff = await computeDiff(root, DiffSpec.cases.Range.make({ base, head }));
+
+    expect(diff.files).toBe(2);
+    expect(diff.index.map((file) => [file.path, file.additions])).toEqual([
+      ["notes.md", 1],
+      ["other.md", 1],
+    ]);
+  });
+
+  test("a patch cut inside a header's first word ends at the file before it", () => {
+    const patch = "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\ndiff --git";
+    const index = indexDiff(new TextEncoder().encode(patch));
+
+    expect(index.map((file) => [file.path, file.length])).toEqual([["a", patch.length]]);
+  });
+
   test("an empty patch has no files; quoted paths are unquoted", () => {
     expect(indexDiff(new Uint8Array())).toEqual([]);
     expect(unquotePath('"caf\\303\\251\\tx"')).toBe("café\tx");
