@@ -28,6 +28,7 @@ import {
 import { AttachmentSettings, AttachmentUsage, StagedAmount } from "./attachments.ts";
 import { AutoArchiveRpcs } from "./autoArchive.ts";
 import { IdleCompactionRpcs } from "./idleCompaction.ts";
+import { SuggestedReplyRpcs } from "./suggestedReply.ts";
 import { VisualsRpcs } from "./visuals.ts";
 import { DeveloperModeRpcs } from "./developerMode.ts";
 import { SelfTraceRpcs } from "./selfTraces.ts";
@@ -780,7 +781,7 @@ export const DaemonRpcDefinitions = RpcGroup.make(
   .merge(ConstellationHostRpcs, ResourceRpcs, EditorFileRpcs)
   .merge(LanguageRpcs, PredictionRpcs, SessionTurnRpcs)
   .merge(AutoArchiveRpcs, IdleCompactionRpcs, ContinuityRpcs, PresenceRpcs, HostStatsRpcs)
-  .merge(VisualsRpcs)
+  .merge(VisualsRpcs, SuggestedReplyRpcs)
   .merge(GitWriteRpcs, GitWatchRpcs, GitLogRpcs, CommitMessageRpcs)
   .merge(ExtensionRpcs, RemoteAccessRpcs, LinkedDeviceRpcs, VoiceRpcs, RestartRpcs)
   .merge(

@@ -18,6 +18,7 @@ import {
   AttachmentSettings,
   AutoArchiveSettings,
   IdleCompactionSettings,
+  SuggestedReplySettings,
   VisualsLevel,
   VisualsSettings,
   MIN_IDLE_COMPACTION_TOKENS,
@@ -178,6 +179,15 @@ export const IdleCompactionPref = Schema.Struct({
 
 export type IdleCompactionPref = typeof IdleCompactionPref.Type;
 
+/** Settings → Sessions, Suggested Replies (ENG-887): written to every Host that has them. */
+export const SuggestedRepliesPref = Schema.Struct({
+  enabled: Schema.Boolean,
+  /** Null: automatic, the Host's first ready small, fast model. */
+  fallback: Schema.NullOr(RoleDefault),
+});
+
+export type SuggestedRepliesPref = typeof SuggestedRepliesPref.Type;
+
 /** Settings → Sessions: how every new Agent Session starts and what happens around it. */
 export const SessionPrefs = Schema.Struct({
   /** Start on a new Worktree rather than in the Workspace directory. */
@@ -212,6 +222,8 @@ export const SessionPrefs = Schema.Struct({
   constellationDefaults: ConstellationDefaults,
   /** Compact a large session idle for 55 minutes, while its prompt cache is warm (ENG-562). */
   idleCompaction: IdleCompactionPref,
+  /** A whole reply offered when a Turn ends (ENG-887, off by default); written to every Host. */
+  suggestedReplies: SuggestedRepliesPref,
   /** How readily agents draw a visualization (ENG-598); written to every Host. */
   visuals: VisualsLevel,
   /** Settings → Editor: vim keys in the Editor (off by default, spec §4). */
@@ -248,6 +260,7 @@ export const SessionPrefsPatch = Schema.Struct({
   workspaceAcceptBranch: Schema.optionalKey(Schema.Record(Schema.String, AcceptBranchMode)),
   constellationDefaults: Schema.optionalKey(ConstellationDefaults),
   idleCompaction: Schema.optionalKey(IdleCompactionPref),
+  suggestedReplies: Schema.optionalKey(SuggestedRepliesPref),
   visuals: Schema.optionalKey(VisualsLevel),
   editorVim: Schema.optionalKey(Schema.Boolean),
   editorAutosave: Schema.optionalKey(Schema.Boolean),
@@ -400,6 +413,9 @@ export const RequestInputs = {
   "sessions.setAutoArchive": onHost({ settings: AutoArchiveSettings }),
   "sessions.idleCompaction": onHost({}),
   "sessions.setIdleCompaction": onHost({ settings: IdleCompactionSettings }),
+  /** Suggested Replies (capability `sessions.suggested-replies`): the preference and its fallback. */
+  "sessions.suggestedReplies": onHost({}),
+  "sessions.setSuggestedReplies": onHost({ settings: SuggestedReplySettings }),
   /** The Visuals setting (capability `sessions.visuals`): how readily agents draw. */
   "sessions.visuals": onHost({}),
   "sessions.setVisuals": onHost({ settings: VisualsSettings }),

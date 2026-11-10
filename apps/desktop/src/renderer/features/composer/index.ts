@@ -9,6 +9,8 @@ export type { PromptEditorProps } from "./ui/PromptEditor.tsx";
 
 export { type CommandOption, promptFor } from "./model/commands.ts";
 
+export { type OfferedReply, offeredReply } from "./model/suggestion.ts";
+
 export { sentMessages } from "./model/history.ts";
 
 export { isShellDraft, leaveShell, shellCommandOf, shellDraft } from "./model/shell.ts";

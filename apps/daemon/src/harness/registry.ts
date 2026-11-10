@@ -17,6 +17,8 @@
  * `SimulatorMcp` in context they get the Simulator's too, and with `DesktopMcp` computer use
  * (`polaris_desktop`).
  */
+import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
+import { NATIVE_SUGGESTIONS } from "../suggestedReply/rules.ts";
 import type { HarnessKind, KnownHarnessKind } from "@polaris/protocol";
 import { Effect, Layer, Option, Scope } from "effect";
 import { HarnessRegistry, ServiceError } from "../services.ts";
@@ -111,6 +113,16 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const browser = yield* BrowserMcp;
       const desktop = Option.getOrUndefined(yield* Effect.serviceOption(DesktopMcp));
       const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
+      const preference = yield* Effect.serviceOption(SuggestedReplyPreference);
+
+      // Read per Turn by the Claude driver (ENG-885); off while Claude Code isn't native (ENG-891).
+      const suggestedReplies = {
+        suggestedReplies: () =>
+          NATIVE_SUGGESTIONS.has("claude") &&
+          Option.isSome(preference) &&
+          preference.value.enabledNow(),
+      };
+
       const planLimits = { report };
       // The app-server the Codex driver may start belongs to this layer, not to the first `open`.
       const scope = yield* Effect.scope;
@@ -157,6 +169,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
                 browser,
                 desktop,
                 simulator,
+                ...suggestedReplies,
               })
             )
           ),

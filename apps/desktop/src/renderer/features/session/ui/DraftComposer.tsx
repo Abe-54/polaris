@@ -19,6 +19,7 @@ import {
   type FrecencyTable,
   type MentionSearch,
   Prompt,
+  type OfferedReply,
 } from "../../composer/index.ts";
 import type { StagedAttachment } from "../state.ts";
 import { ComposerMenu } from "./ComposerMenu.tsx";
@@ -97,6 +98,8 @@ export interface DraftComposerProps {
   readonly status?: ReactNode;
   /** The `@` picker's file search (`useMentionSearch`); unset, `@` is just text. */
   readonly mentions?: MentionSearch | null;
+  /** The Suggested Reply to offer in the empty prompt (`offeredReply`). */
+  readonly suggestion?: OfferedReply | null;
 }
 
 /** The paperclip's file picker: a hidden input whose picks are attached like dropped files. */
@@ -162,6 +165,7 @@ export const DraftComposer = ({
   strip,
   status,
   mentions = null,
+  suggestion = null,
 }: DraftComposerProps) => {
   const filePicker = useRef<HTMLInputElement>(null);
   // The menu draws in this box, above the card (which clips what it holds).
@@ -252,6 +256,7 @@ export const DraftComposer = ({
                   history={history}
                   mono={shell !== undefined}
                   mentions={shell === undefined ? mentions : null}
+                  suggestion={suggestion}
                 />
               </ComposerMenu>
             }

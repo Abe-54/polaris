@@ -138,7 +138,7 @@
           "max": 46.84765625
         },
         "startup_modules": {
-          "value": 724,
+          "value": 749,
           "unit": "modules",
           "kind": "count",
           "better": "lower",

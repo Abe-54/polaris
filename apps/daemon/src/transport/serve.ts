@@ -1,3 +1,5 @@
+import { SuggestedReplyPreference } from "../engine/suggestedReplyPreference.ts";
+import { lazySuggestedReplies } from "../suggestedReply/lazy.ts";
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
@@ -149,9 +151,23 @@ const computerUseBindings = Layer.effectDiscard(
   })
 );
 
+/** One Harness availability report for the whole Daemon. */
+const availability = Availability.layer();
+
+/** One preference for the whole Daemon: the Claude driver reads it, the Engine serves it. */
+const suggestedReplyPreference = SuggestedReplyPreference.layer().pipe(Layer.provide(availability));
+
 /** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
-  Layer.provide(Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator, desktopMcp))
+  Layer.provide(
+    Layer.mergeAll(
+      PlanLimitReporter.layer,
+      browserMcp,
+      lazySimulator,
+      desktopMcp,
+      suggestedReplyPreference
+    )
+  )
 );
 
 /**
@@ -168,8 +184,11 @@ export const traceServices = lazyTraces.pipe(
   Layer.provide(Layer.merge(ReviewerPolicyLive, traceWorkspaceTrust))
 );
 
+/** The Engine, and the Polaris fallback for Suggested Replies, loaded once they're on (ENG-886). */
+const engine = lazySuggestedReplies.pipe(Layer.provideMerge(Engine.layer));
+
 export const engineServices = Layer.mergeAll(
-  computerUseBindings.pipe(Layer.provideMerge(Engine.layer)),
+  computerUseBindings.pipe(Layer.provideMerge(engine)),
   releaseWhenQuiet()
 ).pipe(
   Layer.provideMerge(
@@ -187,7 +206,8 @@ export const engineServices = Layer.mergeAll(
       TerminalsDaemonLive,
       ReviewerPolicyLive,
       RulesLive,
-      Availability.layer()
+      availability,
+      suggestedReplyPreference
     )
   ),
   Layer.provideMerge(usageServices),
@@ -373,6 +393,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "attachments.settings",
   "sessions.auto-archive",
   "sessions.idle-compaction",
+  "sessions.suggested-replies",
   "sessions.visuals",
   "terminal",
   "terminal.binary",

@@ -120,6 +120,10 @@ A git worktree of a Workspace, tracked by Polaris wherever it lives on disk (whe
 One message from the user plus everything the Harness does in response; the unit that gets a checkpoint, a diff, and a Review.
 _Avoid_: Step, exchange
 
+**Suggested Reply**:
+A whole reply the composer offers when a Turn ends and the composer is empty, shown before anything is sent and used only when the user accepts it with Tab.
+_Avoid_: Autocomplete, prompt suggestion, ghost reply, Edit Prediction (that is the Editor's)
+
 **Tool Call**:
 One use of a tool by an Agent Session within a Turn: a built-in tool, an MCP server's tool, or a Skill being loaded.
 _Avoid_: Activity, step, action

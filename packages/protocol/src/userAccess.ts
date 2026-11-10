@@ -128,6 +128,8 @@ export const USER_RPCS = {
   "sessions.setAutoArchive": "any",
   "sessions.idleCompaction": "any",
   "sessions.setIdleCompaction": "any",
+  "sessions.suggestedReplies": "any",
+  "sessions.setSuggestedReplies": "any",
   "sessions.visuals": "any",
   "sessions.setVisuals": "any",
   "continuity.watch": "any",

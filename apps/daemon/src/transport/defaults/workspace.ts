@@ -9,6 +9,7 @@ import {
   GitWatchRpcs,
   GitWriteRpcs,
   IdleCompactionRpcs,
+  SuggestedReplyRpcs,
   NotFound,
   SessionTurnRpcs,
   TerminalRpcs,
@@ -73,6 +74,10 @@ const sessionSettingsDefaults = Layer.mergeAll(
   IdleCompactionRpcs.toLayer({
     "sessions.idleCompaction": unsupported("sessions.idle-compaction"),
     "sessions.setIdleCompaction": unsupported("sessions.idle-compaction"),
+  }),
+  SuggestedReplyRpcs.toLayer({
+    "sessions.suggestedReplies": unsupported("sessions.suggested-replies"),
+    "sessions.setSuggestedReplies": unsupported("sessions.suggested-replies"),
   }),
   VisualsRpcs.toLayer({
     "sessions.visuals": unsupported("sessions.visuals"),

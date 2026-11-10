@@ -102,6 +102,8 @@ export const RPC_GRANTS = {
   "sessions.setAutoArchive": "client",
   "sessions.idleCompaction": "client",
   "sessions.setIdleCompaction": "client",
+  "sessions.suggestedReplies": "client",
+  "sessions.setSuggestedReplies": "client",
   "sessions.visuals": "client",
   "sessions.setVisuals": "client",
   "continuity.watch": "client",

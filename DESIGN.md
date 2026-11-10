@@ -901,6 +901,16 @@ The composer is a plain-text editor (Lexical) where the Harness's **Skills** and
 | OpenCode | its server's `/command` | none | every listed command (`session/command`) | none |
 | ACP (Gemini, Copilot) | the agent's `available_commands_update` | every listed command | none | none |
 
+### Suggested Replies in the composer (ENG-885)
+
+A **Suggested Reply** (CONTEXT.md) sits in the empty prompt where the placeholder would be. Built, not drawn in Paper (owner decision).
+
+- **When.** Only while the session is Idle, the prompt is empty and the session's latest Turn has one (`AgentSession.suggestedReply` for that Turn). Working, Needs You and Limited hide it, and so does a newer Turn from any Client. With the Settings toggle off no event exists, so nothing shows.
+- **Look.** The reply in `body` type and `text-subtle`, on one line, truncated, newlines shown as spaces; 6px after it a `⇥ Tab` keycap (the 18px `Kbd` cap) that is a button named "Use suggested reply". No motion.
+- **Accepting.** ⇥, or clicking the keycap, types the whole reply into the prompt as one undoable edit, the caret after it; nothing is sent, and ↵ sends as usual. An open `/` menu or `@` picker keeps ⇥.
+- **Dismissing.** Typing, pasting or esc removes it for that Turn; clearing the prompt doesn't bring it back, nor does undoing an accept. esc spends itself on the reply and stops nothing. The next Turn's reply shows again.
+- **Screen readers.** A polite live region says it once: "Suggested reply: go with B. Press Tab to use it."
+
 ### Shell commands in the composer (ENG-388)
 
 Claude Code's bash mode, in the session composer. Built, not drawn in Paper.

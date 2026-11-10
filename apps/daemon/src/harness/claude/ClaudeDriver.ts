@@ -85,6 +85,8 @@ import {
 } from "./permissions.ts";
 import { type ClaudePlanLimits, claudePlanLimitReader } from "./planLimits.ts";
 import { usageLimitWatch } from "./usageLimit.ts";
+import { resultOutcome, type TurnOutcome } from "./outcome.ts";
+import { ReplySuggestions } from "./suggestions.ts";
 import { ClaudeTranslator } from "./translate.ts";
 import { readConfinement } from "../confinement.ts";
 import { readOnlyEnv, readOnlyOptions } from "./readOnly.ts";
@@ -132,6 +134,8 @@ export interface ClaudeDriverOptions extends ToolServers {
   readonly sandbox?: () => ClaudeSandbox;
   /** The Host's name in error messages; default the machine's short hostname. */
   readonly hostName?: string;
+  /** Whether the Host's Suggested Replies preference is on (default off). */
+  readonly suggestedReplies?: () => boolean;
 }
 
 const HARNESS = "claude";
@@ -147,24 +151,6 @@ const unknownEffort = (effort: string) =>
 /** `2.1.283 (Claude Code)` → `2.1.283`. */
 export const parseVersion = (stdout: string): string | null =>
   /(\d+\.\d+\.\d+[^\s]*)/.exec(stdout)?.[1] ?? null;
-
-/** How a Turn ends when every message sent for it is answered. */
-interface TurnOutcome {
-  readonly status: "completed" | "failed";
-  readonly error: string | null;
-}
-
-const resultOutcome = (result: SDKResultMessage): TurnOutcome => {
-  if (result.subtype === "success")
-    return result.is_error
-      ? { status: "failed", error: result.result || "Claude reported an error" }
-      : { status: "completed", error: null };
-
-  return {
-    status: "failed",
-    error: result.errors.length > 0 ? result.errors.join("\n") : result.subtype,
-  };
-};
 
 interface PendingApproval {
   readonly toolName: string;
@@ -227,7 +213,11 @@ const openSession = Effect.fnUntraced(function* (
 
   const events = yield* Queue.unbounded<HarnessEvent, Cause.Done>();
   const clock = new ItemClock();
-  const emit = (event: HarnessEvent) => Queue.offerUnsafe(events, clock.stamp(event));
+  const suggestions = new ReplySuggestions(driver.suggestedReplies);
+
+  const emit = (event: HarnessEvent) =>
+    Queue.offerUnsafe(events, clock.stamp(suggestions.observe(event)));
+
   const usageLimit = usageLimitWatch();
 
   const emitAll = (list: ReadonlyArray<HarnessEvent>) => {
@@ -360,6 +350,7 @@ const openSession = Effect.fnUntraced(function* (
     // SDK's CLAUDE_SDK_CAN_USE_TOOL_SHADOWED warning is expected. See this driver's README.
     canUseTool,
     includePartialMessages: true,
+    ...suggestions.option(),
     // Claude Code echoes each user message when it takes it in: a steer lands then.
     extraArgs: { "replay-user-messages": null },
     // Subagents' own text and thinking, not only their tool calls (see translate.ts).
@@ -529,6 +520,8 @@ const openSession = Effect.fnUntraced(function* (
 
     if (message.type === "user" && "isReplay" in message && message.isReplay)
       landSteer(message.uuid);
+
+    if (message.type === "prompt_suggestion") return emitAll(suggestions.take(message.suggestion));
 
     if (message.type === "result") {
       if (message.origin?.kind === "task-notification") continueOnReports();

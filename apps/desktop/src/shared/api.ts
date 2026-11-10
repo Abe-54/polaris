@@ -27,6 +27,7 @@ import type {
   AttachmentSettings,
   AutoArchiveSettings,
   IdleCompactionSettings,
+  GetSuggestedReplySettings,
   VisualsSettings,
   DeveloperMode,
   AttachmentUsage,
@@ -534,6 +535,8 @@ export interface RequestOutputs
   "sessions.setAutoArchive": null;
   "sessions.idleCompaction": Plain<IdleCompactionSettings>;
   "sessions.setIdleCompaction": null;
+  "sessions.suggestedReplies": Rpc.Success<typeof GetSuggestedReplySettings>;
+  "sessions.setSuggestedReplies": null;
   "sessions.visuals": Plain<VisualsSettings>;
   "sessions.setVisuals": null;
   /** Every connected Host's watched Developer Mode, by Host key. */
