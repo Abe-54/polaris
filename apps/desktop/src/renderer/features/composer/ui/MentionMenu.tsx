@@ -71,7 +71,7 @@ const Row = ({
 );
 
 const CARD =
-  "rounded-card border-hairline bg-surface-raised shadow-float mb-2 max-w-[560px] border p-1.5";
+  "rounded-card border-hairline bg-surface-raised shadow-float max-w-[560px] border p-1.5";
 
 export const MentionMenu = ({ rows, failed, active, onPick, onHover }: MentionMenuProps) => {
   const list = useRef<HTMLDivElement>(null);
@@ -106,7 +106,11 @@ export const MentionMenu = ({ rows, failed, active, onPick, onHover }: MentionMe
       role="listbox"
       aria-label="Files and folders"
       data-testid="mention-menu"
-      className={cn(REVEAL_MOTION, CARD, "max-h-[min(320px,40vh)] overflow-y-auto")}
+      className={cn(
+        REVEAL_MOTION,
+        CARD,
+        "max-h-[var(--menu-room,min(320px,40vh))] overflow-y-auto"
+      )}
     >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {

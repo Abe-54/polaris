@@ -127,7 +127,7 @@ export const CommandMenu = ({
         aria-live="polite"
         className={cn(
           REVEAL_MOTION,
-          "rounded-card border-hairline bg-surface-raised shadow-float mb-2 max-w-[560px] border p-1.5"
+          "rounded-card border-hairline bg-surface-raised shadow-float max-w-[560px] border p-1.5"
         )}
       >
         <NoticeRow notice={notice} />
@@ -160,7 +160,7 @@ export const CommandMenu = ({
       data-testid="command-menu"
       className={cn(
         REVEAL_MOTION,
-        "rounded-card border-hairline bg-surface-raised shadow-float mb-2 max-h-[min(320px,40vh)] max-w-[560px] overflow-y-auto border p-1.5"
+        "rounded-card border-hairline bg-surface-raised shadow-float max-h-[var(--menu-room,min(320px,40vh))] max-w-[560px] overflow-y-auto border p-1.5"
       )}
     >
       {menu === null ? (
