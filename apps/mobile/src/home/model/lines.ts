@@ -18,6 +18,8 @@ export const askLine = (approval: ApprovalRequest): string =>
     Match.when("tool", () => "Wants to use a tool"),
     Match.when("question", () => "Asks"),
     Match.when("secret", () => "Asks for a secret"),
+    Match.when("app", () => "Wants to use an app"),
+    Match.when("headed-input", () => "Wants headed input"),
     Match.exhaustive
   );
 

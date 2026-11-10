@@ -12,6 +12,8 @@ const WANTS: Readonly<Record<ApprovalRequest["kind"], string>> = {
   tool: "wants to use a tool",
   question: "has a question",
   secret: "asks for a secret",
+  app: "wants to use an app",
+  "headed-input": "wants headed input",
 };
 
 /** What fits beside Approve and Deny on the narrowest iPhone; longer opens to the whole request. */

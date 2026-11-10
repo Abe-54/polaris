@@ -61,6 +61,7 @@ import { SecretRpcs } from "./secrets.ts";
 import { TerminalRpcs } from "./terminal.ts";
 import { RestartRpcs } from "./restart.ts";
 import { BrowserStackRpcs } from "./browser.ts";
+import { COMPUTER_USE_RPC_TAGS, ComputerUseRpcs } from "./computerUse.ts";
 import { HarnessKind } from "./harnesses.ts";
 import { Hello } from "./hello.ts";
 import {
@@ -724,7 +725,11 @@ export const ClearAttachments = Rpc.make("attachments.clear", {
   error: Schema.Union([Unsupported, FileError]),
 });
 
-export class DaemonRpcs extends RpcGroup.make(
+/**
+ * A const, not a class: `RpcGroup.Rpcs<typeof X>` reads a group's RPCs directly, but infers
+ * them member by member from a class, which no longer fits the checker's instantiation budget.
+ */
+export const DaemonRpcs = RpcGroup.make(
   InlinePropose,
   Hello,
   Dispatch,
@@ -782,22 +787,24 @@ export class DaemonRpcs extends RpcGroup.make(
     ProfilesRpcs,
     TraceCompareRpcs
   )
-  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs) {}
+  .merge(BrowserStackRpcs, DeveloperModeRpcs, SelfTraceRpcs, RequestsRpcs)
+  .merge(ComputerUseRpcs);
 
 /**
  * `DaemonRpcs` as the Daemon serves it to Extensions: every RPC can fail with
  * `NotGranted` (grants.ts). The SDK's Client is built on this group so the
  * refusal decodes; the Desktop App, never refused, stays on `DaemonRpcs`.
  */
-export class ExtensionDaemonRpcs extends DaemonRpcs.omit("dispatch")
+export const ExtensionDaemonRpcs = DaemonRpcs.omit("dispatch")
   .add(Dispatch.setError(Schema.Union([CommandRejected, NotFound, NotGranted])))
-  .middleware(GrantGate) {}
+  .middleware(GrantGate);
 
 /**
- * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests, which only the Desktop App
- * may call (RPC_GRANTS: client); leaving it out keeps the client type within the checker's depth.
+ * What the SDK's Client calls: `ExtensionDaemonRpcs` without Requests and computer use, which only
+ * the Desktop App may call (RPC_GRANTS: client); leaving them out keeps the client type within
+ * the checker's depth.
  */
-export class ExtensionClientRpcs extends ExtensionDaemonRpcs.omit(
+export const ExtensionClientRpcs = ExtensionDaemonRpcs.omit(
   "requests.watch",
   "requests.save",
   "requests.send",
@@ -806,5 +813,6 @@ export class ExtensionClientRpcs extends ExtensionDaemonRpcs.omit(
   "requests.sendLog.watch",
   "requests.send.get",
   "requests.curl.parse",
-  "requests.curl.format"
-) {}
+  "requests.curl.format",
+  ...COMPUTER_USE_RPC_TAGS
+);

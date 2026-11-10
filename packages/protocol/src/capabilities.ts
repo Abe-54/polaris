@@ -106,6 +106,13 @@ export const Capability = Schema.Literals([
    * `secret.provide`. A Client without it is sent neither.
    */
   "approval.secret",
+  /**
+   * Computer use (ADR 0104): `computerUse.*` but the live preview, the `app` and `headed-input`
+   * ApprovalKinds and `ToolCall.computerUse`. A Client without it is sent neither kind.
+   */
+  "computer-use",
+  /** `computerUse.preview.watch`: live window frames, on Hosts that can capture them. */
+  "computer-use.preview",
   /** `PinSession`, `SessionPinned`, and `AgentSession.pinnedAt` and `origin`. */
   "session.pin",
   /**

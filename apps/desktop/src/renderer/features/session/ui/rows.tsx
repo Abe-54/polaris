@@ -378,6 +378,8 @@ const KIND_WANTS: Record<Exclude<ApprovalRequest["kind"], "secret">, string> = {
   "file-change": "wants to change files",
   tool: "wants to use a tool",
   question: "has a question",
+  app: "wants to use an app",
+  "headed-input": "wants headed input",
 };
 
 /** DESIGN.md Needs You: the washed header strip and numbered rows; free text goes in the composer. */

@@ -4,6 +4,7 @@
  * modules land. `server.ts` layers real handlers over these.
  */
 import {
+  COMPUTER_USE_RPC_TAGS,
   InlineError,
   PredictionError,
   CommitMessageError,
@@ -47,6 +48,7 @@ import { HostPresence } from "../presence/index.ts";
 import { browserDefaults } from "../browser/index.ts";
 import { DEVELOPER_MODE_DEFAULT_TAGS, developerModeDefaults } from "./developerModeDefaults.ts";
 import { REQUESTS_DEFAULT_TAGS, requestsDefaults } from "./requestsDefaults.ts";
+import { computerUseDefaults } from "./computerUseDefaults.ts";
 
 const notADevice = () =>
   new PushRegistrationError({
@@ -78,11 +80,20 @@ type DefaultOptions = {
 };
 
 export const defaultHandlers = (options: DefaultOptions) =>
-  Layer.mergeAll(serverDefaults(options), developerModeDefaults, requestsDefaults);
+  Layer.mergeAll(
+    serverDefaults(options),
+    developerModeDefaults,
+    requestsDefaults,
+    computerUseDefaults
+  );
 
 /** Leaves the newer groups to their own layer, keeping this object under TS's instantiation depth. */
 const serverDefaults = (options: DefaultOptions) =>
-  ServerRpcs.omit(...DEVELOPER_MODE_DEFAULT_TAGS, ...REQUESTS_DEFAULT_TAGS).toLayer({
+  ServerRpcs.omit(
+    ...DEVELOPER_MODE_DEFAULT_TAGS,
+    ...REQUESTS_DEFAULT_TAGS,
+    ...COMPUTER_USE_RPC_TAGS
+  ).toLayer({
     ...languageDefaults,
     ...browserDefaults,
     "prediction.capability": () =>
