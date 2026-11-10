@@ -15,6 +15,7 @@ export const computerUseDefaults = ComputerUseRpcs.toLayer({
   "computerUse.openSetup": request,
   "computerUse.allowedApps": request,
   "computerUse.removeAllowedApp": request,
+  "computerUse.allowedApps.add": request,
   "computerUse.app": request,
   "computerUse.preview.watch": () =>
     Stream.fail(new Unsupported({ capability: "computer-use.preview" })),

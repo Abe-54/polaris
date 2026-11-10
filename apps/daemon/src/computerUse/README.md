@@ -4,7 +4,7 @@
 
 | File | What |
 |---|---|
-| `host.ts` | `ComputerUseHost`: `current`, `ensure`, `changes`, `desktopEnv`, `enable`, `disable`, `openSetup`, the allowed list (`allowApp`, `removeAllowedApp`), `setControlledApps` and `feed`. `stateOf` is the order of the states. |
+| `host.ts` | `ComputerUseHost`: `current`, `ensure`, `changes`, `desktopEnv`, `enable`, `disable`, `openSetup`, the allowed list (`allowApp` for an approval's "Always allow", `addAllowedApp` for Settings' add, `removeAllowedApp`), `setControlledApps` and `feed`. `stateOf` is the order of the states. |
 | `desktop.ts` | `detectDesktop`: whether there is a desktop session, found by the Daemon itself. |
 | `linux.ts`, `mac.ts` | What each platform still needs (`NeedsSetup`), and the setup commands on macOS. |
 | `feed.ts` | `computerUse.watch`: a `Status`, `AllowedApps` and `ControlledApps` first, then each again when it changes. |

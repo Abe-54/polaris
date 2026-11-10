@@ -1,13 +1,6 @@
 /** Computer use through the real Engine (ENG-846): first use, always allow and the refused apps. */
 import { describe, expect, test } from "bun:test";
-import {
-  AppId,
-  ApprovalDecision,
-  type Capability,
-  Command,
-  DesktopApp,
-  SessionId,
-} from "@polaris/protocol";
+import { AppId, ApprovalDecision, type Capability, Command, SessionId } from "@polaris/protocol";
 import { Effect, Option, Predicate, Stream } from "effect";
 import { ComputerUseHost } from "../computerUse/index.ts";
 import { DesktopMcp } from "../harness/desktop/index.ts";
@@ -279,24 +272,28 @@ describe("the always-refused apps", () => {
     expect(request).toMatchObject({ kind: "app", app: { id: "com.example.crossword" } });
   });
 
-  test("one the user always-allowed on the Host is used without asking", async () => {
+  test("one the user added in Settings is used without asking, until they remove it", async () => {
     const { layer, ran } = await setup();
     const S = SessionId.make("cu-refused-lifted");
+    const terminal = AppId.make("com.apple.Terminal");
 
-    const result = await run(
+    const [added, removed, pending] = await run(
       layer,
       Effect.gen(function* () {
+        const host = yield* ComputerUseHost;
         const server = yield* open(S);
+        yield* host.addAllowedApp(terminal);
+        const used = yield* Effect.promise(() => call(server, "snapshot", { app: "Terminal" }));
+        yield* host.removeAllowedApp(terminal);
+        const after = yield* Effect.promise(() => call(server, "snapshot", { app: "Terminal" }));
 
-        yield* (yield* ComputerUseHost).allowApp(
-          new DesktopApp({ id: AppId.make("com.apple.Terminal"), name: "Terminal", icon: null })
-        );
-
-        return yield* Effect.promise(() => call(server, "snapshot", { app: "Terminal" }));
+        return [used, after, yield* pendingOf(S)] as const;
       })
     );
 
-    expect(result.isError).toBeUndefined();
+    expect(added.isError).toBeUndefined();
+    expect(textOf(removed)).toContain("polaris_desktop doesn't drive Terminal");
+    expect(pending).toEqual([]);
     expect(ranCommand(ran, "snapshot")).toBe(1);
   });
 });

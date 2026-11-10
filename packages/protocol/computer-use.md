@@ -4,7 +4,7 @@ What the Daemon, the Desktop App, the Mobile App and Extensions build against fo
 
 The Daemon serves status, setup, on/off and the always-allowed list (`apps/daemon/src/computerUse/`) and announces `computer-use`. `computerUse.app` and the preview still answer `Unsupported` (`apps/daemon/src/transport/computerUseDefaults.ts`, a layer of its own that the real handlers replace). The Engine sends the two approval kinds (`apps/daemon/src/engine/appApprovals.ts`), with `app.icon` null until `computerUse.app` is served.
 
-`COMPUTER_USE_RPC_TAGS` lists the ten RPCs. The SDK's Client group (`ExtensionClientRpcs`) leaves them out, as it does Requests: no Extension may call them.
+`COMPUTER_USE_RPC_TAGS` lists the eleven RPCs. The SDK's Client group (`ExtensionClientRpcs`) leaves them out, as it does Requests: no Extension may call them.
 
 ## Capabilities
 
@@ -72,7 +72,7 @@ Two new `ApprovalKind`s. Both carry the app in `ApprovalRequest.app` (a `Desktop
 
 `decideAppUse(policy, { sessionId, appId, headed })` answers the first that applies:
 
-1. `Refused`: the app is on the built-in always-refused list. No approval reaches it; the Daemon leaves an app off that list while the Host's always-allowed list names it.
+1. `Refused`: the app is on the built-in always-refused list. No approval ever opens for it, so no "Always allow" in an approval can lift it. The Daemon leaves an app off that list only while the Host's always-allowed list names it, and only `computerUse.allowedApps.add` (the Desktop App's Settings) can put a refused app there.
 2. `InUse { by }`: another session controls the app. The tool call is refused; there is no queue.
 3. `NeedsApproval { kind: "app" }`: the app is neither always-allowed nor allowed for this session.
 4. `NeedsApproval { kind: "headed-input" }`: the use is headed, and headed input is not allowed for this session in this app.
@@ -95,6 +95,7 @@ A session's approvals are folded from its `ApprovalRequested` and `ApprovalResol
 |---|---|---|
 | `computerUse.allowedApps` | `{}` | `AllowedApp[]` (`{ app, allowedAt }`), by name. |
 | `computerUse.removeAllowedApp` | `{ appId }` | The list after removing it. An app not on it is fine. |
+| `computerUse.allowedApps.add` | `{ appId }` | The list after adding it, for an app the user picks in Settings. An app already on it is fine. The Host names the app; its name is its id when the Host can't. |
 
 The list also arrives on the Host feed.
 
@@ -125,7 +126,7 @@ Every preview image is a JPEG that travels as a blob (binary side-chunks), never
 | | Desktop App | Linked Device | Extension |
 |---|---|---|---|
 | `computerUse.status`, `watch`, `app`, `preview.latest` | yes | yes | no |
-| `enable`, `disable`, `openSetup`, `allowedApps`, `removeAllowedApp`, `preview.watch` | yes | no | no |
+| `enable`, `disable`, `openSetup`, `allowedApps`, `removeAllowedApp`, `allowedApps.add`, `preview.watch` | yes | no | no |
 | Answering an `app` or `headed-input` approval (`RespondToApproval`) | yes | yes | with the `approve` Grant |
 | "Always allow on this Host" (`Allow { remember: true }` on `app`) | yes | yes | no |
 

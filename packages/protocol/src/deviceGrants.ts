@@ -145,6 +145,7 @@ export const DEVICE_RPCS = {
   "computerUse.openSetup": "local",
   "computerUse.allowedApps": "local",
   "computerUse.removeAllowedApp": "local",
+  "computerUse.allowedApps.add": "local",
   "computerUse.app": "device",
   "computerUse.preview.watch": "local",
   "computerUse.preview.latest": "device",

@@ -145,6 +145,7 @@ export const RPC_GRANTS = {
   "computerUse.openSetup": "client",
   "computerUse.allowedApps": "client",
   "computerUse.removeAllowedApp": "client",
+  "computerUse.allowedApps.add": "client",
   "computerUse.app": "client",
   "computerUse.preview.watch": "client",
   "computerUse.preview.latest": "client",

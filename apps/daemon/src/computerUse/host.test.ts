@@ -367,6 +367,37 @@ test("the always-allowed list is kept by name, survives a restart, and removes b
   expect(afterRestart.map((allowed) => allowed.app.id)).toEqual([arc.id]);
 });
 
+test("an app added in Settings is named by the Host, and by its id when the Host can't", async () => {
+  const host = fakeHost();
+
+  host.command(
+    "mdfind",
+    `case "$*" in *com.apple.Terminal*) echo /System/Applications/Utilities/Terminal.app;; esac`
+  );
+
+  const probe = host.probe({ platform: "darwin" });
+  const hostile = AppId.make("x' || kMDItemFSName == '*");
+
+  const apps = await run({ probe, file: join(host.root, "cu.json") }, (service) =>
+    Effect.gen(function* () {
+      yield* service.addAllowedApp(AppId.make("com.apple.Terminal"));
+      yield* service.addAllowedApp(AppId.make("dev.example.gone"));
+      yield* service.addAllowedApp(hostile);
+
+      return yield* service.addAllowedApp(AppId.make("com.apple.Terminal"));
+    })
+  );
+
+  expect(apps.map((allowed) => [allowed.app.id, allowed.app.name])).toEqual([
+    ["dev.example.gone", "dev.example.gone"],
+    ["com.apple.Terminal", "Terminal"],
+    [hostile, hostile],
+  ]);
+  // An id that could end the quoted value never reaches Spotlight's query.
+  expect(host.calls("mdfind")).toHaveLength(3);
+  expect(host.calls("mdfind").join("\n")).not.toContain("kMDItemFSName");
+});
+
 macTest("watching the Host checks it once and never again until asked", async () => {
   const host = fakeHost();
   const helper = await fakeHelper(host, macStatus("granted", "granted"));
