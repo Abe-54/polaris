@@ -7,7 +7,13 @@ import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
-import { BUNDLE_FILE_NAMES, BUNDLE_FILES, DAEMON_BUNDLE, infoPlist } from "../bundle.ts";
+import {
+  BUNDLE_FILE_NAMES,
+  BUNDLE_FILES,
+  BUNDLE_LIBRARY_NAMES,
+  DAEMON_BUNDLE,
+  infoPlist,
+} from "../bundle.ts";
 import { type InstallContext, layout, stageBinary } from "../install.ts";
 import { buildHelper, compileCapture } from "./build.ts";
 import { COMPUTER_USE_BUNDLE, HELPER_FILE_NAMES, HELPER_FILES } from "./bundle.ts";
@@ -44,7 +50,7 @@ built("a built helper verifies after the flat trip, under the build's bundle id"
   const dist = join(root, "dist");
   const daemon = join(dist, DAEMON_BUNDLE);
 
-  for (const name of ["polaris", "betterleaks"] as const) {
+  for (const name of ["polaris", "betterleaks", ...BUNDLE_LIBRARY_NAMES] as const) {
     mkdirSync(dirname(join(daemon, BUNDLE_FILES[name])), { recursive: true });
     copyFileSync("/usr/bin/true", join(daemon, BUNDLE_FILES[name]));
   }

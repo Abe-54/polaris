@@ -18,10 +18,35 @@ export const DESKTOP_BUNDLE_ID = "dev.lux.polaris";
 
 export const DAEMON_ICON = "Polaris.icns";
 
+/**
+ * The native libraries the Daemon loads from its bundle instead of embedding them (ENG-877,
+ * ADR 0105): by file name in `Contents/Frameworks`, which is also their flat name in a build.
+ */
+export const BUNDLE_LIBRARY_NAMES = [
+  "libfff_c.dylib",
+  "ast-grep-napi.darwin-arm64.node",
+  "sodium-native.node",
+  "tree-sitter-python.so",
+  "tree-sitter-go.so",
+  "tree-sitter-rust.so",
+  "tree-sitter-bash.so",
+] as const;
+
+export type BundleLibrary = (typeof BUNDLE_LIBRARY_NAMES)[number];
+
+/** Where the bundle's libraries are, from the bundle's root. */
+export const BUNDLE_LIBRARY_DIR = "Contents/Frameworks";
+
+// SAFETY: built from BUNDLE_LIBRARY_NAMES, so it has exactly the BundleLibrary keys.
+const BUNDLE_LIBRARY_FILES = Object.fromEntries(
+  BUNDLE_LIBRARY_NAMES.map((name) => [name, `${BUNDLE_LIBRARY_DIR}/${name}`])
+) as Record<BundleLibrary, string>;
+
 /** Each file of the bundle by its flat name in a build, and its path inside the bundle. */
 export const BUNDLE_FILES = {
   polaris: "Contents/MacOS/polaris",
   betterleaks: "Contents/MacOS/betterleaks",
+  ...BUNDLE_LIBRARY_FILES,
   "Info.plist": "Contents/Info.plist",
   [DAEMON_ICON]: "Contents/Resources/Polaris.icns",
   CodeResources: "Contents/_CodeSignature/CodeResources",

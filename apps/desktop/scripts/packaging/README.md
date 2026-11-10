@@ -169,3 +169,25 @@ runner sets and restores that opt-in. On macOS they also require CI (`CI=1` or `
 `POLARIS_DESKTOP_SCRIPTED_VM=1`, which attests that the caller is running in a disposable VM.
 A temporary HOME moves the LaunchAgent plist but still uses the shared
 `dev.lux.polaris` launchd label and the account's real UID; these smokes refuse otherwise.
+
+## Electron fuses
+
+Every package flips the Electron fuses in `fuses.ts` (ENG-878). The hook runs after packager
+copies the extra resources, before the asar integrity digest and signing, and package.ts reads
+them back from each built app. Node mode (`ELECTRON_RUN_AS_NODE`), `NODE_OPTIONS` and the
+`--inspect` flags are off. The app loads only from `app.asar`, whose integrity is checked. Cookies
+are encrypted, and no `file://` page gets extra privileges (the renderer is served on `app://`).
+The config names every fuse, so an Electron upgrade that adds one fails packaging until it is
+decided.
+
+Nothing in the Desktop App runs its own binary as Node. Playwright's Electron launcher needs
+`--inspect`, so `scripts/packageCheck.ts` drives the packaged app over Chromium's remote debugging
+port. It launches the app with `NODE_OPTIONS=--require`, `--inspect` and `ELECTRON_RUN_AS_NODE=1`,
+and checks that each is refused. Electron already drops `--require` in a packaged app, so the
+check looks for the fuse's own log line. With the fuses turned back on, the same check fails all
+three.
+
+Cookie encryption keeps existing sessions: a plaintext cookie written by an unfused build is
+still read, and new cookies are stored encrypted with the app's Safe Storage key, which
+`safeStorage` already uses. The switch is one-way: turning the fuse off again would leave the
+encrypted cookies unreadable.

@@ -37,6 +37,7 @@ import { githubHandlers } from "../github/ipc.ts";
 import { gitHandlers } from "./git.ts";
 import { constellationHandlers, resourceHandlers } from "./constellation.ts";
 import { remoteAccessHandlers } from "./remoteAccess.ts";
+import { computerUseHandlers } from "./computerUse.ts";
 import { linkedDevicesHandlers } from "./linkedDevices.ts";
 import { voiceHandlers } from "./voice.ts";
 import { browserHandlers } from "../browser/ipc.ts";
@@ -265,6 +266,7 @@ export const requestHandlers = (ctx: RequestContext): Handlers => ({
   ...constellationHandlers,
   ...resourceHandlers,
   ...remoteAccessHandlers,
+  ...computerUseHandlers,
   ...linkedDevicesHandlers,
   ...voiceHandlers,
   ...browserHandlers(ctx.browser),

@@ -23,6 +23,8 @@ export const removeDists = () => {
 export const DARWIN_PATHS = {
   polaris: "PolarisDaemon.app/Contents/MacOS/polaris",
   betterleaks: "PolarisDaemon.app/Contents/MacOS/betterleaks",
+  "libfff_c.dylib": "PolarisDaemon.app/Contents/Frameworks/libfff_c.dylib",
+  "sodium-native.node": "PolarisDaemon.app/Contents/Frameworks/sodium-native.node",
   "Info.plist": "PolarisDaemon.app/Contents/Info.plist",
   "Polaris.icns": "PolarisDaemon.app/Contents/Resources/Polaris.icns",
   CodeResources: "PolarisDaemon.app/Contents/_CodeSignature/CodeResources",

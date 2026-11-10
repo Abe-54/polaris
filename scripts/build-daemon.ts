@@ -36,6 +36,12 @@
  * The version is compiled in (`process.env.POLARIS_BUILD_VERSION`, read by `service/platform.ts`).
  * So is a sourcemap, which Bun applies to `Error.stack` (`daemonBundle.ts`, ENG-752).
  *
+ * A darwin build embeds no native library (ENG-877, ADR 0105,
+ * `apps/daemon/src/service/bundleLibraries.ts`): Bun would write each to the temp directory
+ * and load whatever file has its name and size. fff's, ast-grep's addon and grammars and
+ * libsodium are files in `PolarisDaemon.app/Contents/Frameworks`, which the release signer
+ * signs, and the build fails when the Daemon loads a library from anywhere else.
+ *
  * A darwin release build's Bun runtime is sealed (ENG-875, ADR 0105,
  * `apps/daemon/src/service/sealedRuntime.ts`): `BUN_BE_BUN`, `BUN_OPTIONS` and `BUN_INSPECT*`
  * no longer make the signed binary run foreign JavaScript. The build fails when they still do.
@@ -69,6 +75,13 @@ import {
   HELPER_EXECUTABLES,
   HELPER_FILES,
 } from "../apps/daemon/src/service/computerUse/bundle.ts";
+import {
+  bundleLibrariesPlugin,
+  embeddedLibraries,
+  foreignLibraries,
+  loadedLibraries,
+  placeBundleLibraries,
+} from "../apps/daemon/src/service/bundleLibraries.ts";
 import { AGENT_DESKTOP_VERSION } from "../apps/daemon/src/install/agentDesktop/pin.ts";
 import { openRoutes, sealRuntime } from "../apps/daemon/src/service/sealedRuntime.ts";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
@@ -366,6 +379,27 @@ const bundlePaths = (betterleaks: boolean): Record<string, string> =>
     ]),
   ]);
 
+/** Fails the build when the darwin Daemon would load a library from outside its bundle and macOS. */
+const assertOwnLibraries = async (binary: string, expected: string) => {
+  const embedded = embeddedLibraries(binary);
+
+  if (embedded > 0) {
+    throw new Error(`${binary} embeds ${embedded} native libraries: see docs/adr/0105 (ENG-877)`);
+  }
+
+  if (expected === "") return;
+  const { stdout, images } = await loadedLibraries(binary, ["selftest"]);
+  const foreign = foreignLibraries(binary, images);
+
+  if (stdout.split("\n")[0] !== expected || foreign.length > 0) {
+    throw new Error(
+      `${binary} selftest printed "${stdout.trim()}" and loaded ${foreign.join(", ") || "no foreign library"} (ENG-877)`
+    );
+  }
+
+  console.log("  native libraries: ok (none embedded, all from the bundle or macOS)");
+};
+
 /** Fails the build when the built Daemon still runs a script its environment names. */
 const assertSealed = async (binary: string) => {
   const open = await openRoutes(binary, { command: ["version"], names: "bun" });
@@ -375,6 +409,27 @@ const assertSealed = async (binary: string) => {
   }
 
   console.log("  sealed runtime: ok (BUN_BE_BUN, BUN_OPTIONS, BUN_INSPECT)");
+};
+
+/** Runs the built Daemon where this machine can, and fails the build on what it must never do. */
+const checkBuild = async (platform: Platform, binary: string, version: string, sealed: boolean) => {
+  const expected = `polaris ${version} ${platform}`;
+  const runs = platform === hostPlatform;
+
+  if (runs) {
+    // `selftest` also proves fff's library, the Rules' addon and libsodium load.
+    const output = (await run([binary, "selftest"])).trim();
+
+    if (output.split("\n")[0] !== expected) {
+      throw new Error(`${binary} selftest printed "${output}", expected "${expected}" first`);
+    }
+
+    console.log(output.replaceAll(/^/gm, "  "));
+
+    if (sealed) await assertSealed(binary);
+  }
+
+  if (platform.startsWith("darwin")) await assertOwnLibraries(binary, runs ? expected : "");
 };
 
 const build = async (
@@ -392,6 +447,7 @@ const build = async (
   const binary = join(binDir, name);
 
   const instrumentation = await instrumentationPlugin();
+  const libraries = darwin ? bundleLibrariesPlugin() : null;
 
   const result = await buildFromRoot(root, {
     ...DAEMON_BUILD_OPTIONS,
@@ -413,11 +469,14 @@ const build = async (
       ),
       "process.env.POLARIS_BUILD_VERSION": JSON.stringify(version),
     },
-    plugins: [instrumentation],
+    plugins: libraries === null ? [instrumentation] : [instrumentation, libraries],
   });
 
   if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
   instrumentation.assertEmbedded();
+
+  // Before the bundle is signed: its signature seals them.
+  if (libraries !== null) placeBundleLibraries(join(outDir, DAEMON_BUNDLE), libraries.sources);
   const sealed = darwin && release;
 
   // Before the bundle is signed: the seal changes the executable's bytes.
@@ -430,19 +489,7 @@ const build = async (
     await bundleHelper(platform, outDir, version, release);
   }
 
-  if (platform === hostPlatform) {
-    // `selftest` also proves the embedded fff library loads and searches.
-    const output = (await run([binary, "selftest"])).trim();
-    const expected = `polaris ${version} ${platform}`;
-
-    if (output.split("\n")[0] !== expected) {
-      throw new Error(`${binary} selftest printed "${output}", expected "${expected}" first`);
-    }
-
-    console.log(output.replaceAll(/^/gm, "  "));
-
-    if (sealed) await assertSealed(binary);
-  }
+  await checkBuild(platform, binary, version, sealed);
 
   const flat =
     betterleaks === null ? { [name]: name } : { [name]: name, betterleaks: "betterleaks" };

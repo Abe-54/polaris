@@ -1,7 +1,7 @@
 /**
  * One host's page in Settings → Hosts (Paper HS-D, HS-D3; DESIGN.md, Settings → Hosts
  * redesign): the breadcrumb (esc goes back), the header, what needs the user first, then
- * Vitals, Harnesses beside Capacity, and Remote access beside Daemon, on one scrolling page.
+ * Vitals, Harnesses beside Capacity, Computer use (CU1), and Remote access beside Daemon.
  */
 import { SettingsCard, SettingsGrid } from "@polaris/ui";
 import { useState } from "react";
@@ -27,6 +27,7 @@ import { Breadcrumb, Header, RemoveConfirm } from "./Header.tsx";
 import { RemoteAccessCard, routesOf } from "./RemoteAccessCard.tsx";
 import { hostName, type Pill, pageLine, pill, type RestartPhase } from "./state.ts";
 import { VitalsCard } from "./VitalsCard.tsx";
+import { HostComputerUseCard, servesComputerUse } from "../../computer-use/index.ts";
 
 const phaseOf = (state: RestartState): RestartPhase => {
   if (state.step === "restarting") return "restarting";
@@ -234,6 +235,7 @@ export const HostPage = ({ machine, now, onBack }: HostPageProps) => {
         restarting={restartingOf(restart.state, facts)}
       />
       {facts.connected ? <Workers machine={machine} /> : null}
+      {servesComputerUse(machine) ? <HostComputerUseCard machine={machine} /> : null}
       <SettingsGrid>
         {routes.relay || routes.tailscale ? <RemoteAccessCard machine={machine} /> : null}
         <DaemonCard

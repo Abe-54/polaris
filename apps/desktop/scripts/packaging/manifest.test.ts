@@ -55,6 +55,9 @@ describe("shipped Daemon manifest", () => {
     const signed = commands.filter((argv) => argv.includes("--sign"));
     expect(signed.map((argv) => argv.at(-1))).toEqual([
       join(bundle, "Contents/MacOS/betterleaks"),
+      // The Daemon's libraries, before the signature that seals them (ENG-877).
+      join(bundle, "Contents/Frameworks/libfff_c.dylib"),
+      join(bundle, "Contents/Frameworks/sodium-native.node"),
       bundle,
       // The helper app's tools are sealed by its own signature, after the Daemon's.
       join(helper, "Contents/MacOS/agent-desktop"),
@@ -63,15 +66,20 @@ describe("shipped Daemon manifest", () => {
       helper,
     ]);
 
-    for (const argv of signed.slice(2)) {
+    for (const argv of signed.slice(1, 3)) {
+      expect(argv).toContain("runtime");
+      expect(argv).not.toContain("--entitlements");
+    }
+
+    for (const argv of signed.slice(4)) {
       expect(argv).toContain("/entitlements/computer-use.plist");
       expect(argv).toContain("runtime");
     }
 
-    expect(signed[1]).toContain("runtime");
-    expect(signed[1]).toContain("--timestamp");
-    expect(signed[1]).toContain("/fake/keychain");
-    expect(signed[1]).toContain("/entitlements/daemon.plist");
+    expect(signed[3]).toContain("runtime");
+    expect(signed[3]).toContain("--timestamp");
+    expect(signed[3]).toContain("/fake/keychain");
+    expect(signed[3]).toContain("/entitlements/daemon.plist");
     expect(signed[0]).toContain("/entitlements/betterleaks.plist");
     expect(commands).toContainEqual(["codesign", "--verify", "--deep", "--strict", bundle]);
     expect(commands).toContainEqual(["codesign", "--verify", "--deep", "--strict", helper]);
@@ -96,9 +104,11 @@ describe("shipped Daemon manifest", () => {
       "agent-desktop-macos-helper",
       "betterleaks",
       "computer-use-CodeResources",
+      "libfff_c.dylib",
       "polaris",
       "polaris-capture",
       "polaris-computer-use",
+      "sodium-native.node",
     ]);
     expect(mac.files.map((file) => file.path)).toContain(
       join(stage, "darwin-arm64", DARWIN_PATHS["Info.plist"])

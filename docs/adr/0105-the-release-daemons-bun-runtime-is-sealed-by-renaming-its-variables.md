@@ -1,5 +1,5 @@
 ---
-status: accepted (ENG-875, ENG-846)
+status: accepted (ENG-875, ENG-846); amended (ENG-877)
 ---
 
 # The release Daemon's Bun runtime is sealed by renaming its variables
@@ -79,5 +79,81 @@ the renamed names on a copy signed with the hardened runtime and the release ent
   through to the processes it starts.
 - `BUN_INSPECT_CONNECT_TO` is closed by the same rename but has no run of its own in the checks:
   it connects after a short command has ended.
-- Not closed here: a native library planted in the temp directory (ENG-877), and the Desktop
-  App's `ELECTRON_RUN_AS_NODE` (ENG-878).
+- Not closed here: the Desktop App's `ELECTRON_RUN_AS_NODE` (ENG-878). A native library planted
+  in the temp directory (ENG-877) is closed by the amendment below.
+
+## Amendment: the Daemon's native libraries ship signed in its bundle (ENG-877)
+
+### Context
+
+The seal covers JavaScript. Native code had its own way in. Bun cannot `dlopen` a library
+embedded in a compiled executable, so it writes it to `$BUN_TMPDIR` or `$TMPDIR` as
+`.bun-<uid>-<wyhash of the bytes>.<ext>` first, and when a regular file of that name, owner and
+size is already there it loads that file without reading it (`resolve_embedded_file_to_buf`,
+`src/runtime/jsc_hooks.rs`, called for `process.dlopen` and `bun:ffi`; Bun 1.4.4 at 38afee6c).
+The name is computable from the shipped binary and the caller picks the directory. The Daemon
+embedded fff's library, ast-grep's addon and libsodium this way, and copied ast-grep's four
+grammars to `~/.polaris/lib/grammars/`, where an existing file was used as it was. The release
+Daemon was signed with `disable-library-validation` so that those unsigned copies would load,
+which made macOS load anybody's. A same-size file planted under the expected name ran its
+constructor inside `polaris selftest` on D7's release build.
+
+### Decision
+
+A darwin Daemon embeds no native library, and the release Daemon has library validation.
+
+- The build replaces the import of each of the seven libraries with its path in the bundle
+  (`bundleLibrariesPlugin`, `apps/daemon/src/service/bundleLibraries.ts`) and copies the files
+  to `PolarisDaemon.app/Contents/Frameworks`. They are bundle files like any other
+  (`BUNDLE_FILES`): in the manifest, the archive and what `polaris install` places.
+- The release signer signs each file there with the Developer ID before the bundle
+  (`tooling/release/sign.py`, mirrored in `apps/desktop/scripts/packaging/manifest.ts`).
+- `daemon.plist` no longer has `com.apple.security.cs.disable-library-validation`. macOS then
+  maps into the Daemon only libraries signed by Apple or by our team, wherever they are and
+  whoever asks: a planted file, a library swapped in a copy of the bundle, a `libsqlite3.dylib`
+  put before the system's.
+
+Library validation is the fix; the bundle is what makes it possible. The build fails closed:
+it counts Mach-O libraries inside the compiled program (none allowed) and runs `selftest` with
+`DYLD_PRINT_LIBRARIES`, failing on any image that is neither macOS's nor one of the seven.
+`bundleLibraries.slow.test.ts` plants files on a real release build.
+
+Every native library a darwin Daemon loads:
+
+| Library | From | Loaded by |
+|---|---|---|
+| `libfff_c.dylib` | the bundle | `bun:ffi` in `@ff-labs/fff-bun` |
+| `ast-grep-napi.darwin-arm64.node` | the bundle | `require` in `rules/patterns/native.ts` |
+| `tree-sitter-{python,go,rust,bash}.so` | the bundle | ast-grep, by path |
+| `sodium-native.node` | the bundle | `require` in the patched `sodium-native` |
+| `/usr/lib/libSystem.B.dylib` | macOS | `bun:ffi` (`libcPath()`) |
+| `libsqlite3.dylib` | macOS | Bun's `bun:sqlite`, by leaf name |
+| system frameworks | macOS | Bun itself (FSEvents, Security, CoreFoundation) |
+
+Nothing else needed the entitlement. JIT code and `bun:ffi`'s trampolines are covered by
+`allow-jit` and `allow-unsigned-executable-memory`. Harnesses, Betterleaks, git and language
+servers are processes the Daemon starts, validated under their own signatures, not libraries
+it loads.
+
+### Considered Options
+
+- **Sign the libraries before they are embedded.** The extracted copy would keep its signature,
+  but the build job has no identity (ADR 0057): signing comes after the compile, when the bytes
+  are already inside the program.
+- **A private, verified extraction directory.** Bun has no setting for it, and checking a file
+  and then opening it leaves a gap for a program of the same user, which can write wherever the
+  Daemon can.
+- **Renaming `BUN_TMPDIR` as the seal does.** `$TMPDIR` remains.
+
+### Consequences
+
+- The darwin `polaris` no longer works alone: it needs its bundle's `Contents/Frameworks`.
+  It finds it from its own real path, so a link to the executable still works.
+- The signer runs from the default branch: its change must be on main before a release tag
+  whose Daemon has these files, or their signatures stay ad hoc and the Daemon loads none.
+- A new native dependency must be added to `BUNDLE_LIBRARY_NAMES` and
+  `BUNDLE_LIBRARY_SOURCES`; until then the build fails on the embedded library.
+- A dev build is ad hoc without the hardened runtime: it has the same layout and no
+  protection, as above. An ad hoc build with the hardened runtime loads no library of its own
+  (no team to match), so only a Developer ID build shows the signed libraries loading.
+- Linux and Windows builds still embed their libraries: nothing there trusts a signature.
