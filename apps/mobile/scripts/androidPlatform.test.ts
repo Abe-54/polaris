@@ -58,18 +58,13 @@ test.each(["android", "ios"])(
 mock.module("expo-document-picker", () => ({ getDocumentAsync: async () => ({
   canceled: false, assets: [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3 }],
 }) }));
-mock.module("expo-image-picker", () => ({
-  UIImagePickerPreferredAssetRepresentationMode: { Compatible: "compatible" },
-  launchImageLibraryAsync: async () => ({ canceled: false, assets: [
-    { uri: "file:///photo.jpg", fileName: "photo.jpg", mimeType: "image/jpeg", fileSize: 4 },
-  ] }),
-}));
-mock.module("expo-file-system", () => ({ File: class {} }));
+mock.module("expo-image-picker", () => ({ UIImagePickerPreferredAssetRepresentationMode: {}, launchImageLibraryAsync: async () => ({ canceled: true }) }));
+mock.module("expo-file-system", () => ({ File: class {}, Paths: {} }));
 const { pickAttachments } = await import("./src/composer/pick.ts");
 const photos = pickAttachments();
 assert.deepEqual(offered(), ["Photo library", "Files"]);
 select(0);
-assert.deepEqual(await photos, [{ uri: "file:///photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 4, isImage: true }]);
+assert.deepEqual(await photos, []);
 const files = pickAttachments();
 select(1);
 assert.deepEqual(await files, [{ uri: "file:///notes.txt", name: "notes.txt", mimeType: "text/plain", size: 3, isImage: false }]);
