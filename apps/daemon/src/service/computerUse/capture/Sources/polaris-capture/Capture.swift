@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import CoreMedia
 import Foundation
@@ -63,6 +64,10 @@ final class Capture {
       output.write(.idle(.notReady))
       exit(ExitCode.notReady)
     }
+
+    // ScreenCaptureKit asserts (CGS_REQUIRE_INIT) in a tool that never connected to the
+    // window server; AppKit connects. Only once the grant is known, so a refusal stays quiet.
+    _ = NSApplication.shared
 
     do {
       let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)

@@ -1,4 +1,3 @@
-import AppKit
 import CoreGraphics
 import Foundation
 
@@ -10,8 +9,6 @@ enum Main {
   @MainActor
   static func main() async {
     signal(SIGPIPE, SIG_IGN)
-    // ScreenCaptureKit asserts in a tool with no window server connection; this makes one.
-    _ = NSApplication.shared
     let (events, continuation) = AsyncStream.makeStream(of: Event.self)
     let capture = Capture(output: Output(), events: continuation, locked: screenIsLocked())
 
