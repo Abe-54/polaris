@@ -2,10 +2,12 @@
  * The Editor's column (DESIGN.md, Chrome redesign → Editor; Paper X-I Variant C): the editor
  * card, and when the terminal shows, the terminal card and the status strip under it, 6px apart.
  * Hidden, the status is the editor card's foot row and the Terminal chip floats over the code.
+ * The change between the two is a morph (`morph.ts`).
  */
 import { cn, Kbd, Panel, TerminalIcon } from "@polaris/ui";
 import { Component, createRef, type ReactNode, type RefObject } from "react";
-import { type MorphFrom, playMorph } from "./morph.ts";
+import { useTerminalLeaving } from "./leaving.ts";
+import { partsIn, playDivide, playJoin, settle } from "./morph.ts";
 import { OpenDrawer, toggleHint, useTerminalDock } from "./TerminalDock.tsx";
 
 export interface TerminalPanelsProps {
@@ -52,6 +54,7 @@ const StatusRow = ({
   <div
     data-slot={ROW}
     data-placement={placement}
+    data-morph={placement === "strip" ? "strip" : undefined}
     className={cn(
       "flex h-7 shrink-0 items-center",
       placement === "foot"
@@ -65,6 +68,8 @@ const StatusRow = ({
 
 interface MorphProps {
   readonly placement: Placement;
+  /** The terminal is hidden but still laid out, while the join plays. */
+  readonly leaving: boolean;
   readonly dock: RefObject<HTMLDivElement | null>;
   readonly hostKey: string;
   readonly workspaceId: string;
@@ -73,26 +78,29 @@ interface MorphProps {
 
 type NoState = Readonly<Record<string, never>>;
 
-const rowIn = (root: HTMLElement | null) => root?.querySelector(`[data-slot="${ROW}"]`) ?? null;
-
-/** A class for getSnapshotBeforeUpdate: the row's old place is read before the DOM changes. */
+/** A class for componentDidUpdate's previous props: which way the column just changed. */
 class MorphColumn extends Component<MorphProps, NoState> {
   private readonly own = createRef<HTMLDivElement>();
 
-  override getSnapshotBeforeUpdate(previous: MorphProps): MorphFrom | null {
-    if (previous.placement === this.props.placement) return null;
-    const box = rowIn(this.own.current)?.getBoundingClientRect();
+  override componentDidUpdate(previous: MorphProps) {
+    const root = this.own.current;
+    const { placement, leaving } = this.props;
 
-    return box === undefined ? null : { left: box.left, top: box.top };
-  }
+    if (root === null) return;
 
-  override componentDidUpdate(_previous: MorphProps, _state: NoState, from: MorphFrom | null) {
-    const row = rowIn(this.own.current);
+    if (placement === "foot") {
+      if (previous.placement === "strip") settle(root);
 
-    if (from === null || row === null) return;
-    const terminal = this.own.current?.querySelector('[data-slot="terminal-card"]') ?? null;
+      return;
+    }
 
-    playMorph(row, from, terminal);
+    const parts = partsIn(root);
+
+    if (parts === null) return;
+
+    if (previous.placement === "foot") playDivide(parts, true);
+    else if (leaving && !previous.leaving) playJoin(parts);
+    else if (!leaving && previous.leaving) playDivide(parts, false);
   }
 
   override render() {
@@ -104,12 +112,17 @@ class MorphColumn extends Component<MorphProps, NoState> {
           this.own.current = node;
           dock.current = node;
         }}
-        className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5"
+        className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col gap-1.5"
         data-host-key={hostKey}
         data-workspace-id={workspaceId}
         data-terminal={placement === "strip" ? "shown" : "hidden"}
         data-testid="terminal-dock"
       >
+        <div
+          aria-hidden
+          data-morph="fill"
+          className="bg-panel pointer-events-none invisible absolute inset-x-0 -z-10"
+        />
         {children}
       </div>
     );
@@ -124,6 +137,8 @@ export interface EditorColumnProps {
   readonly status: ReactNode;
   /** The terminal card's body while it shows, else null. */
   readonly terminal: ReactNode;
+  /** The terminal is hidden but `terminal` is still passed, while it leaves. Default false. */
+  readonly leaving?: boolean;
   /** The floating Terminal chip while it's hidden; null without a terminal to open. */
   readonly chip: ReactNode;
 }
@@ -136,6 +151,7 @@ export const EditorColumn = ({
   children,
   status,
   terminal,
+  leaving = false,
   chip,
 }: EditorColumnProps) => {
   const strip = terminal !== null;
@@ -143,11 +159,12 @@ export const EditorColumn = ({
   return (
     <MorphColumn
       placement={strip ? "strip" : "foot"}
+      leaving={leaving}
       dock={dock}
       hostKey={hostKey}
       workspaceId={workspaceId}
     >
-      <Panel className="min-w-0 flex-1" data-testid="editor-card">
+      <Panel className="min-w-0 flex-1" data-testid="editor-card" data-morph="card">
         <div className="relative flex min-h-0 flex-1 flex-col">
           {children}
           {strip ? null : chip}
@@ -156,9 +173,11 @@ export const EditorColumn = ({
       </Panel>
       {strip ? (
         <>
-          <Panel className="shrink-0" data-slot="terminal-card">
-            {terminal}
-          </Panel>
+          <div className="shrink-0" data-morph="well" inert={leaving}>
+            <Panel data-slot="terminal-card" data-morph="terminal">
+              {terminal}
+            </Panel>
+          </div>
           <StatusRow placement="strip">{status}</StatusRow>
         </>
       ) : null}
@@ -168,6 +187,7 @@ export const EditorColumn = ({
 
 export const TerminalPanels = ({ hostKey, workspaceId, children, status }: TerminalPanelsProps) => {
   const { dock, shown, toggle, count, drawerProps } = useTerminalDock(hostKey, workspaceId);
+  const leaving = useTerminalLeaving(shown);
 
   return (
     <EditorColumn
@@ -175,8 +195,11 @@ export const TerminalPanels = ({ hostKey, workspaceId, children, status }: Termi
       hostKey={hostKey}
       workspaceId={workspaceId}
       status={status}
+      leaving={leaving}
       terminal={
-        shown && drawerProps !== null ? <OpenDrawer {...drawerProps} variant="panel" /> : null
+        (shown || leaving) && drawerProps !== null ? (
+          <OpenDrawer {...drawerProps} variant="panel" />
+        ) : null
       }
       chip={drawerProps === null ? null : <TerminalChip onToggle={toggle} count={count} />}
     >
