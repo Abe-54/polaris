@@ -8,8 +8,10 @@ import { encodeControl, type RelayAddress, type RelayRole } from "@polaris/proto
 export interface Endpoint {
   readonly address: RelayAddress;
   readonly role: RelayRole;
-  /** Sends a control message or a data frame; false when the socket dropped it. */
-  readonly send: (message: string | Uint8Array) => boolean;
+  /** Sends a control message, after every data frame already forwarded to this socket. */
+  readonly send: (message: string) => void;
+  /** Forwards a data frame; small frames of one event-loop turn share a write (ADR 0104). */
+  readonly forward: (frame: Uint8Array) => void;
   /** Closes the socket because a newer connection proved the same key. */
   readonly replace: () => void;
 }
@@ -61,7 +63,7 @@ export class Hub {
 
     for (const device of before) {
       if (after.has(device)) continue;
-      this.hostsOf.get(device)?.delete(host.address);
+      this.forget(host.address, device);
       this.announce(host.address, device, false);
     }
 
@@ -72,8 +74,13 @@ export class Hub {
       this.hostsOf.set(device, hosts);
       this.announce(host.address, device, true);
     }
+  }
 
-    for (const [device, hosts] of this.hostsOf) if (hosts.size === 0) this.hostsOf.delete(device);
+  /** Drops `host` from `device`'s hosts, and the entry with its last host. */
+  private forget(host: RelayAddress, device: RelayAddress): void {
+    const hosts = this.hostsOf.get(device);
+
+    if (hosts?.delete(host) === true && hosts.size === 0) this.hostsOf.delete(device);
   }
 
   /** The endpoint `from` may deliver to at `to`, or undefined when it is offline or not linked. */

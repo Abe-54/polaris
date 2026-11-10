@@ -276,6 +276,9 @@ Without that, every client looks like the proxy. The relay is one process with i
 state, so run a single replica; spreading parties across replicas needs shared routing (not
 built). `railway.json` builds the Dockerfile and health-checks `/healthz`.
 
+`apps/relay-rs` holds the same relay in Rust, held to this contract by the tests below, and
+the load generator that measures both (ADR 0104).
+
 ## Tests
 
 `bun run --cwd apps/relay test`:
@@ -283,7 +286,8 @@ built). `railway.json` builds the Dockerfile and health-checks `/healthz`.
 - `relay.test.ts`: two parties handshake and exchange protocol frames through a real relay
   socket, with checks that nothing they handed the relay and nothing it logged holds the
   plaintext or an identifier. Also linking, unlinking, presence, device and host reconnects,
-  and replacement.
+  replacement, and the order of forwarded frames: mixed sizes in a burst, beside a refused
+  forward, and before a party's `presence` offline.
 - `push.test.ts`: wakes reach a fake push service signed, only with the device's ticket for
   that host and within the rate (across reconnects), and nothing a wake carries is logged.
 - `abuse.slow.test.ts`: key proof failures, auth and idle timeouts, malformed messages, size,
@@ -292,3 +296,8 @@ built). `railway.json` builds the Dockerfile and health-checks `/healthz`.
   clean `SIGTERM` exit.
 - `packages/protocol/src/relay`: the channel (tampering, replay, gaps, unlinked devices, wrong
   host key) and the wire format.
+
+With `POLARIS_RELAY_COMMAND` set to a command that serves a relay on `$PORT`, every test above
+starts that command instead of the in-process relay, configures it through the environment
+variables of this README, and reads its log lines from stdout. It needs a build that binds a
+free port for `PORT=0`, as the Rust relay does (`apps/relay-rs/README.md`).

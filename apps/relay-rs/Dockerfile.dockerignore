@@ -1,0 +1,6 @@
+# Only the Rust workspace goes into the build; rust-toolchain.toml would fetch rustfmt and clippy.
+*
+!apps/relay-rs
+apps/relay-rs/target
+apps/relay-rs/results
+apps/relay-rs/rust-toolchain.toml

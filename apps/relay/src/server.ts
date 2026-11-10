@@ -11,15 +11,16 @@ import {
   type Wake,
   type WakeOutcome,
   verifyPushTicket,
-  decodeDataFrame,
   encodeControl,
-  encodeDataFrame,
   fromBase64Url,
   MAX_RECORD_BYTES,
   MAX_RELAY_MESSAGE_BYTES,
   NONCE_BYTES,
+  RELAY_ADDRESS_LENGTH,
+  RELAY_ADDRESS_PATTERN,
   RELAY_PATH,
-  RelayAddress,
+  RELAY_WIRE_VERSION,
+  type RelayAddress,
   RelayClose,
   RelayOp,
   authMessage,
@@ -27,7 +28,7 @@ import {
   toBase64Url,
   verifyEd25519,
 } from "@polaris/protocol/relay";
-import { Match, Option, Predicate, Schema } from "effect";
+import { Match, Option, Predicate } from "effect";
 import type { Server, ServerWebSocket } from "bun";
 import type { RelayConfig } from "./config.ts";
 import { type Endpoint, Hub } from "./hub.ts";
@@ -47,6 +48,8 @@ interface Connection {
   readonly bytes: TokenBucket;
   phase: Phase;
   endpoint: Endpoint | null;
+  /** The party's own address as bytes, written over a forward's destination. */
+  source: Uint8Array | null;
   authTimer: ReturnType<typeof setTimeout> | null;
   endedBy: string;
   framesIn: number;
@@ -69,7 +72,26 @@ export interface RelayHandle {
 
 const SWEEP_INTERVAL_MS = 60_000;
 
-const decodeAddress = Schema.decodeUnknownOption(RelayAddress);
+/** A data frame's header: version, op, the address's length, and the address. */
+const HEADER_BYTES = 3 + RELAY_ADDRESS_LENGTH;
+
+/** The address schema's check alone, without a decode, for the per-frame path. */
+const isRelayAddress = (text: string): text is RelayAddress => RELAY_ADDRESS_PATTERN.test(text);
+
+/** The destination of a well-formed forward, or null. Reads the header only. */
+const forwardPeer = (bytes: Buffer): RelayAddress | null => {
+  if (
+    bytes.byteLength < HEADER_BYTES ||
+    bytes[0] !== RELAY_WIRE_VERSION ||
+    bytes[1] !== RelayOp.Forward ||
+    bytes[2] !== RELAY_ADDRESS_LENGTH ||
+    bytes.byteLength - HEADER_BYTES > MAX_RECORD_BYTES
+  )
+    return null;
+  const peer = bytes.toString("latin1", 3, HEADER_BYTES);
+
+  return isRelayAddress(peer) ? peer : null;
+};
 
 const clientIp = (request: Request, server: Server<Connection>, trustProxy: boolean): string => {
   const forwarded = trustProxy ? request.headers.get("x-forwarded-for") : null;
@@ -87,6 +109,7 @@ const newConnection = (config: RelayConfig, ip: string): Connection => ({
   bytes: new TokenBucket(config.bytesPerSecond, config.bytesPerSecond * 2),
   phase: "challenged",
   endpoint: null,
+  source: null,
   authTimer: null,
   endedBy: "peer",
   framesIn: 0,
@@ -105,31 +128,46 @@ const end = (ws: Socket, code: number, reason: string) => {
   ws.close(code, reason);
 };
 
+/** A frame this large gains nothing from sharing a write, so it is sent at once. */
+const DIRECT_BYTES = 8 * 1024;
+
+/** Publishes a frame to one socket's topic; 0 when nothing took it. */
+type Publish = (topic: string, frame: Uint8Array) => number;
+
+/**
+ * A party's endpoint. Small data frames go through the socket's own topic: the server writes
+ * a turn's worth in one system call, and a direct send drains them first, so order holds.
+ */
 const endpointFor = (
   ws: Socket,
   auth: typeof Auth.Type,
-  address: Endpoint["address"]
-): Endpoint => ({
-  address,
-  role: auth.role,
-  send: (message) => {
-    const sent = ws.send(message);
+  address: Endpoint["address"],
+  publish: Publish
+): Endpoint => {
+  const data = ws.data;
+  ws.subscribe(data.id);
 
-    if (sent === 0) {
-      ws.data.dropped++;
+  return {
+    address,
+    role: auth.role,
+    send: (message) => {
+      if (ws.send(message) === 0) data.dropped++;
+    },
+    forward: (frame) => {
+      const sent = frame.byteLength < DIRECT_BYTES ? publish(data.id, frame) : ws.send(frame);
 
-      return false;
-    }
+      if (sent === 0) {
+        data.dropped++;
 
-    if (!Predicate.isString(message)) {
-      ws.data.framesOut++;
-      ws.data.bytesOut += message.byteLength;
-    }
+        return;
+      }
 
-    return true;
-  },
-  replace: () => end(ws, RelayClose.Replaced, "replaced"),
-});
+      data.framesOut++;
+      data.bytesOut += frame.byteLength;
+    },
+    replace: () => end(ws, RelayClose.Replaced, "replaced"),
+  };
+};
 
 export const startRelay = (
   config: RelayConfig,
@@ -196,7 +234,8 @@ export const startRelay = (
     if (ws.readyState !== WebSocket.OPEN) return;
     clearTimeout(ws.data.authTimer ?? undefined);
     ws.data.phase = "ready";
-    ws.data.endpoint = endpointFor(ws, auth, address);
+    ws.data.source = Buffer.from(address, "latin1");
+    ws.data.endpoint = endpointFor(ws, auth, address, publish);
     ws.send(encodeControl({ t: "ready", address }));
     hub.attach(ws.data.endpoint, peers);
 
@@ -207,7 +246,7 @@ export const startRelay = (
     emit({ event: "relay.wake", outcome, durationMs: Math.round(performance.now() - started) });
 
     if (ws.readyState === WebSocket.OPEN)
-      ws.send(encodeControl({ t: "woken", id: wake.id, outcome }));
+      ws.data.endpoint?.send(encodeControl({ t: "woken", id: wake.id, outcome }));
   };
 
   /**
@@ -236,7 +275,7 @@ export const startRelay = (
 
     if (!(await verifyLiveTicket(ticket, peer, endpoint.address, environment, token))) {
       if (ws.readyState === WebSocket.OPEN)
-        ws.send(encodeControl({ t: "live-gone", token, outcome: "unlinked" }));
+        endpoint.send(encodeControl({ t: "live-gone", token, outcome: "unlinked" }));
 
       return;
     }
@@ -280,32 +319,33 @@ export const startRelay = (
     );
   };
 
-  const onData = (ws: Socket, bytes: Uint8Array) => {
-    const endpoint = ws.data.endpoint;
+  /**
+   * Forwards one data frame. Source and destination addresses are the same length, so the
+   * sender's is written over the destination and the received buffer goes on, uncopied.
+   */
+  const onData = (ws: Socket, bytes: Buffer) => {
+    const { endpoint, source } = ws.data;
 
-    if (endpoint === null) return end(ws, RelayClose.BadMessage, "data-before-ready");
-    const frame = decodeDataFrame(bytes);
-    const peer = Option.flatMap(frame, (f) => decodeAddress(f.peer));
+    if (endpoint === null || source === null)
+      return end(ws, RelayClose.BadMessage, "data-before-ready");
+    const peer = forwardPeer(bytes);
 
-    if (
-      Option.isNone(frame) ||
-      Option.isNone(peer) ||
-      frame.value.op !== RelayOp.Forward ||
-      frame.value.payload.byteLength > MAX_RECORD_BYTES
-    )
-      return end(ws, RelayClose.BadMessage, "bad-frame");
+    if (peer === null) return end(ws, RelayClose.BadMessage, "bad-frame");
     ws.data.framesIn++;
-    const target = hub.route(endpoint, peer.value);
+    const target = hub.route(endpoint, peer);
 
     if (target === undefined) {
       ws.data.unreachable++;
-      ws.send(encodeControl({ t: "unreachable", peer: peer.value }));
+      endpoint.send(encodeControl({ t: "unreachable", peer }));
 
       return;
     }
 
-    target.send(encodeDataFrame(RelayOp.Forward, endpoint.address, frame.value.payload));
+    bytes.set(source, 3);
+    target.forward(bytes);
   };
+
+  const publish: Publish = (topic, frame) => server.publish(topic, frame);
 
   const server = Bun.serve<Connection>({
     port: config.port,
@@ -355,8 +395,9 @@ export const startRelay = (
       message(ws, message) {
         const size = Predicate.isString(message) ? Buffer.byteLength(message) : message.byteLength;
         ws.data.bytesIn += size;
+        const now = performance.now();
 
-        if (!ws.data.messages.take() || !ws.data.bytes.take(size))
+        if (!ws.data.messages.take(1, now) || !ws.data.bytes.take(size, now))
           return end(ws, RelayClose.RateLimited, "rate-limited");
 
         if (ws.data.phase === "verifying") return end(ws, RelayClose.BadMessage, "early-message");

@@ -90,6 +90,32 @@ describe("relay key proof", () => {
     host.sendBytes(new Uint8Array([9, 1, 1, 65]));
     expect(await host.closed).toEqual({ code: 4400, reason: "bad-frame" });
   });
+
+  const ADDRESS = "AAAAAAAAAAAAAAAAAAAAAA";
+
+  const header = (version: number, op: number, peer: string, record = 16) =>
+    Buffer.concat([
+      Buffer.from([version, op, peer.length]),
+      Buffer.from(peer),
+      Buffer.alloc(record),
+    ]);
+
+  test.each([
+    ["another version", header(2, 1, ADDRESS)],
+    ["a reserved op", header(1, 2, ADDRESS)],
+    ["an address a character short", header(1, 1, ADDRESS.slice(1))],
+    ["an address a character long", header(1, 1, `${ADDRESS}A`)],
+    ["an address outside base64url", header(1, 1, `${ADDRESS.slice(1)}/`)],
+    ["a non-ASCII address", header(1, 1, `${ADDRESS.slice(2)}\u00e9`)],
+    ["a header cut short", header(1, 1, ADDRESS).subarray(0, 20)],
+    ["a record over the limit", header(1, 1, ADDRESS, 65_545)],
+  ])("a data frame with %s is closed as a bad frame", async (_, frame) => {
+    relay = startTestRelay();
+    const host = await TestParty.connect(relay.url, "host");
+
+    host.sendBytes(frame);
+    expect(await host.closed).toEqual({ code: 4400, reason: "bad-frame" });
+  });
 });
 
 describe("relay abuse limits", () => {

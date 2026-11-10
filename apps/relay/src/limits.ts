@@ -14,8 +14,8 @@ export class TokenBucket {
     this.last = now();
   }
 
-  take(count = 1): boolean {
-    const now = this.now();
+  /** `now` lets a caller with two buckets read the clock once. */
+  take(count = 1, now = this.now()): boolean {
     this.tokens = Math.min(this.burst, this.tokens + ((now - this.last) / 1000) * this.perSecond);
     this.last = now;
 

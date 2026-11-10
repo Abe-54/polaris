@@ -4,3 +4,5 @@
 **/.next
 .git
 apps/desktop/release
+apps/relay-rs/target
+apps/relay-rs/results
