@@ -1,13 +1,12 @@
 /**
- * Test Hosts for computer use: a temp directory with fake commands on PATH, live Unix sockets
- * and a fake helper app, all read through the real probe. Not used at runtime.
+ * Test Hosts for computer use: a temp directory with fake commands on PATH and live Unix
+ * sockets, all read through the real probe, and agent-desktop's macOS status. Not used at runtime.
  */
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { dirname, join } from "node:path";
 import { afterEach } from "bun:test";
 import { newTempDir } from "../platform/tempDir.testing.ts";
-import { launcherOf } from "../service/computerUse/bundle.ts";
 import { type HostProbe, hostProbe, type ProbeOptions } from "./probe.ts";
 
 const servers: Array<Server> = [];
@@ -96,22 +95,3 @@ export const macStatus = (accessibility: string, screenRecording: string) =>
       platform: "macos",
     },
   });
-
-/**
- * A helper app whose launcher prints what `status` holds for `run agent-desktop status`,
- * so a test changes a grant by rewriting it. Its calls are logged as `launcher`.
- */
-export const fakeHelper = (host: FakeHost, status: string) => {
-  const bundle = join(host.root, "Polaris Computer Use.app");
-  const statusFile = host.file(join(host.root, "status.json"), status);
-  const launcher = host.file(launcherOf(bundle));
-  const calls = join(host.root, "launcher.calls");
-  writeFileSync(launcher, `#!/bin/sh\necho "$*" >> '${calls}'\n/bin/cat '${statusFile}'\n`);
-  chmodSync(launcher, 0o755);
-
-  return {
-    bundle,
-    grant: (next: string) => writeFileSync(statusFile, next),
-    calls: () => host.calls("launcher"),
-  };
-};

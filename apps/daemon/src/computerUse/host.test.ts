@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { chmodSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AppId,
@@ -13,7 +14,9 @@ import {
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ComputerUseHelper } from "../service/computerUse/index.ts";
 import { ComputerUseHost } from "./host.ts";
-import { type FakeHost, fakeHelper, fakeHost, macStatus } from "./host.testing.ts";
+import { type FakeHost, fakeHost, macStatus } from "./host.testing.ts";
+import { makeHelper, toolOf } from "../service/computerUse/helper.testing.ts";
+import { newTempDir } from "../platform/tempDir.testing.ts";
 import type { HostProbe } from "./probe.ts";
 
 const run = <A, E>(
@@ -146,13 +149,43 @@ test("the accessibility bus is asked on the desktop's session bus", async () => 
   ]);
 });
 
+let built: Promise<string> | null = null;
+
+/** D6's test helper (the real launcher and Mach hand-off), built once per test file. */
+const sharedHelper = () => {
+  built ??= makeHelper(realpathSync(newTempDir("pl-cuh-", { short: true })), process.execPath);
+
+  return built;
+};
+
+/**
+ * The helper app with a script in agent-desktop's place that prints what `status` holds, so a
+ * test changes a grant by rewriting it. The script's calls are logged under `host`. macOS only.
+ */
+export const fakeHelper = async (host: FakeHost, status: string) => {
+  const bundle = await sharedHelper();
+  const statusFile = host.file(join(host.root, "status.json"), status);
+  const calls = join(host.root, "agent-desktop.calls");
+  writeFileSync(toolOf(bundle), `#!/bin/sh\necho "$*" >> '${calls}'\n/bin/cat '${statusFile}'\n`);
+  chmodSync(toolOf(bundle), 0o755);
+
+  return {
+    bundle,
+    grant: (next: string) => writeFileSync(statusFile, next),
+    calls: () => host.calls("agent-desktop"),
+  };
+};
+
+/** These run the real launcher (D6's test helper), which needs macOS. */
+const macTest = test.skipIf(process.platform !== "darwin");
+
 const macHost = (host: FakeHost) => {
   host.file(join(host.root, "console"));
 
   return host.probe({ platform: "darwin", uid: process.getuid?.() ?? 0 });
 };
 
-test.each([
+macTest.each([
   ["granted", "denied", { accessibility: true, screenRecording: false }],
   ["denied", "granted", { accessibility: false, screenRecording: true }],
   ["denied", "denied", { accessibility: false, screenRecording: false }],
@@ -160,7 +193,7 @@ test.each([
   "macOS with accessibility %s and screen recording %s needs each permission it lacks",
   async (accessibility, screen, permissions) => {
     const host = fakeHost();
-    const helper = fakeHelper(host, macStatus(accessibility, screen));
+    const helper = await fakeHelper(host, macStatus(accessibility, screen));
     const probe = macHost(host);
 
     const status = await run(
@@ -174,13 +207,13 @@ test.each([
       })
     );
 
-    expect(helper.calls()).toEqual(["run agent-desktop status"]);
+    expect(helper.calls()).toEqual(["status"]);
   }
 );
 
-test("macOS with both permissions is ready, and the helper isn't asked while off", async () => {
+macTest("macOS with both permissions is ready, and the helper isn't asked while off", async () => {
   const host = fakeHost();
-  const helper = fakeHelper(host, macStatus("granted", "granted"));
+  const helper = await fakeHelper(host, macStatus("granted", "granted"));
   const probe = macHost(host);
   const file = join(host.root, "cu.json");
 
@@ -197,36 +230,39 @@ test("macOS with both permissions is ready, and the helper isn't asked while off
   expect(states).toEqual(["Off", 0, "Ready"]);
 });
 
-test("setup reveals the helper and opens the pane, then turns ready by itself once granted", async () => {
-  const host = fakeHost();
-  const helper = fakeHelper(host, macStatus("denied", "denied"));
-  host.command("open", "exit 0");
-  const probe = macHost(host);
+macTest(
+  "setup reveals the helper and opens the pane, then turns ready by itself once granted",
+  async () => {
+    const host = fakeHost();
+    const helper = await fakeHelper(host, macStatus("denied", "denied"));
+    host.command("open", "exit 0");
+    const probe = macHost(host);
 
-  const states = await run(
-    { probe, file: join(host.root, "cu.json"), helper: helper.bundle },
-    (service) =>
-      Effect.gen(function* () {
-        yield* service.enable;
+    const states = await run(
+      { probe, file: join(host.root, "cu.json"), helper: helper.bundle },
+      (service) =>
+        Effect.gen(function* () {
+          yield* service.enable;
 
-        const ready = yield* Stream.runHead(
-          service.changes.pipe(Stream.filter((status) => tag(status) === "Ready"))
-        ).pipe(Effect.forkChild);
+          const ready = yield* Stream.runHead(
+            service.changes.pipe(Stream.filter((status) => tag(status) === "Ready"))
+          ).pipe(Effect.forkChild);
 
-        const opened = tag(yield* service.openSetup(null));
-        helper.grant(macStatus("granted", "granted"));
+          const opened = tag(yield* service.openSetup(null));
+          helper.grant(macStatus("granted", "granted"));
 
-        return [opened, tag(Option.getOrThrow(yield* Fiber.join(ready)))];
-      })
-  );
+          return [opened, tag(Option.getOrThrow(yield* Fiber.join(ready)))];
+        })
+    );
 
-  expect(states).toEqual(["NeedsSetup", "Ready"]);
+    expect(states).toEqual(["NeedsSetup", "Ready"]);
 
-  expect(host.calls("open")).toEqual([
-    `-R ${helper.bundle}`,
-    "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
-  ]);
-});
+    expect(host.calls("open")).toEqual([
+      `-R ${helper.bundle}`,
+      "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+    ]);
+  }
+);
 
 test("setup without a helper beside the Daemon fails with why, and says both are missing", async () => {
   const host = fakeHost();
@@ -341,9 +377,9 @@ test("the always-allowed list is kept by name, survives a restart, and removes b
   expect(afterRestart.map((allowed) => allowed.app.id)).toEqual([arc.id]);
 });
 
-test("watching the Host checks it once and never again until asked", async () => {
+macTest("watching the Host checks it once and never again until asked", async () => {
   const host = fakeHost();
-  const helper = fakeHelper(host, macStatus("granted", "granted"));
+  const helper = await fakeHelper(host, macStatus("granted", "granted"));
   const probe = macHost(host);
 
   const calls = await run(
