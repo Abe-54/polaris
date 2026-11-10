@@ -77,14 +77,18 @@ test("an upload's helper files go to the helper app beside the Daemon's bundle",
   for (const name of HELPER_FILE_NAMES)
     expect(readFileSync(at(name), "utf8")).toBe(`helper ${name}`);
 
-  for (const name of [
-    "polaris-computer-use",
-    "agent-desktop",
-    "agent-desktop-macos-helper",
-    "polaris-capture",
-  ] as const)
-    expect(statSync(at(name)).mode & 0o777).toBe(0o755);
-  expect(statSync(at("computer-use-Info.plist")).mode & 0o777).toBe(0o644);
+  // A Windows runner's files have no POSIX modes to read back.
+  if (process.platform !== "win32") {
+    for (const name of [
+      "polaris-computer-use",
+      "agent-desktop",
+      "agent-desktop-macos-helper",
+      "polaris-capture",
+    ] as const)
+      expect(statSync(at(name)).mode & 0o777).toBe(0o755);
+    expect(statSync(at("computer-use-Info.plist")).mode & 0o777).toBe(0o644);
+  }
+
   // The running Daemon finds it from its own executable, through the `polaris` link too.
   expect(helperBeside(join(versionDir, DAEMON_BUNDLE, BUNDLE_FILES.polaris))).toBe(helper);
   expect((await stage(join(upload, "polaris"), "1.2.3")).changed).toBe(false);

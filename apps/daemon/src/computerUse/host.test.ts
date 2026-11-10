@@ -118,7 +118,7 @@ test.each([
 
   if (installed) a11yInstalled(host);
   busctl(host, ping);
-  host.command("apt-get", "exit 0");
+  host.command("apt-get");
 
   const status = await run({ probe, file: join(host.root, "cu.json") }, (s) => s.enable);
 
@@ -225,7 +225,7 @@ macTest(
   async () => {
     const host = fakeHost();
     const helper = await fakeHelper(host, macStatus("denied", "denied"));
-    host.command("open", "exit 0");
+    host.command("open");
     const probe = macHost(host);
 
     const states = await run(
@@ -281,7 +281,7 @@ test("setup without a helper beside the Daemon fails with why, and says both are
 test("setup on Linux opens nothing and says what to run on the Host", async () => {
   const host = fakeHost();
   const probe = await linuxDesktop(host);
-  host.command("apt-get", "exit 0");
+  host.command("apt-get");
 
   const message = await run({ probe, file: join(host.root, "cu.json") }, (s) =>
     Effect.andThen(
@@ -370,10 +370,9 @@ test("the always-allowed list is kept by name, survives a restart, and removes b
 test("an app added in Settings is named by the Host, and by its id when the Host can't", async () => {
   const host = fakeHost();
 
-  host.command(
-    "mdfind",
-    `case "$*" in *com.apple.Terminal*) echo /System/Applications/Utilities/Terminal.app;; esac`
-  );
+  host.command("mdfind", [
+    { when: "com.apple.Terminal", stdout: "/System/Applications/Utilities/Terminal.app\n" },
+  ]);
 
   const probe = host.probe({ platform: "darwin" });
   const hostile = AppId.make("x' || kMDItemFSName == '*");

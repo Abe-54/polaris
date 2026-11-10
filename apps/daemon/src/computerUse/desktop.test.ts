@@ -30,8 +30,10 @@ Remote=no
 Seat=
 Display=`;
 
-const loginctl = (sessions: string) =>
-  `case "$1" in show-user) printf 'Sessions=2 3\\n';; show-session) printf '%s\\n' '${sessions}';; esac`;
+const loginctl = (sessions: string) => [
+  { when: "show-user", stdout: "Sessions=2 3\n" },
+  { when: "show-session", stdout: `${sessions}\n` },
+];
 
 test("a live WAYLAND_DISPLAY in the Daemon's environment is a Wayland desktop it can reach", async () => {
   const host = fakeHost();
@@ -145,11 +147,15 @@ test.each([
 });
 
 /** `tasklist /FO CSV /NH` answering the Daemon's own PID in `session`, and Explorer's. */
-const tasklist = (session: string, explorer: boolean) =>
-  `case "$*" in
-  *"PID eq"*) printf '"polaris.exe","4242","Console","${session}","80,000 K"\\r\\n';;
-  *explorer*) ${explorer ? `printf '"explorer.exe","900","Console","${session}","90,000 K"\\r\\n'` : `printf 'INFO: No tasks are running which match the specified criteria.\\r\\n'`};;
-esac`;
+const tasklist = (session: string, explorer: boolean) => [
+  { when: "PID eq", stdout: `"polaris.exe","4242","Console","${session}","80,000 K"\r\n` },
+  {
+    when: "explorer",
+    stdout: explorer
+      ? `"explorer.exe","900","Console","${session}","90,000 K"\r\n`
+      : "INFO: No tasks are running which match the specified criteria.\r\n",
+  },
+];
 
 test.each([
   ["an interactive session with Explorer", "1", true, true],

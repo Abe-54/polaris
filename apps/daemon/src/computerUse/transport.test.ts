@@ -17,10 +17,7 @@ test("the Desktop App turns computer use on, watches it turn ready, and the app 
   const host = fakeHost();
   await host.listen(join(host.root, "run", "1000", "wayland-0"));
   host.file(join(host.root, "dbus-1", "org.a11y.Bus.service"));
-  host.command(
-    "busctl",
-    `case "$*" in *GetAddress*) printf 's "unix:path=/tmp/a11y"\\n';; *) exit 0;; esac`
-  );
+  host.command("busctl", [{ when: "GetAddress", stdout: 's "unix:path=/tmp/a11y"\n' }]);
 
   const probe = host.probe({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" } });
 
