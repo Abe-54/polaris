@@ -1,6 +1,6 @@
 //! The relay over real sockets, for what the TypeScript suite's WebSocket client can't
 //! send: fragments, frames cut across writes, pings, plain HTTP, a receiver that stops
-//! reading, and a stop. That suite covers the contract itself (apps/relay-rs/README.md).
+//! reading, and a stop. That suite covers the contract itself (README.md).
 
 use std::io::Write;
 use std::sync::{Arc, Mutex};

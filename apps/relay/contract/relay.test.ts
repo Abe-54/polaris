@@ -320,18 +320,15 @@ describe("relay reconnects", () => {
   });
 });
 
-test("the relay's runtime code never imports the end-to-end channel or its keys", async () => {
-  const runtime = [...new Bun.Glob("src/**/*.ts").scanSync(`${import.meta.dir}/..`)].filter(
-    (path) => !path.endsWith(".test.ts") && !path.includes("/testing/")
-  );
+test("the relay's code never names the end-to-end channel or a cipher for it", async () => {
+  const root = `${import.meta.dir}/..`;
+  const sources = [...new Bun.Glob("src/**/*.rs").scanSync(root), "Cargo.toml"];
 
-  expect(runtime).toContain("src/server.ts");
+  expect(sources).toContain("src/server.rs");
 
-  for (const path of runtime) {
-    const source = await Bun.file(`${import.meta.dir}/../${path}`).text();
-    expect({ path, party: source.includes("relay/party") || source.includes("noise") }).toEqual({
-      path,
-      party: false,
-    });
+  for (const path of sources) {
+    const source = (await Bun.file(`${root}/${path}`).text()).toLowerCase();
+    const names = ["noise", "snow", "x25519", "chacha"].filter((name) => source.includes(name));
+    expect({ path, names }).toEqual({ path, names: [] });
   }
 });

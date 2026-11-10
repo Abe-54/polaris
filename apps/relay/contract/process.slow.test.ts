@@ -6,7 +6,8 @@ import {
   RelayInitiator,
 } from "@polaris/protocol/relay/party";
 import { TestParty } from "./testing/party.ts";
-import { identify, relayCommand } from "./testing/relay.ts";
+import { relayBinary } from "./testing/binary.ts";
+import { identify } from "./testing/relay.ts";
 
 const freePort = () => {
   const listener = Bun.listen({
@@ -44,10 +45,7 @@ const collect = (stream: ReadableStream<Uint8Array>) => {
 test("the relay process carries an encrypted exchange and logs no payload or identifier", async () => {
   const port = freePort();
 
-  const command = relayCommand === "" ? ["bun", "src/main.ts"] : relayCommand.split(" ");
-
-  const child = Bun.spawn(command, {
-    cwd: `${import.meta.dir}/..`,
+  const child = Bun.spawn([relayBinary()], {
     env: { ...process.env, PORT: String(port), POLARIS_RELAY_HOSTNAME: "127.0.0.1" },
     stdout: "pipe",
     stderr: "pipe",

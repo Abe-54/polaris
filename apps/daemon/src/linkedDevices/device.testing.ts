@@ -1,9 +1,8 @@
 /**
  * A Linked Device for tests: dials the relay with its own relay identity, links with a
  * link string, and opens a session whose ByteTransport an RPC client speaks over, as
- * the Mobile App does. Also starts a real relay process (`apps/relay/src/main.ts`).
+ * the Mobile App does. Also starts a real relay process (apps/relay's binary).
  */
-import { join } from "node:path";
 import {
   type ByteTransport,
   decodeLinkString,
@@ -33,6 +32,7 @@ import {
   type RelaySession,
   type StaticKeyPair,
 } from "@polaris/protocol/relay/party";
+import { relayBinary } from "@polaris/relay/testing/binary";
 import { Cause, Effect, Option, Predicate, Queue, Stream } from "effect";
 
 const WAIT_MS = 5_000;
@@ -240,10 +240,12 @@ export const freePort = (): number => {
   return port;
 };
 
-/** Runs the real relay (`bun apps/relay/src/main.ts`) on `port` until `stop`. */
+// Built here, as the file loads, so no test's timeout pays for a cold build.
+const relay = relayBinary();
+
+/** Runs the real relay (apps/relay's binary) on `port` until `stop`. */
 export const startRelay = async (port = freePort(), env: Readonly<Record<string, string>> = {}) => {
-  const child = Bun.spawn(["bun", "src/main.ts"], {
-    cwd: join(import.meta.dir, "../../../relay"),
+  const child = Bun.spawn([relay], {
     env: {
       ...process.env,
       PORT: String(port),

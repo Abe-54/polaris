@@ -5,10 +5,12 @@ use std::process::ExitCode;
 use polaris_relay::config::{Config, Env};
 use polaris_relay::events::Events;
 use polaris_relay::server::{Relay, listen};
-use tokio::signal::unix::{SignalKind, signal};
 
 /// Resolves at SIGTERM, which is how a container platform stops the relay, or at SIGINT.
+#[cfg(unix)]
 async fn stopped() {
+    use tokio::signal::unix::{SignalKind, signal};
+
     let (Ok(mut terminate), Ok(mut interrupt)) =
         (signal(SignalKind::terminate()), signal(SignalKind::interrupt()))
     else {
@@ -18,6 +20,14 @@ async fn stopped() {
     tokio::select! {
         _ = terminate.recv() => {}
         _ = interrupt.recv() => {}
+    }
+}
+
+/// Resolves at Ctrl-C. Windows has no SIGTERM: the tests that run there end the process.
+#[cfg(not(unix))]
+async fn stopped() {
+    if tokio::signal::ctrl_c().await.is_err() {
+        std::future::pending::<()>().await;
     }
 }
 

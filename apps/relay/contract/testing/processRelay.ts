@@ -1,12 +1,34 @@
 /**
- * Runs the suite against another relay build: a command that reads the README's variables,
- * takes `PORT=0` for a free port, and writes wide events to stdout (apps/relay-rs/README.md).
+ * Starts the relay binary as a process: configured through the README's variables, on a free
+ * port (`PORT=0`), with its log lines read from stdout.
  */
 import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RelayConfig } from "../config.ts";
-import type { WideEvent } from "../wideEvent.ts";
+import type { WideEvent } from "./events.ts";
+
+/** The relay's settings a test may change (README: Configuration). */
+export interface RelayConfig {
+  readonly port: number;
+  readonly hostname: string;
+  readonly trustProxy: boolean;
+  readonly maxConnections: number;
+  readonly maxConnectionsPerIp: number;
+  readonly connectsPerSecondPerIp: number;
+  readonly connectBurstPerIp: number;
+  readonly maxPeers: number;
+  readonly messagesPerSecond: number;
+  readonly bytesPerSecond: number;
+  readonly authTimeoutMs: number;
+  readonly idleTimeoutSeconds: number;
+  readonly backpressureLimitBytes: number;
+  readonly push: { readonly url: string; readonly secret: string } | null;
+  readonly wakesPerMinute: number;
+  readonly wakeBurst: number;
+  readonly maxWakesInFlight: number;
+  readonly maxLiveActivities: number;
+  readonly liveHostGoneMs: number;
+}
 
 const START_TIMEOUT_MS = 10_000;
 
@@ -54,14 +76,13 @@ export interface ProcessRelay {
 }
 
 /**
- * Starts `command` and waits, without yielding, for its start line. Its stdout is a file, so
+ * Starts `binary` and waits, without yielding, for its start line. Its stdout is a file, so
  * `events` reads everything the relay has written by the time it is asked.
  */
-export const startProcessRelay = (command: string, config: RelayConfig): ProcessRelay => {
+export const startProcessRelay = (binary: string, config: RelayConfig): ProcessRelay => {
   const log = join(tmpdir(), `polaris-relay-${crypto.randomUUID()}.log`);
 
-  const child = Bun.spawn(command.split(" "), {
-    cwd: `${import.meta.dir}/../..`,
+  const child = Bun.spawn([binary], {
     env: { ...process.env, ...environment(config) },
     stdout: Bun.file(log),
     stderr: "inherit",
@@ -77,7 +98,7 @@ export const startProcessRelay = (command: string, config: RelayConfig): Process
     if (port !== undefined) break;
 
     if (child.exitCode !== null || Date.now() > deadline)
-      throw new Error(`the relay did not start: ${command}`);
+      throw new Error(`the relay did not start: ${binary}`);
     Bun.sleepSync(2);
   }
 

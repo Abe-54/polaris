@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { encodeControl, encodeDataFrame, RelayOp, toBase64Url } from "@polaris/protocol/relay";
 import { generateRelayIdentity, proveRelayKey } from "@polaris/protocol/relay/party";
-import { ConnectionGate, TokenBucket } from "./limits.ts";
 import { TestParty } from "./testing/party.ts";
 import { identify, startTestRelay, type TestRelay } from "./testing/relay.ts";
 
@@ -189,40 +188,4 @@ describe("relay abuse limits", () => {
     host.sendRecord(p.address, new Uint8Array(16));
     expect(await host.control("unreachable")).toEqual({ t: "unreachable", peer: p.address });
   }, 20_000);
-});
-
-describe("limits", () => {
-  test("a token bucket refuses past its burst and refills with time", () => {
-    let now = 0;
-    const bucket = new TokenBucket(10, 20, () => now);
-
-    expect(Array.from({ length: 25 }, () => bucket.take()).filter(Boolean)).toHaveLength(20);
-    now = 500;
-    expect(Array.from({ length: 10 }, () => bucket.take()).filter(Boolean)).toHaveLength(5);
-  });
-
-  test("the gate refuses a fast connector and a full relay", () => {
-    let now = 0;
-
-    const gate = new ConnectionGate(
-      {
-        maxConnections: 3,
-        maxConnectionsPerIp: 10,
-        connectsPerSecondPerIp: 1,
-        connectBurstPerIp: 2,
-      },
-      () => now
-    );
-
-    expect([gate.admit("a"), gate.admit("a"), gate.admit("a")]).toEqual([
-      null,
-      null,
-      "connecting-too-fast",
-    ]);
-    now = 1_000;
-    expect(gate.admit("a")).toBeNull();
-    expect(gate.admit("b")).toBe("relay-full");
-    gate.release("a");
-    expect(gate.admit("b")).toBeNull();
-  });
 });

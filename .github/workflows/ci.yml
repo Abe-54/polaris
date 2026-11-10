@@ -21,8 +21,9 @@ name: CI
 #   bench             Daemon memory gates (bench-shards runs it 3 times in parallel): Daemon, Client,
 #                     protocol or SDK affected.
 #   desktop-budgets   the Desktop App's budgets: Desktop App or Daemon affected.
-#   relay-rs          the Rust relay (apps/relay-rs, ADR 0104): fmt, clippy, its tests, then the Bun
-#                     relay's suite against its binary; the relay affected or apps/relay-rs changed.
+#   relay             the relay's Rust (apps/relay, ADR 0105): fmt, clippy and its own tests; the relay
+#                     affected. Its contract suite runs in `test`, like every suite that starts a
+#                     relay, on the binary .github/actions/relay-binary builds or restores.
 #   macos-result      on a push to main, what the macOS jobs add up to (tooling/ci/macosResult.ts).
 #   ci-red            on a push to main, a Linear issue per red job (tooling/ci/ciRed.ts); not counted.
 #   ci                one result for branch protection: every job off macOS passed or was skipped. It
@@ -111,7 +112,7 @@ jobs:
           out binaries eval 'has @polaris/daemon @polaris/client || path "^scripts/build-daemon\.ts$"'
           out bench has @polaris/daemon @polaris/client @polaris/protocol @polaris/sdk
           out desktop has @polaris/desktop @polaris/daemon
-          out relay eval 'has @polaris/relay || path "^apps/relay-rs/"'
+          out relay has @polaris/relay
 
           {
             echo "Affected packages (\`turbo query affected\`, HEAD^1..HEAD):"
@@ -251,6 +252,9 @@ jobs:
         with:
           node-version: 24
       - uses: ./.github/actions/bun-install
+        if: env.RUN == 'true'
+      # The Daemon's, the Mobile App's and the relay's own suites start the relay's binary.
+      - uses: ./.github/actions/relay-binary
         if: env.RUN == 'true'
       # Quint fetches its evaluator on first use through GitHub's unauthenticated API, which
       # shared runners exhaust; fetch it once, authenticated (tests replay traces through Quint).
@@ -594,49 +598,36 @@ jobs:
           path: desktop-budgets.json
           if-no-files-found: warn
 
-  relay-rs:
-    name: Rust relay (fmt, clippy, tests, the Bun relay's suite)
-    # Both relay builds are held to one contract (ADR 0104): apps/relay's suite starts the
-    # Rust binary per test through POLARIS_RELAY_COMMAND.
+  relay:
+    name: Relay (fmt, clippy, tests)
+    # The relay's Rust and the tests of what a WebSocket client library cannot send (ADR 0105).
     needs: scope
     if: needs.scope.outputs.relay == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/relay
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: ./.github/actions/bun-install
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            apps/relay-rs/target
-          key: relay-rs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/relay-rs/rust-toolchain.toml', 'apps/relay-rs/Cargo.lock') }}
-          restore-keys: relay-rs-${{ runner.os }}-${{ runner.arch }}-
+            apps/relay/target
+          key: relay-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/relay/rust-toolchain.toml', 'apps/relay/Cargo.lock') }}
+          restore-keys: relay-${{ runner.os }}-${{ runner.arch }}-
       # The toolchain rust-toolchain.toml pins, with rustfmt and clippy.
       - name: Rust toolchain
-        working-directory: apps/relay-rs
         run: rustup toolchain install --no-self-update
       - name: Format
-        working-directory: apps/relay-rs
         run: cargo fmt --all --check
       - name: Clippy
-        working-directory: apps/relay-rs
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
-        working-directory: apps/relay-rs
         run: cargo test --locked -p polaris-relay
-      - name: Build the relay
-        working-directory: apps/relay-rs
-        run: cargo build --release --locked -p polaris-relay
-      - name: The Bun relay's suite against the Rust relay
-        env:
-          POLARIS_RELAY_COMMAND: ${{ github.workspace }}/apps/relay-rs/target/release/polaris-relay
-        run: bun run --cwd apps/relay test
 
   ci:
     name: CI
@@ -656,7 +647,7 @@ jobs:
         service-windows,
         bench,
         desktop-budgets,
-        relay-rs,
+        relay,
       ]
     if: always()
     runs-on: ubuntu-latest

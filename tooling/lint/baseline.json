@@ -190,9 +190,6 @@
     "apps/mobile/src/newSession/draftWriter.test.ts": {
       "polaris/no-fixed-sleep": 2
     },
-    "apps/relay/src/live.test.ts": {
-      "polaris/no-fixed-sleep": 2
-    },
     "packages/bench/src/proc.test.ts": {
       "polaris/no-fixed-sleep": 1
     },
