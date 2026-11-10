@@ -1,16 +1,17 @@
 /**
- * A process running inside the helper app, and the default way to start one: the launcher's
- * `run`, which disclaims responsibility so TCC charges the helper (ADR 0104).
+ * A process running inside the helper app, as the Daemon sees it, and the setting that picks
+ * how its launcher is started (ADR 0104).
  */
-import { executableOf } from "../../platform/executable.ts";
-import { childEnv } from "../childEnv.ts";
-import { type HelperTool, launcherOf } from "./bundle.ts";
+import type { HelperTool } from "./bundle.ts";
 
 /** `disclaim` is the default; `launch-services` is the fallback that needs no private SPI. */
 export type SpawnVia = "disclaim" | "launch-services";
 
 /** The launcher's exit code when macOS has no disclaim SPI or refuses it (`launcher.c`). */
 export const EXIT_NO_DISCLAIM = 70;
+
+/** The launcher's exit code when its caller is not the Daemon (`launcher.c`, ENG-867). */
+export const EXIT_REFUSED = 77;
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -41,33 +42,3 @@ export interface HelperProcess {
 /** The setting that picks the fallback: `POLARIS_COMPUTER_USE_SPAWN=launch-services`. */
 export const spawnSetting = (env: Env = process.env): SpawnVia =>
   env.POLARIS_COMPUTER_USE_SPAWN === "launch-services" ? "launch-services" : "disclaim";
-
-/** Starts `request.tool` through the launcher's `run`, with pipes for its stdio. */
-export const spawnDisclaimed = (helper: string, request: HelperRequest): HelperProcess => {
-  const args = ["run", request.tool, ...request.args];
-  const stdio = { stdin: "pipe", stdout: "pipe", stderr: "pipe" } as const;
-  const env = request.env ?? childEnv();
-
-  const proc =
-    request.cwd === undefined
-      ? Bun.spawn([executableOf(launcherOf(helper)), ...args], { env, ...stdio })
-      : Bun.spawn([executableOf(launcherOf(helper)), ...args], {
-          env,
-          cwd: request.cwd,
-          ...stdio,
-        });
-
-  return {
-    via: "disclaim",
-    write: (chunk) => {
-      void proc.stdin.write(chunk);
-      void proc.stdin.flush();
-    },
-    end: () => void proc.stdin.end(),
-    stdout: proc.stdout,
-    stderr: proc.stderr,
-    exited: proc.exited,
-    // A SIGKILL would end the launcher and orphan the tool; SIGUSR1 has it kill the tool.
-    kill: (signal = "SIGTERM") => proc.kill(signal === "SIGKILL" ? "SIGUSR1" : "SIGTERM"),
-  };
-};

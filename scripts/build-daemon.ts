@@ -62,7 +62,6 @@ import {
   COMPUTER_USE_BUNDLE,
   HELPER_EXECUTABLES,
   HELPER_FILES,
-  launcherOf,
 } from "../apps/daemon/src/service/computerUse/bundle.ts";
 import { AGENT_DESKTOP_VERSION } from "../apps/daemon/src/install/agentDesktop/pin.ts";
 import { fetchBetterleaks } from "../apps/daemon/src/rules/secrets/fetch.ts";
@@ -312,8 +311,8 @@ const bundleHelper = async (
   });
 
   if (platform !== hostPlatform) return;
-  // Proves the launcher disclaims and runs the pinned agent-desktop on this macOS.
-  const output = await run([launcherOf(helper), "run", "agent-desktop", "version"]);
+  // Run directly: the launcher serves only the Daemon (ENG-867), and a build is not one.
+  const output = await run([join(helper, HELPER_FILES["agent-desktop"]), "version"]);
 
   if (!output.includes(`"version":"${AGENT_DESKTOP_VERSION}"`))
     throw new Error(`the helper's agent-desktop printed "${output.trim()}"`);

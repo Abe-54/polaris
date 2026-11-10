@@ -1,50 +1,34 @@
 /**
  * The helper's launcher (`launcher.c`), compiled here and driven through the Daemon's API with
  * a shell script standing in for agent-desktop. macOS only: it needs clang and the disclaim SPI.
+ * Callers the launcher must refuse are in `caller.slow.test.ts`.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { realpathSync, writeFileSync } from "node:fs";
 import { dlopen, FFIType } from "bun:ffi";
 import { Effect } from "effect";
 import { newTempDir, removeTempDir } from "../../platform/tempDir.testing.ts";
-import { compileLauncher } from "./build.ts";
-import { COMPUTER_USE_BUNDLE, COMPUTER_USE_LAUNCHER, HELPER_FILES, launcherOf } from "./bundle.ts";
+import { COMPUTER_USE_LAUNCHER, launcherOf } from "./bundle.ts";
+import { makeHelper, toolOf } from "./helper.testing.ts";
 import { ComputerUseHelper, type HelperRequest, type SpawnVia } from "./index.ts";
-import { execHelper } from "./launchServices.ts";
-
-const TOOL = `#!/bin/sh
-case "$1" in
-  echo) cat ;;
-  facts) shift; printf '%s\\n' "$@" "$POLARIS_TEST_VAR" "$(pwd)" ;;
-  fail) echo oops >&2; exit 7 ;;
-  hang) trap 'exit 42' TERM; echo ready; while :; do sleep 0.05; done ;;
-  parent) echo $PPID; cat ;;
-  stubborn) trap '' TERM; echo $$; while :; do sleep 0.05; done ;;
-  big) head -c 300000 /dev/zero | tr '\\0' x ;;
-  status) cat "$0.status" ;;
-esac
-`;
+import { execHelper } from "./launch.ts";
 
 let root: string;
 
 let helper: string;
 
-const tool = () => join(helper, HELPER_FILES["agent-desktop"]);
+const tool = () => toolOf(helper);
 
 beforeAll(async () => {
   root = realpathSync(newTempDir("polaris-cu-", { short: true }));
-  helper = join(root, COMPUTER_USE_BUNDLE);
-  mkdirSync(dirname(launcherOf(helper)), { recursive: true });
-  await compileLauncher(launcherOf(helper));
-  writeFileSync(tool(), TOOL);
-  chmodSync(tool(), 0o755);
+  // This test run stands in for the Daemon: the launcher serves the program beside it.
+  helper = await makeHelper(root, process.execPath);
 });
 
 afterAll(() => removeTempDir(root));
 
 /** Runs the tool to its end through the service and collects what it wrote. */
-const runTool = (request: Omit<HelperRequest, "tool">, stdin = "") =>
+const runTool = (request: Partial<HelperRequest> & Pick<HelperRequest, "args">, stdin = "") =>
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -193,12 +177,28 @@ describe.skipIf(process.platform !== "darwin")("a tool run inside the helper app
   test.each([["../outside"], ["/bin/sh"], [COMPUTER_USE_LAUNCHER], [".hidden"]])(
     "the launcher refuses %s: only a tool beside it runs",
     async (name) => {
-      const proc = Bun.spawn([launcherOf(helper), "run", name], { stderr: "pipe" });
+      // SAFETY: deliberately not a HelperTool; the launcher must refuse what the types forbid.
+      const result = await runTool({ tool: name as "agent-desktop", args: [] });
 
-      expect(await proc.exited).toBe(64);
-      expect(await new Response(proc.stderr).text()).toContain("polaris-computer-use: the tool");
+      expect(result).toEqual({ via: "disclaim", stdout: "", stderr: "", code: 64 });
     }
   );
+
+  test("the tool gets its stdio and no other descriptor of the launcher's", async () => {
+    const result = await runTool({ args: ["fds"] });
+
+    // 3 and 4 are ls's own; the launcher's control socket would be a sixth.
+    expect(result.stdout.trim()).toBe("0 1 2 3 4");
+  });
+
+  test("a launcher nobody hands sockets to runs nothing", async () => {
+    const proc = Bun.spawn([launcherOf(helper), "run", "agent-desktop", "echo"], {
+      stderr: "pipe",
+    });
+
+    expect(await proc.exited).toBe(64);
+    expect(await new Response(proc.stderr).text()).toContain("usage: polaris-computer-use run");
+  });
 
   test.each([
     ["denied", "needs setup", ["accessibility", "screen recording"]],
