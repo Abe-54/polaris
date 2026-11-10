@@ -161,12 +161,20 @@ const currentUserTurn = (session: SessionData, turn: TurnFacts): CurrentUserTurn
     : current;
 };
 
+/** The Suggested Reply stays only for the Turn it follows; a newer Turn makes it stale. */
+const replyAfter = (session: SessionData, turnId: string) =>
+  session.suggestedReply?.turnId === turnId ? session.suggestedReply : null;
+
 /** Idle compaction's Turn moves nothing the user reads: the last prompt and reply stay. */
 const onCompactionTurn = (turn: TurnFacts) =>
   onSession(turn.sessionId, (entry) => ({
     ...entry,
     lastTurnId: turn.id,
-    session: { ...entry.session, turnCount: Math.max(entry.session.turnCount, turn.index + 1) },
+    session: {
+      ...entry.session,
+      turnCount: Math.max(entry.session.turnCount, turn.index + 1),
+      suggestedReply: replyAfter(entry.session, turn.id),
+    },
   }));
 
 const onUserOrHarnessTurn = (turn: TurnFacts, ended: boolean) =>
@@ -182,6 +190,7 @@ const onUserOrHarnessTurn = (turn: TurnFacts, ended: boolean) =>
       ...entry.session,
       turnCount: Math.max(entry.session.turnCount, turn.index + 1),
       currentUserTurn: currentUserTurn(entry.session, turn),
+      suggestedReply: replyAfter(entry.session, turn.id),
       lastReplyPreview: ended
         ? (turn.replyPreview ?? null)
         : (entry.session.lastReplyPreview ?? null),
@@ -332,6 +341,13 @@ const fold = (event: DomainEvent): Fold =>
         ),
       SessionCompacted: ({ sessionId, compaction }) =>
         onSession(sessionId, patch({ lastCompaction: compaction })),
+      // A reply for a Turn older than the latest is already stale.
+      SessionReplySuggested: ({ sessionId, reply }) =>
+        onSession(sessionId, (entry) =>
+          (entry.lastTurnId ?? reply.turnId) === reply.turnId
+            ? patch({ suggestedReply: reply })(entry)
+            : entry
+        ),
       SessionNotified: ({ sessionId, notification }) =>
         onSession(sessionId, (entry) => ({ ...entry, lastNotification: notification })),
       SessionBackgroundCommandFailed: ({ sessionId, itemId, reason }) =>

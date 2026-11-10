@@ -397,6 +397,13 @@ const fold = (event: DomainEvent): Fold =>
         ({ compaction }): Fold =>
         (m) =>
           patchSession(m, { lastCompaction: compaction }),
+      // A reply for a Turn older than the latest is already stale.
+      SessionReplySuggested:
+        ({ reply }): Fold =>
+        (m) =>
+          (m.turns.at(-1)?.turn.id ?? reply.turnId) === reply.turnId
+            ? patchSession(m, { suggestedReply: reply })
+            : m,
       SessionBackgroundTasksChanged:
         ({ tasks, reportsPending }): Fold =>
         (m) =>
@@ -406,6 +413,9 @@ const fold = (event: DomainEvent): Fold =>
         (m) =>
           patchSession(upsertTurn(m, turn), {
             turnCount: Math.max(m.session?.turnCount ?? 0, turn.index + 1),
+            // The Suggested Reply stays only for the Turn it follows.
+            suggestedReply:
+              m.session?.suggestedReply?.turnId === turn.id ? m.session.suggestedReply : null,
           }),
       TurnEnded:
         ({ turn }): Fold =>
