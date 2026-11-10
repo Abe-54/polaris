@@ -146,6 +146,7 @@ export const sessionOf: (event: DomainEvent) => SessionId | null =
     SessionSetupChanged: bySessionId,
     SessionContextUsed: bySessionId,
     SessionCompacted: bySessionId,
+    SessionReplySuggested: bySessionId,
     SessionNotified: bySessionId,
     SessionBackgroundTasksChanged: bySessionId,
     SessionBackgroundCommandFailed: bySessionId,
@@ -427,6 +428,8 @@ const recordTurn =
           lastReplyPreview: quiet ? r.session.lastReplyPreview : kept.replyPreview,
           // A Turn starting is the Harness taking up any reports it had waiting.
           backgroundReportsPending: started ? false : r.session.backgroundReportsPending,
+          // A newer Turn makes the Suggested Reply stale (ADR 0106).
+          suggestedReply: started && known === undefined ? null : r.session.suggestedReply,
         },
         turns: upsertTurn(r.turns, kept),
       };
@@ -594,6 +597,11 @@ const apply: (event: DomainEvent) => Reducer = DomainEvent.match<Reducer>({
     })),
   SessionCompacted: (event) => (fold) =>
     updateSession(fold, event.sessionId, () => ({ session: { lastCompaction: event.compaction } })),
+  SessionReplySuggested: (event) => (fold) =>
+    updateSession(fold, event.sessionId, (r) =>
+      // Only for the latest Turn: one that arrives after a newer Turn started is already stale.
+      lastTurn(r)?.id === event.reply.turnId ? { session: { suggestedReply: event.reply } } : {}
+    ),
   /** Only Clients act on these; the read model keeps nothing. */
   SessionBackgroundCommandFailed:
     () =>

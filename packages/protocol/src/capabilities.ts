@@ -193,6 +193,11 @@ export const Capability = Schema.Literals([
    * `CompactSession` and `Turn.idleCompaction`.
    */
   "sessions.idle-compaction",
+  /**
+   * Suggested Replies (`suggestedReply.ts`): `sessions.suggestedReplies`,
+   * `sessions.setSuggestedReplies`, `SessionReplySuggested` and `AgentSession.suggestedReply`.
+   */
+  "sessions.suggested-replies",
   /** `sessions.visuals` and `sessions.setVisuals`: the Visuals setting (`visuals.ts`). */
   "sessions.visuals",
   /** `continuity.watch`, `continuity.markRead`, `continuity.saveDraft`: read position and drafts. */

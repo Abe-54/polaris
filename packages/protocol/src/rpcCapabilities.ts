@@ -160,6 +160,8 @@ export const RPC_CAPABILITIES = {
   "sessions.setAutoArchive": "sessions.auto-archive",
   "sessions.idleCompaction": "sessions.idle-compaction",
   "sessions.setIdleCompaction": "sessions.idle-compaction",
+  "sessions.suggestedReplies": "sessions.suggested-replies",
+  "sessions.setSuggestedReplies": "sessions.suggested-replies",
   "sessions.visuals": "sessions.visuals",
   "sessions.setVisuals": "sessions.visuals",
   "continuity.watch": "session.continuity",

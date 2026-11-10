@@ -26,6 +26,7 @@ export const patchSession = (session: AgentSession, patch: SessionPatch): AgentS
     lastReplyPreview: session.lastReplyPreview,
     contextUsage: session.contextUsage,
     lastCompaction: session.lastCompaction,
+    suggestedReply: session.suggestedReply,
     backgroundTasks: session.backgroundTasks,
     backgroundChangedAt: session.backgroundChangedAt,
     backgroundReportsPending: session.backgroundReportsPending,
