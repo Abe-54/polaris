@@ -52,11 +52,13 @@ from pathlib import Path
 
 PLATFORM = "darwin-arm64"
 DAEMON_ENTITLEMENTS = {"polaris": "daemon.plist", "betterleaks": "betterleaks.plist"}
+# Where the Daemon's bundle holds the native libraries it loads.
+DAEMON_LIBRARIES = "Contents/Frameworks"
 APP_ENTITLEMENTS = "electron.plist"
 # "Polaris Computer Use.app" beside the Daemon's bundle: its launcher and the tools it runs (ENG-846).
 HELPER_APP = "Polaris Computer Use.app"
 HELPER_LAUNCHER = "polaris-computer-use"
-HELPER_TOOLS = ("agent-desktop", "agent-desktop-macos-helper")
+HELPER_TOOLS = ("agent-desktop", "agent-desktop-macos-helper", "polaris-capture")
 HELPER_ENTITLEMENTS = "computer-use.plist"
 # The hand-off's only roots, as the build job tars them.
 DAEMON_DIST = "apps/daemon/dist"
@@ -454,6 +456,11 @@ def helper_of(paths: dict, daemon: Path) -> Path:
     return helper
 
 
+def bundle_libraries(paths: dict, bundle: Path) -> list:
+    """The Daemon's native libraries: the manifest's files in its bundle's Frameworks (ENG-877)."""
+    return sorted(path for path in paths.values() if path.parent == bundle / DAEMON_LIBRARIES)
+
+
 def sign_daemon(signer: Signer, dist: Path, entitlements: Path, version: str) -> dict:
     manifest = read_manifest(dist, version)
     build = manifest["platforms"][PLATFORM]
@@ -467,6 +474,9 @@ def sign_daemon(signer: Signer, dist: Path, entitlements: Path, version: str) ->
     bundle = app_bundle_of(paths["polaris"])
     helper = helper_of(paths, bundle)
     sign(signer, paths["betterleaks"], entitlements / DAEMON_ENTITLEMENTS["betterleaks"])
+    # The Daemon has library validation: it loads only libraries signed by this team (ADR 0105).
+    for library in bundle_libraries(paths, bundle):
+        sign(signer, library, None)
     sign(signer, bundle, entitlements / DAEMON_ENTITLEMENTS["polaris"])
     run(["codesign", "--verify", "--deep", "--strict", bundle])
     # The helper's tools, then the bundle that seals them, under its own identity (ENG-846).

@@ -1,7 +1,8 @@
 /**
  * macOS: "Polaris Computer Use.app", the helper app that holds computer use's privacy grants
  * (ADR 0104). It sits beside `PolarisDaemon.app`, ships flat like it (`../bundle.ts`), and
- * holds the pinned agent-desktop next to its launcher (`launcher.c`).
+ * holds the pinned agent-desktop and the preview's capture tool (`capture/`) next to its
+ * launcher (`launcher.c`).
  */
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -22,11 +23,15 @@ export const computerUseBundleId = (release: boolean): string =>
 /** The bundle's main executable, built from `launcher.c`. */
 export const COMPUTER_USE_LAUNCHER = "polaris-computer-use";
 
+/** The live preview's ScreenCaptureKit tool, built from `capture/` (ENG-846). */
+export const COMPUTER_USE_CAPTURE = "polaris-capture";
+
 /** Each file of the helper by its flat name in a build, and its path inside the bundle. */
 export const HELPER_FILES = {
   [COMPUTER_USE_LAUNCHER]: `Contents/MacOS/${COMPUTER_USE_LAUNCHER}`,
   "agent-desktop": "Contents/MacOS/agent-desktop",
   "agent-desktop-macos-helper": "Contents/MacOS/agent-desktop-macos-helper",
+  [COMPUTER_USE_CAPTURE]: `Contents/MacOS/${COMPUTER_USE_CAPTURE}`,
   "computer-use-Info.plist": "Contents/Info.plist",
   "computer-use-Polaris.icns": `Contents/Resources/${DAEMON_ICON}`,
   "computer-use-CodeResources": "Contents/_CodeSignature/CodeResources",
@@ -42,10 +47,11 @@ export const HELPER_EXECUTABLES: ReadonlySet<HelperFile> = new Set([
   COMPUTER_USE_LAUNCHER,
   "agent-desktop",
   "agent-desktop-macos-helper",
+  COMPUTER_USE_CAPTURE,
 ]);
 
 /** A tool the launcher runs from the bundle's `Contents/MacOS`. */
-export type HelperTool = "agent-desktop";
+export type HelperTool = "agent-desktop" | typeof COMPUTER_USE_CAPTURE;
 
 /** `0.8.0` from `0.8.0-dev.12.abc1234`: bundle version keys take numbers only. */
 const bundleVersion = (version: string): string => version.split(/[-+]/)[0] ?? version;
@@ -88,6 +94,8 @@ export const helperInfoPlist = (version: string, release: boolean): string => {
   <string>13.0</string>
   <key>NSAppleEventsUsageDescription</key>
   <string>Polaris uses this to operate apps for your agent sessions.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Polaris uses this to show you the window your agent session is working in.</string>
 </dict>
 </plist>
 `;

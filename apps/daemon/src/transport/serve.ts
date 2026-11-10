@@ -1,6 +1,9 @@
 import { lazyData, lazyDataHandlers } from "./lazyData.ts";
 import { lazyTraces, lazyTraceHandlers } from "./lazyTraces.ts";
 import { lazyRequestHandlers, lazyRequests } from "./lazyRequests.ts";
+import { lazyPreviewHandlers } from "./lazyPreview.ts";
+import { livePreview, PREVIEW_CAPABILITY } from "../computerUse/preview/group.ts";
+import { PreviewTargets } from "../computerUse/preview/targets.ts";
 import { selfTraceExport } from "../traces/self/export.ts";
 import { selfTracer } from "../traces/self/tracer.ts";
 import { PredictionCapabilityLive } from "../prediction/capability.ts";
@@ -122,11 +125,16 @@ const browserMcp = BrowserMcp.layer.pipe(
 
 /**
  * Computer use (`polaris_desktop`, ENG-846): agent-desktop inside the helper on macOS. The tools
- * follow `ComputerUseHost`'s status and ask `AppControl` before each app; D4 replaces `acted`.
+ * follow `ComputerUseHost`'s status and ask `AppControl` before each app.
  */
-const desktopMcp = DesktopMcp.layerOn(computerUseDesktopHost, AppControl).pipe(
-  Layer.provide(Layer.mergeAll(ComputerUseHelper.layer, AgentDesktop.layer))
-);
+const desktopMcp = Layer.unwrap(
+  Effect.gen(function* () {
+    // The preview follows what each call acted on (`PreviewTargets`, in `engineServices`).
+    const targets = yield* PreviewTargets;
+
+    return DesktopMcp.layerOn(computerUseDesktopHost, AppControl, targets.acted);
+  })
+).pipe(Layer.provide(Layer.mergeAll(ComputerUseHelper.layer, AgentDesktop.layer)));
 
 /** `AppControl` sits under the Engine it asks for approvals: bound once the Engine is up. */
 const appApprovals = Layer.effectDiscard(
@@ -181,6 +189,8 @@ export const engineServices = Layer.mergeAll(
   Layer.provideMerge(dataServices),
   // RequestSends and Origin Approvals: the Requests RPCs and MCP's send_request share them.
   Layer.provideMerge(lazyRequests),
+  // What each session last did with computer use: its tools report it, the preview reads it.
+  Layer.provideMerge(PreviewTargets.layerDaemon),
   Layer.provideMerge(traceServices),
   Layer.provideMerge(ReviewerSessions.layer),
   // The live Developer Mode: what `selfTraceExport`, Traces and Data see (ENG-709).
@@ -210,6 +220,7 @@ export const daemonHandlers = Layer.mergeAll(
   lazyDataHandlers,
   lazyTraceHandlers,
   lazyRequestHandlers.pipe(Layer.provide(fileSearch)),
+  lazyPreviewHandlers,
   PredictionCapabilityLive,
   PredictionServerLive,
   lazyLanguageHandlers,
@@ -278,6 +289,7 @@ export const daemonCapabilities: ReadonlyArray<Capability> = [
   "traces.profiles.attach",
   "traces.self",
   "requests",
+  ...(livePreview() ? [PREVIEW_CAPABILITY] : []),
   "constellation",
   "constellation.defaults",
   "extensions",

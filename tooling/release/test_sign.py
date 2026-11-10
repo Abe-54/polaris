@@ -246,6 +246,25 @@ class Helper(unittest.TestCase):
         self.assertIn("agent-desktop is not beside the helper's launcher", self.refused(outside))
 
 
+class Libraries(unittest.TestCase):
+    """Which of the Daemon's files are signed as its libraries, before its bundle."""
+
+    def test_takes_the_files_in_the_daemon_s_frameworks_and_nothing_else(self) -> None:
+        dist = Path("/dist/darwin-arm64")
+        daemon = dist / "PolarisDaemon.app"
+        paths = {
+            "polaris": daemon / "Contents/MacOS/polaris",
+            "sodium-native.node": daemon / "Contents/Frameworks/sodium-native.node",
+            "libfff_c.dylib": daemon / "Contents/Frameworks/libfff_c.dylib",
+            "Polaris.icns": daemon / "Contents/Resources/Polaris.icns",
+            "agent-desktop": dist / "Polaris Computer Use.app/Contents/Frameworks/agent-desktop",
+        }
+        self.assertEqual(
+            sign.bundle_libraries(paths, daemon),
+            [paths["libfff_c.dylib"], paths["sodium-native.node"]],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 

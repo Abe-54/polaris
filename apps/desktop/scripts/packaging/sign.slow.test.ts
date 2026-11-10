@@ -56,7 +56,10 @@ const HELPER_EXECUTABLES = [
   "polaris-computer-use",
   "agent-desktop",
   "agent-desktop-macos-helper",
+  "polaris-capture",
 ] as const;
+
+const DAEMON_LIBRARIES = ["libfff_c.dylib", "sodium-native.node"] as const;
 
 const daemonFile = (name: keyof typeof DARWIN_PATHS) => `darwin-arm64/${DARWIN_PATHS[name]}`;
 
@@ -70,6 +73,8 @@ const releaseDist = () => {
 
   copyFileSync(MACHO, join(dist, daemonFile("polaris")));
   copyFileSync(MACHO, join(dist, daemonFile("betterleaks")));
+
+  for (const name of DAEMON_LIBRARIES) copyFileSync(MACHO, join(dist, daemonFile(name)));
   writeFileSync(
     join(dist, daemonFile("Info.plist")),
     plist({ CFBundleExecutable: "polaris", CFBundleIdentifier: "dev.lux.polaris.daemon" })
@@ -245,19 +250,23 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     expect(archived.map((entry) => [entry.name, entry.mode])).toEqual([
       ["polaris", 0o755],
       ["betterleaks", 0o755],
+      ["libfff_c.dylib", 0o644],
+      ["sodium-native.node", 0o644],
       ["Info.plist", 0o644],
       ["Polaris.icns", 0o644],
       ["CodeResources", 0o644],
       ["polaris-computer-use", 0o755],
       ["agent-desktop", 0o755],
       ["agent-desktop-macos-helper", 0o755],
+      ["polaris-capture", 0o755],
       ["computer-use-Info.plist", 0o644],
       ["computer-use-Polaris.icns", 0o644],
       ["computer-use-CodeResources", 0o644],
     ]);
     expect(Buffer.from(archived[0]!.bytes).equals(polaris)).toBe(true);
     const sealed = readFileSync(join(dist, daemonFile("CodeResources")));
-    expect(Buffer.from(archived[4]!.bytes).equals(sealed)).toBe(true);
+    const resources = archived.find((entry) => entry.name === "CodeResources")!;
+    expect(Buffer.from(resources.bytes).equals(sealed)).toBe(true);
     expect(fileFacts(join(dist, RELEASE_DIR, archive.name))).toEqual({
       sha256: archive.sha256,
       size: archive.size,
@@ -287,7 +296,7 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
     expect(helper).not.toContain("com.apple.security.cs.allow-jit");
     expect(verifies("--deep", join(dist, HELPER_APP))).toBe(true);
 
-    for (const tool of ["agent-desktop", "agent-desktop-macos-helper"] as const)
+    for (const tool of ["agent-desktop", "agent-desktop-macos-helper", "polaris-capture"] as const)
       expect(signature(join(dist, daemonFile(tool)))).toContain("(adhoc,runtime)");
 
     // The archive and the app's staged copy carry the signed bytes, so they verify on a Host.
@@ -323,9 +332,16 @@ describe.skipIf(process.platform !== "darwin")("the release signer", () => {
       "Contents/Frameworks/Fake.framework/Versions/A/Libraries/libfake.dylib",
     ])
       expect(signature(join(app, nested))).toContain("(adhoc,runtime)");
-    expect(signature(join(app, "Contents/Resources/daemon", DAEMON_APP))).toContain(
-      "com.apple.security.cs.disable-library-validation"
-    );
+
+    // Library validation stays on (ENG-877), so the Daemon's libraries carry the signer's signature.
+    const daemon = signature(join(app, "Contents/Resources/daemon", DAEMON_APP));
+    expect(daemon).toContain("com.apple.security.cs.allow-jit");
+    expect(daemon).not.toContain("com.apple.security.cs.disable-library-validation");
+
+    for (const name of DAEMON_LIBRARIES)
+      expect(signature(join(app, "Contents/Resources/daemon", daemonFile(name)))).toContain(
+        "(adhoc,runtime)"
+      );
 
     const listing = Bun.spawnSync([
       "unzip",

@@ -23,6 +23,8 @@ export const removeDists = () => {
 export const DARWIN_PATHS = {
   polaris: "PolarisDaemon.app/Contents/MacOS/polaris",
   betterleaks: "PolarisDaemon.app/Contents/MacOS/betterleaks",
+  "libfff_c.dylib": "PolarisDaemon.app/Contents/Frameworks/libfff_c.dylib",
+  "sodium-native.node": "PolarisDaemon.app/Contents/Frameworks/sodium-native.node",
   "Info.plist": "PolarisDaemon.app/Contents/Info.plist",
   "Polaris.icns": "PolarisDaemon.app/Contents/Resources/Polaris.icns",
   CodeResources: "PolarisDaemon.app/Contents/_CodeSignature/CodeResources",
@@ -30,6 +32,7 @@ export const DARWIN_PATHS = {
   "agent-desktop": "Polaris Computer Use.app/Contents/MacOS/agent-desktop",
   "agent-desktop-macos-helper":
     "Polaris Computer Use.app/Contents/MacOS/agent-desktop-macos-helper",
+  "polaris-capture": "Polaris Computer Use.app/Contents/MacOS/polaris-capture",
   "computer-use-Info.plist": "Polaris Computer Use.app/Contents/Info.plist",
   "computer-use-Polaris.icns": "Polaris Computer Use.app/Contents/Resources/Polaris.icns",
   "computer-use-CodeResources": "Polaris Computer Use.app/Contents/_CodeSignature/CodeResources",
@@ -40,6 +43,7 @@ const EXECUTABLES = new Set([
   "polaris-computer-use",
   "agent-desktop",
   "agent-desktop-macos-helper",
+  "polaris-capture",
 ]);
 
 /** Each file a platform's build has, and its path in the platform directory. */

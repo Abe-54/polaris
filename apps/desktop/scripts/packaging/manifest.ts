@@ -30,7 +30,7 @@ export const appBundleOf = (executable: string): string | null => {
 /** "Polaris Computer Use.app": its launcher and the tools it runs (`service/computerUse/bundle.ts`). */
 const HELPER_LAUNCHER = "polaris-computer-use";
 
-const HELPER_TOOLS = ["agent-desktop", "agent-desktop-macos-helper"] as const;
+const HELPER_TOOLS = ["agent-desktop", "agent-desktop-macos-helper", "polaris-capture"] as const;
 
 const HELPER_ENTITLEMENTS = "computer-use.plist";
 
@@ -108,6 +108,10 @@ export const verifyDaemonManifest = (dist: string, version?: string): void => {
   }
 };
 
+/** The Daemon's native libraries among `paths`: the files in its bundle's Frameworks (ENG-877). */
+const bundleLibraries = (paths: ReadonlyArray<string>, bundle: string) =>
+  paths.filter((path) => dirname(path) === join(bundle, "Contents/Frameworks")).toSorted();
+
 export const signDaemonBuilds = (
   dist: string,
   signing: Signing | null,
@@ -129,7 +133,7 @@ export const signDaemonBuilds = (
 
   if (bundle === null) throw new Error("the darwin-arm64 Daemon is not in an app bundle (ENG-680)");
 
-  const sign = (path: string, entitlements: string) => {
+  const sign = (path: string, entitlements?: string) => {
     execute([
       "codesign",
       "--force",
@@ -139,14 +143,18 @@ export const signDaemonBuilds = (
       "runtime",
       "--timestamp",
       ...(signing.keychain ? ["--keychain", signing.keychain] : []),
-      "--entitlements",
-      join(entitlementsDir, entitlements),
+      ...(entitlements === undefined
+        ? []
+        : ["--entitlements", join(entitlementsDir, entitlements)]),
       path,
     ]);
   };
 
   // Nested code first: the bundle's signature seals Betterleaks' as it is then.
   sign(at("betterleaks"), "betterleaks.plist");
+  // The Daemon has library validation: it loads only libraries signed by this team (ADR 0105).
+
+  for (const library of bundleLibraries(Object.keys(build.files).map(at), bundle)) sign(library);
   sign(bundle, "daemon.plist");
   execute(["codesign", "--verify", "--deep", "--strict", bundle]);
 

@@ -2,7 +2,8 @@
  * A Host with no Workspaces, and first run (onboarding O2): "Where does your
  * code live?" with the setup card (Paper 57Q-1): add a workspace (the ⌘O
  * dialog, on this Host), connect a host, and start
- * a session, which with no workspace starts in the Host's home directory.
+ * a session, which with no workspace starts in the Host's home directory. This Mac's
+ * computer use first-run card (Paper CU3) sits under it until skipped or done.
  */
 import {
   Button,
@@ -25,6 +26,7 @@ import {
   stageKicker,
 } from "../model.ts";
 import { Stage } from "./Stage.tsx";
+import { LocalMacOnboarding } from "../../computer-use/index.ts";
 import { commandShortcut } from "../../../../shared/keymap.ts";
 import { clientPlatform } from "../../../../shared/platform.ts";
 
@@ -172,6 +174,9 @@ export const HostStage = ({ hostKey }: { readonly hostKey: string | null }) => {
         <ConnectHostRow hostCount={hostCount} />
         <StartRow host={host} />
       </SetupCard>
+      <div className="pt-6">
+        <LocalMacOnboarding host={host} />
+      </div>
     </Stage>
   );
 };
