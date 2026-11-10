@@ -3,7 +3,7 @@
  * Constellation mark, the verb and its subject in glossary words, folded to one line. It opens
  * to what the call carried and Polaris's reply; the raw call stays behind Show raw.
  */
-import { Button, ChevronDownIcon, ChevronRightIcon, cn, Dither, type Harness } from "@polaris/ui";
+import { Button, cn, DisclosureChevron, Dither, type Harness } from "@polaris/ui";
 import { useMemo, useState } from "react";
 import { useApp } from "../../../../shell/hooks.ts";
 import { useBanner } from "../../banners.ts";
@@ -139,14 +139,12 @@ const Line = ({
     {view.caption === null ? null : (
       <span className="text-caption text-text-subtle shrink-0">{view.caption}</span>
     )}
-    {open ? (
-      <ChevronDownIcon size={10} className="text-text-faint shrink-0" />
-    ) : (
-      <ChevronRightIcon
-        size={10}
-        className="text-text-subtle shrink-0 opacity-60 group-hover/polaris:opacity-100"
-      />
-    )}
+    <DisclosureChevron
+      open={open}
+      className={
+        open ? "text-text-faint" : "text-text-subtle opacity-60 group-hover/polaris:opacity-100"
+      }
+    />
   </button>
 );
 

@@ -4,7 +4,7 @@
  * Turn's divider above it, and a reviewed Turn folds to the divider alone with a check.
  * Rendered by Pierre into each file's header slot; it reads its row from `headerStore`.
  */
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, cn, SeverityBadge, Tile } from "@polaris/ui";
+import { CheckIcon, cn, DisclosureChevron, SeverityBadge, Tile } from "@polaris/ui";
 import { memo } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
@@ -172,11 +172,11 @@ const Header = ({ id }: { readonly id: string }) => {
             row.collapsed ? "rounded-row" : "rounded-t-row border-b-hairline"
           )}
         >
-          {row.collapsed ? (
-            <ChevronRightIcon size={12} className="text-text-faint shrink-0" />
-          ) : (
-            <ChevronDownIcon size={12} className="text-text-subtle shrink-0" />
-          )}
+          <DisclosureChevron
+            open={!row.collapsed}
+            size={12}
+            className={row.collapsed ? "text-text-faint" : "text-text-subtle"}
+          />
           <span className="text-caption text-text-default min-w-0 truncate font-mono">
             {row.oldPath === null ? row.path : `${row.oldPath} → ${row.path}`}
           </span>

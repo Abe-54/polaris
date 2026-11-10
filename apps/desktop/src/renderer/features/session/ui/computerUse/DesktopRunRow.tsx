@@ -4,10 +4,9 @@
  * capture. Only the session's latest run has a thumbnail: the Host shows the session's last window.
  */
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
   cn,
   CursorIcon,
+  DisclosureChevron,
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
@@ -120,11 +119,7 @@ export const DesktopRunRow = ({ id, run, items, renderItem }: DesktopRunRowProps
           <span className="text-body text-text-strong shrink-0">{runTitle(run)}</span>
           <span className="text-caption text-text-subtle truncate">{runDetail(run)}</span>
           <span className="self-center">
-            {open ? (
-              <ChevronDownIcon size={10} className="text-text-faint" />
-            ) : (
-              <ChevronRightIcon size={10} className="text-text-faint" />
-            )}
+            <DisclosureChevron open={open} className="text-text-faint" />
           </span>
         </button>
         {target !== null && latest ? <RunThumbnail target={target} run={run} /> : null}

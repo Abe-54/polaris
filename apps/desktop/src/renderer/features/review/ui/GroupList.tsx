@@ -3,7 +3,7 @@
  * glyph, label, Critical badge, "1 of 3", highest Severity); an open group adds its "why"
  * and its files. The first group opens by default. Virtualized like the flat list.
  */
-import { ChevronDownIcon, ChevronRightIcon, SeverityBadge, SeverityGlyph } from "@polaris/ui";
+import { DisclosureChevron, SeverityBadge, SeverityGlyph } from "@polaris/ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef, useState } from "react";
 import { type GroupHead, type GroupListRow, groupListRows } from "../model/groupList.ts";
@@ -47,8 +47,6 @@ const GroupRow = ({
   readonly head: GroupHead;
   readonly onToggle: (key: string) => void;
 }) => {
-  const Chevron = head.open ? ChevronDownIcon : ChevronRightIcon;
-
   return (
     <button
       type="button"
@@ -59,7 +57,7 @@ const GroupRow = ({
       title={head.group.summary ?? undefined}
       className="rounded-row hover:bg-fill-hover h-tree-row px-gap flex w-full cursor-default items-center gap-2"
     >
-      <Chevron size={10} className="text-text-faint shrink-0" />
+      <DisclosureChevron open={head.open} className="text-text-faint" />
       <IntentGlyph category={head.group.category} />
       <span
         className={`text-body min-w-0 truncate text-left ${head.open ? "text-text-strong" : "text-text-default"}`}

@@ -3,7 +3,7 @@
  * with the Constellation mark and "Lead · 7 workers", then its workers on a hairline rail under
  * their Task groups, needs-you first, accepted ones folded into one "A1, A2 done · show" line.
  */
-import { ChevronDownIcon, ChevronRightIcon, cn, Row } from "@polaris/ui";
+import { cn, DisclosureChevron, Row } from "@polaris/ui";
 import { type KeyboardEvent, useState } from "react";
 import { needsYou, shownState } from "../../../routes/topBar.ts";
 import { age } from "../../../shell/copy.ts";
@@ -396,7 +396,7 @@ export const LeadGroup = ({ hostKey, group, now }: GroupProps) => {
                   }}
                   className="text-text-faint hover:text-text-default -mr-1 hidden size-4 cursor-default items-center justify-center group-hover/row:flex"
                 >
-                  {open ? <ChevronDownIcon size={10} /> : <ChevronRightIcon size={10} />}
+                  <DisclosureChevron open={open} />
                 </button>
               }
             />

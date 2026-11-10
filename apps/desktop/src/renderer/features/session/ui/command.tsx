@@ -5,7 +5,7 @@
  * open, the line wraps to the whole command. Folded, a line that hides part of it opens the
  * whole command in a hover card (`commandCard.tsx`).
  */
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, cn, PixelFailedIcon } from "@polaris/ui";
+import { CheckIcon, cn, DisclosureChevron, PixelFailedIcon } from "@polaris/ui";
 import { type ReactElement, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
   chooseCollapse,
@@ -176,12 +176,9 @@ const Line = ({
   );
 };
 
-const Chevron = ({ open }: { readonly open: boolean }) =>
-  open ? (
-    <ChevronDownIcon size={10} className="text-text-faint shrink-0" />
-  ) : (
-    <ChevronRightIcon size={10} className="text-text-faint shrink-0" />
-  );
+const Chevron = ({ open }: { readonly open: boolean }) => (
+  <DisclosureChevron open={open} className="text-text-faint" />
+);
 
 /** `own`: the user's shell command (`!`), in their lane on the prompt's fill, not an agent's well. */
 export const Command = ({

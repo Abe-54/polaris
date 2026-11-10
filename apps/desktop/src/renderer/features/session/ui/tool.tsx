@@ -5,15 +5,7 @@
  * made shows under it, read from the session's Host.
  */
 import { JsonText, looksLikeJson } from "./json.tsx";
-import {
-  Button,
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  cn,
-  LiveDither,
-  PixelFailedIcon,
-} from "@polaris/ui";
+import { Button, CheckIcon, cn, DisclosureChevron, LiveDither, PixelFailedIcon } from "@polaris/ui";
 import { Predicate } from "effect";
 import { useState } from "react";
 // The glyph alone: the Constellation feature's index imports the session feature.
@@ -200,11 +192,7 @@ export const Tool = ({ item, hue }: { readonly item: ToolView; readonly hue: Hue
             onClick={toggle}
             className="shrink-0 cursor-default"
           >
-            {open ? (
-              <ChevronDownIcon size={10} className="text-text-faint" />
-            ) : (
-              <ChevronRightIcon size={10} className="text-text-faint" />
-            )}
+            <DisclosureChevron open={open} className="text-text-faint" />
           </button>
         ) : null}
       </div>

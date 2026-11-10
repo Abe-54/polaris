@@ -3,9 +3,8 @@
  * its row estimate or git letter, the functions group, or a note under a source.
  */
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
   cn,
+  DisclosureChevron,
   Dither,
   GIT_LETTERS,
   GIT_TINTS,
@@ -22,7 +21,7 @@ const ROW =
 
 const Chevron = ({ open, shown }: { readonly open: boolean; readonly shown: boolean }) => (
   <span className="text-text-subtle flex w-3 shrink-0 justify-center">
-    {shown ? open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} /> : null}
+    {shown ? <DisclosureChevron open={open} size={12} /> : null}
   </span>
 );
 
