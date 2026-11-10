@@ -119,10 +119,10 @@ const browserMcp = BrowserMcp.layer.pipe(
   Layer.provide(Layer.mergeAll(cdpRelay, AgentBrowser.layer))
 );
 
-/** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 /** One preference for the whole Daemon: the Claude driver reads it, the Engine serves it. */
 const suggestedReplyPreference = SuggestedReplyPreference.layer();
 
+/** The drivers report Plan Limits through the reporter, in front of the Usage index's sink. */
 const harnesses = HarnessRegistryLive.pipe(
   Layer.provide(
     Layer.mergeAll(PlanLimitReporter.layer, browserMcp, lazySimulator, suggestedReplyPreference)

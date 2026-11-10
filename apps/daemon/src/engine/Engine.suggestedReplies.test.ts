@@ -74,7 +74,7 @@ describe("Suggested Replies", () => {
         const first = (yield* startIdleSession(s)).sessions.get(s)!.turns[0]!;
         const engine = yield* Engine;
 
-        yield* engine.offerSuggestedReply(s, "  Run the tests  ", "harness");
+        yield* engine.offerSuggestedReply(s, first.id, "  Run the tests  ", "harness");
         yield* waitFor((m) => m.sessions.get(s)?.session.suggestedReply != null);
 
         expect(yield* suggestionOf(s)).toMatchObject({
@@ -90,13 +90,19 @@ describe("Suggested Replies", () => {
 
         expect(yield* suggestionOf(s)).toBeNull();
 
-        // Polaris's fallback commits the same event, for the Turn that is latest now.
-        yield* waitFor((m) => m.sessions.get(s)?.session.state === "idle");
-        yield* engine.offerSuggestedReply(s, "Open a pull request", "polaris");
-        const second = yield* waitFor((m) => m.sessions.get(s)?.session.suggestedReply != null);
+        // One written for the first Turn that lands after the second started commits nothing.
+        const idle = yield* waitFor((m) => m.sessions.get(s)?.session.state === "idle");
+        const second = idle.sessions.get(s)!.turns[1]!;
+        yield* engine.offerSuggestedReply(s, first.id, "A late reply", "harness");
 
-        expect(second.sessions.get(s)!.session.suggestedReply).toMatchObject({
-          turnId: second.sessions.get(s)!.turns[1]!.id,
+        expect(yield* suggestionOf(s)).toBeNull();
+
+        // Polaris's fallback commits the same event, for the Turn that is latest now.
+        yield* engine.offerSuggestedReply(s, second.id, "Open a pull request", "polaris");
+        const after = yield* waitFor((m) => m.sessions.get(s)?.session.suggestedReply != null);
+
+        expect(after.sessions.get(s)!.session.suggestedReply).toMatchObject({
+          turnId: second.id,
           source: "polaris",
         });
       })

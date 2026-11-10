@@ -12,6 +12,7 @@ import {
   WorkspaceId,
 } from "@polaris/protocol";
 import { foldSession, type SessionRecord } from "../store/model.ts";
+import { patchTurn } from "../store/patch.ts";
 import { suggestReply } from "./suggestedReplies.ts";
 import { resolveFallback } from "./suggestedReplyPreference.ts";
 
@@ -88,14 +89,25 @@ test("a suggestion that arrives after a newer Turn started folds to none", () =>
   expect(fold([started(t1), started(t2), suggested(t1, "Late")]).session.suggestedReply).toBeNull();
 });
 
-test("the decision offers trimmed text once, for the latest Turn only", () => {
+test("the decision offers trimmed text once, for the latest ended Turn only", () => {
   const record = fold([started(t1), started(t2)]);
-  const [event] = suggestReply(record, "  Next step  ", "harness");
+  const [event] = suggestReply(record, t2.id, "  Next step  ", "harness");
 
   expect(event).toMatchObject({ reply: { turnId: t2.id, text: "Next step", source: "harness" } });
-  expect(suggestReply(record, "   ", "harness")).toEqual([]);
-  expect(suggestReply(fold([started(t2), suggested(t2, "Again")]), "Again", "polaris")).toEqual([]);
-  expect(suggestReply(fold([]), "No Turn yet", "harness")).toEqual([]);
+  expect(suggestReply(record, t2.id, "   ", "harness")).toEqual([]);
+
+  const offered = fold([started(t2), suggested(t2, "Again")]);
+
+  expect(suggestReply(offered, t2.id, "Again", "polaris")).toEqual([]);
+  expect(suggestReply(fold([]), t1.id, "No Turn yet", "harness")).toEqual([]);
+});
+
+test("a suggestion written for a Turn that is no longer latest, or still running, commits nothing", () => {
+  const later = fold([started(t1), started(t2)]);
+  const running = fold([started(t1), started(patchTurn(t2, { status: "working", endedAt: null }))]);
+
+  expect(suggestReply(later, t1.id, "Late", "polaris")).toEqual([]);
+  expect(suggestReply(running, t2.id, "Too early", "harness")).toEqual([]);
 });
 
 const ready = (...kinds: ReadonlyArray<string>) =>

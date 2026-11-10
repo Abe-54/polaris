@@ -2,30 +2,36 @@
  * Suggested Replies (ENG-884, ADR 0106): the decision that commits a `SessionReplySuggested`
  * for a session's latest Turn, from either source (the Harness's own, or Polaris's fallback).
  */
-import { DomainEvent, SuggestedReply, type SuggestedReplySource } from "@polaris/protocol";
-import { lastTurn, type SessionRecord } from "../store/model.ts";
+import {
+  DomainEvent,
+  SuggestedReply,
+  type SuggestedReplySource,
+  type TurnId,
+} from "@polaris/protocol";
+import { lastTurn, type SessionRecord, workingTurn } from "../store/model.ts";
 
 /**
- * The events that offer `text` after the session's latest Turn: none when it is blank or
- * the same as the one already offered. A suggestion only ever follows the latest Turn.
+ * The events that offer `text` after `turnId`, the Turn it was written for: none unless that
+ * Turn is still the latest and has ended, nor when the text is blank or already offered.
  */
 export const suggestReply = (
   record: SessionRecord,
+  turnId: TurnId,
   text: string,
   source: SuggestedReplySource
 ): ReadonlyArray<DomainEvent> => {
-  const turn = lastTurn(record);
   const trimmed = text.trim();
   const current = record.session.suggestedReply;
+  const stale = lastTurn(record)?.id !== turnId || workingTurn(record) !== undefined;
 
-  if (turn === undefined || trimmed === "") return [];
+  if (stale || trimmed === "") return [];
 
-  if (current?.turnId === turn.id && current.text === trimmed) return [];
+  if (current?.turnId === turnId && current.text === trimmed) return [];
 
   return [
     DomainEvent.cases.SessionReplySuggested.make({
       sessionId: record.session.id,
-      reply: SuggestedReply.make({ turnId: turn.id, text: trimmed, source }),
+      reply: SuggestedReply.make({ turnId, text: trimmed, source }),
     }),
   ];
 };

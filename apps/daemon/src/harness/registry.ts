@@ -111,7 +111,7 @@ export const harnessRegistryLayer = (options: RegistryOptions = {}) =>
       const simulator = Option.getOrUndefined(yield* Effect.serviceOption(SimulatorMcp));
       const preference = yield* Effect.serviceOption(SuggestedReplyPreference);
 
-      // Read per Turn by the Claude driver (ENG-886); off when the Daemon has no preference.
+      // Read per Turn by the Claude driver (ENG-885); off when the Daemon has no preference.
       const suggestedReplies = {
         suggestedReplies: () => Option.isSome(preference) && preference.value.enabledNow(),
       };

@@ -30,6 +30,7 @@ import {
   type Sequence,
   type SessionId,
   type SuggestedReplySource,
+  type TurnId,
   type SessionStreamItem,
   type TerminalLaunch,
   type TurnPage,
@@ -122,9 +123,10 @@ export class Engine extends Context.Service<
     ) => Effect.Effect<void, FileError>;
     /** The Host's Suggested Reply preference (`suggestedReplyPreference.ts`). */
     readonly suggestedReplies: typeof SuggestedReplyPreference.Service;
-    /** Commits a Suggested Reply after the session's latest Turn (`suggestedReplies.ts`). */
+    /** Commits a Suggested Reply for `turnId`, if it is still the latest, ended Turn (`suggestedReplies.ts`). */
     readonly offerSuggestedReply: (
       sessionId: SessionId,
+      turnId: TurnId,
       text: string,
       source: SuggestedReplySource
     ) => Effect.Effect<void, ServiceError>;
@@ -257,8 +259,10 @@ const make = Effect.gen(function* () {
     idleCompactionSettings: idleCompaction.settings,
     setIdleCompactionSettings: idleCompaction.setSettings,
     suggestedReplies: yield* SuggestedReplyPreference,
-    offerSuggestedReply: (sessionId, text, source) =>
-      Effect.asVoid(runtime.recordFor(sessionId, (record) => suggestReply(record, text, source))),
+    offerSuggestedReply: (sessionId, turnId, text, source) =>
+      Effect.asVoid(
+        runtime.recordFor(sessionId, (record) => suggestReply(record, turnId, text, source))
+      ),
     checkoutReviewed: checkouts.reviewed,
     checkoutStatus: (checkoutId) =>
       checkouts.status(checkoutId).pipe(
