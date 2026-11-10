@@ -1,5 +1,5 @@
 /** A computer use approval in the transcript (Paper CU4): the app, why, and the answers. */
-import type { ApprovalRequest } from "@polaris/protocol";
+import { AppId, type ApprovalRequest, DesktopApp } from "@polaris/protocol";
 import { SettingsButton } from "@polaris/ui";
 import { appApprovalView, appNameOf } from "../approval.ts";
 import { AppIcon } from "./parts.tsx";
@@ -35,7 +35,10 @@ export const AppApprovalCard = ({
 }: AppApprovalCardProps) => {
   const view = appApprovalView(request, who, host);
 
-  const app = request.app ?? { id: request.id, name: appNameOf(request), icon: null };
+  // A request without an app still shows an icon: the monogram of "an app".
+  const app =
+    request.app ??
+    new DesktopApp({ id: AppId.make(request.id), name: appNameOf(request), icon: null });
 
   return (
     <div
