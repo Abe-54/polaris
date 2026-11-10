@@ -52,7 +52,7 @@ const Composer = ({
 }: {
   search: MentionSearch;
   sent: Array<string>;
-  history?: () => ReadonlyArray<string>;
+  history?: (() => ReadonlyArray<string>) | undefined;
 }) => {
   const [value, setValue] = useState("");
   const draft = useRef("");
