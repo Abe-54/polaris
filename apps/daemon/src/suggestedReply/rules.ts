@@ -1,13 +1,13 @@
 /** When the Daemon writes a fallback Suggested Reply (ADR 0106), and with which Harness. */
-import type {
-  HarnessKind,
-  HostHarnesses,
-  PlanLimit,
-  SuggestedReplyFallback,
-  SuggestedReplySettings,
-  Turn,
+import {
+  AUTO_SUGGESTED_REPLY_FALLBACKS,
+  type HarnessKind,
+  type HostHarnesses,
+  type PlanLimit,
+  type SuggestedReplyFallback,
+  type SuggestedReplySettings,
+  type Turn,
 } from "@polaris/protocol";
-import { resolveFallback } from "../engine/suggestedReplyPreference.ts";
 import { lastTurn, type SessionRecord } from "../store/model.ts";
 
 /**
@@ -64,17 +64,22 @@ const ready = (report: HostHarnesses, harness: HarnessKind) =>
   report.harnesses.some((entry) => entry.harness === harness && entry.status === "ready");
 
 /**
- * The fallback to write with now, or null: the preference's resolution (`resolveFallback`),
- * kept only when an inline runner can drive it and its Harness is ready.
+ * The fallbacks to try now, in order: the Settings choice, then each automatic pick. Kept only
+ * when an inline runner can drive it and its Harness is ready; a model is never asked twice.
  */
-export const runnableFallback = (
+export const fallbackCandidates = (
   settings: SuggestedReplySettings,
   report: HostHarnesses
-): RunnableFallback | null => {
-  const { choice } = resolveFallback(settings, report);
+): ReadonlyArray<RunnableFallback> => {
+  const picks = settings.fallback === null ? [] : [settings.fallback];
+  const found: Array<RunnableFallback> = [];
 
-  if (choice === null) return null;
-  const { harness, model, effort } = choice;
+  for (const { harness, model, effort } of [...picks, ...AUTO_SUGGESTED_REPLY_FALLBACKS]) {
+    const runnable = isInlineHarness(harness) && ready(report, harness);
+    const seen = found.some((f) => f.harness === harness && f.model === model);
 
-  return isInlineHarness(harness) && ready(report, harness) ? { harness, model, effort } : null;
+    if (runnable && !seen) found.push({ harness, model, effort });
+  }
+
+  return found;
 };

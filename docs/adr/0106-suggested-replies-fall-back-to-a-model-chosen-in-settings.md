@@ -32,4 +32,7 @@ switched off, until Claude Code sends suggestions (ENG-891).
 calls that reached the model answered null. A replay of 30 real Turns offered a reply on 17 with
 the old instructions and on 30 with the new ones, which ask for the likeliest next message
 almost always. The first Turn now gets a suggestion too, since it often ends with the agent's
-question (ENG-928).
+question. The prompt also quotes the user's past typed prompts from their other sessions, so
+the reply sounds like them. The fallbacks are tried in order, the Settings choice first and
+then each automatic pick: one that is signed out, failing or at a Plan Limit hands over to the
+next ready one (ENG-928).

@@ -14,15 +14,18 @@ The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use 
 - **When** (`suggestionDue`): the user's own session (no `origin`), out of plan mode, not
   Limited, after any completed Turn (the first too) that isn't an idle compaction or a shell
   command.
-  Not when the fallback's Harness has reached a Plan Limit (`atPlanLimit`: a `reached` window
-  in the Usage index). A `warning` doesn't stop it: Claude sends one for a fast pace even at
+  Not when every ready fallback's Harness has reached a Plan Limit (`atPlanLimit`: a `reached`
+  window in the Usage index). A `warning` doesn't stop it: Claude sends one for a fast pace even at
   low use, and a suggestion is one small request.
-- **Which** (`runnableFallback`): the preference's resolution (`resolveFallback`: the Settings
-  choice, or when unset the first ready entry of `AUTO_SUGGESTED_REPLY_FALLBACKS`), kept only
-  when its Harness is ready and has an inline runner (Claude Code, Codex). Readiness comes from
-  `Availability.get("when-stale")`, so a sign-in or install after the Daemon started counts
-  within a minute.
-- **What**: the last 3 ended Turns' user messages (prompt and steers) and final agent text,
+- **Which** (`fallbackCandidates`): the Settings choice, then each entry of
+  `AUTO_SUGGESTED_REPLY_FALLBACKS`, kept when its Harness is ready, has an inline runner
+  (Claude Code, Codex) and hasn't reached a Plan Limit. They are tried in order within the one
+  timeout: a fallback that fails, as a signed-out Codex does, hands over to the next. Readiness
+  comes from `Availability.get("when-stale")`, so a sign-in or install after the Daemon started
+  counts within a minute.
+- **What**: up to 30 of the user's past typed prompts from their other sessions, newest first
+  and cut to 280 characters (`pastMessages`), so the reply matches how they write; then the
+  last 3 ended Turns' user messages (prompt and steers) and final agent text,
   newest kept within ~6k tokens (`PROMPT_BUDGET_CHARS`). Tools are off and the Harness runs in
   a fresh private directory (`mkdtemp`, removed afterwards), so no project instructions or
   config load, nor anything another user planted in the shared temp directory. The answer is

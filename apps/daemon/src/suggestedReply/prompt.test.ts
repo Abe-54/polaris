@@ -42,7 +42,7 @@ test("over budget, older Turns go first and the oldest kept loses its start", ()
     [turn(2).id, [say("2", "newest answer")]],
   ]);
 
-  const prompt = replyPrompt([turn(0), turn(1), turn(2)], items, 150);
+  const prompt = replyPrompt([turn(0), turn(1), turn(2)], items, { budget: 150 });
 
   expect(prompt).not.toContain("OLDEST");
   expect(prompt).toContain("[earlier text cut]");

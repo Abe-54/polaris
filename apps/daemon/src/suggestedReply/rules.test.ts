@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { PlanLimit, SuggestedReplyFallback, SuggestedReplySettings } from "@polaris/protocol";
-import { atPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
+import {
+  type HarnessKind,
+  PlanLimit,
+  SuggestedReplyFallback,
+  SuggestedReplySettings,
+} from "@polaris/protocol";
+import { atPlanLimit, fallbackCandidates, suggestionDue } from "./rules.ts";
 import { agentSession, at, record, report, turn } from "./testing.ts";
 
 describe("suggestionDue", () => {
@@ -51,25 +56,32 @@ test("at a Plan Limit means a window of that Harness has reached it, not only wa
   expect(atPlanLimit("codex", [limit("codex", "ok"), limit("claude", "reached")])).toBe(false);
 });
 
-describe("runnableFallback", () => {
+describe("fallbackCandidates", () => {
   const haiku = SuggestedReplyFallback.make({ harness: "claude", model: "m", effort: null });
 
   const settings = (fallback: SuggestedReplyFallback | null) =>
     SuggestedReplySettings.make({ enabled: true, fallback });
 
-  test("the Settings choice when its Harness is ready, and nothing when it isn't", () => {
-    expect(runnableFallback(settings(haiku), report("claude"))).toEqual({
+  const harnesses = (s: SuggestedReplySettings, ...ready: ReadonlyArray<HarnessKind>) =>
+    fallbackCandidates(s, report(...ready)).map((c) => c.harness);
+
+  test("the Settings choice first, then the ready automatic picks", () => {
+    expect(fallbackCandidates(settings(haiku), report("claude", "codex"))[0]).toEqual({
       harness: "claude",
       model: "m",
       effort: null,
     });
-    expect(runnableFallback(settings(haiku), report("codex"))).toBeNull();
+    expect(harnesses(settings(haiku), "claude", "codex")).toEqual(["claude", "codex", "claude"]);
   });
 
-  test("unset picks a ready automatic fallback, or nothing", () => {
-    expect(runnableFallback(settings(null), report("claude"))?.harness).toBe("claude");
-    expect(runnableFallback(settings(null), report("codex"))?.harness).toBe("codex");
-    expect(runnableFallback(settings(null), report("opencode"))).toBeNull();
+  test("a Settings choice whose Harness isn't ready gives way to one that is", () => {
+    expect(harnesses(settings(haiku), "codex")).toEqual(["codex"]);
+  });
+
+  test("unset tries every ready automatic pick, and none is nothing", () => {
+    expect(harnesses(settings(null), "claude", "codex")).toEqual(["codex", "claude"]);
+    expect(harnesses(settings(null), "claude")).toEqual(["claude"]);
+    expect(harnesses(settings(null), "opencode")).toEqual([]);
   });
 
   test("a Harness without an inline runner is never chosen", () => {
@@ -79,7 +91,7 @@ describe("runnableFallback", () => {
       effort: null,
     });
 
-    expect(runnableFallback(settings(opencode), report("opencode"))).toBeNull();
+    expect(harnesses(settings(opencode), "opencode")).toEqual([]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   type PermissionMode,
   SessionId,
   type SessionOrigin,
+  type SessionWorker,
   type SessionState,
   Turn,
   TurnId,
@@ -39,10 +40,12 @@ export const agentSession = (
     permissionMode?: PermissionMode;
     state?: SessionState;
     origin?: SessionOrigin;
+    id?: SessionId;
+    worker?: SessionWorker;
   } = {}
 ) =>
   new AgentSession({
-    id: sessionId,
+    id: options.id ?? sessionId,
     workspaceId,
     harness: options.harness ?? "codex",
     title: "t",
@@ -50,6 +53,7 @@ export const agentSession = (
     worktreeId: null,
     state: options.state ?? "idle",
     origin: options.origin ?? null,
+    worker: options.worker ?? null,
     permissionMode: options.permissionMode ?? "supervised",
     model: null,
     effort: null,
@@ -68,6 +72,9 @@ export interface TurnExtras {
   readonly userTurnNumber?: number;
   readonly idleCompaction?: boolean;
   readonly shellCommand?: string;
+  readonly sessionId?: SessionId;
+  readonly trigger?: Turn["trigger"];
+  readonly startedAt?: string;
 }
 
 /** The `index`th Turn (user Turn `index + 1`), ended with `status` unless it's `working`. */
@@ -78,8 +85,11 @@ export const turn = (
   extras: TurnExtras = {}
 ) =>
   new Turn({
-    id: TurnId.make(`t-${index}`),
-    sessionId,
+    id: TurnId.make(
+      extras.sessionId === undefined ? `t-${index}` : `${extras.sessionId}-t-${index}`
+    ),
+    sessionId: extras.sessionId ?? sessionId,
+    trigger: extras.trigger ?? null,
     index,
     prompt,
     userTurnNumber: extras.userTurnNumber ?? index + 1,
@@ -91,7 +101,7 @@ export const turn = (
     status,
     checkpointBefore: null,
     checkpointAfter: null,
-    startedAt: at,
+    startedAt: extras.startedAt ?? at,
     endedAt: status === "working" ? null : at,
   });
 

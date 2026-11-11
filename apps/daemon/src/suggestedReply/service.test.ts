@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   DomainEvent,
   PlanLimit,
+  SessionId,
   SuggestedReplyFallback,
   SuggestedReplySettings,
   TurnItem,
@@ -355,10 +356,63 @@ test("a failing Harness commits nothing and the service keeps following", async 
   expect(reply?.text).toBe("Again.");
 });
 
+/** Codex signed out: it fails, and Claude Code answers. */
+const signedOutCodex = scripted(Effect.succeed({ reply: "unused" }));
+
+const byHarness: ReplyBackend = (harness, job, dir) =>
+  harness === "codex"
+    ? Effect.andThen(
+        signedOutCodex.backend(harness, job, dir),
+        Effect.fail(new HarnessError({ harness, message: "signed out" }))
+      )
+    : Effect.as(signedOutCodex.backend(harness, job, dir), { reply: "Merge it." });
+
+test.each([
+  ["a fallback that fails, as a signed-out Codex does", []],
+  ["a fallback whose Harness has reached a Plan Limit", [limitOf("codex", "reached")]],
+] as const)("%s hands over to the next ready one", async (_, limits) => {
+  signedOutCodex.calls.length = 0;
+
+  const reply = await run(
+    { backend: byHarness, ready: ["codex", "claude"], limits },
+    Effect.andThen(
+      commitAll([ended(turn(1))]),
+      eventually(suggestion, (s) => s != null)
+    )
+  );
+
+  expect(reply?.text).toBe("Merge it.");
+  expect(signedOutCodex.calls.at(-1)?.harness).toBe("claude");
+});
+
+test("the prompt quotes what the user wrote in their other sessions", async () => {
+  const { calls, backend } = scripted(Effect.succeed({ reply: "ok" }));
+  const elsewhere = SessionId.make("s-2");
+
+  await run(
+    { backend },
+    Effect.andThen(
+      commitAll([
+        DomainEvent.cases.SessionCreated.make({ session: agentSession({ id: elsewhere }) }),
+        started(turn(0, "working", "lgtm, merge and cut a patch", { sessionId: elsewhere })),
+        ended(turn(0, "completed", "lgtm, merge and cut a patch", { sessionId: elsewhere })),
+        ended(turn(1)),
+      ]),
+      eventually(suggestion, (s) => s != null)
+    )
+  );
+
+  // The other session's ended Turn gets its own call; this session's quotes the parser fix.
+  const prompt = calls.find((c) => c.job.prompt.includes("Fixed the parser"))?.job.prompt ?? "";
+
+  expect(prompt).toContain("- lgtm, merge and cut a patch");
+  expect(prompt).not.toContain("- ask 0");
+});
+
 test.each([
   ["the preference is off", "settings", { settings: SuggestedReplySettings.make({}) }],
   [
-    "the fallback's Harness has reached a Plan Limit",
+    "the only ready fallback's Harness has reached a Plan Limit",
     "limits",
     { limits: [limitOf("codex", "reached")] },
   ],
