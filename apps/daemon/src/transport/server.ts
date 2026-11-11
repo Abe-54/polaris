@@ -64,7 +64,7 @@ import { defaultHandlers } from "./defaults/index.ts";
 import { loadHostInfo } from "./hostInfo.ts";
 import { acquireLock, type DaemonAlreadyRunning, LockError } from "./lock.ts";
 import { ConnectionBlobs, ServerRpcs } from "./rpcs.ts";
-import { userAccessFile, userAccessGateFor } from "./userAccess.ts";
+import { openUserAccessGate } from "./userAccess.ts";
 import { listen, prepareSocketPath } from "./socket.ts";
 import { languageIdentityFor, revokeLanguageIdentity } from "./languageIdentity.ts";
 import {
@@ -403,9 +403,7 @@ export const startServer = <ROut = never, E = never, RIn = never>(
 
     const handlers = yield* Layer.build(
       Layer.merge(
-        defaultHandlers({ hostInfo, capabilities, userAccessFile: userAccessFile(root) }).pipe(
-          Layer.provide(extensionServices)
-        ),
+        defaultHandlers({ hostInfo, capabilities }).pipe(Layer.provide(extensionServices)),
         // SAFETY: `handlers` is omitted only when ROut, E and RIn keep their `never` defaults.
         ((options.handlers ?? Layer.empty) as Layer.Layer<ROut, E, RIn>).pipe(
           Layer.provide(
@@ -442,7 +440,7 @@ export const startServer = <ROut = never, E = never, RIn = never>(
       Effect.provideService(RpcServer.Protocol, protocol),
       Effect.provideService(ConnectionBlobs, blobsMiddleware),
       Effect.provideService(GrantGate, grantGateFor(transportFacts)),
-      Effect.provideService(UserAccessGate, userAccessGateFor(transportFacts)),
+      Effect.provideService(UserAccessGate, openUserAccessGate),
       Effect.provideContext(handlers),
       Effect.forkScoped
     );

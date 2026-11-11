@@ -118,13 +118,9 @@ export const formatPairings = (pairings: ReadonlyArray<Pairing>): string =>
         .map((p) => [p.id, p.name, grantLine(p), usedLine(p)].map(terminalText).join("  ·  "))
         .join("\n");
 
-/** `DaemonRpcs` carries the user gate's refusal, which a terminal gets for pair and revoke (ADR 0100). */
+/** The CLI talks to the local Daemon as a token-less Client. */
 const connectCli = (transport: Parameters<typeof connectRpcWith>[1]) =>
   connectRpcWith(DaemonRpcs, transport);
-
-/** A terminal holds no user key, so an agent there can't pair itself an Extension. */
-const NEEDS_DESKTOP =
-  "pairing and revoking Extensions needs the Desktop App: use Settings › Extensions";
 
 const withDaemon = <A, E>(
   use: (client: Effect.Success<ReturnType<typeof connectCli>>["client"]) => Effect.Effect<A, E>
@@ -146,8 +142,7 @@ const run = (command: ExtensionCommand) =>
     Match.discriminatorsExhaustive("kind")({
       pair: ({ name, grant }) =>
         withDaemon((client) => client["extensions.pair"]({ name, grant })).pipe(
-          Effect.map((paired) => formatPaired(paired)),
-          Effect.catchTag("UserAccessRequired", () => Effect.fail(NEEDS_DESKTOP))
+          Effect.map((paired) => formatPaired(paired))
         ),
       list: () =>
         withDaemon((client) => client["extensions.list"]()).pipe(Effect.map(formatPairings)),
@@ -156,8 +151,7 @@ const run = (command: ExtensionCommand) =>
           Effect.map(
             (pairing) => `Revoked ${terminalText(pairing.name)} (${terminalText(pairing.id)}).`
           ),
-          Effect.catchTag("NotFound", () => Effect.fail(`no pairing ${id} on this host`)),
-          Effect.catchTag("UserAccessRequired", () => Effect.fail(NEEDS_DESKTOP))
+          Effect.catchTag("NotFound", () => Effect.fail(`no pairing ${id} on this host`))
         ),
     })
   );
