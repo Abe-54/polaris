@@ -29,8 +29,16 @@ import { Engine } from "../engine/Engine.ts";
 import { EventStore, type LiveItem } from "../store/EventStore.ts";
 import { UsageIndex } from "../usage/service.ts";
 import type { ReplyBackend } from "./backend.ts";
-import { instructions, PROMPT_TURNS, replyJsonSchema, replyPrompt, replyText } from "./prompt.ts";
-import { atPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
+import {
+  instructions,
+  PROMPT_TURNS,
+  type ReplyAnswer,
+  replyJsonSchema,
+  replyPrompt,
+  replyText,
+} from "./prompt.ts";
+import { pastMessages } from "./history.ts";
+import { atPlanLimit, fallbackCandidates, type RunnableFallback, suggestionDue } from "./rules.ts";
 
 /** A suggestion that takes longer is dropped; the user is likely typing by then. */
 export const SUGGEST_TIMEOUT = Duration.seconds(15);
@@ -85,6 +93,54 @@ type Outcome = "not-due" | "no-ready-fallback" | "plan-limit-reached" | "no-repl
 
 const outcome = (value: Outcome) => Effect.annotateCurrentSpan("suggestedReply.outcome", value);
 
+/** One fallback's answer, in a private empty directory (0700) with nothing for it to load. */
+const ask = (backend: ReplyBackend, choice: RunnableFallback, prompt: string) =>
+  Effect.scoped(
+    Effect.flatMap(scratch, (dir) =>
+      backend(
+        choice.harness,
+        {
+          instructions,
+          prompt,
+          schema: replyJsonSchema,
+          model: choice.model,
+          effort: choice.effort,
+          read: false,
+        },
+        dir
+      )
+    )
+  ).pipe(
+    Effect.tap(() =>
+      Effect.annotateCurrentSpan({
+        "suggestedReply.harness": choice.harness,
+        "suggestedReply.model": choice.model,
+      })
+    )
+  );
+
+/** The first fallback that answers: one signed out or failing hands over to the next. */
+const firstAnswer = (
+  backend: ReplyBackend,
+  candidates: ReadonlyArray<RunnableFallback>,
+  prompt: string
+): Effect.Effect<ReplyAnswer, HarnessError> => {
+  const [choice, ...rest] = candidates;
+
+  if (choice === undefined)
+    return Effect.fail(new HarnessError({ harness: "polaris", message: "no fallback answered" }));
+
+  return ask(backend, choice, prompt).pipe(
+    Effect.catch((error) =>
+      rest.length === 0
+        ? Effect.fail(error)
+        : Effect.logInfo(
+            `suggested reply: ${choice.harness} failed, trying the next fallback`
+          ).pipe(Effect.andThen(firstAnswer(backend, rest, prompt)))
+    )
+  );
+};
+
 const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
   Effect.gen(function* () {
     const store = yield* EventStore;
@@ -105,18 +161,18 @@ const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
         return yield* outcome("not-due");
 
       // A report from before a sign-in or install would leave the fallback off until a restart.
-      const harnesses = yield* availability.get("when-stale");
-      const choice = runnableFallback(yield* options.settings, harnesses);
+      const ready = fallbackCandidates(
+        yield* options.settings,
+        yield* availability.get("when-stale")
+      );
 
-      if (choice === null) return yield* outcome("no-ready-fallback");
-      yield* Effect.annotateCurrentSpan({
-        "suggestedReply.harness": choice.harness,
-        "suggestedReply.model": choice.model,
-      });
+      if (ready.length === 0) return yield* outcome("no-ready-fallback");
       const limits = Option.isSome(usage) ? yield* usage.value.planLimits : [];
 
       // The session's own Harness is irrelevant here: a Limited session is never due.
-      if (atPlanLimit(choice.harness, limits)) return yield* outcome("plan-limit-reached");
+      const candidates = ready.filter((choice) => !atPlanLimit(choice.harness, limits));
+
+      if (candidates.length === 0) return yield* outcome("plan-limit-reached");
 
       const turns = record.turns.filter((turn) => turn.status !== "working").slice(-PROMPT_TURNS);
 
@@ -125,27 +181,14 @@ const make = (options: SuggestedRepliesOptions & SuggestedReplySeams) =>
         upTo: model.sequence,
       });
 
+      const history = pastMessages(model, new Set(record.turns.map((turn) => turn.id)));
+      const prompt = replyPrompt(turns, items, { history });
       backend ??= yield* defaultBackend();
-      const run = backend;
-      const harness = choice.harness;
 
-      const job = {
-        instructions,
-        prompt: replyPrompt(turns, items),
-        schema: replyJsonSchema,
-        model: choice.model,
-        effort: choice.effort,
-        read: false,
-      };
-
-      // A private empty directory (0700): nothing in the cwd for either Harness to load.
-      const answer = yield* Effect.scoped(
-        Effect.flatMap(scratch, (dir) => run(harness, job, dir))
-      ).pipe(
+      const answer = yield* firstAnswer(backend, candidates, prompt).pipe(
         Effect.timeoutOrElse({
           duration: timeout,
-          orElse: () =>
-            Effect.fail(new HarnessError({ harness: choice.harness, message: "timed out" })),
+          orElse: () => Effect.fail(new HarnessError({ harness: "polaris", message: "timed out" })),
         })
       );
 

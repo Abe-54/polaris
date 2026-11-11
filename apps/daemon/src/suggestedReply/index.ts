@@ -4,7 +4,7 @@ export {
   NATIVE_SUGGESTIONS,
   atPlanLimit,
   type RunnableFallback,
-  runnableFallback,
+  fallbackCandidates,
   suggestionDue,
 } from "./rules.ts";
 
