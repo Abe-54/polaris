@@ -12,7 +12,8 @@ which commits `SessionReplySuggested` only if that Turn is still the latest and 
 The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use `layerWith`.
 
 - **When** (`suggestionDue`): the user's own session (no `origin`), out of plan mode, not
-  Limited, after a completed Turn that isn't the first, an idle compaction or a shell command.
+  Limited, after any completed Turn (the first too) that isn't an idle compaction or a shell
+  command.
   Not when the fallback's Harness has reached a Plan Limit (`atPlanLimit`: a `reached` window
   in the Usage index). A `warning` doesn't stop it: Claude sends one for a fast pace even at
   low use, and a suggestion is one small request.
@@ -25,7 +26,8 @@ The Daemon builds it on top of `Engine.layer` (`transport/serve.ts`); tests use 
   newest kept within ~6k tokens (`PROMPT_BUDGET_CHARS`). Tools are off and the Harness runs in
   a fresh private directory (`mkdtemp`, removed afterwards), so no project instructions or
   config load, nor anything another user planted in the shared temp directory. The answer is
-  `{reply: string | null}`; null or blank commits nothing.
+  `{reply: string | null}`; null or blank commits nothing. The instructions ask for a reply
+  almost always, null only when the user has nothing to send (ENG-928).
 - **Cancellation**: a new Turn, or another ended one, interrupts the request in flight, which
   kills the process. `SUGGEST_TIMEOUT` (15 s) drops a slow one. Every failure is logged only.
 - **Traces**: each run's `suggestedReply.suggest` span carries `suggestedReply.outcome`:

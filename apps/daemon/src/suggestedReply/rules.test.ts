@@ -4,12 +4,15 @@ import { atPlanLimit, runnableFallback, suggestionDue } from "./rules.ts";
 import { agentSession, at, record, report, turn } from "./testing.ts";
 
 describe("suggestionDue", () => {
-  test("a completed second Turn in a Codex session is due one", () => {
-    expect(suggestionDue(record(agentSession(), [turn(0), turn(1)]))?.id).toBe(turn(1).id);
+  test.each([
+    ["the first Turn", [turn(0)]],
+    ["a second Turn", [turn(0), turn(1)]],
+    ["a background report", [turn(0), turn(1, "completed", "", { userTurnNumber: 1 })]],
+  ])("a session is due one after %s", (_, turns) => {
+    expect(suggestionDue(record(agentSession(), turns))?.id).toBe(turns.at(-1)?.id);
   });
 
   test.each([
-    ["the first Turn", record(agentSession(), [turn(0)])],
     ["a failed Turn", record(agentSession(), [turn(0), turn(1, "failed")])],
     ["an interrupted Turn", record(agentSession(), [turn(0), turn(1, "interrupted")])],
     ["a Turn still working", record(agentSession(), [turn(0), turn(1, "working")])],
@@ -23,10 +26,6 @@ describe("suggestionDue", () => {
     [
       "the user's shell command",
       record(agentSession(), [turn(0), turn(1, "completed", "! ls", { shellCommand: "ls" })]),
-    ],
-    [
-      "a background report after the first Turn",
-      record(agentSession(), [turn(0), turn(1, "completed", "", { userTurnNumber: 1 })]),
     ],
   ])("none after %s", (_, given) => {
     expect(suggestionDue(given)).toBeNull();

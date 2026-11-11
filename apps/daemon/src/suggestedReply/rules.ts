@@ -29,11 +29,9 @@ export const isInlineHarness = (harness: HarnessKind): harness is InlineHarness 
 export const atPlanLimit = (harness: HarnessKind, limits: ReadonlyArray<PlanLimit>) =>
   limits.some((limit) => limit.harness === harness && limit.status === "reached");
 
-const isFirstTurn = (turn: Turn) => (turn.userTurnNumber ?? turn.index + 1) <= 1;
-
 /**
  * The ended Turn this session is due a fallback suggestion for, or null: the user's own
- * session, on a Harness without its own, after a completed Turn past the first, out of plan mode.
+ * session, on a Harness without its own, after a completed Turn (the first too), out of plan mode.
  */
 export const suggestionDue = (record: SessionRecord | undefined): Turn | null => {
   const turn = record && lastTurn(record);
@@ -48,8 +46,7 @@ export const suggestionDue = (record: SessionRecord | undefined): Turn | null =>
     session.state === "limited" ||
     turn.status !== "completed" ||
     turn.idleCompaction === true ||
-    turn.shellCommand != null ||
-    isFirstTurn(turn)
+    turn.shellCommand != null
   )
     return null;
 
