@@ -83,7 +83,7 @@ const cli = async (main: string, env: Record<string, string | undefined>, args: 
   };
 };
 
-test("the real CLI lists Pairings but leaves pairing and revoking to the Desktop App", async () => {
+test("the real CLI pairs, lists and revokes through an isolated Daemon, as the Desktop App does", async () => {
   const home = newTempDir("polaris-ext-cli-", { short: true });
   const main = resolve(import.meta.dir, "../main.ts");
 
@@ -116,7 +116,7 @@ test("the real CLI lists Pairings but leaves pairing and revoking to the Desktop
 
     reader.releaseLock();
 
-    // The Desktop App pairs; a terminal holds no user key (ADR 0100).
+    // The Desktop App pairs too, with its user key, which the Daemon no longer checks (ADR 0110).
     const desktopPair = (name: string) =>
       Effect.runPromise(
         Effect.scoped(
@@ -136,9 +136,9 @@ test("the real CLI lists Pairings but leaves pairing and revoking to the Desktop
         )
       );
 
-    const refusedPair = await cli(main, env, ["pair", "--name", "Agent", "--allow", "approve"]);
-    expect(refusedPair.code).toBe(1);
-    expect(refusedPair.err).toContain("needs the Desktop App: use Settings › Extensions");
+    const cliPair = await cli(main, env, ["pair", "--name", "Agent", "--allow", "approve"]);
+    expect(cliPair.code).toBe(0);
+    expect(cliPair.out).toContain("Paired Agent (");
 
     const raycast = await desktopPair("Raycast");
     const unsafeName = "Phone\u001b]52;c;clipboard\u0007\n\u202ename";
@@ -153,10 +153,12 @@ test("the real CLI lists Pairings but leaves pairing and revoking to the Desktop
     expect(listed.out + listed.err).not.toContain(raycast.token);
     expect(listed.out).not.toContain(unsafe.token);
 
-    const refusedRevoke = await cli(main, env, ["revoke", raycast.pairing.id]);
-    expect(refusedRevoke.code).toBe(1);
-    expect(refusedRevoke.err).toContain("needs the Desktop App");
-    expect((await cli(main, env, ["list"])).out).not.toMatch(/revoked /);
+    const revoked = await cli(main, env, ["revoke", raycast.pairing.id]);
+    expect(revoked.out).toContain(`Revoked Raycast (${raycast.pairing.id}).`);
+
+    expect((await cli(main, env, ["list"])).out).toMatch(
+      new RegExp(`${raycast.pairing.id}.*revoked `)
+    );
 
     const invalid = await cli(main, env, ["bad\u001b[2J\ncommand"]);
     expect(invalid.code).toBe(2);

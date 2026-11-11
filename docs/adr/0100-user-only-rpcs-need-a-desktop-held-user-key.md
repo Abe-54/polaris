@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by 0110 (ENG-926)
 ---
 
 # User-only RPCs need a Desktop-held user key
