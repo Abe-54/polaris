@@ -38,7 +38,10 @@ write(
   ].join("\n")
 );
 
-const outfile = join(dir, "out", "fixture");
+// Windows compiles to an .exe; naming it here keeps Bun from adding the extension.
+const name = process.platform === "win32" ? "fixture.exe" : "fixture";
+
+const outfile = join(dir, "out", name);
 
 test("a compiled bundle's stacks name repo-relative source files and lines", async () => {
   const result = await buildFromRoot(dir, {
@@ -48,7 +51,7 @@ test("a compiled bundle's stacks name repo-relative source files and lines", asy
   });
 
   expect(result.logs.map((log) => log.message)).toEqual([]);
-  expect(readdirSync(join(dir, "out"))).toEqual(["fixture"]);
+  expect(readdirSync(join(dir, "out"))).toEqual([name]);
 
   const proc = Bun.spawn([outfile], { cwd: tmpdir(), stdout: "pipe", stderr: "inherit" });
   const stdout = await new Response(proc.stdout).text();
