@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Option, Predicate, Schema } from "effect";
 import { LLAMA_BUILD } from "./catalog.ts";
 import { executableOf } from "../../platform/executable.ts";
+import { system32 } from "../../platform/processes.ts";
 
 export interface ManagedProcess {
   readonly pid: number;
@@ -115,7 +116,10 @@ export const serverBinary = (dir: string) => join(buildDir(dir), "llama-server")
 
 /** The Host's own tar; the archive was hashed against its pin before this runs. */
 export const extractBuild = async (archive: string, dir: string): Promise<void> => {
-  const child = Bun.spawn([executableOf("tar"), "-xzf", archive, "-C", dir], {
+  // Windows' own bsdtar: Git's GNU tar, often first on PATH, reads `C:\…` as a remote host.
+  const tar = process.platform === "win32" ? system32("tar.exe") : executableOf("tar");
+
+  const child = Bun.spawn([tar, "-xzf", archive, "-C", dir], {
     stderr: "pipe",
     stdout: "ignore",
   });
